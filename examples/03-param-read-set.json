@@ -4,16 +4,16 @@
     "type": "tab",
     "label": "03 Param read set",
     "disabled": false,
-    "info": "Read a parameter, then set it with PARAM_VALUE echo confirmation.",
+    "info": "Separate Param read and Param set (echo-confirm) demos — not chained, so a read PARAM_VALUE cannot race a set confirmation.",
     "env": []
   },
   {
     "id": "ex03-comment",
     "type": "comment",
     "z": "ex03-tab",
-    "name": "Param read then set",
-    "info": "Reads SYSID_THISMAV, then sets it to the same value to demonstrate echo-confirm. Change param id/value as needed. Set Connection and Vehicle target before deploy.",
-    "x": 150,
+    "name": "Param read and set (separate injects)",
+    "info": "Two independent demos. Read requests SYSID_THISMAV (Send). Set writes RTL_ALT with Send & confirm so the echo matcher waits for that set's PARAM_VALUE — never wire read continue into set. Edit the set inject payload value for your vehicle. Set Connection and Vehicle target before deploy.",
+    "x": 220,
     "y": 40,
     "wires": []
   },
@@ -61,10 +61,10 @@
     "disabled": false
   },
   {
-    "id": "ex03-inject",
+    "id": "ex03-inject-read",
     "type": "inject",
     "z": "ex03-tab",
-    "name": "Read param",
+    "name": "Read SYSID_THISMAV",
     "props": [{ "p": "payload" }],
     "repeat": "",
     "crontab": "",
@@ -73,17 +73,17 @@
     "topic": "",
     "payload": "",
     "payloadType": "date",
-    "x": 130,
-    "y": 160,
+    "x": 160,
+    "y": 140,
     "wires": [["ex03-read"]]
   },
   {
     "id": "ex03-read",
     "type": "mavlink-param",
     "z": "ex03-tab",
-    "name": "Read SYSID_THISMAV",
+    "name": "Read (send)",
     "connection": "ex03-connection",
-    "delivery": "confirm",
+    "delivery": "send",
     "action": "read",
     "firmware": "ardupilot",
     "targetSystem": 1,
@@ -92,28 +92,51 @@
     "paramIndex": -1,
     "value": "",
     "paramType": "MAV_PARAM_TYPE_REAL32",
-    "x": 330,
-    "y": 160,
-    "wires": [["ex03-set"], ["ex03-read-status"]]
+    "x": 380,
+    "y": 140,
+    "wires": [["ex03-read-done"], ["ex03-read-status"]]
+  },
+  {
+    "id": "ex03-inject-set",
+    "type": "inject",
+    "z": "ex03-tab",
+    "name": "Set RTL_ALT",
+    "props": [
+      {
+        "p": "payload",
+        "v": "{\"action\":\"set\",\"paramId\":\"RTL_ALT\",\"value\":1500,\"paramType\":\"MAV_PARAM_TYPE_REAL32\"}",
+        "vt": "json"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 280,
+    "wires": [["ex03-set"]]
   },
   {
     "id": "ex03-set",
     "type": "mavlink-param",
     "z": "ex03-tab",
-    "name": "Set SYSID_THISMAV",
+    "name": "Set (echo confirm)",
     "connection": "ex03-connection",
     "delivery": "confirm",
     "action": "set",
     "firmware": "ardupilot",
     "targetSystem": 1,
     "targetComponent": 1,
-    "paramId": "SYSID_THISMAV",
+    "paramId": "RTL_ALT",
     "paramIndex": -1,
-    "value": "1",
+    "value": "",
     "paramType": "MAV_PARAM_TYPE_REAL32",
-    "x": 540,
-    "y": 160,
-    "wires": [["ex03-done"], ["ex03-set-status"]]
+    "x": 390,
+    "y": 280,
+    "wires": [["ex03-set-done"], ["ex03-set-status"]]
   },
   {
     "id": "ex03-read-status",
@@ -128,8 +151,25 @@
     "targetType": "full",
     "statusVal": "",
     "statusType": "auto",
-    "x": 330,
-    "y": 240,
+    "x": 590,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "ex03-read-done",
+    "type": "debug",
+    "z": "ex03-tab",
+    "name": "read continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 590,
+    "y": 140,
     "wires": []
   },
   {
@@ -145,15 +185,15 @@
     "targetType": "full",
     "statusVal": "",
     "statusType": "auto",
-    "x": 540,
-    "y": 240,
+    "x": 600,
+    "y": 340,
     "wires": []
   },
   {
-    "id": "ex03-done",
+    "id": "ex03-set-done",
     "type": "debug",
     "z": "ex03-tab",
-    "name": "param chain done",
+    "name": "set continue",
     "active": true,
     "tosidebar": true,
     "console": false,
@@ -162,8 +202,8 @@
     "targetType": "full",
     "statusVal": "",
     "statusType": "auto",
-    "x": 740,
-    "y": 160,
+    "x": 610,
+    "y": 280,
     "wires": []
   }
 ]

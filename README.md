@@ -22,7 +22,7 @@ Requires Node.js 18+ and Node-RED 3.0+.
 |------|------|
 | `mavlink-local-identity` | Source sysid/compid, role preset, heartbeat, signing credential |
 | `mavlink-vehicle` | Dialect selection, bundled or custom XML, default target ids |
-| `mavlink-connection` | UDP/TCP/serial transport, peer table, queue, signing, heartbeats |
+| `mavlink-connection` | UDP transport (TCP/serial stubbed “not yet”), peer table, queue, signing, heartbeats |
 | `mavlink-in` | Subscribe to decoded traffic with filters |
 | `mavlink-out` | Send raw or pre-built messages |
 | `mavlink-build` | Build any dialect message with delivery tiers |
@@ -42,7 +42,7 @@ Importable flows live in [`examples/`](examples/). In the Node-RED editor: **Imp
 |------|----------------|
 | `01-udp-heartbeat.json` | Local Identity + Vehicle + Connection (UDP) + mavlink-in on HEARTBEAT |
 | `02-arm-takeoff-chain.json` | Command arm (confirm) chained to takeoff (await completion) |
-| `03-param-read-set.json` | Param read then set with echo confirmation |
+| `03-param-read-set.json` | Param read and set (separate injects; echo-confirm on set) |
 | `04-mission-upload-download.json` | Mission upload then download |
 | `05-swarm-arm.json` | Swarm sequential arm — dry-run then live |
 
