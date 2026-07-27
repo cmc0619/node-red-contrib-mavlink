@@ -173,6 +173,33 @@ test('listen-only UDP drops outbound quietly when no remote and no peer endpoint
   connection.close();
 });
 
+test('partial UDP remote config still warns (incomplete destination is a misconfig)', async () => {
+  const warns = [];
+  const { connection, dg } = build(
+    {
+      transport: {
+        mode: 'udp',
+        bindAddress: '0.0.0.0',
+        bindPort: 14550,
+        remoteAddress: '10.0.0.9',
+        // remotePort omitted on purpose
+      },
+    },
+    { logger: { warn: (m) => warns.push(m), info() {}, error() {} } }
+  );
+
+  await connection.start();
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
+  await delay(30);
+
+  assert.equal(dg.sockets[0].sent.length, 0);
+  assert.ok(
+    warns.some((m) => /incomplete destination/i.test(m)),
+    'half-configured remote must still warn'
+  );
+  connection.close();
+});
+
 test('require-signed drops an unsigned inbound frame and emits rejected', async () => {
   const { connection, dg } = build({
     signing: { linkId: 0, requireSigned: true, signOutbound: false, acceptInvalid: false, hasKey: false },
