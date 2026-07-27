@@ -4,7 +4,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 
-const { TcpTransport, TCP_NO_DESTINATION } = require('../../lib/connection/transport/tcp');
+const {
+  TcpTransport,
+  TCP_NO_DESTINATION,
+  TCP_PEER_GONE,
+} = require('../../lib/connection/transport/tcp');
 
 /** @returns {Promise<void>} */
 function tick() {
@@ -263,6 +267,23 @@ test('server peer error does not emit transport error for remaining clients', as
   });
   assert.equal(sent, true);
   assert.equal(b.writes[0].toString(), 'to-b');
+});
+
+test('targeted send to a removed server peer fails loud with TCP_PEER_GONE', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  await transport.open();
+
+  const a = new MockSocket({ address: '10.0.0.1', port: 1 });
+  net.servers[0].accept(a);
+  a.emit('error', new Error('peer a failed'));
+
+  await new Promise((resolve) => {
+    transport.send(Buffer.from('stale'), { address: '10.0.0.1', port: 1 }, (err) => {
+      assert.equal(err.code, TCP_PEER_GONE);
+      resolve();
+    });
+  });
 });
 
 test('no destination returns the quiet TCP_NO_DESTINATION code', async () => {
