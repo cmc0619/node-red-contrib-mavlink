@@ -82,6 +82,28 @@ test('Safety preset refuses a truthy-but-non-boolean confirmation token', async 
   assert.equal(conn.sent.length, 0, 'nothing is sent to the vehicle');
 });
 
+test('Safety preset Build tier also requires msg.confirmed === true', async () => {
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'flight_termination',
+    delivery: 'build',
+    connection: 'conn',
+    targetSysid: '1',
+    targetCompid: '1',
+  });
+
+  let sent;
+  node.emit('input', { payload: { 1: 1 } }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0], null, 'build must not emit an unconfirmed safety command');
+  assert.equal(sent[1].result, 'unconfirmed');
+});
+
 test('Safety preset with confirmed === true proceeds to send the command', async () => {
   const conn = connStub();
   const RED = redStub({ conn });

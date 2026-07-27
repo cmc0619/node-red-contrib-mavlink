@@ -267,6 +267,26 @@ module.exports = function registerMavlinkCommand(RED) {
         });
       }
 
+      // ── Safety preset confirmation check ──────────────────────────────────
+      // Runs before Build as well as send tiers: a built Flight Termination
+      // envelope on output 0 can be forwarded straight to mavlink-out, so the
+      // gate must block construction without an explicit boolean confirm
+      // (§9 safety — requiresConfirmation presets).
+      // Truthy tokens like the string "false" or 1 must NOT pass.
+      if (requiresConfirmation && msg.confirmed !== true) {
+        const rec = makeRecord({
+          result: 'unconfirmed',
+          confirmedBy: 'none',
+          elapsed: Date.now() - startMs,
+          detail: 'safety command requires msg.confirmed = true',
+        });
+        node.status({ fill: 'red', shape: 'ring', text: badge24(`confirm ${displayName}`) });
+        node.error('mavlink-command: safety command blocked — set msg.confirmed = true', msg);
+        emitStatus(rec, send, false);
+        done && done();
+        return;
+      }
+
       // ── Missing connection on a send/confirm/complete tier ────────────────
       // Do not silently build and pretend success — a chosen send tier with no
       // connection is a misconfiguration (§9). Fail loud on output 1 only.
@@ -306,24 +326,6 @@ module.exports = function registerMavlinkCommand(RED) {
           detail: 'build tier: message constructed, not sent',
         });
         emitStatus(rec, send, true, message);
-        done && done();
-        return;
-      }
-
-      // ── Safety preset confirmation check ──────────────────────────────────
-      // The node config carries requiresConfirmation; the operator must set an
-      // explicit boolean true. Truthy tokens like the string "false" or 1 must
-      // NOT arm a safety command (§9 safety gate).
-      if (requiresConfirmation && msg.confirmed !== true) {
-        const rec = makeRecord({
-          result: 'unconfirmed',
-          confirmedBy: 'none',
-          elapsed: Date.now() - startMs,
-          detail: 'safety command requires msg.confirmed = true',
-        });
-        node.status({ fill: 'red', shape: 'ring', text: badge24(`confirm ${displayName}`) });
-        node.error('mavlink-command: safety command blocked — set msg.confirmed = true', msg);
-        emitStatus(rec, send, false);
         done && done();
         return;
       }

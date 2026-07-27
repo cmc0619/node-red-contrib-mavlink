@@ -52,9 +52,9 @@ test('ack from a different sysid does not settle the transaction; the addressed 
   const waiter = makeWaiter(conn, { commandId: 400, targetSysid: 2, targetCompid: 1 });
   const p = waiter.start();
 
-  // Another vehicle (sysid 1) acks the same command — must be ignored.
-  conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 1, 1);
-  // The addressed vehicle (sysid 2) acks — settles the transaction.
+  // Another vehicle (sysid 1) acks DENIED — must be ignored (not settle).
+  conn.injectAck({ command: 400, result: MAV_RESULT.DENIED }, 1, 1);
+  // The addressed vehicle (sysid 2) acks ACCEPTED — settles the transaction.
   conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 2, 1);
 
   const outcome = await p;
@@ -79,9 +79,9 @@ test('ack from a different component is ignored when a specific compid is addres
   const waiter = makeWaiter(conn, { commandId: 176, targetSysid: 3, targetCompid: 1 });
   const p = waiter.start();
 
-  // Camera component (100) on the same system replies — wrong component.
-  conn.injectAck({ command: 176, result: MAV_RESULT.ACCEPTED }, 3, 100);
-  // Autopilot (compid 1) replies — the addressed component.
+  // Camera component (100) on the same system replies DENIED — wrong component.
+  conn.injectAck({ command: 176, result: MAV_RESULT.DENIED }, 3, 100);
+  // Autopilot (compid 1) replies ACCEPTED — the addressed component.
   conn.injectAck({ command: 176, result: MAV_RESULT.ACCEPTED }, 3, 1);
 
   const outcome = await p;
