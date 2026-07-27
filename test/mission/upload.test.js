@@ -165,20 +165,35 @@ test('a premature/stale ACCEPTED before items are delivered is ignored, not a ph
   assert.deepEqual(itemSends(stub).map((s) => s.seq), [0, 1]);
 });
 
-test('a rejection ACK before all items still fails immediately (§9)', async () => {
+test('a stale rejection ACK before all items is ignored; a real one after delivery fails (§9)', async () => {
   const stub = new StubConnection();
+  const items = makeItems(2);
+  let sentFinal = false;
+
   stub.onSend((message, deliver) => {
     if (message.name === 'MISSION_COUNT') {
-      deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } });
-    } else if (message.name === 'MISSION_ITEM_INT') {
+      // Stale DENIED from a prior transfer — must not abort this upload.
       deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.INVALID, mission_type: 0 } });
+      deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } });
+      return;
+    }
+    if (message.name === 'MISSION_ITEM_INT') {
+      const seq = message.fields.seq;
+      if (seq === 0) {
+        deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 1, mission_type: 0 } });
+      } else if (!sentFinal) {
+        sentFinal = true;
+        // After every item has been answered, a rejection is this transfer's.
+        deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.INVALID, mission_type: 0 } });
+      }
     }
   });
 
-  const outcome = await new MissionUpload(uploadOpts(stub, makeItems(3))).start();
+  const outcome = await new MissionUpload(uploadOpts(stub, items)).start();
 
   assert.equal(outcome.result, 'failed');
   assert.equal(outcome.resultCode, MAV_MISSION_RESULT.INVALID);
+  assert.deepEqual(itemSends(stub).map((s) => s.seq), [0, 1]);
 });
 
 test('global-frame item x/y are scaled to degE7 in the INT carrier (§9 coordinate frames)', () => {
