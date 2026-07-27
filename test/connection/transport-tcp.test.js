@@ -328,6 +328,30 @@ test('server peer error removes the socket before pending write callbacks resume
   assert.equal(b.writes[0].toString(), 'to-b');
 });
 
+test('server peer close fails pending writes loud with TCP_PEER_GONE', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  await transport.open();
+
+  const peer = new MockSocket({ address: '10.0.0.9', port: 9 });
+  net.servers[0].accept(peer);
+  peer.nextWriteResult = false;
+
+  let errCode = null;
+  transport.send(Buffer.from('backpressured'), { address: '10.0.0.9', port: 9 }, (err) => {
+    errCode = err && err.code;
+  });
+  peer.emit('close');
+  assert.equal(errCode, TCP_PEER_GONE);
+
+  await new Promise((resolve) => {
+    transport.send(Buffer.from('after'), { address: '10.0.0.9', port: 9 }, (err) => {
+      assert.equal(err.code, TCP_PEER_GONE);
+      resolve();
+    });
+  });
+});
+
 test('client disconnect emits error before pending write callbacks resume', async () => {
   const net = mockNet();
   const transport = new TcpTransport({ remoteAddress: '127.0.0.1', remotePort: 5760 }, { net: net.module });
