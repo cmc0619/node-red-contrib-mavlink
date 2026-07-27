@@ -28,7 +28,15 @@
     "nodes": {
       "mavlink-local-identity": "nodes/mavlink-local-identity.js",
       "mavlink-vehicle": "nodes/mavlink-vehicle.js",
-      "mavlink-connection": "nodes/mavlink-connection.js"
+      "mavlink-connection": "nodes/mavlink-connection.js",
+      "mavlink-in": "nodes/mavlink-in.js",
+      "mavlink-out": "nodes/mavlink-out.js",
+      "mavlink-build": "nodes/mavlink-build.js",
+      "mavlink-command": "nodes/mavlink-command.js",
+      "mavlink-move": "nodes/mavlink-move.js",
+      "mavlink-param": "nodes/mavlink-param.js",
+      "mavlink-payload": "nodes/mavlink-payload.js",
+      "mavlink-state": "nodes/mavlink-state.js"
     }
   }
 }

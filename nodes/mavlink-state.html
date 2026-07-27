@@ -1,0 +1,31 @@
+<script type="text/javascript">
+  RED.nodes.registerType('mavlink-state', {
+    category: 'mavlink',
+    color: '#e6ffe6',
+    defaults: {
+      name: { value: '' },
+      connection: { value: '', type: 'mavlink-connection', required: true },
+      mode: { value: 'snapshot' },
+      events: { value: 'stale,expired,statustext' },
+      targetSystem: { value: '', validate: RED.validators.number(true) },
+      targetComponent: { value: '', validate: RED.validators.number(true) }
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: 'font-awesome/fa-table',
+    label: function () { return this.name || 'mavlink state'; }
+  });
+</script>
+
+<script type="text/html" data-template-name="mavlink-state">
+  <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+  <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row"><label for="node-input-mode">Mode</label><select id="node-input-mode"><option value="snapshot">Snapshot on input</option><option value="feed">Event feed</option></select></div>
+  <div class="form-row"><label for="node-input-events">Events</label><input type="text" id="node-input-events" placeholder="stale,expired,statustext"></div>
+  <div class="form-row"><label for="node-input-targetSystem">Filter sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-targetComponent">Filter compid</label><input type="number" id="node-input-targetComponent" min="0" max="255"></div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-state">
+  <p>Reads the Connection-owned peer table. Snapshot mode emits the current peer-table view on input; feed mode emits selected transition and STATUSTEXT records as they arrive.</p>
+</script>

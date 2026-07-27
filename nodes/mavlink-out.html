@@ -1,0 +1,83 @@
+<script type="text/javascript">
+  (function () {
+    var BAND_OPTIONS = [
+      { value: '0', label: 'Emergency (0)' },
+      { value: '1', label: 'Liveness (1)' },
+      { value: '2', label: 'Control (2)' },
+      { value: '3', label: 'Streaming (3)' },
+      { value: '4', label: 'Bulk (4)' },
+    ];
+
+    RED.nodes.registerType('mavlink-out', {
+      category: 'MAVLink',
+      color: '#6ea6d7',
+      defaults: {
+        name:       { value: '' },
+        connection: { value: '', type: 'mavlink-connection', required: true },
+        band:       { value: '2' },
+      },
+      inputs: 1,
+      outputs: 2,
+      outputLabels: ['continue', 'status'],
+      icon: 'font-awesome/fa-arrow-up',
+      paletteLabel: 'mavlink out',
+      label: function () {
+        return this.name || 'mavlink out';
+      },
+      labelStyle: function () {
+        return this.name ? 'node_label_italic' : '';
+      },
+      oneditprepare: function () {
+        var $band = $('#node-input-band');
+        $band.empty();
+        BAND_OPTIONS.forEach(function (opt) {
+          $('<option>').val(opt.value).text(opt.label).appendTo($band);
+        });
+        $band.val(this.band !== undefined ? String(this.band) : '2');
+      },
+    });
+  }());
+</script>
+
+<script type="text/html" data-template-name="mavlink-out">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-connection"><i class="fa fa-plug"></i> Connection</label>
+    <input type="text" id="node-input-connection">
+  </div>
+  <div class="form-row">
+    <label for="node-input-band"><i class="fa fa-sort-amount-asc"></i> Default band</label>
+    <select id="node-input-band" style="width:200px"></select>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-out">
+  <p>Enqueue a MAVLink message onto the Connection's outbound band queue.</p>
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">object</span></dt>
+    <dd>The message to send. Accepted shapes:
+      <ul>
+        <li><code>{ name, fields }</code> — decoded-shape message with wire-ready field values.</li>
+        <li>Build-tier envelope from <b>mavlink-build</b>: <code>{ message: { name, fields }, … }</code>.</li>
+      </ul>
+    </dd>
+    <dt class="optional">band <span class="property-type">number</span></dt>
+    <dd>Queue band (0–4). Overrides the node default.</dd>
+    <dt class="optional">target <span class="property-type">object</span></dt>
+    <dd><code>{ sysid, compid }</code> destination. Uses connection default when absent.</dd>
+    <dt class="optional">identityId <span class="property-type">string</span></dt>
+    <dd>Local identity override. Must be bound to the connection.</dd>
+  </dl>
+  <h3>Outputs</h3>
+  <ol class="node-ports">
+    <li>Continue — the original input message, fired once the message is accepted into the queue.</li>
+    <li>Status — a status record on every terminal outcome.</li>
+  </ol>
+  <h3>Details</h3>
+  <p>Set <code>msg.payload = false</code> to suppress the node silently.</p>
+  <p>If output 1 is wired back to this node's input, a refusal status record is emitted instead of sending.</p>
+</script>

@@ -1,0 +1,43 @@
+<script type="text/javascript">
+  RED.nodes.registerType('mavlink-param', {
+    category: 'mavlink',
+    color: '#e9e4ff',
+    defaults: {
+      name: { value: '' },
+      connection: { value: '', type: 'mavlink-connection' },
+      delivery: { value: 'build' },
+      action: { value: 'read' },
+      firmware: { value: 'ardupilot' },
+      targetSystem: { value: 1, validate: RED.validators.number() },
+      targetComponent: { value: 1, validate: RED.validators.number() },
+      paramId: { value: '' },
+      paramIndex: { value: -1, validate: RED.validators.number(true) },
+      value: { value: '', validate: RED.validators.number(true) },
+      paramType: { value: 'MAV_PARAM_TYPE_REAL32' }
+    },
+    inputs: 1,
+    outputs: 2,
+    outputLabels: ['continue', 'status'],
+    icon: 'font-awesome/fa-sliders',
+    label: function () { return this.name || 'mavlink param'; }
+  });
+</script>
+
+<script type="text/html" data-template-name="mavlink-param">
+  <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+  <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and echo-confirm</option><option value="collect">Request list and collect</option></select></div>
+  <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action"><option value="read">Read one</option><option value="set">Set one</option><option value="request-list">Request list</option></select></div>
+  <div class="form-row"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
+  <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><input type="number" id="node-input-targetComponent" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-paramId">Param id</label><input type="text" id="node-input-paramId" maxlength="16"></div>
+  <div class="form-row"><label for="node-input-paramIndex">Index</label><input type="number" id="node-input-paramIndex"></div>
+  <div class="form-row"><label for="node-input-value">Value</label><input type="text" id="node-input-value"></div>
+  <div class="form-row"><label for="node-input-paramType">Type</label><select id="node-input-paramType"><option value="MAV_PARAM_TYPE_REAL32">REAL32 (9)</option><option value="MAV_PARAM_TYPE_UINT8">UINT8 (1)</option><option value="MAV_PARAM_TYPE_INT8">INT8 (2)</option><option value="MAV_PARAM_TYPE_UINT16">UINT16 (3)</option><option value="MAV_PARAM_TYPE_INT16">INT16 (4)</option><option value="MAV_PARAM_TYPE_UINT32">UINT32 (5)</option><option value="MAV_PARAM_TYPE_INT32">INT32 (6)</option></select></div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-param">
+  <p>Reads one parameter, sets one parameter, or requests a full list. Set confirmation is by matching the PARAM_VALUE echo, not COMMAND_ACK.</p>
+  <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast.</p>
+</script>

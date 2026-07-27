@@ -1,0 +1,145 @@
+<script type="text/javascript">
+  (function () {
+    var BAND_OPTIONS = [
+      { value: '0', label: 'Emergency (0)' },
+      { value: '1', label: 'Liveness (1)' },
+      { value: '2', label: 'Control (2)' },
+      { value: '3', label: 'Streaming (3)' },
+      { value: '4', label: 'Bulk (4)' },
+    ];
+
+    var TIER_OPTIONS = [
+      { value: 'build', label: 'Build' },
+      { value: 'send',  label: 'Send' },
+    ];
+
+    RED.nodes.registerType('mavlink-build', {
+      category: 'MAVLink',
+      color: '#6ea6d7',
+      defaults: {
+        name:        { value: '' },
+        vehicle:     { value: '', type: 'mavlink-vehicle', required: true },
+        connection:  { value: '', type: 'mavlink-connection' },
+        messageName: { value: '' },
+        fields:      { value: '{}' },
+        tier:        { value: 'send' },
+        band:        { value: '2' },
+        repeatMs:    { value: 0 },
+      },
+      inputs: 1,
+      outputs: 2,
+      outputLabels: ['continue', 'status'],
+      icon: 'font-awesome/fa-wrench',
+      paletteLabel: 'mavlink build',
+      label: function () {
+        return this.name || this.messageName || 'mavlink build';
+      },
+      labelStyle: function () {
+        return this.name ? 'node_label_italic' : '';
+      },
+      oneditprepare: function () {
+        var node = this;
+
+        /* Tier dropdown */
+        var $tier = $('#node-input-tier');
+        $tier.empty();
+        TIER_OPTIONS.forEach(function (opt) {
+          $('<option>').val(opt.value).text(opt.label).appendTo($tier);
+        });
+        $tier.val(node.tier || 'send');
+
+        /* Band dropdown */
+        var $band = $('#node-input-band');
+        $band.empty();
+        BAND_OPTIONS.forEach(function (opt) {
+          $('<option>').val(opt.value).text(opt.label).appendTo($band);
+        });
+        $band.val(node.band !== undefined ? String(node.band) : '2');
+
+        /* Message name — plain text for now; a future pass wires a dialect dropdown */
+        $('#node-input-messageName').val(node.messageName || '');
+
+        /* Show/hide connection row based on tier */
+        function updateConnectionRow() {
+          var t = $tier.val();
+          if (t === 'build') {
+            $('#mav-connection-row').hide();
+          } else {
+            $('#mav-connection-row').show();
+          }
+        }
+        $tier.on('change', updateConnectionRow);
+        updateConnectionRow();
+      },
+    });
+  }());
+</script>
+
+<script type="text/html" data-template-name="mavlink-build">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-vehicle"><i class="fa fa-plane"></i> Vehicle</label>
+    <input type="text" id="node-input-vehicle">
+  </div>
+  <div class="form-row" id="mav-connection-row">
+    <label for="node-input-connection"><i class="fa fa-plug"></i> Connection</label>
+    <input type="text" id="node-input-connection">
+  </div>
+  <hr/>
+  <div class="form-row">
+    <label for="node-input-messageName"><i class="fa fa-envelope"></i> Message</label>
+    <input type="text" id="node-input-messageName" placeholder="e.g. HEARTBEAT">
+  </div>
+  <div class="form-row">
+    <label for="node-input-fields"><i class="fa fa-list"></i> Fields</label>
+    <textarea id="node-input-fields" style="width:70%;height:80px;font-family:monospace;font-size:12px" placeholder='{"field_name": value}'></textarea>
+  </div>
+  <hr/>
+  <div class="form-row">
+    <label for="node-input-tier"><i class="fa fa-send"></i> Delivery</label>
+    <select id="node-input-tier" style="width:150px"></select>
+  </div>
+  <div class="form-row">
+    <label for="node-input-band"><i class="fa fa-sort-amount-asc"></i> Band</label>
+    <select id="node-input-band" style="width:200px"></select>
+  </div>
+  <div class="form-row">
+    <label for="node-input-repeatMs"><i class="fa fa-refresh"></i> Repeat</label>
+    <input type="number" id="node-input-repeatMs" placeholder="0" min="0" step="100" style="width:80px">
+    <span> ms (0 = off)</span>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-build">
+  <p>Build a MAVLink message from any message in the loaded dialect.</p>
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt class="optional">payload <span class="property-type">object</span></dt>
+    <dd>Field value overrides merged on top of the node's configured defaults.
+        Set to <code>false</code> to suppress the node silently.</dd>
+    <dt class="optional">band <span class="property-type">number</span></dt>
+    <dd>Queue band override (0–4).</dd>
+    <dt class="optional">target <span class="property-type">object</span></dt>
+    <dd><code>{ sysid, compid }</code> destination.</dd>
+  </dl>
+  <h3>Outputs</h3>
+  <ol class="node-ports">
+    <li><b>Continue</b>: on <b>Build</b> tier, carries
+      <code>{ message: { name, fields }, messageName, tier }</code> — forward to
+      <b>mavlink-out</b> or inspect/modify before sending.<br/>
+      On <b>Send</b> tier, carries the original input message as a pass-through trigger.</li>
+    <li><b>Status</b>: a status record on every terminal outcome.</li>
+  </ol>
+  <h3>Details</h3>
+  <p><b>Fields</b>: a JSON object of default field values. Keys are snake_case
+  field names as declared in the dialect. Values must be appropriate for the
+  field type — the field codec encodes them to wire format.</p>
+  <p><b>Delivery</b>: <i>Build</i> encodes and emits without sending. <i>Send</i>
+  enqueues directly on the Connection.</p>
+  <p><b>Repeat</b>: when set, the node fires independently of inbound triggers at
+  the configured interval. The status badge shows the achieved rate alongside the
+  configured rate.</p>
+</script>

@@ -1,0 +1,441 @@
+<!-- mavlink-command editor dialog (DESIGN.md §3, §6, §9) -->
+<script type="text/javascript">
+(function () {
+  'use strict';
+
+  /**
+   * Cap text at 24 characters with single-glyph ellipsis (§6).
+   * @param {string} t
+   * @returns {string}
+   */
+  function badge24(t) {
+    return t.length <= 24 ? t : t.slice(0, 23) + '\u2026';
+  }
+
+  /**
+   * Helper: create a labelled form row.
+   * @param {string} label
+   * @param {HTMLElement} input
+   * @returns {HTMLElement}
+   */
+  function formRow(label, input) {
+    const row = $('<div class="form-row"></div>');
+    const lbl = $('<label></label>').css({ width: '120px', display: 'inline-block' }).text(label);
+    row.append(lbl).append(input);
+    return row;
+  }
+
+  /**
+   * Delivery options filtered by what the selected command supports.
+   * @param {boolean} hasConnection  whether a connection is configured
+   * @param {boolean} hasCompletion  whether the command has a completion condition
+   * @returns {Array<{value: string, label: string}>}
+   */
+  function deliveryOptions(hasConnection, hasCompletion) {
+    const opts = [{ value: 'build', label: 'Build' }];
+    if (hasConnection) {
+      opts.push({ value: 'send', label: 'Send' });
+      opts.push({ value: 'confirm', label: 'Send & confirm' });
+      if (hasCompletion) {
+        opts.push({ value: 'complete', label: 'Send & await completion' });
+      }
+    }
+    return opts;
+  }
+
+  // ── Preset cache loaded from server ───────────────────────────────────────
+  let _presetGroups = null;
+
+  function loadPresets(cb) {
+    if (_presetGroups) { cb(_presetGroups); return; }
+    $.getJSON('/mavlink/command/presets', function (data) {
+      _presetGroups = data.groups || [];
+      cb(_presetGroups);
+    }).fail(function () {
+      _presetGroups = [];
+      cb(_presetGroups);
+    });
+  }
+
+  // Hard-coded preset param shapes for offline rendering.
+  // Keyed by preset id; each entry is an array of { index, label, units, enumName }.
+  // This table covers the presets defined in lib/command/presets.js.
+  const PRESET_PARAMS = {
+    arm:           [{ index: 2, label: 'Force (0 or 21196)', units: '' }],
+    disarm:        [{ index: 2, label: 'Force (0 or 21196)', units: '' }],
+    set_mode:      [{ index: 1, label: 'Mode (base_mode)', units: '' },
+                    { index: 2, label: 'Custom mode', units: '' }],
+    takeoff:       [{ index: 1, label: 'Min pitch', units: 'deg' },
+                    { index: 7, label: 'Altitude', units: 'm' }],
+    land:          [{ index: 1, label: 'Abort altitude', units: 'm' },
+                    { index: 5, label: 'Latitude', units: 'degE7' },
+                    { index: 6, label: 'Longitude', units: 'degE7' },
+                    { index: 7, label: 'Altitude', units: 'm' }],
+    rtl:           [],
+    set_home:      [{ index: 1, label: 'Use current (1 = yes)', units: '' },
+                    { index: 5, label: 'Latitude', units: 'degE7' },
+                    { index: 6, label: 'Longitude', units: 'degE7' },
+                    { index: 7, label: 'Altitude', units: 'm' }],
+    reposition:    [{ index: 1, label: 'Speed', units: 'm/s' },
+                    { index: 2, label: 'Bitmask / flags', units: '' },
+                    { index: 3, label: 'Loiter radius', units: 'm' },
+                    { index: 4, label: 'Yaw', units: 'deg' },
+                    { index: 5, label: 'Latitude', units: 'degE7' },
+                    { index: 6, label: 'Longitude', units: 'degE7' },
+                    { index: 7, label: 'Altitude', units: 'm' }],
+    change_speed:  [{ index: 1, label: 'Speed type (0=AS 1=GS 2=Climb 3=Desc)', units: '' },
+                    { index: 2, label: 'Speed', units: 'm/s' },
+                    { index: 3, label: 'Throttle', units: '%' }],
+    yaw:           [{ index: 1, label: 'Angle', units: 'deg' },
+                    { index: 2, label: 'Angular speed', units: 'deg/s' },
+                    { index: 3, label: 'Direction (-1=CCW 0=CW)', units: '' }],
+    rotate:        [{ index: 1, label: 'Angle', units: 'deg' },
+                    { index: 2, label: 'Angular speed', units: 'deg/s' },
+                    { index: 3, label: 'Direction (-1=CCW 0=CW)', units: '' }],
+    orbit:         [{ index: 1, label: 'Radius', units: 'm' },
+                    { index: 2, label: 'Velocity', units: 'm/s' },
+                    { index: 3, label: 'Yaw behavior', units: '' },
+                    { index: 5, label: 'Latitude', units: 'degE7' },
+                    { index: 6, label: 'Longitude', units: 'degE7' },
+                    { index: 7, label: 'Altitude', units: 'm' }],
+    mission_start: [{ index: 1, label: 'First item', units: '' },
+                    { index: 2, label: 'Last item', units: '' }],
+    pause:         [],
+    resume:        [],
+    request_message:    [{ index: 1, label: 'Message ID', units: '' },
+                         { index: 2, label: 'Response target', units: '' }],
+    set_message_interval: [{ index: 1, label: 'Message ID', units: '' },
+                            { index: 2, label: 'Interval', units: 'µs' },
+                            { index: 3, label: 'Response target', units: '' }],
+    stop_message_interval: [{ index: 1, label: 'Message ID', units: '' }],
+    reboot_autopilot: [{ index: 1, label: 'Autopilot action (1=reboot)', units: '' },
+                       { index: 2, label: 'Companion action', units: '' }],
+    flight_termination: [{ index: 1, label: 'Terminate (1=yes)', units: '' }],
+  };
+
+  // Presets with completion conditions — determines if "await completion" is shown.
+  const HAS_COMPLETION = new Set(['arm', 'disarm', 'takeoff', 'land', 'rtl', 'set_mode']);
+  // Safety presets that require msg.confirmed.
+  const REQUIRES_CONFIRM = new Set(['flight_termination']);
+
+  RED.nodes.registerType('mavlink-command', {
+    category: 'MAVLink',
+    color: '#4a90d9',
+    defaults: {
+      name:              { value: '' },
+      mode:              { value: 'preset' },
+      preset:            { value: 'arm' },
+      advancedCommand:   { value: '' },
+      delivery:          { value: 'confirm' },
+      connection:        { value: '', type: 'mavlink-connection', required: false },
+      targetSysid:       { value: '' },
+      targetCompid:      { value: '' },
+      timeout:           { value: '10000' },
+      maxRetries:        { value: '3' },
+      unconfirmedContinue: { value: false },
+      completionTimeout: { value: '60000' },
+      params:            { value: '{}' },
+    },
+    inputs:  1,
+    outputs: 2,
+    outputLabels: ['continue', 'status'],
+    icon: 'font-awesome/fa-rocket',
+    paletteLabel: 'command',
+    label: function () {
+      if (this.name) return this.name;
+      if (this.mode === 'advanced') return `cmd #${this.advancedCommand || '?'}`;
+      return this.preset || 'command';
+    },
+
+    oneditprepare: function () {
+      const node = this;
+      const container = $('#node-input-params-container');
+
+      // ── Mode toggle ────────────────────────────────────────────────────────
+      function applyMode(mode) {
+        if (mode === 'advanced') {
+          $('#row-preset').hide();
+          $('#row-advanced').show();
+        } else {
+          $('#row-preset').show();
+          $('#row-advanced').hide();
+        }
+        refreshParamFields();
+        refreshDelivery();
+      }
+
+      $('#node-input-mode').on('change', function () {
+        applyMode($(this).val());
+      });
+
+      // ── Preset dropdown ────────────────────────────────────────────────────
+      function buildPresetDropdown(groups) {
+        const sel = $('#node-input-preset').empty();
+        for (const g of groups) {
+          const og = $('<optgroup></optgroup>').attr('label', g.group.charAt(0).toUpperCase() + g.group.slice(1));
+          for (const p of g.presets) {
+            const opt = $('<option></option>').val(p.id).text(`${p.name} (${p.commandId})`);
+            og.append(opt);
+          }
+          sel.append(og);
+        }
+        // Re-apply the saved selection now that the options exist, then fire a
+        // change so the param fields, delivery tiers, and safety notice render
+        // for the saved preset. loadPresets is async on first open, so this
+        // callback runs after the initial applyMode() left the dialog empty —
+        // without this the exposed params stay stale until the user re-picks.
+        sel.val(node.preset || 'arm');
+        sel.trigger('change');
+      }
+
+      loadPresets(buildPresetDropdown);
+
+      $('#node-input-preset').on('change', function () {
+        refreshParamFields();
+        refreshDelivery();
+      });
+
+      // ── Advanced command field ─────────────────────────────────────────────
+      $('#node-input-advancedCommand').on('change', refreshDelivery);
+
+      // ── Delivery dropdown ──────────────────────────────────────────────────
+      function refreshDelivery() {
+        const hasConn = !!$('#node-input-connection').val();
+        const mode = $('#node-input-mode').val();
+        let hasCompletion = false;
+        if (mode === 'preset') {
+          hasCompletion = HAS_COMPLETION.has($('#node-input-preset').val());
+        }
+
+        const curDelivery = $('#node-input-delivery').val();
+        const opts = deliveryOptions(hasConn, hasCompletion);
+        const sel = $('#node-input-delivery').empty();
+        for (const o of opts) {
+          sel.append($('<option></option>').val(o.value).text(o.label));
+        }
+        // Preserve selection if still valid; else fall back to last available.
+        if (opts.find((o) => o.value === curDelivery)) {
+          sel.val(curDelivery);
+        } else {
+          sel.val(opts[opts.length - 1].value);
+        }
+        refreshCompletionRow();
+      }
+
+      $('#node-input-connection').on('change', refreshDelivery);
+      $('#node-input-delivery').on('change', refreshCompletionRow);
+
+      function refreshCompletionRow() {
+        const isComplete = $('#node-input-delivery').val() === 'complete';
+        $('#row-completion-timeout')[isComplete ? 'show' : 'hide']();
+      }
+
+      // ── Param fields ───────────────────────────────────────────────────────
+      let savedParams = {};
+      try { savedParams = JSON.parse(node.params || '{}'); } catch (_e) {}
+
+      function refreshParamFields() {
+        container.empty();
+
+        const mode = $('#node-input-mode').val();
+        if (mode === 'advanced') {
+          // Advanced: 7 generic param fields.
+          for (let i = 1; i <= 7; i++) {
+            const input = $('<input type="number" class="param-input">').attr('data-idx', i)
+              .val(savedParams[i] !== undefined ? savedParams[i] : '');
+            container.append(formRow(`Param ${i}`, input));
+          }
+        } else {
+          const presetId = $('#node-input-preset').val();
+          const paramSpec = PRESET_PARAMS[presetId] || [];
+          if (paramSpec.length === 0) {
+            container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
+          }
+          for (const spec of paramSpec) {
+            const label = spec.units
+              ? `${spec.label} (${spec.units})`
+              : spec.label;
+            const input = $('<input type="number" class="param-input">').attr('data-idx', spec.index)
+              .val(savedParams[spec.index] !== undefined ? savedParams[spec.index] : '');
+            container.append(formRow(label, input));
+          }
+        }
+      }
+
+      // ── Safety preset notice ───────────────────────────────────────────────
+      function refreshSafetyNotice() {
+        const presetId = $('#node-input-preset').val();
+        const isSafety = REQUIRES_CONFIRM.has(presetId) && $('#node-input-mode').val() !== 'advanced';
+        $('#row-safety-notice')[isSafety ? 'show' : 'hide']();
+      }
+
+      $('#node-input-preset').on('change', refreshSafetyNotice);
+      $('#node-input-mode').on('change', refreshSafetyNotice);
+
+      // ── Initial state ──────────────────────────────────────────────────────
+      applyMode(node.mode || 'preset');
+      refreshSafetyNotice();
+      refreshCompletionRow();
+    },
+
+    oneditsave: function () {
+      // Collect param values from the dynamic fields.
+      const params = {};
+      $('.param-input').each(function () {
+        const idx = Number($(this).attr('data-idx'));
+        const val = $(this).val().trim();
+        if (val !== '') params[idx] = Number(val);
+      });
+      this.params = JSON.stringify(params);
+    },
+
+    oneditcancel: function () {},
+  });
+}());
+</script>
+
+<script type="text/html" data-template-name="mavlink-command">
+  <div class="form-row">
+    <label for="node-input-name" style="width:120px"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="(optional)">
+  </div>
+
+  <div class="form-row">
+    <label for="node-input-mode" style="width:120px">Mode</label>
+    <select id="node-input-mode" style="width:200px">
+      <option value="preset">Preset</option>
+      <option value="advanced">Advanced (full MAV_CMD list)</option>
+    </select>
+  </div>
+
+  <div class="form-row" id="row-preset">
+    <label for="node-input-preset" style="width:120px">Preset</label>
+    <select id="node-input-preset" style="width:240px"></select>
+  </div>
+
+  <div class="form-row" id="row-advanced" style="display:none">
+    <label for="node-input-advancedCommand" style="width:120px">MAV_CMD id</label>
+    <input type="number" id="node-input-advancedCommand" placeholder="e.g. 400" style="width:120px">
+    <span style="margin-left:6px;color:#888;font-size:11px">Numeric command value</span>
+  </div>
+
+  <!-- Safety notice for presets that require confirmation -->
+  <div class="form-row" id="row-safety-notice"
+       style="display:none;background:#fff3cd;border:1px solid #ffc107;padding:6px 10px;border-radius:3px">
+    <i class="fa fa-warning" style="color:#e67e22"></i>
+    <strong>Safety command</strong> — set <code>msg.confirmed = true</code> to allow sending.
+  </div>
+
+  <hr style="margin:8px 0">
+
+  <div class="form-row">
+    <label style="width:120px;font-weight:bold">Parameters</label>
+  </div>
+  <div id="node-input-params-container"></div>
+  <!-- params JSON stored in hidden field; populated by oneditsave -->
+  <input type="hidden" id="node-input-params">
+
+  <hr style="margin:8px 0">
+
+  <div class="form-row">
+    <label for="node-input-connection" style="width:120px">Connection</label>
+    <input type="text" id="node-input-connection" style="width:240px">
+  </div>
+
+  <div class="form-row">
+    <label for="node-input-delivery" style="width:120px">Delivery</label>
+    <select id="node-input-delivery" style="width:200px">
+      <option value="build">Build</option>
+      <option value="send">Send</option>
+      <option value="confirm">Send &amp; confirm</option>
+      <option value="complete">Send &amp; await completion</option>
+    </select>
+  </div>
+
+  <div class="form-row" id="row-completion-timeout" style="display:none">
+    <label for="node-input-completionTimeout" style="width:120px">Completion timeout</label>
+    <input type="number" id="node-input-completionTimeout" style="width:80px"> ms
+  </div>
+
+  <hr style="margin:8px 0">
+
+  <div class="form-row">
+    <label for="node-input-targetSysid" style="width:120px">Target sysid</label>
+    <input type="number" id="node-input-targetSysid" placeholder="(connection default)" style="width:80px">
+    <label for="node-input-targetCompid" style="margin-left:10px;width:80px">Compid</label>
+    <input type="number" id="node-input-targetCompid" placeholder="(default)" style="width:80px">
+  </div>
+
+  <div class="form-row">
+    <label for="node-input-timeout" style="width:120px">ACK timeout</label>
+    <input type="number" id="node-input-timeout" style="width:80px"> ms
+  </div>
+
+  <div class="form-row">
+    <label for="node-input-maxRetries" style="width:120px">Max retries</label>
+    <input type="number" id="node-input-maxRetries" style="width:60px">
+    <span style="margin-left:6px;color:#888;font-size:11px">TEMPORARILY_REJECTED backoff</span>
+  </div>
+
+  <div class="form-row">
+    <label style="width:120px">On timeout</label>
+    <input type="checkbox" id="node-input-unconfirmedContinue" style="width:auto;margin-right:6px">
+    <label for="node-input-unconfirmedContinue" style="width:auto">Continue chain if unconfirmed</label>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-command">
+  <p>Sends a MAVLink <code>MAV_CMD</code> command with configurable delivery and confirmation.</p>
+
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">object | false</span></dt>
+    <dd>
+      When an object with numeric keys 1–7, those values override the configured
+      command parameters for the matching param index.
+      <code>false</code> suppresses the command (nothing is sent or emitted).
+    </dd>
+    <dt class="optional">confirmed <span class="property-type">boolean</span></dt>
+    <dd>Must be <code>true</code> for Safety presets (e.g. Flight Termination).</dd>
+  </dl>
+
+  <h3>Outputs</h3>
+  <ol class="node-ports">
+    <li>Continue
+      <dl class="message-properties">
+        <dt>payload <span class="property-type">object</span></dt>
+        <dd>The status record on success; the built <code>COMMAND_LONG</code> message in Build mode.</dd>
+      </dl>
+    </li>
+    <li>Status
+      <dl class="message-properties">
+        <dt>payload <span class="property-type">object</span></dt>
+        <dd>Status record on every terminal outcome:
+          <code>result</code>, <code>resultCode</code>, <code>confirmedBy</code>,
+          <code>target</code>, <code>elapsed</code>, <code>retries</code>,
+          <code>command</code>, <code>commandId</code>, <code>detail</code>.
+        </dd>
+      </dl>
+    </li>
+  </ol>
+
+  <h3>Delivery tiers</h3>
+  <ul>
+    <li><b>Build</b> — construct the COMMAND_LONG and emit on output 1; no send.</li>
+    <li><b>Send</b> — fire-and-forget; no acknowledgement waiting.</li>
+    <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; retry on TEMPORARILY_REJECTED.</li>
+    <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
+        vehicle state satisfies the command's completion condition (Arm, Takeoff, Land, Set Mode).</li>
+  </ul>
+
+  <h3>Details</h3>
+  <p>
+    Wiring output 1 (status) directly into this node's input is detected and reported
+    as a miswire — the chain would otherwise advance on failure.
+  </p>
+  <p>
+    On ACK timeout the node checks the peer table. If the completion condition is
+    satisfied, the command is confirmed by observed state. Otherwise the result is
+    <em>unconfirmed</em>; output 0 does not fire unless <em>Continue chain if unconfirmed</em> is enabled.
+  </p>
+</script>

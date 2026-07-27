@@ -1,0 +1,60 @@
+<script type="text/javascript">
+  RED.nodes.registerType('mavlink-payload', {
+    category: 'mavlink',
+    color: '#ffe8d8',
+    defaults: {
+      name: { value: '' },
+      connection: { value: '', type: 'mavlink-connection' },
+      delivery: { value: 'build' },
+      timeout: { value: 10000, validate: RED.validators.number(true) },
+      maxRetries: { value: 3, validate: RED.validators.number(true) },
+      topic: { value: 'camera' },
+      verb: { value: 'photo' },
+      path: { value: 'legacy' },
+      targetSystem: { value: 1, validate: RED.validators.number() },
+      targetComponent: { value: 1, validate: RED.validators.number() },
+      count: { value: 1, validate: RED.validators.number(true) },
+      interval: { value: 0, validate: RED.validators.number(true) },
+      modeValue: { value: 0, validate: RED.validators.number(true) },
+      distance: { value: 0, validate: RED.validators.number(true) },
+      pitch: { value: 0, validate: RED.validators.number(true) },
+      roll: { value: 0, validate: RED.validators.number(true) },
+      yaw: { value: 0, validate: RED.validators.number(true) },
+      pitchRate: { value: 0, validate: RED.validators.number(true) },
+      yawRate: { value: 0, validate: RED.validators.number(true) },
+      servo: { value: 0, validate: RED.validators.number(true) },
+      pwm: { value: 0, validate: RED.validators.number(true) },
+      period: { value: 0, validate: RED.validators.number(true) },
+      instance: { value: 0, validate: RED.validators.number(true) },
+      actionValue: { value: 0, validate: RED.validators.number(true) }
+    },
+    inputs: 1,
+    outputs: 2,
+    outputLabels: ['continue', 'status'],
+    icon: 'font-awesome/fa-camera',
+    label: function () { return this.name || 'mavlink payload'; }
+  });
+</script>
+
+<script type="text/html" data-template-name="mavlink-payload">
+  <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+  <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option></select></div>
+  <div class="form-row"><label for="node-input-timeout">ACK timeout</label><input type="number" id="node-input-timeout" style="width:80px"> ms</div>
+  <div class="form-row"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
+  <div class="form-row"><label for="node-input-topic">Topic</label><select id="node-input-topic"><option value="camera">Camera</option><option value="gimbal">Gimbal</option><option value="servo">Servo</option><option value="release">Release</option></select></div>
+  <div class="form-row"><label for="node-input-verb">Verb</label><input type="text" id="node-input-verb" placeholder="photo, aim, set, gripper"></div>
+  <div class="form-row"><label for="node-input-path">Gimbal path</label><select id="node-input-path"><option value="legacy">DO_MOUNT_CONTROL</option><option value="manager">GIMBAL_MANAGER_SET_PITCHYAW</option></select></div>
+  <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><input type="number" id="node-input-targetComponent" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-count">Camera</label><input type="text" id="node-input-count" placeholder="count"><input type="text" id="node-input-interval" placeholder="interval" style="width:30%;"></div>
+  <div class="form-row"><label for="node-input-pitch">Gimbal</label><input type="text" id="node-input-pitch" placeholder="pitch"><input type="text" id="node-input-yaw" placeholder="yaw" style="width:30%;"></div>
+  <div class="form-row"><label for="node-input-servo">Servo</label><input type="text" id="node-input-servo" placeholder="servo"><input type="text" id="node-input-pwm" placeholder="pwm" style="width:30%;"></div>
+  <div class="form-row"><label for="node-input-actionValue">Release</label><input type="text" id="node-input-instance" placeholder="instance"><input type="text" id="node-input-actionValue" placeholder="action" style="width:30%;"></div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-payload">
+  <p>Controls camera, gimbal, servo, and release payload verbs. Command-backed verbs report command acknowledgement as their confirmation mode.</p>
+  <p>On the <b>Send &amp; confirm</b> tier a command-backed verb waits for its <code>COMMAND_ACK</code>: output 0 (continue) fires only on <code>ACCEPTED</code>, and a <code>DENIED</code>, <code>TEMPORARILY_REJECTED</code>, or timeout halts the chain and reports on output 1.</p>
+  <p>Gimbal manager aiming uses GIMBAL_MANAGER_SET_PITCHYAW and has no MAVLink acknowledgement, so it is always sent unconfirmed.</p>
+</script>
