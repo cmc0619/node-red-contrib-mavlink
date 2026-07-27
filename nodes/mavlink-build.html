@@ -162,6 +162,15 @@
         var container = $('#node-input-fields-container');
         var savedFields = {};
         try { savedFields = JSON.parse(node.fields || '{}'); } catch (_e) { savedFields = {}; }
+        /** Tracks MAV_CMD identity across param rebuilds; `undefined` = not initialized. */
+        var lastBuildCommandId = undefined;
+        var COMMAND_PARAM_KEYS = [
+          'param1', 'param2', 'param3', 'param4', 'param5', 'param6', 'param7', 'x', 'y', 'z',
+        ];
+
+        function clearCommandParamWireFields() {
+          COMMAND_PARAM_KEYS.forEach(function (key) { delete savedFields[key]; });
+        }
 
         if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
           RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
@@ -344,7 +353,13 @@
             $slot.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
             return;
           }
-          var cmdId = $('#mav-build-command-select').val();
+          var cmdId = $('#mav-build-command-select').val() || '';
+          // Same command rebuild keeps live edits; a different MAV_CMD must not
+          // inherit paramN/x/y/z values that mean something else on the new command.
+          if (lastBuildCommandId !== undefined && String(lastBuildCommandId) !== String(cmdId)) {
+            clearCommandParamWireFields();
+          }
+          lastBuildCommandId = cmdId;
           if (!cmdId) {
             $slot.append($('<div class="form-row"><em>Select a MAV_CMD to configure parameters.</em></div>'));
             return;
@@ -390,6 +405,7 @@
           if (COMMAND_MESSAGES[msg.name]) {
             // COMMAND_LONG / COMMAND_INT: named command params, never Param 1–7 (§6).
             // COMMAND_INT location lives in x/y/z — hide those raw slots too.
+            lastBuildCommandId = undefined;
             (msg.fields || []).forEach(function (spec) {
               if (isCommandParamSlot(spec.name) || spec.name === 'command') return;
               if (msg.name === 'COMMAND_INT' && (spec.name === 'x' || spec.name === 'y' || spec.name === 'z')) return;
