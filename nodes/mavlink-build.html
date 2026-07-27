@@ -98,6 +98,42 @@
       });
     }
 
+    function bitmaskTitle(description) {
+      var base = description || 'Bitmask flags';
+      return base + ' (Ctrl/Cmd-click to select multiple flags.)';
+    }
+
+    function selectedBitmaskValues(saved, entries) {
+      if (saved === undefined || saved === null || saved === '') return [];
+      var mask;
+      try {
+        mask = BigInt(String(saved));
+      } catch (_e) {
+        return [];
+      }
+      return entries.filter(function (entry) {
+        var value;
+        try {
+          value = BigInt(String(entry.value));
+        } catch (_e) {
+          return false;
+        }
+        return (value === 0n && mask === 0n) || (value !== 0n && (mask & value) === value);
+      }).map(function (entry) {
+        return String(entry.value);
+      });
+    }
+
+    function selectedNumericMask(raw) {
+      var values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+      if (!values.length) return null;
+      var mask = 0n;
+      values.forEach(function (value) {
+        mask = mask | BigInt(String(value));
+      });
+      return Number(mask);
+    }
+
     /** Collect typed values from live `.mav-field-input` controls (oneditsave + live sync). */
     function collectFieldInputsFromDom($root) {
       var fields = {};
@@ -108,6 +144,11 @@
         var raw = $(this).val();
         if (kind === 'bitmask') {
           fields[name] = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+          return;
+        }
+        if (kind === 'bitmask-mask') {
+          var mask = selectedNumericMask(raw);
+          if (mask !== null) fields[name] = mask;
           return;
         }
         if (raw === '' || raw === null || raw === undefined) return;
@@ -241,7 +282,7 @@
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', spec.name)
               .attr('data-kind', multi ? 'bitmask' : 'enum')
-              .attr('title', spec.description || '');
+              .attr('title', multi ? bitmaskTitle(spec.description) : (spec.description || ''));
             if (multi) sel.attr('multiple', 'multiple').attr('size', Math.min(6, enums[spec.enum].length));
             else sel.append($('<option></option>').val('').text('\u2014'));
             enums[spec.enum].forEach(function (entry) {
@@ -323,15 +364,24 @@
             saved = savedFields['param' + spec.index];
           }
           if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
+            var isBitmask = !!spec.bitmask;
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', key)
-              .attr('data-kind', 'enum')
-              .attr('title', spec.description || '');
-            sel.append($('<option></option>').val('').text('\u2014'));
+              .attr('data-kind', isBitmask ? 'bitmask-mask' : 'enum')
+              .attr('title', isBitmask ? bitmaskTitle(spec.description) : (spec.description || ''));
+            if (isBitmask) {
+              sel.attr('multiple', 'multiple').attr('size', Math.min(6, enums[spec.enum].length));
+            } else {
+              sel.append($('<option></option>').val('').text('\u2014'));
+            }
             enums[spec.enum].forEach(function (entry) {
               sel.append($('<option></option>').val(String(entry.value)).text(entry.label));
             });
-            if (saved !== undefined && saved !== null && saved !== '') sel.val(String(saved));
+            if (isBitmask) {
+              sel.val(selectedBitmaskValues(saved, enums[spec.enum]));
+            } else if (saved !== undefined && saved !== null && saved !== '') {
+              sel.val(String(saved));
+            }
             return sel;
           }
           var input = $('<input type="number" class="mav-field-input">')
@@ -558,7 +608,8 @@
   <p><b>Message</b> is a dialect dropdown. Selecting a message reshapes the field
   form: enum-typed fields become dropdowns; scalars are number inputs; strings
   are text. <code>COMMAND_LONG</code> / <code>COMMAND_INT</code> use a MAV_CMD
-  dropdown and that command's named params — never a Param 1–7 grid.</p>
+  dropdown and that command's named params — never a Param 1–7 grid. Bitmask
+  fields use native multi-selects; Ctrl/Cmd-click multiple flags.</p>
   <p><b>Delivery</b>: <i>Build</i> encodes and emits without sending. <i>Send</i>
   enqueues directly on the Connection.</p>
   <p><b>Repeat</b>: when set, the node fires independently of inbound triggers at

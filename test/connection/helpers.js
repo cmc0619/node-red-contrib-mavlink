@@ -43,7 +43,6 @@ function mockDgram() {
           if (callback) callback();
         }, 0);
       };
-      socket.setBroadcast = () => {};
       socket.setSendBufferSize = () => {};
       socket.address = () => socket.boundTo || {};
       // Inject an inbound datagram, as though a peer sent it.

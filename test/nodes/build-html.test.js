@@ -65,3 +65,32 @@ test('Build oneditprepare ensures standard config-node pickers', () => {
   assert.match(html, /ensureConfigNodePicker\(node,\s*'vehicle'/);
   assert.match(html, /ensureConfigNodePicker\(node,\s*'connection'/);
 });
+
+test('Build message-field bitmasks use multi-select tokens accepted by the codec', () => {
+  const collector = html.slice(
+    html.indexOf('function collectFieldInputsFromDom'),
+    html.indexOf('RED.nodes.registerType')
+  );
+  const fieldRenderer = html.slice(
+    html.indexOf('function fieldInput'),
+    html.indexOf('function syncSavedFieldsFromDom')
+  );
+
+  assert.match(fieldRenderer, /spec\.display === ['"]bitmask['"]/, 'message field bitmasks follow field metadata');
+  assert.match(fieldRenderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'message field bitmasks use native multi-select');
+  assert.match(fieldRenderer, /\.val\(entry\.name\)/, 'message field bitmasks save enum entry names');
+  assert.match(collector, /fields\[name\]\s*=\s*Array\.isArray\(raw\) \? raw/, 'collector keeps selected token array');
+});
+
+test('Build COMMAND_LONG/INT command params render bitmasks as numeric multi-select masks', () => {
+  const renderer = html.slice(
+    html.indexOf('function commandParamInput'),
+    html.indexOf('function refreshCommandParams')
+  );
+
+  assert.match(renderer, /spec\.bitmask/, 'command param bitmask flag drives rendering');
+  assert.match(renderer, /data-kind['"],\s*isBitmask \? ['"]bitmask-mask['"] : ['"]enum['"]/, 'command bitmask params are tagged for numeric mask save');
+  assert.match(renderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'command bitmask params use native multi-select');
+  assert.match(renderer, /\.val\(String\(entry\.value\)\)/, 'command bitmask options carry numeric values');
+  assert.match(html, /kind === ['"]bitmask-mask['"]/, 'collector stores one numeric mask for command params');
+});
