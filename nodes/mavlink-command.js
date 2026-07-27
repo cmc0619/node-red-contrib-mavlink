@@ -559,11 +559,17 @@ module.exports = function registerMavlinkCommand(RED) {
   }
 
   /**
-   * Admin endpoint: return all preset groups for editor dropdowns.
-   * Registered once per process (§6 "Register with needsPermission").
+   * Admin endpoints for editor dropdowns (§6 "Register with needsPermission").
+   * Registered once per process.
    */
   if (!MavlinkCommandNode._routeRegistered) {
     const { presetGroups } = require('../lib/command');
+    const {
+      listCommandsCatalog,
+      catalogFromBundle,
+      knownDialects,
+    } = require('../lib/metadata');
+
     RED.httpAdmin.get(
       '/mavlink/command/presets',
       RED.auth.needsPermission('mavlink.read'),
@@ -571,6 +577,65 @@ module.exports = function registerMavlinkCommand(RED) {
         res.json({ groups: presetGroups() });
       }
     );
+
+    /**
+     * Advanced-mode catalog: every MAV_CMD plus param specs and the enum
+     * tables those params reference (§6 / §9).
+     *
+     * Prefer `?vehicle=<id>` so a custom Vehicle Profile's compiled bundle is
+     * used when the config node is deployed. Otherwise `?dialect=` must be an
+     * allow-listed bundled name (never a filesystem path).
+     */
+    RED.httpAdmin.get(
+      '/mavlink/command/commands',
+      RED.auth.needsPermission('mavlink.read'),
+      (req, res) => {
+        try {
+          const vehicleId = typeof req.query.vehicle === 'string'
+            ? req.query.vehicle.trim()
+            : '';
+          const requested = typeof req.query.dialect === 'string' && req.query.dialect.trim()
+            ? req.query.dialect.trim()
+            : '';
+
+          if (vehicleId) {
+            // Treat the id as an opaque key into the live node table — never as
+            // a path segment (§6 editor endpoints).
+            const vehicleNode = RED.nodes.getNode(vehicleId);
+            if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
+              const bundle = vehicleNode.getDialect();
+              const dialect = (vehicleNode.dialect || bundle.dialect || 'custom');
+              return res.json(catalogFromBundle(bundle, dialect));
+            }
+            // Referenced profile is not deployed. Serve a bundled dialect only
+            // when the editor also names an allow-listed one — never invent
+            // ardupilotmega under a vehicle: key (wrong commands would cache).
+            if (!requested || requested === 'custom') {
+              return res.status(404).json({
+                error: 'Vehicle Profile not found or not deployed; Deploy the flow, or pass a bundled ?dialect=',
+                dialects: knownDialects(),
+              });
+            }
+            return res.json(listCommandsCatalog(requested));
+          }
+
+          const dialect = requested || 'ardupilotmega';
+          if (dialect === 'custom') {
+            return res.status(400).json({
+              error: 'custom dialect requires a deployed Vehicle Profile (?vehicle=id)',
+              dialects: knownDialects(),
+            });
+          }
+          res.json(listCommandsCatalog(dialect));
+        } catch (err) {
+          res.status(400).json({
+            error: err.message,
+            dialects: knownDialects(),
+          });
+        }
+      }
+    );
+
     MavlinkCommandNode._routeRegistered = true;
   }
 

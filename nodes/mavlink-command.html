@@ -43,8 +43,14 @@
     return opts;
   }
 
-  // ── Preset cache loaded from server ───────────────────────────────────────
+  // ── Preset / command caches loaded from server ─────────────────────────────
   let _presetGroups = null;
+  /** @type {Object<string, {commands:Array, enums:Object, dialect:string}>} */
+  const _catalogByKey = {};
+  /** Monotonic token so a stale dialect response cannot overwrite a newer one. */
+  let _catalogRequestSeq = 0;
+  /** Cache key for the catalog currently shown in the Advanced dropdown. */
+  let _activeCatalogKey = '';
 
   function loadPresets(cb) {
     if (_presetGroups) { cb(_presetGroups); return; }
@@ -54,6 +60,74 @@
     }).fail(function () {
       _presetGroups = [];
       cb(_presetGroups);
+    });
+  }
+
+  /**
+   * Resolve which Vehicle / dialect the Advanced list should load.
+   * Uses the editor-side config graph (RED.nodes.node), not a runtime lookup.
+   *
+   * @returns {{key: string, query: object, dialect: string, vehicleId: string}}
+   */
+  function resolveCatalogTarget() {
+    const connId = $('#node-input-connection').val();
+    let vehicleId = '';
+    let dialect = 'ardupilotmega';
+    if (connId && typeof RED !== 'undefined' && RED.nodes && RED.nodes.node) {
+      const conn = RED.nodes.node(connId);
+      if (conn && conn.vehicle) {
+        vehicleId = conn.vehicle;
+        const vehicle = RED.nodes.node(conn.vehicle);
+        if (vehicle && vehicle.dialect) dialect = vehicle.dialect;
+      }
+    }
+    // Prefer vehicle id so a deployed custom profile serves its own bundle.
+    // Include dialect so an undeployed bundled profile can still serve a
+    // catalog; custom without a live node gets a 404 (never a silent default).
+    if (vehicleId) {
+      return {
+        key: 'vehicle:' + vehicleId,
+        query: { vehicle: vehicleId, dialect: dialect },
+        dialect: dialect,
+        vehicleId: vehicleId,
+      };
+    }
+    return {
+      key: 'dialect:' + dialect,
+      query: { dialect: dialect },
+      dialect: dialect,
+      vehicleId: '',
+    };
+  }
+
+  /**
+   * Load the Advanced catalog (commands + enums). Ignores stale responses when
+   * the Connection (and therefore the target) changed mid-flight.
+   *
+   * @param {function({commands:Array, enums:Object, dialect:string}|null, Error=):void} cb
+   */
+  function loadCommandsCatalog(cb) {
+    const target = resolveCatalogTarget();
+    if (_catalogByKey[target.key]) {
+      _activeCatalogKey = target.key;
+      cb(_catalogByKey[target.key]);
+      return;
+    }
+    const seq = ++_catalogRequestSeq;
+    $.getJSON('/mavlink/command/commands', target.query, function (data) {
+      if (seq !== _catalogRequestSeq) return; // stale — a newer request is in flight
+      const catalog = {
+        commands: data.commands || [],
+        enums: data.enums || {},
+        dialect: data.dialect || target.dialect,
+      };
+      _catalogByKey[target.key] = catalog;
+      _activeCatalogKey = target.key;
+      cb(catalog);
+    }).fail(function (_xhr, _status, err) {
+      if (seq !== _catalogRequestSeq) return;
+      _activeCatalogKey = target.key;
+      cb({ commands: [], enums: {}, dialect: target.dialect, error: String(err || 'load failed') });
     });
   }
 
@@ -143,7 +217,10 @@
     paletteLabel: 'command',
     label: function () {
       if (this.name) return this.name;
-      if (this.mode === 'advanced') return `cmd #${this.advancedCommand || '?'}`;
+      if (this.mode === 'advanced') {
+        const id = this.advancedCommand;
+        return id !== undefined && id !== null && id !== '' ? `cmd ${id}` : 'command';
+      }
       return this.preset || 'command';
     },
 
@@ -156,6 +233,7 @@
         if (mode === 'advanced') {
           $('#row-preset').hide();
           $('#row-advanced').show();
+          refreshAdvancedCommands();
         } else {
           $('#row-preset').show();
           $('#row-advanced').hide();
@@ -195,8 +273,39 @@
         refreshDelivery();
       });
 
-      // ── Advanced command field ─────────────────────────────────────────────
-      $('#node-input-advancedCommand').on('change', refreshDelivery);
+      // ── Advanced MAV_CMD dropdown (§6 / §9 — every command in the dialect) ─
+      function buildAdvancedDropdown(catalog) {
+        if (!catalog) return;
+        const commands = catalog.commands || [];
+        const sel = $('#node-input-advancedCommand');
+        // Prefer the in-progress selection over the pre-edit saved value so a
+        // Connection change mid-dialog does not snap the MAV_CMD back.
+        const current = sel.val();
+        const saved = node.advancedCommand !== undefined && node.advancedCommand !== null
+          ? String(node.advancedCommand)
+          : '';
+        const prefer = current || saved;
+
+        sel.empty();
+        sel.append($('<option></option>').val('').text('\u2014 select MAV_CMD \u2014'));
+        for (const c of commands) {
+          sel.append($('<option></option>').val(String(c.value)).text(c.label));
+        }
+        if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
+          sel.append($('<option></option>').val(prefer).text('#' + prefer + ' (not in dialect)'));
+        }
+        if (prefer) sel.val(prefer);
+        sel.trigger('change');
+      }
+
+      function refreshAdvancedCommands() {
+        loadCommandsCatalog(buildAdvancedDropdown);
+      }
+
+      $('#node-input-advancedCommand').on('change', function () {
+        refreshParamFields();
+        refreshDelivery();
+      });
 
       // ── Delivery dropdown ──────────────────────────────────────────────────
       function refreshDelivery() {
@@ -222,7 +331,11 @@
         refreshCompletionRow();
       }
 
-      $('#node-input-connection').on('change', refreshDelivery);
+      $('#node-input-connection').on('change', function () {
+        refreshDelivery();
+        // Connection binds a Vehicle Profile → dialect; Advanced list follows it.
+        if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
+      });
       $('#node-input-delivery').on('change', refreshCompletionRow);
 
       function refreshCompletionRow() {
@@ -234,16 +347,85 @@
       let savedParams = {};
       try { savedParams = JSON.parse(node.params || '{}'); } catch (_e) {}
 
+      /**
+       * Field label for one Advanced param under the §6 four-case rule
+       * (caller has already filtered `hidden` / reserved / Empty).
+       * @param {object} spec
+       * @returns {string}
+       */
+      function advancedParamLabel(spec) {
+        let label = spec.label || spec.description || ('param ' + spec.index);
+        if (spec.units) label += ' (' + spec.units + ')';
+        return label;
+      }
+
+      /**
+       * Build the input control for one Advanced param: enum= → <select>,
+       * otherwise a number field with units/range as constraints (§6).
+       * @param {object} spec
+       * @param {Object<string, Array>} enums
+       * @returns {HTMLElement|jQuery}
+       */
+      function advancedParamInput(spec, enums) {
+        const saved = savedParams[spec.index];
+        if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
+          const sel = $('<select class="param-input"></select>')
+            .attr('data-idx', spec.index)
+            .attr('title', spec.description || '');
+          sel.append($('<option></option>').val('').text('\u2014'));
+          for (const entry of enums[spec.enum]) {
+            sel.append($('<option></option>').val(String(entry.value)).text(entry.label));
+          }
+          if (saved !== undefined && saved !== null && saved !== '') {
+            sel.val(String(saved));
+          }
+          return sel;
+        }
+        const input = $('<input type="number" class="param-input">')
+          .attr('data-idx', spec.index)
+          .attr('title', spec.description || '')
+          .val(saved !== undefined && saved !== null ? saved : '');
+        if (spec.minValue !== null && spec.minValue !== undefined) input.attr('min', spec.minValue);
+        if (spec.maxValue !== null && spec.maxValue !== undefined) input.attr('max', spec.maxValue);
+        if (spec.increment !== null && spec.increment !== undefined) input.attr('step', spec.increment);
+        return input;
+      }
+
       function refreshParamFields() {
         container.empty();
 
         const mode = $('#node-input-mode').val();
         if (mode === 'advanced') {
-          // Advanced: 7 generic param fields.
-          for (let i = 1; i <= 7; i++) {
-            const input = $('<input type="number" class="param-input">').attr('data-idx', i)
-              .val(savedParams[i] !== undefined ? savedParams[i] : '');
-            container.append(formRow(`Param ${i}`, input));
+          // Fields are created by selection (§6 / §9 Advanced): named params
+          // from the dialect metadata — never a raw Param 1–7 grid.
+          const catalog = _catalogByKey[_activeCatalogKey];
+          const cmdId = $('#node-input-advancedCommand').val();
+          if (!catalog) {
+            container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
+            return;
+          }
+          if (catalog.error && !(catalog.commands && catalog.commands.length)) {
+            container.append($('<div class="form-row"><em>Could not load command parameters for this Vehicle dialect. Deploy the Vehicle Profile (required for custom dialects).</em></div>'));
+            return;
+          }
+          if (!cmdId) {
+            container.append($('<div class="form-row"><em>Select a MAV_CMD to configure parameters.</em></div>'));
+            return;
+          }
+          const cmd = (catalog.commands || []).find(function (c) {
+            return String(c.value) === String(cmdId);
+          });
+          if (!cmd) {
+            container.append($('<div class="form-row"><em>Command not in this dialect.</em></div>'));
+            return;
+          }
+          const visible = (cmd.params || []).filter(function (p) { return !p.hidden; });
+          if (visible.length === 0) {
+            container.append($('<div class="form-row"><em>No exposed parameters for this command.</em></div>'));
+            return;
+          }
+          for (const spec of visible) {
+            container.append(formRow(advancedParamLabel(spec), advancedParamInput(spec, catalog.enums || {})));
           }
         } else {
           const presetId = $('#node-input-preset').val();
@@ -314,9 +496,8 @@
   </div>
 
   <div class="form-row" id="row-advanced" style="display:none">
-    <label for="node-input-advancedCommand" style="width:120px">MAV_CMD id</label>
-    <input type="number" id="node-input-advancedCommand" placeholder="e.g. 400" style="width:120px">
-    <span style="margin-left:6px;color:#888;font-size:11px">Numeric command value</span>
+    <label for="node-input-advancedCommand" style="width:120px">MAV_CMD</label>
+    <select id="node-input-advancedCommand" style="width:280px"></select>
   </div>
 
   <!-- Safety notice for presets that require confirmation -->
@@ -427,6 +608,14 @@
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
         vehicle state satisfies the command's completion condition (Arm, Takeoff, Land, Set Mode).</li>
   </ul>
+
+  <h3>Mode</h3>
+  <p>
+    <b>Preset</b> — hand-curated commands with pinned params and friendly names.
+    <b>Advanced</b> — every <code>MAV_CMD</code> in the Connection's Vehicle dialect as a
+    dropdown (name and numeric id); all seven params exposed. The list follows the
+    bound Vehicle Profile when a Connection is selected.
+  </p>
 
   <h3>Details</h3>
   <p>

@@ -1,0 +1,139 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const {
+  listCommandsForDialect,
+  listCommandsCatalog,
+  catalogFromBundle,
+  loadBundled,
+  resolveBundledDialect,
+  commandLabel,
+  isHiddenParam,
+  enumOptionLabel,
+} = require('../../lib/metadata');
+
+test('commandLabel strips MAV_CMD_ and shows the value in parentheses (§6)', () => {
+  assert.equal(commandLabel('MAV_CMD_NAV_TAKEOFF', 22), 'NAV_TAKEOFF (22)');
+  assert.equal(commandLabel('MAV_CMD_COMPONENT_ARM_DISARM', 400), 'COMPONENT_ARM_DISARM (400)');
+});
+
+test('resolveBundledDialect allow-lists known names and rejects unknown ones (§6)', () => {
+  assert.equal(resolveBundledDialect('ardupilotmega'), 'ardupilotmega');
+  assert.throws(() => resolveBundledDialect('../etc/passwd'), /unknown dialect/);
+  assert.throws(() => resolveBundledDialect(''), /unknown dialect/);
+});
+
+test('isHiddenParam follows the §6 reserved / Empty / Reserved cases', () => {
+  assert.equal(isHiddenParam({ reserved: true, description: 'Anything' }), true);
+  assert.equal(isHiddenParam({ reserved: false, description: 'Empty' }), true);
+  assert.equal(isHiddenParam({ reserved: false, description: 'Empty.' }), true);
+  assert.equal(isHiddenParam({ reserved: false, description: 'Reserved' }), true);
+  assert.equal(isHiddenParam({ reserved: false, description: 'Minimum pitch' }), false);
+});
+
+test('enumOptionLabel prefers description and shows the value in parentheses (§6)', () => {
+  assert.equal(
+    enumOptionLabel({ name: 'SPEED_TYPE_AIRSPEED', value: 0, description: 'Airspeed' }),
+    'Airspeed (0)'
+  );
+});
+
+test('listCommandsCatalog includes params and referenced enums for Advanced UI', () => {
+  const catalog = listCommandsCatalog('ardupilotmega');
+  assert.equal(catalog.dialect, 'ardupilotmega');
+  assert.ok(catalog.commands.length > 50);
+
+  const arm = catalog.commands.find((c) => c.value === 400);
+  assert.ok(arm, 'COMPONENT_ARM_DISARM (400)');
+  assert.ok(arm.params.some((p) => p.index === 1 && p.label === 'Arm'));
+  assert.ok(arm.params.every((p) => typeof p.hidden === 'boolean'));
+
+  const changeSpeed = catalog.commands.find((c) => c.value === 178);
+  assert.ok(changeSpeed, 'DO_CHANGE_SPEED (178)');
+  const speedType = changeSpeed.params.find((p) => p.index === 1);
+  assert.equal(speedType.enum, 'SPEED_TYPE');
+  assert.ok(Array.isArray(catalog.enums.SPEED_TYPE));
+  assert.ok(catalog.enums.SPEED_TYPE.some((e) => e.value === 0 && /Airspeed/.test(e.label)));
+
+  // No raw Param-N placeholders — only metadata-backed params.
+  for (const p of changeSpeed.params) {
+    assert.ok(p.label || p.description, 'every param has a label or description');
+  }
+});
+
+test('listCommandsForDialect returns the commands array from the catalog', () => {
+  const list = listCommandsForDialect('ardupilotmega');
+  assert.ok(list.length > 50);
+  assert.ok(list.find((c) => c.value === 22));
+});
+
+test('catalogFromBundle works for any DialectBundle (custom profiles inclusive)', () => {
+  const bundle = loadBundled('common');
+  const catalog = catalogFromBundle(bundle, 'common');
+  assert.equal(catalog.dialect, 'common');
+  assert.ok(catalog.commands.some((c) => c.value === 400));
+});
+
+/**
+ * Stable local DialectBundle — does not depend on mavlink-mappings contents.
+ * Covers hidden params, enum references, ordering, and custom dialect names.
+ */
+const FIXTURE_BUNDLE = {
+  dialect: 'fixture-custom',
+  commands: {
+    MAV_CMD_Z_LAST: {
+      name: 'MAV_CMD_Z_LAST',
+      value: 200,
+      description: 'sorts after',
+      params: [
+        { index: 1, label: 'Empty', description: 'Empty', reserved: false },
+        { index: 2, label: 'Speed', description: 'Speed', units: 'm/s', enum: 'FIXTURE_SPEED', reserved: false },
+      ],
+    },
+    MAV_CMD_A_FIRST: {
+      name: 'MAV_CMD_A_FIRST',
+      value: 100,
+      description: 'sorts first',
+      params: [
+        { index: 1, label: 'Reserved slot', description: 'Reserved', reserved: false },
+        { index: 2, label: 'Force', description: 'Force arm', minValue: 0, maxValue: 1, increment: 1, reserved: false },
+        { index: 3, label: 'Hidden reserved', description: 'x', reserved: true },
+      ],
+    },
+  },
+  enums: {
+    FIXTURE_SPEED: {
+      name: 'FIXTURE_SPEED',
+      entries: [
+        { name: 'FIXTURE_SPEED_AIR', value: 0, description: 'Airspeed' },
+        { name: 'FIXTURE_SPEED_GROUND', value: 1, description: 'Ground speed' },
+      ],
+    },
+  },
+};
+
+test('catalogFromBundle fixture: custom name, ordering, hidden params, enums (§13)', () => {
+  const catalog = catalogFromBundle(FIXTURE_BUNDLE, 'fixture-custom');
+  assert.equal(catalog.dialect, 'fixture-custom');
+  assert.deepEqual(
+    catalog.commands.map((c) => c.value),
+    [100, 200],
+    'commands are ordered by numeric value'
+  );
+
+  const first = catalog.commands[0];
+  assert.equal(first.label, 'A_FIRST (100)');
+  const hidden = first.params.filter((p) => p.hidden);
+  assert.equal(hidden.length, 2, 'Reserved description and reserved:true are hidden');
+  assert.ok(first.params.find((p) => p.index === 2 && p.label === 'Force' && !p.hidden));
+
+  const last = catalog.commands[1];
+  const speed = last.params.find((p) => p.index === 2);
+  assert.equal(speed.enum, 'FIXTURE_SPEED');
+  assert.ok(last.params.find((p) => p.index === 1 && p.hidden), 'Empty description is hidden');
+  assert.ok(Array.isArray(catalog.enums.FIXTURE_SPEED));
+  assert.ok(catalog.enums.FIXTURE_SPEED.some((e) => e.value === 0 && /Airspeed/.test(e.label)));
+  assert.equal(Object.keys(catalog.enums).length, 1, 'only referenced enums are included');
+});
