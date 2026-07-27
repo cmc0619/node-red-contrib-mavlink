@@ -112,10 +112,10 @@
         });
         refreshMessageOptions(node);
         if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
-          RED.mavlink.loadEnumsCatalog(['MAV_COMP_ID'], function (catalog) {
+          RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
             RED.mavlink.fillCompIdSelect(
               $('#node-input-compid'),
-              (catalog.enums || {}).MAV_COMP_ID || [],
+              (catalog.enums || {}).MAV_COMPONENT || [],
               { allowEmpty: true, emptyLabel: 'Any component', saved: node.compid }
             );
           });
