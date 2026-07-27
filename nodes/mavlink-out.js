@@ -74,7 +74,7 @@ module.exports = function registerMavlinkOut(RED) {
         return;
       }
 
-      const message = resolveMessage(msg.payload);
+      const message = resolveMessage(msg);
       if (!message) {
         const sr = makeStatusRecord({
           result: 'failed',
@@ -112,27 +112,42 @@ module.exports = function registerMavlinkOut(RED) {
 };
 
 /**
- * Extract the `{ name, fields }` message from the various accepted payload
+ * Extract the `{ name, fields }` message from the various accepted message
  * shapes. Returns null when the shape is not recognised.
  *
- * @param {*} payload
+ * @param {object} msg  the inbound Node-RED message
  * @returns {{ name: string, fields: object }|null}
  */
-function resolveMessage(payload) {
-  if (!payload || typeof payload !== 'object') return null;
+function resolveMessage(msg) {
+  const payload = msg && msg.payload;
 
-  // Build-tier envelope: { message: { name, fields }, ... }
-  if (
-    payload.message &&
-    typeof payload.message === 'object' &&
-    typeof payload.message.name === 'string'
-  ) {
-    return payload.message;
+  if (payload && typeof payload === 'object') {
+    // Build-tier envelope: { message: { name, fields }, ... }
+    if (
+      payload.message &&
+      typeof payload.message === 'object' &&
+      typeof payload.message.name === 'string'
+    ) {
+      return payload.message;
+    }
+
+    // Decoded-shape: { name, fields }
+    if (typeof payload.name === 'string') {
+      return payload;
+    }
   }
 
-  // Decoded-shape: { name, fields }
-  if (typeof payload.name === 'string') {
-    return payload;
+  // mavlink-in shape: the message name is in msg.topic and the decoded field
+  // values are in msg.payload. Recognising this lets a direct In → Out flow
+  // forward traffic across connections without a Function node in between.
+  if (
+    typeof msg.topic === 'string' &&
+    msg.topic !== '' &&
+    payload &&
+    typeof payload === 'object' &&
+    !Array.isArray(payload)
+  ) {
+    return { name: msg.topic, fields: payload };
   }
 
   return null;

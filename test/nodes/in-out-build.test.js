@@ -492,6 +492,23 @@ test('mavlink-out: unwraps Build-tier envelope from mavlink-build', () => {
   assert.equal(sent[0].message.name, 'HEARTBEAT');
 });
 
+test('mavlink-out: forwards the mavlink-in shape (name in msg.topic, fields in msg.payload)', () => {
+  const RED = makeRED();
+  const { stub, sent } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-out')(RED);
+  const Constructor = RED._nodeTypes['mavlink-out'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' });
+
+  // This is exactly what mavlink-in emits: name in topic, fields in payload.
+  node._input({ topic: 'HEARTBEAT', payload: { type: 6, autopilot: 8 }, sysid: 1, compid: 1 });
+
+  assert.equal(sent.length, 1, 'a direct In → Out flow must forward without a Function node');
+  assert.equal(sent[0].message.name, 'HEARTBEAT');
+  assert.deepEqual(sent[0].message.fields, { type: 6, autopilot: 8 });
+});
+
 test('mavlink-out: uses msg.band when provided', () => {
   const RED = makeRED();
   const { stub, sent } = makeConnectionStub();
