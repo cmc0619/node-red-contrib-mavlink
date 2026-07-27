@@ -24,6 +24,9 @@ are addressed or explicitly declined per DESIGN.md §2 (with a §14 note when a 
 displaced). Prefer a Cursor Automation on GitHub **CI completed** + **PR review submitted**
 (see below) over busy-polling — this agent cannot create that automation itself.
 
+**Codex re-review is manual.** CodeRabbit and Greptile re-run on push; Codex does not.
+After pushing review fixes, post a top-level PR comment exactly: `@codex review`.
+
 **GitHub → Cursor wake-up (owner setup).** Create a private automation at
 https://cursor.com/automations (or `/automate` in the Agents Window) on this repo with
 triggers: **CI completed** (covers CodeRabbit / Greptile check completion) and **PR review
