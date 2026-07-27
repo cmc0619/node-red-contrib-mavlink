@@ -1163,6 +1163,12 @@ next agent reads only this file.
 **Pull requests stay at or under 50 files.** Larger layers split by module boundary into
 sequential PRs. Count: `git diff --name-only <base>...HEAD | wc -l`.
 
+**Command-param enum hints stay a small table until a complete recovery exists.** The 85
+`<param enum=`> links in upstream XML are real, but regenerating all of them into the
+bundled path without vendoring XML is a separate deliverable. Omitting a hint renders a
+number field (wrong for that param) — prefer adding the one you need over inventing a
+second metadata pipeline. Do not treat "fill all 85 by hand in one PR" as the bar.
+
 ---
 
 **Bundled dialects are the npm registry, not vendored XML.**

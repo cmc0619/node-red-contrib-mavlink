@@ -144,3 +144,17 @@ test('listFiles gates a bad entry name before fetching it', async () => {
     /'nonexistent\.xml' is not among the files/
   );
 });
+
+test('an empty listFiles result rejects the entry (does not skip validation)', async () => {
+  await assert.rejects(
+    () =>
+      fetchDialect({
+        repo: 'mavlink/mavlink',
+        files: 'common.xml',
+        resolveCommit: async () => 'abc',
+        fetchFile: async () => BASE,
+        listFiles: async () => [],
+      }),
+    /'common\.xml' is not among the files/
+  );
+});

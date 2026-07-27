@@ -17,6 +17,26 @@ not see this conversation.
 Split by module boundary (`lib/<module>`, `nodes/<node>`, matching tests) into sequential PRs
 when a layer would exceed the cap. Count is `git diff --name-only <base>...HEAD | wc -l`.
 
+**PRs are opened ready for review (not draft)** so bot reviewers run immediately. After push,
+wait for **all** of: CodeRabbit, Greptile, and Codex (`chatgpt-codex-connector`). Do not treat
+the implementation as finished until those reviews are read and Critical/Important findings
+are addressed or explicitly declined per DESIGN.md §2 (with a §14 note when a belief was
+displaced). Prefer a Cursor Automation on GitHub **CI completed** + **PR review submitted**
+(see below) over busy-polling — this agent cannot create that automation itself.
+
+**GitHub → Cursor wake-up (owner setup).** Create a private automation at
+https://cursor.com/automations (or `/automate` in the Agents Window) on this repo with
+triggers: **CI completed** (covers CodeRabbit / Greptile check completion) and **PR review
+submitted** (covers Codex and human reviews). Prompt should: identify the open PR, collect
+inline comments from CodeRabbit / Greptile / Codex, apply or decline each finding against
+DESIGN.md, push fixes under the 50-file cap, and reply on the threads. Without this, agents
+only learn reviews finished when a human pings them.
+
+**PRs are opened ready for review, not as drafts.** After push, mark the PR ready and **wait
+for bot reviewers** (CodeRabbit, Greptile, and any other configured checks) to finish before
+treating the change as done or stacking more work that depends on their feedback. Address
+Critical/Important findings before moving on.
+
 ## Implementation workflow: use sub-agents (repo-owner directive)
 
 The repo owner wants implementation parallelized with sub-agents, with agent capability matched

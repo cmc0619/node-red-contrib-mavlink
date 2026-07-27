@@ -93,6 +93,12 @@ test('control-hint table gives DO_CHANGE_SPEED param 1 the SPEED_TYPE enum with 
   assert.equal(p2.units, 'm/s', 'units recovered from the command class .d.ts');
 });
 
+test('DO_REPOSITION hint maps flags (param 2), not latitude (param 5)', () => {
+  const cmd = loadBundled('common').commands.MAV_CMD_DO_REPOSITION;
+  assert.equal(cmd.params.find((p) => p.index === 2).enum, 'MAV_DO_REPOSITION_FLAGS');
+  assert.equal(cmd.params.find((p) => p.index === 5).enum, null);
+});
+
 test('never assume a dialect includes common.xml — icarous still resolves its base set', () => {
   const bundle = loadBundled('icarous');
   assert.ok(bundle.messages.HEARTBEAT, 'HEARTBEAT reachable through the explicit chain');
