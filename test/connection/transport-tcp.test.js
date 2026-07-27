@@ -294,6 +294,68 @@ test('targeted send to a removed server peer fails loud with TCP_PEER_GONE', asy
   });
 });
 
+test('server peer error removes the socket before pending write callbacks resume', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  await transport.open();
+
+  const a = new MockSocket({ address: '10.0.0.1', port: 1 });
+  const b = new MockSocket({ address: '10.0.0.2', port: 2 });
+  net.servers[0].accept(a);
+  net.servers[0].accept(b);
+
+  a.nextWriteResult = false;
+  let pendingErr = null;
+  let sawPeerGone = false;
+  let sentToB = false;
+  transport.send(Buffer.from('backpressured'), { address: '10.0.0.1', port: 1 }, (err) => {
+    pendingErr = err;
+    // Resumed pump path: failed peer must already be gone; remaining peer works.
+    transport.send(Buffer.from('to-b'), { address: '10.0.0.2', port: 2 }, (sendErr) => {
+      assert.ifError(sendErr);
+      sentToB = true;
+    });
+    transport.send(Buffer.from('to-a'), { address: '10.0.0.1', port: 1 }, (sendErr) => {
+      assert.equal(sendErr.code, TCP_PEER_GONE);
+      sawPeerGone = true;
+    });
+  });
+
+  a.emit('error', new Error('peer a failed'));
+  assert.ok(pendingErr);
+  assert.equal(sentToB, true);
+  assert.equal(sawPeerGone, true);
+  assert.equal(b.writes[0].toString(), 'to-b');
+});
+
+test('client disconnect emits error before pending write callbacks resume', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ remoteAddress: '127.0.0.1', remotePort: 5760 }, { net: net.module });
+  await transport.open();
+
+  net.clients[0].nextWriteResult = false;
+  let errorBeforeCallback = false;
+  let sawError = false;
+  let callbackRan = false;
+  transport.on('error', () => {
+    sawError = true;
+  });
+  transport.send(Buffer.from('large'), null, (err) => {
+    errorBeforeCallback = sawError;
+    callbackRan = true;
+    assert.equal(err.code, 'TCP_DISCONNECTED');
+    // After the error event, client mode has no destination.
+    transport.send(Buffer.from('next'), null, (sendErr) => {
+      assert.equal(sendErr.code, TCP_NO_DESTINATION);
+    });
+  });
+
+  net.clients[0].emit('close');
+  assert.equal(sawError, true);
+  assert.equal(callbackRan, true);
+  assert.equal(errorBeforeCallback, true);
+});
+
 test('no destination returns the quiet TCP_NO_DESTINATION code', async () => {
   const net = mockNet();
   const serverTransport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
