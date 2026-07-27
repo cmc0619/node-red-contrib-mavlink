@@ -40,7 +40,12 @@
     outputs: 2,
     outputLabels: ['continue', 'status'],
     icon: 'font-awesome/fa-sitemap',
-    label: function () { return this.name || 'mavlink swarm'; }
+    label: function () { return this.name || 'mavlink swarm'; },
+    oneditprepare: function () {
+      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
+        RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
+      }
+    }
   });
 </script>
 

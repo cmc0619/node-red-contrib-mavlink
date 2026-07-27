@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * Connection editor: Vehicle and Identity must be config-node selectors
- * (DESIGN.md §6 — everything enumerable is a dropdown), not free-form ids.
+ * Connection editor: Vehicle and Identity must use Node-RED's standard
+ * config-node select with edit/add buttons (DESIGN.md §6), not free-form ids
+ * and not a buttonless <select> fallback.
  */
 
 const test = require('node:test');
@@ -12,6 +13,10 @@ const path = require('node:path');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-connection.html'),
+  'utf8'
+);
+const identityHtml = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'nodes', 'mavlink-local-identity.html'),
   'utf8'
 );
 
@@ -31,8 +36,29 @@ test('Identity default declares type mavlink-local-identity', () => {
   );
 });
 
-test('oneditprepare falls back to an explicit select of existing Vehicle Profiles', () => {
-  assert.match(html, /ensureConfigSelect/, 'fallback select builder is present');
-  assert.match(html, /mavlink-vehicle/, 'Vehicle Profile type is referenced');
-  assert.match(html, /eachConfig/, 'existing config nodes are enumerated');
+test('shared ensureConfigNodePicker uses RED.editor.prepareConfigNodeSelect (edit/add)', () => {
+  assert.match(
+    identityHtml,
+    /ensureConfigNodePicker/,
+    'helper is defined on the first-loaded identity editor'
+  );
+  assert.match(
+    identityHtml,
+    /prepareConfigNodeSelect/,
+    'helper must call Node-RED\'s standard config select builder'
+  );
+  assert.match(
+    html,
+    /ensureConfigNodePicker\(this,\s*'vehicle'/,
+    'Connection oneditprepare asks for the Vehicle picker'
+  );
+  assert.match(
+    html,
+    /ensureConfigNodePicker\(\s*this,\s*'localIdentity'/,
+    'Connection oneditprepare asks for the Identity picker'
+  );
+  assert.ok(
+    !html.includes('ensureConfigSelect'),
+    'buttonless select fallback must be gone'
+  );
 });

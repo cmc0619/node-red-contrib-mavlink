@@ -1296,6 +1296,18 @@ wrong MAV_CMD list to that key. A miss returns 404 unless the request also names
 allow-listed bundled `?dialect=`; `custom` without a live profile is never served.
 *Check:* `node --test test/command/commands-route.test.js`
 
+**Config-node refs use Node-RED's select + edit/add, never free-form ids.**
+*Wrong belief:* a plain `<input>` with `defaults.foo.type = 'mavlink-vehicle'` is enough, or a
+hand-built `<select>` of `eachConfig` is an acceptable fallback.
+*Fact:* Node-RED replaces the input with a `<select>` **and** pencil/plus buttons only when
+`RED.nodes.getType(type)` is a registered `category: 'config'` type at dialog prepare time. If
+`mavlink-vehicle` failed to load (e.g. missing `mavlink-mappings`), the field stays free-form.
+A buttonless `<select>` is not the standard control. Vehicle/command modules must still
+`registerType` when deps are missing so pickers appear; editors call
+`RED.editor.prepareConfigNodeSelect` via `RED.mavlink.ensureConfigNodePicker` as a safety net.
+*Check:* open Connection → Vehicle shows a dropdown with pencil and + ; with mappings
+uninstalled the type still registers (status `missing deps`).
+
 **Bind-mounted source is not an installed package.**
 *Wrong belief:* `npm install /module` from the Node-RED user directory (or listing
 `mavlink-mappings` in `package.json`) is enough for a `/module` bind mount to load.

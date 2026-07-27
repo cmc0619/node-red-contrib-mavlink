@@ -1,6 +1,64 @@
 <script type="text/javascript">
   (function () {
     /**
+     * Shared config-node picker helper for every MAVLink editor that follows.
+     * local-identity is listed first in package.json so this lands before
+     * Connection / Build / palette node HTML runs.
+     */
+    RED.mavlink = RED.mavlink || {};
+
+    /**
+     * Ensure a config-node property uses Node-RED's standard <select> plus
+     * edit (pencil) and add (+) buttons (DESIGN.md §6).
+     *
+     * Node-RED builds this before oneditprepare when defaults[prop].type names
+     * a registered config type. Call from oneditprepare as a safety net when
+     * the field is still free-form or a buttonless <select>.
+     *
+     * @param {object} node
+     * @param {string} property
+     * @param {string} type
+     * @param {string} [prefix]
+     */
+    RED.mavlink.ensureConfigNodePicker = function (node, property, type, prefix) {
+      prefix = prefix || 'node-input';
+      if ($('#' + prefix + '-btn-' + property + '-add').length) {
+        return;
+      }
+
+      var typeDef = RED.nodes.getType(type);
+      var $el = $('#' + prefix + '-' + property);
+      if (!$el.length) return;
+
+      if (!typeDef || typeDef.category !== 'config') {
+        if ($el.is('input[type="text"]') || ($el.is('input') && !$el.attr('type'))) {
+          $el.prop('readonly', true)
+            .attr(
+              'placeholder',
+              type + ' not loaded — check Node-RED log / dependencies'
+            );
+        }
+        return;
+      }
+
+      if ($el.is('select')) {
+        var val = $el.val();
+        var style = $el.attr('style') || 'width:70%';
+        var $input = $('<input type="text">')
+          .attr('id', prefix + '-' + property)
+          .attr('style', style);
+        if (val) node[property] = val;
+        $el.replaceWith($input);
+      } else if ($el.attr('type') === 'hidden') {
+        return;
+      }
+
+      if (typeof RED.editor.prepareConfigNodeSelect === 'function') {
+        RED.editor.prepareConfigNodeSelect(node, property, type, prefix);
+      }
+    };
+
+    /**
      * Editor-side uint8 validator. Blank is allowed; the runtime applies the
      * role preset default. Source ids disallow 0 (broadcast / all).
      *

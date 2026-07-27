@@ -28,6 +28,9 @@
         return this.name ? 'node_label_italic' : '';
       },
       oneditprepare: function () {
+        if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
+          RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
+        }
         var $band = $('#node-input-band');
         $band.empty();
         BAND_OPTIONS.forEach(function (opt) {
