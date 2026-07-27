@@ -44,8 +44,9 @@ module.exports = function registerMavlinkPayload(RED) {
           verb: payload.verb || config.verb || 'photo',
           path: payload.path || config.path || 'legacy',
           target: {
-            sysid: Number((payload.target && payload.target.sysid) || config.targetSystem || 1),
-            compid: Number((payload.target && payload.target.compid) || config.targetComponent || 1),
+            // Nullish-preserving so a configured 0 (broadcast) survives.
+            sysid: Number(firstDefined(payload.target && payload.target.sysid, config.targetSystem, 1)),
+            compid: Number(firstDefined(payload.target && payload.target.compid, config.targetComponent, 1)),
           },
           values: payload.values || valuesFrom(config),
         });
@@ -210,6 +211,13 @@ function statusRecord(result, detail, extra = {}) {
 
 function objectPayload(payload) {
   return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+}
+
+function firstDefined(...values) {
+  for (const v of values) {
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return undefined;
 }
 
 function cap(text) {

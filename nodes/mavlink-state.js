@@ -32,8 +32,10 @@ module.exports = function registerMavlinkState(RED) {
         }
         const payload = objectPayload(msg.payload);
         const peers = snapshotPeers(connectionNode.peerTable, {
-          sysid: payload.sysid || config.targetSystem,
-          compid: payload.compid || config.targetComponent,
+          // Nullish-preserving: a configured 0 must reach the filter as 0, not
+          // be swallowed by `||` and treated as "unset".
+          sysid: firstDefined(payload.sysid, config.targetSystem),
+          compid: firstDefined(payload.compid, config.targetComponent),
         });
         node.status({ fill: 'green', shape: 'dot', text: cap(`${peers.length} peer(s)`) });
         emit([{ payload: peers }]);
@@ -69,6 +71,13 @@ function statusRecord(result, detail) {
 
 function objectPayload(payload) {
   return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+}
+
+function firstDefined(...values) {
+  for (const v of values) {
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return undefined;
 }
 
 function cap(text) {

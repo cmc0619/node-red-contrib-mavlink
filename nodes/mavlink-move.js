@@ -102,10 +102,19 @@ function statusRecord(result, detail, extra = {}) {
 
 function targetFrom(config, payload) {
   const target = payload.target || {};
+  // Nullish-preserving: a configured 0 is a legitimate broadcast address and
+  // must not fall through the `||` chain to the default of 1.
   return {
-    sysid: Number(target.sysid || config.targetSystem || 1),
-    compid: Number(target.compid || config.targetComponent || 1),
+    sysid: Number(firstDefined(target.sysid, config.targetSystem, 1)),
+    compid: Number(firstDefined(target.compid, config.targetComponent, 1)),
   };
+}
+
+function firstDefined(...values) {
+  for (const v of values) {
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return undefined;
 }
 
 function positionFrom(config) {
