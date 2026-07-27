@@ -15,7 +15,8 @@
     "test": "node --test"
   },
   "dependencies": {
-    "fast-xml-parser": "^5.10.1"
+    "fast-xml-parser": "^5.10.1",
+    "mavlink-mappings": "^1.0.22-20260311"
   },
   "devDependencies": {
     "eslint": "^10.8.0"
