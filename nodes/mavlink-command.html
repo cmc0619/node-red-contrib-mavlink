@@ -232,6 +232,16 @@
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
       }
 
+      if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
+        RED.mavlink.loadEnumsCatalog(['MAV_COMP_ID'], function (catalog) {
+          RED.mavlink.fillCompIdSelect(
+            $('#node-input-targetCompid'),
+            (catalog.enums || {}).MAV_COMP_ID || [],
+            { allowEmpty: true, emptyLabel: '(default)', saved: node.targetCompid }
+          );
+        });
+      }
+
       // ── Mode toggle ────────────────────────────────────────────────────────
       function applyMode(mode) {
         if (mode === 'advanced') {
@@ -597,7 +607,7 @@
     <label for="node-input-targetSysid" style="width:120px">Target sysid</label>
     <input type="number" id="node-input-targetSysid" placeholder="(connection default)" style="width:80px">
     <label for="node-input-targetCompid" style="margin-left:10px;width:80px">Compid</label>
-    <input type="number" id="node-input-targetCompid" placeholder="(default)" style="width:80px">
+    <select id="node-input-targetCompid" style="width:80px"></select>
   </div>
 
   <div class="form-row">

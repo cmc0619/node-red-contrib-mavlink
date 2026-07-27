@@ -244,11 +244,31 @@
         return (this.name || 'MAVLink Local Identity') + ids;
       },
       oneditprepare: function () {
+        var node = this;
         var $role   = $('#node-config-input-role');
         var $sysid  = $('#node-config-input-sourceSystemId');
         var $compid = $('#node-config-input-sourceComponentId');
         var $hbType = $('#node-config-input-heartbeatType');
+        var $hbAp   = $('#node-config-input-heartbeatAutopilot');
         var prevRole = $role.val() || 'gcs';
+
+        if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
+          RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMP_ID'], function (catalog) {
+            var enums = catalog.enums || {};
+            RED.mavlink.fillEnumSelect($hbType, enums.MAV_TYPE || [], {
+              valueKey: 'name',
+              allowEmpty: true,
+              saved: node.heartbeatType
+            });
+            RED.mavlink.fillEnumSelect($hbAp, enums.MAV_AUTOPILOT || [], {
+              valueKey: 'name',
+              saved: node.heartbeatAutopilot
+            });
+            RED.mavlink.fillCompIdSelect($compid, enums.MAV_COMP_ID || [], {
+              saved: node.sourceComponentId
+            });
+          });
+        }
 
         function preset(role) {
           return ROLE_PRESETS[role] || ROLE_PRESETS.custom;
@@ -283,7 +303,6 @@
           if (hb === '' || hb === prev.heartbeatType) {
             $hbType.val(next.heartbeatType);
           }
-          $hbType.attr('placeholder', next.heartbeatType);
 
           applyVisibility(role);
           prevRole = role;
@@ -307,7 +326,6 @@
         /* Show hint for saved role without rewriting saved values */
         $('.mav-role-hint').hide();
         $('#mav-role-hint-' + prevRole).show();
-        $hbType.attr('placeholder', preset(prevRole).heartbeatType);
         applyVisibility(prevRole);
       },
       oneditsave: function () {
@@ -354,7 +372,7 @@
   </div>
   <div class="form-row">
     <label for="node-config-input-sourceComponentId">Source CompID</label>
-    <input type="number" id="node-config-input-sourceComponentId" min="1" max="255">
+    <select id="node-config-input-sourceComponentId"></select>
   </div>
   <div class="form-tips" id="mav-companion-ids-note" style="margin-bottom:8px;display:none;">
     <b>Source SysID</b> is derived from the Vehicle Profile on the bound Connection.
@@ -363,11 +381,11 @@
   </div>
   <div class="form-row">
     <label for="node-config-input-heartbeatType">HB Type</label>
-    <input type="text" id="node-config-input-heartbeatType" placeholder="MAV_TYPE_GCS">
+    <select id="node-config-input-heartbeatType"></select>
   </div>
   <div class="form-row">
     <label for="node-config-input-heartbeatAutopilot">HB Autopilot</label>
-    <input type="text" id="node-config-input-heartbeatAutopilot" placeholder="MAV_AUTOPILOT_INVALID">
+    <select id="node-config-input-heartbeatAutopilot"></select>
   </div>
   <div class="form-row">
     <label for="node-config-input-heartbeatIntervalMs">HB Interval (ms)</label>

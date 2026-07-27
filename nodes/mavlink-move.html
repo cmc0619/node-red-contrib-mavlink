@@ -29,8 +29,18 @@
     icon: 'font-awesome/fa-location-arrow',
     label: function () { return this.name || 'mavlink move'; },
     oneditprepare: function () {
+      var node = this;
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
+        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+      }
+      if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
+        RED.mavlink.loadEnumsCatalog(['MAV_COMP_ID'], function (catalog) {
+          RED.mavlink.fillCompIdSelect(
+            $('#node-input-targetComponent'),
+            (catalog.enums || {}).MAV_COMP_ID || [],
+            { saved: node.targetComponent }
+          );
+        });
       }
     }
   });
@@ -42,7 +52,7 @@
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="stream">Stream</option></select></div>
   <div class="form-row"><label for="node-input-mode">Mode</label><select id="node-input-mode"><option value="local-position">Local position</option><option value="local-velocity">Local velocity</option><option value="global-position">Global position</option></select></div>
   <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
-  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><input type="number" id="node-input-targetComponent" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row"><label for="node-input-north">North / Lat</label><input type="text" id="node-input-north" placeholder="m north"><input type="text" id="node-input-lat" placeholder="deg lat" style="width:30%;"></div>
   <div class="form-row"><label for="node-input-east">East / Lon</label><input type="text" id="node-input-east" placeholder="m east"><input type="text" id="node-input-lon" placeholder="deg lon" style="width:30%;"></div>
   <div class="form-row"><label for="node-input-up">Up / Alt</label><input type="text" id="node-input-up" placeholder="m up"><input type="text" id="node-input-alt" placeholder="m alt" style="width:30%;"></div>

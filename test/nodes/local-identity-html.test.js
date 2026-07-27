@@ -155,3 +155,13 @@ test('fillCompIdSelect allows an empty filter option', () => {
   );
   assert.equal(select.selected, '');
 });
+
+test('identity oneditprepare loads MAV_TYPE by enum name, not numeric value', () => {
+  assert.match(
+    html,
+    /fillEnumSelect\(\$hbType[\s\S]*valueKey:\s*'name'/
+  );
+  assert.match(html, /saved:\s*node\.heartbeatType/);
+  assert.match(html, /saved:\s*node\.heartbeatAutopilot/);
+  assert.match(html, /saved:\s*node\.sourceComponentId/);
+});

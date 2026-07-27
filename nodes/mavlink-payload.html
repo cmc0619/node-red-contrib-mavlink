@@ -85,6 +85,16 @@
         refreshVerbOptions(false);
       });
       refreshVerbOptions(true);
+
+      if (RED.mavlink.loadEnumsCatalog) {
+        RED.mavlink.loadEnumsCatalog(['MAV_COMP_ID'], function (catalog) {
+          RED.mavlink.fillCompIdSelect(
+            $('#node-input-targetComponent'),
+            (catalog.enums || {}).MAV_COMP_ID || [],
+            { saved: node.targetComponent }
+          );
+        });
+      }
     }
   });
 </script>
@@ -99,7 +109,7 @@
   <div class="form-row"><label for="node-input-verb">Verb</label><select id="node-input-verb"></select></div>
   <div class="form-row"><label for="node-input-path">Gimbal path</label><select id="node-input-path"><option value="legacy">DO_MOUNT_CONTROL</option><option value="manager">GIMBAL_MANAGER_SET_PITCHYAW</option></select></div>
   <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
-  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><input type="number" id="node-input-targetComponent" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row"><label for="node-input-count">Camera</label><input type="text" id="node-input-count" placeholder="count"><input type="text" id="node-input-interval" placeholder="interval" style="width:30%;"></div>
   <div class="form-row"><label for="node-input-pitch">Gimbal</label><input type="text" id="node-input-pitch" placeholder="pitch"><input type="text" id="node-input-yaw" placeholder="yaw" style="width:30%;"></div>
   <div class="form-row"><label for="node-input-servo">Servo</label><input type="text" id="node-input-servo" placeholder="servo"><input type="text" id="node-input-pwm" placeholder="pwm" style="width:30%;"></div>
