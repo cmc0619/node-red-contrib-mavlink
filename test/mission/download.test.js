@@ -9,7 +9,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { MissionDownload, MISSION_TYPE } = require('../../lib/mission');
+const { MissionDownload, MISSION_TYPE, MAV_MISSION_RESULT, buildItemInt } = require('../../lib/mission');
 const { StubConnection } = require('./stubs/connection');
 
 const TARGET = { sysid: 1, compid: 1 };
@@ -93,4 +93,90 @@ test('download ignores replies whose mission_type mismatches', async () => {
   assert.equal(outcome.count, 1);
   assert.equal(requestedItems, 1);
   assert.equal(outcome.items.length, 1);
+});
+
+test('a MISSION_ACK arriving mid-download (after the count) is ignored, not an abort (§9)', async () => {
+  const stub = new StubConnection();
+  const count = 2;
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count, mission_type: 0 } });
+    } else if (message.name === 'MISSION_REQUEST_INT') {
+      const seq = message.fields.seq;
+      if (seq === 0) {
+        // A stray/duplicate MISSION_ACK once items are already flowing is stale
+        // (only the ack *we* send closes a download). It must not abort.
+        deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.ERROR, mission_type: 0 } });
+      }
+      deliver({ name: 'MISSION_ITEM_INT', fields: { seq, command: 16, mission_type: 0 } });
+    }
+  });
+
+  const outcome = await new MissionDownload(machineOpts(stub)).start();
+
+  assert.equal(outcome.result, 'succeeded');
+  assert.equal(outcome.count, 2);
+  assert.equal(outcome.items.length, 2);
+});
+
+test('an early MISSION_ACK before the count is still an abort (vehicle refuses the request)', async () => {
+  const stub = new StubConnection();
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      // The vehicle refuses the download outright, before any MISSION_COUNT.
+      deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.UNSUPPORTED, mission_type: 0 } });
+    }
+  });
+
+  const outcome = await new MissionDownload(machineOpts(stub)).start();
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.resultCode, MAV_MISSION_RESULT.UNSUPPORTED);
+});
+
+test('MISSION_ITEM_INT global lat/lon are normalized to degrees, so a round-trip does not double-scale (§9)', async () => {
+  const stub = new StubConnection();
+  const latE7 = Math.round(47.397742 * 1e7);
+  const lonE7 = Math.round(8.545594 * 1e7);
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 1, mission_type: 0 } });
+    } else if (message.name === 'MISSION_REQUEST_INT') {
+      deliver({
+        name: 'MISSION_ITEM_INT',
+        fields: { seq: 0, frame: 3, command: 16, x: latE7, y: lonE7, z: 25, mission_type: 0 },
+      });
+    }
+  });
+
+  const outcome = await new MissionDownload(machineOpts(stub)).start();
+  const item = outcome.items[0];
+
+  assert.ok(Math.abs(item.x - 47.397742) < 1e-6, 'lat restored to float degrees');
+  assert.ok(Math.abs(item.y - 8.545594) < 1e-6, 'lon restored to float degrees');
+  assert.equal(item.z, 25, 'altitude passes through unscaled');
+
+  // Re-encoding the canonical item reproduces the original wire integers.
+  const rebuilt = buildItemInt(item, TARGET, 0, 0);
+  assert.equal(rebuilt.fields.x, latE7);
+  assert.equal(rebuilt.fields.y, lonE7);
+});
+
+test('non-global-frame MISSION_ITEM_INT x/y (metres) pass through unscaled', async () => {
+  const stub = new StubConnection();
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 1, mission_type: 0 } });
+    } else if (message.name === 'MISSION_REQUEST_INT') {
+      // frame 1 = LOCAL_NED — x/y are metres, not degE7.
+      deliver({
+        name: 'MISSION_ITEM_INT',
+        fields: { seq: 0, frame: 1, command: 16, x: 12, y: -7, z: 5, mission_type: 0 },
+      });
+    }
+  });
+
+  const outcome = await new MissionDownload(machineOpts(stub)).start();
+  assert.equal(outcome.items[0].x, 12);
+  assert.equal(outcome.items[0].y, -7);
 });

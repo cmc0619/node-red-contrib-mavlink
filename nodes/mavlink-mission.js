@@ -53,7 +53,11 @@ module.exports = function registerMavlinkMission(RED) {
     const operation = config.operation || OPERATION.DOWNLOAD;
     const connNode = config.connection ? RED.nodes.getNode(config.connection) : null;
     const delivery = config.delivery || (connNode ? 'confirm' : 'build');
-    const firmware = config.firmware || 'ardupilot';
+    // The firmware gate must follow the Connection's bound Vehicle Profile, not
+    // an independent default that can drift out of sync with it (§9 "Firmware
+    // gates the type list", §11). Prefer the connection's profile firmware;
+    // fall back to node config, then ArduPilot.
+    const firmware = boundFirmware(connNode) || config.firmware || 'ardupilot';
     const timeoutMs = config.timeout ? Number(config.timeout) : undefined;
     const maxRetries = config.maxRetries !== undefined && config.maxRetries !== ''
       ? Number(config.maxRetries)
@@ -79,7 +83,7 @@ module.exports = function registerMavlinkMission(RED) {
       if (refusal) {
         applyActionStatus(node, 'error', 'miswire');
         node.error('mavlink-mission: status record received on input (miswire)', msg);
-        emit([null, { payload: refusal }]);
+        emit([null, refusal]);
         finish();
         return;
       }
@@ -100,7 +104,7 @@ module.exports = function registerMavlinkMission(RED) {
         });
         applyActionStatus(node, 'error', `no ${missionTypeKey} on ${firmware}`);
         node.error(`mavlink-mission: ${rec.reason}`, msg);
-        emit([null, { payload: rec }]);
+        emit([null, rec]);
         finish();
         return;
       }
@@ -120,31 +124,17 @@ module.exports = function registerMavlinkMission(RED) {
           });
           applyActionStatus(node, 'error', `invalid ${missionTypeKey} item`);
           node.error(`mavlink-mission: ${check.reason}`, msg);
-          emit([null, { payload: rec }]);
+          emit([null, rec]);
           finish();
           return;
         }
       }
 
-      // ── Build tier: emit the protocol plan, send nothing. ─────────────────
-      if (delivery === 'build' || !connNode) {
-        const plan = buildPlan(operation, missionType, target, uploadItems);
-        applyActionStatus(node, 'preview', `plan ${operation} ${missionTypeKey}`);
-        emit([
-          { payload: plan },
-          {
-            payload: record(operation, missionTypeKey, target, {
-              result: 'succeeded',
-              phase: 'built',
-              messageCount: plan.messages.length,
-            }),
-          },
-        ]);
-        finish();
-        return;
-      }
-
       // ── Clear confirmation gate (destructive, §9). ────────────────────────
+      // Runs *before* Build: a built MISSION_CLEAR_ALL emitted on output 0 can
+      // be forwarded straight to mavlink-out, so the destructive gate must
+      // block construction — not just sending — without an explicit confirm
+      // (same lesson as the Command node's Flight Termination Build gate).
       if (operation === OPERATION.CLEAR && !(config.confirmClear || msg.confirmed === true)) {
         const rec = record(operation, missionTypeKey, target, {
           result: 'failed',
@@ -153,7 +143,23 @@ module.exports = function registerMavlinkMission(RED) {
         });
         applyActionStatus(node, 'error', `confirm clear ${missionTypeKey}`);
         node.error(`mavlink-mission: ${rec.reason}`, msg);
-        emit([null, { payload: rec }]);
+        emit([null, rec]);
+        finish();
+        return;
+      }
+
+      // ── Build tier: emit the protocol plan, send nothing. ─────────────────
+      if (delivery === 'build' || !connNode) {
+        const plan = buildPlan(operation, missionType, target, uploadItems);
+        applyActionStatus(node, 'preview', `plan ${operation} ${missionTypeKey}`);
+        emit([
+          { payload: plan },
+          record(operation, missionTypeKey, target, {
+            result: 'succeeded',
+            phase: 'built',
+            messageCount: plan.messages.length,
+          }),
+        ]);
         finish();
         return;
       }
@@ -168,7 +174,7 @@ module.exports = function registerMavlinkMission(RED) {
         });
         applyActionStatus(node, 'error', `${missionTypeKey} busy`);
         node.error(`mavlink-mission: ${rec.reason}`, msg);
-        emit([null, { payload: rec }]);
+        emit([null, rec]);
         finish();
         return;
       }
@@ -193,7 +199,7 @@ module.exports = function registerMavlinkMission(RED) {
         onProgress: (update) => {
           emit([
             null,
-            { payload: record(operation, missionTypeKey, target, { result: 'progress', ...update }) },
+            record(operation, missionTypeKey, target, { result: 'progress', ...update }),
           ]);
         },
       });
@@ -208,13 +214,13 @@ module.exports = function registerMavlinkMission(RED) {
           const rec = record(operation, missionTypeKey, target, outcome);
           if (outcome.result === 'succeeded') {
             applyActionStatus(node, 'ok', successBadge(operation, missionTypeKey, outcome));
-            emit([{ payload: rec }, { payload: rec }]);
+            emit([{ payload: rec }, rec]);
           } else {
             applyActionStatus(node, 'error', `${operation} ${outcome.result}`);
             if (outcome.result !== 'cancelled') {
               node.error(`mavlink-mission: ${operation} ${outcome.result}: ${outcome.reason || ''}`, msg);
             }
-            emit([null, { payload: rec }]);
+            emit([null, rec]);
           }
           finish();
         })
@@ -223,11 +229,11 @@ module.exports = function registerMavlinkMission(RED) {
           release();
           applyActionStatus(node, 'error', `${operation} error`);
           node.error(`mavlink-mission: ${err.message}`, msg);
-          emit([null, { payload: record(operation, missionTypeKey, target, {
+          emit([null, record(operation, missionTypeKey, target, {
             result: 'failed',
             phase: 'error',
             reason: err.message,
-          }) }]);
+          })]);
           finish(err);
         });
     });
@@ -243,6 +249,18 @@ module.exports = function registerMavlinkMission(RED) {
 
   RED.nodes.registerType('mavlink-mission', MavlinkMissionNode);
 };
+
+/**
+ * The firmware of the Connection's bound Vehicle Profile, when reachable, so
+ * the mission-type gate matches the stack actually addressed (§9, §11).
+ *
+ * @param {object|null} connNode  the Connection config node
+ * @returns {string|null}
+ */
+function boundFirmware(connNode) {
+  const vehicle = connNode && connNode.connection && connNode.connection._vehicle;
+  return vehicle && vehicle.firmware ? vehicle.firmware : null;
+}
 
 /**
  * Build a status record for output 1. Every record carries the operation and

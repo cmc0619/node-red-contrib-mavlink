@@ -132,6 +132,55 @@ test('a rejected upload fails and never sends MISSION_CLEAR_ALL', async () => {
   assert.equal(stub.sentNames().includes('MISSION_CLEAR_ALL'), false);
 });
 
+test('a premature/stale ACCEPTED before items are delivered is ignored, not a phantom success (§9)', async () => {
+  const stub = new StubConnection();
+  const items = makeItems(2);
+  let sentAck = false;
+
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_COUNT') {
+      // A stale ACCEPTED (e.g. left over from a prior transfer) arrives before
+      // the vehicle has requested a single item — it must not complete the
+      // upload that never actually happened.
+      deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: 0 } });
+      deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } });
+      return;
+    }
+    if (message.name === 'MISSION_ITEM_INT') {
+      const seq = message.fields.seq;
+      if (seq === 0) {
+        deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 1, mission_type: 0 } });
+      } else if (!sentAck) {
+        sentAck = true;
+        deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: 0 } });
+      }
+    }
+  });
+
+  const outcome = await new MissionUpload(uploadOpts(stub, items)).start();
+
+  assert.equal(outcome.result, 'succeeded');
+  assert.equal(outcome.count, 2);
+  // Both items were actually delivered before the real completion.
+  assert.deepEqual(itemSends(stub).map((s) => s.seq), [0, 1]);
+});
+
+test('a rejection ACK before all items still fails immediately (§9)', async () => {
+  const stub = new StubConnection();
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_COUNT') {
+      deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } });
+    } else if (message.name === 'MISSION_ITEM_INT') {
+      deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.INVALID, mission_type: 0 } });
+    }
+  });
+
+  const outcome = await new MissionUpload(uploadOpts(stub, makeItems(3))).start();
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.resultCode, MAV_MISSION_RESULT.INVALID);
+});
+
 test('global-frame item x/y are scaled to degE7 in the INT carrier (§9 coordinate frames)', () => {
   const { buildItemInt } = require('../../lib/mission');
   const msg = buildItemInt({ frame: 3, command: 16, x: 47.397742, y: 8.545594, z: 25 }, TARGET, 0, 0);

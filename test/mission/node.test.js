@@ -68,7 +68,8 @@ test('a status record on input is refused, not acted on', async () => {
   const { outputs } = await runInput(node, makeStatusRecord({ result: 'accepted', payload: {} }));
   assert.equal(outputs.length, 1);
   assert.equal(outputs[0][0], null, 'continue port stays silent');
-  assert.equal(outputs[0][1].payload.result, 'refused');
+  assert.equal(outputs[0][1].result, 'refused');
+  assert.equal(isStatusRecord(outputs[0][1]), true, 'refusal record carries the marker at root');
 });
 
 test('Build tier emits the protocol plan on output 0 and sends nothing', async () => {
@@ -82,7 +83,7 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
   assert.equal(plan.operation, 'download');
   assert.deepEqual(plan.messages.map((m) => m.name), ['MISSION_REQUEST_LIST']);
   assert.equal(conn.sent.length, 0, 'Build sends nothing');
-  assert.equal(isStatusRecord(outputs[0][1].payload), true);
+  assert.equal(isStatusRecord(outputs[0][1]), true, 'output 1 record carries the marker at root');
 });
 
 test('firmware gating: PX4 refuses a fence transfer at the node (§11)', async () => {
@@ -97,7 +98,7 @@ test('firmware gating: PX4 refuses a fence transfer at the node (§11)', async (
   const { outputs } = await runInput(node, { payload: {} });
   assert.equal(outputs.length, 1);
   assert.equal(outputs[0][0], null);
-  assert.equal(outputs[0][1].payload.phase, 'gated');
+  assert.equal(outputs[0][1].phase, 'gated');
 });
 
 test('clear is refused without confirmation and runs once confirmed', async () => {
@@ -113,15 +114,50 @@ test('clear is refused without confirmation and runs once confirmed', async () =
   const unconfirmed = new Node({ operation: 'clear', connection: 'conn', delivery: 'confirm', confirmClear: false });
   let res = await runInput(unconfirmed, { payload: {} });
   assert.equal(res.outputs[0][0], null);
-  assert.equal(res.outputs[0][1].payload.phase, 'unconfirmed');
+  assert.equal(res.outputs[0][1].phase, 'unconfirmed');
   assert.equal(conn.sent.length, 0, 'nothing sent without confirmation');
 
   const confirmed = new Node({ operation: 'clear', connection: 'conn', delivery: 'confirm', confirmClear: true });
   res = await runInput(confirmed, { payload: {} });
   const last = res.outputs.at(-1);
   assert.equal(last[0].payload.result, 'succeeded', 'continue port fires on success');
-  assert.equal(last[1].payload.result, 'succeeded');
+  assert.equal(last[1].result, 'succeeded');
   assert.equal(conn.sentNames().includes('MISSION_CLEAR_ALL'), true);
+});
+
+test('clear Build tier is gated before the plan is built (§9 destructive gate)', async () => {
+  const conn = new StubConnection();
+  const Node = loadNode(conn);
+
+  // Build tier + no confirmation → no MISSION_CLEAR_ALL plan on output 0.
+  const unconfirmed = new Node({ operation: 'clear', connection: 'conn', delivery: 'build', confirmClear: false });
+  const refused = await runInput(unconfirmed, { payload: {} });
+  assert.equal(refused.outputs.length, 1);
+  assert.equal(refused.outputs[0][0], null, 'no destructive plan emitted on output 0 without confirm');
+  assert.equal(refused.outputs[0][1].phase, 'unconfirmed');
+
+  // Build tier + confirmation → the plan is produced.
+  const confirmed = new Node({ operation: 'clear', connection: 'conn', delivery: 'build', confirmClear: true });
+  const ok = await runInput(confirmed, { payload: {} });
+  assert.deepEqual(ok.outputs[0][0].payload.messages.map((m) => m.name), ['MISSION_CLEAR_ALL']);
+});
+
+test('firmware gate follows the Connection Vehicle Profile, not stale node config (§11)', async () => {
+  const conn = new StubConnection();
+  // Bound profile is PX4; the node config independently (and stalely) says ardupilot.
+  conn.connection = { _vehicle: { firmware: 'px4' } };
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'build',
+    firmware: 'ardupilot',
+    missionType: 'fence',
+  });
+
+  const { outputs } = await runInput(node, { payload: {} });
+  assert.equal(outputs[0][1].phase, 'gated', 'PX4 profile gates the fence transfer');
+  assert.match(outputs[0][1].reason, /px4/);
 });
 
 test('download end-to-end: progress on output 1, success on both ports', async () => {
@@ -139,17 +175,17 @@ test('download end-to-end: progress on output 1, success on both ports', async (
   const node = new Node({ operation: 'download', connection: 'conn', delivery: 'confirm', missionType: 'mission' });
   const { outputs } = await runInput(node, { payload: {} });
 
-  // Every emitted item is a status record on output 1.
-  for (const out of outputs) assert.equal(isStatusRecord(out[1].payload), true);
+  // Every emitted item is a status record on output 1 (marker at root).
+  for (const out of outputs) assert.equal(isStatusRecord(out[1]), true);
 
   // Progress records appeared before the terminal one.
-  const progress = outputs.filter((o) => o[1].payload.result === 'progress');
+  const progress = outputs.filter((o) => o[1].result === 'progress');
   assert.ok(progress.length >= 2, 'phase/count progress emitted on output 1');
 
   const terminal = outputs.at(-1);
   assert.equal(terminal[0].payload.result, 'succeeded', 'continue port fires only on success');
-  assert.equal(terminal[1].payload.result, 'succeeded');
-  assert.equal(terminal[1].payload.count, 2);
+  assert.equal(terminal[1].result, 'succeeded');
+  assert.equal(terminal[1].count, 2);
 });
 
 test('a busy lock refuses a second same-type transfer on the node', async () => {
@@ -166,7 +202,7 @@ test('a busy lock refuses a second same-type transfer on the node', async () => 
   first.emit('input', { payload: {} }, (m) => firstOutputs.push(m), () => {});
 
   const { outputs } = await runInput(second, { payload: {} });
-  assert.equal(outputs.at(-1)[1].payload.phase, 'locked');
+  assert.equal(outputs.at(-1)[1].phase, 'locked');
 
   // Clean up the held lock so the shared registry does not leak into other tests.
   first.emit('close', () => {});
