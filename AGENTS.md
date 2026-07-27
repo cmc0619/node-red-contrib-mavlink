@@ -1,46 +1,73 @@
 # AGENTS.md
 
+## Mission
+
+This repository is the build target for `DESIGN.md`: implement the complete
+**"MAVLink for Node-RED"** toolkit described there. `DESIGN.md` is the authoritative
+specification — its code principles (§2), UI rules (§6), build order (§12), testing plan (§13),
+and ground truth (§14) are binding, not suggestions. When code and spec disagree, the spec wins;
+when the spec and measured reality disagree, re-measure (§14) and update the spec in the same PR.
+
+## Implementation workflow: use sub-agents (repo-owner directive)
+
+The repo owner wants implementation parallelized with sub-agents, with agent capability matched
+to task difficulty. When executing any multi-module chunk of the build, do this rather than
+writing everything serially in one context:
+
+### How to split the work
+
+- **Respect the §12 dependency order between layers, parallelize within a layer.** The metadata
+  pipeline (§4) and the field codec (§5) are mutually independent — the codec takes compiled
+  metadata as an *argument* and imports nothing above it — so they are the canonical first
+  parallel pair. Config nodes, then Connection, then palette nodes follow; sibling palette nodes
+  (Command, Move, Param, Payload, State) are independent of each other once Connection's
+  subscription/queue contracts exist.
+- **One owner per file/directory.** Never have two concurrent sub-agents writing the same file.
+  Split by module boundary (`lib/<module>`, `nodes/<node>`, matching tests), which `DESIGN.md`
+  §2 already requires of the code itself.
+- **Self-contained briefs.** A sub-agent cannot see this conversation. Each brief must name the
+  exact `DESIGN.md` sections that govern its module, the files it owns, the contracts it consumes
+  and exposes, and the tests it must ship (tests are the deliverable for the codec — §5).
+- **Integrate and verify centrally.** The dispatching agent reviews every sub-agent's output
+  against the spec, runs the full lint/test suite after integration, and owns the final result.
+  A sub-agent's claim of passing tests is checked, not trusted.
+
+### Matching skill level to the task
+
+Use the strongest/highest-reasoning agent tier available for correctness-critical, subtle work,
+and faster/lighter tiers for mechanical work:
+
+| Tier | Work |
+|---|---|
+| Highest reasoning | field codec (§5) and its pinned-byte test vectors; XML compiler and include resolution (§4); Connection runtime — queue bands, driver-side scheduling, signing/timestamp/replay state (§7); mission protocol state machines (§9) |
+| Standard | config nodes, palette nodes, peer table (§8), swarm (§10), fixture-based tests (§13) |
+| Fast/light | editor HTML dialogs following the §6 rendering rules, node help text, examples (§12 step 9), README/docs, repetitive test fixtures |
+
+Review of merged work is always done at the highest tier — cheap generation, expensive review,
+never the reverse.
+
 ## Cursor Cloud specific instructions
 
-### Current state of this repository
+### Toolchain and environment
 
-This repo is **specification-only**. The tracked files are `DESIGN.md`, `LICENSE`, and
-`.gitignore`. There is **no application code, `package.json`, lockfile, tests, lint config, or
-build** yet. `DESIGN.md` is the authoritative build specification for a planned
-**"MAVLink for Node-RED"** toolkit (a Node.js / Node-RED node package).
+- Target runtime is Node.js (Node-RED node package). The VM has Node 22, `npm`, `pnpm`, and
+  `yarn` on `PATH`.
+- The startup update script installs dependencies **only if a manifest exists** (guarded on
+  lockfile/`package.json`), so it works both before and after the project is scaffolded.
+- Until the first implementation PR lands there is no `package.json`, source, tests, lint, or
+  runnable app at HEAD — do not hunt for one.
 
-Consequences for setup:
+### Standard commands (per `DESIGN.md`; do not invent alternatives)
 
-- There is nothing to install, lint, test, build, or run at HEAD. Any "run the app" request
-  cannot be satisfied until the package described in `DESIGN.md` is actually implemented.
-- Do not scaffold the whole project as part of environment setup — implementing the package is
-  a development task driven by `DESIGN.md` (see its §12 build order), not an env-setup step.
-
-### Toolchain
-
-- Target runtime is Node.js (Node-RED package). The VM already has Node 22, `npm`, `pnpm`, and
-  `yarn` on `PATH`; no version manager juggling is needed.
-- The startup update script installs dependencies **only if a manifest exists** (guarded), so it
-  is a no-op today and will "just work" once a `package.json`/lockfile is added.
-
-### When code is added, where the standard commands live
-
-`DESIGN.md` already pins the intended tooling; use it as the source of truth instead of
-inventing commands:
-
-- Dependencies: `node-mavlink` and `mavlink-mappings` (the ArduPilot line), an XML parser, and
-  `serialport` as an **optional** dependency (§3). UDP/TCP installs must work without
-  `serialport`.
-- Lint: a small, high-signal ESLint gate (`no-undef`, `no-unused-vars`, `no-unreachable`, and
-  `no-bitwise` in the codec directory only) scoped to `lib/`, `nodes/`, `test/` (§13). Lint is
-  not a substitute for tests.
-- Tests: fixture-based unit tests (field codec, XML compile, param rendering, etc.) plus
-  SITL-backed integration tests requiring ArduPilot/PX4 SITL instances (§13). SITL is **not**
-  provisioned in this VM; fixture-only tests are what run without external simulators.
-- Run: this is a Node-RED node package, so "running" it means loading the nodes inside a
-  Node-RED instance, not launching a standalone server.
-
-### Verified ground truth (matches `DESIGN.md` §14)
-
-- `node-mavlink@2.3.0` resolves and declares `github.com/ArduPilot/node-mavlink` as its repo.
-- `mavlink-mappings` is a real package; `node-mavlink-mappings` does **not** exist on npm.
+- Dependencies: `node-mavlink` and `mavlink-mappings` (the ArduPilot line — verified: no
+  `node-mavlink-mappings` package exists), an XML parser, and `serialport` as an **optional**
+  dependency (§3). UDP/TCP installs must work without `serialport`.
+- Lint: the small ESLint gate of §13 (`no-undef`, `no-unused-vars`, `no-unreachable`,
+  `no-bitwise` in the codec directory only) scoped to `lib/`, `nodes/`, `test/`. Lint passing is
+  never reported as verification.
+- Tests: fixture-based suites run in CI/this VM. SITL-backed tests (§13) need ArduPilot/PX4 SITL
+  instances, which are **not** provisioned here; treat them as out of scope unless the user
+  provides a rig.
+- Run: this is a Node-RED node package — "running" it means installing it into a local Node-RED
+  instance (e.g. `npm install <path>` into a Node-RED user dir, then start Node-RED) and
+  exercising the nodes in the editor, not launching a standalone server.
