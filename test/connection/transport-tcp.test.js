@@ -238,6 +238,33 @@ test('client disconnect emits error so the runtime can leave CONNECTED', async (
   assert.equal(err.code, 'TCP_DISCONNECTED');
 });
 
+test('server peer error does not emit transport error for remaining clients', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  await transport.open();
+
+  const a = new MockSocket({ address: '10.0.0.1', port: 1 });
+  const b = new MockSocket({ address: '10.0.0.2', port: 2 });
+  net.servers[0].accept(a);
+  net.servers[0].accept(b);
+
+  let transportErrors = 0;
+  transport.on('error', () => {
+    transportErrors += 1;
+  });
+
+  a.emit('error', new Error('peer a failed'));
+  assert.equal(transportErrors, 0);
+
+  let sent = false;
+  transport.send(Buffer.from('to-b'), { address: '10.0.0.2', port: 2 }, (err) => {
+    assert.ifError(err);
+    sent = true;
+  });
+  assert.equal(sent, true);
+  assert.equal(b.writes[0].toString(), 'to-b');
+});
+
 test('no destination returns the quiet TCP_NO_DESTINATION code', async () => {
   const net = mockNet();
   const serverTransport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
