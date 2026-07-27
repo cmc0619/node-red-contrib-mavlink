@@ -78,6 +78,17 @@
       };
     }
 
+    function positiveNumberValidator(v) {
+      if (v === undefined || v === null || String(v).trim() === '') {
+        return true;
+      }
+      const n = Number(v);
+      if (!Number.isFinite(n) || n <= 0) {
+        return 'must be a positive number';
+      }
+      return true;
+    }
+
     /**
      * Role-aware identity-id validator. The companion role derives its SysID
      * and pins its CompID, so blank is valid there. Every other role requires
@@ -118,7 +129,8 @@
         sourceSystemId:    { value: 255, validate: mavIdentityIdValidator(1) },
         sourceComponentId: { value: 190, validate: mavIdentityIdValidator(1) },
         heartbeatType:     { value: '' },
-        heartbeatAutopilot:{ value: 'MAV_AUTOPILOT_INVALID' }
+        heartbeatAutopilot:{ value: 'MAV_AUTOPILOT_INVALID' },
+        heartbeatIntervalMs:{ value: 1000, validate: positiveNumberValidator }
       },
       label: function () {
         if (this.role === 'companion') {
@@ -255,11 +267,17 @@
     <label for="node-config-input-heartbeatAutopilot">HB Autopilot</label>
     <input type="text" id="node-config-input-heartbeatAutopilot" placeholder="MAV_AUTOPILOT_INVALID">
   </div>
+  <div class="form-row">
+    <label for="node-config-input-heartbeatIntervalMs">HB Interval (ms)</label>
+    <input type="number" id="node-config-input-heartbeatIntervalMs" min="1" placeholder="1000">
+  </div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-local-identity">
   <p>A <b>Local MAVLink Identity</b> is who this Node-RED runtime <em>is</em> when it transmits:
-  the source SysID/CompID stamped into outbound frames and the HEARTBEAT identity it advertises.</p>
+  the source SysID/CompID stamped into outbound frames, the HEARTBEAT identity it advertises,
+  and that heartbeat's interval. The default interval is <code>1000 ms</code>, the usual 1 Hz
+  MAVLink convention.</p>
   <p>Three independent concerns:</p>
   <ul>
     <li><b>Local Identity</b> (this node) — who Node-RED is on the wire.</li>

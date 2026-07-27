@@ -83,6 +83,7 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
 
     node.heartbeatType = config.heartbeatType || preset.heartbeatType;
     node.heartbeatAutopilot = config.heartbeatAutopilot || preset.heartbeatAutopilot;
+    node.heartbeatIntervalMs = parseHeartbeatIntervalMs(config.heartbeatIntervalMs);
 
     if (problems.length) {
       const text = problems[0].slice(0, 24);
@@ -134,7 +135,7 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
 
     /**
      * HEARTBEAT field values for this identity (DESIGN.md §7 Heartbeat).
-     * Connection owns emission; identity owns content.
+     * Local Identity owns the heartbeat content and interval.
      *
      * @returns {import('../lib/identity/heartbeat').HeartbeatFields}
      */
@@ -158,3 +159,12 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
 
   RED.nodes.registerType('mavlink-local-identity', MavlinkLocalIdentityNode);
 };
+
+/**
+ * @param {*} value
+ * @returns {number} interval in milliseconds; defaults to 1 Hz
+ */
+function parseHeartbeatIntervalMs(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return 1000;
+  return Number(value);
+}

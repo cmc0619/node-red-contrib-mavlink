@@ -144,6 +144,29 @@ test('a heartbeat tick enqueues on the Liveness band and is transmitted', async 
   connection.close();
 });
 
+test('heartbeat scheduler interval is driven by the bound identity snapshot', async () => {
+  const intervals = [];
+  const identity = { ...GCS, heartbeatIntervalMs: 250 };
+  const { connection } = build(
+    {
+      identities: [identity],
+      heartbeat: { staleMs: 5000, expireMs: 15000 },
+    },
+    {
+      setInterval: (_fn, ms) => {
+        intervals.push(ms);
+        return { unref() {} };
+      },
+      clearInterval() {},
+    }
+  );
+
+  await connection.start();
+
+  assert.ok(intervals.includes(250), `expected heartbeat timer at 250ms, saw ${intervals}`);
+  connection.close();
+});
+
 test('listen-only UDP drops outbound quietly when no remote and no peer endpoint', async () => {
   const warns = [];
   const { connection, dg } = build(
@@ -197,6 +220,28 @@ test('partial UDP remote config still warns (incomplete destination is a misconf
     warns.some((m) => /incomplete destination/i.test(m)),
     'half-configured remote must still warn'
   );
+  connection.close();
+});
+
+test('UDP transport does not enable SO_BROADCAST from config', async () => {
+  const dg = mockDgram();
+  let setBroadcastCalls = 0;
+  const originalCreateSocket = dg.module.createSocket;
+  dg.module.createSocket = (...args) => {
+    const socket = originalCreateSocket(...args);
+    socket.setBroadcast = () => {
+      setBroadcastCalls += 1;
+    };
+    return socket;
+  };
+  const { connection } = build(
+    { transport: { mode: 'udp', bindAddress: '0.0.0.0', bindPort: 14550, broadcast: true } },
+    { dgram: dg.module }
+  );
+
+  await connection.start();
+
+  assert.equal(setBroadcastCalls, 0);
   connection.close();
 });
 

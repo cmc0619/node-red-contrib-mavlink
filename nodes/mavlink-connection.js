@@ -5,9 +5,8 @@
  *
  * The Connection owns how traffic moves and stays channel-correct: the
  * transport (UDP first), the peer table, its one bound Vehicle Profile, the
- * outbound queue and its bands, per-identity heartbeat emission, the signing
- * link state, the default identity plus opt-in additional ones, and the disable
- * switch.
+ * outbound queue and its bands, the signing link state, the default identity
+ * plus opt-in additional ones, and the disable switch.
  *
  * The node is thin (§2): it reads config, resolves the bound Vehicle Profile
  * and Local Identity config nodes, and hands a plain snapshot to the
@@ -36,7 +35,7 @@ module.exports = function registerMavlinkConnection(RED) {
     node.disabled = !!config.disabled;
 
     // Disabled means no runtime is constructed at all: no dialing, listening,
-    // heartbeats, or timers (§7). Show the grey disabled badge and stop.
+    // or timers (§7). Show the grey disabled badge and stop.
     if (node.disabled) {
       node.status({ fill: 'grey', shape: 'ring', text: 'disabled' });
       node.subscribe = () => () => {};
@@ -66,7 +65,6 @@ module.exports = function registerMavlinkConnection(RED) {
         bindPort: Number(config.bindPort),
         remoteAddress: config.remoteHost || undefined,
         remotePort: config.remotePort ? Number(config.remotePort) : undefined,
-        broadcast: !!config.broadcast,
       },
       vehicle: {
         targetSysid: defaults.defaultTargetSystem,
@@ -80,7 +78,6 @@ module.exports = function registerMavlinkConnection(RED) {
       boundIdentityIds: identityIds,
       signing: buildSigning(config, node.credentials),
       heartbeat: {
-        intervalMs: config.heartbeatInterval ? Number(config.heartbeatInterval) : 1000,
         staleMs: config.staleMs ? Number(config.staleMs) : undefined,
         expireMs: config.expireMs ? Number(config.expireMs) : undefined,
       },
@@ -130,7 +127,7 @@ module.exports = function registerMavlinkConnection(RED) {
  * @param {object} defaults  Vehicle Profile defaults
  * @param {object} bundle  the dialect bundle (for enum resolution)
  * @param {string} connectionId  this connection's node id (for sysid claims)
- * @returns {{id: string, sysid: number, compid: number, heartbeat: object}}
+ * @returns {{id: string, sysid: number, compid: number, heartbeatIntervalMs: number, heartbeat: object}}
  */
 function identitySnapshot(idNode, defaults, bundle, connectionId) {
   if (idNode.derivesSysidFromVehicle) {
@@ -142,6 +139,7 @@ function identitySnapshot(idNode, defaults, bundle, connectionId) {
     id: idNode.id,
     sysid: wire.sysid,
     compid: wire.compid,
+    heartbeatIntervalMs: idNode.heartbeatIntervalMs,
     heartbeat: {
       type: enumValue(bundle, 'MAV_TYPE', hb.type),
       autopilot: enumValue(bundle, 'MAV_AUTOPILOT', hb.autopilot),

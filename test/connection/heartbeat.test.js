@@ -59,12 +59,17 @@ test('a faulted identity does not heartbeat, and the fault is logged once', () =
 
 test('the heartbeat resumes when the fault clears, logged once', () => {
   const faulted = new Set(['gcs']);
-  const { scheduler, emitted, logs } = build({ health: (id) => !faulted.has(id) });
+  let now = 0;
+  const { scheduler, emitted, logs } = build({
+    health: (id) => !faulted.has(id),
+    now: () => now,
+  });
   scheduler.add(GCS);
 
   scheduler.tick(); // faulted
   faulted.delete('gcs');
   scheduler.tick(); // healthy again
+  now = 1000;
   scheduler.tick();
 
   assert.equal(emitted.length, 2);
@@ -96,4 +101,43 @@ test('start/stop drive the injected interval and release it', () => {
   assert.equal(emitted.length, 1);
   scheduler.stop();
   assert.equal(intervalCleared, true);
+});
+
+test('scheduler ticks at the minimum identity interval and emits each identity when due', () => {
+  let now = 0;
+  let tick;
+  let intervalMs;
+  const { scheduler, emitted } = build({
+    now: () => now,
+    setInterval: (fn, ms) => {
+      tick = fn;
+      intervalMs = ms;
+      return 'token';
+    },
+    clearInterval() {},
+  });
+  scheduler.add({ ...GCS, heartbeatIntervalMs: 500 });
+  scheduler.add({
+    id: 'slow',
+    sysid: 1,
+    compid: 191,
+    heartbeatIntervalMs: 1500,
+    heartbeat: { type: 18, autopilot: 8 },
+  });
+
+  scheduler.start();
+  assert.equal(intervalMs, 500);
+
+  tick();
+  now = 500;
+  tick();
+  now = 1000;
+  tick();
+  now = 1500;
+  tick();
+
+  assert.deepEqual(
+    emitted.map((e) => e.identity.id),
+    ['gcs', 'slow', 'gcs', 'gcs', 'gcs', 'slow']
+  );
 });

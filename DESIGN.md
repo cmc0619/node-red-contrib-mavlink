@@ -141,9 +141,9 @@ makes unreachable.
 
 | Type | Answers |
 |---|---|
-| `mavlink-local-identity` | Who is Node-RED on the wire? Owns source sysid and compid, the role preset, heartbeat content, and the signing credential reference |
+| `mavlink-local-identity` | Who is Node-RED on the wire? Owns source sysid and compid, the role preset, heartbeat content and interval, and the signing credential reference |
 | `mavlink-vehicle` | Who is being addressed, in what dialect? Owns dialect selection — bundled or custom — the XML upload and download, and the catalog picker |
-| `mavlink-connection` | How does traffic move, and stay channel-correct? Owns the transport (UDP, TCP, serial), the peer table, its bound Vehicle Profile, the outbound queue and its bands, per-identity heartbeat emission, signing switches and channel state, the default identity plus opt-in additional ones, and the disable switch |
+| `mavlink-connection` | How does traffic move, and stay channel-correct? Owns the transport (UDP, TCP, serial), the peer table, its bound Vehicle Profile, the outbound queue and its bands, signing switches and channel state, the default identity plus opt-in additional ones, and the disable switch |
 
 **Palette nodes**
 
@@ -416,7 +416,7 @@ validity badges, availability — recomputes on every redeploy, not only first l
 
 | Node | Owns |
 |---|---|
-| **Local Identity** | source sysid/compid, role, heartbeat identity, signing policy |
+| **Local Identity** | source sysid/compid, role, heartbeat content and interval, signing policy |
 | **Vehicle Profile** | target defaults, dialect, firmware, vehicle family, mode and param metadata |
 | **Connection** | transport, peer table, bound Vehicle Profile, queue, subscriptions, signing link ID, sequence and replay state |
 
@@ -518,10 +518,10 @@ repointing the vehicle at the right port, so the whole job is telling the operat
 they have not. Derived data checking declared configuration, not replacing it.
 
 Connection carries a **disable switch**, since Node-RED cannot disable config nodes. Disabled
-means no runtime is constructed at all: no dialing, listening, heartbeats, or timers.
+means no runtime is constructed at all: no dialing, listening, or timers.
 
 **Teardown.** Node-RED calls `close(done)` on every redeploy, and skipping cleanup leaves two
-live copies — the old socket holds the port, or two heartbeat schedulers fire on one identity.
+live copies — the old socket holds the port, or old timers keep firing after redeploy.
 Two traps beyond the obvious: release locks and stop timers on *every* exit path, including a
 constructor that threw halfway; and never re-resolve a config reference inside `close` — record
 what was bound at bind time and tear that down, because a lookup that throws synchronously in
@@ -543,12 +543,13 @@ vehicle's system ID under its own component ID.
 This is not a formality. The spec directs components to broadcast *even when not commanding
 anything*, and ArduPilot's GCS failsafe fires on heartbeat loss — stop sending and the vehicle
 reacts. Rate is not defined by MAVLink; 1 Hz with disconnection after four or five missed is the
-normal RF convention, and that is what the peer table's stale threshold should mirror.
+normal RF convention. Local Identity owns the interval and defaults to `1000 ms`; the peer
+table's stale threshold should mirror the inbound freshness expectation.
 
-**Ownership splits.** Local Identity owns the *content* — type, autopilot field, system status,
-source IDs. Connection owns the *emission* — one scheduler per bound identity per link, because
-a heartbeat is something a component does on a channel. An identity bound to two connections
-heartbeats on both.
+**Ownership splits.** Local Identity owns the *content and interval* — type, autopilot field,
+system status, source IDs, and cadence. Connection provides the channel and send path; its
+scheduler is an implementation detail driven by each bound identity's interval. An identity bound
+to two connections heartbeats on both.
 
 **A faulted component must not heartbeat.** The spec says so directly, and warns specifically
 against publishing from a thread unaware of the rest of the component's state. So the emitter
