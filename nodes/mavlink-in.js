@@ -26,6 +26,16 @@ const { capBadge } = require('../lib/delivery');
 /** @type {number} */
 const BADGE_MAX = 24;
 
+/**
+ * Minimum interval (ms) between status-badge writes for an unchanged badge.
+ * A high-rate stream (e.g. 50 Hz ATTITUDE) would otherwise rewrite the same
+ * badge 50×/s and flood the editor; the message rate limit above governs wire
+ * delivery, not the badge (§6). The badge still updates immediately whenever
+ * its text changes so it never lags behind the actual traffic.
+ * @type {number}
+ */
+const STATUS_MIN_INTERVAL_MS = 250;
+
 module.exports = function registerMavlinkIn(RED) {
   /**
    * @param {object} config  Node-RED node config from the editor
@@ -62,6 +72,10 @@ module.exports = function registerMavlinkIn(RED) {
     /** @type {Map<string, number>} key → last delivery timestamp ms */
     const lastDeliveryMs = new Map();
 
+    /** Badge throttling state (§6 — do not flood status on high-rate streams). */
+    let lastStatusText = null;
+    let lastStatusMs = 0;
+
     const subscribeFilter = {
       message: filterMessage !== null ? filterMessage : undefined,
       sysid: filterSysid !== null ? filterSysid : undefined,
@@ -97,11 +111,15 @@ module.exports = function registerMavlinkIn(RED) {
         trusted: decoded.trusted,
       });
 
-      node.status({
-        fill: 'green',
-        shape: 'dot',
-        text: capBadge(decoded.name).slice(0, BADGE_MAX),
-      });
+      // Rate-limit status writes: refresh only when the badge text changes or
+      // after the minimum interval, so a steady high-rate stream does not
+      // rewrite an identical badge on every frame.
+      const badgeText = capBadge(decoded.name).slice(0, BADGE_MAX);
+      if (badgeText !== lastStatusText || now - lastStatusMs >= STATUS_MIN_INTERVAL_MS) {
+        node.status({ fill: 'green', shape: 'dot', text: badgeText });
+        lastStatusText = badgeText;
+        lastStatusMs = now;
+      }
     });
 
     node.on('close', () => {
