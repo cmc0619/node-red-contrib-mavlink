@@ -45,8 +45,8 @@
 
   // ── Preset / command caches loaded from server ─────────────────────────────
   let _presetGroups = null;
-  /** @type {Object<string, Array<{name:string,value:number,label:string}>>} */
-  const _commandsByDialect = {};
+  /** @type {Object<string, {commands:Array, enums:Object}>} */
+  const _catalogByDialect = {};
 
   function loadPresets(cb) {
     if (_presetGroups) { cb(_presetGroups); return; }
@@ -81,19 +81,22 @@
   }
 
   /**
-   * Load the MAV_CMD list for a dialect and invoke cb(commands).
+   * Load the Advanced catalog (commands + enums) for a dialect.
    * @param {string} dialect
-   * @param {function(Array):void} cb
+   * @param {function({commands:Array, enums:Object}):void} cb
    */
-  function loadCommands(dialect, cb) {
+  function loadCommandsCatalog(dialect, cb) {
     const key = dialect || 'ardupilotmega';
-    if (_commandsByDialect[key]) { cb(_commandsByDialect[key]); return; }
+    if (_catalogByDialect[key]) { cb(_catalogByDialect[key]); return; }
     $.getJSON('/mavlink/command/commands', { dialect: key }, function (data) {
-      _commandsByDialect[key] = data.commands || [];
-      cb(_commandsByDialect[key]);
+      _catalogByDialect[key] = {
+        commands: data.commands || [],
+        enums: data.enums || {},
+      };
+      cb(_catalogByDialect[key]);
     }).fail(function () {
-      _commandsByDialect[key] = [];
-      cb(_commandsByDialect[key]);
+      _catalogByDialect[key] = { commands: [], enums: {} };
+      cb(_catalogByDialect[key]);
     });
   }
 
@@ -240,9 +243,10 @@
       });
 
       // ── Advanced MAV_CMD dropdown (§6 / §9 — every command in the dialect) ─
-      function buildAdvancedDropdown(commands) {
+      function buildAdvancedDropdown(catalog) {
+        const commands = catalog.commands || [];
         const sel = $('#node-input-advancedCommand').empty();
-        sel.append($('<option></option>').val('').text('— select MAV_CMD —'));
+        sel.append($('<option></option>').val('').text('\u2014 select MAV_CMD \u2014'));
         for (const c of commands) {
           sel.append($('<option></option>').val(String(c.value)).text(c.label));
         }
@@ -259,10 +263,13 @@
       }
 
       function refreshAdvancedCommands() {
-        loadCommands(resolveEditorDialect(), buildAdvancedDropdown);
+        loadCommandsCatalog(resolveEditorDialect(), buildAdvancedDropdown);
       }
 
-      $('#node-input-advancedCommand').on('change', refreshDelivery);
+      $('#node-input-advancedCommand').on('change', function () {
+        refreshParamFields();
+        refreshDelivery();
+      });
 
       // ── Delivery dropdown ──────────────────────────────────────────────────
       function refreshDelivery() {
@@ -304,16 +311,82 @@
       let savedParams = {};
       try { savedParams = JSON.parse(node.params || '{}'); } catch (_e) {}
 
+      /**
+       * Field label for one Advanced param under the §6 four-case rule
+       * (caller has already filtered `hidden` / reserved / Empty).
+       * @param {object} spec
+       * @returns {string}
+       */
+      function advancedParamLabel(spec) {
+        let label = spec.label || spec.description || ('param ' + spec.index);
+        if (spec.units) label += ' (' + spec.units + ')';
+        return label;
+      }
+
+      /**
+       * Build the input control for one Advanced param: enum= → <select>,
+       * otherwise a number field with units/range as constraints (§6).
+       * @param {object} spec
+       * @param {Object<string, Array>} enums
+       * @returns {HTMLElement|jQuery}
+       */
+      function advancedParamInput(spec, enums) {
+        const saved = savedParams[spec.index];
+        if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
+          const sel = $('<select class="param-input"></select>')
+            .attr('data-idx', spec.index)
+            .attr('title', spec.description || '');
+          sel.append($('<option></option>').val('').text('\u2014'));
+          for (const entry of enums[spec.enum]) {
+            sel.append($('<option></option>').val(String(entry.value)).text(entry.label));
+          }
+          if (saved !== undefined && saved !== null && saved !== '') {
+            sel.val(String(saved));
+          }
+          return sel;
+        }
+        const input = $('<input type="number" class="param-input">')
+          .attr('data-idx', spec.index)
+          .attr('title', spec.description || '')
+          .val(saved !== undefined && saved !== null ? saved : '');
+        if (spec.minValue !== null && spec.minValue !== undefined) input.attr('min', spec.minValue);
+        if (spec.maxValue !== null && spec.maxValue !== undefined) input.attr('max', spec.maxValue);
+        if (spec.increment !== null && spec.increment !== undefined) input.attr('step', spec.increment);
+        return input;
+      }
+
       function refreshParamFields() {
         container.empty();
 
         const mode = $('#node-input-mode').val();
         if (mode === 'advanced') {
-          // Advanced: 7 generic param fields.
-          for (let i = 1; i <= 7; i++) {
-            const input = $('<input type="number" class="param-input">').attr('data-idx', i)
-              .val(savedParams[i] !== undefined ? savedParams[i] : '');
-            container.append(formRow(`Param ${i}`, input));
+          // Fields are created by selection (§6 / §9 Advanced): named params
+          // from the dialect metadata — never a raw Param 1–7 grid.
+          const dialect = resolveEditorDialect();
+          const catalog = _catalogByDialect[dialect];
+          const cmdId = $('#node-input-advancedCommand').val();
+          if (!catalog) {
+            container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
+            return;
+          }
+          if (!cmdId) {
+            container.append($('<div class="form-row"><em>Select a MAV_CMD to configure parameters.</em></div>'));
+            return;
+          }
+          const cmd = (catalog.commands || []).find(function (c) {
+            return String(c.value) === String(cmdId);
+          });
+          if (!cmd) {
+            container.append($('<div class="form-row"><em>Command not in this dialect.</em></div>'));
+            return;
+          }
+          const visible = (cmd.params || []).filter(function (p) { return !p.hidden; });
+          if (visible.length === 0) {
+            container.append($('<div class="form-row"><em>No exposed parameters for this command.</em></div>'));
+            return;
+          }
+          for (const spec of visible) {
+            container.append(formRow(advancedParamLabel(spec), advancedParamInput(spec, catalog.enums || {})));
           }
         } else {
           const presetId = $('#node-input-preset').val();

@@ -564,7 +564,7 @@ module.exports = function registerMavlinkCommand(RED) {
    */
   if (!MavlinkCommandNode._routeRegistered) {
     const { presetGroups } = require('../lib/command');
-    const { listCommandsForDialect, knownDialects } = require('../lib/metadata');
+    const { listCommandsCatalog, knownDialects } = require('../lib/metadata');
 
     RED.httpAdmin.get(
       '/mavlink/command/presets',
@@ -575,9 +575,8 @@ module.exports = function registerMavlinkCommand(RED) {
     );
 
     /**
-     * Full MAV_CMD list for Advanced mode. Dialect is an allow-listed bundled
-     * name (§6 — path segments resolve against a known list, never a filesystem
-     * path). Defaults to `ardupilotmega` when omitted.
+     * Advanced-mode catalog: every MAV_CMD plus param specs and the enum
+     * tables those params reference (§6 / §9). Dialect is allow-listed.
      */
     RED.httpAdmin.get(
       '/mavlink/command/commands',
@@ -587,8 +586,7 @@ module.exports = function registerMavlinkCommand(RED) {
           ? req.query.dialect.trim()
           : 'ardupilotmega';
         try {
-          const commands = listCommandsForDialect(requested);
-          res.json({ dialect: requested, commands });
+          res.json(listCommandsCatalog(requested));
         } catch (err) {
           res.status(400).json({
             error: err.message,
