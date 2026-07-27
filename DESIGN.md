@@ -929,9 +929,11 @@ Rules across all three:
   mission is recoverable; one silently emptied is not.
 - **Retry per item, with a ceiling**, then abort the whole transfer with the sequence number
   that stalled. A transfer that hangs forever is worse than one that fails.
-- **Item validation is per type.** Mission items are `MAV_CMD_NAV_*`, fence items are
-  `MAV_CMD_NAV_FENCE_*`, rally is `MAV_CMD_NAV_RALLY_POINT`. Three validators, not one with a
-  flag.
+- **Item validation is per type.** Mission items accept `MAV_CMD_NAV_*` navigation commands
+  plus the `CONDITION_*` / `DO_*` commands that real plans embed (`DO_JUMP`,
+  `CONDITION_DELAY`, …) while rejecting fence and rally command ids; fence items are only
+  `MAV_CMD_NAV_FENCE_*`; rally is only `MAV_CMD_NAV_RALLY_POINT`. Three validators, not one
+  with a flag.
 - **Lock per connection, profile, and type.** A fence upload and a mission download run
   concurrently; two fence uploads do not.
 - **Progress is status, not a port.** Phase and item counts go out output 1 as they happen.
