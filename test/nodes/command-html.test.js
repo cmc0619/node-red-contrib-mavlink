@@ -84,3 +84,27 @@ test('preset dropdown re-applies the saved selection and fires change after the 
   assert.match(builder, /sel\.val\(node\.preset/, 'the saved preset is re-applied');
   assert.match(builder, /sel\.trigger\(['"]change['"]\)/, 'a change event is fired after building');
 });
+
+test('advanced bitmask command params render as multi-select controls', () => {
+  const renderer = html.slice(
+    html.indexOf('function advancedParamInput'),
+    html.indexOf('function refreshParamFields')
+  );
+
+  assert.match(renderer, /spec\.bitmask/, 'param-level bitmask flag drives rendering');
+  assert.match(renderer, /data-kind['"],\s*isBitmask \? ['"]bitmask['"] : ['"]enum['"]/, 'bitmask controls are tagged');
+  assert.match(renderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'bitmask enum params use native multi-select');
+  assert.match(html, /Ctrl\/Cmd-click/, 'multi-select title/help explains how to select multiple flags');
+});
+
+test('advanced bitmask command params save one numeric mask value', () => {
+  const saver = html.slice(
+    html.indexOf('oneditsave: function'),
+    html.indexOf('oneditcancel: function')
+  );
+
+  assert.match(saver, /data-kind['"]\)\s*===\s*['"]bitmask['"]/, 'save path detects bitmask controls');
+  assert.match(saver, /Array\.isArray\(raw\)/, 'save path handles multi-select value arrays');
+  assert.match(saver, /mask\s*=\s*mask\s*\|/, 'selected entries are ORed into one mask');
+  assert.match(saver, /params\[idx\]\s*=\s*mask/, 'params JSON stores a number, not an array');
+});

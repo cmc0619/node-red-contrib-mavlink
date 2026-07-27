@@ -111,6 +111,14 @@ const FIXTURE_BUNDLE = {
         { name: 'FIXTURE_SPEED_GROUND', value: 1, description: 'Ground speed' },
       ],
     },
+    FIXTURE_FLAGS: {
+      name: 'FIXTURE_FLAGS',
+      bitmask: true,
+      entries: [
+        { name: 'FIXTURE_FLAG_ONE', value: 1, description: 'First flag' },
+        { name: 'FIXTURE_FLAG_TWO', value: 2, description: 'Second flag' },
+      ],
+    },
   },
 };
 
@@ -136,4 +144,27 @@ test('catalogFromBundle fixture: custom name, ordering, hidden params, enums (§
   assert.ok(Array.isArray(catalog.enums.FIXTURE_SPEED));
   assert.ok(catalog.enums.FIXTURE_SPEED.some((e) => e.value === 0 && /Airspeed/.test(e.label)));
   assert.equal(Object.keys(catalog.enums).length, 1, 'only referenced enums are included');
+});
+
+test('catalogFromBundle marks command params backed by bitmask enums', () => {
+  const bundle = {
+    dialect: 'fixture-bitmask',
+    commands: {
+      MAV_CMD_FLAGS: {
+        name: 'MAV_CMD_FLAGS',
+        value: 300,
+        params: [
+          { index: 1, label: 'Flags', description: 'Flags', enum: 'FIXTURE_FLAGS' },
+        ],
+      },
+    },
+    enums: FIXTURE_BUNDLE.enums,
+  };
+
+  const catalog = catalogFromBundle(bundle, 'fixture-bitmask');
+  const flags = catalog.commands[0].params[0];
+
+  assert.equal(flags.enum, 'FIXTURE_FLAGS');
+  assert.equal(flags.bitmask, true);
+  assert.ok(Array.isArray(catalog.enums.FIXTURE_FLAGS), 'enum table shape stays an array');
 });
