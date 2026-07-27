@@ -11,6 +11,7 @@ const {
   TRANSPORT_QUIET_SEND_CODES,
   UDP_NO_DESTINATION,
   TCP_NO_DESTINATION,
+  TCP_PEER_GONE,
   SERIAL_NO_DESTINATION,
 } = require('../../lib/connection/transport');
 
@@ -37,4 +38,5 @@ test('quiet send codes cover every transport soft-fail', () => {
   assert.ok(TRANSPORT_QUIET_SEND_CODES.has(UDP_NO_DESTINATION));
   assert.ok(TRANSPORT_QUIET_SEND_CODES.has(TCP_NO_DESTINATION));
   assert.ok(TRANSPORT_QUIET_SEND_CODES.has(SERIAL_NO_DESTINATION));
+  assert.equal(TRANSPORT_QUIET_SEND_CODES.has(TCP_PEER_GONE), false);
 });
