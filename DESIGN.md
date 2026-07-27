@@ -1295,3 +1295,14 @@ items. Fence and rally validators stay strict to their families.
 wrong MAV_CMD list to that key. A miss returns 404 unless the request also names an
 allow-listed bundled `?dialect=`; `custom` without a live profile is never served.
 *Check:* `node --test test/command/commands-route.test.js`
+
+**Bind-mounted source is not an installed package.**
+*Wrong belief:* pointing Node-RED at a git checkout (e.g. Docker `/module` volume) is enough
+for the palette to load, because `package.json` lists `mavlink-mappings`.
+*Fact:* Node resolves `require('mavlink-mappings')` from the file that loads
+(`…/lib/metadata/bundled.js`), walking `node_modules` upward from that path. A bare mount has
+no `node_modules`, so vehicle/command fail at palette load with `Cannot find module
+'mavlink-mappings'` even though the dependency is declared. `npm install` into the Node-RED
+user directory (or `npm install --omit=dev` on the mount) is required.
+*Check:* from a clean dir, `npm install ./node-red-contrib-mavlink-*.tgz` then
+`node -e "require('mavlink-mappings')"`; contrast with `node -e "require('/module/lib/metadata/bundled')"` on an undepended mount.

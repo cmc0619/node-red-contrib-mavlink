@@ -6,15 +6,32 @@ Full design and behaviour are specified in [DESIGN.md](DESIGN.md).
 
 ## Install
 
-From your Node-RED user directory (usually `~/.node-red`):
+From your Node-RED user directory (usually `~/.node-red`, or `/data` in the official Docker image):
 
 ```bash
 npm install /path/to/node-red-contrib-mavlink
 ```
 
-Restart Node-RED. The nodes appear under the **MAVLink** palette (config nodes under **Configuration nodes**).
+That installs this package **and** its runtime dependencies (`mavlink-mappings`, `node-mavlink`, …) where Node can resolve them. Restart Node-RED. The nodes appear under the **MAVLink** palette (config nodes under **Configuration nodes**).
 
 Requires Node.js 18+ and Node-RED 3.0+.
+
+### Docker / volume mount (`/module`, Unraid, etc.)
+
+If Node-RED loads this repo from a bind mount (paths like `/module/lib/...` in the log) instead of from `userDir/node_modules`, `npm install` must still put dependencies on that resolve path. A bare git checkout has no `node_modules`; you will see:
+
+```text
+[node-red-contrib-mavlink/mavlink-command] Error: Cannot find module 'mavlink-mappings'
+```
+
+Fix — inside the container, on the mounted package root:
+
+```bash
+cd /module   # or whatever you mounted
+npm install --omit=dev
+```
+
+Then restart Node-RED. Prefer installing into the user directory (`npm install /module` from `/data`) so Node-RED loads from `node_modules` like any other contrib package; keep a raw `/module` mount only for development.
 
 ## Nodes
 
