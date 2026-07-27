@@ -36,7 +36,9 @@
       "mavlink-move": "nodes/mavlink-move.js",
       "mavlink-param": "nodes/mavlink-param.js",
       "mavlink-payload": "nodes/mavlink-payload.js",
-      "mavlink-state": "nodes/mavlink-state.js"
+      "mavlink-state": "nodes/mavlink-state.js",
+      "mavlink-mission": "nodes/mavlink-mission.js",
+      "mavlink-swarm": "nodes/mavlink-swarm.js"
     }
   }
 }
