@@ -929,9 +929,11 @@ Rules across all three:
   mission is recoverable; one silently emptied is not.
 - **Retry per item, with a ceiling**, then abort the whole transfer with the sequence number
   that stalled. A transfer that hangs forever is worse than one that fails.
-- **Item validation is per type.** Mission items are `MAV_CMD_NAV_*`, fence items are
-  `MAV_CMD_NAV_FENCE_*`, rally is `MAV_CMD_NAV_RALLY_POINT`. Three validators, not one with a
-  flag.
+- **Item validation is per type.** Mission items accept `MAV_CMD_NAV_*` navigation commands
+  plus the `CONDITION_*` / `DO_*` commands that real plans embed (`DO_JUMP`,
+  `CONDITION_DELAY`, …) while rejecting fence and rally command ids; fence items are only
+  `MAV_CMD_NAV_FENCE_*`; rally is only `MAV_CMD_NAV_RALLY_POINT`. Three validators, not one
+  with a flag.
 - **Lock per connection, profile, and type.** A fence upload and a mission download run
   concurrently; two fence uploads do not.
 - **Progress is status, not a port.** Phase and item counts go out output 1 as they happen.
@@ -1272,3 +1274,13 @@ PX4 has no equivalent, so the editor supplies a URL and nothing is baked in to r
 **Grep alternation.** `grep -E` uses `|` for alternation; `\|` matches a literal pipe. More than
 one measurement in this document was initially wrong because of that, including a count that
 measured the regex rather than the code.
+
+**Mission-item validation is not NAV-only.**
+*Wrong belief:* §9's shorthand "Mission items are `MAV_CMD_NAV_*`" means the mission validator
+rejects every non-NAV command.
+*Fact:* uploaded missions routinely contain `MAV_CMD_DO_*` and `MAV_CMD_CONDITION_*` (e.g.
+`DO_JUMP`, `CONDITION_DELAY`) alongside navigation. The mission validator's real job is to
+reject *fence* and *rally* command ids (and other out-of-family ids), not to strip DO/CONDITION
+items. Fence and rally validators stay strict to their families.
+*Check:* inspect any ArduPilot `.waypoints` / QGC plan with a jump or delay, or
+`rg "DO_JUMP|CONDITION_DELAY" ` against a captured mission download.

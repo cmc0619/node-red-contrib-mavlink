@@ -72,6 +72,7 @@ module.exports = function registerMavlinkConnection(RED) {
         targetSysid: defaults.defaultTargetSystem,
         targetCompid: defaults.defaultTargetComponent,
         bundle,
+        firmware: defaults.firmware,
         autopilot: firmwareAutopilot(defaults.firmware),
       },
       identities,
