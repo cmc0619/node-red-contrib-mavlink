@@ -302,22 +302,22 @@
   <div class="form-row" id="row-payload-path"><label for="node-input-path">Gimbal path</label><select id="node-input-path"><option value="legacy">DO_MOUNT_CONTROL</option><option value="manager">GIMBAL_MANAGER_SET_PITCHYAW</option></select></div>
   <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
   <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
-  <div class="form-row" id="row-payload-count"><label for="node-input-count">Count</label><input type="number" id="node-input-count" style="width:80px"></div>
-  <div class="form-row" id="row-payload-interval"><label for="node-input-interval">Interval</label><input type="number" id="node-input-interval" style="width:80px"> s</div>
-  <div class="form-row" id="row-payload-distance"><label for="node-input-distance">Distance</label><input type="number" id="node-input-distance" style="width:80px"> m</div>
+  <div class="form-row" id="row-payload-count"><label for="node-input-count">Count</label><input type="number" id="node-input-count" step="1" style="width:80px"></div>
+  <div class="form-row" id="row-payload-interval"><label for="node-input-interval">Interval</label><input type="number" id="node-input-interval" step="any" style="width:80px"> s</div>
+  <div class="form-row" id="row-payload-distance"><label for="node-input-distance">Distance</label><input type="number" id="node-input-distance" step="any" style="width:80px"> m</div>
   <div class="form-row" id="row-payload-mode"><label for="node-input-modeValue">Mode</label><select id="node-input-modeValue" style="width:70%"></select></div>
-  <div class="form-row" id="row-payload-pitch"><label for="node-input-pitch">Pitch</label><input type="number" id="node-input-pitch" style="width:80px"> deg</div>
-  <div class="form-row" id="row-payload-roll"><label for="node-input-roll">Roll</label><input type="number" id="node-input-roll" style="width:80px"> deg</div>
-  <div class="form-row" id="row-payload-yaw"><label for="node-input-yaw">Yaw</label><input type="number" id="node-input-yaw" style="width:80px"> deg</div>
-  <div class="form-row" id="row-payload-pitchRate"><label for="node-input-pitchRate">Pitch rate</label><input type="number" id="node-input-pitchRate" style="width:80px"> deg/s</div>
-  <div class="form-row" id="row-payload-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="number" id="node-input-yawRate" style="width:80px"> deg/s</div>
-  <div class="form-row" id="row-payload-servo"><label for="node-input-servo">Servo</label><input type="number" id="node-input-servo" style="width:80px"></div>
-  <div class="form-row" id="row-payload-pwm"><label for="node-input-pwm">PWM</label><input type="number" id="node-input-pwm" style="width:80px"> us</div>
-  <div class="form-row" id="row-payload-period"><label for="node-input-period">Period</label><input type="number" id="node-input-period" style="width:80px"> ms</div>
-  <div class="form-row" id="row-payload-instance"><label for="node-input-instance">Instance</label><input type="number" id="node-input-instance" style="width:80px"></div>
+  <div class="form-row" id="row-payload-pitch"><label for="node-input-pitch">Pitch</label><input type="number" id="node-input-pitch" step="any" style="width:80px"> deg</div>
+  <div class="form-row" id="row-payload-roll"><label for="node-input-roll">Roll</label><input type="number" id="node-input-roll" step="any" style="width:80px"> deg</div>
+  <div class="form-row" id="row-payload-yaw"><label for="node-input-yaw">Yaw</label><input type="number" id="node-input-yaw" step="any" style="width:80px"> deg</div>
+  <div class="form-row" id="row-payload-pitchRate"><label for="node-input-pitchRate">Pitch rate</label><input type="number" id="node-input-pitchRate" step="any" style="width:80px"> deg/s</div>
+  <div class="form-row" id="row-payload-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="number" id="node-input-yawRate" step="any" style="width:80px"> deg/s</div>
+  <div class="form-row" id="row-payload-servo"><label for="node-input-servo">Servo</label><input type="number" id="node-input-servo" step="1" style="width:80px"></div>
+  <div class="form-row" id="row-payload-pwm"><label for="node-input-pwm">PWM</label><input type="number" id="node-input-pwm" step="1" style="width:80px"> us</div>
+  <div class="form-row" id="row-payload-period"><label for="node-input-period">Period</label><input type="number" id="node-input-period" step="any" style="width:80px"> ms</div>
+  <div class="form-row" id="row-payload-instance"><label for="node-input-instance">Instance</label><input type="number" id="node-input-instance" step="1" style="width:80px"></div>
   <div class="form-row" id="row-payload-action"><label for="node-input-actionValue">Action</label><select id="node-input-actionValue" style="width:70%"></select></div>
-  <div class="form-row" id="row-payload-length"><label for="node-input-length">Length</label><input type="number" id="node-input-length" style="width:80px"> m</div>
-  <div class="form-row" id="row-payload-rate"><label for="node-input-rate">Rate</label><input type="number" id="node-input-rate" style="width:80px"> m/s</div>
+  <div class="form-row" id="row-payload-length"><label for="node-input-length">Length</label><input type="number" id="node-input-length" step="any" style="width:80px"> m</div>
+  <div class="form-row" id="row-payload-rate"><label for="node-input-rate">Rate</label><input type="number" id="node-input-rate" step="any" style="width:80px"> m/s</div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-payload">

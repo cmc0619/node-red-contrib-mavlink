@@ -120,3 +120,24 @@ test('mavlink-payload does not leak action ids across release enum families', ()
     'gripper → parachute must not keep the old numeric action id'
   );
 });
+
+test('mavlink-payload fractional params use step=any', () => {
+  for (const id of [
+    'node-input-interval',
+    'node-input-distance',
+    'node-input-pitch',
+    'node-input-roll',
+    'node-input-yaw',
+    'node-input-pitchRate',
+    'node-input-yawRate',
+    'node-input-period',
+    'node-input-length',
+    'node-input-rate',
+  ]) {
+    assert.match(
+      payloadHtml,
+      new RegExp(`id="${id}"[^>]*step="any"|step="any"[^>]*id="${id}"`),
+      `${id} must accept fractional values`
+    );
+  }
+});
