@@ -6,32 +6,48 @@ Full design and behaviour are specified in [DESIGN.md](DESIGN.md).
 
 ## Install
 
-From your Node-RED user directory (usually `~/.node-red`, or `/data` in the official Docker image):
+From your Node-RED user directory (usually `~/.node-red`, or `/data` in the official Docker image).
+
+**Do not** `npm install /path/to/checkout` alone. Modern npm symlinks a local path and does
+**not** install that package's dependencies, so `require('mavlink-mappings')` fails at palette
+load. Use one of:
 
 ```bash
-npm install /path/to/node-red-contrib-mavlink
+# From npm (when published), or from GitHub:
+npm install cmc0619/node-red-contrib-mavlink
+
+# From a local checkout — copy, don't symlink:
+npm install --install-links /path/to/node-red-contrib-mavlink
+
+# Or pack first, then install the tarball (also a real copy):
+npm pack /path/to/node-red-contrib-mavlink
+npm install ./node-red-contrib-mavlink-*.tgz
 ```
 
-That installs this package **and** its runtime dependencies (`mavlink-mappings`, `node-mavlink`, …) where Node can resolve them. Restart Node-RED. The nodes appear under the **MAVLink** palette (config nodes under **Configuration nodes**).
+Restart Node-RED. The nodes appear under the **MAVLink** palette (config nodes under
+**Configuration nodes**).
 
 Requires Node.js 18+ and Node-RED 3.0+.
 
 ### Docker / volume mount (`/module`, Unraid, etc.)
 
-If Node-RED loads this repo from a bind mount (paths like `/module/lib/...` in the log) instead of from `userDir/node_modules`, `npm install` must still put dependencies on that resolve path. A bare git checkout has no `node_modules`; you will see:
+If the log shows a require stack under `/module/lib/...`, Node-RED is loading the bind-mounted
+checkout directly. A bare mount has no `node_modules`:
 
 ```text
 [node-red-contrib-mavlink/mavlink-command] Error: Cannot find module 'mavlink-mappings'
 ```
 
-Fix — inside the container, on the mounted package root:
+Install dependencies **on the mount** (so resolution from `/module/lib/...` succeeds):
 
 ```bash
 cd /module   # or whatever you mounted
 npm install --omit=dev
 ```
 
-Then restart Node-RED. Prefer installing into the user directory (`npm install /module` from `/data`) so Node-RED loads from `node_modules` like any other contrib package; keep a raw `/module` mount only for development.
+Then restart Node-RED. Alternatively, leave the mount as source only and install a **copy** into
+the user directory with `--install-links` or a tarball (above) so the palette loads from
+`/data/node_modules` like any other contrib package.
 
 ## Nodes
 
