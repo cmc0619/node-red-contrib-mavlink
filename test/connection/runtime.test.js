@@ -33,9 +33,10 @@ function resolveIdentity(input) {
 
 /**
  * @param {object} [configOverrides]
+ * @param {object} [depOverrides]
  * @returns {{connection: Connection, dg: object, timers: object}}
  */
-function build(configOverrides = {}) {
+function build(configOverrides = {}, depOverrides = {}) {
   const dg = mockDgram();
   const timers = fakeTimers();
   const clock = fakeClock(1000);
@@ -62,6 +63,7 @@ function build(configOverrides = {}) {
     dgram: dg.module,
     wire: fakeWire(),
     resolveIdentity,
+    ...depOverrides,
   });
   return { connection, dg, timers };
 }
@@ -139,6 +141,62 @@ test('a heartbeat tick enqueues on the Liveness band and is transmitted', async 
   assert.ok(heartbeat);
   assert.equal(heartbeat.sysid, 255);
   assert.equal(heartbeat.compid, 190);
+  connection.close();
+});
+
+test('listen-only UDP drops outbound quietly when no remote and no peer endpoint', async () => {
+  const warns = [];
+  const { connection, dg } = build(
+    {
+      transport: {
+        mode: 'udp',
+        bindAddress: '0.0.0.0',
+        bindPort: 14550,
+        // no remoteAddress / remotePort — valid listen-only bind
+      },
+    },
+    { logger: { warn: (m) => warns.push(m), info() {}, error() {} } }
+  );
+
+  await connection.start();
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
+  connection.heartbeats.tick();
+  await delay(30);
+
+  assert.equal(dg.sockets[0].sent.length, 0, 'nothing to send without a destination');
+  assert.equal(
+    warns.filter((m) => /outbound send failed|no destination/i.test(m)).length,
+    0,
+    'no-destination must not spam the Node-RED log'
+  );
+  assert.equal(connection.getState(), STATE.CONNECTED);
+  connection.close();
+});
+
+test('partial UDP remote config still warns (incomplete destination is a misconfig)', async () => {
+  const warns = [];
+  const { connection, dg } = build(
+    {
+      transport: {
+        mode: 'udp',
+        bindAddress: '0.0.0.0',
+        bindPort: 14550,
+        remoteAddress: '10.0.0.9',
+        // remotePort omitted on purpose
+      },
+    },
+    { logger: { warn: (m) => warns.push(m), info() {}, error() {} } }
+  );
+
+  await connection.start();
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
+  await delay(30);
+
+  assert.equal(dg.sockets[0].sent.length, 0);
+  assert.ok(
+    warns.some((m) => /incomplete destination/i.test(m)),
+    'half-configured remote must still warn'
+  );
   connection.close();
 });
 
