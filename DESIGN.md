@@ -1160,6 +1160,9 @@ working reference displaces a belief written here, rewrite the affected section 
 §14 entry in that PR — do not leave the correction as chat memory or a code comment. The
 next agent reads only this file.
 
+**Pull requests stay at or under 50 files.** Larger layers split by module boundary into
+sequential PRs. Count: `git diff --name-only <base>...HEAD | wc -l`.
+
 ---
 
 **Bundled dialects are the npm registry, not vendored XML.**

@@ -13,6 +13,10 @@ or working reference that changes how the toolkit must be built is written into 
 section plus a §14 ground-truth entry before the PR is considered ready. The next agent will
 not see this conversation.
 
+**PR size cap: 50 files.** Do not push a pull request whose diff touches more than 50 files.
+Split by module boundary (`lib/<module>`, `nodes/<node>`, matching tests) into sequential PRs
+when a layer would exceed the cap. Count is `git diff --name-only <base>...HEAD | wc -l`.
+
 ## Implementation workflow: use sub-agents (repo-owner directive)
 
 The repo owner wants implementation parallelized with sub-agents, with agent capability matched
