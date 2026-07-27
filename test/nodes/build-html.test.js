@@ -50,7 +50,8 @@ test('Build reshapes fields from message metadata and handles COMMAND_LONG/INT',
   assert.match(html, /data-kind.*array|data-kind', 'array'/);
   assert.match(html, /bitmask/);
   assert.match(html, /int64/);
-  assert.match(html, /if \(!\$inputs\.length\) return/);
+  assert.match(html, /syncSavedFieldsFromDom/);
+  assert.match(html, /collectFieldInputsFromDom/);
   assert.ok(
     !/<textarea id="node-input-fields"/.test(html),
     'raw JSON fields textarea must be replaced by dynamic controls'

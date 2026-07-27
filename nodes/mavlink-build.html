@@ -98,6 +98,41 @@
       });
     }
 
+    /** Collect typed values from live `.mav-field-input` controls (oneditsave + live sync). */
+    function collectFieldInputsFromDom($root) {
+      var fields = {};
+      $root.find('.mav-field-input').each(function () {
+        var name = $(this).attr('data-field');
+        if (!name) return;
+        var kind = $(this).attr('data-kind') || 'number';
+        var raw = $(this).val();
+        if (kind === 'bitmask') {
+          fields[name] = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+          return;
+        }
+        if (raw === '' || raw === null || raw === undefined) return;
+        if (kind === 'array') {
+          fields[name] = String(raw).split(/[,\s]+/).filter(function (p) { return p !== ''; }).map(function (p) {
+            var n = Number(p);
+            return Number.isNaN(n) ? p : n;
+          });
+          return;
+        }
+        if (kind === 'int64' || kind === 'char') {
+          fields[name] = String(raw);
+          return;
+        }
+        if (kind === 'enum') {
+          var asNum = Number(raw);
+          fields[name] = !Number.isNaN(asNum) && String(asNum) === String(raw) ? asNum : raw;
+          return;
+        }
+        var n = Number(raw);
+        fields[name] = !Number.isNaN(n) ? n : raw;
+      });
+      return fields;
+    }
+
     RED.nodes.registerType('mavlink-build', {
       category: 'MAVLink',
       color: '#6ea6d7',
@@ -250,6 +285,19 @@
           return input;
         }
 
+        /**
+         * Merge live edits into savedFields before rebuilding controls so a MAV_CMD
+         * (or message) change does not discard in-session parameter values.
+         */
+        function syncSavedFieldsFromDom() {
+          var $root = $('#node-input-fields-container');
+          if (!$root.find('.mav-field-input').length) return;
+          var live = collectFieldInputsFromDom($root);
+          Object.keys(live).forEach(function (key) {
+            savedFields[key] = live[key];
+          });
+        }
+
         function commandParamInput(msgName, spec, enums) {
           var key = wireFieldForCommandParam(msgName, spec.index);
           var saved = savedFields[key];
@@ -281,6 +329,7 @@
         }
 
         function refreshCommandParams(msgName, cmdCatalog) {
+          syncSavedFieldsFromDom();
           var $slot = $('#mav-command-params');
           $slot.empty();
           if (!cmdCatalog) {
@@ -312,6 +361,7 @@
         }
 
         function refreshFieldForm() {
+          syncSavedFieldsFromDom();
           container.empty();
           var catalog = _msgCatalogByKey[_msgCatalogKey];
           var msgName = $('#node-input-messageName').val();
@@ -412,42 +462,10 @@
         reloadCatalogs();
       },
       oneditsave: function () {
-        var $inputs = $('#node-input-fields-container').find('.mav-field-input');
+        var $root = $('#node-input-fields-container');
         // If catalogs never populated controls, keep the previously saved JSON.
-        if (!$inputs.length) return;
-
-        var fields = {};
-        $inputs.each(function () {
-          var name = $(this).attr('data-field');
-          if (!name) return;
-          var kind = $(this).attr('data-kind') || 'number';
-          var raw = $(this).val();
-          if (kind === 'bitmask') {
-            fields[name] = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-            return;
-          }
-          if (raw === '' || raw === null || raw === undefined) return;
-          if (kind === 'array') {
-            fields[name] = String(raw).split(/[,\s]+/).filter(function (p) { return p !== ''; }).map(function (p) {
-              var n = Number(p);
-              return Number.isNaN(n) ? p : n;
-            });
-            return;
-          }
-          if (kind === 'int64' || kind === 'char') {
-            fields[name] = String(raw);
-            return;
-          }
-          if (kind === 'enum') {
-            // Prefer numeric value when the option value is numeric; else keep name.
-            var asNum = Number(raw);
-            fields[name] = !Number.isNaN(asNum) && String(asNum) === String(raw) ? asNum : raw;
-            return;
-          }
-          var n = Number(raw);
-          fields[name] = !Number.isNaN(n) ? n : raw;
-        });
-        $('#node-input-fields').val(JSON.stringify(fields));
+        if (!$root.find('.mav-field-input').length) return;
+        $('#node-input-fields').val(JSON.stringify(collectFieldInputsFromDom($root)));
       },
     });
   }());
