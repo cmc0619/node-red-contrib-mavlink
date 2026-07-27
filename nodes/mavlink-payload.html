@@ -67,6 +67,117 @@
         };
       }
 
+      var PAYLOAD_ENUM_NAMES = [
+        'CAMERA_MODE',
+        'MAV_MOUNT_MODE',
+        'GRIPPER_ACTIONS',
+        'WINCH_ACTIONS',
+        'PARACHUTE_ACTION'
+      ];
+      var RELEASE_ACTION_ENUMS = {
+        gripper: 'GRIPPER_ACTIONS',
+        winch: 'WINCH_ACTIONS',
+        parachute: 'PARACHUTE_ACTION'
+      };
+      var MODE_ENUMS = {
+        camera: 'CAMERA_MODE',
+        gimbal: 'MAV_MOUNT_MODE'
+      };
+      var FALLBACK_ENUMS = {
+        GRIPPER_ACTIONS: [
+          { name: 'GRIPPER_ACTIONS_RELEASE', value: 0, label: 'GRIPPER_ACTIONS_RELEASE (0)' },
+          { name: 'GRIPPER_ACTIONS_GRAB', value: 1, label: 'GRIPPER_ACTIONS_GRAB (1)' },
+          { name: 'GRIPPER_ACTIONS_HOLD', value: 2, label: 'GRIPPER_ACTIONS_HOLD (2)' }
+        ],
+        WINCH_ACTIONS: [
+          { name: 'WINCH_ACTIONS_RELAXED', value: 0, label: 'WINCH_ACTIONS_RELAXED (0)' },
+          { name: 'WINCH_ACTIONS_RELATIVE_LENGTH_CONTROL', value: 1, label: 'WINCH_ACTIONS_RELATIVE_LENGTH_CONTROL (1)' },
+          { name: 'WINCH_ACTIONS_RATE_CONTROL', value: 2, label: 'WINCH_ACTIONS_RATE_CONTROL (2)' },
+          { name: 'WINCH_ACTIONS_LOCK', value: 3, label: 'WINCH_ACTIONS_LOCK (3)' },
+          { name: 'WINCH_ACTIONS_DELIVER', value: 4, label: 'WINCH_ACTIONS_DELIVER (4)' },
+          { name: 'WINCH_ACTIONS_HOLD', value: 5, label: 'WINCH_ACTIONS_HOLD (5)' },
+          { name: 'WINCH_ACTIONS_RETRACT', value: 6, label: 'WINCH_ACTIONS_RETRACT (6)' },
+          { name: 'WINCH_ACTIONS_LOAD_LINE', value: 7, label: 'WINCH_ACTIONS_LOAD_LINE (7)' },
+          { name: 'WINCH_ACTIONS_ABANDON_LINE', value: 8, label: 'WINCH_ACTIONS_ABANDON_LINE (8)' },
+          { name: 'WINCH_ACTIONS_LOAD_PAYLOAD', value: 9, label: 'WINCH_ACTIONS_LOAD_PAYLOAD (9)' }
+        ],
+        PARACHUTE_ACTION: [
+          { name: 'PARACHUTE_ACTION_DISABLE', value: 0, label: 'PARACHUTE_ACTION_DISABLE (0)' },
+          { name: 'PARACHUTE_ACTION_ENABLE', value: 1, label: 'PARACHUTE_ACTION_ENABLE (1)' },
+          { name: 'PARACHUTE_ACTION_RELEASE', value: 2, label: 'PARACHUTE_ACTION_RELEASE (2)' }
+        ]
+      };
+      var enumCatalog = { enums: {} };
+      var enumCatalogLoaded = false;
+      var enumRequestSeq = 0;
+
+      function loadPayloadEnums(cb) {
+        if (enumCatalogLoaded) {
+          cb();
+          return;
+        }
+        if (!(RED.mavlink && typeof RED.mavlink.loadEnumsCatalog === 'function')) {
+          enumCatalogLoaded = true;
+          enumCatalog = { enums: {} };
+          cb();
+          return;
+        }
+        var seq = ++enumRequestSeq;
+        RED.mavlink.loadEnumsCatalog(PAYLOAD_ENUM_NAMES, function (catalog) {
+          if (seq !== enumRequestSeq) return;
+          enumCatalog = catalog || { enums: {} };
+          enumCatalogLoaded = true;
+          cb();
+        });
+      }
+
+      function enumEntries(name) {
+        var enums = (enumCatalog && enumCatalog.enums) || {};
+        return enums[name] || FALLBACK_ENUMS[name] || [];
+      }
+
+      function fillSelect($select, entries, saved, emptyLabel) {
+        if (RED.mavlink && typeof RED.mavlink.fillEnumSelect === 'function') {
+          RED.mavlink.fillEnumSelect($select, entries, {
+            allowEmpty: true,
+            emptyLabel: emptyLabel || '\u2014',
+            saved: saved
+          });
+          return;
+        }
+        $select.empty();
+        $select.append($('<option></option>').val('').text(emptyLabel || '\u2014'));
+        for (var i = 0; i < entries.length; i++) {
+          var entry = entries[i];
+          $select.append($('<option></option>').val(String(entry.value)).text(entry.label || (entry.name + ' (' + entry.value + ')')));
+        }
+        if (saved !== undefined && saved !== null && saved !== '') $select.val(String(saved));
+      }
+
+      function refreshEnumControls() {
+        loadPayloadEnums(function () {
+          var topic = $('#node-input-topic').val() || 'camera';
+          var verb = $('#node-input-verb').val() || '';
+          var releaseEnum = topic === 'release' ? RELEASE_ACTION_ENUMS[verb] : null;
+          var modeEnum = verb === 'set-mode' ? MODE_ENUMS[topic] : null;
+          var currentMode = $('#node-input-modeValue').val();
+          var currentAction = $('#node-input-actionValue').val();
+          var modeSaved = currentMode !== undefined && currentMode !== null && currentMode !== '' ? currentMode : node.modeValue;
+          var actionSaved = currentAction !== undefined && currentAction !== null && currentAction !== '' ? currentAction : node.actionValue;
+
+          $('#row-payload-mode')[modeEnum ? 'show' : 'hide']();
+          if (modeEnum) {
+            fillSelect($('#node-input-modeValue'), enumEntries(modeEnum), modeSaved, '\u2014 mode \u2014');
+          }
+
+          if (releaseEnum) {
+            fillSelect($('#node-input-actionValue'), enumEntries(releaseEnum), actionSaved, '\u2014 action \u2014');
+          } else {
+            fillSelect($('#node-input-actionValue'), [], '', '\u2014 action \u2014');
+          }
+        });
+      }
+
       function refreshVerbOptions(useSaved) {
         var topic = $('#node-input-topic').val() || 'camera';
         var verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
@@ -83,8 +194,16 @@
 
       $('#node-input-topic').on('change', function () {
         refreshVerbOptions(false);
+        refreshEnumControls();
+      });
+      $('#node-input-verb').on('change', refreshEnumControls);
+      $('#node-input-connection').on('change', function () {
+        enumCatalog = { enums: {} };
+        enumCatalogLoaded = false;
+        refreshEnumControls();
       });
       refreshVerbOptions(true);
+      refreshEnumControls();
 
       if (RED.mavlink.loadEnumsCatalog) {
         RED.mavlink.loadEnumsCatalog(['MAV_COMP_ID'], function (catalog) {
@@ -112,8 +231,9 @@
   <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row"><label for="node-input-count">Camera</label><input type="text" id="node-input-count" placeholder="count"><input type="text" id="node-input-interval" placeholder="interval" style="width:30%;"></div>
   <div class="form-row"><label for="node-input-pitch">Gimbal</label><input type="text" id="node-input-pitch" placeholder="pitch"><input type="text" id="node-input-yaw" placeholder="yaw" style="width:30%;"></div>
+  <div class="form-row" id="row-payload-mode"><label for="node-input-modeValue">Mode</label><select id="node-input-modeValue" style="width:30%;"></select></div>
   <div class="form-row"><label for="node-input-servo">Servo</label><input type="text" id="node-input-servo" placeholder="servo"><input type="text" id="node-input-pwm" placeholder="pwm" style="width:30%;"></div>
-  <div class="form-row"><label for="node-input-actionValue">Release</label><input type="text" id="node-input-instance" placeholder="instance"><input type="text" id="node-input-actionValue" placeholder="action" style="width:30%;"></div>
+  <div class="form-row"><label for="node-input-actionValue">Release</label><input type="text" id="node-input-instance" placeholder="instance"><select id="node-input-actionValue" style="width:30%;"></select></div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-payload">

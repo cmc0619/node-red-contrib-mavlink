@@ -108,3 +108,34 @@ test('advanced bitmask command params save one numeric mask value', () => {
   assert.match(saver, /mask\s*=\s*mask\s*\|/, 'selected entries are ORed into one mask');
   assert.match(saver, /params\[idx\]\s*=\s*mask/, 'params JSON stores a number, not an array');
 });
+
+test('preset params declare enum-backed and message-backed selects', () => {
+  const table = html.slice(
+    html.indexOf('const PRESET_PARAMS = {'),
+    html.indexOf('const HAS_COMPLETION')
+  );
+
+  assert.match(table, /set_mode:[\s\S]*enumName:\s*'MAV_MODE'/, 'set_mode base_mode uses MAV_MODE');
+  assert.match(table, /change_speed:[\s\S]*enumName:\s*'SPEED_TYPE'/, 'change_speed param1 uses SPEED_TYPE');
+  assert.match(table, /orbit:[\s\S]*enumName:\s*'ORBIT_YAW_BEHAVIOUR'/, 'orbit yaw behavior uses enum when present');
+  assert.match(table, /reposition:[\s\S]*enumName:\s*'MAV_DO_REPOSITION_FLAGS'[\s\S]*bitmask:\s*true/, 'reposition flags use bitmask enum');
+  assert.match(table, /request_message:[\s\S]*messages:\s*true/, 'request_message message id uses message catalog');
+  assert.match(table, /set_message_interval:[\s\S]*messages:\s*true/, 'set_message_interval message id uses message catalog');
+  assert.match(table, /stop_message_interval:[\s\S]*messages:\s*true/, 'stop_message_interval message id uses message catalog');
+  assert.match(table, /reboot_autopilot:[\s\S]*enumName:\s*'REBOOT_SHUTDOWN_ACTION'/, 'reboot actions use reboot enum');
+});
+
+test('preset renderer loads enum and message catalogs for selects', () => {
+  const presetBlock = html.slice(
+    html.indexOf("const presetId = $('#node-input-preset')"),
+    html.indexOf('// ── Safety preset notice')
+  );
+
+  assert.match(html, /RED\.mavlink\.loadEnumsCatalog/, 'preset enums use shared enum helper');
+  assert.match(html, /\/mavlink\/build\/messages/, 'message ids load from the shared messages API');
+  assert.match(html, /function presetParamInput/, 'preset branch has a shared input renderer');
+  assert.match(presetBlock, /presetParamInput\(spec\)/, 'preset branch calls the shared input renderer');
+  assert.match(html, /spec\.messages/, 'message-backed preset params become selects');
+  assert.match(html, /spec\.enumName/, 'enum-backed preset params become selects');
+  assert.match(html, /data-kind['"],\s*isBitmask \? ['"]bitmask['"] : ['"]enum['"]/, 'preset bitmask controls are tagged');
+});

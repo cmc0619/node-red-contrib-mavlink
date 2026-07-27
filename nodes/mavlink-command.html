@@ -51,6 +51,9 @@
   let _catalogRequestSeq = 0;
   /** Cache key for the catalog currently shown in the Advanced dropdown. */
   let _activeCatalogKey = '';
+  /** @type {Object<string, {messages:Array, enums:Object, dialect:string, error?:string}>} */
+  const _messageCatalogByKey = {};
+  let _messageRequestSeq = 0;
 
   function loadPresets(cb) {
     if (_presetGroups) { cb(_presetGroups); return; }
@@ -131,13 +134,43 @@
     });
   }
 
+  function loadMessagesCatalog(cb) {
+    const target = resolveCatalogTarget();
+    if (_messageCatalogByKey[target.key]) {
+      cb(_messageCatalogByKey[target.key]);
+      return;
+    }
+    const seq = ++_messageRequestSeq;
+    $.getJSON('/mavlink/build/messages', target.query, function (data) {
+      if (seq !== _messageRequestSeq) return;
+      const catalog = {
+        messages: data.messages || [],
+        enums: data.enums || {},
+        dialect: data.dialect || target.dialect,
+      };
+      _messageCatalogByKey[target.key] = catalog;
+      cb(catalog);
+    }).fail(function (_xhr, _status, err) {
+      if (seq !== _messageRequestSeq) return;
+      cb({ messages: [], enums: {}, dialect: target.dialect, error: String(err || 'load failed') });
+    });
+  }
+
   // Hard-coded preset param shapes for offline rendering.
   // Keyed by preset id; each entry is an array of { index, label, units, enumName }.
   // This table covers the presets defined in lib/command/presets.js.
+  const REBOOT_SHUTDOWN_ACTION_OPTIONS = [
+    { name: 'REBOOT_SHUTDOWN_ACTION_NONE', value: 0, label: 'REBOOT_SHUTDOWN_ACTION_NONE (0)' },
+    { name: 'REBOOT_SHUTDOWN_ACTION_REBOOT', value: 1, label: 'REBOOT_SHUTDOWN_ACTION_REBOOT (1)' },
+    { name: 'REBOOT_SHUTDOWN_ACTION_SHUTDOWN', value: 2, label: 'REBOOT_SHUTDOWN_ACTION_SHUTDOWN (2)' },
+    { name: 'REBOOT_SHUTDOWN_ACTION_REBOOT_TO_BOOTLOADER', value: 3, label: 'REBOOT_SHUTDOWN_ACTION_REBOOT_TO_BOOTLOADER (3)' },
+    { name: 'REBOOT_SHUTDOWN_ACTION_POWER_ON', value: 4, label: 'REBOOT_SHUTDOWN_ACTION_POWER_ON (4)' },
+  ];
+
   const PRESET_PARAMS = {
     arm:           [{ index: 2, label: 'Force (0 or 21196)', units: '' }],
     disarm:        [{ index: 2, label: 'Force (0 or 21196)', units: '' }],
-    set_mode:      [{ index: 1, label: 'Mode (base_mode)', units: '' },
+    set_mode:      [{ index: 1, label: 'Mode (base_mode)', units: '', enumName: 'MAV_MODE' },
                     { index: 2, label: 'Custom mode', units: '' }],
     takeoff:       [{ index: 1, label: 'Min pitch', units: 'deg' },
                     { index: 7, label: 'Altitude', units: 'm' }],
@@ -151,13 +184,13 @@
                     { index: 6, label: 'Longitude', units: 'degE7' },
                     { index: 7, label: 'Altitude', units: 'm' }],
     reposition:    [{ index: 1, label: 'Speed', units: 'm/s' },
-                    { index: 2, label: 'Bitmask / flags', units: '' },
+                    { index: 2, label: 'Bitmask / flags', units: '', enumName: 'MAV_DO_REPOSITION_FLAGS', bitmask: true },
                     { index: 3, label: 'Loiter radius', units: 'm' },
                     { index: 4, label: 'Yaw', units: 'deg' },
                     { index: 5, label: 'Latitude', units: 'degE7' },
                     { index: 6, label: 'Longitude', units: 'degE7' },
                     { index: 7, label: 'Altitude', units: 'm' }],
-    change_speed:  [{ index: 1, label: 'Speed type (0=AS 1=GS 2=Climb 3=Desc)', units: '' },
+    change_speed:  [{ index: 1, label: 'Speed type', units: '', enumName: 'SPEED_TYPE' },
                     { index: 2, label: 'Speed', units: 'm/s' },
                     { index: 3, label: 'Throttle', units: '%' }],
     yaw:           [{ index: 1, label: 'Angle', units: 'deg' },
@@ -168,7 +201,7 @@
                     { index: 3, label: 'Direction (-1=CCW 0=CW)', units: '' }],
     orbit:         [{ index: 1, label: 'Radius', units: 'm' },
                     { index: 2, label: 'Velocity', units: 'm/s' },
-                    { index: 3, label: 'Yaw behavior', units: '' },
+                    { index: 3, label: 'Yaw behavior', units: '', enumName: 'ORBIT_YAW_BEHAVIOUR' },
                     { index: 5, label: 'Latitude', units: 'degE7' },
                     { index: 6, label: 'Longitude', units: 'degE7' },
                     { index: 7, label: 'Altitude', units: 'm' }],
@@ -176,16 +209,23 @@
                     { index: 2, label: 'Last item', units: '' }],
     pause:         [],
     resume:        [],
-    request_message:    [{ index: 1, label: 'Message ID', units: '' },
+    request_message:    [{ index: 1, label: 'Message ID', units: '', messages: true },
                          { index: 2, label: 'Response target', units: '' }],
-    set_message_interval: [{ index: 1, label: 'Message ID', units: '' },
+    set_message_interval: [{ index: 1, label: 'Message ID', units: '', messages: true },
                             { index: 2, label: 'Interval', units: 'µs' },
                             { index: 3, label: 'Response target', units: '' }],
-    stop_message_interval: [{ index: 1, label: 'Message ID', units: '' }],
-    reboot_autopilot: [{ index: 1, label: 'Autopilot action (1=reboot)', units: '' },
-                       { index: 2, label: 'Companion action', units: '' }],
+    stop_message_interval: [{ index: 1, label: 'Message ID', units: '', messages: true }],
+    reboot_autopilot: [{ index: 1, label: 'Autopilot action', units: '', enumName: 'REBOOT_SHUTDOWN_ACTION', fallbackOptions: REBOOT_SHUTDOWN_ACTION_OPTIONS },
+                       { index: 2, label: 'Companion action', units: '', enumName: 'REBOOT_SHUTDOWN_ACTION', fallbackOptions: REBOOT_SHUTDOWN_ACTION_OPTIONS }],
     flight_termination: [{ index: 1, label: 'Terminate (1=yes)', units: '' }],
   };
+
+  const PRESET_ENUM_NAMES = Array.from(new Set(
+    Object.values(PRESET_PARAMS)
+      .flat()
+      .map((spec) => spec.enumName)
+      .filter(Boolean)
+  ));
 
   // Presets with completion conditions — determines if "await completion" is shown.
   const HAS_COMPLETION = new Set(['arm', 'disarm', 'takeoff', 'land', 'rtl', 'set_mode']);
@@ -346,9 +386,15 @@
       }
 
       $('#node-input-connection').on('change', function () {
+        presetEnumsCatalog = { enums: {} };
+        presetEnumsLoaded = false;
+        presetEnumRequestSeq += 1;
+        presetMessagesCatalog = null;
+        presetMessagesKey = '';
         refreshDelivery();
         // Connection binds a Vehicle Profile → dialect; Advanced list follows it.
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
+        if ($('#node-input-mode').val() === 'preset') refreshParamFields();
       });
       $('#node-input-delivery').on('change', refreshCompletionRow);
 
@@ -360,6 +406,94 @@
       // ── Param fields ───────────────────────────────────────────────────────
       let savedParams = {};
       try { savedParams = JSON.parse(node.params || '{}'); } catch (_e) {}
+      let presetEnumsCatalog = { enums: {} };
+      let presetEnumsLoaded = false;
+      let presetEnumRequestSeq = 0;
+      let presetMessagesCatalog = null;
+      let presetMessagesKey = '';
+
+      function loadPresetEnums(cb) {
+        if (presetEnumsLoaded) {
+          cb();
+          return;
+        }
+        if (!(RED.mavlink && typeof RED.mavlink.loadEnumsCatalog === 'function')) {
+          presetEnumsLoaded = true;
+          presetEnumsCatalog = { enums: {} };
+          cb();
+          return;
+        }
+        const seq = ++presetEnumRequestSeq;
+        RED.mavlink.loadEnumsCatalog(PRESET_ENUM_NAMES, function (catalog) {
+          if (seq !== presetEnumRequestSeq) return;
+          presetEnumsCatalog = catalog || { enums: {} };
+          presetEnumsLoaded = true;
+          cb();
+        });
+      }
+
+      function loadPresetMessages(cb) {
+        const target = resolveCatalogTarget();
+        loadMessagesCatalog(function (catalog) {
+          const currentTarget = resolveCatalogTarget();
+          if (currentTarget.key !== target.key) return;
+          presetMessagesCatalog = catalog || { messages: [] };
+          presetMessagesKey = target.key;
+          cb();
+        });
+      }
+
+      function needsPresetEnums(specs) {
+        return specs.some(function (spec) { return !!spec.enumName; });
+      }
+
+      function needsPresetMessages(specs) {
+        return specs.some(function (spec) { return !!spec.messages; });
+      }
+
+      function presetMessagesReady() {
+        return presetMessagesCatalog && presetMessagesKey === resolveCatalogTarget().key;
+      }
+
+      function fillSelect($select, entries, opts) {
+        if (RED.mavlink && typeof RED.mavlink.fillEnumSelect === 'function') {
+          RED.mavlink.fillEnumSelect($select, entries, opts || {});
+          return;
+        }
+        const options = opts || {};
+        const saved = options.saved !== undefined && options.saved !== null
+          ? String(options.saved)
+          : String($select.val() || '');
+        $select.empty();
+        if (options.allowEmpty) {
+          $select.append($('<option></option>').val('').text(options.emptyLabel || '\u2014'));
+        }
+        for (const entry of entries || []) {
+          const value = String(entry.value);
+          const label = entry.label || (entry.name + ' (' + entry.value + ')');
+          $select.append($('<option></option>').val(value).text(label));
+        }
+        if (saved && !$select.find('option[value="' + saved + '"]').length) {
+          $select.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
+        }
+        if (saved || options.allowEmpty) $select.val(saved);
+      }
+
+      function messageEntries(catalog) {
+        return ((catalog && catalog.messages) || []).map(function (msg) {
+          return {
+            name: msg.name,
+            value: msg.id,
+            label: msg.label || (msg.name + ' (' + msg.id + ')'),
+          };
+        });
+      }
+
+      function numericParamInput(spec) {
+        return $('<input type="number" class="param-input">')
+          .attr('data-idx', spec.index)
+          .val(savedParams[spec.index] !== undefined ? savedParams[spec.index] : '');
+      }
 
       /**
        * Field label for one Advanced param under the §6 four-case rule
@@ -441,6 +575,41 @@
         return input;
       }
 
+      function presetParamInput(spec) {
+        const saved = savedParams[spec.index];
+        if (spec.messages) {
+          const entries = messageEntries(presetMessagesCatalog);
+          if (entries.length) {
+            const sel = $('<select class="param-input"></select>')
+              .attr('data-idx', spec.index)
+              .attr('data-kind', 'enum');
+            fillSelect(sel, entries, { allowEmpty: true, emptyLabel: '\u2014 message \u2014', saved: saved });
+            return sel;
+          }
+        }
+
+        if (spec.enumName) {
+          const enums = (presetEnumsCatalog && presetEnumsCatalog.enums) || {};
+          let entries = enums[spec.enumName] || [];
+          if (!entries.length && spec.fallbackOptions) entries = spec.fallbackOptions;
+          if (entries.length) {
+            const isBitmask = !!spec.bitmask;
+            const sel = $('<select class="param-input"></select>')
+              .attr('data-idx', spec.index)
+              .attr('data-kind', isBitmask ? 'bitmask' : 'enum')
+              .attr('title', isBitmask ? bitmaskTitle(spec.label) : '');
+            if (isBitmask) {
+              sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
+            }
+            fillSelect(sel, entries, { allowEmpty: !isBitmask, saved: saved });
+            if (isBitmask) sel.val(selectedBitmaskValues(saved, entries));
+            return sel;
+          }
+        }
+
+        return numericParamInput(spec);
+      }
+
       function refreshParamFields() {
         container.empty();
 
@@ -480,6 +649,16 @@
         } else {
           const presetId = $('#node-input-preset').val();
           const paramSpec = PRESET_PARAMS[presetId] || [];
+          if (needsPresetEnums(paramSpec) && !presetEnumsLoaded) {
+            container.append($('<div class="form-row"><em>Loading parameter options\u2026</em></div>'));
+            loadPresetEnums(refreshParamFields);
+            return;
+          }
+          if (needsPresetMessages(paramSpec) && !presetMessagesReady()) {
+            container.append($('<div class="form-row"><em>Loading message list\u2026</em></div>'));
+            loadPresetMessages(refreshParamFields);
+            return;
+          }
           if (paramSpec.length === 0) {
             container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
           }
@@ -487,8 +666,7 @@
             const label = spec.units
               ? `${spec.label} (${spec.units})`
               : spec.label;
-            const input = $('<input type="number" class="param-input">').attr('data-idx', spec.index)
-              .val(savedParams[spec.index] !== undefined ? savedParams[spec.index] : '');
+            const input = presetParamInput(spec);
             container.append(formRow(label, input));
           }
         }

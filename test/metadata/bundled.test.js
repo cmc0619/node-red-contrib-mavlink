@@ -99,6 +99,21 @@ test('DO_REPOSITION hint maps flags (param 2), not latitude (param 5)', () => {
   assert.equal(cmd.params.find((p) => p.index === 5).enum, null);
 });
 
+test('control hints attach verified orbit and reboot enums from the bundled XML', () => {
+  const bundle = loadBundled('common');
+
+  assert.ok(bundle.enums.ORBIT_YAW_BEHAVIOUR, 'orbit yaw enum is present in the bundle');
+  assert.equal(
+    bundle.commands.MAV_CMD_DO_ORBIT.params.find((p) => p.index === 3).enum,
+    'ORBIT_YAW_BEHAVIOUR'
+  );
+
+  assert.ok(bundle.enums.REBOOT_SHUTDOWN_ACTION, 'reboot action enum is present in the bundle');
+  const reboot = bundle.commands.MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN;
+  assert.equal(reboot.params.find((p) => p.index === 1).enum, 'REBOOT_SHUTDOWN_ACTION');
+  assert.equal(reboot.params.find((p) => p.index === 2).enum, 'REBOOT_SHUTDOWN_ACTION');
+});
+
 test('never assume a dialect includes common.xml — icarous still resolves its base set', () => {
   const bundle = loadBundled('icarous');
   assert.ok(bundle.messages.HEARTBEAT, 'HEARTBEAT reachable through the explicit chain');
