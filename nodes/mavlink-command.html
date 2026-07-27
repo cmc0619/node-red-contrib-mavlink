@@ -82,10 +82,12 @@
       }
     }
     // Prefer vehicle id so a deployed custom profile serves its own bundle.
+    // Include dialect so an undeployed bundled profile can still serve a
+    // catalog; custom without a live node gets a 404 (never a silent default).
     if (vehicleId) {
       return {
         key: 'vehicle:' + vehicleId,
-        query: { vehicle: vehicleId },
+        query: { vehicle: vehicleId, dialect: dialect },
         dialect: dialect,
         vehicleId: vehicleId,
       };

@@ -66,7 +66,11 @@ test('advanced catalog load ignores stale responses and keeps the in-progress se
   assert.match(html, /seq !== _catalogRequestSeq/, 'stale responses are dropped');
   assert.match(html, /const current = sel\.val\(\)/, 'in-progress select value is read');
   assert.match(html, /const prefer = current \|\| saved/, 'current selection wins over saved');
-  assert.match(html, /query:\s*\{\s*vehicle:/, 'Vehicle id is preferred for custom dialects');
+  assert.match(
+    html,
+    /query:\s*\{\s*vehicle:\s*vehicleId,\s*dialect:\s*dialect\s*\}/,
+    'Vehicle id is preferred; dialect accompanies it for undeployed bundled profiles'
+  );
 });
 
 test('preset dropdown re-applies the saved selection and fires change after the async load', () => {

@@ -1141,7 +1141,10 @@ is itself stale, and stale suppressions are how a gate quietly stops gating.
 **Scope: `lib/`, `nodes/`, `test/`, and the lint config itself.** Editor HTML inline scripts stay
 out — linting them needs an HTML processor plugin, and their real exposure is a control the
 runtime reads that the template never renders, which no linter can see. Editor-versus-runtime
-drift tests cover that instead.
+drift tests cover that instead: source-level asserts that the template binds the right control
+ids, loads the right admin endpoints, and contains the §6 rendering branches. Those are the
+fixture form for editor HTML until a Node-RED editor harness exists; full jsdom simulation of
+delayed AJAX / typedInput attach is not on the §13 pain-point list.
 
 **Declare Node globals explicitly rather than importing the `globals` package.** The list is
 short, it documents exactly what this codebase reaches for outside its own modules, and the gate
@@ -1284,3 +1287,11 @@ reject *fence* and *rally* command ids (and other out-of-family ids), not to str
 items. Fence and rally validators stay strict to their families.
 *Check:* inspect any ArduPilot `.waypoints` / QGC plan with a jump or delay, or
 `rg "DO_JUMP|CONDITION_DELAY" ` against a captured mission download.
+
+**Missing Vehicle Profile must not invent a dialect catalog.**
+*Wrong belief:* `GET /mavlink/command/commands?vehicle=<id>` can fall through to
+`ardupilotmega` when `RED.nodes.getNode(id)` misses (editor open before Deploy).
+*Fact:* the editor caches the response under `vehicle:<id>`. A silent default would pin the
+wrong MAV_CMD list to that key. A miss returns 404 unless the request also names an
+allow-listed bundled `?dialect=`; `custom` without a live profile is never served.
+*Check:* `node --test test/command/commands-route.test.js`
