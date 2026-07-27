@@ -1,0 +1,88 @@
+<script type="text/javascript">
+  (function () {
+    RED.nodes.registerType('mavlink-in', {
+      category: 'MAVLink',
+      color: '#6ea6d7',
+      defaults: {
+        name:        { value: '' },
+        connection:  { value: '', type: 'mavlink-connection', required: true },
+        message:     { value: '' },
+        sysid:       { value: '' },
+        compid:      { value: '' },
+        changedOnly: { value: false },
+        rateLimit:   { value: 0 },
+      },
+      inputs: 0,
+      outputs: 1,
+      outputLabels: ['decoded message'],
+      icon: 'font-awesome/fa-arrow-down',
+      paletteLabel: 'mavlink in',
+      label: function () {
+        var label = this.name || this.message || 'mavlink in';
+        return label;
+      },
+      labelStyle: function () {
+        return this.name ? 'node_label_italic' : '';
+      },
+    });
+  }());
+</script>
+
+<script type="text/html" data-template-name="mavlink-in">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-connection"><i class="fa fa-plug"></i> Connection</label>
+    <input type="text" id="node-input-connection">
+  </div>
+  <hr/>
+  <div class="form-row">
+    <label for="node-input-message"><i class="fa fa-filter"></i> Message</label>
+    <input type="text" id="node-input-message" placeholder="e.g. HEARTBEAT (blank = all)">
+  </div>
+  <div class="form-row">
+    <label for="node-input-sysid"><i class="fa fa-filter"></i> Sysid</label>
+    <input type="text" id="node-input-sysid" placeholder="blank = all" style="width:80px">
+  </div>
+  <div class="form-row">
+    <label for="node-input-compid"><i class="fa fa-filter"></i> Compid</label>
+    <input type="text" id="node-input-compid" placeholder="blank = all" style="width:80px">
+  </div>
+  <hr/>
+  <div class="form-row">
+    <label>&nbsp;</label>
+    <input type="checkbox" id="node-input-changedOnly" style="width:auto">
+    <label for="node-input-changedOnly" style="width:auto"> Changed only</label>
+  </div>
+  <div class="form-row">
+    <label for="node-input-rateLimit"><i class="fa fa-tachometer"></i> Rate limit</label>
+    <input type="number" id="node-input-rateLimit" placeholder="0" min="0" step="0.1" style="width:80px">
+    <span> msg/s (0 = unlimited)</span>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-in">
+  <p>Subscribe to decoded MAVLink traffic from a Connection.</p>
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>topic <span class="property-type">string</span></dt>
+    <dd>Message name, e.g. <code>HEARTBEAT</code>.</dd>
+    <dt>payload <span class="property-type">object</span></dt>
+    <dd>Decoded field values keyed by field name (snake_case).</dd>
+    <dt>sysid <span class="property-type">number</span></dt>
+    <dd>Source system id.</dd>
+    <dt>compid <span class="property-type">number</span></dt>
+    <dd>Source component id.</dd>
+    <dt>trusted <span class="property-type">boolean</span></dt>
+    <dd>Whether the frame passed signing verification on the connection.</dd>
+  </dl>
+  <h3>Details</h3>
+  <p><b>Message</b>, <b>Sysid</b>, and <b>Compid</b> filters are all optional;
+  leave blank to match all traffic on the connection.</p>
+  <p><b>Changed only</b>: only forward a message when its field values differ
+  from the previous delivery for the same (message, sysid, compid) tuple.</p>
+  <p><b>Rate limit</b>: maximum messages per second per (message, sysid, compid)
+  tuple; 0 means unlimited.</p>
+</script>
