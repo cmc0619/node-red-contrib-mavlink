@@ -1305,8 +1305,13 @@ hand-built `<select>` of `eachConfig` is an acceptable fallback.
 A buttonless `<select>` is not the standard control. Vehicle/command modules must still
 `registerType` when deps are missing so pickers appear; editors call
 `RED.editor.prepareConfigNodeSelect` via `RED.mavlink.ensureConfigNodePicker` as a safety net.
-*Check:* open Connection → Vehicle shows a dropdown with pencil and + ; with mappings
-uninstalled the type still registers (status `missing deps`).
+*Working reference:* Node-RED **5.0.1** / `@node-red/editor-client@5.0.1`
+`prepareConfigNodeSelect` in `public/red/red.js` (builds `#…-btn-{property}-edit` pencil and
+`#…-btn-{property}-add` plus). Measured against that build; re-check the same symbol after
+editor-client upgrades.
+*Check:* open Connection → Vehicle shows a dropdown with pencil and + ; 
+`node --test test/vehicle/register-without-mappings.test.js` (mappings stubbed — type still
+registers).
 
 **Bind-mounted source is not an installed package.**
 *Wrong belief:* `npm install /module` from the Node-RED user directory (or listing
