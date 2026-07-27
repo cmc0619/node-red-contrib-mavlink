@@ -168,38 +168,44 @@ selecting serial when it is absent gives a clear error, not a native module stac
 Both npm packages are already the ArduPilot line — install nothing else (§14).
 
 
-## 4. Metadata — one XML pipeline
+## 4. Metadata — registry for bundled, XML for custom
 
-**Compile from XML. Do not read the generated TypeScript.**
+**Do not vendor dialect XML.** Bundled dialects come from the `mavlink-mappings` package
+(the ArduPilot line on npm). That package is the registry: message classes, `REGISTRY`,
+enums, and CRC-extra tables. One loader merges modules in include order into a dialect
+**bundle** — the same shape custom dialects produce after compile — so everything
+downstream is identical code and custom dialects are not second-class.
 
-Measured, not assumed. In `common.xml`, `MAV_CMD_DO_CHANGE_SPEED` param 1 is
-`label="Speed Type" enum="SPEED_TYPE"`. The generated `.d.ts` renders it as
-`@param1 Speed Type Speed type of value set in param2 (…)` — label and description survive,
-the enum reference is gone. `SpeedType` is exported in the same file, unlinked, and name
-matching recovers zero of them. 85 param-level enum references exist in `common.xml`; the
-generated mappings expose none. Read the generated TypeScript and command param enums cannot be
-rendered as dropdowns at all.
+**Bundled.** Ten dialects: common, minimal, standard, ardupilotmega, asluav, development,
+icarous, storm32, uavionix, ualberta. Load them from `mavlink-mappings`; never ship copies
+of their XML. Cache the assembled bundle per dialect name — bundles are immutable once
+built, and a profile loads its dialect on every deploy.
 
-So: **bundled and custom dialects compile through the same pipeline, from XML, to the same
-bundle shape.** Everything downstream — enumeration, field rendering, dropdowns — is then
-identical code, and custom dialects are not second-class.
-
-**Bundled.** Ten dialects: common, minimal, standard, ardupilotmega, ASLUAV, development,
-icarous, storm32, uAvionix, ualberta. Ship their XML and compile it.
+**What the registry drops, and how to recover it.** The compiled JS keeps wire types and
+drops the field→enum association (`enum=` on `<field>`). The package's shipped `.d.ts`
+files retain it as property types (`type: MavType`) and carry message/field/enum/command
+descriptions as JSDoc. Parse those declarations offline — no XML fetch — to recover enum
+dropdowns and editor help for bundled dialects. Measured: that recovers message-field enums
+and labeled command-param help; it does **not** recover param-level `enum=` links (e.g.
+`MAV_CMD_DO_CHANGE_SPEED` param 1 → `SPEED_TYPE`). Those are a small, explicit control-hint
+table for the cases the UI needs, not a reason to vendor XML.
 
 **Custom.** Upload the full include chain. No resolution against bundled definitions — the
-user provides every file the graph references. Compile, resolve includes in dependency order,
-reconcile, display. Compile once at upload; it is not a per-deploy cost.
+user provides every file the graph references. Compile from XML, resolve includes in
+dependency order, reconcile, display. Same bundle shape as a registry load. Compile once at
+upload; it is not a per-deploy cost.
 
-**Remote fetch.** Pulling current official XML from GitHub is supported. Configuration happens
-on a bench with internet. Make the source selectable — `mavlink/mavlink` or `ArduPilot/mavlink`
-— though as of now they are byte-identical for `ardupilotmega.xml`, so neither is privileged.
-Record the commit that was fetched, so that when a profile compiles differently in three
-months the cause is visible.
+**Remote fetch.** Pulling current official XML from GitHub is supported for *custom*
+profiles and for comparing a downloaded snapshot against the installed registry dialect —
+not as a substitute for the bundled path. Configuration happens on a bench with internet.
+Make the source selectable — `mavlink/mavlink` or `ArduPilot/mavlink` — though as of now
+they are byte-identical for `ardupilotmega.xml`, so neither is privileged. Pin the ref to a
+commit before downloading, record that commit, and follow includes at download time so a
+snapshot is self-contained.
 
-Fail loud on: missing include, cyclic include, msgid collision between two files defining
-different messages. Redefinition of the same message is an override, resolved by include order,
-and shown as a diff against the same-named bundled dialect.
+Fail loud on custom compile: missing include, cyclic include, msgid collision between two
+files defining different messages. Redefinition of the same message is an override, resolved
+by include order, and shown as a diff against the same-named bundled dialect.
 
 Never assume a dialect includes `common.xml`. Some define their own base set.
 
@@ -1036,8 +1042,9 @@ to know the mode table.
 
 ## 12. Build order
 
-1. **Metadata pipeline.** XML compile, bundled and custom, include resolution, the bundle shape.
-   Nothing else is buildable until enumeration works.
+1. **Metadata pipeline.** Registry load from `mavlink-mappings` (bundled), `.d.ts` metadata
+   recovery, custom XML compile with include resolution, the shared bundle shape. Nothing else
+   is buildable until enumeration works.
 2. **The field codec (§5).** The standalone conversion library and its test suite. Everything
    that touches a wire value depends on this, and nothing above it is trustworthy until it
    passes.
@@ -1070,8 +1077,12 @@ a percentage would only reward testing the parts that were never going to break.
 - **Field codec** — bit-31 masks, blank versus explicit zero, `NaN` sentinels, the parameter
   int/float union, `char[]` length handling, 64-bit as decimal string. Round-trip compared
   NaN-aware at float32 precision, plus pinned payload-byte vectors.
-- **XML compile** — include ordering, missing include, cyclic include, msgid collision between
-  files, same-message override precedence.
+- **Registry load** — all ten bundled dialects assemble from `mavlink-mappings`; include-chain
+  merge surfaces `HEARTBEAT` / `MAV_AUTOPILOT` on `common`; unknown dialect fails loud.
+- **`.d.ts` recovery** — a known enum-typed message field resolves to its enum; missing
+  declarations degrade field→enum to empty rather than failing the dialect load.
+- **XML compile (custom only)** — include ordering, missing include, cyclic include, msgid
+  collision between files, same-message override precedence.
 - **Param rendering** — the four-case rule, `reserved` and `Empty`/`Reserved` hiding, and the
   increment-collapse case where min, max, and increment admit only a few values.
 - **Identity resolution** — an explicit override that is not a bound identity is rejected and
@@ -1141,18 +1152,48 @@ belief is the *plausible* one — a builder arrives already holding it, so stati
 does not dislodge it. Every entry names the belief, the fact, and how to re-check in one command.
 
 **Verify before asserting.** These checks cost seconds. Anything in this document that can be
-confirmed against `common.xml`, an installed package, or the MAVLink specification should be,
+confirmed against an installed package, upstream XML, or the MAVLink specification should be,
 rather than recalled.
+
+**Lessons update this document in the same change.** When a build attempt, measurement, or
+working reference displaces a belief written here, rewrite the affected section and add a
+§14 entry in that PR — do not leave the correction as chat memory or a code comment. The
+next agent reads only this file.
 
 ---
 
-**Command params carry their enum in the XML.**
-*Wrong belief:* MAVLink has no machine-readable link from a command param to its enum, so
-dropdowns need a hand-maintained table.
-*Fact:* `<param>` takes an `enum` attribute — `MAV_CMD_DO_CHANGE_SPEED` param 1 is
-`label="Speed Type" enum="SPEED_TYPE"`. 85 params in `common.xml` carry it. The *generated*
-`mavlink-mappings` TypeScript drops it, which is what makes the belief plausible.
-*Check:* `grep -c '<param index="[0-9]"[^>]*enum="' common.xml`
+**Bundled dialects are the npm registry, not vendored XML.**
+*Wrong belief:* §4 requires shipping copies of the ten dialect XML files under `dialects/`.
+*Fact:* `mavlink-mappings` already ships the compiled registry (`REGISTRY`, enums, CRC-extra).
+Vendoring XML duplicates what `npm install` provides, drifts from the locked package version,
+and was the wrong first move. Custom dialects still compile from user-supplied XML; remote
+fetch is for custom/compare, not for the bundled path.
+*Check:* `npm pack mavlink-mappings --dry-run` — JS and `.d.ts` only; no `*.xml`.
+
+**Message-field `enum=` is recoverable from the shipped `.d.ts`.**
+*Wrong belief:* because the compiled JS drops field→enum links, bundled dropdowns need XML.
+*Fact:* generated declarations type enum-backed fields with the enum class (`type: MavType`)
+while plain fields use wire aliases (`customMode: uint32_t`). Parsing those property types
+offline recovers the association. Proven in `node-red-contrib-mavlink-ai`
+(`lib/dialects/field-enums.js`, `message-metadata.js`).
+*Check:* `node -e "const fs=require('fs'),p=require('path'),d=p.dirname(require.resolve('mavlink-mappings')); console.log(fs.readFileSync(p.join(d,'lib/minimal.d.ts'),'utf8').match(/type: MavType/)!=null)"`
+
+**Command-param `enum=` is in the XML, not in the registry package.**
+*Wrong belief:* either every command-param dropdown must be hand-maintained, or the bundled
+path must compile from vendored XML.
+*Fact:* `<param enum="…">` exists in the XML (85 in `common.xml`), and the generated
+`mavlink-mappings` `.d.ts` keeps the label/description but drops that enum link. Message-field
+enums *are* recoverable from `.d.ts` property types. Command-param enums that the UI needs are
+a small explicit control-hint table on top of the registry — not a reason to ship dialect XML.
+*Check:* parse a bundled `.d.ts` for `MavCmd` / command class accessors; confirm param `enum=`
+is absent there and present in upstream XML.
+
+**Registry modules still need an include merge.**
+*Wrong belief:* `require('mavlink-mappings').common` is a complete dialect.
+*Fact:* the package keeps each XML file's own messages/enums in a separate module. Loading
+`common` must merge `minimal` → `standard` → `common` (and likewise for every other dialect).
+Unknown dialect fails loud — never silent-fallback to `common`.
+*Check:* `node -e "const m=require('mavlink-mappings'); console.log(!!m.common.REGISTRY[0], Object.keys(m.minimal.REGISTRY||{}).slice(0,3))"`
 
 **Params without `enum=` are scalars, not gaps.**
 *Wrong belief:* 85 of 947 is poor coverage.

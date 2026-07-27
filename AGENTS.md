@@ -8,6 +8,11 @@ specification — its code principles (§2), UI rules (§6), build order (§12),
 and ground truth (§14) are binding, not suggestions. When code and spec disagree, the spec wins;
 when the spec and measured reality disagree, re-measure (§14) and update the spec in the same PR.
 
+**Session lessons belong in `DESIGN.md`, not in chat.** Every displaced belief, measured fact,
+or working reference that changes how the toolkit must be built is written into the affected
+section plus a §14 ground-truth entry before the PR is considered ready. The next agent will
+not see this conversation.
+
 ## Implementation workflow: use sub-agents (repo-owner directive)
 
 The repo owner wants implementation parallelized with sub-agents, with agent capability matched
