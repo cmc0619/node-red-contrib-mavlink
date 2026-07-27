@@ -199,19 +199,29 @@ module.exports = function registerMavlinkCommand(RED) {
     /**
      * Emit a status record on output 1 and optionally on output 0.
      *
-     * @param {import('../lib/command').makeStatusRecord} record
-     * @param {object|null} sendFn  Node-RED send function
+     * The status record is emitted as the top-level message on output 1 (its
+     * own marker at the message root), matching how `mavlink-out` and
+     * `mavlink-build` emit records via `lib/delivery`. This keeps the shared
+     * marker on the object that `isStatusRecord(msg)` inspects, so wiring
+     * output 1 back into any action node's input is refused as a miswire
+     * rather than executed (§9 "A status record is refused").
+     *
+     * Output 0 (continue) still wraps its trigger under `msg.payload`.
+     *
+     * @param {object} record  status record carrying the delivery marker
+     * @param {Function} sendFn  Node-RED send function
      * @param {boolean} continueOut  whether to also fire output 0
+     * @param {*} [send0Payload]  payload for output 0 when continuing
      */
     function emitStatus(record, sendFn, continueOut, send0Payload) {
       if (continueOut) {
-        sendFn([{ payload: send0Payload || record }, { payload: record }]);
+        sendFn([{ payload: send0Payload || record }, record]);
       } else {
-        sendFn([null, { payload: record }]);
+        sendFn([null, record]);
       }
     }
 
-    node.on('input', async (msg, send, done) => {
+    async function handleInput(msg, send, done) {
       // § Suppress: msg.payload === false → do nothing.
       if (msg.payload === false) {
         done && done();
@@ -258,15 +268,26 @@ module.exports = function registerMavlinkCommand(RED) {
           0
         );
         node.status({ fill: 'yellow', shape: 'dot', text: badge24(`build ${displayName}`) });
-        send([{ payload: message }, null]);
+        // Output 1 reports every terminal outcome, success included (§9); a
+        // successful build emits a 'built' status record for status/debug
+        // consumers, consistent with the other action nodes.
+        const rec = makeRecord({
+          result: 'built',
+          resultCode: null,
+          confirmedBy: 'none',
+          elapsed: Date.now() - startMs,
+          detail: 'build tier: message constructed, not sent',
+        });
+        emitStatus(rec, send, true, message);
         done && done();
         return;
       }
 
       // ── Safety preset confirmation check ──────────────────────────────────
-      // The node config carries requiresConfirmation; if the user hasn't set
-      // a confirmation token in the message, we refuse and surface the reason.
-      if (requiresConfirmation && !msg.confirmed) {
+      // The node config carries requiresConfirmation; the operator must set an
+      // explicit boolean true. Truthy tokens like the string "false" or 1 must
+      // NOT arm a safety command (§9 safety gate).
+      if (requiresConfirmation && msg.confirmed !== true) {
         const rec = makeRecord({
           result: 'unconfirmed',
           confirmedBy: 'none',
@@ -470,6 +491,33 @@ module.exports = function registerMavlinkCommand(RED) {
       node.error(`mavlink-command: ${displayName} ${ackOutcome.result}`, msg);
       emitStatus(rec, send, false);
       done && done();
+    }
+
+    // Wrap the async handler so any throw or rejection becomes a terminal
+    // status record on output 1 plus done(err), never an unhandled promise
+    // rejection. Node-RED does not await async input handlers, so an uncaught
+    // rejection would otherwise crash the process or silently drop the flow.
+    node.on('input', (msg, send, done) => {
+      Promise.resolve()
+        .then(() => handleInput(msg, send, done))
+        .catch((err) => {
+          const rec = makeStatusRecord({
+            result: 'failed',
+            resultCode: null,
+            confirmedBy: 'none',
+            command: commandName,
+            commandId,
+            detail: `command handler error: ${err && err.message ? err.message : String(err)}`,
+          });
+          node.status({ fill: 'red', shape: 'ring', text: badge24(`error ${displayName}`) });
+          try {
+            send([null, rec]);
+          } catch {
+            /* send may be unavailable if the runtime already tore down */
+          }
+          node.error(err, msg);
+          if (done) done(err);
+        });
     });
 
     node.on('close', (done) => {
