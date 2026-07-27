@@ -26,7 +26,9 @@
       pwm: { value: 0, validate: RED.validators.number(true) },
       period: { value: 0, validate: RED.validators.number(true) },
       instance: { value: 0, validate: RED.validators.number(true) },
-      actionValue: { value: 0, validate: RED.validators.number(true) }
+      actionValue: { value: 0, validate: RED.validators.number(true) },
+      length: { value: 0, validate: RED.validators.number(true) },
+      rate: { value: 0, validate: RED.validators.number(true) }
     },
     inputs: 1,
     outputs: 2,
@@ -110,6 +112,8 @@
       var enumCatalog = { enums: {} };
       var enumCatalogLoaded = false;
       var enumRequestSeq = 0;
+      var paintedModeEnum = null;
+      var paintedReleaseEnum = null;
 
       function loadPayloadEnums(cb) {
         if (enumCatalogLoaded) {
@@ -154,27 +158,93 @@
         if (saved !== undefined && saved !== null && saved !== '') $select.val(String(saved));
       }
 
+      /**
+       * §6: only the fields for the selected topic/verb exist. Everything else
+       * is hidden — not greyed, not left over from another topic.
+       */
+      function refreshVisibility() {
+        var topic = $('#node-input-topic').val() || 'camera';
+        var verb = $('#node-input-verb').val() || '';
+        var path = $('#node-input-path').val() || 'legacy';
+        var show = {
+          path: topic === 'gimbal' && verb === 'aim',
+          count: (topic === 'camera' && verb === 'photo') || (topic === 'servo' && verb === 'repeat'),
+          interval: topic === 'camera' && verb === 'photo',
+          distance: topic === 'camera' && verb === 'trigger-distance',
+          mode: verb === 'set-mode' && (topic === 'camera' || topic === 'gimbal'),
+          pitch: topic === 'gimbal' && verb === 'aim',
+          roll: topic === 'gimbal' && verb === 'aim' && path === 'legacy',
+          yaw: topic === 'gimbal' && verb === 'aim',
+          pitchRate: topic === 'gimbal' && verb === 'aim' && path === 'manager',
+          yawRate: topic === 'gimbal' && verb === 'aim' && path === 'manager',
+          servo: topic === 'servo',
+          pwm: topic === 'servo',
+          period: topic === 'servo' && verb === 'repeat',
+          instance: topic === 'release' && (verb === 'gripper' || verb === 'winch'),
+          action: topic === 'release',
+          length: topic === 'release' && verb === 'winch',
+          rate: topic === 'release' && verb === 'winch'
+        };
+
+        $('#row-payload-path').toggle(!!show.path);
+        $('#row-payload-count').toggle(!!show.count);
+        $('#row-payload-interval').toggle(!!show.interval);
+        $('#row-payload-distance').toggle(!!show.distance);
+        $('#row-payload-mode').toggle(!!show.mode);
+        $('#row-payload-pitch').toggle(!!show.pitch);
+        $('#row-payload-roll').toggle(!!show.roll);
+        $('#row-payload-yaw').toggle(!!show.yaw);
+        $('#row-payload-pitchRate').toggle(!!show.pitchRate);
+        $('#row-payload-yawRate').toggle(!!show.yawRate);
+        $('#row-payload-servo').toggle(!!show.servo);
+        $('#row-payload-pwm').toggle(!!show.pwm);
+        $('#row-payload-period').toggle(!!show.period);
+        $('#row-payload-instance').toggle(!!show.instance);
+        $('#row-payload-action').toggle(!!show.action);
+        $('#row-payload-length').toggle(!!show.length);
+        $('#row-payload-rate').toggle(!!show.rate);
+      }
+
+      function savedForEnum(painted, enumName, currentVal, nodeVal) {
+        if (!enumName) return '';
+        if (painted === null) return nodeVal;
+        if (painted === enumName) {
+          return currentVal !== undefined && currentVal !== null && currentVal !== ''
+            ? currentVal
+            : nodeVal;
+        }
+        // Enum family changed (e.g. gripper → parachute): do not leak the old id.
+        return '';
+      }
+
       function refreshEnumControls() {
         loadPayloadEnums(function () {
           var topic = $('#node-input-topic').val() || 'camera';
           var verb = $('#node-input-verb').val() || '';
           var releaseEnum = topic === 'release' ? RELEASE_ACTION_ENUMS[verb] : null;
           var modeEnum = verb === 'set-mode' ? MODE_ENUMS[topic] : null;
-          var currentMode = $('#node-input-modeValue').val();
-          var currentAction = $('#node-input-actionValue').val();
-          var modeSaved = currentMode !== undefined && currentMode !== null && currentMode !== '' ? currentMode : node.modeValue;
-          var actionSaved = currentAction !== undefined && currentAction !== null && currentAction !== '' ? currentAction : node.actionValue;
 
-          $('#row-payload-mode')[modeEnum ? 'show' : 'hide']();
           if (modeEnum) {
-            fillSelect($('#node-input-modeValue'), enumEntries(modeEnum), modeSaved, '\u2014 mode \u2014');
+            fillSelect(
+              $('#node-input-modeValue'),
+              enumEntries(modeEnum),
+              savedForEnum(paintedModeEnum, modeEnum, $('#node-input-modeValue').val(), node.modeValue),
+              '\u2014 mode \u2014'
+            );
+            paintedModeEnum = modeEnum;
           }
 
           if (releaseEnum) {
-            fillSelect($('#node-input-actionValue'), enumEntries(releaseEnum), actionSaved, '\u2014 action \u2014');
-          } else {
-            fillSelect($('#node-input-actionValue'), [], '', '\u2014 action \u2014');
+            fillSelect(
+              $('#node-input-actionValue'),
+              enumEntries(releaseEnum),
+              savedForEnum(paintedReleaseEnum, releaseEnum, $('#node-input-actionValue').val(), node.actionValue),
+              '\u2014 action \u2014'
+            );
+            paintedReleaseEnum = releaseEnum;
           }
+
+          refreshVisibility();
         });
       }
 
@@ -197,9 +267,12 @@
         refreshEnumControls();
       });
       $('#node-input-verb').on('change', refreshEnumControls);
+      $('#node-input-path').on('change', refreshVisibility);
       $('#node-input-connection').on('change', function () {
         enumCatalog = { enums: {} };
         enumCatalogLoaded = false;
+        paintedModeEnum = null;
+        paintedReleaseEnum = null;
         refreshEnumControls();
       });
       refreshVerbOptions(true);
@@ -209,7 +282,7 @@
         RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
           RED.mavlink.fillCompIdSelect(
             $('#node-input-targetComponent'),
-            (catalog.enums || {}).MAV_COMPONENT || [],
+            ((catalog || {}).enums || {}).MAV_COMPONENT || [],
             { saved: node.targetComponent }
           );
         });
@@ -226,18 +299,30 @@
   <div class="form-row"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
   <div class="form-row"><label for="node-input-topic">Topic</label><select id="node-input-topic"><option value="camera">Camera</option><option value="gimbal">Gimbal</option><option value="servo">Servo</option><option value="release">Release</option></select></div>
   <div class="form-row"><label for="node-input-verb">Verb</label><select id="node-input-verb"></select></div>
-  <div class="form-row"><label for="node-input-path">Gimbal path</label><select id="node-input-path"><option value="legacy">DO_MOUNT_CONTROL</option><option value="manager">GIMBAL_MANAGER_SET_PITCHYAW</option></select></div>
+  <div class="form-row" id="row-payload-path"><label for="node-input-path">Gimbal path</label><select id="node-input-path"><option value="legacy">DO_MOUNT_CONTROL</option><option value="manager">GIMBAL_MANAGER_SET_PITCHYAW</option></select></div>
   <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
   <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
-  <div class="form-row"><label for="node-input-count">Camera</label><input type="text" id="node-input-count" placeholder="count"><input type="text" id="node-input-interval" placeholder="interval" style="width:30%;"></div>
-  <div class="form-row"><label for="node-input-pitch">Gimbal</label><input type="text" id="node-input-pitch" placeholder="pitch"><input type="text" id="node-input-yaw" placeholder="yaw" style="width:30%;"></div>
-  <div class="form-row" id="row-payload-mode"><label for="node-input-modeValue">Mode</label><select id="node-input-modeValue" style="width:30%;"></select></div>
-  <div class="form-row"><label for="node-input-servo">Servo</label><input type="text" id="node-input-servo" placeholder="servo"><input type="text" id="node-input-pwm" placeholder="pwm" style="width:30%;"></div>
-  <div class="form-row"><label for="node-input-actionValue">Release</label><input type="text" id="node-input-instance" placeholder="instance"><select id="node-input-actionValue" style="width:30%;"></select></div>
+  <div class="form-row" id="row-payload-count"><label for="node-input-count">Count</label><input type="number" id="node-input-count" style="width:80px"></div>
+  <div class="form-row" id="row-payload-interval"><label for="node-input-interval">Interval</label><input type="number" id="node-input-interval" style="width:80px"> s</div>
+  <div class="form-row" id="row-payload-distance"><label for="node-input-distance">Distance</label><input type="number" id="node-input-distance" style="width:80px"> m</div>
+  <div class="form-row" id="row-payload-mode"><label for="node-input-modeValue">Mode</label><select id="node-input-modeValue" style="width:70%"></select></div>
+  <div class="form-row" id="row-payload-pitch"><label for="node-input-pitch">Pitch</label><input type="number" id="node-input-pitch" style="width:80px"> deg</div>
+  <div class="form-row" id="row-payload-roll"><label for="node-input-roll">Roll</label><input type="number" id="node-input-roll" style="width:80px"> deg</div>
+  <div class="form-row" id="row-payload-yaw"><label for="node-input-yaw">Yaw</label><input type="number" id="node-input-yaw" style="width:80px"> deg</div>
+  <div class="form-row" id="row-payload-pitchRate"><label for="node-input-pitchRate">Pitch rate</label><input type="number" id="node-input-pitchRate" style="width:80px"> deg/s</div>
+  <div class="form-row" id="row-payload-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="number" id="node-input-yawRate" style="width:80px"> deg/s</div>
+  <div class="form-row" id="row-payload-servo"><label for="node-input-servo">Servo</label><input type="number" id="node-input-servo" style="width:80px"></div>
+  <div class="form-row" id="row-payload-pwm"><label for="node-input-pwm">PWM</label><input type="number" id="node-input-pwm" style="width:80px"> us</div>
+  <div class="form-row" id="row-payload-period"><label for="node-input-period">Period</label><input type="number" id="node-input-period" style="width:80px"> ms</div>
+  <div class="form-row" id="row-payload-instance"><label for="node-input-instance">Instance</label><input type="number" id="node-input-instance" style="width:80px"></div>
+  <div class="form-row" id="row-payload-action"><label for="node-input-actionValue">Action</label><select id="node-input-actionValue" style="width:70%"></select></div>
+  <div class="form-row" id="row-payload-length"><label for="node-input-length">Length</label><input type="number" id="node-input-length" style="width:80px"> m</div>
+  <div class="form-row" id="row-payload-rate"><label for="node-input-rate">Rate</label><input type="number" id="node-input-rate" style="width:80px"> m/s</div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-payload">
   <p>Controls camera, gimbal, servo, and release payload verbs. Command-backed verbs report command acknowledgement as their confirmation mode.</p>
+  <p>Topic and verb reshape the form (§6): only the parameters for the selected verb are shown.</p>
   <p>On the <b>Send &amp; confirm</b> tier a command-backed verb waits for its <code>COMMAND_ACK</code>: output 0 (continue) fires only on <code>ACCEPTED</code>, and a <code>DENIED</code>, <code>TEMPORARILY_REJECTED</code>, or timeout halts the chain and reports on output 1.</p>
   <p>Gimbal manager aiming uses GIMBAL_MANAGER_SET_PITCHYAW and has no MAVLink acknowledgement, so it is always sent unconfirmed.</p>
 </script>
