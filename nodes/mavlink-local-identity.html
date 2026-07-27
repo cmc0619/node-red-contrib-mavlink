@@ -59,6 +59,108 @@
     };
 
     /**
+     * Shared enum option label. Server catalogs should already include labels,
+     * but local/generated entries use the same §6 NAME (value) format.
+     *
+     * @param {{name: string, value: number|string}} entry
+     * @returns {string}
+     */
+    RED.mavlink.enumOptionLabel = function (entry) {
+      return entry.name + ' (' + entry.value + ')';
+    };
+
+    function valueFromSelector(selector) {
+      var $el = $(selector);
+      return $el && $el.length ? String($el.val() || '').trim() : '';
+    }
+
+    function currentEnumQuery(names) {
+      var query = {};
+      var vehicle = valueFromSelector('#node-input-vehicle');
+      var dialect = valueFromSelector('#node-input-dialect') ||
+        valueFromSelector('#node-config-input-dialect');
+
+      if (!vehicle) {
+        var connection = valueFromSelector('#node-input-connection');
+        if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
+          var conn = RED.nodes.node(connection);
+          if (conn && conn.vehicle) {
+            vehicle = conn.vehicle;
+            var profile = RED.nodes.node(conn.vehicle);
+            if (!dialect && profile && profile.dialect) dialect = profile.dialect;
+          }
+        }
+      }
+
+      if (vehicle) query.vehicle = vehicle;
+      if (dialect) query.dialect = dialect;
+      if (Array.isArray(names) && names.length) {
+        query.names = names.join(',');
+      } else if (typeof names === 'string' && names.trim()) {
+        query.names = names.trim();
+      }
+      return query;
+    }
+
+    /**
+     * Load a shared dialect enum catalog from the admin endpoint.
+     *
+     * @param {string[]|string} names  extra enum table names to include
+     * @param {function(object):void} cb
+     */
+    RED.mavlink.loadEnumsCatalog = function (names, cb) {
+      $.getJSON('/mavlink/enums', currentEnumQuery(names), function (data) {
+        cb({
+          dialect: data.dialect,
+          enums: data.enums || {}
+        });
+      }).fail(function () {
+        cb({ dialect: '', enums: {} });
+      });
+    };
+
+    /**
+     * Fill a select from enum entries. Option values are numeric strings so
+     * node configs save MAVLink enum ids, not localized labels.
+     *
+     * @param {object} $select  jQuery select
+     * @param {Array<{name:string,value:number|string,label?:string}>} entries
+     * @param {object} opts
+     */
+    RED.mavlink.fillEnumSelect = function ($select, entries, opts) {
+      opts = opts || {};
+      var valueKey = opts.valueKey || 'value';
+      var saved = opts.saved !== undefined && opts.saved !== null
+        ? String(opts.saved)
+        : String($select.val() || '');
+      $select.empty();
+      if (opts.allowEmpty) {
+        $select.append($('<option></option>').val('').text(opts.emptyLabel || '\u2014'));
+      }
+      (entries || []).forEach(function (entry) {
+        var value = String(entry[valueKey]);
+        var label = entry.label || RED.mavlink.enumOptionLabel(entry);
+        $select.append($('<option></option>').val(value).text(label));
+      });
+      if (saved && !$select.find('option[value="' + saved + '"]').length) {
+        $select.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
+      }
+      if (saved || opts.allowEmpty) {
+        $select.val(saved);
+      } else if (entries && entries.length) {
+        $select.val(String(entries[0][valueKey]));
+      }
+    };
+
+    /**
+     * Fill a MAV_COMP_ID select; filters can opt into an empty "any component"
+     * choice through the same options object.
+     */
+    RED.mavlink.fillCompIdSelect = function ($select, entries, opts) {
+      RED.mavlink.fillEnumSelect($select, entries, opts || {});
+    };
+
+    /**
      * Editor-side uint8 validator. Blank is allowed; the runtime applies the
      * role preset default. Source ids disallow 0 (broadcast / all).
      *

@@ -29,9 +29,13 @@ try {
 
 /** Admin endpoint path for dialect list. */
 const DIALECTS_ROUTE = '/mavlink/dialects';
+/** Admin endpoint path for shared dialect enum catalogs. */
+const ENUMS_ROUTE = '/mavlink/enums';
 
 /** Whether the admin dialects route has been registered (once per process). */
 let _dialectsRouteRegistered = false;
+/** Whether the admin enums route has been registered (once per process). */
+let _enumsRouteRegistered = false;
 
 module.exports = function registerMavlinkVehicle(RED) {
   if (!vehicleApi) {
@@ -80,6 +84,85 @@ module.exports = function registerMavlinkVehicle(RED) {
       }
     );
     _dialectsRouteRegistered = true;
+  }
+
+  /**
+   * Register the shared enum catalog route used by editor dropdowns (§6).
+   * It follows the same Vehicle Profile / dialect rules as the Build message
+   * catalog: prefer a deployed profile's bundle, and never invent a bundled
+   * dialect for a missing `?vehicle=`.
+   */
+  if (!_enumsRouteRegistered) {
+    let catalogApi = null;
+    let catalogLoadError = null;
+    try {
+      catalogApi = require('../lib/metadata');
+    } catch (err) {
+      catalogLoadError = err;
+      if (RED.log && typeof RED.log.error === 'function') {
+        RED.log.error(`[mavlink-vehicle] enum catalog unavailable: ${err.message}`);
+      }
+    }
+
+    RED.httpAdmin.get(
+      ENUMS_ROUTE,
+      RED.auth.needsPermission('mavlink.read'),
+      (req, res) => {
+        if (!catalogApi) {
+          return res.status(503).json({
+            error: catalogLoadError
+              ? catalogLoadError.message
+              : 'enum catalog unavailable',
+          });
+        }
+        const {
+          listEnumsCatalog,
+          catalogEnumsFromBundle,
+          knownDialects,
+        } = catalogApi;
+        try {
+          const vehicleId = typeof req.query.vehicle === 'string'
+            ? req.query.vehicle.trim()
+            : '';
+          const requested = typeof req.query.dialect === 'string' && req.query.dialect.trim()
+            ? req.query.dialect.trim()
+            : '';
+          const names = typeof req.query.names === 'string' ? req.query.names : '';
+
+          if (vehicleId) {
+            const vehicleNode = RED.nodes.getNode(vehicleId);
+            if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
+              const bundle = vehicleNode.getDialect();
+              const dialect = vehicleNode.dialect || bundle.dialect || 'custom';
+              return res.json(catalogEnumsFromBundle(bundle, dialect, names));
+            }
+            if (!requested || requested === 'custom') {
+              return res.status(404).json({
+                error: 'Vehicle Profile not found or not deployed; Deploy the flow, or pass a bundled ?dialect=',
+                dialects: knownDialects(),
+              });
+            }
+            return res.json(listEnumsCatalog(requested, names));
+          }
+
+          const dialect = requested || 'ardupilotmega';
+          if (dialect === 'custom') {
+            return res.status(400).json({
+              error: 'custom dialect requires a deployed Vehicle Profile (?vehicle=id)',
+              dialects: knownDialects(),
+            });
+          }
+          res.json(listEnumsCatalog(dialect, names));
+        } catch (err) {
+          res.status(400).json({
+            error: err.message,
+            dialects: catalogApi.knownDialects(),
+          });
+        }
+      }
+    );
+
+    _enumsRouteRegistered = true;
   }
 
   /**
