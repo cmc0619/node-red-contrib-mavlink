@@ -293,8 +293,16 @@
           var $root = $('#node-input-fields-container');
           if (!$root.find('.mav-field-input').length) return;
           var live = collectFieldInputsFromDom($root);
-          Object.keys(live).forEach(function (key) {
-            savedFields[key] = live[key];
+          // Empty controls are omitted from `live` (save semantics). Delete those
+          // keys from the working snapshot so a rebuild does not restore them.
+          $root.find('.mav-field-input').each(function () {
+            var name = $(this).attr('data-field');
+            if (!name) return;
+            if (Object.prototype.hasOwnProperty.call(live, name)) {
+              savedFields[name] = live[name];
+            } else {
+              delete savedFields[name];
+            }
           });
         }
 
