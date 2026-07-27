@@ -91,7 +91,25 @@ module.exports = function registerMavlinkOut(RED) {
       const target = msg.target || null;
       const identityId = msg.identityId || undefined;
 
-      connectionNode.send(message, { band, target, identityId });
+      // The queue send can throw synchronously — a full Control band, an
+      // unknown identity, a disabled connection. Route the failure through a
+      // status record + node.error() so it never escapes as an uncaught throw
+      // (§2) and the chain halts (output 0 stays silent).
+      try {
+        connectionNode.send(message, { band, target, identityId });
+      } catch (err) {
+        const sr = makeStatusRecord({
+          result: 'failed',
+          reason: err.message,
+          message: message.name,
+          band,
+          timestamp: Date.now(),
+        });
+        applyActionStatus(node, 'error', capBadge(err.message));
+        node.error(`mavlink-out: ${err.message}`, msg);
+        node.send([null, sr]);
+        return;
+      }
 
       const sr = makeStatusRecord({
         result: 'sent',
