@@ -1,10 +1,9 @@
 <!--
   mavlink-connection — Connection config node editor (DESIGN.md §3, §6, §7).
 
-  A config node: it has no wires and appears in the "Configuration nodes" tray.
-  Every enumerable field is a dropdown; saved values survive redeploys. The
-  transport, the bound Vehicle Profile, the default and additional Local
-  Identities, the signing switches, and the disable switch live here.
+  Vehicle / Identity use Node-RED's standard config-node select with edit
+  (pencil) and add (+) buttons — never a free-form id and never a buttonless
+  <select> fallback.
 -->
 
 <script type="text/javascript">
@@ -18,9 +17,7 @@
       remoteHost: { value: '' },
       remotePort: { value: '', validate: RED.validators.number(true) },
       broadcast: { value: false },
-      // Config-node references: Node-RED turns these inputs into typedInput
-      // pickers that list existing mavlink-vehicle / mavlink-local-identity
-      // nodes (DESIGN.md §6 — everything enumerable is a dropdown).
+      // Config-node references (§6 — everything enumerable is a dropdown).
       vehicle: { value: '', type: 'mavlink-vehicle', required: true },
       localIdentity: { value: '', type: 'mavlink-local-identity', required: true },
       additionalIdentities: { value: [] },
@@ -42,50 +39,15 @@
       return this.name || 'MAVLink ' + mode + where;
     },
     oneditprepare: function () {
-      /**
-       * If Node-RED's typedInput conversion for a config-node `type:` did not
-       * run (leaving a plain text field), replace it with an explicit
-       * <select> of existing profiles so Vehicle / Identity are always
-       * dropdowns (§6).
-       *
-       * @param {string} inputId
-       * @param {string} nodeType
-       * @param {string} savedId
-       * @param {string} emptyLabel
-       */
-      function ensureConfigSelect(inputId, nodeType, savedId, emptyLabel) {
-        var $el = $('#' + inputId);
-        if (!$el.length) return;
-        // typedInput wraps the original input; leave it alone when present.
-        if ($el.closest('.red-ui-typedInput-container').length) return;
-        if ($el.is('select')) return;
-
-        var $select = $('<select></select>')
-          .attr('id', inputId)
-          .attr('style', $el.attr('style') || 'width:70%');
-        $select.append($('<option></option>').val('').text('\u2014 select ' + emptyLabel + ' \u2014'));
-        RED.nodes.eachConfig(function (n) {
-          if (n.type !== nodeType) return;
-          $select.append(
-            $('<option></option>').val(n.id).text(n.name || (emptyLabel + ' ' + n.id))
-          );
-        });
-        if (savedId && !$select.find('option[value="' + savedId + '"]').length) {
-          $select.append(
-            $('<option></option>').val(savedId).text(savedId + ' (missing)')
-          );
-        }
-        if (savedId) $select.val(savedId);
-        $el.replaceWith($select);
+      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
+        RED.mavlink.ensureConfigNodePicker(this, 'vehicle', 'mavlink-vehicle', 'node-config-input');
+        RED.mavlink.ensureConfigNodePicker(
+          this,
+          'localIdentity',
+          'mavlink-local-identity',
+          'node-config-input'
+        );
       }
-
-      ensureConfigSelect('node-config-input-vehicle', 'mavlink-vehicle', this.vehicle, 'Vehicle Profile');
-      ensureConfigSelect(
-        'node-config-input-localIdentity',
-        'mavlink-local-identity',
-        this.localIdentity,
-        'Local Identity'
-      );
     },
   });
 </script>

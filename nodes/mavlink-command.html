@@ -228,6 +228,10 @@
       const node = this;
       const container = $('#node-input-params-container');
 
+      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
+        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+      }
+
       // ── Mode toggle ────────────────────────────────────────────────────────
       function applyMode(mode) {
         if (mode === 'advanced') {

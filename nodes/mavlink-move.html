@@ -27,7 +27,12 @@
     outputs: 2,
     outputLabels: ['continue', 'status'],
     icon: 'font-awesome/fa-location-arrow',
-    label: function () { return this.name || 'mavlink move'; }
+    label: function () { return this.name || 'mavlink move'; },
+    oneditprepare: function () {
+      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
+        RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
+      }
+    }
   });
 </script>
 

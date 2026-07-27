@@ -12,17 +12,20 @@
  * decoded against its profile — one dialect, one firmware, no per-packet lookup
  * (§7). A mixed fleet is expressed as more connections, not more configuration
  * inside one.
+ *
+ * The type is always registered even if `mavlink-mappings` failed to load, so
+ * Connection / Build keep their standard config-node edit/add pickers. Runtime
+ * dialect access then fails loud with a status badge.
  */
 
-const {
-  FIRMWARE_TYPES,
-  VEHICLE_FAMILIES,
-  normalizeFirmware,
-  normalizeFamily,
-  resolveDialect,
-  parseTargetUint8,
-  knownDialects,
-} = require('../lib/vehicle');
+let vehicleApi = null;
+/** @type {Error|null} */
+let vehicleLoadError = null;
+try {
+  vehicleApi = require('../lib/vehicle');
+} catch (err) {
+  vehicleLoadError = err;
+}
 
 /** Admin endpoint path for dialect list. */
 const DIALECTS_ROUTE = '/mavlink/dialects';
@@ -31,6 +34,38 @@ const DIALECTS_ROUTE = '/mavlink/dialects';
 let _dialectsRouteRegistered = false;
 
 module.exports = function registerMavlinkVehicle(RED) {
+  if (!vehicleApi) {
+    const msg = vehicleLoadError ? vehicleLoadError.message : 'vehicle library unavailable';
+    if (RED.log && typeof RED.log.error === 'function') {
+      RED.log.error(`[mavlink-vehicle] ${msg}`);
+    }
+    function BrokenVehicleNode(config) {
+      RED.nodes.createNode(this, config);
+      this.status({ fill: 'red', shape: 'ring', text: 'missing deps' });
+      this.getDialect = () => {
+        throw vehicleLoadError || new Error(msg);
+      };
+      this.getDefaults = () => ({
+        vehicleFamily: config.vehicleFamily || 'generic',
+        firmware: config.firmware || 'ardupilot',
+        dialect: config.dialect || 'ardupilotmega',
+        dialectSource: config.dialectSource || 'bundled',
+        defaultTargetSystem: 1,
+        defaultTargetComponent: 1,
+      });
+    }
+    RED.nodes.registerType('mavlink-vehicle', BrokenVehicleNode);
+    return;
+  }
+
+  const {
+    normalizeFirmware,
+    normalizeFamily,
+    resolveDialect,
+    parseTargetUint8,
+    knownDialects,
+  } = vehicleApi;
+
   /**
    * Register the admin HTTP endpoint that serves the bundled dialect list to
    * editor dropdowns (§6 "Register with RED.auth.needsPermission"). Done once
@@ -132,5 +167,5 @@ module.exports = function registerMavlinkVehicle(RED) {
 };
 
 /* Expose lists for editor HTML and tests */
-module.exports.FIRMWARE_TYPES = FIRMWARE_TYPES;
-module.exports.VEHICLE_FAMILIES = VEHICLE_FAMILIES;
+module.exports.FIRMWARE_TYPES = vehicleApi ? vehicleApi.FIRMWARE_TYPES : [];
+module.exports.VEHICLE_FAMILIES = vehicleApi ? vehicleApi.VEHICLE_FAMILIES : [];

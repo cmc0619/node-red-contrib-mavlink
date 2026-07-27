@@ -560,15 +560,22 @@ module.exports = function registerMavlinkCommand(RED) {
 
   /**
    * Admin endpoints for editor dropdowns (§6 "Register with needsPermission").
-   * Registered once per process.
+   * Registered once per process. Metadata load is isolated so a missing
+   * `mavlink-mappings` install still registers the palette type (flows can
+   * open); the catalog routes then return 503 until deps are installed.
    */
   if (!MavlinkCommandNode._routeRegistered) {
     const { presetGroups } = require('../lib/command');
-    const {
-      listCommandsCatalog,
-      catalogFromBundle,
-      knownDialects,
-    } = require('../lib/metadata');
+    let catalogApi = null;
+    let catalogLoadError = null;
+    try {
+      catalogApi = require('../lib/metadata');
+    } catch (err) {
+      catalogLoadError = err;
+      if (RED.log && typeof RED.log.error === 'function') {
+        RED.log.error(`[mavlink-command] catalog unavailable: ${err.message}`);
+      }
+    }
 
     RED.httpAdmin.get(
       '/mavlink/command/presets',
@@ -590,6 +597,18 @@ module.exports = function registerMavlinkCommand(RED) {
       '/mavlink/command/commands',
       RED.auth.needsPermission('mavlink.read'),
       (req, res) => {
+        if (!catalogApi) {
+          return res.status(503).json({
+            error: catalogLoadError
+              ? catalogLoadError.message
+              : 'command catalog unavailable',
+          });
+        }
+        const {
+          listCommandsCatalog,
+          catalogFromBundle,
+          knownDialects,
+        } = catalogApi;
         try {
           const vehicleId = typeof req.query.vehicle === 'string'
             ? req.query.vehicle.trim()
@@ -630,7 +649,7 @@ module.exports = function registerMavlinkCommand(RED) {
         } catch (err) {
           res.status(400).json({
             error: err.message,
-            dialects: knownDialects(),
+            dialects: catalogApi.knownDialects(),
           });
         }
       }

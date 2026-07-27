@@ -40,6 +40,12 @@
       oneditprepare: function () {
         var node = this;
 
+        // Vehicle / Connection: standard config-node select with edit/add (§6).
+        if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
+          RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
+          RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+        }
+
         /* Tier dropdown */
         var $tier = $('#node-input-tier');
         $tier.empty();
