@@ -45,8 +45,12 @@
 
   // ── Preset / command caches loaded from server ─────────────────────────────
   let _presetGroups = null;
-  /** @type {Object<string, {commands:Array, enums:Object}>} */
-  const _catalogByDialect = {};
+  /** @type {Object<string, {commands:Array, enums:Object, dialect:string}>} */
+  const _catalogByKey = {};
+  /** Monotonic token so a stale dialect response cannot overwrite a newer one. */
+  let _catalogRequestSeq = 0;
+  /** Cache key for the catalog currently shown in the Advanced dropdown. */
+  let _activeCatalogKey = '';
 
   function loadPresets(cb) {
     if (_presetGroups) { cb(_presetGroups); return; }
@@ -60,43 +64,68 @@
   }
 
   /**
-   * Dialect for the Advanced MAV_CMD list: the Connection's bound Vehicle
-   * Profile dialect when a connection is selected, otherwise ardupilotmega.
+   * Resolve which Vehicle / dialect the Advanced list should load.
    * Uses the editor-side config graph (RED.nodes.node), not a runtime lookup.
    *
-   * @returns {string}
+   * @returns {{key: string, query: object, dialect: string, vehicleId: string}}
    */
-  function resolveEditorDialect() {
+  function resolveCatalogTarget() {
     const connId = $('#node-input-connection').val();
-    if (!connId || typeof RED === 'undefined' || !RED.nodes || !RED.nodes.node) {
-      return 'ardupilotmega';
+    let vehicleId = '';
+    let dialect = 'ardupilotmega';
+    if (connId && typeof RED !== 'undefined' && RED.nodes && RED.nodes.node) {
+      const conn = RED.nodes.node(connId);
+      if (conn && conn.vehicle) {
+        vehicleId = conn.vehicle;
+        const vehicle = RED.nodes.node(conn.vehicle);
+        if (vehicle && vehicle.dialect) dialect = vehicle.dialect;
+      }
     }
-    const conn = RED.nodes.node(connId);
-    if (!conn || !conn.vehicle) return 'ardupilotmega';
-    const vehicle = RED.nodes.node(conn.vehicle);
-    if (!vehicle || !vehicle.dialect || vehicle.dialect === 'custom') {
-      return 'ardupilotmega';
+    // Prefer vehicle id so a deployed custom profile serves its own bundle.
+    if (vehicleId) {
+      return {
+        key: 'vehicle:' + vehicleId,
+        query: { vehicle: vehicleId },
+        dialect: dialect,
+        vehicleId: vehicleId,
+      };
     }
-    return vehicle.dialect;
+    return {
+      key: 'dialect:' + dialect,
+      query: { dialect: dialect },
+      dialect: dialect,
+      vehicleId: '',
+    };
   }
 
   /**
-   * Load the Advanced catalog (commands + enums) for a dialect.
-   * @param {string} dialect
-   * @param {function({commands:Array, enums:Object}):void} cb
+   * Load the Advanced catalog (commands + enums). Ignores stale responses when
+   * the Connection (and therefore the target) changed mid-flight.
+   *
+   * @param {function({commands:Array, enums:Object, dialect:string}|null, Error=):void} cb
    */
-  function loadCommandsCatalog(dialect, cb) {
-    const key = dialect || 'ardupilotmega';
-    if (_catalogByDialect[key]) { cb(_catalogByDialect[key]); return; }
-    $.getJSON('/mavlink/command/commands', { dialect: key }, function (data) {
-      _catalogByDialect[key] = {
+  function loadCommandsCatalog(cb) {
+    const target = resolveCatalogTarget();
+    if (_catalogByKey[target.key]) {
+      _activeCatalogKey = target.key;
+      cb(_catalogByKey[target.key]);
+      return;
+    }
+    const seq = ++_catalogRequestSeq;
+    $.getJSON('/mavlink/command/commands', target.query, function (data) {
+      if (seq !== _catalogRequestSeq) return; // stale — a newer request is in flight
+      const catalog = {
         commands: data.commands || [],
         enums: data.enums || {},
+        dialect: data.dialect || target.dialect,
       };
-      cb(_catalogByDialect[key]);
-    }).fail(function () {
-      _catalogByDialect[key] = { commands: [], enums: {} };
-      cb(_catalogByDialect[key]);
+      _catalogByKey[target.key] = catalog;
+      _activeCatalogKey = target.key;
+      cb(catalog);
+    }).fail(function (_xhr, _status, err) {
+      if (seq !== _catalogRequestSeq) return;
+      _activeCatalogKey = target.key;
+      cb({ commands: [], enums: {}, dialect: target.dialect, error: String(err || 'load failed') });
     });
   }
 
@@ -244,26 +273,31 @@
 
       // ── Advanced MAV_CMD dropdown (§6 / §9 — every command in the dialect) ─
       function buildAdvancedDropdown(catalog) {
+        if (!catalog) return;
         const commands = catalog.commands || [];
-        const sel = $('#node-input-advancedCommand').empty();
+        const sel = $('#node-input-advancedCommand');
+        // Prefer the in-progress selection over the pre-edit saved value so a
+        // Connection change mid-dialog does not snap the MAV_CMD back.
+        const current = sel.val();
+        const saved = node.advancedCommand !== undefined && node.advancedCommand !== null
+          ? String(node.advancedCommand)
+          : '';
+        const prefer = current || saved;
+
+        sel.empty();
         sel.append($('<option></option>').val('').text('\u2014 select MAV_CMD \u2014'));
         for (const c of commands) {
           sel.append($('<option></option>').val(String(c.value)).text(c.label));
         }
-        // Saved values survive async loads (§6): re-apply the persisted id, or
-        // keep a missing id visible rather than silently clearing it.
-        const saved = node.advancedCommand !== undefined && node.advancedCommand !== null
-          ? String(node.advancedCommand)
-          : '';
-        if (saved && !sel.find('option[value="' + saved + '"]').length) {
-          sel.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
+        if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
+          sel.append($('<option></option>').val(prefer).text('#' + prefer + ' (not in dialect)'));
         }
-        if (saved) sel.val(saved);
+        if (prefer) sel.val(prefer);
         sel.trigger('change');
       }
 
       function refreshAdvancedCommands() {
-        loadCommandsCatalog(resolveEditorDialect(), buildAdvancedDropdown);
+        loadCommandsCatalog(buildAdvancedDropdown);
       }
 
       $('#node-input-advancedCommand').on('change', function () {
@@ -362,11 +396,14 @@
         if (mode === 'advanced') {
           // Fields are created by selection (§6 / §9 Advanced): named params
           // from the dialect metadata — never a raw Param 1–7 grid.
-          const dialect = resolveEditorDialect();
-          const catalog = _catalogByDialect[dialect];
+          const catalog = _catalogByKey[_activeCatalogKey];
           const cmdId = $('#node-input-advancedCommand').val();
           if (!catalog) {
             container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
+            return;
+          }
+          if (catalog.error && !(catalog.commands && catalog.commands.length)) {
+            container.append($('<div class="form-row"><em>Could not load command parameters for this Vehicle dialect. Deploy the Vehicle Profile (required for custom dialects).</em></div>'));
             return;
           }
           if (!cmdId) {

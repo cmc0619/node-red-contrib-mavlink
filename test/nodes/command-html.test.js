@@ -61,6 +61,14 @@ test('advanced mode enumerates params from dialect metadata, not Param 1–7 (§
   );
 });
 
+test('advanced catalog load ignores stale responses and keeps the in-progress selection', () => {
+  assert.match(html, /_catalogRequestSeq/, 'request sequence token exists');
+  assert.match(html, /seq !== _catalogRequestSeq/, 'stale responses are dropped');
+  assert.match(html, /const current = sel\.val\(\)/, 'in-progress select value is read');
+  assert.match(html, /const prefer = current \|\| saved/, 'current selection wins over saved');
+  assert.match(html, /query:\s*\{\s*vehicle:/, 'Vehicle id is preferred for custom dialects');
+});
+
 test('preset dropdown re-applies the saved selection and fires change after the async load', () => {
   // The preset list loads asynchronously; the builder must re-select the saved
   // preset and trigger a change so the exposed param fields render on first

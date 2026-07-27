@@ -6,6 +6,8 @@ const assert = require('node:assert/strict');
 const {
   listCommandsForDialect,
   listCommandsCatalog,
+  catalogFromBundle,
+  loadBundled,
   resolveBundledDialect,
   commandLabel,
   isHiddenParam,
@@ -65,4 +67,11 @@ test('listCommandsForDialect returns the commands array from the catalog', () =>
   const list = listCommandsForDialect('ardupilotmega');
   assert.ok(list.length > 50);
   assert.ok(list.find((c) => c.value === 22));
+});
+
+test('catalogFromBundle works for any DialectBundle (custom profiles inclusive)', () => {
+  const bundle = loadBundled('common');
+  const catalog = catalogFromBundle(bundle, 'common');
+  assert.equal(catalog.dialect, 'common');
+  assert.ok(catalog.commands.some((c) => c.value === 400));
 });
