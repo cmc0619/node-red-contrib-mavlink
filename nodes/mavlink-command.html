@@ -276,11 +276,11 @@
         if (!(RED.mavlink && RED.mavlink.loadEnumsCatalog)) return;
         const seq = ++compIdRequestSeq;
         const saved = $('#node-input-targetCompid').val() || node.targetCompid;
-        RED.mavlink.loadEnumsCatalog(['MAV_COMP_ID'], function (catalog) {
+        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
           if (seq !== compIdRequestSeq) return;
           RED.mavlink.fillCompIdSelect(
             $('#node-input-targetCompid'),
-            ((catalog || {}).enums || {}).MAV_COMP_ID || [],
+            ((catalog || {}).enums || {}).MAV_COMPONENT || [],
             { allowEmpty: true, emptyLabel: '(default)', saved: saved }
           );
         });

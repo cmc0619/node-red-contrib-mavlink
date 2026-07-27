@@ -145,6 +145,6 @@ test('Command CompID reloads when Connection changes', () => {
   assert.match(
     html,
     /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
-    'Connection change refreshes MAV_COMP_ID for the new dialect'
+    'Connection change refreshes MAV_COMPONENT for the new dialect'
   );
 });

@@ -102,13 +102,13 @@ test('loadEnumsCatalog calls the shared enum route with a comma names list', () 
   const context = loadHelpers();
   let payload = null;
 
-  context.RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_COMP_ID'], (catalog) => {
+  context.RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_COMPONENT'], (catalog) => {
     payload = catalog;
   });
 
   assert.deepEqual(JSON.parse(JSON.stringify(context.$.lastRequest)), {
     url: '/mavlink/enums',
-    query: { names: 'MAV_TYPE,MAV_COMP_ID' },
+    query: { names: 'MAV_TYPE,MAV_COMPONENT' },
   });
   assert.equal(payload.dialect, 'common');
 });

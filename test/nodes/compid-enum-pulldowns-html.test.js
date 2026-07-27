@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * MAV_COMP_ID enum pulldowns across palette/config editors (§6).
+ * MAV_COMPONENT enum pulldowns across palette/config editors (§6).
  */
 
 const test = require('node:test');
@@ -23,32 +23,32 @@ const TARGET_COMP_NODES = [
 ];
 
 for (const name of TARGET_COMP_NODES) {
-  test(`${name}: targetComponent is a MAV_COMP_ID select`, () => {
+  test(`${name}: targetComponent is a MAV_COMPONENT select`, () => {
     const html = readHtml(name);
     assert.match(html, /<select id="node-input-targetComponent">/);
     assert.ok(
       !html.includes('type="number" id="node-input-targetComponent"'),
       'numeric targetComponent input must be gone'
     );
-    assert.match(html, /loadEnumsCatalog\(\['MAV_COMP_ID'\]/);
+    assert.match(html, /loadEnumsCatalog\(\['MAV_COMPONENT'\]/);
     assert.match(html, /fillCompIdSelect\(/);
-    assert.match(html, /MAV_COMP_ID/);
+    assert.match(html, /\.MAV_COMPONENT/);
   });
 }
 
-test('mavlink-vehicle: defaultTargetComponent is a MAV_COMP_ID select', () => {
+test('mavlink-vehicle: defaultTargetComponent is a MAV_COMPONENT select', () => {
   const html = readHtml('mavlink-vehicle');
   assert.match(html, /<select id="node-config-input-defaultTargetComponent">/);
   assert.ok(!html.includes('type="number" id="node-config-input-defaultTargetComponent"'));
-  assert.match(html, /loadEnumsCatalog\(\['MAV_COMP_ID'\]/);
+  assert.match(html, /loadEnumsCatalog\(\['MAV_COMPONENT'\]/);
   assert.match(html, /fillCompIdSelect\(/);
 });
 
-test('mavlink-command: static targetCompid is a MAV_COMP_ID select only', () => {
+test('mavlink-command: static targetCompid is a MAV_COMPONENT select only', () => {
   const html = readHtml('mavlink-command');
   assert.match(html, /<select id="node-input-targetCompid"/);
   assert.ok(!html.includes('type="number" id="node-input-targetCompid"'));
-  assert.match(html, /loadEnumsCatalog\(\['MAV_COMP_ID'\]/);
+  assert.match(html, /loadEnumsCatalog\(\['MAV_COMPONENT'\]/);
   assert.match(html, /fillCompIdSelect\([\s\S]*targetCompid/);
   assert.match(html, /allowEmpty:\s*true[\s\S]*emptyLabel:\s*'\(default\)'/);
 });
@@ -57,15 +57,15 @@ test('mavlink-state: filter targetComponent allows blank = any', () => {
   const html = readHtml('mavlink-state');
   assert.match(html, /<select id="node-input-targetComponent">/);
   assert.ok(!html.includes('type="number" id="node-input-targetComponent"'));
-  assert.match(html, /loadEnumsCatalog\(\['MAV_COMP_ID'\]/);
+  assert.match(html, /loadEnumsCatalog\(\['MAV_COMPONENT'\]/);
   assert.match(html, /allowEmpty:\s*true[\s\S]*Any component/);
 });
 
-test('mavlink-in: compid filter is a MAV_COMP_ID select', () => {
+test('mavlink-in: compid filter is a MAV_COMPONENT select', () => {
   const html = readHtml('mavlink-in');
   assert.match(html, /<select id="node-input-compid"/);
   assert.ok(!html.includes('id="node-input-compid" placeholder="blank = all"'));
-  assert.match(html, /loadEnumsCatalog\(\['MAV_COMP_ID'\]/);
+  assert.match(html, /loadEnumsCatalog\(\['MAV_COMPONENT'\]/);
   assert.match(html, /fillCompIdSelect\([\s\S]*node-input-compid/);
   assert.match(html, /allowEmpty:\s*true[\s\S]*Any component/);
 });
@@ -78,10 +78,10 @@ test('mavlink-local-identity: HB enums and source CompID use selects; SysID stay
   assert.match(html, /type="number" id="node-config-input-sourceSystemId"/);
   assert.match(
     html,
-    /loadEnumsCatalog\(\['MAV_TYPE',\s*'MAV_AUTOPILOT',\s*'MAV_COMP_ID'\]/
+    /loadEnumsCatalog\(\['MAV_TYPE',\s*'MAV_AUTOPILOT',\s*'MAV_COMPONENT'\]/
   );
   assert.match(html, /valueKey:\s*'name'/);
   assert.match(html, /enums\.MAV_TYPE/);
   assert.match(html, /enums\.MAV_AUTOPILOT/);
-  assert.match(html, /enums\.MAV_COMP_ID/);
+  assert.match(html, /enums\.MAV_COMPONENT/);
 });

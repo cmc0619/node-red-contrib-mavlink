@@ -1342,3 +1342,13 @@ a packed `.tgz` / git URL).
 *Check:* `npm install /tmp/bare-checkout` from a clean userDir — `ls node_modules` has the
 symlink and no `mavlink-mappings`; then `npm install --install-links /tmp/bare-checkout` and
 `node -e "require('mavlink-mappings')"`.
+
+**Component IDs are the `MAV_COMPONENT` enum table, not `MAV_COMP_ID`.**
+*Wrong belief:* CompID dropdowns load enum table `MAV_COMP_ID` (because entries are named
+`MAV_COMP_ID_AUTOPILOT1`, …).
+*Fact:* Upstream XML / `mavlink-mappings` expose the table as `MAV_COMPONENT` (`MavComponent`).
+Entry *names* keep the historical `MAV_COMP_ID_*` prefix. Asking the catalog for `MAV_COMP_ID`
+returns an empty list for every dialect, so the editor falls back to `#1 (not in dialect)`.
+Bundled reconstruction must re-prefix members with `MAV_COMP_ID_`, not `MAV_COMPONENT_`.
+*Check:* `node -e "const {listEnumsCatalog}=require('./lib/metadata'); console.log(listEnumsCatalog('ardupilotmega',['MAV_COMPONENT']).enums.MAV_COMPONENT.find(e=>e.value===1))"`
+— expect `{ name: 'MAV_COMP_ID_AUTOPILOT1', value: 1, label: 'MAV_COMP_ID_AUTOPILOT1 (1)', … }`.

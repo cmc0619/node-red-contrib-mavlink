@@ -22,8 +22,8 @@ const FIXTURE_BUNDLE = {
         { name: 'MAV_TYPE_GCS', value: 6, description: 'Ground control station.' },
       ],
     },
-    MAV_COMP_ID: {
-      name: 'MAV_COMP_ID',
+    MAV_COMPONENT: {
+      name: 'MAV_COMPONENT',
       bitmask: false,
       description: 'Component id',
       entries: [
@@ -45,7 +45,7 @@ test('DEFAULT_ENUM_NAMES includes the editor pulldown common set', () => {
   assert.deepEqual(DEFAULT_ENUM_NAMES, [
     'MAV_TYPE',
     'MAV_AUTOPILOT',
-    'MAV_COMP_ID',
+    'MAV_COMPONENT',
     'MAV_STATE',
     'MAV_MODE',
     'SPEED_TYPE',
@@ -60,12 +60,18 @@ test('catalogEnumsFromBundle returns default enums with name/value labels', () =
   const catalog = catalogEnumsFromBundle(FIXTURE_BUNDLE, 'fixture');
 
   assert.equal(catalog.dialect, 'fixture');
-  assert.deepEqual(Object.keys(catalog.enums), ['MAV_TYPE', 'MAV_COMP_ID']);
+  assert.deepEqual(Object.keys(catalog.enums), ['MAV_TYPE', 'MAV_COMPONENT']);
   assert.deepEqual(catalog.enums.MAV_TYPE[1], {
     name: 'MAV_TYPE_GCS',
     value: 6,
     label: 'MAV_TYPE_GCS (6)',
     description: 'Ground control station.',
+  });
+  assert.deepEqual(catalog.enums.MAV_COMPONENT[0], {
+    name: 'MAV_COMP_ID_AUTOPILOT1',
+    value: 1,
+    label: 'MAV_COMP_ID_AUTOPILOT1 (1)',
+    description: 'Autopilot.',
   });
 });
 
@@ -90,6 +96,18 @@ test('listEnumsCatalog loads bundled dialect enum entries', () => {
   assert.ok(catalog.enums.MAV_TYPE.some((entry) => entry.label === 'MAV_TYPE_GCS (6)'));
 });
 
+test('listEnumsCatalog serves MAV_COMPONENT with XML entry names for every stack', () => {
+  for (const dialect of ['common', 'ardupilotmega', 'development']) {
+    const catalog = listEnumsCatalog(dialect, ['MAV_COMPONENT']);
+    const entries = catalog.enums.MAV_COMPONENT || [];
+    assert.ok(entries.length > 0, `${dialect} must expose MAV_COMPONENT`);
+    const autopilot = entries.find((entry) => Number(entry.value) === 1);
+    assert.ok(autopilot, `${dialect} must include component id 1`);
+    assert.equal(autopilot.name, 'MAV_COMP_ID_AUTOPILOT1');
+    assert.equal(autopilot.label, 'MAV_COMP_ID_AUTOPILOT1 (1)');
+  }
+});
+
 test('catalogEnumsFromBundle preserves values outside MAX_SAFE_INTEGER as strings', () => {
   const huge = String(Number.MAX_SAFE_INTEGER + 10);
   const catalog = catalogEnumsFromBundle(
@@ -98,7 +116,7 @@ test('catalogEnumsFromBundle preserves values outside MAX_SAFE_INTEGER as string
       enums: {
         MAV_TYPE: { entries: [] },
         MAV_AUTOPILOT: { entries: [] },
-        MAV_COMP_ID: { entries: [] },
+        MAV_COMPONENT: { entries: [] },
         MAV_STATE: { entries: [] },
         MAV_MODE: { entries: [] },
         SPEED_TYPE: { entries: [] },
