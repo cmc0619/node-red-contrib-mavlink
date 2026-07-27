@@ -65,7 +65,7 @@ module.exports = function registerMavlinkBuild(RED) {
     // Effective tier: clamp to Build when no connection is configured.
     const tier = (hasConnection && config.tier !== TIER.BUILD) ? (config.tier || TIER.SEND) : TIER.BUILD;
 
-    const messageName = config.messageName || '';
+    const messageName = config.messageName || 'HEARTBEAT';
     const defaultBand = config.band !== undefined && config.band !== null && config.band !== ''
       ? Number(config.band)
       : BAND.CONTROL;
@@ -103,11 +103,6 @@ module.exports = function registerMavlinkBuild(RED) {
     } catch (err) {
       node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
       node.error(`mavlink-build: ${err.message}`);
-      return;
-    }
-
-    if (!messageName) {
-      node.status({ fill: 'red', shape: 'ring', text: 'no message selected' });
       return;
     }
 
@@ -270,6 +265,83 @@ module.exports = function registerMavlinkBuild(RED) {
       void lastFireMs;
       done();
     });
+  }
+
+  /**
+   * Admin endpoint for the Build editor's message dropdown (§6). Registered
+   * once per process and isolated from metadata-load failures so the palette
+   * node still registers when `mavlink-mappings` is absent.
+   */
+  if (!MavlinkBuildNode._messagesRouteRegistered) {
+    let catalogApi = null;
+    let catalogLoadError = null;
+    try {
+      catalogApi = require('../lib/metadata');
+    } catch (err) {
+      catalogLoadError = err;
+      if (RED.log && typeof RED.log.error === 'function') {
+        RED.log.error(`[mavlink-build] message catalog unavailable: ${err.message}`);
+      }
+    }
+
+    RED.httpAdmin.get(
+      '/mavlink/build/messages',
+      RED.auth.needsPermission('mavlink.read'),
+      (req, res) => {
+        if (!catalogApi) {
+          return res.status(503).json({
+            error: catalogLoadError
+              ? catalogLoadError.message
+              : 'message catalog unavailable',
+          });
+        }
+        const {
+          listMessagesCatalog,
+          catalogMessagesFromBundle,
+          knownDialects,
+        } = catalogApi;
+        try {
+          const vehicleId = typeof req.query.vehicle === 'string'
+            ? req.query.vehicle.trim()
+            : '';
+          const requested = typeof req.query.dialect === 'string' && req.query.dialect.trim()
+            ? req.query.dialect.trim()
+            : '';
+
+          if (vehicleId) {
+            const vehicleNode = RED.nodes.getNode(vehicleId);
+            if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
+              const bundle = vehicleNode.getDialect();
+              const dialect = vehicleNode.dialect || bundle.dialect || 'custom';
+              return res.json(catalogMessagesFromBundle(bundle, dialect));
+            }
+            if (!requested || requested === 'custom') {
+              return res.status(404).json({
+                error: 'Vehicle Profile not found or not deployed; Deploy the flow, or pass a bundled ?dialect=',
+                dialects: knownDialects(),
+              });
+            }
+            return res.json(listMessagesCatalog(requested));
+          }
+
+          const dialect = requested || 'ardupilotmega';
+          if (dialect === 'custom') {
+            return res.status(400).json({
+              error: 'custom dialect requires a deployed Vehicle Profile (?vehicle=id)',
+              dialects: knownDialects(),
+            });
+          }
+          res.json(listMessagesCatalog(dialect));
+        } catch (err) {
+          res.status(400).json({
+            error: err.message,
+            dialects: catalogApi.knownDialects(),
+          });
+        }
+      }
+    );
+
+    MavlinkBuildNode._messagesRouteRegistered = true;
   }
 
   RED.nodes.registerType('mavlink-build', MavlinkBuildNode);

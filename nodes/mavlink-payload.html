@@ -34,9 +34,57 @@
     icon: 'font-awesome/fa-camera',
     label: function () { return this.name || 'mavlink payload'; },
     oneditprepare: function () {
+      var node = this;
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
+        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
       }
+
+      RED.mavlink = RED.mavlink || {};
+      if (!RED.mavlink.PAYLOAD_VERBS) {
+        RED.mavlink.PAYLOAD_VERBS = {
+          camera: [
+            { value: 'photo', label: 'Photo' },
+            { value: 'start-video', label: 'Start video' },
+            { value: 'stop-video', label: 'Stop video' },
+            { value: 'set-mode', label: 'Set mode' },
+            { value: 'trigger-distance', label: 'Trigger by distance' }
+          ],
+          gimbal: [
+            { value: 'aim', label: 'Aim' },
+            { value: 'set-mode', label: 'Set mode' },
+            { value: 'roi-set', label: 'ROI set' },
+            { value: 'roi-clear', label: 'ROI clear' }
+          ],
+          servo: [
+            { value: 'set', label: 'Set' },
+            { value: 'repeat', label: 'Repeat' }
+          ],
+          release: [
+            { value: 'gripper', label: 'Gripper' },
+            { value: 'winch', label: 'Winch' },
+            { value: 'parachute', label: 'Parachute' }
+          ]
+        };
+      }
+
+      function refreshVerbOptions(useSaved) {
+        var topic = $('#node-input-topic').val() || 'camera';
+        var verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
+        var $verb = $('#node-input-verb');
+        var saved = useSaved ? (node.verb || $verb.val()) : $verb.val();
+        $verb.empty();
+        for (var i = 0; i < verbs.length; i++) {
+          var entry = verbs[i];
+          $verb.append($('<option></option>').val(entry.value).text(entry.label));
+        }
+        var valid = verbs.some(function (v) { return v.value === saved; });
+        $verb.val(valid ? saved : (verbs[0] ? verbs[0].value : ''));
+      }
+
+      $('#node-input-topic').on('change', function () {
+        refreshVerbOptions(false);
+      });
+      refreshVerbOptions(true);
     }
   });
 </script>
@@ -48,7 +96,7 @@
   <div class="form-row"><label for="node-input-timeout">ACK timeout</label><input type="number" id="node-input-timeout" style="width:80px"> ms</div>
   <div class="form-row"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
   <div class="form-row"><label for="node-input-topic">Topic</label><select id="node-input-topic"><option value="camera">Camera</option><option value="gimbal">Gimbal</option><option value="servo">Servo</option><option value="release">Release</option></select></div>
-  <div class="form-row"><label for="node-input-verb">Verb</label><input type="text" id="node-input-verb" placeholder="photo, aim, set, gripper"></div>
+  <div class="form-row"><label for="node-input-verb">Verb</label><select id="node-input-verb"></select></div>
   <div class="form-row"><label for="node-input-path">Gimbal path</label><select id="node-input-path"><option value="legacy">DO_MOUNT_CONTROL</option><option value="manager">GIMBAL_MANAGER_SET_PITCHYAW</option></select></div>
   <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
   <div class="form-row"><label for="node-input-targetComponent">Target compid</label><input type="number" id="node-input-targetComponent" min="0" max="255"></div>

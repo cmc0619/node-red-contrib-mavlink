@@ -1,8 +1,7 @@
 'use strict';
 
 /**
- * Build editor: Vehicle and Connection are config-node pickers with edit/add
- * (§6), not free-form ids.
+ * Build editor: Message is a dialect dropdown; fields reshape by selection (§6).
  */
 
 const test = require('node:test');
@@ -29,6 +28,29 @@ test('Build connection default declares type mavlink-connection', () => {
     /connection:\s*\{\s*value:\s*''\s*,\s*type:\s*'mavlink-connection'/,
     'defaults.connection.type must be mavlink-connection'
   );
+});
+
+test('Build messageName defaults to HEARTBEAT and is a <select>', () => {
+  assert.match(html, /messageName:\s*\{\s*value:\s*'HEARTBEAT'/);
+  assert.match(html, /<select id="node-input-messageName"/);
+  assert.ok(
+    !html.includes('placeholder="e.g. HEARTBEAT"'),
+    'free-form message placeholder must be gone'
+  );
+});
+
+test('Build reshapes fields from message metadata and handles COMMAND_LONG', () => {
+  assert.match(html, /\/mavlink\/build\/messages/);
+  assert.match(html, /function refreshFieldForm/);
+  assert.match(html, /spec\.enum/);
+  assert.match(html, /COMMAND_LONG/);
+  assert.match(html, /mav-build-command-select/);
+  assert.match(html, /isCommandParamSlot/);
+  assert.ok(
+    !/<textarea id="node-input-fields"/.test(html),
+    'raw JSON fields textarea must be replaced by dynamic controls'
+  );
+  assert.match(html, /oneditsave/);
 });
 
 test('Build oneditprepare ensures standard config-node pickers', () => {
