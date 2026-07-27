@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "05 Swarm arm",
     "disabled": false,
-    "info": "Sequential arm across multiple vehicles — dry-run first, then live send.",
+    "info": "Sequential arm across multiple vehicles \u2014 dry-run first, then live send.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex05-tab",
     "name": "Swarm sequential arm",
-    "info": "Dry-run inject plans the arm fan-out without sending. Live inject uses Send and confirm across ArduPilot SITL sysids 1–5 (DESIGN.md §13). Requires active peers on the Connection peer table. Clear Dry run on the live node before deploying against real vehicles.",
+    "info": "Dry-run then live sequential arm across ArduPilot SITL sysids 1\u20135. Live node has confirm=true. Bind 127.0.0.1:14550, remote 14551.",
     "x": 160,
     "y": 40,
     "wires": []
@@ -43,10 +43,10 @@
     "type": "mavlink-connection",
     "name": "UDP swarm",
     "mode": "udp",
-    "bindHost": "0.0.0.0",
+    "bindHost": "127.0.0.1",
     "bindPort": 14550,
     "remoteHost": "127.0.0.1",
-    "remotePort": 14550,
+    "remotePort": 14551,
     "broadcast": false,
     "vehicle": "ex05-vehicle",
     "localIdentity": "ex05-identity",
@@ -65,7 +65,11 @@
     "type": "inject",
     "z": "ex05-tab",
     "name": "Dry run",
-    "props": [{ "p": "payload" }],
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
     "repeat": "",
     "crontab": "",
     "once": false,
@@ -75,7 +79,11 @@
     "payloadType": "date",
     "x": 120,
     "y": 160,
-    "wires": [["ex05-swarm-dry"]]
+    "wires": [
+      [
+        "ex05-swarm-dry"
+      ]
+    ]
   },
   {
     "id": "ex05-swarm-dry",
@@ -114,14 +122,30 @@
     "timeoutMs": 10000,
     "x": 310,
     "y": 160,
-    "wires": [["ex05-dry-done"], ["ex05-dry-status"]]
+    "wires": [
+      [
+        "ex05-dry-done"
+      ],
+      [
+        "ex05-dry-status"
+      ]
+    ]
   },
   {
     "id": "ex05-inject-live",
     "type": "inject",
     "z": "ex05-tab",
     "name": "Live arm",
-    "props": [{ "p": "payload" }],
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "confirmed",
+        "v": "true",
+        "vt": "bool"
+      }
+    ],
     "repeat": "",
     "crontab": "",
     "once": false,
@@ -131,7 +155,11 @@
     "payloadType": "date",
     "x": 120,
     "y": 280,
-    "wires": [["ex05-swarm-live"]]
+    "wires": [
+      [
+        "ex05-swarm-live"
+      ]
+    ]
   },
   {
     "id": "ex05-swarm-live",
@@ -170,7 +198,15 @@
     "timeoutMs": 10000,
     "x": 310,
     "y": 280,
-    "wires": [["ex05-live-done"], ["ex05-live-status"]]
+    "wires": [
+      [
+        "ex05-live-done"
+      ],
+      [
+        "ex05-live-status"
+      ]
+    ],
+    "confirm": true
   },
   {
     "id": "ex05-dry-status",

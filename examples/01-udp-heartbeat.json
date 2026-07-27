@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "01 UDP heartbeat",
     "disabled": false,
-    "info": "Listen for HEARTBEAT on a UDP MAVLink connection. Set Connection remote host/port and Vehicle dialect before deploy.",
+    "info": "Listens on 127.0.0.1:14550 for HEARTBEAT. Point remoteHost/remotePort at your SITL MAVLink input (default 14551). Signing off for local SITL only.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex01-tab",
     "name": "UDP heartbeat monitor",
-    "info": "Binds UDP 14550, filters mavlink-in to HEARTBEAT, and prints decoded fields. Point Connection at your SITL or vehicle (remote host/port) and match the Vehicle dialect (ArduPilot: ardupilotmega, PX4: development).",
+    "info": "Listens on 127.0.0.1:14550 for HEARTBEAT. Point remoteHost/remotePort at your SITL MAVLink input (default 14551). Signing off for local SITL only.",
     "x": 170,
     "y": 40,
     "wires": []
@@ -43,10 +43,10 @@
     "type": "mavlink-connection",
     "name": "UDP SITL",
     "mode": "udp",
-    "bindHost": "0.0.0.0",
+    "bindHost": "127.0.0.1",
     "bindPort": 14550,
     "remoteHost": "127.0.0.1",
-    "remotePort": 14550,
+    "remotePort": 14551,
     "broadcast": false,
     "vehicle": "ex01-vehicle",
     "localIdentity": "ex01-identity",
@@ -73,7 +73,11 @@
     "rateLimit": 0,
     "x": 200,
     "y": 140,
-    "wires": [["ex01-debug"]]
+    "wires": [
+      [
+        "ex01-debug"
+      ]
+    ]
   },
   {
     "id": "ex01-debug",

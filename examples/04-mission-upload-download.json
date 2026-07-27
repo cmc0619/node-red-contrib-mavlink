@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex04-tab",
     "name": "Mission upload then download",
-    "info": "Uploads a minimal two-waypoint plan (Canberra SITL coordinates), then downloads the mission on success. Both nodes use Send and confirm delivery. Set Connection remote host/port and Vehicle dialect before deploy.",
+    "info": "Upload a tiny mission then download it. Connection bind 14550 (where SITL sends), remote 14551 (SITL input). Edit Vehicle target and mission items as needed.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -43,10 +43,10 @@
     "type": "mavlink-connection",
     "name": "UDP SITL",
     "mode": "udp",
-    "bindHost": "0.0.0.0",
+    "bindHost": "127.0.0.1",
     "bindPort": 14550,
     "remoteHost": "127.0.0.1",
-    "remotePort": 14550,
+    "remotePort": 14551,
     "broadcast": false,
     "vehicle": "ex04-vehicle",
     "localIdentity": "ex04-identity",
@@ -65,7 +65,11 @@
     "type": "inject",
     "z": "ex04-tab",
     "name": "Upload mission",
-    "props": [{ "p": "payload" }],
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
     "repeat": "",
     "crontab": "",
     "once": false,
@@ -75,7 +79,11 @@
     "payloadType": "date",
     "x": 140,
     "y": 160,
-    "wires": [["ex04-upload"]]
+    "wires": [
+      [
+        "ex04-upload"
+      ]
+    ]
   },
   {
     "id": "ex04-upload",
@@ -95,7 +103,14 @@
     "maxRetries": "",
     "x": 350,
     "y": 160,
-    "wires": [["ex04-download"], ["ex04-upload-status"]]
+    "wires": [
+      [
+        "ex04-download"
+      ],
+      [
+        "ex04-upload-status"
+      ]
+    ]
   },
   {
     "id": "ex04-download",
@@ -115,7 +130,14 @@
     "maxRetries": "",
     "x": 560,
     "y": 160,
-    "wires": [["ex04-items"], ["ex04-download-status"]]
+    "wires": [
+      [
+        "ex04-items"
+      ],
+      [
+        "ex04-download-status"
+      ]
+    ]
   },
   {
     "id": "ex04-upload-status",

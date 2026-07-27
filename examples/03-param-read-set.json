@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "03 Param read set",
     "disabled": false,
-    "info": "Separate Param read and Param set (echo-confirm) demos — not chained, so a read PARAM_VALUE cannot race a set confirmation.",
+    "info": "Separate Param read and Param set (echo-confirm) demos \u2014 not chained, so a read PARAM_VALUE cannot race a set confirmation.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex03-tab",
     "name": "Param read and set (separate injects)",
-    "info": "Two independent demos. Read requests SYSID_THISMAV (Send). Set writes RTL_ALT with Send & confirm so the echo matcher waits for that set's PARAM_VALUE — never wire read continue into set. Edit the set inject payload value for your vehicle. Set Connection and Vehicle target before deploy.",
+    "info": "Two independent demos \u2014 not chained. Read requests SYSID_THISMAV (Send). Set writes RTL_ALT from the inject JSON (Send & confirm). Never wire read continue into set. Align each Param targetSystem with the Vehicle profile before deploy.",
     "x": 220,
     "y": 40,
     "wires": []
@@ -43,10 +43,10 @@
     "type": "mavlink-connection",
     "name": "UDP SITL",
     "mode": "udp",
-    "bindHost": "0.0.0.0",
+    "bindHost": "127.0.0.1",
     "bindPort": 14550,
     "remoteHost": "127.0.0.1",
-    "remotePort": 14550,
+    "remotePort": 14551,
     "broadcast": false,
     "vehicle": "ex03-vehicle",
     "localIdentity": "ex03-identity",
@@ -65,7 +65,11 @@
     "type": "inject",
     "z": "ex03-tab",
     "name": "Read SYSID_THISMAV",
-    "props": [{ "p": "payload" }],
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
     "repeat": "",
     "crontab": "",
     "once": false,
@@ -75,7 +79,11 @@
     "payloadType": "date",
     "x": 160,
     "y": 140,
-    "wires": [["ex03-read"]]
+    "wires": [
+      [
+        "ex03-read"
+      ]
+    ]
   },
   {
     "id": "ex03-read",
@@ -94,7 +102,14 @@
     "paramType": "MAV_PARAM_TYPE_REAL32",
     "x": 380,
     "y": 140,
-    "wires": [["ex03-read-done"], ["ex03-read-status"]]
+    "wires": [
+      [
+        "ex03-read-done"
+      ],
+      [
+        "ex03-read-status"
+      ]
+    ]
   },
   {
     "id": "ex03-inject-set",
@@ -117,7 +132,11 @@
     "payloadType": "date",
     "x": 140,
     "y": 280,
-    "wires": [["ex03-set"]]
+    "wires": [
+      [
+        "ex03-set"
+      ]
+    ]
   },
   {
     "id": "ex03-set",
@@ -136,7 +155,14 @@
     "paramType": "MAV_PARAM_TYPE_REAL32",
     "x": 390,
     "y": 280,
-    "wires": [["ex03-set-done"], ["ex03-set-status"]]
+    "wires": [
+      [
+        "ex03-set-done"
+      ],
+      [
+        "ex03-set-status"
+      ]
+    ]
   },
   {
     "id": "ex03-read-status",

@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex02-tab",
     "name": "Arm then takeoff",
-    "info": "Inject triggers Arm (Send & confirm). On success, Takeoff runs with Send & await completion. Status records appear on each node's second output. Set Connection remote host/port and Vehicle target sysid before deploy.",
+    "info": "Arm (confirm) \u2192 Takeoff (await completion). Command targets inherit the Vehicle profile when target fields are blank \u2014 edit the Vehicle defaultTargetSystem. Connection: bind 14550, remote 14551 for typical SITL.",
     "x": 150,
     "y": 40,
     "wires": []
@@ -43,10 +43,10 @@
     "type": "mavlink-connection",
     "name": "UDP SITL",
     "mode": "udp",
-    "bindHost": "0.0.0.0",
+    "bindHost": "127.0.0.1",
     "bindPort": 14550,
     "remoteHost": "127.0.0.1",
-    "remotePort": 14550,
+    "remotePort": 14551,
     "broadcast": false,
     "vehicle": "ex02-vehicle",
     "localIdentity": "ex02-identity",
@@ -65,7 +65,11 @@
     "type": "inject",
     "z": "ex02-tab",
     "name": "Start chain",
-    "props": [{ "p": "payload" }],
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
     "repeat": "",
     "crontab": "",
     "once": false,
@@ -75,7 +79,11 @@
     "payloadType": "date",
     "x": 130,
     "y": 160,
-    "wires": [["ex02-arm"]]
+    "wires": [
+      [
+        "ex02-arm"
+      ]
+    ]
   },
   {
     "id": "ex02-arm",
@@ -87,8 +95,8 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex02-connection",
-    "targetSysid": "1",
-    "targetCompid": "1",
+    "targetSysid": "",
+    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -96,7 +104,14 @@
     "params": "{}",
     "x": 320,
     "y": 160,
-    "wires": [["ex02-takeoff"], ["ex02-arm-status"]]
+    "wires": [
+      [
+        "ex02-takeoff"
+      ],
+      [
+        "ex02-arm-status"
+      ]
+    ]
   },
   {
     "id": "ex02-takeoff",
@@ -108,8 +123,8 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex02-connection",
-    "targetSysid": "1",
-    "targetCompid": "1",
+    "targetSysid": "",
+    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -117,7 +132,14 @@
     "params": "{\"7\":10}",
     "x": 520,
     "y": 160,
-    "wires": [["ex02-done"], ["ex02-takeoff-status"]]
+    "wires": [
+      [
+        "ex02-done"
+      ],
+      [
+        "ex02-takeoff-status"
+      ]
+    ]
   },
   {
     "id": "ex02-arm-status",
