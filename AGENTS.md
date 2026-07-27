@@ -27,6 +27,10 @@ displaced). Prefer a Cursor Automation on GitHub **CI completed** + **PR review 
 **Codex re-review is manual.** CodeRabbit and Greptile re-run on push; Codex does not.
 After pushing review fixes, post a top-level PR comment exactly: `@codex review`.
 
+**Resolve review threads as they are handled.** When a finding is fixed (or declined with a
+DESIGN.md / §14 reason), mark its GitHub review thread Resolved — do not leave fixed threads
+open for the next passer-by.
+
 **GitHub → Cursor wake-up (owner setup).** Create a private automation at
 https://cursor.com/automations (or `/automate` in the Agents Window) on this repo with
 triggers: **CI completed** (covers CodeRabbit / Greptile check completion) and **PR review

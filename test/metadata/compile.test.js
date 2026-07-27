@@ -99,6 +99,7 @@ test('enum bitmask flag and value notations: decimal, hex, power, beyond-safe-in
       '<enum name="MY_FLAGS" bitmask="true">' +
         '<entry value="1" name="MY_FLAGS_A"/>' +
         '<entry value="0x2" name="MY_FLAGS_B"/>' +
+        '<entry value="-0x2" name="MY_FLAGS_NEG"/>' +
         '<entry value="2**2" name="MY_FLAGS_C"/>' +
         '<entry value="9223372036854775808" name="MY_FLAGS_BIG"/>' +
       '</enum>' +
@@ -110,6 +111,7 @@ test('enum bitmask flag and value notations: decimal, hex, power, beyond-safe-in
   const byName = Object.fromEntries(e.entries.map((x) => [x.name, x.value]));
   assert.equal(byName.MY_FLAGS_A, 1);
   assert.equal(byName.MY_FLAGS_B, 2);
+  assert.equal(byName.MY_FLAGS_NEG, -2);
   assert.equal(byName.MY_FLAGS_C, 4);
   assert.equal(byName.MY_FLAGS_BIG, '9223372036854775808');
 });
