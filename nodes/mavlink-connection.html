@@ -20,7 +20,11 @@
       } },
       remoteHost: { value: '' },
       remotePort: { value: '', validate: RED.validators.number(true) },
-      serialPath: { value: '' },
+      serialPath: { value: '', validate: function (v) {
+        var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
+        if (mode !== 'serial') return true;
+        return String(v == null ? '' : v).trim().length > 0;
+      } },
       baudRate: { value: 57600, validate: function (v) {
         var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
         if (mode !== 'serial') return true;

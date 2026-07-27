@@ -27,6 +27,7 @@ class MockSocket extends EventEmitter {
     this.remotePort = endpoint.port;
     this.writes = [];
     this.closed = false;
+    this.destroyed = false;
     this.nextWriteResult = true;
   }
 
@@ -48,6 +49,13 @@ class MockSocket extends EventEmitter {
       this.emit('close');
       if (callback) callback();
     }, 0);
+  }
+
+  destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.closed = true;
+    this.emit('close');
   }
 
   /** @param {Buffer} buffer */
@@ -428,5 +436,20 @@ test('close ends tracked sockets, closes the listener, and removes clients on so
 
   assert.equal(closed, true);
   assert.equal(net.servers[0].closed, true);
-  assert.equal(remainingClient.closed, true);
+  assert.equal(remainingClient.destroyed, true);
+});
+
+test('client close after disconnect still invokes the close callback', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ remoteAddress: '127.0.0.1', remotePort: 5760 }, { net: net.module });
+  await transport.open();
+  transport.on('error', () => {});
+  net.clients[0].emit('close');
+
+  let closed = false;
+  transport.close(() => {
+    closed = true;
+  });
+  assert.equal(closed, true);
+  assert.equal(net.clients[0].destroyed, true);
 });

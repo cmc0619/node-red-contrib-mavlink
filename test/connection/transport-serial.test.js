@@ -14,12 +14,24 @@ class FakeSerialPort extends EventEmitter {
     this.isOpen = false;
     this.writes = [];
     this.closed = false;
+    this.openCallback = null;
     FakeSerialPort.instances.push(this);
   }
 
   open(callback) {
+    this.openCallback = callback;
+    if (FakeSerialPort.deferOpen) return;
     this.isOpen = true;
     setTimeout(() => callback(), 0);
+  }
+
+  /** Complete a deferred open() for race tests. */
+  completeOpen(err) {
+    if (!this.openCallback) return;
+    if (!err) this.isOpen = true;
+    const cb = this.openCallback;
+    this.openCallback = null;
+    cb(err);
   }
 
   write(buffer, callback) {
@@ -47,6 +59,7 @@ FakeSerialPort.instances = [];
 function resetFakeSerialPort() {
   FakeSerialPort.instances = [];
   FakeSerialPort.prototype.writeReturn = true;
+  FakeSerialPort.deferOpen = false;
 }
 
 function openTransport(config = {}) {
@@ -139,11 +152,42 @@ test('send soft-fails with SERIAL_NO_DESTINATION when the port is not open', () 
   resetFakeSerialPort();
   const transport = new SerialTransport({ path: '/dev/ttyUSB0' }, { SerialPort: FakeSerialPort });
 
+  let called = false;
   transport.send(Buffer.from('abc'), null, (err) => {
     assert.equal(err.code, SERIAL_NO_DESTINATION);
     assert.match(err.message, /not open/i);
+    called = true;
   });
+  assert.equal(called, true);
 });
+
+test('close during in-flight open releases the port when open completes', async () => {
+  resetFakeSerialPort();
+  FakeSerialPort.deferOpen = true;
+  const transport = new SerialTransport(
+    { path: '/dev/ttyUSB0', baudRate: 57600 },
+    { SerialPort: FakeSerialPort }
+  );
+  const opening = transport.open();
+  const port = FakeSerialPort.instances[0];
+
+  let closed = false;
+  transport.close(() => {
+    closed = true;
+  });
+  assert.equal(closed, true);
+  assert.equal(port.closed, false);
+
+  port.completeOpen();
+  await opening;
+  await tick();
+  assert.equal(port.closed, true);
+});
+
+/** @returns {Promise<void>} */
+function tick() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 test('close closes the port and emits close', async () => {
   const { transport, opened, port } = openTransport();

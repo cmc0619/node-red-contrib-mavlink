@@ -80,6 +80,11 @@ test('Connection editor offers UDP, TCP, and serial without “not yet” stubs'
   assert.match(html, /function refreshTransportRows/, 'mode toggles transport field rows');
   assert.match(html, /node-config-input-serialPath/, 'serial path field is present');
   assert.match(html, /node-config-input-baudRate/, 'baud field is present');
+  assert.match(
+    html,
+    /serialPath:[\s\S]*validate:[\s\S]*mode !== 'serial'[\s\S]*trim\(\)\.length > 0/,
+    'serial path is required in serial mode'
+  );
 });
 
 test('Local Identity editor exposes heartbeatIntervalMs', () => {
