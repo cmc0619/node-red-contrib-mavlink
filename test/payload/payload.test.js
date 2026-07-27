@@ -10,7 +10,7 @@ test('camera photo builds a command-backed IMAGE_START_CAPTURE payload action', 
     topic: 'camera',
     verb: 'photo',
     target: { sysid: 2, compid: 100 },
-    values: { count: 3, interval: 1.5 },
+    values: { cameraId: 4, count: 3, interval: 1.5, sequence: 7 },
   });
 
   assert.equal(built.confirmation, 'command_ack');
@@ -18,8 +18,24 @@ test('camera photo builds a command-backed IMAGE_START_CAPTURE payload action', 
   assert.equal(built.message.fields.command, 2000);
   assert.equal(built.message.fields.target_system, 2);
   assert.equal(built.message.fields.target_component, 100);
+  // MAV_CMD_IMAGE_START_CAPTURE: p1=camera id, p2=interval, p3=count, p4=sequence.
+  assert.equal(built.message.fields.param1, 4);
   assert.equal(built.message.fields.param2, 1.5);
   assert.equal(built.message.fields.param3, 3);
+  assert.equal(built.message.fields.param4, 7);
+});
+
+test('camera photo defaults camera id and sequence to 0 and count to 1', () => {
+  const built = buildPayloadMessage({
+    topic: 'camera',
+    verb: 'photo',
+    target: { sysid: 1, compid: 1 },
+    values: { interval: 2 },
+  });
+  assert.equal(built.message.fields.param1, 0);
+  assert.equal(built.message.fields.param2, 2);
+  assert.equal(built.message.fields.param3, 1);
+  assert.equal(built.message.fields.param4, 0);
 });
 
 test('gimbal manager aim uses the message path and declares no confirmation', () => {
