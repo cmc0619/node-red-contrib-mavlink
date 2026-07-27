@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex03-tab",
     "name": "Param read and set (separate injects)",
-    "info": "Two independent demos \u2014 not chained. Read requests SYSID_THISMAV (Send). Set writes RTL_ALT from the inject JSON (Send & confirm). Never wire read continue into set. Align each Param targetSystem with the Vehicle profile before deploy.",
+    "info": "Two independent demos \u2014 not chained. Read requests MAV_SYSID (Send). Set writes FS_GCS_ENABLE from the inject JSON with Send & confirm (DESIGN.md \u00a79 echo-confirm). Never wire read continue into set. Align Param targetSystem with the Vehicle profile. Param names match current ArduPilot; change them if your firmware differs.",
     "x": 220,
     "y": 40,
     "wires": []
@@ -64,7 +64,7 @@
     "id": "ex03-inject-read",
     "type": "inject",
     "z": "ex03-tab",
-    "name": "Read SYSID_THISMAV",
+    "name": "Read MAV_SYSID",
     "props": [
       {
         "p": "payload"
@@ -96,7 +96,7 @@
     "firmware": "ardupilot",
     "targetSystem": 1,
     "targetComponent": 1,
-    "paramId": "SYSID_THISMAV",
+    "paramId": "MAV_SYSID",
     "paramIndex": -1,
     "value": "",
     "paramType": "MAV_PARAM_TYPE_REAL32",
@@ -115,11 +115,11 @@
     "id": "ex03-inject-set",
     "type": "inject",
     "z": "ex03-tab",
-    "name": "Set RTL_ALT",
+    "name": "Set FS_GCS_ENABLE",
     "props": [
       {
         "p": "payload",
-        "v": "{\"action\":\"set\",\"paramId\":\"RTL_ALT\",\"value\":1500,\"paramType\":\"MAV_PARAM_TYPE_REAL32\"}",
+        "v": "{\"action\":\"set\",\"paramId\":\"FS_GCS_ENABLE\",\"value\":1,\"paramType\":\"MAV_PARAM_TYPE_REAL32\"}",
         "vt": "json"
       }
     ],
@@ -149,7 +149,7 @@
     "firmware": "ardupilot",
     "targetSystem": 1,
     "targetComponent": 1,
-    "paramId": "RTL_ALT",
+    "paramId": "FS_GCS_ENABLE",
     "paramIndex": -1,
     "value": "",
     "paramType": "MAV_PARAM_TYPE_REAL32",

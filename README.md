@@ -42,11 +42,11 @@ Importable flows live in [`examples/`](examples/). In the Node-RED editor: **Imp
 |------|----------------|
 | `01-udp-heartbeat.json` | Local Identity + Vehicle + Connection (UDP) + mavlink-in on HEARTBEAT |
 | `02-arm-takeoff-chain.json` | Command arm (confirm) chained to takeoff (await completion) |
-| `03-param-read-set.json` | Param read and set (separate injects; echo-confirm on set) |
+| `03-param-read-set.json` | Param read (MAV_SYSID) and set (FS_GCS_ENABLE) as separate injects |
 | `04-mission-upload-download.json` | Mission upload then download |
 | `05-swarm-arm.json` | Swarm sequential arm — dry-run then live |
 
-Before deploying against a vehicle or SITL, set each example's **Connection** remote host/port and match the **Vehicle** dialect and target system id to your link.
+Before deploying against a vehicle or SITL, set each example's **Connection** endpoints (`bind` is where traffic arrives — typically `127.0.0.1:14550`; `remote` is the vehicle/SITL input — often `14551`) and match the **Vehicle** dialect and default target system id to your link.
 
 ## Development
 
