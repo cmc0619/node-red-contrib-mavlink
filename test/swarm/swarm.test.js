@@ -194,6 +194,150 @@ test('broadcast aggregate warns about mixed firmware for uniform commands', asyn
   assert.match(result.warnings.join('\n'), /mixed firmware/);
 });
 
+test('broadcast refuses a filtered or explicit-list selection and sends nothing (§10)', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  const list = await executeSwarm({
+    connection,
+    action: commandAction(),
+    mode: 'broadcast',
+    delivery: 'send',
+    selection: { mode: 'list', sysids: '1' },
+  });
+  const filter = await executeSwarm({
+    connection,
+    action: commandAction(),
+    mode: 'broadcast',
+    delivery: 'send',
+    selection: { mode: 'filter', filter: { firmware: 'px4' } },
+  });
+
+  assert.equal(list.result, 'refused');
+  assert.match(list.detail, /broadcast/);
+  assert.match(list.detail, /list/);
+  assert.equal(filter.result, 'refused');
+  assert.match(filter.detail, /filter/);
+  assert.equal(connection.sends.length, 0, 'a refused broadcast blasts nobody');
+});
+
+test('broadcast still allows an explicit all-vehicles selection', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  const result = await executeSwarm({
+    connection,
+    action: commandAction(),
+    mode: 'broadcast',
+    delivery: 'send',
+    selection: { mode: 'all' },
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(connection.sends.length, 1);
+  assert.equal(connection.sends[0].message.fields.target_system, 0);
+});
+
+test('a safety preset (Flight Termination) is refused without confirmation and runs with it (§10)', async () => {
+  const action = { type: 'command', preset: 'flight_termination', params: { 1: 1 } };
+
+  const refused = await executeSwarm({
+    connection: connectionStub([peer(1)]),
+    action,
+    mode: 'sequential',
+    delivery: 'send',
+  });
+  assert.equal(refused.result, 'refused');
+  assert.match(refused.detail, /confirm/i);
+
+  const confirmedConnection = connectionStub([peer(1)]);
+  const confirmed = await executeSwarm({
+    connection: confirmedConnection,
+    action,
+    mode: 'sequential',
+    delivery: 'send',
+    confirmed: true,
+  });
+  assert.equal(confirmed.success, true);
+  assert.equal(confirmedConnection.sends[0].message.fields.command, 185);
+});
+
+test('a raw DO_FLIGHTTERMINATION command id is gated the same as the preset (§10)', async () => {
+  const refused = await executeSwarm({
+    connection: connectionStub([peer(1)]),
+    action: { type: 'command', commandId: 185, params: { 1: 1 } },
+    mode: 'broadcast',
+    delivery: 'send',
+  });
+  assert.equal(refused.result, 'refused');
+  assert.match(refused.detail, /confirm/i);
+});
+
+test('a preset resolves its own command id, ignoring a leftover default (§9/§10)', async () => {
+  const connection = connectionStub([peer(1)]);
+
+  const result = await executeSwarm({
+    connection,
+    // Editor left commandId at its 400 default while a preset was selected.
+    action: { type: 'command', preset: 'takeoff', commandId: 400, params: {} },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(connection.sends[0].message.fields.command, 22, 'MAV_CMD_NAV_TAKEOFF, not the 400 default');
+});
+
+test('advanced command params preserve NaN instead of coercing it to 0 (§9)', async () => {
+  const connection = connectionStub([peer(1)]);
+
+  const result = await executeSwarm({
+    connection,
+    action: { type: 'command', commandId: 115, params: { 1: 90, 4: NaN } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  assert.equal(result.success, true);
+  const fields = connection.sends[0].message.fields;
+  assert.equal(fields.param1, 90);
+  assert.ok(Number.isNaN(fields.param4), 'a NaN "keep current" param survives to the wire');
+});
+
+test('broadcast confirm matches COMMAND_ACK on sysid AND component (§10)', async () => {
+  const handlers = [];
+  const connection = {
+    peerTable: peerTableStub([peer(1)]),
+    sends: [],
+    send(message, options) {
+      this.sends.push({ message, options });
+    },
+    subscribe(filter, handler) {
+      handlers.push(handler);
+      return () => {};
+    },
+  };
+  const deliver = (decoded) => handlers.forEach((h) => h(decoded));
+
+  const promise = executeSwarm({
+    connection,
+    action: commandAction({ params: { 1: 1 } }),
+    mode: 'broadcast',
+    delivery: 'confirm',
+    selection: { mode: 'all' },
+    timeoutMs: 1000,
+  });
+
+  // A gimbal (component 154) FAILED ack must be ignored — matching sysid alone
+  // would wrongly settle the autopilot's command as failed.
+  deliver({ sysid: 1, compid: 154, fields: { command: 400, result: 4 } });
+  // The addressed autopilot (component 1) then ACCEPTS.
+  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 0 } });
+
+  const result = await promise;
+  assert.equal(result.success, true, 'the autopilot ack, not the gimbal ack, decided the outcome');
+  const member = result.members.find((m) => m.sysid === 1);
+  assert.equal(member.confirmedBy, 'ack');
+});
+
 function commandAction(overrides = {}) {
   return { type: 'command', commandId: 400, params: {}, ...overrides };
 }

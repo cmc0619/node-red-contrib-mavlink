@@ -24,7 +24,8 @@ test('mavlink-swarm node emits continue only for all-success aggregate', async (
   });
 
   assert.equal(sent[0].payload.result, 'succeeded');
-  assert.equal(sent[1].payload.result, 'succeeded');
+  assert.equal(sent[1].result, 'succeeded');
+  assert.equal(require('../../lib/delivery').isStatusRecord(sent[1]), true, 'output 1 aggregate carries the marker at root');
   assert.equal(connection.sends.length, 2);
 });
 
@@ -49,8 +50,33 @@ test('mavlink-swarm node refuses status-record input on output 1 only', async ()
   );
 
   assert.equal(sent[0], null);
-  assert.equal(sent[1].payload.result, 'refused');
+  assert.equal(sent[1].result, 'refused');
   assert.equal(connection.sends.length, 0);
+});
+
+test('mavlink-swarm node gates a safety preset on msg.confirmed / node confirm (§10)', async () => {
+  const RED = redStub({ conn: connectionStub([peer(1)]) });
+  require('../../nodes/mavlink-swarm')(RED);
+  const Node = RED.nodes.types['mavlink-swarm'];
+
+  // No confirmation anywhere → refused, nothing sent.
+  const gated = new Node({ connection: 'conn', actionType: 'command', preset: 'flight_termination', delivery: 'send' });
+  let sent;
+  await emitInput(gated, { payload: { 1: 1 } }, (m) => { sent = m; });
+  assert.equal(sent[0], null);
+  assert.equal(sent[1].result, 'refused');
+  assert.match(sent[1].detail, /confirm/i);
+
+  // msg.confirmed === true clears the gate.
+  const conn2 = connectionStub([peer(1)]);
+  const RED2 = redStub({ conn: conn2 });
+  require('../../nodes/mavlink-swarm')(RED2);
+  const okNode = new (RED2.nodes.types['mavlink-swarm'])({
+    connection: 'conn', actionType: 'command', preset: 'flight_termination', delivery: 'send',
+  });
+  await emitInput(okNode, { payload: { 1: 1 }, confirmed: true }, () => {});
+  assert.equal(conn2.sends.length, 1);
+  assert.equal(conn2.sends[0].message.fields.command, 185);
 });
 
 function emitInput(node, msg, send) {

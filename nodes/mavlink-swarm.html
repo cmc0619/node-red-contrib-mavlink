@@ -13,6 +13,7 @@
       executionMode: { value: 'sequential' },
       intervalMs: { value: 100, validate: RED.validators.number() },
       dryRun: { value: false },
+      confirm: { value: false },
       delivery: { value: 'build' },
       actionType: { value: 'command' },
       commandId: { value: 400, validate: RED.validators.number() },
@@ -54,6 +55,7 @@
   <div class="form-row"><label for="node-input-executionMode">Execution</label><select id="node-input-executionMode"><option value="sequential">Sequential</option><option value="broadcast">Broadcast</option></select></div>
   <div class="form-row"><label for="node-input-intervalMs">Interval ms</label><input type="number" id="node-input-intervalMs" min="0"></div>
   <div class="form-row"><label for="node-input-dryRun">Dry run</label><input type="checkbox" id="node-input-dryRun" style="display:inline-block;width:auto;"></div>
+  <div class="form-row"><label for="node-input-confirm">Confirm</label><input type="checkbox" id="node-input-confirm" style="display:inline-block;width:auto;"> <span>Allow safety commands (Flight Termination)</span></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
   <div class="form-row"><label for="node-input-actionType">Action</label><select id="node-input-actionType"><option value="command">Command</option><option value="move">Move</option><option value="payload">Payload</option><option value="param">Param set</option><option value="mission">Mission (refused)</option></select></div>
   <div class="form-row"><label for="node-input-commandId">Command</label><input type="number" id="node-input-commandId" placeholder="MAV_CMD value"></div>
@@ -78,4 +80,6 @@
   <p>Fans one single-message MAVLink action out across the active vehicles selected from a Connection peer table.</p>
   <p>Sequential mode sends one targeted message per member at the configured interval. Broadcast mode sends one packet with target_system 0 and target_component 1.</p>
   <p>Output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail. Mission actions and parameter list requests are refused.</p>
+  <p>Broadcast requires the <i>All active vehicles</i> selection: a broadcast packet reaches every vehicle on the link, so it cannot honour a filtered or explicit-list subset. Use sequential fan-out for a subset.</p>
+  <p>Safety commands (Flight Termination) are refused unless the <b>Confirm</b> box is ticked or <code>msg.confirmed = true</code> is set.</p>
 </script>
