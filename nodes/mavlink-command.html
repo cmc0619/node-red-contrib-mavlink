@@ -43,8 +43,10 @@
     return opts;
   }
 
-  // ── Preset cache loaded from server ───────────────────────────────────────
+  // ── Preset / command caches loaded from server ─────────────────────────────
   let _presetGroups = null;
+  /** @type {Object<string, Array<{name:string,value:number,label:string}>>} */
+  const _commandsByDialect = {};
 
   function loadPresets(cb) {
     if (_presetGroups) { cb(_presetGroups); return; }
@@ -54,6 +56,44 @@
     }).fail(function () {
       _presetGroups = [];
       cb(_presetGroups);
+    });
+  }
+
+  /**
+   * Dialect for the Advanced MAV_CMD list: the Connection's bound Vehicle
+   * Profile dialect when a connection is selected, otherwise ardupilotmega.
+   * Uses the editor-side config graph (RED.nodes.node), not a runtime lookup.
+   *
+   * @returns {string}
+   */
+  function resolveEditorDialect() {
+    const connId = $('#node-input-connection').val();
+    if (!connId || typeof RED === 'undefined' || !RED.nodes || !RED.nodes.node) {
+      return 'ardupilotmega';
+    }
+    const conn = RED.nodes.node(connId);
+    if (!conn || !conn.vehicle) return 'ardupilotmega';
+    const vehicle = RED.nodes.node(conn.vehicle);
+    if (!vehicle || !vehicle.dialect || vehicle.dialect === 'custom') {
+      return 'ardupilotmega';
+    }
+    return vehicle.dialect;
+  }
+
+  /**
+   * Load the MAV_CMD list for a dialect and invoke cb(commands).
+   * @param {string} dialect
+   * @param {function(Array):void} cb
+   */
+  function loadCommands(dialect, cb) {
+    const key = dialect || 'ardupilotmega';
+    if (_commandsByDialect[key]) { cb(_commandsByDialect[key]); return; }
+    $.getJSON('/mavlink/command/commands', { dialect: key }, function (data) {
+      _commandsByDialect[key] = data.commands || [];
+      cb(_commandsByDialect[key]);
+    }).fail(function () {
+      _commandsByDialect[key] = [];
+      cb(_commandsByDialect[key]);
     });
   }
 
@@ -143,7 +183,10 @@
     paletteLabel: 'command',
     label: function () {
       if (this.name) return this.name;
-      if (this.mode === 'advanced') return `cmd #${this.advancedCommand || '?'}`;
+      if (this.mode === 'advanced') {
+        const id = this.advancedCommand;
+        return id !== undefined && id !== null && id !== '' ? `cmd ${id}` : 'command';
+      }
       return this.preset || 'command';
     },
 
@@ -156,6 +199,7 @@
         if (mode === 'advanced') {
           $('#row-preset').hide();
           $('#row-advanced').show();
+          refreshAdvancedCommands();
         } else {
           $('#row-preset').show();
           $('#row-advanced').hide();
@@ -195,7 +239,29 @@
         refreshDelivery();
       });
 
-      // ── Advanced command field ─────────────────────────────────────────────
+      // ── Advanced MAV_CMD dropdown (§6 / §9 — every command in the dialect) ─
+      function buildAdvancedDropdown(commands) {
+        const sel = $('#node-input-advancedCommand').empty();
+        sel.append($('<option></option>').val('').text('— select MAV_CMD —'));
+        for (const c of commands) {
+          sel.append($('<option></option>').val(String(c.value)).text(c.label));
+        }
+        // Saved values survive async loads (§6): re-apply the persisted id, or
+        // keep a missing id visible rather than silently clearing it.
+        const saved = node.advancedCommand !== undefined && node.advancedCommand !== null
+          ? String(node.advancedCommand)
+          : '';
+        if (saved && !sel.find('option[value="' + saved + '"]').length) {
+          sel.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
+        }
+        if (saved) sel.val(saved);
+        sel.trigger('change');
+      }
+
+      function refreshAdvancedCommands() {
+        loadCommands(resolveEditorDialect(), buildAdvancedDropdown);
+      }
+
       $('#node-input-advancedCommand').on('change', refreshDelivery);
 
       // ── Delivery dropdown ──────────────────────────────────────────────────
@@ -222,7 +288,11 @@
         refreshCompletionRow();
       }
 
-      $('#node-input-connection').on('change', refreshDelivery);
+      $('#node-input-connection').on('change', function () {
+        refreshDelivery();
+        // Connection binds a Vehicle Profile → dialect; Advanced list follows it.
+        if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
+      });
       $('#node-input-delivery').on('change', refreshCompletionRow);
 
       function refreshCompletionRow() {
@@ -314,9 +384,8 @@
   </div>
 
   <div class="form-row" id="row-advanced" style="display:none">
-    <label for="node-input-advancedCommand" style="width:120px">MAV_CMD id</label>
-    <input type="number" id="node-input-advancedCommand" placeholder="e.g. 400" style="width:120px">
-    <span style="margin-left:6px;color:#888;font-size:11px">Numeric command value</span>
+    <label for="node-input-advancedCommand" style="width:120px">MAV_CMD</label>
+    <select id="node-input-advancedCommand" style="width:280px"></select>
   </div>
 
   <!-- Safety notice for presets that require confirmation -->
@@ -427,6 +496,14 @@
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
         vehicle state satisfies the command's completion condition (Arm, Takeoff, Land, Set Mode).</li>
   </ul>
+
+  <h3>Mode</h3>
+  <p>
+    <b>Preset</b> — hand-curated commands with pinned params and friendly names.
+    <b>Advanced</b> — every <code>MAV_CMD</code> in the Connection's Vehicle dialect as a
+    dropdown (name and numeric id); all seven params exposed. The list follows the
+    bound Vehicle Profile when a Connection is selected.
+  </p>
 
   <h3>Details</h3>
   <p>

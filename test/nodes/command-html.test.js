@@ -26,6 +26,20 @@ test('advanced command input binds to the advancedCommand property', () => {
   );
 });
 
+test('advanced command is a MAV_CMD <select>, not a free-form number (§6/§9)', () => {
+  assert.match(
+    html,
+    /<select id="node-input-advancedCommand"/,
+    'Advanced mode must use a select dropdown'
+  );
+  assert.ok(
+    !html.includes('type="number" id="node-input-advancedCommand"'),
+    'the free-form numeric id field must be gone'
+  );
+  assert.match(html, /\/mavlink\/command\/commands/, 'dialect MAV_CMD list is loaded from admin API');
+  assert.match(html, /function buildAdvancedDropdown/, 'async load re-applies the saved command');
+});
+
 test('preset dropdown re-applies the saved selection and fires change after the async load', () => {
   // The preset list loads asynchronously; the builder must re-select the saved
   // preset and trigger a change so the exposed param fields render on first

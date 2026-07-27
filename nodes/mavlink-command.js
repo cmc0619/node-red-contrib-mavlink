@@ -559,11 +559,13 @@ module.exports = function registerMavlinkCommand(RED) {
   }
 
   /**
-   * Admin endpoint: return all preset groups for editor dropdowns.
-   * Registered once per process (§6 "Register with needsPermission").
+   * Admin endpoints for editor dropdowns (§6 "Register with needsPermission").
+   * Registered once per process.
    */
   if (!MavlinkCommandNode._routeRegistered) {
     const { presetGroups } = require('../lib/command');
+    const { listCommandsForDialect, knownDialects } = require('../lib/metadata');
+
     RED.httpAdmin.get(
       '/mavlink/command/presets',
       RED.auth.needsPermission('mavlink.read'),
@@ -571,6 +573,31 @@ module.exports = function registerMavlinkCommand(RED) {
         res.json({ groups: presetGroups() });
       }
     );
+
+    /**
+     * Full MAV_CMD list for Advanced mode. Dialect is an allow-listed bundled
+     * name (§6 — path segments resolve against a known list, never a filesystem
+     * path). Defaults to `ardupilotmega` when omitted.
+     */
+    RED.httpAdmin.get(
+      '/mavlink/command/commands',
+      RED.auth.needsPermission('mavlink.read'),
+      (req, res) => {
+        const requested = typeof req.query.dialect === 'string' && req.query.dialect.trim()
+          ? req.query.dialect.trim()
+          : 'ardupilotmega';
+        try {
+          const commands = listCommandsForDialect(requested);
+          res.json({ dialect: requested, commands });
+        } catch (err) {
+          res.status(400).json({
+            error: err.message,
+            dialects: knownDialects(),
+          });
+        }
+      }
+    );
+
     MavlinkCommandNode._routeRegistered = true;
   }
 
