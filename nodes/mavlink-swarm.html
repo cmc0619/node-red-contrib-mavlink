@@ -1,0 +1,81 @@
+<script type="text/javascript">
+  RED.nodes.registerType('mavlink-swarm', {
+    category: 'mavlink',
+    color: '#ffe6cc',
+    defaults: {
+      name: { value: '' },
+      connection: { value: '', type: 'mavlink-connection', required: true },
+      selectionMode: { value: 'all' },
+      sysids: { value: '' },
+      vehicleType: { value: '' },
+      firmwareFilter: { value: '' },
+      armedFilter: { value: '' },
+      executionMode: { value: 'sequential' },
+      intervalMs: { value: 100, validate: RED.validators.number() },
+      dryRun: { value: false },
+      delivery: { value: 'build' },
+      actionType: { value: 'command' },
+      commandId: { value: 400, validate: RED.validators.number() },
+      preset: { value: '' },
+      params: { value: '{}' },
+      moveMode: { value: 'local-position' },
+      north: { value: 0, validate: RED.validators.number(true) },
+      east: { value: 0, validate: RED.validators.number(true) },
+      up: { value: 0, validate: RED.validators.number(true) },
+      lat: { value: '', validate: RED.validators.number(true) },
+      lon: { value: '', validate: RED.validators.number(true) },
+      alt: { value: '', validate: RED.validators.number(true) },
+      topic: { value: 'camera' },
+      verb: { value: 'photo' },
+      path: { value: 'legacy' },
+      paramAction: { value: 'set' },
+      paramId: { value: '' },
+      value: { value: '', validate: RED.validators.number(true) },
+      paramType: { value: 'MAV_PARAM_TYPE_REAL32' },
+      firmware: { value: 'ardupilot' },
+      timeoutMs: { value: 10000, validate: RED.validators.number() }
+    },
+    inputs: 1,
+    outputs: 2,
+    outputLabels: ['continue', 'status'],
+    icon: 'font-awesome/fa-sitemap',
+    label: function () { return this.name || 'mavlink swarm'; }
+  });
+</script>
+
+<script type="text/html" data-template-name="mavlink-swarm">
+  <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+  <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row"><label for="node-input-selectionMode">Selection</label><select id="node-input-selectionMode"><option value="all">All active vehicles</option><option value="list">Explicit sysid list</option><option value="filter">Filter</option></select></div>
+  <div class="form-row"><label for="node-input-sysids">Sysids</label><input type="text" id="node-input-sysids" placeholder="1,2,3"></div>
+  <div class="form-row"><label for="node-input-vehicleType">Type filter</label><input type="number" id="node-input-vehicleType" placeholder="MAV_TYPE value"></div>
+  <div class="form-row"><label for="node-input-firmwareFilter">Firmware</label><select id="node-input-firmwareFilter"><option value="">Any</option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
+  <div class="form-row"><label for="node-input-armedFilter">Armed</label><select id="node-input-armedFilter"><option value="">Any</option><option value="true">Armed</option><option value="false">Disarmed</option></select></div>
+  <div class="form-row"><label for="node-input-executionMode">Execution</label><select id="node-input-executionMode"><option value="sequential">Sequential</option><option value="broadcast">Broadcast</option></select></div>
+  <div class="form-row"><label for="node-input-intervalMs">Interval ms</label><input type="number" id="node-input-intervalMs" min="0"></div>
+  <div class="form-row"><label for="node-input-dryRun">Dry run</label><input type="checkbox" id="node-input-dryRun" style="display:inline-block;width:auto;"></div>
+  <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
+  <div class="form-row"><label for="node-input-actionType">Action</label><select id="node-input-actionType"><option value="command">Command</option><option value="move">Move</option><option value="payload">Payload</option><option value="param">Param set</option><option value="mission">Mission (refused)</option></select></div>
+  <div class="form-row"><label for="node-input-commandId">Command</label><input type="number" id="node-input-commandId" placeholder="MAV_CMD value"></div>
+  <div class="form-row"><label for="node-input-params">Params JSON</label><input type="text" id="node-input-params" placeholder='{"1":1}'></div>
+  <div class="form-row"><label for="node-input-moveMode">Move mode</label><select id="node-input-moveMode"><option value="local-position">Local position</option><option value="local-velocity">Local velocity</option><option value="global-position">Global position</option></select></div>
+  <div class="form-row"><label for="node-input-north">North</label><input type="number" id="node-input-north"></div>
+  <div class="form-row"><label for="node-input-east">East</label><input type="number" id="node-input-east"></div>
+  <div class="form-row"><label for="node-input-up">Up</label><input type="number" id="node-input-up"></div>
+  <div class="form-row"><label for="node-input-lat">Latitude</label><input type="number" id="node-input-lat"></div>
+  <div class="form-row"><label for="node-input-lon">Longitude</label><input type="number" id="node-input-lon"></div>
+  <div class="form-row"><label for="node-input-alt">Altitude</label><input type="number" id="node-input-alt"></div>
+  <div class="form-row"><label for="node-input-topic">Payload topic</label><select id="node-input-topic"><option value="camera">Camera</option><option value="gimbal">Gimbal</option><option value="servo">Servo</option><option value="release">Release</option></select></div>
+  <div class="form-row"><label for="node-input-verb">Payload verb</label><input type="text" id="node-input-verb" placeholder="photo, set, aim"></div>
+  <div class="form-row"><label for="node-input-path">Payload path</label><select id="node-input-path"><option value="legacy">Legacy</option><option value="manager">Gimbal manager</option></select></div>
+  <div class="form-row"><label for="node-input-paramId">Param id</label><input type="text" id="node-input-paramId" maxlength="16"></div>
+  <div class="form-row"><label for="node-input-value">Param value</label><input type="number" id="node-input-value"></div>
+  <div class="form-row"><label for="node-input-paramType">Param type</label><select id="node-input-paramType"><option value="MAV_PARAM_TYPE_REAL32">REAL32 (9)</option><option value="MAV_PARAM_TYPE_UINT8">UINT8 (1)</option><option value="MAV_PARAM_TYPE_INT8">INT8 (2)</option><option value="MAV_PARAM_TYPE_UINT16">UINT16 (3)</option><option value="MAV_PARAM_TYPE_INT16">INT16 (4)</option><option value="MAV_PARAM_TYPE_UINT32">UINT32 (5)</option><option value="MAV_PARAM_TYPE_INT32">INT32 (6)</option></select></div>
+  <div class="form-row"><label for="node-input-timeoutMs">Timeout ms</label><input type="number" id="node-input-timeoutMs" min="1"></div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-swarm">
+  <p>Fans one single-message MAVLink action out across the active vehicles selected from a Connection peer table.</p>
+  <p>Sequential mode sends one targeted message per member at the configured interval. Broadcast mode sends one packet with target_system 0 and target_component 1.</p>
+  <p>Output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail. Mission actions and parameter list requests are refused.</p>
+</script>
