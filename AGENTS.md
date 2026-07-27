@@ -24,8 +24,10 @@ are addressed or explicitly declined per DESIGN.md §2 (with a §14 note when a 
 displaced). Prefer a Cursor Automation on GitHub **CI completed** + **PR review submitted**
 (see below) over busy-polling — this agent cannot create that automation itself.
 
-**Codex re-review is manual.** CodeRabbit and Greptile re-run on push; Codex does not.
-After pushing review fixes, post a top-level PR comment exactly: `@codex review`.
+**Codex is optional.** CodeRabbit and Greptile re-run on push and are the bot gate. Codex
+(`chatgpt-codex-connector`) often ignores `@codex review` from `cursor[bot]` (it does not
+treat that identity as a triggerer) — do not block the build waiting for it. If a human
+triggers Codex and it leaves findings, handle them; otherwise proceed.
 
 **Resolve review threads as they are handled.** When a finding is fixed (or declined with a
 DESIGN.md / §14 reason), mark its GitHub review thread Resolved — do not leave fixed threads
