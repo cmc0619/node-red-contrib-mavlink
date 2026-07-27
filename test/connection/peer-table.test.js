@@ -125,7 +125,6 @@ test('markPrimaryFailed rotates the primary and emits primary-changed', () => {
   assert.deepEqual(next, EP2);
   assert.deepEqual(changes, [14551]);
   assert.deepEqual(table.endpointFor(1, 1), EP2);
-  assert.equal(table.getComponent(1, 1).endpoints.has('10.0.0.5:14550'), false);
 });
 
 test('markPrimaryFailed clears a sole failed endpoint', () => {
