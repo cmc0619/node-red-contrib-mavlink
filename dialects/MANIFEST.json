@@ -1,0 +1,40 @@
+{
+  "source": {
+    "repo": "mavlink/mavlink",
+    "commit": "de1e078a3a7c53c9262a95b7417959a0f8bf4150",
+    "path": "message_definitions/v1.0",
+    "fetchedAt": "2026-07-27T01:40:14.557Z"
+  },
+  "dialects": [
+    "common",
+    "minimal",
+    "standard",
+    "ardupilotmega",
+    "ASLUAV",
+    "development",
+    "icarous",
+    "storm32",
+    "uAvionix",
+    "ualberta"
+  ],
+  "includeOnly": [
+    "csAirLink",
+    "cubepilot",
+    "loweheiser"
+  ],
+  "files": {
+    "ASLUAV.xml": "c5e15be9309138de988ee4a744bfb431cfa1aed52dd4bc93466fee484fe4197c",
+    "ardupilotmega.xml": "8cff0bf2ae5bec60d16118bf37e1ec6e9f55f54aecc486df0b18f89977479047",
+    "common.xml": "d52b11535a6d05bde21ca9cc9ef1f86522bb6700c152c108d7b68df63b4ff65b",
+    "csAirLink.xml": "f5b5ba62d0b65953438981ca95fc45dceb98d63601dfc0705ad91184227ee24d",
+    "cubepilot.xml": "b4f76d660b41b16746f67fa8e17321ea6b65448791045154105f29b3a70ce7b9",
+    "development.xml": "fbc4c27af39794aeffd4ef626b733310855e918349fc3f1e3126f814c983ed5e",
+    "icarous.xml": "e40ec11a6d76b48eb815c101c96b1849c76a8ba5302a01d39f1941ff9c501bbb",
+    "loweheiser.xml": "31f20f01d436f2fbaaaf86f4a51c60cc01bc42722ae4c5ad403afeaaaa512deb",
+    "minimal.xml": "7bbf84456396089cf4dd9661ebe94e48a81009c047e826ed2778b4b9be60145c",
+    "standard.xml": "fd57e0f3e767821310ba51384faeb6d7a6141f279cecfffe6c7c14b9385569ca",
+    "storm32.xml": "55d7b66ec1e698e7b8562df81ee564f21bb8745f9af1243889df65e0b154e42d",
+    "uAvionix.xml": "288ce94228833ce7823d4775bc3c0ad3fedd3e0d01684119223a61c44eba9e9a",
+    "ualberta.xml": "c9103962c2b2300be92b4159605a650bb8f72d0071f3e45655fced7683c5d20d"
+  }
+}

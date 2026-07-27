@@ -1,0 +1,23 @@
+{
+  "name": "node-red-contrib-mavlink",
+  "version": "0.0.1",
+  "description": "MAVLink toolkit for Node-RED — GCS and companion roles, one node set.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cmc0619/node-red-contrib-mavlink.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.10.1"
+  },
+  "devDependencies": {
+    "eslint": "^10.8.0"
+  }
+}
