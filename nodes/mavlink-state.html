@@ -1,34 +1,93 @@
 <script type="text/javascript">
-  RED.nodes.registerType('mavlink-state', {
-    category: 'mavlink',
-    color: '#e6ffe6',
-    defaults: {
-      name: { value: '' },
-      connection: { value: '', type: 'mavlink-connection', required: true },
-      mode: { value: 'snapshot' },
-      events: { value: 'stale,expired,statustext' },
-      targetSystem: { value: '', validate: RED.validators.number(true) },
-      targetComponent: { value: '', validate: RED.validators.number(true) }
-    },
-    inputs: 1,
-    outputs: 1,
-    icon: 'font-awesome/fa-table',
-    label: function () { return this.name || 'mavlink state'; },
-    oneditprepare: function () {
-      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
+  (function () {
+    /** Must stay in sync with lib/state DEFAULT_EVENTS. */
+    var STATE_EVENTS = [
+      'peer-new',
+      'component-new',
+      'stale',
+      'expired',
+      'primary-changed',
+      'multi-endpoint',
+      'profile-mismatch',
+      'statustext',
+    ];
+
+    function parseSavedEvents(raw) {
+      if (Array.isArray(raw)) return raw.map(String);
+      if (typeof raw === 'string' && raw.trim()) {
+        return raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
       }
+      return [];
     }
-  });
+
+    function buildEventsMultiSelect(node) {
+      var $select = $('#mav-state-events-select');
+      var saved = parseSavedEvents(node.events);
+      $select.empty();
+      for (var i = 0; i < STATE_EVENTS.length; i++) {
+        var name = STATE_EVENTS[i];
+        $select.append($('<option></option>').val(name).text(name));
+      }
+      $select.val(saved.length ? saved : STATE_EVENTS);
+    }
+
+    function syncEventsHiddenFromSelect() {
+      var raw = $('#mav-state-events-select').val();
+      var values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+      $('#node-input-events').val(values.join(','));
+    }
+
+    RED.nodes.registerType('mavlink-state', {
+      category: 'mavlink',
+      color: '#e6ffe6',
+      defaults: {
+        name: { value: '' },
+        connection: { value: '', type: 'mavlink-connection', required: true },
+        mode: { value: 'snapshot' },
+        events: { value: 'stale,expired,statustext' },
+        targetSystem: { value: '', validate: RED.validators.number(true) },
+        targetComponent: { value: '', validate: RED.validators.number(true) }
+      },
+      inputs: 1,
+      outputs: 1,
+      icon: 'font-awesome/fa-table',
+      label: function () { return this.name || 'mavlink state'; },
+      oneditprepare: function () {
+        var node = this;
+        if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
+          RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+        }
+        buildEventsMultiSelect(node);
+        $('#mav-state-events-select').on('change', syncEventsHiddenFromSelect);
+        syncEventsHiddenFromSelect();
+        if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
+          RED.mavlink.loadEnumsCatalog(['MAV_COMP_ID'], function (catalog) {
+            RED.mavlink.fillCompIdSelect(
+              $('#node-input-targetComponent'),
+              (catalog.enums || {}).MAV_COMP_ID || [],
+              { allowEmpty: true, emptyLabel: 'Any component', saved: node.targetComponent }
+            );
+          });
+        }
+      },
+      oneditsave: function () {
+        syncEventsHiddenFromSelect();
+      }
+    });
+  }());
 </script>
 
 <script type="text/html" data-template-name="mavlink-state">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row"><label for="node-input-mode">Mode</label><select id="node-input-mode"><option value="snapshot">Snapshot on input</option><option value="feed">Event feed</option></select></div>
-  <div class="form-row"><label for="node-input-events">Events</label><input type="text" id="node-input-events" placeholder="stale,expired,statustext"></div>
+  <div class="form-row">
+    <label for="mav-state-events-select">Events</label>
+    <select id="mav-state-events-select" multiple="multiple" size="8" style="width:70%"></select>
+    <input type="hidden" id="node-input-events">
+  </div>
   <div class="form-row"><label for="node-input-targetSystem">Filter sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
-  <div class="form-row"><label for="node-input-targetComponent">Filter compid</label><input type="number" id="node-input-targetComponent" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-targetComponent">Filter compid</label><select id="node-input-targetComponent"></select></div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-state">
