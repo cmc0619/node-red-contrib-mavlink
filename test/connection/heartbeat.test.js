@@ -1,0 +1,99 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const { HeartbeatScheduler } = require('../../lib/connection/heartbeat');
+
+const GCS = {
+  id: 'gcs',
+  sysid: 255,
+  compid: 190,
+  heartbeat: { type: 6, autopilot: 8, systemStatus: 4 },
+};
+
+/**
+ * @param {object} [opts]
+ * @returns {{scheduler: HeartbeatScheduler, emitted: object[], logs: object[]}}
+ */
+function build(opts = {}) {
+  const emitted = [];
+  const logs = [];
+  const scheduler = new HeartbeatScheduler({
+    emit: (entry) => emitted.push(entry),
+    logger: {
+      info: (m) => logs.push({ level: 'info', m }),
+      warn: (m) => logs.push({ level: 'warn', m }),
+    },
+    ...opts,
+  });
+  return { scheduler, emitted, logs };
+}
+
+test('emits one HEARTBEAT per bound identity per tick', () => {
+  const { scheduler, emitted } = build();
+  scheduler.add(GCS);
+  scheduler.add({ id: 'comp', sysid: 1, compid: 191, heartbeat: { type: 18, autopilot: 8 } });
+  scheduler.tick();
+  assert.equal(emitted.length, 2);
+  const gcs = emitted.find((e) => e.identity.id === 'gcs').message;
+  assert.equal(gcs.name, 'HEARTBEAT');
+  assert.equal(gcs.sysid, 255);
+  assert.equal(gcs.compid, 190);
+  assert.equal(gcs.fields.type, 6);
+  assert.equal(gcs.fields.autopilot, 8);
+  assert.equal(gcs.fields.system_status, 4);
+  assert.equal(gcs.fields.mavlink_version, 3);
+});
+
+test('a faulted identity does not heartbeat, and the fault is logged once', () => {
+  const faulted = new Set(['gcs']);
+  const { scheduler, emitted, logs } = build({ health: (id) => !faulted.has(id) });
+  scheduler.add(GCS);
+
+  scheduler.tick();
+  scheduler.tick();
+  assert.equal(emitted.length, 0);
+  assert.equal(logs.filter((l) => l.level === 'warn').length, 1); // logged once, not per tick
+});
+
+test('the heartbeat resumes when the fault clears, logged once', () => {
+  const faulted = new Set(['gcs']);
+  const { scheduler, emitted, logs } = build({ health: (id) => !faulted.has(id) });
+  scheduler.add(GCS);
+
+  scheduler.tick(); // faulted
+  faulted.delete('gcs');
+  scheduler.tick(); // healthy again
+  scheduler.tick();
+
+  assert.equal(emitted.length, 2);
+  assert.equal(logs.filter((l) => l.level === 'info').length, 1);
+});
+
+test('MAV_STATE reflects the live health read rather than a constant', () => {
+  const { scheduler, emitted } = build({
+    health: () => ({ healthy: true, systemStatus: 6 }), // MAV_STATE_CRITICAL
+  });
+  scheduler.add(GCS);
+  scheduler.tick();
+  assert.equal(emitted[0].message.fields.system_status, 6);
+});
+
+test('start/stop drive the injected interval and release it', () => {
+  let intervalCleared = false;
+  const { scheduler, emitted } = build({
+    setInterval: (fn) => {
+      fn(); // fire once immediately
+      return 'token';
+    },
+    clearInterval: (token) => {
+      intervalCleared = token === 'token';
+    },
+  });
+  scheduler.add(GCS);
+  scheduler.start();
+  assert.equal(emitted.length, 1);
+  scheduler.stop();
+  assert.equal(intervalCleared, true);
+});

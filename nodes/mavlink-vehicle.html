@@ -1,0 +1,211 @@
+<script type="text/javascript">
+  (function () {
+    /**
+     * Editor-side uint8 validator for target ids. Blank is allowed (runtime
+     * applies the default). Target ids allow 0 (broadcast); source ids do not.
+     */
+    function mavUint8Validator(min) {
+      return function (v) {
+        if (v === undefined || v === null || String(v).trim() === '') {
+          return true;
+        }
+        const n = Number(v);
+        if (!Number.isInteger(n) || n < min || n > 255) {
+          return 'must be an integer between ' + min + ' and 255';
+        }
+        return true;
+      };
+    }
+
+    RED.nodes.registerType('mavlink-vehicle', {
+      category: 'config',
+      defaults: {
+        name:                  { value: '' },
+        vehicleFamily:         { value: 'generic', required: true },
+        firmware:              { value: 'ardupilot', required: true },
+        dialect:               { value: 'ardupilotmega', required: true },
+        dialectSource:         { value: 'bundled' },
+        defaultTargetSystem:   { value: 1, validate: mavUint8Validator(0) },
+        defaultTargetComponent:{ value: 1, validate: mavUint8Validator(0) }
+      },
+      label: function () {
+        return this.name || 'MAVLink Vehicle Profile';
+      },
+      oneditprepare: function () {
+        const node = this;
+        const $source   = $('#node-config-input-dialectSource');
+        const $dialect  = $('#node-config-input-dialect');
+        const $bundled  = $('#mav-bundled-dialect');
+        const $firmware = $('#node-config-input-firmware');
+        const FALLBACK  = ['ardupilotmega', 'common', 'minimal'];
+
+        /* Firmware → dialect suggestion (§6: fields are created by selection) */
+        const FIRMWARE_DIALECT = { ardupilot: 'ardupilotmega', px4: 'development', custom: 'common' };
+
+        function bundledSelection() {
+          return $bundled.val() || (node.dialect && node.dialect !== 'custom' ? node.dialect : 'ardupilotmega');
+        }
+
+        function syncDialect() {
+          $dialect.val($source.val() === 'bundled' ? bundledSelection() : 'custom');
+        }
+
+        function toggleRows() {
+          const bundled = $source.val() === 'bundled';
+          $('.mav-dialect-bundled').toggle(bundled);
+          $('.mav-dialect-custom').toggle(!bundled);
+          syncDialect();
+        }
+
+        /* §6: enums show (value) in parentheses — dialect dropdown uses name only
+           (dialects are not MAVLink enum entries), but the firmware dropdown does. */
+        function populateBundled(list) {
+          $bundled.empty();
+          (list && list.length ? list : FALLBACK).forEach(function (d) {
+            $('<option>').val(d).text(d).appendTo($bundled);
+          });
+          const saved = (node.dialect && node.dialect !== 'custom') ? node.dialect : 'ardupilotmega';
+          if (!$bundled.find('option[value="' + saved + '"]').length) {
+            $('<option>').val(saved).text(saved).appendTo($bundled);
+          }
+          $bundled.val(saved);
+        }
+
+        /* Fetch bundled dialect list from the admin endpoint (§6 editor endpoint). */
+        $.getJSON('mavlink/dialects')
+          .done(function (data) { populateBundled(data && data.dialects); toggleRows(); })
+          .fail(function ()     { populateBundled(null); toggleRows(); });
+
+        $source.val(node.dialectSource === 'custom' ? 'custom' : 'bundled');
+        $source.on('change', toggleRows);
+        $bundled.on('change', syncDialect);
+
+        /* Picking a firmware suggests its canonical dialect. */
+        $firmware.on('change', function () {
+          const want = FIRMWARE_DIALECT[$firmware.val()];
+          if (want && $source.val() === 'bundled') {
+            if (!$bundled.find('option[value="' + want + '"]').length) {
+              $('<option>').val(want).text(want).appendTo($bundled);
+            }
+            $bundled.val(want);
+            syncDialect();
+          }
+        });
+      },
+      oneditsave: function () {
+        /* Keep hidden `dialect` field in sync with the visible bundled picker. */
+        const source = $('#node-config-input-dialectSource').val();
+        const picked = $('#mav-bundled-dialect').val() ||
+          (this.dialect && this.dialect !== 'custom' ? this.dialect : 'ardupilotmega');
+        $('#node-config-input-dialect').val(source === 'bundled' ? picked : 'custom');
+      }
+    });
+  })();
+</script>
+
+<script type="text/html" data-template-name="mavlink-vehicle">
+  <div class="form-row">
+    <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-config-input-name" placeholder="SITL Copter">
+  </div>
+  <div class="form-tips" style="margin-bottom:8px;">
+    Describes the vehicle being <em>addressed</em>. Who this runtime <em>is</em> on the wire lives
+    on the <b>Local Identity</b> config node.
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-vehicleFamily">Vehicle</label>
+    <select id="node-config-input-vehicleFamily">
+      <option value="generic">Generic / unknown</option>
+      <option value="copter">Copter</option>
+      <option value="plane">Plane</option>
+      <option value="rover">Rover</option>
+      <option value="boat">Boat</option>
+      <option value="sub">Sub</option>
+      <option value="antenna-tracker">Antenna Tracker</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-firmware">Firmware</label>
+    <select id="node-config-input-firmware">
+      <option value="ardupilot">ArduPilot</option>
+      <option value="px4">PX4</option>
+      <option value="custom">Custom</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-defaultTargetSystem">Target SysID</label>
+    <input type="number" id="node-config-input-defaultTargetSystem" min="0" max="255">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-defaultTargetComponent">Target CompID</label>
+    <input type="number" id="node-config-input-defaultTargetComponent" min="0" max="255">
+  </div>
+  <div class="form-row" style="margin-bottom:4px;">
+    <a href="#" id="node-mav-advanced-toggle" style="color:inherit;">
+      <i class="fa fa-caret-right"></i> Advanced
+    </a>
+  </div>
+  <div class="mav-advanced" style="display:none;">
+    <div class="form-row">
+      <label for="node-config-input-dialectSource">Dialect source</label>
+      <select id="node-config-input-dialectSource">
+        <option value="bundled">Bundled</option>
+        <option value="custom">Custom</option>
+      </select>
+    </div>
+    <div class="form-row mav-dialect-bundled">
+      <label for="mav-bundled-dialect">Bundled dialect</label>
+      <select id="mav-bundled-dialect" style="width:60%;"></select>
+    </div>
+    <div class="form-row mav-dialect-custom" style="display:none;">
+      <label>Custom dialect</label>
+      <span class="form-tips">
+        Supply a pre-compiled dialect bundle via the HTTP API or future upload mechanism.
+        The runtime marks this profile invalid until a bundle is provided.
+      </span>
+    </div>
+  </div>
+  <!-- hidden persisted value keeps the saved dialect name across async dropdown loads -->
+  <input type="hidden" id="node-config-input-dialect">
+  <script type="text/javascript">
+    (function () {
+      $('#node-mav-advanced-toggle').on('click', function (e) {
+        e.preventDefault();
+        var $adv = $('.mav-advanced');
+        var $icon = $(this).find('i');
+        if ($adv.is(':visible')) {
+          $adv.hide();
+          $icon.removeClass('fa-caret-down').addClass('fa-caret-right');
+        } else {
+          $adv.show();
+          $icon.removeClass('fa-caret-right').addClass('fa-caret-down');
+        }
+      });
+    })();
+  </script>
+</script>
+
+<script type="text/html" data-help-name="mavlink-vehicle">
+  <p>A <b>Vehicle Profile</b> describes the vehicle being <em>addressed</em>: dialect, firmware,
+  default target ids, and vehicle family for mode tables and parameter metadata.</p>
+  <p>It owns nothing about the local side — source SysID/CompID, heartbeat identity, and signing
+  belong to the <b>Local Identity</b> config node. Selecting a Vehicle Profile can never change
+  who this Node-RED runtime is on the wire.</p>
+  <h3>Vehicle family</h3>
+  <p>Used for ArduPilot mode tables and parameter metadata. <b>Generic</b> applies no
+  vehicle-specific metadata — correct for PX4, custom stacks, and unknown vehicles.</p>
+  <h3>Firmware</h3>
+  <ul>
+    <li><b>ArduPilot</b> — selects <code>ardupilotmega</code> dialect and ArduPilot mode tables.</li>
+    <li><b>PX4</b> — selects <code>development</code> dialect (PX4 emits development-only messages).</li>
+    <li><b>Custom</b> — no firmware-specific behavior; dialect used as-is.</li>
+  </ul>
+  <h3>Target SysID / CompID</h3>
+  <p>Default destination for outbound messages. Commonly <code>1</code>/<code>1</code> for the
+  autopilot component.</p>
+  <h3>Dialect source (Advanced)</h3>
+  <ul>
+    <li><b>Bundled</b> — one of the ten dialects loaded from <code>mavlink-mappings</code>.</li>
+    <li><b>Custom</b> — a pre-compiled dialect bundle (upload mechanism not yet implemented).</li>
+  </ul>
+</script>

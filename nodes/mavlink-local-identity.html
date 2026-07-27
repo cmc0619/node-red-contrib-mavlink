@@ -1,0 +1,224 @@
+<script type="text/javascript">
+  (function () {
+    /**
+     * Editor-side uint8 validator. Blank is allowed; the runtime applies the
+     * role preset default. Source ids disallow 0 (broadcast / all).
+     *
+     * @param {number} min  lower bound (1 for source ids)
+     * @returns {function(*): true|string}
+     */
+    function mavUint8Validator(min) {
+      return function (v) {
+        if (v === undefined || v === null || String(v).trim() === '') {
+          return true;
+        }
+        const n = Number(v);
+        if (!Number.isInteger(n) || n < min || n > 255) {
+          return 'must be an integer between ' + min + ' and 255';
+        }
+        return true;
+      };
+    }
+
+    /**
+     * Role-aware identity-id validator. The companion role derives its SysID
+     * and pins its CompID, so blank is valid there. Every other role requires
+     * a value.
+     */
+    function mavIdentityIdValidator(min) {
+      const rangeCheck = mavUint8Validator(min);
+      return function (v) {
+        const role = $('#node-config-input-role').val() || this.role || 'gcs';
+        const blank = v === undefined || v === null || String(v).trim() === '';
+        if (role === 'companion') {
+          return blank ? true : rangeCheck.call(this, v);
+        }
+        return blank ? 'required for this role' : rangeCheck.call(this, v);
+      };
+    }
+
+    /**
+     * Role presets: suggested identity values per role. Switching roles
+     * pre-fills blank fields; an explicitly customized value is never rewritten.
+     */
+    var ROLE_PRESETS = {
+      gcs:       { sysid: 255, compid: 190, heartbeatType: 'MAV_TYPE_GCS',               healthDriven: false },
+      companion: { sysid: null, compid: null, heartbeatType: 'MAV_TYPE_ONBOARD_CONTROLLER', healthDriven: true },
+      custom:    { sysid: 255, compid: 190, heartbeatType: 'MAV_TYPE_GENERIC',            healthDriven: false }
+    };
+
+    RED.nodes.registerType('mavlink-local-identity', {
+      category: 'config',
+      defaults: {
+        name:              { value: '' },
+        role:              { value: 'gcs', required: true },
+        /**
+         * NOT `required`: companion role derives sysid and pins compid, so
+         * blank is the correct saved state for those fields in that role.
+         * The role-aware validator below enforces the requirement for other roles.
+         */
+        sourceSystemId:    { value: 255, validate: mavIdentityIdValidator(1) },
+        sourceComponentId: { value: 190, validate: mavIdentityIdValidator(1) },
+        heartbeatType:     { value: '' },
+        heartbeatAutopilot:{ value: 'MAV_AUTOPILOT_INVALID' }
+      },
+      label: function () {
+        if (this.role === 'companion') {
+          return (this.name || 'MAVLink Local Identity') + ' (vehicle SysID)';
+        }
+        var sysid = this.sourceSystemId;
+        var compid = this.sourceComponentId;
+        var ids = (sysid !== undefined && compid !== undefined) ? ' ' + sysid + '/' + compid : '';
+        return (this.name || 'MAVLink Local Identity') + ids;
+      },
+      oneditprepare: function () {
+        var $role   = $('#node-config-input-role');
+        var $sysid  = $('#node-config-input-sourceSystemId');
+        var $compid = $('#node-config-input-sourceComponentId');
+        var $hbType = $('#node-config-input-heartbeatType');
+        var prevRole = $role.val() || 'gcs';
+
+        function preset(role) {
+          return ROLE_PRESETS[role] || ROLE_PRESETS.custom;
+        }
+
+        /**
+         * Apply role hint visibility and migrate suggested values. A field is
+         * rewritten only when blank or still equal to the previous role's
+         * suggestion — an explicit edit is never reverted.
+         */
+        function applyRole() {
+          var role = $role.val();
+          var prev = preset(prevRole);
+          var next = preset(role);
+
+          /* sysid */
+          if (next.sysid !== null) {
+            var curSys = String($sysid.val()).trim();
+            if (curSys === '' || Number($sysid.val()) === prev.sysid) {
+              $sysid.val(next.sysid);
+            }
+          }
+          /* compid */
+          if (next.compid !== null) {
+            var curCmp = String($compid.val()).trim();
+            if (curCmp === '' || Number($compid.val()) === prev.compid) {
+              $compid.val(next.compid);
+            }
+          }
+          /* heartbeat type */
+          var hb = String($hbType.val()).trim();
+          if (hb === '' || hb === prev.heartbeatType) {
+            $hbType.val(next.heartbeatType);
+          }
+          $hbType.attr('placeholder', next.heartbeatType);
+
+          applyVisibility(role);
+          prevRole = role;
+        }
+
+        /**
+         * §6 rule: role reshapes the dialog. Companion derives sysid/compid —
+         * those rows hide and a note appears instead.
+         */
+        function applyVisibility(role) {
+          var isCompanion = (role === 'companion');
+          $sysid.closest('.form-row').toggle(!isCompanion);
+          $compid.closest('.form-row').toggle(!isCompanion);
+          $('#mav-companion-ids-note').toggle(isCompanion);
+          $('.mav-role-hint').hide();
+          $('#mav-role-hint-' + role).show();
+        }
+
+        $role.on('change', applyRole);
+
+        /* Show hint for saved role without rewriting saved values */
+        $('.mav-role-hint').hide();
+        $('#mav-role-hint-' + prevRole).show();
+        $hbType.attr('placeholder', preset(prevRole).heartbeatType);
+        applyVisibility(prevRole);
+      },
+      oneditsave: function () {
+        /**
+         * Companion role: clear any values a previous role left behind. The
+         * runtime ignores them anyway (derives sysid, pins compid to 191), but
+         * a saved 255 next to a derived 1 looks like a contradiction.
+         */
+        if ($('#node-config-input-role').val() === 'companion') {
+          this.sourceSystemId = '';
+          this.sourceComponentId = '';
+        }
+      }
+    });
+  })();
+</script>
+
+<script type="text/html" data-template-name="mavlink-local-identity">
+  <div class="form-row">
+    <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-config-input-name" placeholder="Node-RED GCS">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-role">Role</label>
+    <select id="node-config-input-role">
+      <option value="gcs">GCS (ground control station)</option>
+      <option value="companion">Onboard companion (shares vehicle SysID)</option>
+      <option value="custom">Custom</option>
+    </select>
+  </div>
+  <div class="form-tips mav-role-hint" id="mav-role-hint-gcs" style="margin-bottom:8px;display:none;">
+    A <b>GCS</b> conventionally uses Source SysID <code>255</code> and CompID <code>190</code>,
+    and advertises <code>MAV_TYPE_GCS</code> in its heartbeat.
+  </div>
+  <div class="form-tips mav-role-hint" id="mav-role-hint-companion" style="margin-bottom:8px;display:none;">
+    Only if Node-RED runs <b>on the airframe</b> — an off-vehicle controller is a <b>GCS</b>.
+  </div>
+  <div class="form-tips mav-role-hint" id="mav-role-hint-custom" style="margin-bottom:8px;display:none;">
+    <b>Custom</b> sets no conventions — pick the SysID/CompID and heartbeat type yourself.
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-sourceSystemId">Source SysID</label>
+    <input type="number" id="node-config-input-sourceSystemId" min="1" max="255">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-sourceComponentId">Source CompID</label>
+    <input type="number" id="node-config-input-sourceComponentId" min="1" max="255">
+  </div>
+  <div class="form-tips" id="mav-companion-ids-note" style="margin-bottom:8px;display:none;">
+    <b>Source SysID</b> is derived from the Vehicle Profile on the bound Connection.
+    <b>CompID</b> is fixed at <code>191</code> (MAV_COMP_ID_ONBOARD_COMPUTER).
+    Use the <b>Custom</b> role to set either field yourself.
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-heartbeatType">HB Type</label>
+    <input type="text" id="node-config-input-heartbeatType" placeholder="MAV_TYPE_GCS">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-heartbeatAutopilot">HB Autopilot</label>
+    <input type="text" id="node-config-input-heartbeatAutopilot" placeholder="MAV_AUTOPILOT_INVALID">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-local-identity">
+  <p>A <b>Local MAVLink Identity</b> is who this Node-RED runtime <em>is</em> when it transmits:
+  the source SysID/CompID stamped into outbound frames and the HEARTBEAT identity it advertises.</p>
+  <p>Three independent concerns:</p>
+  <ul>
+    <li><b>Local Identity</b> (this node) — who Node-RED is on the wire.</li>
+    <li><b>Vehicle Profile</b> — what vehicle is being addressed (dialect, firmware, modes, params).</li>
+    <li><b>Connection</b> — how traffic moves, which identities are permitted on that link.</li>
+  </ul>
+  <h3>Roles</h3>
+  <ul>
+    <li><b>GCS</b> — ground control station. Suggested SysID <code>255</code> / CompID <code>190</code>,
+    heartbeat <code>MAV_TYPE_GCS</code> with <code>MAV_AUTOPILOT_INVALID</code>.</li>
+    <li><b>Onboard companion</b> — a computer riding on the airframe. SysID is derived from the
+    Vehicle Profile on the Connection (it IS a component of that vehicle's system); CompID is
+    fixed at <code>191</code>. Heartbeat <code>MAV_TYPE_ONBOARD_CONTROLLER</code>.</li>
+    <li><b>Custom</b> — set everything yourself (test rigs, simulated components, unusual stacks).</li>
+  </ul>
+  <h3>MAVLink 2 signing</h3>
+  <p>Signing is configured on the <b>Connection</b>, not here. A MAVLink link has one shared key,
+  so the credential and sign/verify/require policy belong to the secured link — one identity can
+  talk signed on one connection and unsigned on another.</p>
+</script>
