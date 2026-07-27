@@ -34,17 +34,10 @@ writing everything serially in one context:
 
 ### Matching skill level to the task
 
-Use the strongest/highest-reasoning agent tier available for correctness-critical, subtle work,
-and faster/lighter tiers for mechanical work:
-
-| Tier | Work |
-|---|---|
-| Highest reasoning | field codec (§5) and its pinned-byte test vectors; XML compiler and include resolution (§4); Connection runtime — queue bands, driver-side scheduling, signing/timestamp/replay state (§7); mission protocol state machines (§9) |
-| Standard | config nodes, palette nodes, peer table (§8), swarm (§10), fixture-based tests (§13) |
-| Fast/light | editor HTML dialogs following the §6 rendering rules, node help text, examples (§12 step 9), README/docs, repetitive test fixtures |
-
-Review of merged work is always done at the highest tier — cheap generation, expensive review,
-never the reverse.
+Use the appropriately skilled agent for the task at hand. Judge each task's difficulty at
+dispatch time and pick the sub-agent capability to match — subtle, correctness-critical work
+gets a stronger agent; mechanical or repetitive work gets a faster, lighter one. No fixed
+module-to-tier mapping; the dispatching agent decides per task.
 
 ## Cursor Cloud specific instructions
 
