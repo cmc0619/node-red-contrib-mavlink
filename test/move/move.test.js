@@ -39,6 +39,20 @@ test('global-position Move encodes degrees to degE7 and keeps altitude up-positi
   assert.equal(message.fields.alt, 25);
 });
 
+test('global-position Move encodes whole-number degrees as degE7, not as raw wire values', () => {
+  const message = buildMoveMessage({
+    mode: 'global-position',
+    target: { sysid: 3, compid: 1 },
+    // Integer degrees must still scale by 1e7 — treating 47 as an already
+    // encoded degE7 value would place the point at 47e-7 degrees.
+    position: { lat: 47, lon: -122, alt: 10 },
+    timeBootMs: 0,
+  });
+
+  assert.equal(message.fields.lat_int, 470000000);
+  assert.equal(message.fields.lon_int, -1220000000);
+});
+
 test('Move streams on the Streaming band until TTL and emits a zero-velocity stop', () => {
   const sends = [];
   let timer;
