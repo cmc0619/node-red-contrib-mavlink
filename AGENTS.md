@@ -18,16 +18,16 @@ Split by module boundary (`lib/<module>`, `nodes/<node>`, matching tests) into s
 when a layer would exceed the cap. Count is `git diff --name-only <base>...HEAD | wc -l`.
 
 **PRs are opened ready for review (not draft)** so bot reviewers run immediately. After push,
-wait for **all** of: CodeRabbit, Greptile, and Codex (`chatgpt-codex-connector`). Do not treat
-the implementation as finished until those reviews are read and Critical/Important findings
-are addressed or explicitly declined per DESIGN.md §2 (with a §14 note when a belief was
-displaced). Prefer a Cursor Automation on GitHub **CI completed** + **PR review submitted**
-(see below) over busy-polling — this agent cannot create that automation itself.
+wait for a **quorum of finished bots** — enough completed reviews to act on, not every
+configured bot. Today that means **CodeRabbit and Greptile both finished** (check
+success/failure and read their findings). Codex (`chatgpt-codex-connector`) is not required
+for quorum: it often ignores `@codex review` from `cursor[bot]`. If Codex (or a human) does
+leave findings, handle them; do not stall waiting for a bot that never starts.
 
-**Codex is optional.** CodeRabbit and Greptile re-run on push and are the bot gate. Codex
-(`chatgpt-codex-connector`) often ignores `@codex review` from `cursor[bot]` (it does not
-treat that identity as a triggerer) — do not block the build waiting for it. If a human
-triggers Codex and it leaves findings, handle them; otherwise proceed.
+Do not treat the implementation as finished until the quorum's Critical/Important findings
+are addressed or explicitly declined per DESIGN.md §2 (with a §14 note when a belief was
+displaced). Prefer a Cursor Automation on GitHub **CI completed** (see below) over
+busy-polling — this agent cannot create that automation itself.
 
 **Resolve review threads as they are handled.** When a finding is fixed (or declined with a
 DESIGN.md / §14 reason), mark its GitHub review thread Resolved — do not leave fixed threads
