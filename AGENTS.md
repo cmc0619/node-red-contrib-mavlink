@@ -17,6 +17,11 @@ not see this conversation.
 Split by module boundary (`lib/<module>`, `nodes/<node>`, matching tests) into sequential PRs
 when a layer would exceed the cap. Count is `git diff --name-only <base>...HEAD | wc -l`.
 
+**Greenfield: merge liberally to `main`.** This repo is early build-out, not a guarded
+production release train. Once a PR's quorum bots have finished and Critical/Important
+findings are handled (or declined), merge to `main` and keep building — do not stockpile
+long-lived feature branches waiting for perfection or for optional bots.
+
 **PRs are opened ready for review (not draft)** so bot reviewers run immediately. After push,
 wait for a **quorum of finished bots** — enough completed reviews to act on, not every
 configured bot. Today that means **CodeRabbit and Greptile both finished** (check
