@@ -1,0 +1,195 @@
+[
+  {
+    "id": "ex02-tab",
+    "type": "tab",
+    "label": "02 Arm takeoff chain",
+    "disabled": false,
+    "info": "Arm with ACK confirm, then takeoff awaiting completion. Requires a live vehicle link.",
+    "env": []
+  },
+  {
+    "id": "ex02-comment",
+    "type": "comment",
+    "z": "ex02-tab",
+    "name": "Arm then takeoff",
+    "info": "Arm (confirm) \u2192 Takeoff (await completion). Command targets inherit the Vehicle profile when target fields are blank \u2014 edit the Vehicle defaultTargetSystem. Connection: bind 14550, remote 14551 for typical SITL.",
+    "x": 150,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex02-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex02-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "generic",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex02-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex02-vehicle",
+    "localIdentity": "ex02-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex02-inject",
+    "type": "inject",
+    "z": "ex02-tab",
+    "name": "Start chain",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 160,
+    "wires": [
+      [
+        "ex02-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex02-arm",
+    "type": "mavlink-command",
+    "z": "ex02-tab",
+    "name": "Arm",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex02-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{}",
+    "x": 320,
+    "y": 160,
+    "wires": [
+      [
+        "ex02-takeoff"
+      ],
+      [
+        "ex02-arm-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex02-takeoff",
+    "type": "mavlink-command",
+    "z": "ex02-tab",
+    "name": "Takeoff",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex02-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"7\":10}",
+    "x": 520,
+    "y": 160,
+    "wires": [
+      [
+        "ex02-done"
+      ],
+      [
+        "ex02-takeoff-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex02-arm-status",
+    "type": "debug",
+    "z": "ex02-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "ex02-takeoff-status",
+    "type": "debug",
+    "z": "ex02-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "ex02-done",
+    "type": "debug",
+    "z": "ex02-tab",
+    "name": "chain complete",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 160,
+    "wires": []
+  }
+]

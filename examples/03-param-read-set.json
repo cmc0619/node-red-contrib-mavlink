@@ -1,0 +1,235 @@
+[
+  {
+    "id": "ex03-tab",
+    "type": "tab",
+    "label": "03 Param read set",
+    "disabled": false,
+    "info": "Separate Param read and Param set (echo-confirm) demos \u2014 not chained, so a read PARAM_VALUE cannot race a set confirmation.",
+    "env": []
+  },
+  {
+    "id": "ex03-comment",
+    "type": "comment",
+    "z": "ex03-tab",
+    "name": "Param read and set (separate injects)",
+    "info": "Two independent demos \u2014 not chained. Read requests MAV_SYSID (Send). Set writes FS_GCS_ENABLE from the inject JSON with Send & confirm (DESIGN.md \u00a79 echo-confirm). Never wire read continue into set. Align Param targetSystem with the Vehicle profile. Param names match current ArduPilot; change them if your firmware differs.",
+    "x": 220,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex03-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex03-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "generic",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex03-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex03-vehicle",
+    "localIdentity": "ex03-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex03-inject-read",
+    "type": "inject",
+    "z": "ex03-tab",
+    "name": "Read MAV_SYSID",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 140,
+    "wires": [
+      [
+        "ex03-read"
+      ]
+    ]
+  },
+  {
+    "id": "ex03-read",
+    "type": "mavlink-param",
+    "z": "ex03-tab",
+    "name": "Read (send)",
+    "connection": "ex03-connection",
+    "delivery": "send",
+    "action": "read",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "paramId": "MAV_SYSID",
+    "paramIndex": -1,
+    "value": "",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "x": 380,
+    "y": 140,
+    "wires": [
+      [
+        "ex03-read-done"
+      ],
+      [
+        "ex03-read-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex03-inject-set",
+    "type": "inject",
+    "z": "ex03-tab",
+    "name": "Set FS_GCS_ENABLE",
+    "props": [
+      {
+        "p": "payload",
+        "v": "{\"action\":\"set\",\"paramId\":\"FS_GCS_ENABLE\",\"value\":1,\"paramType\":\"MAV_PARAM_TYPE_REAL32\"}",
+        "vt": "json"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 280,
+    "wires": [
+      [
+        "ex03-set"
+      ]
+    ]
+  },
+  {
+    "id": "ex03-set",
+    "type": "mavlink-param",
+    "z": "ex03-tab",
+    "name": "Set (echo confirm)",
+    "connection": "ex03-connection",
+    "delivery": "confirm",
+    "action": "set",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "paramId": "FS_GCS_ENABLE",
+    "paramIndex": -1,
+    "value": "",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "x": 390,
+    "y": 280,
+    "wires": [
+      [
+        "ex03-set-done"
+      ],
+      [
+        "ex03-set-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex03-read-status",
+    "type": "debug",
+    "z": "ex03-tab",
+    "name": "read status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 590,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "ex03-read-done",
+    "type": "debug",
+    "z": "ex03-tab",
+    "name": "read continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 590,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "ex03-set-status",
+    "type": "debug",
+    "z": "ex03-tab",
+    "name": "set status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 600,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "ex03-set-done",
+    "type": "debug",
+    "z": "ex03-tab",
+    "name": "set continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 610,
+    "y": 280,
+    "wires": []
+  }
+]
