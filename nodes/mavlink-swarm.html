@@ -96,6 +96,8 @@
 
       var _msgCatalogByKey = {};
       var _msgRequestSeq = 0;
+      var _cmdCatalogByKey = {};
+      var _cmdRequestSeq = 0;
 
       function resolveCatalogTarget() {
         var connId = $('#node-input-connection').val();
@@ -169,12 +171,62 @@
         if (prefer) sel.val(prefer);
       }
 
+      function loadCommandsCatalog(cb) {
+        var target = resolveCatalogTarget();
+        var seq = ++_cmdRequestSeq;
+        if (_cmdCatalogByKey[target.key]) {
+          cb(_cmdCatalogByKey[target.key]);
+          return;
+        }
+        $.getJSON('/mavlink/command/commands', target.query, function (data) {
+          if (seq !== _cmdRequestSeq) return;
+          var catalog = {
+            commands: data.commands || [],
+            enums: data.enums || {},
+            dialect: data.dialect || target.dialect,
+          };
+          _cmdCatalogByKey[target.key] = catalog;
+          cb(catalog);
+        }).fail(function () {
+          if (seq !== _cmdRequestSeq) return;
+          cb({ commands: [], enums: {}, dialect: target.dialect });
+        });
+      }
+
+      function buildCommandDropdown(catalog) {
+        var sel = $('#node-input-commandId');
+        var current = sel.val();
+        var saved = node.commandId !== undefined && node.commandId !== null
+          ? String(node.commandId)
+          : '';
+        var prefer = current || saved;
+
+        sel.empty();
+        for (var i = 0; i < (catalog.commands || []).length; i++) {
+          var entry = catalog.commands[i];
+          sel.append($('<option></option>').val(String(entry.value)).text(entry.label));
+        }
+        if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
+          sel.append($('<option></option>').val(prefer).text('#' + prefer + ' (not in dialect)'));
+        }
+        if (prefer) sel.val(prefer);
+        else if (catalog.commands && catalog.commands.length) sel.val(String(catalog.commands[0].value));
+      }
+
       function refreshVehicleTypeOptions() {
         loadMessagesCatalog(buildVehicleTypeDropdown);
       }
 
-      $('#node-input-connection').on('change', refreshVehicleTypeOptions);
+      function refreshCommandOptions() {
+        loadCommandsCatalog(buildCommandDropdown);
+      }
+
+      $('#node-input-connection').on('change', function () {
+        refreshVehicleTypeOptions();
+        refreshCommandOptions();
+      });
       refreshVehicleTypeOptions();
+      refreshCommandOptions();
     }
   });
 </script>
@@ -193,7 +245,7 @@
   <div class="form-row"><label for="node-input-confirm">Confirm</label><input type="checkbox" id="node-input-confirm" style="display:inline-block;width:auto;"> <span>Allow safety commands (Flight Termination)</span></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
   <div class="form-row"><label for="node-input-actionType">Action</label><select id="node-input-actionType"><option value="command">Command</option><option value="move">Move</option><option value="payload">Payload</option><option value="param">Param set</option><option value="mission">Mission (refused)</option></select></div>
-  <div class="form-row"><label for="node-input-commandId">Command</label><input type="number" id="node-input-commandId" placeholder="MAV_CMD value"></div>
+  <div class="form-row"><label for="node-input-commandId">Command</label><select id="node-input-commandId" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-params">Params JSON</label><input type="text" id="node-input-params" placeholder='{"1":1}'></div>
   <div class="form-row"><label for="node-input-moveMode">Move mode</label><select id="node-input-moveMode"><option value="local-position">Local position</option><option value="local-velocity">Local velocity</option><option value="global-position">Global position</option></select></div>
   <div class="form-row"><label for="node-input-north">North</label><input type="number" id="node-input-north"></div>

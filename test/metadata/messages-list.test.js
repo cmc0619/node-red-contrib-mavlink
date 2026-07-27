@@ -134,7 +134,7 @@ test('catalogMessagesFromBundle fixture: messages, fields, and referenced enums'
   assert.deepEqual(catalog.enums.FIXTURE_MODE[0], {
     name: 'FIXTURE_MODE_AUTO',
     value: 0,
-    label: 'Automatic mode (0)',
+    label: 'FIXTURE_MODE_AUTO (0)',
   });
 });
 

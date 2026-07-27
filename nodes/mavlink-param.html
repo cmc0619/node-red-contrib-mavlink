@@ -21,8 +21,18 @@
     icon: 'font-awesome/fa-sliders',
     label: function () { return this.name || 'mavlink param'; },
     oneditprepare: function () {
+      var node = this;
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
+        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+      }
+      if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
+        RED.mavlink.loadEnumsCatalog(['MAV_COMP_ID'], function (catalog) {
+          RED.mavlink.fillCompIdSelect(
+            $('#node-input-targetComponent'),
+            (catalog.enums || {}).MAV_COMP_ID || [],
+            { saved: node.targetComponent }
+          );
+        });
       }
     }
   });
@@ -35,7 +45,7 @@
   <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action"><option value="read">Read one</option><option value="set">Set one</option><option value="request-list">Request list</option></select></div>
   <div class="form-row"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
   <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
-  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><input type="number" id="node-input-targetComponent" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row"><label for="node-input-paramId">Param id</label><input type="text" id="node-input-paramId" maxlength="16"></div>
   <div class="form-row"><label for="node-input-paramIndex">Index</label><input type="number" id="node-input-paramIndex"></div>
   <div class="form-row"><label for="node-input-value">Value</label><input type="text" id="node-input-value"></div>

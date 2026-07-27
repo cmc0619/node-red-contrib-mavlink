@@ -91,6 +91,16 @@
             syncDialect();
           }
         });
+
+        if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
+          RED.mavlink.loadEnumsCatalog(['MAV_COMP_ID'], function (catalog) {
+            RED.mavlink.fillCompIdSelect(
+              $('#node-config-input-defaultTargetComponent'),
+              (catalog.enums || {}).MAV_COMP_ID || [],
+              { saved: node.defaultTargetComponent }
+            );
+          });
+        }
       },
       oneditsave: function () {
         /* Keep hidden `dialect` field in sync with the visible bundled picker. */
@@ -138,7 +148,7 @@
   </div>
   <div class="form-row">
     <label for="node-config-input-defaultTargetComponent">Target CompID</label>
-    <input type="number" id="node-config-input-defaultTargetComponent" min="0" max="255">
+    <select id="node-config-input-defaultTargetComponent"></select>
   </div>
   <div class="form-row" style="margin-bottom:4px;">
     <a href="#" id="node-mav-advanced-toggle" style="color:inherit;">

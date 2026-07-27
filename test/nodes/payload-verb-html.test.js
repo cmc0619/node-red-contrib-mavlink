@@ -63,3 +63,26 @@ test('editor catalog includes every lib/payload verb value', () => {
     }
   }
 });
+
+test('mavlink-payload release actionValue is an enum select by verb', () => {
+  assert.match(
+    payloadHtml,
+    /<select id="node-input-actionValue"/,
+    'release actionValue must be a select'
+  );
+  assert.match(payloadHtml, /GRIPPER_ACTIONS/, 'gripper release uses GRIPPER_ACTIONS');
+  assert.match(payloadHtml, /WINCH_ACTIONS/, 'winch release uses WINCH_ACTIONS');
+  assert.match(payloadHtml, /PARACHUTE_ACTION/, 'parachute release uses PARACHUTE_ACTION');
+  assert.match(payloadHtml, /RED\.mavlink\.fillEnumSelect/, 'release options use shared select helper');
+});
+
+test('mavlink-payload exposes camera and gimbal mode enum controls', () => {
+  assert.match(
+    payloadHtml,
+    /<select id="node-input-modeValue"/,
+    'modeValue must be a select so camera/gimbal set-mode is not hidden numeric state'
+  );
+  assert.match(payloadHtml, /CAMERA_MODE/, 'camera set-mode uses CAMERA_MODE');
+  assert.match(payloadHtml, /MAV_MOUNT_MODE/, 'gimbal set-mode uses MAV_MOUNT_MODE');
+  assert.match(payloadHtml, /row-payload-mode/, 'mode row is shown only for set-mode verbs');
+});

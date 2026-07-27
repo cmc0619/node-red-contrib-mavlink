@@ -315,13 +315,14 @@ start, with a hard rule against importing anything above it. Publishing later is
 **Everything enumerable is a dropdown.** Messages, commands, enum-typed params, enum-typed
 message fields, modes, frames, mission types, target components.
 
-**Every enumerated entry shows its numeric value in parentheses.**
+**Every enumerated entry shows its screaming name and numeric value:** `ENTRY_NAME (value)`.
 
 ```
-Arm / Disarm (400)
-Takeoff (22)
-Airspeed (0)
-Global Relative Alt (6)
+MAV_CMD_COMPONENT_ARM_DISARM (400)
+MAV_CMD_NAV_TAKEOFF (22)
+MAV_TYPE_GCS (6)
+MAV_COMP_ID_AUTOPILOT1 (1)
+SPEED_TYPE_AIRSPEED (0)
 ```
 
 **Fields are created and destroyed by selection.** Pick a command, the form becomes that

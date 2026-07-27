@@ -59,6 +59,126 @@
     };
 
     /**
+     * Shared enum option label. Server catalogs should already include labels,
+     * but local/generated entries use the same §6 NAME (value) format.
+     *
+     * @param {{name: string, value: number|string}} entry
+     * @returns {string}
+     */
+    RED.mavlink.enumOptionLabel = function (entry) {
+      return entry.name + ' (' + entry.value + ')';
+    };
+
+    function valueFromSelector(selector) {
+      var $el = $(selector);
+      return $el && $el.length ? String($el.val() || '').trim() : '';
+    }
+
+    function currentEnumQuery(names) {
+      var query = {};
+      var vehicle = valueFromSelector('#node-input-vehicle');
+      var dialect = valueFromSelector('#node-input-dialect') ||
+        valueFromSelector('#node-config-input-dialect');
+
+      if (!vehicle) {
+        var connection = valueFromSelector('#node-input-connection');
+        if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
+          var conn = RED.nodes.node(connection);
+          if (conn && conn.vehicle) {
+            vehicle = conn.vehicle;
+            var profile = RED.nodes.node(conn.vehicle);
+            if (!dialect && profile && profile.dialect) dialect = profile.dialect;
+          }
+        }
+      }
+
+      if (vehicle) query.vehicle = vehicle;
+      if (dialect) query.dialect = dialect;
+      if (Array.isArray(names) && names.length) {
+        query.names = names.join(',');
+      } else if (typeof names === 'string' && names.trim()) {
+        query.names = names.trim();
+      }
+      return query;
+    }
+
+    /**
+     * Build an admin API URL under Node-RED's configured httpAdminRoot.
+     * Absolute `/mavlink/...` paths 404 when the editor is mounted at e.g. `/red`.
+     *
+     * @param {string} path  absolute-looking path, e.g. `/mavlink/enums`
+     * @returns {string}
+     */
+    RED.mavlink.adminApiUrl = function (path) {
+      var root = (RED.settings && RED.settings.httpAdminRoot) || '/';
+      if (root.slice(-1) !== '/') root += '/';
+      return root + String(path || '').replace(/^\//, '');
+    };
+
+    /**
+     * Load a shared dialect enum catalog from the admin endpoint.
+     * Callers that open dialogs should pass a `{ cancelled: boolean }` token and
+     * set `cancelled` from oneditcancel so a late response cannot fill another dialog.
+     *
+     * @param {string[]|string} names  extra enum table names to include
+     * @param {function(object):void} cb
+     * @param {{cancelled?: boolean}} [token]
+     */
+    RED.mavlink.loadEnumsCatalog = function (names, cb, token) {
+      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), currentEnumQuery(names), function (data) {
+        if (token && token.cancelled) return;
+        cb({
+          dialect: data.dialect,
+          enums: data.enums || {}
+        });
+      }).fail(function () {
+        if (token && token.cancelled) return;
+        cb({ dialect: '', enums: {} });
+      });
+    };
+
+    /**
+     * Fill a select from enum entries. Option values are numeric strings so
+     * node configs save MAVLink enum ids, not localized labels.
+     *
+     * @param {object} $select  jQuery select
+     * @param {Array<{name:string,value:number|string,label?:string}>} entries
+     * @param {object} opts
+     */
+    RED.mavlink.fillEnumSelect = function ($select, entries, opts) {
+      opts = opts || {};
+      var valueKey = opts.valueKey || 'value';
+      var saved = opts.saved !== undefined && opts.saved !== null
+        ? String(opts.saved)
+        : String($select.val() || '');
+      $select.empty();
+      if (opts.allowEmpty) {
+        $select.append($('<option></option>').val('').text(opts.emptyLabel || '\u2014'));
+      }
+      (entries || []).forEach(function (entry) {
+        var value = String(entry[valueKey]);
+        var label = entry.label || RED.mavlink.enumOptionLabel(entry);
+        $select.append($('<option></option>').val(value).text(label));
+      });
+      if (saved && !$select.find('option[value="' + saved + '"]').length) {
+        $select.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
+      }
+      if (saved || opts.allowEmpty) {
+        $select.val(saved);
+      } else if (entries && entries.length) {
+        $select.val(String(entries[0][valueKey]));
+      }
+    };
+
+    /**
+     * Fill a MAV_COMP_ID select; filters can opt into an empty "any component"
+     * choice through the same options object.
+     */
+    RED.mavlink.fillCompIdSelect = function ($select, entries, opts) {
+      RED.mavlink.fillEnumSelect($select, entries, opts || {});
+    };
+
+    /**
      * Editor-side uint8 validator. Blank is allowed; the runtime applies the
      * role preset default. Source ids disallow 0 (broadcast / all).
      *
@@ -142,11 +262,35 @@
         return (this.name || 'MAVLink Local Identity') + ids;
       },
       oneditprepare: function () {
+        var node = this;
         var $role   = $('#node-config-input-role');
         var $sysid  = $('#node-config-input-sourceSystemId');
         var $compid = $('#node-config-input-sourceComponentId');
         var $hbType = $('#node-config-input-heartbeatType');
+        var $hbAp   = $('#node-config-input-heartbeatAutopilot');
         var prevRole = $role.val() || 'gcs';
+        var enumLoadToken = { cancelled: false };
+        node._mavEnumLoadToken = enumLoadToken;
+
+        if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
+          RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMP_ID'], function (catalog) {
+            var enums = (catalog && catalog.enums) || {};
+            // Prefer live dialog values so a role change before the catalog
+            // resolves is not overwritten by the pre-edit saved snapshot.
+            RED.mavlink.fillEnumSelect($hbType, enums.MAV_TYPE || [], {
+              valueKey: 'name',
+              allowEmpty: true,
+              saved: $hbType.val() || node.heartbeatType
+            });
+            RED.mavlink.fillEnumSelect($hbAp, enums.MAV_AUTOPILOT || [], {
+              valueKey: 'name',
+              saved: $hbAp.val() || node.heartbeatAutopilot
+            });
+            RED.mavlink.fillCompIdSelect($compid, enums.MAV_COMP_ID || [], {
+              saved: $compid.val() || node.sourceComponentId
+            });
+          }, enumLoadToken);
+        }
 
         function preset(role) {
           return ROLE_PRESETS[role] || ROLE_PRESETS.custom;
@@ -181,7 +325,6 @@
           if (hb === '' || hb === prev.heartbeatType) {
             $hbType.val(next.heartbeatType);
           }
-          $hbType.attr('placeholder', next.heartbeatType);
 
           applyVisibility(role);
           prevRole = role;
@@ -205,10 +348,10 @@
         /* Show hint for saved role without rewriting saved values */
         $('.mav-role-hint').hide();
         $('#mav-role-hint-' + prevRole).show();
-        $hbType.attr('placeholder', preset(prevRole).heartbeatType);
         applyVisibility(prevRole);
       },
       oneditsave: function () {
+        if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
         /**
          * Companion role: clear any values a previous role left behind. The
          * runtime ignores them anyway (derives sysid, pins compid to 191), but
@@ -218,6 +361,9 @@
           this.sourceSystemId = '';
           this.sourceComponentId = '';
         }
+      },
+      oneditcancel: function () {
+        if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
       }
     });
   })();
@@ -252,7 +398,7 @@
   </div>
   <div class="form-row">
     <label for="node-config-input-sourceComponentId">Source CompID</label>
-    <input type="number" id="node-config-input-sourceComponentId" min="1" max="255">
+    <select id="node-config-input-sourceComponentId"></select>
   </div>
   <div class="form-tips" id="mav-companion-ids-note" style="margin-bottom:8px;display:none;">
     <b>Source SysID</b> is derived from the Vehicle Profile on the bound Connection.
@@ -261,11 +407,11 @@
   </div>
   <div class="form-row">
     <label for="node-config-input-heartbeatType">HB Type</label>
-    <input type="text" id="node-config-input-heartbeatType" placeholder="MAV_TYPE_GCS">
+    <select id="node-config-input-heartbeatType"></select>
   </div>
   <div class="form-row">
     <label for="node-config-input-heartbeatAutopilot">HB Autopilot</label>
-    <input type="text" id="node-config-input-heartbeatAutopilot" placeholder="MAV_AUTOPILOT_INVALID">
+    <select id="node-config-input-heartbeatAutopilot"></select>
   </div>
   <div class="form-row">
     <label for="node-config-input-heartbeatIntervalMs">HB Interval (ms)</label>

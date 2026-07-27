@@ -24,8 +24,18 @@
       return this.name || ('mission ' + (this.operation || 'download'));
     },
     oneditprepare: function () {
+      var node = this;
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
+        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+      }
+      if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
+        RED.mavlink.loadEnumsCatalog(['MAV_COMP_ID'], function (catalog) {
+          RED.mavlink.fillCompIdSelect(
+            $('#node-input-targetComponent'),
+            (catalog.enums || {}).MAV_COMP_ID || [],
+            { saved: node.targetComponent }
+          );
+        });
       }
       // Mission types offered per firmware (§9 firmware gating, §11). ArduPilot
       // carries mission/fence/rally; PX4 (and unknown stacks) carry mission
@@ -75,7 +85,7 @@
   <div class="form-row"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
   <div class="form-row"><label for="node-input-missionType">Type</label><select id="node-input-missionType"></select></div>
   <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
-  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><input type="number" id="node-input-targetComponent" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row mavlink-mission-items"><label for="node-input-items">Items (JSON)</label><input type="text" id="node-input-items" placeholder="[] or set msg.payload.items"></div>
   <div class="form-row mavlink-mission-confirm"><label for="node-input-confirmClear">Confirm</label><input type="checkbox" id="node-input-confirmClear" style="display:inline-block; width:auto; vertical-align:top;"> <span>Yes, permanently erase this plan</span></div>
   <div class="form-row"><label for="node-input-timeout">Step timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="1500"></div>

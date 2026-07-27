@@ -53,3 +53,28 @@ test('firmware filter is already a small select (ArduPilot/PX4/custom)', () => {
   assert.match(html, /<option value="px4">PX4<\/option>/);
   assert.match(html, /<option value="custom">Custom<\/option>/);
 });
+
+test('commandId is a MAV_CMD <select>, not a free-form number (§6)', () => {
+  assert.match(
+    html,
+    /<select id="node-input-commandId"/,
+    'Command id must be a select dropdown'
+  );
+  assert.ok(
+    !html.includes('type="number" id="node-input-commandId"'),
+    'the free-form numeric command field must be gone'
+  );
+});
+
+test('commandId loads MAV_CMD entries from command/commands catalog', () => {
+  assert.match(html, /\/mavlink\/command\/commands/, 'dialect MAV_CMD catalog is loaded from admin API');
+  assert.match(html, /function buildCommandDropdown/, 'dropdown is rebuilt from catalog entries');
+  assert.match(html, /entry\.label/, 'option labels come from the catalog (MAV_CMD_… (n))');
+  assert.match(html, /entry\.value/, 'option values are numeric command ids');
+  assert.match(html, /_cmdRequestSeq/, 'stale command catalog responses are ignored');
+});
+
+test('commandId preserves the saved numeric value after async catalog load', () => {
+  assert.match(html, /node\.commandId/, 'saved commandId is re-applied');
+  assert.match(html, /not in dialect/, 'unknown saved values remain selectable');
+});
