@@ -6,6 +6,8 @@
       name: { value: '' },
       connection: { value: '', type: 'mavlink-connection' },
       delivery: { value: 'build' },
+      timeout: { value: 10000, validate: RED.validators.number(true) },
+      maxRetries: { value: 3, validate: RED.validators.number(true) },
       topic: { value: 'camera' },
       verb: { value: 'photo' },
       path: { value: 'legacy' },
@@ -37,7 +39,9 @@
 <script type="text/html" data-template-name="mavlink-payload">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
-  <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option></select></div>
+  <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option></select></div>
+  <div class="form-row"><label for="node-input-timeout">ACK timeout</label><input type="number" id="node-input-timeout" style="width:80px"> ms</div>
+  <div class="form-row"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
   <div class="form-row"><label for="node-input-topic">Topic</label><select id="node-input-topic"><option value="camera">Camera</option><option value="gimbal">Gimbal</option><option value="servo">Servo</option><option value="release">Release</option></select></div>
   <div class="form-row"><label for="node-input-verb">Verb</label><input type="text" id="node-input-verb" placeholder="photo, aim, set, gripper"></div>
   <div class="form-row"><label for="node-input-path">Gimbal path</label><select id="node-input-path"><option value="legacy">DO_MOUNT_CONTROL</option><option value="manager">GIMBAL_MANAGER_SET_PITCHYAW</option></select></div>
@@ -51,5 +55,6 @@
 
 <script type="text/html" data-help-name="mavlink-payload">
   <p>Controls camera, gimbal, servo, and release payload verbs. Command-backed verbs report command acknowledgement as their confirmation mode.</p>
-  <p>Gimbal manager aiming uses GIMBAL_MANAGER_SET_PITCHYAW and has no MAVLink acknowledgement.</p>
+  <p>On the <b>Send &amp; confirm</b> tier a command-backed verb waits for its <code>COMMAND_ACK</code>: output 0 (continue) fires only on <code>ACCEPTED</code>, and a <code>DENIED</code>, <code>TEMPORARILY_REJECTED</code>, or timeout halts the chain and reports on output 1.</p>
+  <p>Gimbal manager aiming uses GIMBAL_MANAGER_SET_PITCHYAW and has no MAVLink acknowledgement, so it is always sent unconfirmed.</p>
 </script>
