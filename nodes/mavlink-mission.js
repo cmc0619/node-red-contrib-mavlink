@@ -63,8 +63,15 @@ module.exports = function registerMavlinkMission(RED) {
       ? Number(config.maxRetries)
       : undefined;
 
-    /** At most one transfer in flight per node. */
-    let active = null;
+    /**
+     * In-flight machines keyed by the same lock key as {@link locks}
+     * (`connection::sysid.compid::missionType`). Different types on one node
+     * may run concurrently; only a later message for the *same* key cancels
+     * its predecessor.
+     *
+     * @type {Map<string, {cancel: Function}>}
+     */
+    const activeByKey = new Map();
 
     node.status({});
 
@@ -179,7 +186,9 @@ module.exports = function registerMavlinkMission(RED) {
         return;
       }
 
-      if (active) active.cancel();
+      // Key the in-flight handle the same way as the lock so a fence upload
+      // does not cancel an in-flight mission download on this node (§9).
+      const lockKey = locks.key(connNode.id, target, missionType);
 
       applyActionStatus(node, 'sending', `${operation} ${missionTypeKey}\u2026`);
 
@@ -203,12 +212,12 @@ module.exports = function registerMavlinkMission(RED) {
           ]);
         },
       });
-      active = machine;
+      activeByKey.set(lockKey, machine);
 
       machine
         .start()
         .then((outcome) => {
-          if (active === machine) active = null;
+          if (activeByKey.get(lockKey) === machine) activeByKey.delete(lockKey);
           release();
 
           const rec = record(operation, missionTypeKey, target, outcome);
@@ -225,7 +234,7 @@ module.exports = function registerMavlinkMission(RED) {
           finish();
         })
         .catch((err) => {
-          if (active === machine) active = null;
+          if (activeByKey.get(lockKey) === machine) activeByKey.delete(lockKey);
           release();
           applyActionStatus(node, 'error', `${operation} error`);
           node.error(`mavlink-mission: ${err.message}`, msg);
@@ -239,10 +248,8 @@ module.exports = function registerMavlinkMission(RED) {
     });
 
     node.on('close', (done) => {
-      if (active) {
-        active.cancel();
-        active = null;
-      }
+      for (const machine of activeByKey.values()) machine.cancel();
+      activeByKey.clear();
       done();
     });
   }
@@ -316,7 +323,12 @@ function buildPlan(operation, missionType, target, items) {
 function resolveItems(config, payload) {
   if (Array.isArray(payload.items)) return payload.items;
   if (typeof config.items === 'string' && config.items.trim()) {
-    const parsed = JSON.parse(config.items);
+    let parsed;
+    try {
+      parsed = JSON.parse(config.items);
+    } catch (err) {
+      throw new Error(`mission items config is not valid JSON: ${err.message}`);
+    }
     if (!Array.isArray(parsed)) throw new Error('mission items config must be a JSON array');
     return parsed;
   }
@@ -331,8 +343,13 @@ function resolveItems(config, payload) {
 function resolveTarget(config, payload) {
   const t = payload.target || {};
   return {
-    sysid: Number(t.sysid || config.targetSystem || 1),
-    compid: Number(t.compid || config.targetComponent || 1),
+    // Preserve configured 0 (broadcast / all-components) — do not treat as unset.
+    sysid: Number(t.sysid ?? (config.targetSystem !== '' && config.targetSystem !== undefined
+      ? config.targetSystem
+      : 1)),
+    compid: Number(t.compid ?? (config.targetComponent !== '' && config.targetComponent !== undefined
+      ? config.targetComponent
+      : 1)),
   };
 }
 

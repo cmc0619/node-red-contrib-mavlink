@@ -236,6 +236,53 @@ test('broadcast still allows an explicit all-vehicles selection', async () => {
   assert.equal(connection.sends[0].message.fields.target_system, 0);
 });
 
+test('broadcast refuses when stale peers exist even under all-vehicles selection (§10)', async () => {
+  const connection = connectionStub([
+    peer(1),
+    peer(2, { state: 'stale' }),
+  ]);
+
+  const result = await executeSwarm({
+    connection,
+    action: commandAction(),
+    mode: 'broadcast',
+    delivery: 'send',
+    selection: { mode: 'all' },
+  });
+
+  assert.equal(result.result, 'refused');
+  assert.match(result.detail, /stale|expired/);
+  assert.equal(connection.sends.length, 0);
+});
+
+test('command without preset or numeric commandId is refused', async () => {
+  const connection = connectionStub([peer(1)]);
+  const result = await executeSwarm({
+    connection,
+    action: { type: 'command', params: { 1: 1 } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+  assert.equal(result.result, 'refused');
+  assert.match(result.detail, /commandId|preset/);
+});
+
+test('global move with blank lat/lon is refused (must not become 0,0)', async () => {
+  const connection = connectionStub([peer(1)]);
+  const result = await executeSwarm({
+    connection,
+    action: {
+      type: 'move',
+      mode: 'global-position',
+      position: { lat: '', lon: '', alt: 10 },
+    },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+  assert.equal(result.result, 'refused');
+  assert.match(result.detail, /lat|lon|0,0/);
+});
+
 test('a safety preset (Flight Termination) is refused without confirmation and runs with it (§10)', async () => {
   const action = { type: 'command', preset: 'flight_termination', params: { 1: 1 } };
 
