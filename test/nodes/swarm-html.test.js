@@ -39,6 +39,12 @@ test('vehicleType preserves the saved numeric value after async catalog load', (
   assert.match(html, /const prefer = current \|\| saved|var prefer = current \|\| saved/, 'in-progress selection wins over saved');
   assert.match(html, /not in dialect/, 'unknown saved values remain selectable');
   assert.match(html, /_msgRequestSeq/, 'stale catalog responses are ignored');
+  // Cache hits must bump the seq before returning so in-flight requests cannot overwrite.
+  assert.match(
+    html,
+    /var seq = \+\+_msgRequestSeq;\s*if \(_msgCatalogByKey\[target\.key\]\)/,
+    'cached catalog path invalidates pending requests'
+  );
 });
 
 test('firmware filter is already a small select (ArduPilot/PX4/custom)', () => {

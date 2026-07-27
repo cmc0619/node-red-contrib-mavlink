@@ -125,11 +125,13 @@
 
       function loadMessagesCatalog(cb) {
         var target = resolveCatalogTarget();
+        // Always advance the seq so an in-flight request for another Connection
+        // cannot overwrite this catalog after a cache hit.
+        var seq = ++_msgRequestSeq;
         if (_msgCatalogByKey[target.key]) {
           cb(_msgCatalogByKey[target.key]);
           return;
         }
-        var seq = ++_msgRequestSeq;
         $.getJSON('/mavlink/build/messages', target.query, function (data) {
           if (seq !== _msgRequestSeq) return;
           var catalog = {

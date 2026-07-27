@@ -1314,6 +1314,19 @@ editor-client upgrades.
 `node --test test/vehicle/register-without-mappings.test.js` (mappings stubbed — type still
 registers).
 
+**Heartbeat cadence lives on Local Identity, not Connection.**
+*Wrong belief:* Connection owns the HEARTBEAT interval field (and UDP `SO_BROADCAST` is how
+`target_system = 0` is sent).
+*Fact:* MAVLink does not mandate a HEARTBEAT rate; ~1 Hz is the RF convention. Local Identity
+owns content and `heartbeatIntervalMs` (default 1000). Connection emits on each bound identity
+using that interval and does not surface HB controls. Peer-table stale/expire stay on Connection
+(inbound freshness). Outbound addressing uses the peer-table primary endpoint (optional Remote
+fallback); `target_system = 0` is a normal message field with no Connection broadcast flag.
+Legacy flows that still store Connection `heartbeatInterval` keep that cadence until the
+Connection is re-saved, when the identity still has the default 1000 ms.
+*Check:* `node --test test/connection/heartbeat.test.js test/identity/` ;
+Local Identity editor shows HB Interval; Connection editor has no Heartbeat/Broadcast rows.
+
 **Bind-mounted source is not an installed package.**
 *Wrong belief:* `npm install /module` from the Node-RED user directory (or listing
 `mavlink-mappings` in `package.json`) is enough for a `/module` bind mount to load.

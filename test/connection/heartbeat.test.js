@@ -141,3 +141,17 @@ test('scheduler ticks at the minimum identity interval and emits each identity w
     ['gcs', 'slow', 'gcs', 'gcs', 'gcs', 'slow']
   );
 });
+
+test('base timer follows a sole slow identity (does not clamp to 1000 ms)', () => {
+  let intervalMs;
+  const { scheduler } = build({
+    setInterval: (_fn, ms) => {
+      intervalMs = ms;
+      return 'token';
+    },
+    clearInterval() {},
+  });
+  scheduler.add({ ...GCS, heartbeatIntervalMs: 1500 });
+  scheduler.start();
+  assert.equal(intervalMs, 1500);
+});

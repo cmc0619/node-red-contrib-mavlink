@@ -66,7 +66,10 @@ test('shared ensureConfigNodePicker uses RED.editor.prepareConfigNodeSelect (edi
 test('Connection editor does not expose heartbeat interval or UDP broadcast controls', () => {
   assert.ok(!html.includes('heartbeatInterval'), 'heartbeat interval belongs to Local Identity');
   assert.ok(!html.includes('node-config-input-broadcast'), 'SO_BROADCAST is not a Connection option');
-  assert.ok(!html.includes('target_system = 0'), 'UDP broadcast must not be conflated with MAVLink broadcast');
+  assert.ok(
+    !/target_system\s*[=:]\s*0/.test(html),
+    'UDP broadcast must not be conflated with MAVLink broadcast'
+  );
 });
 
 test('Local Identity editor exposes heartbeatIntervalMs', () => {
