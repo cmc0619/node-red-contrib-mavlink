@@ -1,0 +1,96 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const { paramValueToWire } = require('../../lib/codec');
+const {
+  buildParamMessage,
+  matchesParamEcho,
+  createParamListCollector,
+} = require('../../lib/param');
+
+test('PARAM_SET for PX4 integer params writes the int bits into the float slot', () => {
+  const message = buildParamMessage({
+    action: 'set',
+    target: { sysid: 1, compid: 1 },
+    paramId: 'MIS_TAKEOFF_ALT',
+    value: 42,
+    paramType: 'MAV_PARAM_TYPE_INT32',
+    firmware: 'px4',
+  });
+
+  assert.equal(message.name, 'PARAM_SET');
+  assert.equal(message.fields.param_id, 'MIS_TAKEOFF_ALT');
+  assert.equal(message.fields.param_type, 6);
+  assert.equal(message.fields.param_value, paramValueToWire(42, 'MAV_PARAM_TYPE_INT32'));
+});
+
+test('Param set confirms only by matching PARAM_VALUE echo, decoded through the PX4 union', () => {
+  const request = {
+    paramId: 'MIS_TAKEOFF_ALT',
+    value: 42,
+    paramType: 'MAV_PARAM_TYPE_INT32',
+    firmware: 'px4',
+  };
+  const echo = {
+    name: 'PARAM_VALUE',
+    sysid: 1,
+    compid: 1,
+    fields: {
+      param_id: 'MIS_TAKEOFF_ALT\u0000\u0000',
+      param_type: 6,
+      param_value: paramValueToWire(42, 'MAV_PARAM_TYPE_INT32'),
+    },
+  };
+
+  assert.equal(matchesParamEcho(request, echo), true);
+  assert.equal(matchesParamEcho({ ...request, value: 43 }, echo), false);
+  assert.equal(matchesParamEcho(request, { ...echo, fields: { ...echo.fields, param_id: 'OTHER' } }), false);
+});
+
+test('PARAM_REQUEST_READ and PARAM_REQUEST_LIST build their distinct messages', () => {
+  const read = buildParamMessage({
+    action: 'read',
+    target: { sysid: 9, compid: 1 },
+    paramId: 'SYSID_THISMAV',
+  });
+  const list = buildParamMessage({
+    action: 'request-list',
+    target: { sysid: 9, compid: 1 },
+  });
+
+  assert.deepEqual(read, {
+    name: 'PARAM_REQUEST_READ',
+    fields: {
+      target_system: 9,
+      target_component: 1,
+      param_id: 'SYSID_THISMAV',
+      param_index: -1,
+    },
+  });
+  assert.deepEqual(list, {
+    name: 'PARAM_REQUEST_LIST',
+    fields: { target_system: 9, target_component: 1 },
+  });
+});
+
+test('request-list collector emits a complete ordered parameter snapshot', () => {
+  const collector = createParamListCollector();
+  assert.equal(
+    collector.accept({
+      name: 'PARAM_VALUE',
+      fields: { param_id: 'B', param_index: 1, param_count: 2, param_value: 2, param_type: 9 },
+    }),
+    null
+  );
+  const complete = collector.accept({
+    name: 'PARAM_VALUE',
+    fields: { param_id: 'A', param_index: 0, param_count: 2, param_value: 1, param_type: 9 },
+  });
+
+  assert.deepEqual(
+    complete.map((p) => p.paramId),
+    ['A', 'B']
+  );
+});

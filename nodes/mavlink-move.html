@@ -1,0 +1,53 @@
+<script type="text/javascript">
+  RED.nodes.registerType('mavlink-move', {
+    category: 'mavlink',
+    color: '#d8ecff',
+    defaults: {
+      name: { value: '' },
+      connection: { value: '', type: 'mavlink-connection' },
+      delivery: { value: 'build' },
+      mode: { value: 'local-position' },
+      targetSystem: { value: 1, validate: RED.validators.number() },
+      targetComponent: { value: 1, validate: RED.validators.number() },
+      north: { value: 0, validate: RED.validators.number(true) },
+      east: { value: 0, validate: RED.validators.number(true) },
+      up: { value: 0, validate: RED.validators.number(true) },
+      vNorth: { value: 0, validate: RED.validators.number(true) },
+      vEast: { value: 0, validate: RED.validators.number(true) },
+      vUp: { value: 0, validate: RED.validators.number(true) },
+      lat: { value: '', validate: RED.validators.number(true) },
+      lon: { value: '', validate: RED.validators.number(true) },
+      alt: { value: '', validate: RED.validators.number(true) },
+      yaw: { value: '', validate: RED.validators.number(true) },
+      yawRate: { value: '', validate: RED.validators.number(true) },
+      intervalMs: { value: 100, validate: RED.validators.number() },
+      ttlMs: { value: 1000, validate: RED.validators.number() }
+    },
+    inputs: 1,
+    outputs: 2,
+    outputLabels: ['continue', 'status'],
+    icon: 'font-awesome/fa-location-arrow',
+    label: function () { return this.name || 'mavlink move'; }
+  });
+</script>
+
+<script type="text/html" data-template-name="mavlink-move">
+  <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+  <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="stream">Stream</option></select></div>
+  <div class="form-row"><label for="node-input-mode">Mode</label><select id="node-input-mode"><option value="local-position">Local position</option><option value="local-velocity">Local velocity</option><option value="global-position">Global position</option></select></div>
+  <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><input type="number" id="node-input-targetComponent" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-north">North / Lat</label><input type="text" id="node-input-north" placeholder="m north"><input type="text" id="node-input-lat" placeholder="deg lat" style="width:30%;"></div>
+  <div class="form-row"><label for="node-input-east">East / Lon</label><input type="text" id="node-input-east" placeholder="m east"><input type="text" id="node-input-lon" placeholder="deg lon" style="width:30%;"></div>
+  <div class="form-row"><label for="node-input-up">Up / Alt</label><input type="text" id="node-input-up" placeholder="m up"><input type="text" id="node-input-alt" placeholder="m alt" style="width:30%;"></div>
+  <div class="form-row"><label for="node-input-vNorth">Velocity</label><input type="text" id="node-input-vNorth" placeholder="north m/s"><input type="text" id="node-input-vEast" placeholder="east m/s" style="width:20%;"><input type="text" id="node-input-vUp" placeholder="up m/s" style="width:20%;"></div>
+  <div class="form-row"><label for="node-input-yaw">Yaw</label><input type="text" id="node-input-yaw" placeholder="rad"><input type="text" id="node-input-yawRate" placeholder="rad/s" style="width:30%;"></div>
+  <div class="form-row"><label for="node-input-intervalMs">Stream ms</label><input type="number" id="node-input-intervalMs"></div>
+  <div class="form-row"><label for="node-input-ttlMs">TTL ms</label><input type="number" id="node-input-ttlMs"></div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-move">
+  <p>Builds or sends SET_POSITION_TARGET_* messages. Local altitude and vertical velocity are entered up-positive; the node flips them once to MAVLink NED down-positive values.</p>
+  <p>Output 0 continues only on success. Output 1 carries the status record for every terminal outcome.</p>
+</script>
