@@ -32,6 +32,70 @@ test('mavlink-param node builds PARAM_SET from msg payload values', () => {
   assert.equal(sent[1].payload._mavlinkStatus, true);
 });
 
+test('mavlink-param confirm set scopes its PARAM_VALUE subscription to the target vehicle', () => {
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'confirm',
+    action: 'set',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 1,
+  });
+
+  node.emit('input', { payload: { paramId: 'FOO', value: 1 } }, () => {}, () => {});
+
+  assert.equal(conn.subs.length, 1, 'one PARAM_VALUE subscription installed');
+  assert.equal(conn.subs[0].filter.message, 'PARAM_VALUE');
+  assert.equal(conn.subs[0].filter.sysid, 6, 'subscription scoped to target sysid');
+  assert.equal(conn.subs[0].filter.compid, 1, 'subscription scoped to target compid');
+});
+
+test('mavlink-param cancels a prior in-flight subscription when a second op starts', () => {
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'confirm',
+    action: 'set',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 1,
+  });
+
+  node.emit('input', { payload: { paramId: 'FOO', value: 1 } }, () => {}, () => {});
+  node.emit('input', { payload: { paramId: 'BAR', value: 2 } }, () => {}, () => {});
+
+  // Two subscriptions were created, but the first must have been cancelled so
+  // exactly one remains active (no leak).
+  assert.equal(conn.subs.length, 2);
+  assert.equal(conn.activeCount(), 1, 'only the latest subscription remains active');
+});
+
+/**
+ * Connection stub that records subscription filters and unsubscribe calls.
+ */
+function connStub() {
+  const subs = [];
+  return {
+    subs,
+    send() {},
+    subscribe(filter, handler) {
+      const entry = { filter, handler, active: true };
+      subs.push(entry);
+      return () => {
+        entry.active = false;
+      };
+    },
+    activeCount() {
+      return subs.filter((s) => s.active).length;
+    },
+  };
+}
+
 function redStub(nodesById) {
   return {
     nodes: {

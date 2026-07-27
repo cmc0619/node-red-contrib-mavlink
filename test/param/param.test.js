@@ -49,6 +49,24 @@ test('Param set confirms only by matching PARAM_VALUE echo, decoded through the 
   assert.equal(matchesParamEcho(request, { ...echo, fields: { ...echo.fields, param_id: 'OTHER' } }), false);
 });
 
+test('PARAM_VALUE echo from another vehicle does not confirm a scoped set', () => {
+  const request = {
+    target: { sysid: 6, compid: 1 },
+    paramId: 'FOO',
+    value: 12,
+    paramType: 'MAV_PARAM_TYPE_REAL32',
+    firmware: 'ardupilot',
+  };
+  const fields = { param_id: 'FOO', param_type: 9, param_value: 12 };
+
+  // Correct source (sysid 6) confirms.
+  assert.equal(matchesParamEcho(request, { name: 'PARAM_VALUE', sysid: 6, compid: 1, fields }), true);
+  // A matching id/value from another system (sysid 2) must not confirm.
+  assert.equal(matchesParamEcho(request, { name: 'PARAM_VALUE', sysid: 2, compid: 1, fields }), false);
+  // Wrong component on the right system is also rejected.
+  assert.equal(matchesParamEcho(request, { name: 'PARAM_VALUE', sysid: 6, compid: 5, fields }), false);
+});
+
 test('PARAM_REQUEST_READ and PARAM_REQUEST_LIST build their distinct messages', () => {
   const read = buildParamMessage({
     action: 'read',

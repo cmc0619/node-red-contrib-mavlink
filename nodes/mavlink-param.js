@@ -15,6 +15,14 @@ module.exports = function registerMavlinkParam(RED) {
     const node = this;
     let unsubscribe = null;
 
+    /** Cancel any in-flight PARAM_VALUE subscription from a prior operation. */
+    function cancelPending() {
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+    }
+
     node.on('input', (msg, send, done) => {
       const emit = send || ((messages) => node.send(messages));
       try {
@@ -41,16 +49,25 @@ module.exports = function registerMavlinkParam(RED) {
             target: request.target,
             identityId: config.identity || payload.identityId,
           });
+          // Scope the PARAM_VALUE subscription to the addressed vehicle so a
+          // reply from another system on a shared connection cannot confirm
+          // this operation or interleave into a list from a different vehicle.
+          const echoFilter = { message: 'PARAM_VALUE', sysid: request.target.sysid };
+          if (request.target.compid) echoFilter.compid = request.target.compid;
           if (delivery === 'confirm' && request.action === 'set') {
-            unsubscribe = connectionNode.subscribe({ message: 'PARAM_VALUE' }, (decoded) => {
+            // A second confirm/collect before the first settles would orphan the
+            // prior subscription; cancel it so only one is ever installed.
+            cancelPending();
+            unsubscribe = connectionNode.subscribe(echoFilter, (decoded) => {
               if (!matchesParamEcho(request, decoded)) return;
               if (unsubscribe) unsubscribe();
               unsubscribe = null;
               completeResult(node, emit, 'succeeded', 'echo-confirmed', decoded);
             });
           } else if (delivery === 'collect' && request.action === 'request-list') {
+            cancelPending();
             const collector = createParamListCollector();
-            unsubscribe = connectionNode.subscribe({ message: 'PARAM_VALUE' }, (decoded) => {
+            unsubscribe = connectionNode.subscribe(echoFilter, (decoded) => {
               const params = collector.accept(decoded);
               if (!params) return;
               if (unsubscribe) unsubscribe();
