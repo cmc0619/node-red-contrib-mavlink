@@ -11,9 +11,13 @@ test('mavlink-local-identity stores heartbeatIntervalMs with a 1 Hz default', ()
 
   const defaulted = new Node({ id: 'defaulted', role: 'gcs' });
   const custom = new Node({ id: 'custom', role: 'gcs', heartbeatIntervalMs: 250 });
+  const explicitDefault = new Node({ id: 'explicit', role: 'gcs', heartbeatIntervalMs: 1000 });
 
   assert.equal(defaulted.heartbeatIntervalMs, 1000);
+  assert.equal(defaulted.heartbeatIntervalMsConfigured, false);
   assert.equal(custom.heartbeatIntervalMs, 250);
+  assert.equal(custom.heartbeatIntervalMsConfigured, true);
+  assert.equal(explicitDefault.heartbeatIntervalMsConfigured, true);
 });
 
 function redStub() {

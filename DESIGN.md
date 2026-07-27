@@ -1323,7 +1323,8 @@ using that interval and does not surface HB controls. Peer-table stale/expire st
 (inbound freshness). Outbound addressing uses the peer-table primary endpoint (optional Remote
 fallback); `target_system = 0` is a normal message field with no Connection broadcast flag.
 Legacy flows that still store Connection `heartbeatInterval` keep that cadence until the
-Connection is re-saved, when the identity still has the default 1000 ms.
+identity flow JSON includes `heartbeatIntervalMs` (or the Connection is re-saved and the
+legacy key drops).
 *Check:* `node --test test/connection/heartbeat.test.js test/identity/` ;
 Local Identity editor shows HB Interval; Connection editor has no Heartbeat/Broadcast rows.
 

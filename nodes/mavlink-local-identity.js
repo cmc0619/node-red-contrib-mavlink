@@ -83,6 +83,12 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
 
     node.heartbeatType = config.heartbeatType || preset.heartbeatType;
     node.heartbeatAutopilot = config.heartbeatAutopilot || preset.heartbeatAutopilot;
+    // True only when the flow JSON actually stored the key — used so Connection
+    // legacy `heartbeatInterval` migrates only for pre-upgrade identities.
+    node.heartbeatIntervalMsConfigured = Object.prototype.hasOwnProperty.call(
+      config,
+      'heartbeatIntervalMs'
+    );
     node.heartbeatIntervalMs = parseHeartbeatIntervalMs(config.heartbeatIntervalMs);
 
     if (problems.length) {

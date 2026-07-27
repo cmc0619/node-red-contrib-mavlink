@@ -142,10 +142,11 @@ function identitySnapshot(idNode, defaults, bundle, connectionId, legacyHeartbea
   const hb = idNode.getHeartbeatFields();
   const fromIdentity = Number(idNode.heartbeatIntervalMs);
   let heartbeatIntervalMs = Number.isFinite(fromIdentity) && fromIdentity > 0 ? fromIdentity : 1000;
+  // Migrate Connection-era cadence only when the identity never saved the new
+  // field (defaults alone look like 1000 and must not override an explicit 1000).
   if (
     legacyHeartbeatIntervalMs != null
-    && heartbeatIntervalMs === 1000
-    && legacyHeartbeatIntervalMs !== 1000
+    && !idNode.heartbeatIntervalMsConfigured
   ) {
     heartbeatIntervalMs = legacyHeartbeatIntervalMs;
   }
