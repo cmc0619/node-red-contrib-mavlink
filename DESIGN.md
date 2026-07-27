@@ -1295,3 +1295,17 @@ items. Fence and rally validators stay strict to their families.
 wrong MAV_CMD list to that key. A miss returns 404 unless the request also names an
 allow-listed bundled `?dialect=`; `custom` without a live profile is never served.
 *Check:* `node --test test/command/commands-route.test.js`
+
+**Bind-mounted source is not an installed package.**
+*Wrong belief:* `npm install /module` from the Node-RED user directory (or listing
+`mavlink-mappings` in `package.json`) is enough for a `/module` bind mount to load.
+*Fact:* Node resolves `require('mavlink-mappings')` from the file that loads
+(`…/lib/metadata/bundled.js`), walking `node_modules` upward from that real path. A bare mount
+has no `node_modules`. Worse, `npm install /path` **symlinks** the package and npm's local-path
+rule skips installing that package's dependencies — so `/data/node_modules/node-red-contrib-mavlink`
+→ `/module` still cannot see `mavlink-mappings`. Fix with `npm install --omit=dev` **on the
+mount**, or install a real copy into the user directory (`npm install --install-links /path` or
+a packed `.tgz` / git URL).
+*Check:* `npm install /tmp/bare-checkout` from a clean userDir — `ls node_modules` has the
+symlink and no `mavlink-mappings`; then `npm install --install-links /tmp/bare-checkout` and
+`node -e "require('mavlink-mappings')"`.
