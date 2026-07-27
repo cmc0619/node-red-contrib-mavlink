@@ -103,18 +103,36 @@
     }
 
     /**
+     * Build an admin API URL under Node-RED's configured httpAdminRoot.
+     * Absolute `/mavlink/...` paths 404 when the editor is mounted at e.g. `/red`.
+     *
+     * @param {string} path  absolute-looking path, e.g. `/mavlink/enums`
+     * @returns {string}
+     */
+    RED.mavlink.adminApiUrl = function (path) {
+      var root = (RED.settings && RED.settings.httpAdminRoot) || '/';
+      if (root.slice(-1) !== '/') root += '/';
+      return root + String(path || '').replace(/^\//, '');
+    };
+
+    /**
      * Load a shared dialect enum catalog from the admin endpoint.
+     * Callers that open dialogs should pass a `{ cancelled: boolean }` token and
+     * set `cancelled` from oneditcancel so a late response cannot fill another dialog.
      *
      * @param {string[]|string} names  extra enum table names to include
      * @param {function(object):void} cb
+     * @param {{cancelled?: boolean}} [token]
      */
-    RED.mavlink.loadEnumsCatalog = function (names, cb) {
-      $.getJSON('/mavlink/enums', currentEnumQuery(names), function (data) {
+    RED.mavlink.loadEnumsCatalog = function (names, cb, token) {
+      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), currentEnumQuery(names), function (data) {
+        if (token && token.cancelled) return;
         cb({
           dialect: data.dialect,
           enums: data.enums || {}
         });
       }).fail(function () {
+        if (token && token.cancelled) return;
         cb({ dialect: '', enums: {} });
       });
     };
@@ -251,23 +269,27 @@
         var $hbType = $('#node-config-input-heartbeatType');
         var $hbAp   = $('#node-config-input-heartbeatAutopilot');
         var prevRole = $role.val() || 'gcs';
+        var enumLoadToken = { cancelled: false };
+        node._mavEnumLoadToken = enumLoadToken;
 
         if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
           RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMP_ID'], function (catalog) {
-            var enums = catalog.enums || {};
+            var enums = (catalog && catalog.enums) || {};
+            // Prefer live dialog values so a role change before the catalog
+            // resolves is not overwritten by the pre-edit saved snapshot.
             RED.mavlink.fillEnumSelect($hbType, enums.MAV_TYPE || [], {
               valueKey: 'name',
               allowEmpty: true,
-              saved: node.heartbeatType
+              saved: $hbType.val() || node.heartbeatType
             });
             RED.mavlink.fillEnumSelect($hbAp, enums.MAV_AUTOPILOT || [], {
               valueKey: 'name',
-              saved: node.heartbeatAutopilot
+              saved: $hbAp.val() || node.heartbeatAutopilot
             });
             RED.mavlink.fillCompIdSelect($compid, enums.MAV_COMP_ID || [], {
-              saved: node.sourceComponentId
+              saved: $compid.val() || node.sourceComponentId
             });
-          });
+          }, enumLoadToken);
         }
 
         function preset(role) {
@@ -329,6 +351,7 @@
         applyVisibility(prevRole);
       },
       oneditsave: function () {
+        if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
         /**
          * Companion role: clear any values a previous role left behind. The
          * runtime ignores them anyway (derives sysid, pins compid to 191), but
@@ -338,6 +361,9 @@
           this.sourceSystemId = '';
           this.sourceComponentId = '';
         }
+      },
+      oneditcancel: function () {
+        if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
       }
     });
   })();

@@ -272,15 +272,21 @@
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
       }
 
-      if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
+      function reloadTargetCompId() {
+        if (!(RED.mavlink && RED.mavlink.loadEnumsCatalog)) return;
+        const seq = ++compIdRequestSeq;
+        const saved = $('#node-input-targetCompid').val() || node.targetCompid;
         RED.mavlink.loadEnumsCatalog(['MAV_COMP_ID'], function (catalog) {
+          if (seq !== compIdRequestSeq) return;
           RED.mavlink.fillCompIdSelect(
             $('#node-input-targetCompid'),
-            (catalog.enums || {}).MAV_COMP_ID || [],
-            { allowEmpty: true, emptyLabel: '(default)', saved: node.targetCompid }
+            ((catalog || {}).enums || {}).MAV_COMP_ID || [],
+            { allowEmpty: true, emptyLabel: '(default)', saved: saved }
           );
         });
       }
+      let compIdRequestSeq = 0;
+      reloadTargetCompId();
 
       // ── Mode toggle ────────────────────────────────────────────────────────
       function applyMode(mode) {
@@ -392,7 +398,8 @@
         presetMessagesCatalog = null;
         presetMessagesKey = '';
         refreshDelivery();
-        // Connection binds a Vehicle Profile → dialect; Advanced list follows it.
+        // Connection binds a Vehicle Profile → dialect; CompID + Advanced follow it.
+        reloadTargetCompId();
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
         if ($('#node-input-mode').val() === 'preset') refreshParamFields();
       });

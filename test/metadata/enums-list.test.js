@@ -89,3 +89,30 @@ test('listEnumsCatalog loads bundled dialect enum entries', () => {
   assert.equal(catalog.enums.MAV_TYPE.length, expectedCount);
   assert.ok(catalog.enums.MAV_TYPE.some((entry) => entry.label === 'MAV_TYPE_GCS (6)'));
 });
+
+test('catalogEnumsFromBundle preserves values outside MAX_SAFE_INTEGER as strings', () => {
+  const huge = String(Number.MAX_SAFE_INTEGER + 10);
+  const catalog = catalogEnumsFromBundle(
+    {
+      dialect: 'fixture',
+      enums: {
+        MAV_TYPE: { entries: [] },
+        MAV_AUTOPILOT: { entries: [] },
+        MAV_COMP_ID: { entries: [] },
+        MAV_STATE: { entries: [] },
+        MAV_MODE: { entries: [] },
+        SPEED_TYPE: { entries: [] },
+        CAMERA_MODE: { entries: [] },
+        MAV_MOUNT_MODE: { entries: [] },
+        ORBIT_YAW_BEHAVIOUR: { entries: [] },
+        MAV_DO_REPOSITION_FLAGS: { entries: [] },
+        HUGE_ENUM: { entries: [{ name: 'HUGE_ENUM_X', value: huge, description: '' }] },
+      },
+    },
+    'fixture',
+    ['HUGE_ENUM']
+  );
+
+  assert.equal(catalog.enums.HUGE_ENUM[0].value, huge);
+  assert.equal(typeof catalog.enums.HUGE_ENUM[0].value, 'string');
+});

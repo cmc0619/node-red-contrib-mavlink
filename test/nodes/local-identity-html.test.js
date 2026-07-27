@@ -75,6 +75,7 @@ function loadHelpers() {
 
   const context = {
     RED: {
+      settings: { httpAdminRoot: '/' },
       mavlink: {},
       nodes: { registerType() {} },
     },
@@ -161,7 +162,23 @@ test('identity oneditprepare loads MAV_TYPE by enum name, not numeric value', ()
     html,
     /fillEnumSelect\(\$hbType[\s\S]*valueKey:\s*'name'/
   );
-  assert.match(html, /saved:\s*node\.heartbeatType/);
-  assert.match(html, /saved:\s*node\.heartbeatAutopilot/);
-  assert.match(html, /saved:\s*node\.sourceComponentId/);
+  assert.match(html, /saved:\s*\$hbType\.val\(\)\s*\|\|\s*node\.heartbeatType/);
+  assert.match(html, /saved:\s*\$hbAp\.val\(\)\s*\|\|\s*node\.heartbeatAutopilot/);
+  assert.match(html, /saved:\s*\$compid\.val\(\)\s*\|\|\s*node\.sourceComponentId/);
+});
+
+test('adminApiUrl respects a non-root httpAdminRoot', () => {
+  const context = loadHelpers();
+  context.RED.settings.httpAdminRoot = '/red';
+  assert.equal(context.RED.mavlink.adminApiUrl('/mavlink/enums'), '/red/mavlink/enums');
+});
+
+test('loadEnumsCatalog ignores responses after the dialog token is cancelled', () => {
+  const context = loadHelpers();
+  let calls = 0;
+  const token = { cancelled: true };
+  context.RED.mavlink.loadEnumsCatalog(['MAV_TYPE'], () => {
+    calls += 1;
+  }, token);
+  assert.equal(calls, 0);
 });

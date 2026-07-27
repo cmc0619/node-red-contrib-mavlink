@@ -1,11 +1,13 @@
 <script type="text/javascript">
   (function () {
-    /** Must stay in sync with lib/state DEFAULT_EVENTS. */
+    /** Must stay in sync with lib/state DEFAULT_EVENTS (full peer-table set). */
     var STATE_EVENTS = [
       'peer-new',
       'component-new',
+      'heartbeat',
       'stale',
       'expired',
+      'endpoint-added',
       'primary-changed',
       'multi-endpoint',
       'profile-mismatch',
@@ -60,18 +62,24 @@
         buildEventsMultiSelect(node);
         $('#mav-state-events-select').on('change', syncEventsHiddenFromSelect);
         syncEventsHiddenFromSelect();
+        var enumLoadToken = { cancelled: false };
+        node._mavEnumLoadToken = enumLoadToken;
         if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
           RED.mavlink.loadEnumsCatalog(['MAV_COMP_ID'], function (catalog) {
             RED.mavlink.fillCompIdSelect(
               $('#node-input-targetComponent'),
-              (catalog.enums || {}).MAV_COMP_ID || [],
+              ((catalog || {}).enums || {}).MAV_COMP_ID || [],
               { allowEmpty: true, emptyLabel: 'Any component', saved: node.targetComponent }
             );
-          });
+          }, enumLoadToken);
         }
       },
       oneditsave: function () {
+        if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
         syncEventsHiddenFromSelect();
+      },
+      oneditcancel: function () {
+        if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
       }
     });
   }());
@@ -83,7 +91,7 @@
   <div class="form-row"><label for="node-input-mode">Mode</label><select id="node-input-mode"><option value="snapshot">Snapshot on input</option><option value="feed">Event feed</option></select></div>
   <div class="form-row">
     <label for="mav-state-events-select">Events</label>
-    <select id="mav-state-events-select" multiple="multiple" size="8" style="width:70%"></select>
+    <select id="mav-state-events-select" multiple="multiple" size="10" style="width:70%"></select>
     <input type="hidden" id="node-input-events">
   </div>
   <div class="form-row"><label for="node-input-targetSystem">Filter sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>

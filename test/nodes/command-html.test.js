@@ -139,3 +139,12 @@ test('preset renderer loads enum and message catalogs for selects', () => {
   assert.match(html, /spec\.enumName/, 'enum-backed preset params become selects');
   assert.match(html, /data-kind['"],\s*isBitmask \? ['"]bitmask['"] : ['"]enum['"]/, 'preset bitmask controls are tagged');
 });
+
+test('Command CompID reloads when Connection changes', () => {
+  assert.match(html, /function reloadTargetCompId/, 'CompID load is a reusable helper');
+  assert.match(
+    html,
+    /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'Connection change refreshes MAV_COMP_ID for the new dialect'
+  );
+});
