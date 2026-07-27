@@ -12,7 +12,7 @@ const Module = require('node:module');
 const path = require('node:path');
 
 const originalLoad = Module._load;
-Module._load = function stubMappings(request, parent, isMain) {
+Module._load = function stubMappings(request, _parent, _isMain) {
   if (request === 'mavlink-mappings') {
     throw new Error("Cannot find module 'mavlink-mappings'");
   }
