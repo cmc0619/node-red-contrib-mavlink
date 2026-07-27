@@ -37,9 +37,18 @@ test('DO_SET_MODE completion stays pending when the active mode differs from par
   assert.equal(res.done, false);
 });
 
-test('DO_SET_MODE completion with no custom mode accepts once the base mode is set', () => {
+test('DO_SET_MODE completion matches custom mode 0 when the vehicle is in mode 0', () => {
+  // custom_mode 0 is a real mode (ArduPilot STABILIZE); a truthiness test would
+  // wrongly report success the moment a peer exists. It must compare against 0.
   const params = [1, 0, 0, 0, 0, 0, 0];
-  const pt = peerWithMode(3, 1, 2);
+  const pt = peerWithMode(3, 1, 0);
   const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
   assert.equal(res.done, true);
+});
+
+test('DO_SET_MODE completion stays pending when custom mode 0 is requested but the vehicle is in another mode', () => {
+  const params = [1, 0, 0, 0, 0, 0, 0];
+  const pt = peerWithMode(3, 1, 5);
+  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
+  assert.equal(res.done, false);
 });
