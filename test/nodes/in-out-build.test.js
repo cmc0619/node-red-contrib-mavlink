@@ -51,6 +51,12 @@ function makeRED() {
         configNodes[id] = nodeObj;
       },
     },
+    httpAdmin: {
+      get() {},
+    },
+    auth: {
+      needsPermission() { return (_req, _res, next) => next && next(); },
+    },
     _nodeTypes: nodeTypes,
   };
 }
@@ -604,14 +610,22 @@ test('mavlink-build: marks invalid config when vehicle is missing', () => {
   assert.equal(node._status && node._status.fill, 'red');
 });
 
-test('mavlink-build: marks invalid config when messageName is empty', () => {
+test('mavlink-build: defaults empty messageName to HEARTBEAT', () => {
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
   require('../../nodes/mavlink-build')(RED);
   const Constructor = RED._nodeTypes['mavlink-build'];
   const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, { vehicle: 'v1', messageName: '' });
-  assert.equal(node._status && node._status.fill, 'red');
+  Constructor.call(node, { vehicle: 'v1', messageName: '', tier: 'build' });
+  assert.equal(node._status && node._status.fill, 'green');
+  assert.equal(node._status && node._status.text, 'HEARTBEAT');
+
+  node._input({ payload: { type: 6, autopilot: 3 } });
+
+  assert.equal(node._sends.length, 1);
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0.payload.messageName, 'HEARTBEAT');
+  assert.equal(out1.result, 'built');
 });
 
 test('mavlink-build: marks invalid config when messageName is not in dialect', () => {

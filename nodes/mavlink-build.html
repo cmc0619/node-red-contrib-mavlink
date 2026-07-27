@@ -13,6 +13,126 @@
       { value: 'send',  label: 'Send' },
     ];
 
+    var COMMAND_MESSAGES = { COMMAND_LONG: true, COMMAND_INT: true };
+
+    /** @type {Object<string, {messages:Array, enums:Object, dialect:string, error?:string}>} */
+    var _msgCatalogByKey = {};
+    var _msgCatalogKey = '';
+    var _msgRequestSeq = 0;
+    /** @type {Object<string, {commands:Array, enums:Object}>} */
+    var _cmdCatalogByKey = {};
+    var _cmdRequestSeq = 0;
+
+    function resolveVehicleTarget() {
+      var vehicleId = $('#node-input-vehicle').val() || '';
+      var dialect = 'ardupilotmega';
+      if (vehicleId && RED.nodes && RED.nodes.node) {
+        var vehicle = RED.nodes.node(vehicleId);
+        if (vehicle && vehicle.dialect) dialect = vehicle.dialect;
+      }
+      if (vehicleId) {
+        return {
+          key: 'vehicle:' + vehicleId,
+          query: { vehicle: vehicleId, dialect: dialect },
+          dialect: dialect,
+        };
+      }
+      return {
+        key: 'dialect:' + dialect,
+        query: { dialect: dialect },
+        dialect: dialect,
+      };
+    }
+
+    function loadMessagesCatalog(cb) {
+      var target = resolveVehicleTarget();
+      if (_msgCatalogByKey[target.key]) {
+        _msgCatalogKey = target.key;
+        cb(_msgCatalogByKey[target.key]);
+        return;
+      }
+      var seq = ++_msgRequestSeq;
+      $.getJSON('/mavlink/build/messages', target.query, function (data) {
+        if (seq !== _msgRequestSeq) return;
+        var catalog = {
+          messages: data.messages || [],
+          enums: data.enums || {},
+          dialect: data.dialect || target.dialect,
+        };
+        _msgCatalogByKey[target.key] = catalog;
+        _msgCatalogKey = target.key;
+        cb(catalog);
+    }).fail(function (_xhr, _status, err) {
+      if (seq !== _msgRequestSeq) return;
+      var catalog = {
+        messages: [],
+        enums: {},
+        dialect: target.dialect,
+        error: String(err || 'load failed'),
+      };
+      _msgCatalogByKey[target.key] = catalog;
+      _msgCatalogKey = target.key;
+      cb(catalog);
+    });
+  }
+
+    function loadCommandsCatalog(cb) {
+      var target = resolveVehicleTarget();
+      if (_cmdCatalogByKey[target.key]) {
+        cb(_cmdCatalogByKey[target.key]);
+        return;
+      }
+      var seq = ++_cmdRequestSeq;
+      $.getJSON('/mavlink/command/commands', target.query, function (data) {
+        if (seq !== _cmdRequestSeq) return;
+        var catalog = {
+          commands: data.commands || [],
+          enums: data.enums || {},
+          dialect: data.dialect || target.dialect,
+        };
+        _cmdCatalogByKey[target.key] = catalog;
+        cb(catalog);
+      }).fail(function (_xhr, _status, err) {
+        if (seq !== _cmdRequestSeq) return;
+        cb({ commands: [], enums: {}, dialect: target.dialect, error: String(err || 'load failed') });
+      });
+    }
+
+    /** Collect typed values from live `.mav-field-input` controls (oneditsave + live sync). */
+    function collectFieldInputsFromDom($root) {
+      var fields = {};
+      $root.find('.mav-field-input').each(function () {
+        var name = $(this).attr('data-field');
+        if (!name) return;
+        var kind = $(this).attr('data-kind') || 'number';
+        var raw = $(this).val();
+        if (kind === 'bitmask') {
+          fields[name] = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+          return;
+        }
+        if (raw === '' || raw === null || raw === undefined) return;
+        if (kind === 'array') {
+          fields[name] = String(raw).split(/[,\s]+/).filter(function (p) { return p !== ''; }).map(function (p) {
+            var n = Number(p);
+            return Number.isNaN(n) ? p : n;
+          });
+          return;
+        }
+        if (kind === 'int64' || kind === 'char') {
+          fields[name] = String(raw);
+          return;
+        }
+        if (kind === 'enum') {
+          var asNum = Number(raw);
+          fields[name] = !Number.isNaN(asNum) && String(asNum) === String(raw) ? asNum : raw;
+          return;
+        }
+        var n = Number(raw);
+        fields[name] = !Number.isNaN(n) ? n : raw;
+      });
+      return fields;
+    }
+
     RED.nodes.registerType('mavlink-build', {
       category: 'MAVLink',
       color: '#6ea6d7',
@@ -20,7 +140,7 @@
         name:        { value: '' },
         vehicle:     { value: '', type: 'mavlink-vehicle', required: true },
         connection:  { value: '', type: 'mavlink-connection' },
-        messageName: { value: '' },
+        messageName: { value: 'HEARTBEAT' },
         fields:      { value: '{}' },
         tier:        { value: 'send' },
         band:        { value: '2' },
@@ -39,14 +159,24 @@
       },
       oneditprepare: function () {
         var node = this;
+        var container = $('#node-input-fields-container');
+        var savedFields = {};
+        try { savedFields = JSON.parse(node.fields || '{}'); } catch (_e) { savedFields = {}; }
+        /** Tracks MAV_CMD identity across param rebuilds; `undefined` = not initialized. */
+        var lastBuildCommandId = undefined;
+        var COMMAND_PARAM_KEYS = [
+          'param1', 'param2', 'param3', 'param4', 'param5', 'param6', 'param7', 'x', 'y', 'z',
+        ];
 
-        // Vehicle / Connection: standard config-node select with edit/add (§6).
+        function clearCommandParamWireFields() {
+          COMMAND_PARAM_KEYS.forEach(function (key) { delete savedFields[key]; });
+        }
+
         if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
           RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
           RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
         }
 
-        /* Tier dropdown */
         var $tier = $('#node-input-tier');
         $tier.empty();
         TIER_OPTIONS.forEach(function (opt) {
@@ -54,7 +184,6 @@
         });
         $tier.val(node.tier || 'send');
 
-        /* Band dropdown */
         var $band = $('#node-input-band');
         $band.empty();
         BAND_OPTIONS.forEach(function (opt) {
@@ -62,13 +191,8 @@
         });
         $band.val(node.band !== undefined ? String(node.band) : '2');
 
-        /* Message name — plain text for now; a future pass wires a dialect dropdown */
-        $('#node-input-messageName').val(node.messageName || '');
-
-        /* Show/hide connection row based on tier */
         function updateConnectionRow() {
-          var t = $tier.val();
-          if (t === 'build') {
+          if ($tier.val() === 'build') {
             $('#mav-connection-row').hide();
           } else {
             $('#mav-connection-row').show();
@@ -76,6 +200,296 @@
         }
         $tier.on('change', updateConnectionRow);
         updateConnectionRow();
+
+        function formRow(label, control) {
+          var row = $('<div class="form-row"></div>');
+          row.append($('<label></label>').text(label).css('width', '140px'));
+          row.append(control);
+          return row;
+        }
+
+        function fieldLabel(spec) {
+          var label = spec.name || 'field';
+          if (spec.units) label += ' (' + spec.units + ')';
+          return label;
+        }
+
+        function isCharArray(spec) {
+          return spec.type === 'char' || (String(spec.type || '').indexOf('char') === 0);
+        }
+
+        function isInt64(spec) {
+          return spec.type === 'int64_t' || spec.type === 'uint64_t';
+        }
+
+        function isCommandParamSlot(name) {
+          return /^param[1-7]$/.test(name);
+        }
+
+        /** COMMAND_INT carries location in x/y/z, not param5–7. */
+        function wireFieldForCommandParam(msgName, index) {
+          if (msgName === 'COMMAND_INT' && index >= 5 && index <= 7) {
+            return ['x', 'y', 'z'][index - 5];
+          }
+          return 'param' + index;
+        }
+
+        function fieldInput(spec, enums) {
+          var saved = savedFields[spec.name];
+          if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
+            var multi = spec.display === 'bitmask';
+            var sel = $('<select class="mav-field-input"></select>')
+              .attr('data-field', spec.name)
+              .attr('data-kind', multi ? 'bitmask' : 'enum')
+              .attr('title', spec.description || '');
+            if (multi) sel.attr('multiple', 'multiple').attr('size', Math.min(6, enums[spec.enum].length));
+            else sel.append($('<option></option>').val('').text('\u2014'));
+            enums[spec.enum].forEach(function (entry) {
+              sel.append($('<option></option>').val(entry.name).text(entry.label));
+            });
+            if (multi) {
+              var selected = Array.isArray(saved) ? saved.map(String) : (saved !== undefined && saved !== null && saved !== '' ? [String(saved)] : []);
+              sel.val(selected);
+            } else if (saved !== undefined && saved !== null && saved !== '') {
+              // Accept saved numeric value or entry name.
+              var match = enums[spec.enum].find(function (e) {
+                return String(e.value) === String(saved) || e.name === saved;
+              });
+              sel.val(match ? match.name : String(saved));
+            }
+            return sel;
+          }
+          if (isCharArray(spec)) {
+            return $('<input type="text" class="mav-field-input">')
+              .attr('data-field', spec.name)
+              .attr('data-kind', 'char')
+              .attr('title', spec.description || '')
+              .attr('maxlength', spec.arrayLength || undefined)
+              .val(saved !== undefined && saved !== null ? saved : '');
+          }
+          if (spec.arrayLength) {
+            var arrVal = Array.isArray(saved) ? saved.join(', ') : (saved !== undefined && saved !== null ? saved : '');
+            return $('<input type="text" class="mav-field-input" style="width:70%">')
+              .attr('data-field', spec.name)
+              .attr('data-kind', 'array')
+              .attr('title', (spec.description || '') + ' (comma-separated, length ' + spec.arrayLength + ')')
+              .attr('placeholder', 'e.g. 0, 0, 0')
+              .val(arrVal);
+          }
+          if (isInt64(spec)) {
+            return $('<input type="text" class="mav-field-input">')
+              .attr('data-field', spec.name)
+              .attr('data-kind', 'int64')
+              .attr('title', spec.description || '64-bit decimal string')
+              .val(saved !== undefined && saved !== null ? String(saved) : '');
+          }
+          var input = $('<input type="number" class="mav-field-input">')
+            .attr('data-field', spec.name)
+            .attr('data-kind', 'number')
+            .attr('title', spec.description || '')
+            .val(saved !== undefined && saved !== null ? saved : '');
+          if (spec.minValue !== null && spec.minValue !== undefined) input.attr('min', spec.minValue);
+          if (spec.maxValue !== null && spec.maxValue !== undefined) input.attr('max', spec.maxValue);
+          if (spec.increment !== null && spec.increment !== undefined) input.attr('step', spec.increment);
+          return input;
+        }
+
+        /**
+         * Merge live edits into savedFields before rebuilding controls so a MAV_CMD
+         * (or message) change does not discard in-session parameter values.
+         */
+        function syncSavedFieldsFromDom() {
+          var $root = $('#node-input-fields-container');
+          if (!$root.find('.mav-field-input').length) return;
+          var live = collectFieldInputsFromDom($root);
+          // Empty controls are omitted from `live` (save semantics). Delete those
+          // keys from the working snapshot so a rebuild does not restore them.
+          $root.find('.mav-field-input').each(function () {
+            var name = $(this).attr('data-field');
+            if (!name) return;
+            if (Object.prototype.hasOwnProperty.call(live, name)) {
+              savedFields[name] = live[name];
+            } else {
+              delete savedFields[name];
+            }
+          });
+        }
+
+        function commandParamInput(msgName, spec, enums) {
+          var key = wireFieldForCommandParam(msgName, spec.index);
+          var saved = savedFields[key];
+          // COMMAND_INT may also have legacy param5–7 saved from earlier builds.
+          if ((saved === undefined || saved === null || saved === '') && msgName === 'COMMAND_INT' && spec.index >= 5) {
+            saved = savedFields['param' + spec.index];
+          }
+          if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
+            var sel = $('<select class="mav-field-input"></select>')
+              .attr('data-field', key)
+              .attr('data-kind', 'enum')
+              .attr('title', spec.description || '');
+            sel.append($('<option></option>').val('').text('\u2014'));
+            enums[spec.enum].forEach(function (entry) {
+              sel.append($('<option></option>').val(String(entry.value)).text(entry.label));
+            });
+            if (saved !== undefined && saved !== null && saved !== '') sel.val(String(saved));
+            return sel;
+          }
+          var input = $('<input type="number" class="mav-field-input">')
+            .attr('data-field', key)
+            .attr('data-kind', 'number')
+            .attr('title', spec.description || '')
+            .val(saved !== undefined && saved !== null ? saved : '');
+          if (spec.minValue !== null && spec.minValue !== undefined) input.attr('min', spec.minValue);
+          if (spec.maxValue !== null && spec.maxValue !== undefined) input.attr('max', spec.maxValue);
+          if (spec.increment !== null && spec.increment !== undefined) input.attr('step', spec.increment);
+          return input;
+        }
+
+        function refreshCommandParams(msgName, cmdCatalog) {
+          syncSavedFieldsFromDom();
+          var $slot = $('#mav-command-params');
+          $slot.empty();
+          if (!cmdCatalog) {
+            $slot.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
+            return;
+          }
+          var cmdId = $('#mav-build-command-select').val() || '';
+          // Same command rebuild keeps live edits; a different MAV_CMD must not
+          // inherit paramN/x/y/z values that mean something else on the new command.
+          if (lastBuildCommandId !== undefined && String(lastBuildCommandId) !== String(cmdId)) {
+            clearCommandParamWireFields();
+          }
+          lastBuildCommandId = cmdId;
+          if (!cmdId) {
+            $slot.append($('<div class="form-row"><em>Select a MAV_CMD to configure parameters.</em></div>'));
+            return;
+          }
+          var cmd = (cmdCatalog.commands || []).find(function (c) {
+            return String(c.value) === String(cmdId);
+          });
+          if (!cmd) {
+            $slot.append($('<div class="form-row"><em>Command not in this dialect.</em></div>'));
+            return;
+          }
+          var visible = (cmd.params || []).filter(function (p) { return !p.hidden; });
+          if (!visible.length) {
+            $slot.append($('<div class="form-row"><em>No exposed parameters for this command.</em></div>'));
+            return;
+          }
+          visible.forEach(function (spec) {
+            var label = spec.label || spec.description || ('param ' + spec.index);
+            if (spec.units) label += ' (' + spec.units + ')';
+            $slot.append(formRow(label, commandParamInput(msgName, spec, cmdCatalog.enums || {})));
+          });
+        }
+
+        function refreshFieldForm() {
+          syncSavedFieldsFromDom();
+          container.empty();
+          var catalog = _msgCatalogByKey[_msgCatalogKey];
+          var msgName = $('#node-input-messageName').val();
+          if (!catalog) {
+            container.append($('<div class="form-row"><em>Loading message fields\u2026</em></div>'));
+            return;
+          }
+          if (catalog.error && !(catalog.messages && catalog.messages.length)) {
+            container.append($('<div class="form-row"><em>Could not load messages for this Vehicle dialect. Deploy the Vehicle Profile (required for custom dialects).</em></div>'));
+            return;
+          }
+          var msg = (catalog.messages || []).find(function (m) { return m.name === msgName; });
+          if (!msg) {
+            container.append($('<div class="form-row"><em>Message not in this dialect.</em></div>'));
+            return;
+          }
+
+          if (COMMAND_MESSAGES[msg.name]) {
+            // COMMAND_LONG / COMMAND_INT: named command params, never Param 1–7 (§6).
+            // COMMAND_INT location lives in x/y/z — hide those raw slots too.
+            lastBuildCommandId = undefined;
+            (msg.fields || []).forEach(function (spec) {
+              if (isCommandParamSlot(spec.name) || spec.name === 'command') return;
+              if (msg.name === 'COMMAND_INT' && (spec.name === 'x' || spec.name === 'y' || spec.name === 'z')) return;
+              container.append(formRow(fieldLabel(spec), fieldInput(spec, catalog.enums || {})));
+            });
+            var cmdSel = $('<select id="mav-build-command-select" class="mav-field-input"></select>')
+              .attr('data-field', 'command')
+              .attr('data-kind', 'number');
+            cmdSel.append($('<option></option>').val('').text('\u2014 select MAV_CMD \u2014'));
+            container.append(formRow('command (MAV_CMD)', cmdSel));
+            container.append($('<div id="mav-command-params"></div>'));
+            loadCommandsCatalog(function (cmdCatalog) {
+              (cmdCatalog.commands || []).forEach(function (c) {
+                cmdSel.append($('<option></option>').val(String(c.value)).text(c.label));
+              });
+              var savedCmd = savedFields.command;
+              if (savedCmd !== undefined && savedCmd !== null && savedCmd !== '') {
+                cmdSel.val(String(savedCmd));
+              } else if (cmdCatalog.commands && cmdCatalog.commands.length) {
+                // Prefer ARM if present, else first command — never leave blank.
+                var arm = cmdCatalog.commands.find(function (c) { return c.value === 400; });
+                cmdSel.val(String((arm || cmdCatalog.commands[0]).value));
+              }
+              cmdSel.off('change.mavcmd').on('change.mavcmd', function () {
+                refreshCommandParams(msg.name, cmdCatalog);
+              });
+              refreshCommandParams(msg.name, cmdCatalog);
+            });
+            return;
+          }
+
+          var fields = msg.fields || [];
+          if (!fields.length) {
+            container.append($('<div class="form-row"><em>No fields for this message.</em></div>'));
+            return;
+          }
+          fields.forEach(function (spec) {
+            container.append(formRow(fieldLabel(spec), fieldInput(spec, catalog.enums || {})));
+          });
+        }
+
+        function buildMessageDropdown(catalog) {
+          var sel = $('#node-input-messageName');
+          var current = sel.is('select') ? sel.val() : null;
+          var prefer = current || node.messageName || 'HEARTBEAT';
+          if (!sel.is('select')) {
+            var $select = $('<select id="node-input-messageName" style="width:70%"></select>');
+            sel.replaceWith($select);
+            sel = $select;
+          }
+          sel.empty();
+          (catalog.messages || []).forEach(function (m) {
+            sel.append($('<option></option>').val(m.name).text(m.label));
+          });
+          if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
+            sel.append($('<option></option>').val(prefer).text(prefer + ' (missing)'));
+          }
+          if (prefer) sel.val(prefer);
+          else if (catalog.messages && catalog.messages.length) sel.val(catalog.messages[0].name);
+          sel.off('change.mavmsg').on('change.mavmsg', refreshFieldForm);
+          refreshFieldForm();
+        }
+
+        function reloadCatalogs() {
+          container.empty().append($('<div class="form-row"><em>Loading messages\u2026</em></div>'));
+          loadMessagesCatalog(function (catalog) {
+            buildMessageDropdown(catalog);
+          });
+        }
+
+        $('#node-input-vehicle').on('change', function () {
+          // Drop cached catalogs when the Vehicle (and dialect) changes.
+          _msgCatalogByKey = {};
+          _cmdCatalogByKey = {};
+          reloadCatalogs();
+        });
+
+        reloadCatalogs();
+      },
+      oneditsave: function () {
+        var $root = $('#node-input-fields-container');
+        // If catalogs never populated controls, keep the previously saved JSON.
+        if (!$root.find('.mav-field-input').length) return;
+        $('#node-input-fields').val(JSON.stringify(collectFieldInputsFromDom($root)));
       },
     });
   }());
@@ -97,12 +511,13 @@
   <hr/>
   <div class="form-row">
     <label for="node-input-messageName"><i class="fa fa-envelope"></i> Message</label>
-    <input type="text" id="node-input-messageName" placeholder="e.g. HEARTBEAT">
+    <select id="node-input-messageName" style="width:70%"></select>
   </div>
   <div class="form-row">
-    <label for="node-input-fields"><i class="fa fa-list"></i> Fields</label>
-    <textarea id="node-input-fields" style="width:70%;height:80px;font-family:monospace;font-size:12px" placeholder='{"field_name": value}'></textarea>
+    <label style="width:140px;font-weight:bold">Fields</label>
   </div>
+  <div id="node-input-fields-container"></div>
+  <input type="hidden" id="node-input-fields">
   <hr/>
   <div class="form-row">
     <label for="node-input-tier"><i class="fa fa-send"></i> Delivery</label>
@@ -140,9 +555,10 @@
     <li><b>Status</b>: a status record on every terminal outcome.</li>
   </ol>
   <h3>Details</h3>
-  <p><b>Fields</b>: a JSON object of default field values. Keys are snake_case
-  field names as declared in the dialect. Values must be appropriate for the
-  field type — the field codec encodes them to wire format.</p>
+  <p><b>Message</b> is a dialect dropdown. Selecting a message reshapes the field
+  form: enum-typed fields become dropdowns; scalars are number inputs; strings
+  are text. <code>COMMAND_LONG</code> / <code>COMMAND_INT</code> use a MAV_CMD
+  dropdown and that command's named params — never a Param 1–7 grid.</p>
   <p><b>Delivery</b>: <i>Build</i> encodes and emits without sending. <i>Send</i>
   enqueues directly on the Connection.</p>
   <p><b>Repeat</b>: when set, the node fires independently of inbound triggers at
