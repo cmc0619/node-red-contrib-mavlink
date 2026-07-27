@@ -136,6 +136,22 @@ test('Async handler contains a throw as a terminal failed status plus done(err)'
   assert.ok(doneErr instanceof Error, 'done(err) was called');
 });
 
+test('Send/confirm tier with no connection fails loud instead of silently building', async () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  // No connection bound but delivery is confirm — this must not degrade to Build.
+  const node = new Node({ mode: 'preset', preset: 'arm', delivery: 'confirm' });
+
+  let sent;
+  node.emit('input', { payload: { 1: 1 } }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0], null, 'output 0 must not fire');
+  assert.equal(sent[1].result, 'failed');
+  assert.ok(/no connection/.test(sent[1].detail));
+});
+
 function connStub() {
   const subs = [];
   const sent = [];

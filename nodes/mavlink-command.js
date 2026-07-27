@@ -176,8 +176,17 @@ module.exports = function registerMavlinkCommand(RED) {
     const maxRetries = config.maxRetries !== undefined ? Number(config.maxRetries) : 3;
     const unconfirmedContinue = !!config.unconfirmedContinue;
 
-    /** Show idle badge once after a reasonable delay. */
-    node.status({});
+    // A send/confirm/complete tier needs a Connection. When one is not bound
+    // the node must not silently degrade into Build and report a phantom
+    // success (§9): flag it at deploy (§6 "misconfigured at deploy") and fail
+    // every trigger with a status record naming the problem.
+    const needsConnection = delivery !== 'build';
+    if (needsConnection && !connNode) {
+      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+    } else {
+      /** Show idle badge once after a reasonable delay. */
+      node.status({});
+    }
 
     /**
      * Build the 7-element param array for this send, merging config + payload.
@@ -258,8 +267,26 @@ module.exports = function registerMavlinkCommand(RED) {
         });
       }
 
+      // ── Missing connection on a send/confirm/complete tier ────────────────
+      // Do not silently build and pretend success — a chosen send tier with no
+      // connection is a misconfiguration (§9). Fail loud on output 1 only.
+      if (delivery !== 'build' && !connNode) {
+        const rec = makeRecord({
+          result: 'failed',
+          resultCode: null,
+          confirmedBy: 'none',
+          elapsed: Date.now() - startMs,
+          detail: `no connection configured for ${delivery} delivery`,
+        });
+        node.status({ fill: 'red', shape: 'ring', text: badge24('invalid config') });
+        node.error(`mavlink-command: ${displayName} has no connection for ${delivery} delivery`, msg);
+        emitStatus(rec, send, false);
+        done && done();
+        return;
+      }
+
       // ── Delivery: Build ───────────────────────────────────────────────────
-      if (delivery === 'build' || !connNode) {
+      if (delivery === 'build') {
         const message = buildCommandLong(
           commandId,
           target.sysid,
