@@ -151,8 +151,16 @@ test('server listens, receives from a client, and writes back to the matching en
   assert.equal(client.writes.length, 1);
   assert.equal(client.writes[0].toString(), 'reply');
 
+  let targetedGone = false;
+  transport.send(Buffer.from('stale-target'), { address: 'missing', port: 1 }, (err) => {
+    assert.equal(err.code, TCP_PEER_GONE);
+    targetedGone = true;
+  });
+  assert.equal(targetedGone, true);
+  assert.equal(client.writes.length, 1);
+
   let fallbackSent = false;
-  transport.send(Buffer.from('single-client'), { address: 'missing', port: 1 }, (err) => {
+  transport.send(Buffer.from('single-client'), null, (err) => {
     assert.ifError(err);
     fallbackSent = true;
   });
@@ -318,7 +326,7 @@ test('close ends tracked sockets, closes the listener, and removes clients on so
 
   await new Promise((resolve) => {
     transport.send(Buffer.from('after-close'), { address: '10.0.0.44', port: 49001 }, (err) => {
-      assert.equal(err.code, TCP_NO_DESTINATION);
+      assert.equal(err.code, TCP_PEER_GONE);
       resolve();
     });
   });
