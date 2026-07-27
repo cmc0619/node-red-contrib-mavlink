@@ -570,6 +570,27 @@ test('mavlink-out: rejects unrecognised payload and emits error status on output
   assert.equal(out1.result, 'failed');
 });
 
+test('mavlink-out: a connection send throw becomes a failed status record, not an uncaught throw', () => {
+  const RED = makeRED();
+  const throwingConn = {
+    send() { throw new Error('Control band full'); },
+    subscribe() { return () => {}; },
+  };
+  RED.nodes._register('conn-1', throwingConn);
+  require('../../nodes/mavlink-out')(RED);
+  const Constructor = RED._nodeTypes['mavlink-out'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' });
+
+  assert.doesNotThrow(() => node._input({ payload: { name: 'HEARTBEAT', fields: {} } }));
+  assert.equal(node._sends.length, 1);
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null, 'output 0 must not fire when the send fails');
+  assert.ok(isStatusRecord(out1));
+  assert.equal(out1.result, 'failed');
+  assert.equal(node._errors.length, 1);
+});
+
 // ---------------------------------------------------------------------------
 // mavlink-build tests
 // ---------------------------------------------------------------------------
@@ -705,7 +726,7 @@ test('mavlink-build Send tier: enqueues on the connection and emits on both outp
     fields: JSON.stringify({ type: 6, autopilot: 3 }),
   });
 
-  const inMsg = { payload: {} };
+  const inMsg = { payload: { marker: 'from-upstream' } };
   node._input(inMsg);
 
   // Connection must have received the message.
@@ -713,13 +734,58 @@ test('mavlink-build Send tier: enqueues on the connection and emits on both outp
   assert.equal(sent[0].message.name, 'HEARTBEAT');
   assert.deepEqual(sent[0].message.fields, { type: 6, autopilot: 3 });
 
-  // output 0 carries the input msg pass-through.
-  // output 1 is a status record.
+  // §9: output 0 is a pass-through trigger on Send — it preserves the inbound
+  // payload rather than replacing it with a Build envelope.
   assert.equal(node._sends.length, 1);
   const [out0, out1] = node._sends[0];
   assert.ok(out0, 'output 0 must fire');
+  assert.deepEqual(out0.payload, { marker: 'from-upstream' }, 'Send output 0 passes the trigger through unchanged');
   assert.ok(isStatusRecord(out1), 'output 1 must be a status record');
   assert.equal(out1.result, 'sent');
+});
+
+test('mavlink-build Send tier: a connection send throw becomes a failed status record, not an uncaught throw', () => {
+  const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
+  const throwingConn = {
+    send() { throw new Error('Control band full'); },
+    subscribe() { return () => {}; },
+  };
+  RED.nodes._register('conn-1', throwingConn);
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ vehicle: 'v1', connection: 'conn-1' });
+  Constructor.call(node, {
+    vehicle: 'v1',
+    connection: 'conn-1',
+    messageName: 'HEARTBEAT',
+    tier: 'send',
+    fields: JSON.stringify({ type: 6, autopilot: 3 }),
+  });
+
+  assert.doesNotThrow(() => node._input({ payload: {} }));
+  assert.equal(node._sends.length, 1);
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null, 'output 0 must not fire when the send fails');
+  assert.ok(isStatusRecord(out1));
+  assert.equal(out1.result, 'failed');
+  assert.equal(node._errors.length, 1);
+});
+
+test('mavlink-build: malformed fields JSON marks invalid config instead of aborting deploy', () => {
+  const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ vehicle: 'v1' });
+  assert.doesNotThrow(() => Constructor.call(node, {
+    vehicle: 'v1',
+    messageName: 'HEARTBEAT',
+    tier: 'build',
+    fields: '{ not valid json',
+  }));
+  assert.equal(node._status && node._status.fill, 'red');
+  assert.equal(node._status && node._status.text, 'invalid config');
 });
 
 test('mavlink-build Send tier: falls back to Build when no connection configured', () => {

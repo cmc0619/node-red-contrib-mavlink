@@ -70,10 +70,19 @@ module.exports = function registerMavlinkBuild(RED) {
       ? Number(config.band)
       : BAND.CONTROL;
 
-    // Default field values from node config (JSON string).
+    // Default field values from node config (JSON string). Malformed JSON here
+    // is a config error, not a reason to abort the whole deploy with an
+    // uncaught throw from the constructor — surface it as an invalid-config
+    // badge (§6) and stop, so sibling flows keep loading.
     let configFields = {};
     if (config.fields && typeof config.fields === 'string' && config.fields.trim()) {
-      configFields = JSON.parse(config.fields);
+      try {
+        configFields = JSON.parse(config.fields);
+      } catch (err) {
+        node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+        node.error(`mavlink-build: invalid fields JSON — ${err.message}`);
+        return;
+      }
     }
 
     // Repeat interval.
@@ -176,7 +185,26 @@ module.exports = function registerMavlinkBuild(RED) {
       const target = (triggerMsg && triggerMsg.target) || null;
       const identityId = (triggerMsg && triggerMsg.identityId) || undefined;
 
-      connectionNode.send(builtMessage, { band, target, identityId });
+      // The queue send can throw synchronously (full Control band, unknown
+      // identity, disabled connection). A throw from a repeat-timer callback is
+      // an async source Node-RED does not contain (§2), so route every failure
+      // through a status record + node.error() rather than letting it escape.
+      try {
+        connectionNode.send(builtMessage, { band, target, identityId });
+      } catch (err) {
+        const sr = makeStatusRecord({
+          result: 'failed',
+          reason: err.message,
+          message: messageName,
+          tier: TIER.SEND,
+          band,
+          timestamp: Date.now(),
+        });
+        applyActionStatus(node, 'error', capBadge(err.message));
+        node.error(`mavlink-build send: ${err.message}`, triggerMsg || {});
+        node.send([null, sr]);
+        return;
+      }
 
       // Track achieved rate.
       const now = Date.now();
@@ -188,8 +216,13 @@ module.exports = function registerMavlinkBuild(RED) {
       }
       lastFireMs = now;
 
-      const outMsg = triggerMsg ? { ...triggerMsg } : {};
-      outMsg.payload = { message: builtMessage, messageName, tier: TIER.SEND };
+      // §9: on the Send tier, output 0 is a pass-through trigger, not a Build
+      // envelope — a downstream node advances on success and never inspects the
+      // payload. Preserve the inbound msg unchanged; a timer-fired send has no
+      // upstream trigger, so it emits the fire-and-forget result instead.
+      const outMsg = triggerMsg
+        ? { ...triggerMsg }
+        : { payload: { result: 'sent', messageName, tier: TIER.SEND } };
 
       const sr = makeStatusRecord({
         result: 'sent',
