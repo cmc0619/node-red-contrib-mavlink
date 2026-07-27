@@ -210,6 +210,34 @@ test('write backpressure waits for drain before releasing the callback', async (
   assert.equal(released, true);
 });
 
+test('socket close during backpressure releases the pending send callback', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ remoteAddress: '127.0.0.1', remotePort: 5760 }, { net: net.module });
+  await transport.open();
+  transport.on('error', () => {});
+
+  net.clients[0].nextWriteResult = false;
+  let errCode = null;
+  transport.send(Buffer.from('large'), null, (err) => {
+    errCode = err && err.code;
+  });
+  assert.equal(errCode, null);
+  net.clients[0].emit('close');
+  assert.equal(errCode, 'TCP_DISCONNECTED');
+});
+
+test('client disconnect emits error so the runtime can leave CONNECTED', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ remoteAddress: '127.0.0.1', remotePort: 5760 }, { net: net.module });
+  await transport.open();
+
+  const err = await new Promise((resolve) => {
+    transport.once('error', resolve);
+    net.clients[0].emit('close');
+  });
+  assert.equal(err.code, 'TCP_DISCONNECTED');
+});
+
 test('no destination returns the quiet TCP_NO_DESTINATION code', async () => {
   const net = mockNet();
   const serverTransport = new TcpTransport({ bindPort: 5760 }, { net: net.module });

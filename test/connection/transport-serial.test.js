@@ -99,7 +99,6 @@ test('send writes and calls back immediately when the port accepts the frame', a
       if (err) reject(err);
       else resolve();
     });
-    port().writeCallback();
   });
 
   assert.deepEqual(port().writes, [Buffer.from('abc')]);
@@ -117,10 +116,23 @@ test('send waits for drain before callback when write returns false', async () =
   });
 
   assert.equal(called, false);
-  port().writeCallback();
-  assert.equal(called, false);
   port().emit('drain');
   assert.equal(called, true);
+});
+
+test('close during backpressure releases the pending send callback', async () => {
+  const { transport, opened, port } = openTransport();
+  await opened;
+  transport.on('error', () => {});
+  port().writeReturn = false;
+  let errCode = null;
+
+  transport.send(Buffer.from('abc'), null, (err) => {
+    errCode = err && err.code;
+  });
+  assert.equal(errCode, null);
+  port().emit('close');
+  assert.equal(errCode, 'SERIAL_DISCONNECTED');
 });
 
 test('send soft-fails with SERIAL_NO_DESTINATION when the port is not open', () => {
