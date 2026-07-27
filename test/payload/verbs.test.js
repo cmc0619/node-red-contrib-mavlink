@@ -25,8 +25,9 @@ test('PAYLOAD_TOPICS lists every payload topic', () => {
 test('PAYLOAD_VERBS catalog matches known verbs per topic', () => {
   for (const topic of PAYLOAD_TOPICS) {
     const values = PAYLOAD_VERBS[topic].map((v) => v.value);
+    const labels = PAYLOAD_VERBS[topic].map((v) => v.label);
     assert.deepEqual(values, KNOWN_VERBS[topic], `${topic} verb list drift`);
-    assert.equal(PAYLOAD_VERBS[topic].length, values.length, `${topic} labels must be unique`);
+    assert.equal(new Set(labels).size, labels.length, `${topic} labels must be unique`);
     for (const entry of PAYLOAD_VERBS[topic]) {
       assert.match(entry.label, /\S/, `${topic}/${entry.value} needs a label`);
     }

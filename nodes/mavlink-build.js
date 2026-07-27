@@ -43,6 +43,9 @@ const {
   capBadge,
 } = require('../lib/delivery');
 
+/** Module-scope guard — the constructor is recreated each factory call. */
+let messagesRouteRegistered = false;
+
 module.exports = function registerMavlinkBuild(RED) {
   /**
    * @param {object} config  Node-RED node config from the editor
@@ -272,7 +275,7 @@ module.exports = function registerMavlinkBuild(RED) {
    * once per process and isolated from metadata-load failures so the palette
    * node still registers when `mavlink-mappings` is absent.
    */
-  if (!MavlinkBuildNode._messagesRouteRegistered) {
+  if (!messagesRouteRegistered) {
     let catalogApi = null;
     let catalogLoadError = null;
     try {
@@ -341,7 +344,7 @@ module.exports = function registerMavlinkBuild(RED) {
       }
     );
 
-    MavlinkBuildNode._messagesRouteRegistered = true;
+    messagesRouteRegistered = true;
   }
 
   RED.nodes.registerType('mavlink-build', MavlinkBuildNode);

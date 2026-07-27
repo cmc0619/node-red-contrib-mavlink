@@ -62,12 +62,19 @@
         _msgCatalogByKey[target.key] = catalog;
         _msgCatalogKey = target.key;
         cb(catalog);
-      }).fail(function (_xhr, _status, err) {
-        if (seq !== _msgRequestSeq) return;
-        _msgCatalogKey = target.key;
-        cb({ messages: [], enums: {}, dialect: target.dialect, error: String(err || 'load failed') });
-      });
-    }
+    }).fail(function (_xhr, _status, err) {
+      if (seq !== _msgRequestSeq) return;
+      var catalog = {
+        messages: [],
+        enums: {},
+        dialect: target.dialect,
+        error: String(err || 'load failed'),
+      };
+      _msgCatalogByKey[target.key] = catalog;
+      _msgCatalogKey = target.key;
+      cb(catalog);
+    });
+  }
 
     function loadCommandsCatalog(cb) {
       var target = resolveVehicleTarget();
@@ -164,37 +171,77 @@
         }
 
         function isCharArray(spec) {
-          return spec.type === 'char' || (spec.arrayLength && String(spec.type).indexOf('char') === 0);
+          return spec.type === 'char' || (String(spec.type || '').indexOf('char') === 0);
+        }
+
+        function isInt64(spec) {
+          return spec.type === 'int64_t' || spec.type === 'uint64_t';
         }
 
         function isCommandParamSlot(name) {
           return /^param[1-7]$/.test(name);
         }
 
+        /** COMMAND_INT carries location in x/y/z, not param5–7. */
+        function wireFieldForCommandParam(msgName, index) {
+          if (msgName === 'COMMAND_INT' && index >= 5 && index <= 7) {
+            return ['x', 'y', 'z'][index - 5];
+          }
+          return 'param' + index;
+        }
+
         function fieldInput(spec, enums) {
           var saved = savedFields[spec.name];
           if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
+            var multi = spec.display === 'bitmask';
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', spec.name)
+              .attr('data-kind', multi ? 'bitmask' : 'enum')
               .attr('title', spec.description || '');
-            sel.append($('<option></option>').val('').text('\u2014'));
+            if (multi) sel.attr('multiple', 'multiple').attr('size', Math.min(6, enums[spec.enum].length));
+            else sel.append($('<option></option>').val('').text('\u2014'));
             enums[spec.enum].forEach(function (entry) {
-              sel.append($('<option></option>').val(String(entry.value)).text(entry.label));
+              sel.append($('<option></option>').val(entry.name).text(entry.label));
             });
-            if (saved !== undefined && saved !== null && saved !== '') {
-              sel.val(String(saved));
+            if (multi) {
+              var selected = Array.isArray(saved) ? saved.map(String) : (saved !== undefined && saved !== null && saved !== '' ? [String(saved)] : []);
+              sel.val(selected);
+            } else if (saved !== undefined && saved !== null && saved !== '') {
+              // Accept saved numeric value or entry name.
+              var match = enums[spec.enum].find(function (e) {
+                return String(e.value) === String(saved) || e.name === saved;
+              });
+              sel.val(match ? match.name : String(saved));
             }
             return sel;
           }
           if (isCharArray(spec)) {
             return $('<input type="text" class="mav-field-input">')
               .attr('data-field', spec.name)
+              .attr('data-kind', 'char')
               .attr('title', spec.description || '')
               .attr('maxlength', spec.arrayLength || undefined)
               .val(saved !== undefined && saved !== null ? saved : '');
           }
+          if (spec.arrayLength) {
+            var arrVal = Array.isArray(saved) ? saved.join(', ') : (saved !== undefined && saved !== null ? saved : '');
+            return $('<input type="text" class="mav-field-input" style="width:70%">')
+              .attr('data-field', spec.name)
+              .attr('data-kind', 'array')
+              .attr('title', (spec.description || '') + ' (comma-separated, length ' + spec.arrayLength + ')')
+              .attr('placeholder', 'e.g. 0, 0, 0')
+              .val(arrVal);
+          }
+          if (isInt64(spec)) {
+            return $('<input type="text" class="mav-field-input">')
+              .attr('data-field', spec.name)
+              .attr('data-kind', 'int64')
+              .attr('title', spec.description || '64-bit decimal string')
+              .val(saved !== undefined && saved !== null ? String(saved) : '');
+          }
           var input = $('<input type="number" class="mav-field-input">')
             .attr('data-field', spec.name)
+            .attr('data-kind', 'number')
             .attr('title', spec.description || '')
             .val(saved !== undefined && saved !== null ? saved : '');
           if (spec.minValue !== null && spec.minValue !== undefined) input.attr('min', spec.minValue);
@@ -203,12 +250,17 @@
           return input;
         }
 
-        function commandParamInput(spec, enums) {
-          var key = 'param' + spec.index;
+        function commandParamInput(msgName, spec, enums) {
+          var key = wireFieldForCommandParam(msgName, spec.index);
           var saved = savedFields[key];
+          // COMMAND_INT may also have legacy param5–7 saved from earlier builds.
+          if ((saved === undefined || saved === null || saved === '') && msgName === 'COMMAND_INT' && spec.index >= 5) {
+            saved = savedFields['param' + spec.index];
+          }
           if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', key)
+              .attr('data-kind', 'enum')
               .attr('title', spec.description || '');
             sel.append($('<option></option>').val('').text('\u2014'));
             enums[spec.enum].forEach(function (entry) {
@@ -219,6 +271,7 @@
           }
           var input = $('<input type="number" class="mav-field-input">')
             .attr('data-field', key)
+            .attr('data-kind', 'number')
             .attr('title', spec.description || '')
             .val(saved !== undefined && saved !== null ? saved : '');
           if (spec.minValue !== null && spec.minValue !== undefined) input.attr('min', spec.minValue);
@@ -227,7 +280,7 @@
           return input;
         }
 
-        function refreshCommandParams(cmdCatalog) {
+        function refreshCommandParams(msgName, cmdCatalog) {
           var $slot = $('#mav-command-params');
           $slot.empty();
           if (!cmdCatalog) {
@@ -254,7 +307,7 @@
           visible.forEach(function (spec) {
             var label = spec.label || spec.description || ('param ' + spec.index);
             if (spec.units) label += ' (' + spec.units + ')';
-            $slot.append(formRow(label, commandParamInput(spec, cmdCatalog.enums || {})));
+            $slot.append(formRow(label, commandParamInput(msgName, spec, cmdCatalog.enums || {})));
           });
         }
 
@@ -278,12 +331,15 @@
 
           if (COMMAND_MESSAGES[msg.name]) {
             // COMMAND_LONG / COMMAND_INT: named command params, never Param 1–7 (§6).
+            // COMMAND_INT location lives in x/y/z — hide those raw slots too.
             (msg.fields || []).forEach(function (spec) {
               if (isCommandParamSlot(spec.name) || spec.name === 'command') return;
+              if (msg.name === 'COMMAND_INT' && (spec.name === 'x' || spec.name === 'y' || spec.name === 'z')) return;
               container.append(formRow(fieldLabel(spec), fieldInput(spec, catalog.enums || {})));
             });
             var cmdSel = $('<select id="mav-build-command-select" class="mav-field-input"></select>')
-              .attr('data-field', 'command');
+              .attr('data-field', 'command')
+              .attr('data-kind', 'number');
             cmdSel.append($('<option></option>').val('').text('\u2014 select MAV_CMD \u2014'));
             container.append(formRow('command (MAV_CMD)', cmdSel));
             container.append($('<div id="mav-command-params"></div>'));
@@ -300,9 +356,9 @@
                 cmdSel.val(String((arm || cmdCatalog.commands[0]).value));
               }
               cmdSel.off('change.mavcmd').on('change.mavcmd', function () {
-                refreshCommandParams(cmdCatalog);
+                refreshCommandParams(msg.name, cmdCatalog);
               });
-              refreshCommandParams(cmdCatalog);
+              refreshCommandParams(msg.name, cmdCatalog);
             });
             return;
           }
@@ -356,16 +412,40 @@
         reloadCatalogs();
       },
       oneditsave: function () {
+        var $inputs = $('#node-input-fields-container').find('.mav-field-input');
+        // If catalogs never populated controls, keep the previously saved JSON.
+        if (!$inputs.length) return;
+
         var fields = {};
-        $('#node-input-fields-container').find('.mav-field-input').each(function () {
+        $inputs.each(function () {
           var name = $(this).attr('data-field');
           if (!name) return;
+          var kind = $(this).attr('data-kind') || 'number';
           var raw = $(this).val();
+          if (kind === 'bitmask') {
+            fields[name] = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+            return;
+          }
           if (raw === '' || raw === null || raw === undefined) return;
-          var asNum = Number(raw);
-          fields[name] = ($(this).attr('type') === 'number' || $(this).is('select')) && raw !== '' && !Number.isNaN(asNum)
-            ? asNum
-            : raw;
+          if (kind === 'array') {
+            fields[name] = String(raw).split(/[,\s]+/).filter(function (p) { return p !== ''; }).map(function (p) {
+              var n = Number(p);
+              return Number.isNaN(n) ? p : n;
+            });
+            return;
+          }
+          if (kind === 'int64' || kind === 'char') {
+            fields[name] = String(raw);
+            return;
+          }
+          if (kind === 'enum') {
+            // Prefer numeric value when the option value is numeric; else keep name.
+            var asNum = Number(raw);
+            fields[name] = !Number.isNaN(asNum) && String(asNum) === String(raw) ? asNum : raw;
+            return;
+          }
+          var n = Number(raw);
+          fields[name] = !Number.isNaN(n) ? n : raw;
         });
         $('#node-input-fields').val(JSON.stringify(fields));
       },

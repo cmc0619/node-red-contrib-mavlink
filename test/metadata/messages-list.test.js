@@ -178,7 +178,11 @@ function captureBuildRoutes(nodesById) {
     },
     auth: { needsPermission() { return (_req, _res, next) => next && next(); } },
   };
-  require('../../nodes/mavlink-build')(RED);
+  // Module-scope route guard survives across factory calls; clear the cache so
+  // each capture rebinds httpAdmin.get against this RED stub.
+  const buildPath = require.resolve('../../nodes/mavlink-build');
+  delete require.cache[buildPath];
+  require(buildPath)(RED);
   return handlers;
 }
 

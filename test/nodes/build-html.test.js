@@ -39,13 +39,18 @@ test('Build messageName defaults to HEARTBEAT and is a <select>', () => {
   );
 });
 
-test('Build reshapes fields from message metadata and handles COMMAND_LONG', () => {
+test('Build reshapes fields from message metadata and handles COMMAND_LONG/INT', () => {
   assert.match(html, /\/mavlink\/build\/messages/);
   assert.match(html, /function refreshFieldForm/);
   assert.match(html, /spec\.enum/);
   assert.match(html, /COMMAND_LONG/);
+  assert.match(html, /wireFieldForCommandParam/);
   assert.match(html, /mav-build-command-select/);
   assert.match(html, /isCommandParamSlot/);
+  assert.match(html, /data-kind.*array|data-kind', 'array'/);
+  assert.match(html, /bitmask/);
+  assert.match(html, /int64/);
+  assert.match(html, /if \(!\$inputs\.length\) return/);
   assert.ok(
     !/<textarea id="node-input-fields"/.test(html),
     'raw JSON fields textarea must be replaced by dynamic controls'
