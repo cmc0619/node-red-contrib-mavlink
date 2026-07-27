@@ -21,5 +21,14 @@
   },
   "devDependencies": {
     "eslint": "^10.8.0"
+  },
+  "keywords": ["node-red", "mavlink", "ardupilot", "px4", "drone"],
+  "node-red": {
+    "version": ">=3.0.0",
+    "nodes": {
+      "mavlink-local-identity": "nodes/mavlink-local-identity.js",
+      "mavlink-vehicle": "nodes/mavlink-vehicle.js",
+      "mavlink-connection": "nodes/mavlink-connection.js"
+    }
   }
 }
