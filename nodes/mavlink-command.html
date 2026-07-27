@@ -179,7 +179,13 @@
           }
           sel.append(og);
         }
+        // Re-apply the saved selection now that the options exist, then fire a
+        // change so the param fields, delivery tiers, and safety notice render
+        // for the saved preset. loadPresets is async on first open, so this
+        // callback runs after the initial applyMode() left the dialog empty —
+        // without this the exposed params stay stale until the user re-picks.
         sel.val(node.preset || 'arm');
+        sel.trigger('change');
       }
 
       loadPresets(buildPresetDropdown);

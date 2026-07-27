@@ -25,3 +25,15 @@ test('advanced command input binds to the advancedCommand property', () => {
     'the unbound kebab-case id must be gone'
   );
 });
+
+test('preset dropdown re-applies the saved selection and fires change after the async load', () => {
+  // The preset list loads asynchronously; the builder must re-select the saved
+  // preset and trigger a change so the exposed param fields render on first
+  // open rather than staying stale until the user re-picks the preset.
+  const builder = html.slice(
+    html.indexOf('function buildPresetDropdown'),
+    html.indexOf('loadPresets(buildPresetDropdown)')
+  );
+  assert.match(builder, /sel\.val\(node\.preset/, 'the saved preset is re-applied');
+  assert.match(builder, /sel\.trigger\(['"]change['"]\)/, 'a change event is fired after building');
+});
