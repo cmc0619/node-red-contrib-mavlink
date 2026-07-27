@@ -2,7 +2,7 @@
 
 /**
  * Payload verb editor: topic-dependent <select> on mavlink-payload and
- * mavlink-swarm (DESIGN.md §9).
+ * mavlink-swarm (DESIGN.md §6 / §9).
  */
 
 const test = require('node:test');
@@ -74,6 +74,7 @@ test('mavlink-payload release actionValue is an enum select by verb', () => {
   assert.match(payloadHtml, /WINCH_ACTIONS/, 'winch release uses WINCH_ACTIONS');
   assert.match(payloadHtml, /PARACHUTE_ACTION/, 'parachute release uses PARACHUTE_ACTION');
   assert.match(payloadHtml, /RED\.mavlink\.fillEnumSelect/, 'release options use shared select helper');
+  assert.match(payloadHtml, /row-payload-action/, 'action row is toggled for release topics');
 });
 
 test('mavlink-payload exposes camera and gimbal mode enum controls', () => {
@@ -85,4 +86,58 @@ test('mavlink-payload exposes camera and gimbal mode enum controls', () => {
   assert.match(payloadHtml, /CAMERA_MODE/, 'camera set-mode uses CAMERA_MODE');
   assert.match(payloadHtml, /MAV_MOUNT_MODE/, 'gimbal set-mode uses MAV_MOUNT_MODE');
   assert.match(payloadHtml, /row-payload-mode/, 'mode row is shown only for set-mode verbs');
+});
+
+test('mavlink-payload shows one labeled field row per parameter (§6)', () => {
+  assert.match(payloadHtml, /id="row-payload-count"/);
+  assert.match(payloadHtml, /id="row-payload-interval"/);
+  assert.match(payloadHtml, /id="row-payload-pitch"/);
+  assert.match(payloadHtml, /id="row-payload-roll"/);
+  assert.match(payloadHtml, /id="row-payload-yaw"/);
+  assert.match(payloadHtml, /id="row-payload-servo"/);
+  assert.match(payloadHtml, /id="row-payload-pwm"/);
+  assert.match(payloadHtml, /function refreshVisibility/, 'topic/verb drive row visibility');
+  assert.match(
+    payloadHtml,
+    /topic === 'gimbal' && verb === 'aim'/,
+    'gimbal path is limited to aim'
+  );
+  assert.ok(
+    !payloadHtml.includes('label for="node-input-count">Camera</label>'),
+    'topic names must not label unrelated parameter rows'
+  );
+  assert.ok(
+    !payloadHtml.includes('placeholder="count"'),
+    'crammed dual-input rows with placeholders are gone'
+  );
+});
+
+test('mavlink-payload does not leak action ids across release enum families', () => {
+  assert.match(payloadHtml, /function savedForEnum/, 'enum family switches reset saved values');
+  assert.match(
+    payloadHtml,
+    /Enum family changed/,
+    'gripper → parachute must not keep the old numeric action id'
+  );
+});
+
+test('mavlink-payload fractional params use step=any', () => {
+  for (const id of [
+    'node-input-interval',
+    'node-input-distance',
+    'node-input-pitch',
+    'node-input-roll',
+    'node-input-yaw',
+    'node-input-pitchRate',
+    'node-input-yawRate',
+    'node-input-period',
+    'node-input-length',
+    'node-input-rate',
+  ]) {
+    assert.match(
+      payloadHtml,
+      new RegExp(`id="${id}"[^>]*step="any"|step="any"[^>]*id="${id}"`),
+      `${id} must accept fractional values`
+    );
+  }
 });
