@@ -13,9 +13,19 @@
       name: { value: '' },
       mode: { value: 'udp', required: true },
       bindHost: { value: '0.0.0.0' },
-      bindPort: { value: 14550, required: true, validate: RED.validators.number() },
+      bindPort: { value: 14550, validate: function (v) {
+        var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
+        if (mode === 'serial') return true;
+        return RED.validators.number()(v);
+      } },
       remoteHost: { value: '' },
       remotePort: { value: '', validate: RED.validators.number(true) },
+      serialPath: { value: '' },
+      baudRate: { value: 57600, validate: function (v) {
+        var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
+        if (mode !== 'serial') return true;
+        return RED.validators.number()(v);
+      } },
       // Config-node references (§6 — everything enumerable is a dropdown).
       vehicle: { value: '', type: 'mavlink-vehicle', required: true },
       localIdentity: { value: '', type: 'mavlink-local-identity', required: true },
@@ -33,6 +43,9 @@
     },
     label: function () {
       var mode = (this.mode || 'udp').toUpperCase();
+      if (this.mode === 'serial') {
+        return this.name || ('MAVLink SERIAL ' + (this.serialPath || ''));
+      }
       var where = this.bindPort ? ':' + this.bindPort : '';
       return this.name || 'MAVLink ' + mode + where;
     },
@@ -46,6 +59,17 @@
           'node-config-input'
         );
       }
+
+      function refreshTransportRows() {
+        var mode = $('#node-config-input-mode').val() || 'udp';
+        var ip = mode === 'udp' || mode === 'tcp';
+        $('#row-conn-bindHost, #row-conn-bindPort, #row-conn-remoteHost, #row-conn-remotePort').toggle(ip);
+        $('#row-conn-serialPath, #row-conn-baudRate').toggle(mode === 'serial');
+        $('#mav-conn-tcp-tip').toggle(mode === 'tcp');
+        $('#mav-conn-serial-tip').toggle(mode === 'serial');
+      }
+      $('#node-config-input-mode').on('change', refreshTransportRows);
+      refreshTransportRows();
     },
   });
 </script>
@@ -59,28 +83,45 @@
   <div class="form-row">
     <label for="node-config-input-mode"><i class="fa fa-exchange"></i> Transport</label>
     <select id="node-config-input-mode">
-      <option value="udp">UDP (14550)</option>
-      <option value="tcp">TCP (not yet)</option>
-      <option value="serial">Serial (not yet)</option>
+      <option value="udp">UDP</option>
+      <option value="tcp">TCP</option>
+      <option value="serial">Serial</option>
     </select>
   </div>
 
-  <div class="form-row">
+  <div class="form-tips" id="mav-conn-tcp-tip" style="margin-bottom:8px;display:none;">
+    TCP with a remote host/port is a <b>client</b>. With only bind host/port it is a
+    <b>server</b> that accepts peers (send follows the peer-table endpoint, or the sole client).
+  </div>
+  <div class="form-tips" id="mav-conn-serial-tip" style="margin-bottom:8px;display:none;">
+    Requires optional dependency <code>serialport</code>. Peer-table endpoints use the device path.
+  </div>
+
+  <div class="form-row" id="row-conn-bindHost">
     <label for="node-config-input-bindHost"><i class="fa fa-sign-in"></i> Bind host</label>
     <input type="text" id="node-config-input-bindHost" placeholder="0.0.0.0" />
   </div>
-  <div class="form-row">
+  <div class="form-row" id="row-conn-bindPort">
     <label for="node-config-input-bindPort"><i class="fa fa-sign-in"></i> Bind port</label>
     <input type="text" id="node-config-input-bindPort" placeholder="14550" />
   </div>
 
-  <div class="form-row">
+  <div class="form-row" id="row-conn-remoteHost">
     <label for="node-config-input-remoteHost"><i class="fa fa-sign-out"></i> Remote host</label>
     <input type="text" id="node-config-input-remoteHost" placeholder="(optional default target)" />
   </div>
-  <div class="form-row">
+  <div class="form-row" id="row-conn-remotePort">
     <label for="node-config-input-remotePort"><i class="fa fa-sign-out"></i> Remote port</label>
     <input type="text" id="node-config-input-remotePort" placeholder="(optional)" />
+  </div>
+
+  <div class="form-row" id="row-conn-serialPath">
+    <label for="node-config-input-serialPath"><i class="fa fa-usb"></i> Serial path</label>
+    <input type="text" id="node-config-input-serialPath" placeholder="/dev/ttyUSB0 or COM3" />
+  </div>
+  <div class="form-row" id="row-conn-baudRate">
+    <label for="node-config-input-baudRate"><i class="fa fa-tachometer"></i> Baud</label>
+    <input type="number" id="node-config-input-baudRate" placeholder="57600" step="1" />
   </div>
 
   <hr />
@@ -148,9 +189,11 @@
   queue and its bands, and the signing link state (DESIGN.md §7, §8).</p>
 
   <h3>Transport</h3>
-  <p>UDP is implemented first. The connection binds a local port and listens;
-  a remote host/port supplies a default send target for links that are not yet
-  in the peer table. TCP and serial are planned.</p>
+  <p><b>UDP</b>, <b>TCP</b>, and <b>serial</b> share the same driver-side scheduling
+  contract. UDP binds a local port and may set an optional remote default target.
+  TCP with a remote host/port is a client; with only bind settings it is a server.
+  Serial opens a device path (optional <code>serialport</code> dependency) at the
+  configured baud; peer-table endpoints are that path.</p>
 
   <h3>Bands and scheduling</h3>
   <p>Every outbound message carries a priority band (emergency, liveness,

@@ -4,9 +4,9 @@
  * mavlink-connection — Connection config node (DESIGN.md §3, §6, §7, §8).
  *
  * The Connection owns how traffic moves and stays channel-correct: the
- * transport (UDP first), the peer table, its one bound Vehicle Profile, the
- * outbound queue and its bands, the signing link state, the default identity
- * plus opt-in additional ones, and the disable switch.
+ * transport (UDP, TCP, or serial), the peer table, its one bound Vehicle
+ * Profile, the outbound queue and its bands, the signing link state, the
+ * default identity plus opt-in additional ones, and the disable switch.
  *
  * The node is thin (§2): it reads config, resolves the bound Vehicle Profile
  * and Local Identity config nodes, and hands a plain snapshot to the
@@ -63,13 +63,7 @@ module.exports = function registerMavlinkConnection(RED) {
 
     const config_ = {
       disabled: false,
-      transport: {
-        mode: config.mode || 'udp',
-        bindAddress: config.bindHost || '0.0.0.0',
-        bindPort: Number(config.bindPort),
-        remoteAddress: config.remoteHost || undefined,
-        remotePort: config.remotePort ? Number(config.remotePort) : undefined,
-      },
+      transport: buildTransportConfig(config),
       vehicle: {
         targetSysid: defaults.defaultTargetSystem,
         targetCompid: defaults.defaultTargetComponent,
@@ -171,6 +165,31 @@ function parseLegacyHeartbeatInterval(raw) {
   if (raw === undefined || raw === null || raw === '') return null;
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Map editor transport fields onto the runtime transport config.
+ * UDP/TCP share bind + optional remote; serial uses path + baud.
+ *
+ * @param {object} config  Node-RED node config
+ * @returns {object}
+ */
+function buildTransportConfig(config) {
+  const mode = config.mode || 'udp';
+  if (mode === 'serial') {
+    return {
+      mode: 'serial',
+      path: config.serialPath || '',
+      baudRate: config.baudRate ? Number(config.baudRate) : 57600,
+    };
+  }
+  return {
+    mode,
+    bindAddress: config.bindHost || '0.0.0.0',
+    bindPort: Number(config.bindPort),
+    remoteAddress: config.remoteHost || undefined,
+    remotePort: config.remotePort ? Number(config.remotePort) : undefined,
+  };
 }
 
 /**
