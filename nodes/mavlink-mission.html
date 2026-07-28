@@ -4,11 +4,12 @@
     color: '#e9e4ff',
     defaults: {
       name: { value: '' },
+      vehicle: { value: '', type: 'mavlink-vehicle', required: false },
       connection: { value: '', type: 'mavlink-connection' },
+      identity: { value: '' },
       delivery: { value: 'confirm' },
       operation: { value: 'download' },
       missionType: { value: 'mission' },
-      firmware: { value: 'ardupilot' },
       targetSystem: { value: '', validate: RED.validators.number(true) },
       targetComponent: { value: '', validate: RED.validators.number(true) },
       items: { value: '' },
@@ -25,9 +26,25 @@
     },
     oneditprepare: function () {
       var node = this;
+
+      /* ── Connection and vehicle pickers ───────────────────────── */
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
+
+      /* ── Identity select ──────────────────────────────────────── */
+      function refreshIdentitySelect() {
+        if (!(RED.mavlink && RED.mavlink.fillIdentitySelect)) return;
+        var connectionId = $('#node-input-connection').val() || '';
+        RED.mavlink.fillIdentitySelect(
+          $('#node-input-identity'),
+          connectionId,
+          { saved: node.identity }
+        );
+      }
+
+      /* ── Target compid enum ───────────────────────────────────── */
       if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
         RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
           RED.mavlink.fillCompIdSelect(
@@ -37,27 +54,53 @@
           );
         });
       }
+
       // Mission types offered per firmware (§9 firmware gating, §11). ArduPilot
-      // carries mission/fence/rally; PX4 (and unknown stacks) carry mission
-      // only. Every entry shows its numeric MAV_MISSION_TYPE (§6).
+      // carries mission/fence/rally; PX4 (and unknown stacks) carry mission only.
       var TYPES_BY_FIRMWARE = {
         ardupilot: [['mission', 'Mission (0)'], ['fence', 'Fence (1)'], ['rally', 'Rally (2)']],
-        px4: [['mission', 'Mission (0)']],
-        custom: [['mission', 'Mission (0)']]
+        px4:       [['mission', 'Mission (0)']],
+        custom:    [['mission', 'Mission (0)']]
       };
 
       var $type = $('#node-input-missionType');
-      var $op = $('#node-input-operation');
-      var $fw = $('#node-input-firmware');
+      var $op   = $('#node-input-operation');
+
+      /**
+       * Read the effective firmware from the selected tier's profile. On build
+       * tier the Vehicle Profile field governs; on wire tiers the Connection's
+       * bound profile governs. Falls back to 'ardupilot' when no profile is
+       * available (§6 "hidden is not honored").
+       */
+      function getEffectiveFirmware() {
+        var delivery = $('#node-input-delivery').val() || 'confirm';
+        if (delivery === 'build') {
+          var vehicleId = $('#node-input-vehicle').val() || '';
+          if (vehicleId && RED.nodes && typeof RED.nodes.node === 'function') {
+            var v = RED.nodes.node(vehicleId);
+            if (v && v.firmware) return v.firmware;
+          }
+          return 'ardupilot';
+        }
+        var connectionId = $('#node-input-connection').val() || '';
+        if (connectionId && RED.nodes && typeof RED.nodes.node === 'function') {
+          var conn = RED.nodes.node(connectionId);
+          if (conn && conn.vehicle) {
+            var vNode = RED.nodes.node(conn.vehicle);
+            if (vNode && vNode.firmware) return vNode.firmware;
+          }
+        }
+        return 'ardupilot';
+      }
 
       function repopulateTypes() {
         var saved = $type.val();
-        var list = TYPES_BY_FIRMWARE[$fw.val()] || TYPES_BY_FIRMWARE.custom;
+        var fw = getEffectiveFirmware();
+        var list = TYPES_BY_FIRMWARE[fw] || TYPES_BY_FIRMWARE.custom;
         $type.empty();
         list.forEach(function (entry) {
           $type.append($('<option>').val(entry[0]).text(entry[1]));
         });
-        // Preserve a valid saved selection; never overwrite it with empty (§6).
         if (saved && list.some(function (e) { return e[0] === saved; })) {
           $type.val(saved);
         }
@@ -66,38 +109,87 @@
       function refreshRows() {
         var op = $op.val();
         $('.mavlink-mission-items').toggle(op === 'upload');
-        $('.mavlink-mission-confirm').toggle(op === 'clear');
+        // confirmClear is only meaningful on wire tiers (clear is destructive send);
+        // hide it on build delivery to avoid confusion.
+        var delivery = $('#node-input-delivery').val() || 'confirm';
+        var isBuild = (delivery === 'build');
+        $('.mavlink-mission-confirm').toggle(op === 'clear' && !isBuild);
       }
 
-      $fw.on('change', repopulateTypes);
+      /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
+      function refreshVisibility() {
+        var delivery = $('#node-input-delivery').val() || 'confirm';
+        var isBuild = (delivery === 'build');
+
+        /* tier-driven rows */
+        $('#row-vehicle').toggle(isBuild);
+        $('#row-connection').toggle(!isBuild);
+        $('#row-identity').toggle(!isBuild);
+        $('#row-timeout').toggle(!isBuild);
+        $('#row-maxRetries').toggle(!isBuild);
+
+        /* role-driven rows: companion hides both target rows */
+        if (!isBuild) {
+          var identityId = $('#node-input-identity').val() || '';
+          var role = RED.mavlink && RED.mavlink.identityRole
+            ? RED.mavlink.identityRole(identityId)
+            : 'gcs';
+          var isCompanion = (role === 'companion');
+          $('#row-targetSystem').toggle(!isCompanion);
+          $('#row-targetComponent').toggle(!isCompanion);
+        } else {
+          $('#row-targetSystem').show();
+          $('#row-targetComponent').show();
+        }
+
+        refreshRows();
+        repopulateTypes();
+      }
+
+      $('#node-input-delivery').on('change', function () {
+        refreshVisibility();
+      });
+      $('#node-input-connection').on('change', function () {
+        refreshIdentitySelect();
+        repopulateTypes();
+      });
+      $('#node-input-vehicle').on('change', function () {
+        repopulateTypes();
+      });
+      $('#node-input-identity').on('change', function () {
+        refreshVisibility();
+      });
       $op.on('change', refreshRows);
-      repopulateTypes();
-      refreshRows();
+
+      /* Initial state. */
+      refreshIdentitySelect();
+      refreshVisibility();
     }
   });
 </script>
 
 <script type="text/html" data-template-name="mavlink-mission">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
-  <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build (plan only)</option><option value="confirm">Send and confirm</option></select></div>
+  <div class="form-row" id="row-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
+  <div class="form-row" id="row-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-identity"><label for="node-input-identity">Send-as</label><select id="node-input-identity"></select></div>
   <div class="form-row"><label for="node-input-operation">Operation</label><select id="node-input-operation"><option value="download">Download</option><option value="upload">Upload</option><option value="clear">Clear</option></select></div>
-  <div class="form-row"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
   <div class="form-row"><label for="node-input-missionType">Type</label><select id="node-input-missionType"></select></div>
-  <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
-  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
+  <div class="form-row" id="row-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
+  <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row mavlink-mission-items"><label for="node-input-items">Items (JSON)</label><input type="text" id="node-input-items" placeholder="[] or set msg.payload.items"></div>
   <div class="form-row mavlink-mission-confirm"><label for="node-input-confirmClear">Confirm</label><input type="checkbox" id="node-input-confirmClear" style="display:inline-block; width:auto; vertical-align:top;"> <span>Yes, permanently erase this plan</span></div>
-  <div class="form-row"><label for="node-input-timeout">Step timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="1500"></div>
-  <div class="form-row"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" placeholder="5"></div>
+  <div class="form-row" id="row-timeout"><label for="node-input-timeout">Step timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="1500"></div>
+  <div class="form-row" id="row-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" placeholder="5"></div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-mission">
   <p>Downloads, uploads, or clears a mission, fence, or rally plan over the MAVLink mission protocol — the one exchange the vehicle drives.</p>
   <p>Output 0 (continue) fires only on a successful <code>MISSION_ACK</code>. Output 1 (status) carries progress records (phase and item counts) as they happen and the terminal record either way.</p>
-  <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on output 0 without sending. <i>Send and confirm</i> runs the transfer to its acknowledgement.</p>
-  <p><b>Upload</b> answers whatever sequence the vehicle requests, in the format it asks for (<code>MISSION_ITEM_INT</code> vs <code>MISSION_ITEM</code>). A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>.</p>
+  <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on output 0 without sending — firmware and target defaults come from the <b>Vehicle Profile</b> field. <i>Send and confirm</i> runs the transfer to its acknowledgement over the selected <b>Connection</b>.</p>
+  <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type list is gated by the connection's bound firmware — PX4 does not carry fence and rally the same way as ArduPilot.</p>
+  <p><b>Upload</b> answers whatever sequence the vehicle requests. A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>.</p>
   <p><b>Clear</b> is destructive and requires confirmation: tick the box or set <code>msg.confirmed = true</code>.</p>
-  <p>The mission type list is gated by firmware — PX4 does not carry fence and rally the same way as ArduPilot.</p>
   <p>Set <code>msg.payload === false</code> to suppress. A status record fed back into the input is refused.</p>
 </script>

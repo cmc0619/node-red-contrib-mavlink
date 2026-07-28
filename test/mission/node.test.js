@@ -16,7 +16,8 @@ const { makeStatusRecord, isStatusRecord } = require('../../lib/delivery');
 const { StubConnection } = require('./stubs/connection');
 
 /** Load the node type against a fresh RED stub with the given connection node. */
-function loadNode(connNode) {
+function loadNode(connNode, extraNodes) {
+  const nodes = Object.assign({ conn: connNode }, extraNodes || {});
   const RED = {
     nodes: {
       types: {},
@@ -34,7 +35,7 @@ function loadNode(connNode) {
         this.types[name] = ctor;
       },
       getNode(id) {
-        return id === 'conn' ? connNode : undefined;
+        return nodes[id];
       },
     },
   };
@@ -87,12 +88,14 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
 });
 
 test('firmware gating: PX4 refuses a fence transfer at the node (§11)', async () => {
-  const Node = loadNode(new StubConnection());
+  const conn = new StubConnection();
+  // Vehicle profile with px4 firmware — the node must consult the profile, not config.firmware.
+  conn.vehicle = { firmware: 'px4', targetSysid: 1, targetCompid: 1 };
+  const Node = loadNode(conn);
   const node = new Node({
     operation: 'download',
     connection: 'conn',
     delivery: 'confirm',
-    firmware: 'px4',
     missionType: 'fence',
   });
   const { outputs } = await runInput(node, { payload: {} });
@@ -150,14 +153,30 @@ test('firmware gate follows the Connection Vehicle Profile, not stale node confi
   const node = new Node({
     operation: 'download',
     connection: 'conn',
-    delivery: 'build',
-    firmware: 'ardupilot',
+    delivery: 'confirm', // wire tier — profile comes from conn.vehicle
+    firmware: 'ardupilot', // stale config value, must NOT be consulted
     missionType: 'fence',
   });
 
   const { outputs } = await runInput(node, { payload: {} });
   assert.equal(outputs[0][1].phase, 'gated', 'PX4 profile gates the fence transfer');
   assert.match(outputs[0][1].reason, /px4/);
+});
+
+test('payload.firmware overrides profile firmware', async () => {
+  const conn = new StubConnection();
+  // Profile is ardupilot (allows fence), but payload overrides to px4 (blocks fence).
+  conn.vehicle = { firmware: 'ardupilot', targetSysid: 1, targetCompid: 1 };
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'fence',
+  });
+
+  const { outputs } = await runInput(node, { payload: { firmware: 'px4' } });
+  assert.equal(outputs[0][1].phase, 'gated', 'payload.firmware=px4 gates the fence transfer');
 });
 
 test('download end-to-end: progress on output 1, success on both ports', async () => {
@@ -254,4 +273,116 @@ test('a busy lock refuses a second same-type transfer on the node', async () => 
 
   // Clean up the held lock so the shared registry does not leak into other tests.
   first.emit('close', () => {});
+});
+
+test('mission companion identity: target derived from airframe sysid, compid pinned to 1', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { targetSysid: 1, targetCompid: 1, firmware: 'ardupilot' };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      // Deliver MISSION_COUNT from the companion-derived sysid 42.
+      deliver({ name: 'MISSION_COUNT', sysid: 42, compid: 1, fields: { count: 0, mission_type: 0 } });
+    }
+  });
+  const identityNode = { derivesSysidFromVehicle: true, getIdentity: () => ({ sysid: 42, compid: 191 }) };
+  const Node = loadNode(conn, { identity: identityNode });
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'confirm',
+    identity: 'identity',
+    missionType: 'mission',
+    targetSystem: '',
+    targetComponent: '',
+  });
+
+  const { outputs } = await runInput(node, { payload: {} });
+  const terminal = outputs.at(-1);
+  // Target must be {sysid: 42, compid: 1} — derived from companion, not profile default.
+  assert.equal(terminal[1].target.sysid, 42, 'companion derives sysid from airframe');
+  assert.equal(terminal[1].target.compid, 1, 'companion pins compid to 1 (autopilot)');
+  assert.equal(terminal[1].result, 'succeeded');
+});
+
+test('mission companion: payload.target overrides companion derivation', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { targetSysid: 1, targetCompid: 1, firmware: 'ardupilot' };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', sysid: 50, compid: 1, fields: { count: 0, mission_type: 0 } });
+    }
+  });
+  const identityNode = { derivesSysidFromVehicle: true, getIdentity: () => ({ sysid: 42, compid: 191 }) };
+  const Node = loadNode(conn, { identity: identityNode });
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'confirm',
+    identity: 'identity',
+    missionType: 'mission',
+  });
+
+  // payload.target.sysid = 50 overrides companion derivation.
+  const { outputs } = await runInput(node, { payload: { target: { sysid: 50 } } });
+  const terminal = outputs.at(-1);
+  assert.equal(terminal[1].target.sysid, 50, 'payload.target.sysid overrides companion derivation');
+  assert.equal(terminal[1].result, 'succeeded');
+});
+
+test('mission build tier inherits from config.vehicle (sysid 77, compid 78)', async () => {
+  const conn = new StubConnection();
+  const vehicleNode = { defaultTargetSystem: 77, defaultTargetComponent: 78, firmware: 'ardupilot' };
+  const Node = loadNode(conn, { veh: vehicleNode });
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'build',
+    vehicle: 'veh',
+    missionType: 'mission',
+    targetSystem: '',
+    targetComponent: '',
+  });
+
+  const { outputs } = await runInput(node, { payload: {} });
+  const plan = outputs[0][0].payload;
+  assert.equal(plan.target.sysid, 77, 'build tier target sysid from config.vehicle');
+  assert.equal(plan.target.compid, 78, 'build tier target compid from config.vehicle');
+});
+
+test('mission protocol subscription keyed on resolved target (companion sysid 42)', async () => {
+  // Verify that when companion derives sysid=42, the machine subscribes to sysid=42
+  // and responses from sysid=1 are not accepted.
+  const conn = new StubConnection();
+  conn.vehicle = { targetSysid: 1, targetCompid: 1, firmware: 'ardupilot' };
+
+  // Deliver MISSION_COUNT from sysid=1 first (should be ignored since subscription is sysid=42).
+  // Then deliver from sysid=42 (should be accepted).
+  let sendCount = 0;
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      sendCount += 1;
+      if (sendCount === 1) {
+        // Wrong sysid — subscription filter should reject it.
+        deliver({ name: 'MISSION_COUNT', sysid: 1, compid: 1, fields: { count: 0, mission_type: 0 } });
+        // Correct sysid — should complete the download.
+        deliver({ name: 'MISSION_COUNT', sysid: 42, compid: 1, fields: { count: 0, mission_type: 0 } });
+      }
+    }
+  });
+
+  const identityNode = { derivesSysidFromVehicle: true, getIdentity: () => ({ sysid: 42, compid: 191 }) };
+  const Node = loadNode(conn, { identity: identityNode });
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'confirm',
+    identity: 'identity',
+    missionType: 'mission',
+  });
+
+  const { outputs } = await runInput(node, { payload: {} });
+  const terminal = outputs.at(-1);
+  // The download must succeed driven by the sysid=42 response, not the sysid=1 one.
+  assert.equal(terminal[1].result, 'succeeded', 'download completes using sysid=42 response');
+  assert.equal(terminal[1].target.sysid, 42);
 });
