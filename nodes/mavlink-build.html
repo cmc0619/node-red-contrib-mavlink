@@ -518,17 +518,11 @@
             container.append($('<div class="form-row"><em>Loading message fields\u2026</em></div>'));
             return;
           }
-          if (catalog.error && !(catalog.messages && catalog.messages.length)) {
-            container.append($('<div class="form-row"></div>').append($('<em></em>').text(
-              'Could not load messages for this Vehicle dialect. Deploy the Vehicle Profile (required for custom dialects).'
-            )));
-            return;
-          }
+          // Catalog empty/failed: leave Fields blank. Missing Connection /
+          // Vehicle Profile already reds the node via defaults.validate —
+          // a second prose error adds nothing (§2 / AGENTS.md).
           var msg = (catalog.messages || []).find(function (m) { return m.name === msgName; });
-          if (!msg) {
-            container.append($('<div class="form-row"><em>Message not in this dialect.</em></div>'));
-            return;
-          }
+          if (!msg) return;
 
           if (COMMAND_MESSAGES[msg.name]) {
             // COMMAND_LONG / COMMAND_INT: named command params, never Param 1–7 (§6).
