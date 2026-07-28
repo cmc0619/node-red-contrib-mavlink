@@ -143,7 +143,7 @@ makes unreachable.
 |---|---|
 | `mavlink-local-identity` | Who is Node-RED on the wire? Owns source sysid and compid, the role preset, heartbeat content and interval, and the signing credential reference |
 | `mavlink-vehicle` | Who is being addressed, in what dialect? Owns dialect selection — bundled or custom — the XML upload and download, and the catalog picker |
-| `mavlink-connection` | How does traffic move, and stay channel-correct? Owns the transport (UDP, TCP, serial), the peer table, its bound Vehicle Profile, the outbound queue and its bands, signing switches and channel state, the default identity plus opt-in additional ones, and the disable switch. Palette nodes reach the runtime through `node.subscribe`, `node.send`, `node.peerTable`, and `node.vehicle` — a frozen snapshot `{targetSysid, targetCompid, firmware, dialect, autopilot}` that palette nodes use to inherit the profile's target defaults; explicit node config wins, empty editor fields mean inherit |
+| `mavlink-connection` | How does traffic move, and stay channel-correct? Owns the transport (UDP, TCP, serial), the peer table, its bound Vehicle Profile, the outbound queue and its bands, signing switches and channel state, the default identity plus opt-in additional ones, and the disable switch. Palette nodes reach the runtime through `node.subscribe`, `node.send`, `node.peerTable`, and `node.vehicle` — a frozen snapshot `{id, targetSysid, targetCompid, firmware, dialect, autopilot}` that palette nodes use to inherit the profile's target defaults; explicit node config wins, empty editor fields mean inherit. `id` is the profile node id: anything needing the compiled bundle resolves that node and calls `getDialect()` — never a bundled-registry lookup by name, which breaks custom XML dialects |
 
 **Palette nodes**
 
@@ -1347,6 +1347,20 @@ indication. Off by default, never advancing the timestamp store (§7).
 `ArduPilot/node-mavlink-mappings` publishes under the name `mavlink-mappings` at the version npm
 serves. There is no `node-mavlink-mappings` package.
 *Check:* `npm view node-mavlink repository.url`
+
+**Custom dialect messages have no `node-mavlink` wire classes — synthesize them.**
+*Wrong belief:* once a custom XML compiles to a bundle (§4), `node-mavlink` can frame its
+messages; only the metadata was missing.
+*Fact:* `node-mavlink` serializes through generated `MavLinkData` subclasses and its packet
+splitter validates CRCs against `mavlink-mappings`' `MSG_ID_MAGIC_NUMBER` table — a custom
+message has neither, so serialize throws "no wire class" and inbound frames are dropped at the
+CRC gate. Both are recoverable at runtime: the compiled bundle carries wire types, array
+lengths, and extension flags in declaration order, which is everything the generator itself
+derives layout from (stable size-descending sort, extensions appended, x25 CRC_EXTRA), and the
+splitter accepts a `{ magicNumbers }` override. `lib/connection/wire-classes.js` synthesizes the
+classes; correctness is pinned by regenerating every bundled message and requiring identical
+layout to the generated classes.
+*Check:* `node --test test/connection/wire-classes.test.js`
 
 **Node exposes no DSCP setter.**
 *Wrong belief:* traffic class is settable on a socket.
