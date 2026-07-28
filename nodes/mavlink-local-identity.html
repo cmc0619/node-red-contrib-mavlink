@@ -276,10 +276,6 @@
       };
     };
 
-    function mavUint8Validator(min) {
-      return RED.mavlink.validateUint8(min);
-    }
-
     function positiveNumberValidator(v, _opt) {
       if (v === undefined || v === null || String(v).trim() === '') return true;
       var n = Number(v);
@@ -293,7 +289,7 @@
      * a value.
      */
     function mavIdentityIdValidator(min) {
-      var rangeCheck = mavUint8Validator(min);
+      var rangeCheck = RED.mavlink.validateUint8(min);
       return function (v, opt) {
         var role = $('#node-config-input-role').val() || this.role || 'gcs';
         var blank = v === undefined || v === null || String(v).trim() === '';
