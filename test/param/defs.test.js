@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const {
   resolveDefsUrl,
   assertSafeDefsUrl,
+  assertSafeDefsDestination,
   parsePdefJson,
   fetchParamDefs,
   clearMemCache,
@@ -71,6 +72,38 @@ test('assertSafeDefsUrl rejects non-https and private destinations (SSRF)', () =
     () => resolveDefsUrl('copter', 'px4', 'https://10.0.0.5/secret.json'),
     (err) => err.code === 'PARAM_DEFS_URL_FORBIDDEN'
   );
+});
+
+test('assertSafeDefsDestination rejects hostnames that resolve to private addresses', async () => {
+  await assert.rejects(
+    () =>
+      assertSafeDefsDestination('https://evil.example/p.json', async () => [
+        { address: '10.1.2.3', family: 4 },
+      ]),
+    (err) => err.code === 'PARAM_DEFS_URL_FORBIDDEN' && /private address/.test(err.message)
+  );
+  await assert.doesNotReject(() =>
+    assertSafeDefsDestination('https://cdn.example/p.json', async () => [
+      { address: '93.184.216.34', family: 4 },
+    ])
+  );
+});
+
+test('fetchParamDefs refuses a hostname that DNS-maps to a private address', async () => {
+  clearMemCache();
+  let fetched = 0;
+  await assert.rejects(
+    () =>
+      fetchParamDefs('https://evil.example/p.json', {
+        lookupFn: async () => [{ address: '192.168.0.20', family: 4 }],
+        fetchFn: async () => {
+          fetched += 1;
+          return {};
+        },
+      }),
+    (err) => err.code === 'PARAM_DEFS_URL_FORBIDDEN'
+  );
+  assert.equal(fetched, 0);
 });
 
 /* ── parsePdefJson ──────────────────────────────────────────────── */
