@@ -146,8 +146,8 @@ module.exports = function registerMavlinkBuild(RED) {
       return;
     }
 
-    // Display initial ready state.
-    applyActionStatus(node, 'ok', capBadge(messageName));
+    // No idle "ready" badge — the label already names the message (§6: action
+    // nodes report last activity; pre-trigger status is only for misconfig).
 
     /**
      * Core action: merge fields, encode, and emit based on the tier.
