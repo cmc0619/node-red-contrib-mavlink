@@ -1,0 +1,450 @@
+[
+  {
+    "id": "sitl06-tab",
+    "type": "tab",
+    "label": "SITL 06 Mission/fence/rally",
+    "disabled": false,
+    "info": "Upload mission, fence, and rally to ArduPilot; attempt fence on PX4 and watch fail-loud because PX4 does not carry fence over this protocol.",
+    "env": []
+  },
+  {
+    "id": "sitl06-comment",
+    "type": "comment",
+    "z": "sitl06-tab",
+    "name": "Mission/fence/rally per firmware (ArduPilot all three; PX4 fence fails)",
+    "info": "ArduPilot sysid 1: upload mission, fence polygon, and rally point.\nPX4 sysid 11: fence upload should fail-loud (px4 does not support fence).\n\nLaunch ArduPilot:\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14551\nLaunch PX4 (sysid 11; verify ports):\n  make px4_sitl gazebo\n\nArduPilot Connection: bind 127.0.0.1:14550 → remote 127.0.0.1:14551.\nPX4 Connection: bind 127.0.0.1:14555 → remote per your PX4 GCS link.",
+    "x": 310,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl06-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl06-vehicle-ap",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl06-vehicle-px4",
+    "type": "mavlink-vehicle",
+    "name": "PX4 sysid 11",
+    "vehicleFamily": "copter",
+    "firmware": "px4",
+    "dialect": "common",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 11,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl06-connection-ap",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "sitl06-vehicle-ap",
+    "localIdentity": "sitl06-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl06-connection-px4",
+    "type": "mavlink-connection",
+    "name": "UDP PX4",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14555,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14550,
+    "broadcast": false,
+    "vehicle": "sitl06-vehicle-px4",
+    "localIdentity": "sitl06-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl06-inject-mission",
+    "type": "inject",
+    "z": "sitl06-tab",
+    "name": "Upload mission (AP)",
+    "props": [
+      {
+        "p": "payload",
+        "v": "[{\"frame\":3,\"command\":16,\"current\":1,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.363261,\"y\":149.16523,\"z\":584},{\"frame\":3,\"command\":16,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.363,\"y\":149.166,\"z\":50}]",
+        "vt": "json"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 140,
+    "wires": [
+      [
+        "sitl06-mission-ap"
+      ]
+    ]
+  },
+  {
+    "id": "sitl06-mission-ap",
+    "type": "mavlink-mission",
+    "z": "sitl06-tab",
+    "name": "Upload mission",
+    "connection": "sitl06-connection-ap",
+    "delivery": "confirm",
+    "operation": "upload",
+    "missionType": "mission",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "items": "",
+    "confirmClear": false,
+    "timeout": "",
+    "maxRetries": "",
+    "x": 390,
+    "y": 140,
+    "wires": [
+      [
+        "sitl06-mission-done"
+      ],
+      [
+        "sitl06-mission-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl06-inject-fence-ap",
+    "type": "inject",
+    "z": "sitl06-tab",
+    "name": "Upload fence (AP)",
+    "props": [
+      {
+        "p": "payload",
+        "v": "[{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.363,\"y\":149.165,\"z\":0},{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.364,\"y\":149.165,\"z\":0},{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.364,\"y\":149.166,\"z\":0}]",
+        "vt": "json"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 240,
+    "wires": [
+      [
+        "sitl06-fence-ap"
+      ]
+    ]
+  },
+  {
+    "id": "sitl06-fence-ap",
+    "type": "mavlink-mission",
+    "z": "sitl06-tab",
+    "name": "Upload fence",
+    "connection": "sitl06-connection-ap",
+    "delivery": "confirm",
+    "operation": "upload",
+    "missionType": "fence",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "items": "",
+    "confirmClear": false,
+    "timeout": "",
+    "maxRetries": "",
+    "x": 390,
+    "y": 240,
+    "wires": [
+      [
+        "sitl06-fence-done"
+      ],
+      [
+        "sitl06-fence-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl06-inject-rally",
+    "type": "inject",
+    "z": "sitl06-tab",
+    "name": "Upload rally (AP)",
+    "props": [
+      {
+        "p": "payload",
+        "v": "[{\"frame\":0,\"command\":5100,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.363261,\"y\":149.16523,\"z\":50}]",
+        "vt": "json"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 340,
+    "wires": [
+      [
+        "sitl06-rally-ap"
+      ]
+    ]
+  },
+  {
+    "id": "sitl06-rally-ap",
+    "type": "mavlink-mission",
+    "z": "sitl06-tab",
+    "name": "Upload rally",
+    "connection": "sitl06-connection-ap",
+    "delivery": "confirm",
+    "operation": "upload",
+    "missionType": "rally",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "items": "",
+    "confirmClear": false,
+    "timeout": "",
+    "maxRetries": "",
+    "x": 390,
+    "y": 340,
+    "wires": [
+      [
+        "sitl06-rally-done"
+      ],
+      [
+        "sitl06-rally-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl06-inject-fence-px4",
+    "type": "inject",
+    "z": "sitl06-tab",
+    "name": "Upload fence (PX4, expect fail)",
+    "props": [
+      {
+        "p": "payload",
+        "v": "[{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":47.3977,\"y\":8.5456,\"z\":0}]",
+        "vt": "json"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 460,
+    "wires": [
+      [
+        "sitl06-fence-px4"
+      ]
+    ]
+  },
+  {
+    "id": "sitl06-fence-px4",
+    "type": "mavlink-mission",
+    "z": "sitl06-tab",
+    "name": "Upload fence (PX4)",
+    "connection": "sitl06-connection-px4",
+    "delivery": "confirm",
+    "operation": "upload",
+    "missionType": "fence",
+    "firmware": "px4",
+    "targetSystem": 11,
+    "targetComponent": 1,
+    "items": "",
+    "confirmClear": false,
+    "timeout": "",
+    "maxRetries": "",
+    "x": 420,
+    "y": 460,
+    "wires": [
+      [
+        "sitl06-px4-done"
+      ],
+      [
+        "sitl06-px4-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl06-mission-done",
+    "type": "debug",
+    "z": "sitl06-tab",
+    "name": "mission ok",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 620,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "sitl06-mission-status",
+    "type": "debug",
+    "z": "sitl06-tab",
+    "name": "mission status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 620,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "sitl06-fence-done",
+    "type": "debug",
+    "z": "sitl06-tab",
+    "name": "fence ok",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 620,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl06-fence-status",
+    "type": "debug",
+    "z": "sitl06-tab",
+    "name": "fence status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 620,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "sitl06-rally-done",
+    "type": "debug",
+    "z": "sitl06-tab",
+    "name": "rally ok",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 620,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "sitl06-rally-status",
+    "type": "debug",
+    "z": "sitl06-tab",
+    "name": "rally status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 620,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "sitl06-px4-done",
+    "type": "debug",
+    "z": "sitl06-tab",
+    "name": "px4 fence (unexpected ok)",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 650,
+    "y": 440,
+    "wires": []
+  },
+  {
+    "id": "sitl06-px4-status",
+    "type": "debug",
+    "z": "sitl06-tab",
+    "name": "px4 fence status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 650,
+    "y": 500,
+    "wires": []
+  }
+]

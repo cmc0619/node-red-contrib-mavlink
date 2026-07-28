@@ -9,7 +9,7 @@ Contents:
 
 1. [Node/preset cheat-sheet](#0-cheat-sheet) — the exact strings the flows must use
 2. [Regular examples (10–27)](#1-regular-examples-1027)
-3. [SITL folder (`examples/sitl/`)](#2-sitl-folder-examplessitl)
+3. [SITL folder (`examples/sitl/`)](#2-sitl-folder-examplessitl) — see also [`sitl/README.md`](sitl/README.md)
 4. [`examples/sitl/README.md` outline](#3-examplessitlreadmemd-outline)
 5. [Renames / moves of 06–09](#4-renames--moves-of-0609)
 

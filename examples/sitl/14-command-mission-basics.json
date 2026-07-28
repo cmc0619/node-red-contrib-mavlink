@@ -2,7 +2,7 @@
   {
     "id": "ex09-tab",
     "type": "tab",
-    "label": "09 Command and mission basics",
+    "label": "SITL 14 Command & mission basics",
     "disabled": false,
     "info": "Basic COMMAND (MAV_CMD preset and advanced) plus mission upload\u2215download. Two ArduPilot SITL instances (sysids 1 and 2) on one connection. Illustrates how the Command node handles presets (arm, takeoff) and an advanced command (SET_MESSAGE_INTERVAL), and how the Mission node uploads a simple two-waypoint route and downloads it back.",
     "env": []

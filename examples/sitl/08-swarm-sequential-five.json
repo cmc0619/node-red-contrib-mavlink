@@ -2,7 +2,7 @@
   {
     "id": "ex07-tab",
     "type": "tab",
-    "label": "07 ArduPilot swarm sequential",
+    "label": "SITL 08 Swarm ×5 pacing",
     "disabled": false,
     "info": "Sequential arm across five ArduPilot SITL instances (sysids 1\u20135) on one connection with 200 ms inter-vehicle pacing. Dry-run verifies fan-out targets before the live run commits. Demonstrates multi-vehicle peer table use, queue pacing, and swarm partial-failure handling.",
     "env": []

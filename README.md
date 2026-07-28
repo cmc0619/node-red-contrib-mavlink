@@ -69,7 +69,12 @@ the user directory with `--install-links` or a tarball (above) so the palette lo
 
 ## Examples
 
-Importable flows live in [`examples/`](examples/). In the Node-RED editor: **Import → Examples → node-red-contrib-mavlink**.
+Importable flows live in [`examples/`](examples/). Firmware pain-tests that need a live
+SITL rig are in [`examples/sitl/`](examples/sitl/) — see that folder's README for the
+five+five launch loop.
+
+In the Node-RED editor: **Import → Examples → node-red-contrib-mavlink** (nested `sitl/`
+entries appear under the package examples folder).
 
 | File | Demonstrates |
 |------|----------------|
@@ -78,10 +83,14 @@ Importable flows live in [`examples/`](examples/). In the Node-RED editor: **Imp
 | `03-param-read-set.json` | Param read (MAV_SYSID) and set (FS_GCS_ENABLE) as separate injects |
 | `04-mission-upload-download.json` | Mission upload then download |
 | `05-swarm-arm.json` | Swarm sequential arm — dry-run then live |
-| `06-sitl-completion-takeoff.json` | Arm + completion-tier takeoff against ArduPilot Copter SITL |
-| `07-ardupilot-swarm-sequential.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
-| `08-param-read-set-defs.json` | Param read, set, and list — with notes on the definition catalog |
-| `09-command-mission.json` | Command presets, advanced `SET_MESSAGE_INTERVAL`, mission upload/download |
+| `sitl/01-completion-takeoff.json` | Arm + completion-tier takeoff against ArduPilot Copter SITL |
+| `sitl/08-swarm-sequential-five.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
+| `sitl/13-param-defs-live.json` | Param read, set, and list — with live definition catalog |
+| `sitl/14-command-mission-basics.json` | Command presets, advanced `SET_MESSAGE_INTERVAL`, mission upload/download |
+
+The `sitl/` folder contains fourteen flows (01–14) covering completion timing, mode tables,
+PX4 param union, mission/fence/rally gating, swarm pacing, signing, and more. See
+[`examples/sitl/README.md`](examples/sitl/README.md) for the full index and launch commands.
 
 Before deploying against a vehicle or SITL, set each example's **Connection** endpoints (`bind` is where traffic arrives — typically `127.0.0.1:14550`; `remote` is the vehicle/SITL input — often `14551`) and match the **Vehicle** dialect and default target system id to your link.
 

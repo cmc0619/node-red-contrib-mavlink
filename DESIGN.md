@@ -1078,10 +1078,10 @@ by silence. Update this list when an item lands.
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
 | **Param definition catalog** | **done** | `lib/param/defs.js` fetches ArduPilot `apm.pdef.json` by family or Vehicle `paramDefsUrl` (PX4/custom); cache; Param editor datalist + units/enums. |
 | **Full command-param `enum=` recovery** | **done** | All 85 common.xml `<param enum=`> links in `lib/metadata/hints.js` (e.g. Arm → `MAV_BOOL`). |
-| **Move editor §6 reshape** | open | Runtime OK; dialog still crams local/global fields on shared rows. |
+| **Move editor §6 reshape** | **done** | Per-field rows + mode/delivery visibility in the Move dialog. |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
 | **`httpAdminRoot` on non-enum admin routes** | **done** | Command/Build/In/Swarm/Param/Vehicle editor catalogs use `RED.mavlink.adminApiUrl('/mavlink/…')`. |
-| **SITL example flows** | **done** | Examples 06–09 assume the five+five rig (completion takeoff, sequential swarm, param defs, command+mission). |
+| **SITL example flows** | **done** | Former examples 06–09 moved under `examples/sitl/`; expanded sitl set (01–14) + regular 10–27 (regular set may land in parallel). |
 | **SITL-backed tests (§13)** | open | Fixture suite in CI; firmware behaviour still needs the live five+five rig. |
 | **Cross-connection swarm** | out of scope | As designed (§10): two Connections → two Swarm nodes. |
 
