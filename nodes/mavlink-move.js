@@ -1,6 +1,7 @@
 'use strict';
 
 const { buildMoveMessage, createMoveStream } = require('../lib/move');
+const { resolveActionTarget, profileFromVehicleNode } = require('../lib/addressing/resolve');
 
 const BADGE_MAX = 24;
 
@@ -23,11 +24,31 @@ module.exports = function registerMavlinkMove(RED) {
           return;
         }
 
-        const connectionNode = RED.nodes.getNode(config.connection);
+        const delivery = config.delivery || 'build';
+        const connectionNode = delivery !== 'build'
+          ? RED.nodes.getNode(config.connection)
+          : null;
         const payload = objectPayload(msg.payload);
+
+        const profile = delivery === 'build'
+          ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
+          : (connectionNode && connectionNode.vehicle) || null;
+        const identityNode = delivery === 'build'
+          ? null
+          : RED.nodes.getNode(payload.identityId || config.identity);
+
+        const target = resolveActionTarget({
+          payloadTarget: payload.target,
+          configSysid: config.targetSystem,
+          configCompid: config.targetComponent,
+          identityNode,
+          profile,
+          // Move: companion hides both sysid and compid — no compidFromConfig
+        });
+
         const message = buildMoveMessage({
           mode: payload.mode || config.mode || 'local-position',
-          target: targetFrom(config, payload, connectionNode),
+          target,
           position: payload.position || positionFrom(config),
           velocity: payload.velocity || velocityFrom(config),
           yaw: valueFrom(payload, config, 'yaw'),
@@ -35,18 +56,19 @@ module.exports = function registerMavlinkMove(RED) {
           timeBootMs: payload.timeBootMs || config.timeBootMs || 0,
         });
 
-        const delivery = config.delivery || 'build';
         if (delivery === 'build') {
           completeBuild(node, emit, message);
         } else {
           if (!connectionNode || typeof connectionNode.send !== 'function') {
             throw new Error('mavlink-move requires a Connection for send/stream delivery');
           }
+          // Payload-first, matching the target derivation above.
+          const identityId = payload.identityId || config.identity;
           const options = {
             connection: connectionNode,
             message,
-            target: targetFrom(config, payload, connectionNode),
-            identityId: config.identity || payload.identityId,
+            target,
+            identityId,
             intervalMs: Number(config.intervalMs || payload.intervalMs || 100),
             ttlMs: Number(config.ttlMs || payload.ttlMs || 1000),
           };
@@ -98,44 +120,6 @@ function fail(node, emit, err) {
 
 function statusRecord(result, detail, extra = {}) {
   return { _mavlinkStatus: true, node: 'mavlink-move', result, detail, ...extra };
-}
-
-/**
- * Resolve the move target from payload, node config, the Connection's Vehicle
- * Profile, then a hardcoded 1.
- *
- * Precedence: payload.target → node config → `connNode.vehicle` → 1.
- * A configured 0 is a legitimate broadcast address and must survive (not fall
- * through the `||` chain).
- *
- * @param {object} config
- * @param {object} payload
- * @param {object|null|undefined} connNode  Connection config node (may be absent for Build)
- * @returns {{sysid: number, compid: number}}
- */
-function targetFrom(config, payload, connNode) {
-  const target = payload.target || {};
-  return {
-    sysid: Number(firstDefined(
-      target.sysid,
-      config.targetSystem,
-      connNode && connNode.vehicle && connNode.vehicle.targetSysid,
-      1
-    )),
-    compid: Number(firstDefined(
-      target.compid,
-      config.targetComponent,
-      connNode && connNode.vehicle && connNode.vehicle.targetCompid,
-      1
-    )),
-  };
-}
-
-function firstDefined(...values) {
-  for (const v of values) {
-    if (v !== undefined && v !== null && v !== '') return v;
-  }
-  return undefined;
 }
 
 function positionFrom(config) {

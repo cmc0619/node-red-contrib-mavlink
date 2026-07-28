@@ -5,6 +5,8 @@
     defaults: {
       name: { value: '' },
       connection: { value: '', type: 'mavlink-connection' },
+      vehicle: { value: '', type: 'mavlink-vehicle', required: false },
+      identity: { value: '' },
       delivery: { value: 'build' },
       timeout: { value: 10000, validate: RED.validators.number(true) },
       maxRetries: { value: 3, validate: RED.validators.number(true) },
@@ -61,6 +63,15 @@
       var node = this;
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
+      }
+
+      if (RED.mavlink && RED.mavlink.fillIdentitySelect) {
+        RED.mavlink.fillIdentitySelect(
+          $('#node-input-identity'),
+          node.connection,
+          { saved: node.identity }
+        );
       }
 
       RED.mavlink = RED.mavlink || {};
@@ -181,15 +192,32 @@
       }
 
       /**
-       * §6: only the fields for the selected topic/verb exist. Everything else
-       * is hidden — not greyed, not left over from another topic.
+       * §6: only the fields for the selected topic/verb, delivery tier, and
+       * identity role exist. Everything else is hidden.
+       * Build → vehicle shown; connection/identity/timeout/retry hidden.
+       * Wire → reverse.
+       * Companion (wire) → target sysid hidden; compid stays visible (spec exception).
        */
       function refreshVisibility() {
         var topic = $('#node-input-topic').val() || 'camera';
         var verb = $('#node-input-verb').val() || '';
         var path = $('#node-input-path').val() || 'legacy';
+        var delivery = $('#node-input-delivery').val() || 'build';
+        var isBuild = delivery === 'build';
+        var isWire = !isBuild;
+        var identityId = isWire ? $('#node-input-identity').val() : '';
+        var isCompanion = isWire && RED.mavlink.identityRole(identityId) === 'companion';
         var isManager = topic === 'gimbal' && verb === 'aim' && path === 'manager';
         var show = {
+          /* tier-driven rows */
+          vehicle: isBuild,
+          connection: isWire,
+          identity: isWire,
+          timeout: isWire,
+          maxRetries: isWire,
+          /* target addressing: companion hides sysid; payload compid stays visible always */
+          targetSystem: isBuild || !isCompanion,
+          targetComponent: true,
           /* camera */
           cameraId:        (topic === 'camera' && (verb === 'photo' || verb === 'set-mode')),
           count:           (topic === 'camera' && verb === 'photo') || (topic === 'servo' && verb === 'repeat'),
@@ -227,6 +255,13 @@
           rate:            topic === 'release' && verb === 'winch'
         };
 
+        $('#row-payload-vehicle').toggle(!!show.vehicle);
+        $('#row-payload-connection').toggle(!!show.connection);
+        $('#row-payload-identity').toggle(!!show.identity);
+        $('#row-payload-timeout').toggle(!!show.timeout);
+        $('#row-payload-maxRetries').toggle(!!show.maxRetries);
+        $('#row-payload-targetSystem').toggle(!!show.targetSystem);
+        $('#row-payload-targetComponent').toggle(!!show.targetComponent);
         $('#row-payload-cameraId').toggle(!!show.cameraId);
         $('#row-payload-count').toggle(!!show.count);
         $('#row-payload-interval').toggle(!!show.interval);
@@ -323,11 +358,20 @@
       });
       $('#node-input-verb').on('change', refreshEnumControls);
       $('#node-input-path').on('change', refreshVisibility);
+      $('#node-input-delivery').on('change', refreshVisibility);
+      $('#node-input-identity').on('change', refreshVisibility);
       $('#node-input-connection').on('change', function () {
         enumCatalog = { enums: {} };
         enumCatalogLoaded = false;
         paintedModeEnum = null;
         paintedReleaseEnum = null;
+        if (RED.mavlink && RED.mavlink.fillIdentitySelect) {
+          RED.mavlink.fillIdentitySelect(
+            $('#node-input-identity'),
+            $(this).val(),
+            { saved: node.identity }
+          );
+        }
         refreshEnumControls();
       });
       refreshVerbOptions(true);
@@ -348,15 +392,17 @@
 
 <script type="text/html" data-template-name="mavlink-payload">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
-  <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-payload-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-payload-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
+  <div class="form-row" id="row-payload-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option></select></div>
-  <div class="form-row"><label for="node-input-timeout">ACK timeout</label><input type="number" id="node-input-timeout" style="width:80px"> ms</div>
-  <div class="form-row"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
+  <div class="form-row" id="row-payload-timeout"><label for="node-input-timeout">ACK timeout</label><input type="number" id="node-input-timeout" style="width:80px"> ms</div>
+  <div class="form-row" id="row-payload-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
   <div class="form-row"><label for="node-input-topic">Topic</label><select id="node-input-topic"><option value="camera">Camera</option><option value="gimbal">Gimbal</option><option value="servo">Servo</option><option value="release">Release</option></select></div>
   <div class="form-row"><label for="node-input-verb">Verb</label><select id="node-input-verb"></select></div>
   <div class="form-row" id="row-payload-path"><label for="node-input-path">Gimbal path</label><select id="node-input-path"><option value="legacy">DO_MOUNT_CONTROL</option><option value="manager">GIMBAL_MANAGER_SET_PITCHYAW</option></select></div>
-  <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
-  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
+  <div class="form-row" id="row-payload-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
+  <div class="form-row" id="row-payload-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <!-- camera photo -->
   <div class="form-row" id="row-payload-cameraId"><label for="node-input-cameraId">Camera ID</label><input type="number" id="node-input-cameraId" step="1" style="width:80px"></div>
   <div class="form-row" id="row-payload-count"><label for="node-input-count">Count</label><input type="number" id="node-input-count" step="1" style="width:80px"></div>
@@ -402,6 +448,7 @@
 <script type="text/html" data-help-name="mavlink-payload">
   <p>Controls camera, gimbal, servo, and release payload verbs. Command-backed verbs report command acknowledgement as their confirmation mode.</p>
   <p>Topic and verb reshape the form (§6): only the parameters for the selected verb are shown.</p>
+  <p>On <b>Build</b> delivery the Vehicle Profile supplies dialect and target defaults. On <b>Send</b> or <b>Send &amp; confirm</b> delivery a Connection is required. The Send-as identity drives target addressing: a companion identity derives the target sysid from its airframe; the target compid remains visible and config-resolved because it addresses a payload device (camera or gimbal), not the autopilot.</p>
   <p>On the <b>Send &amp; confirm</b> tier a command-backed verb waits for its <code>COMMAND_ACK</code>: output 0 (continue) fires only on <code>ACCEPTED</code>, and a <code>DENIED</code>, <code>TEMPORARILY_REJECTED</code>, or timeout halts the chain and reports on output 1.</p>
   <p>Gimbal manager aiming uses GIMBAL_MANAGER_SET_PITCHYAW and has no MAVLink acknowledgement, so it is always sent unconfirmed.</p>
 </script>

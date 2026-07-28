@@ -1482,11 +1482,25 @@ and *sends* commands to `remotePort` (`14551`, MAVProxy's listen). Point `--out`
 **Vehicle Profile target defaults only reach the Connection runtime, not palette nodes.**
 *Wrong belief:* setting `defaultTargetSystem = 42` in a Vehicle Profile propagates to every
 palette node that addresses a target; nodes without an explicit config default to 1.
-*Fact:* target resolution is payload.target → node config → `connNode.vehicle` → 1. The
-Connection exposes its bound profile as a frozen public `node.vehicle` snapshot; palette nodes
-(Command, Move, Param, Payload, Mission) read it as a fallback before hardcoding 1. Leaving the
-editor's sysid/compid fields blank means "inherit from the profile"; saving an explicit 1 means
-exactly 1 — no migration of existing flows. Command no longer reads `connection._vehicle`.
-*Check:* `node --test test/move/node.test.js test/param/node.test.js
-test/payload/node.test.js test/mission/node.test.js test/command/node.test.js` — look for
+*Fact:* target resolution follows the §6 role × tier matrix (payload.target → companion
+derivation → node config → profile default → 1), implemented once in `lib/addressing`. The
+Connection exposes its bound profile as a frozen public `node.vehicle` snapshot. Leaving the
+editor's sysid/compid fields blank means "inherit"; saving an explicit 1 means exactly 1 — no
+migration of existing flows. Command no longer reads `connection._vehicle`.
+*Check:* `node --test test/addressing/resolve.test.js` plus the per-node suites — look for
 "inherits Vehicle Profile target" tests.
+
+**Sender nodes do not own independent firmware dropdowns or unconditional address fields.**
+*Wrong belief:* Param and Mission carry their own firmware selects, every sender always shows
+connection + target fields, and Build (the node) requires a Vehicle Profile.
+*Fact:* the §6 role × tier matrix governs. Build tier shows a Vehicle Profile picker and hides
+connection/identity/timing rows; wire tiers derive firmware and target defaults from the
+connection's profile; a companion send-as identity derives the target ({airframe sysid, 1}) and
+hides the fields (Payload keeps its compid — it addresses a payload device); the Build node
+takes a plain dialect picker (`__vehicle` escape for custom XML); Swarm offers only gcs/custom
+identities and needs no connection for build+list. Hidden fields are ignored at runtime. Ack,
+param-echo, and mission protocol matching key on the same resolved target as the send.
+*Check:* `node --test test/addressing/resolve.test.js test/command/node.test.js
+test/move/node.test.js test/param/node.test.js test/payload/node.test.js
+test/mission/node.test.js test/swarm/node.test.js test/nodes/in-out-build.test.js` — look for
+"companion", "role × tier", and "build+list" tests.

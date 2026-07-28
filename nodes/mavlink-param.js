@@ -181,7 +181,7 @@ module.exports = function registerMavlinkParam(RED) {
         connectionNode.send(message, {
           band: request.action === 'request-list' ? BAND.BULK : BAND.CONTROL,
           target: request.target,
-          identityId: config.identity || payload.identityId,
+          identityId: payload.identityId || config.identity,
         });
 
         // Scope the PARAM_VALUE subscription to the addressed vehicle so a

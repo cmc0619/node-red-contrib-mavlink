@@ -216,7 +216,7 @@ module.exports = function registerMavlinkMission(RED) {
           connNode.send(message, {
             band: BAND.BULK,
             target,
-            identityId: config.identity || payload.identityId,
+            identityId: payload.identityId || config.identity,
           }),
         subscribe: (filter, handler) => connNode.subscribe(filter, handler),
         target,
