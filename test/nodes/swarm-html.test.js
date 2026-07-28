@@ -151,6 +151,15 @@ test('identity is re-filled when connection selection changes', () => {
   );
 });
 
+test('sysids field validates each token as a MAVLink sysid (1..255)', () => {
+  assert.match(
+    html,
+    /sysids:\s*\{[\s\S]*?validate:\s*function/,
+    'sysids declares an editor validate function'
+  );
+  assert.match(html, /n >= 1 && n <= 255/, 'validator bounds each token to 1..255');
+});
+
 test('refreshVisibility is wired to both delivery and selectionMode changes', () => {
   assert.match(
     html,

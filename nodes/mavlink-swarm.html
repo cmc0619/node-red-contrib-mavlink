@@ -7,7 +7,20 @@
       connection: { value: '', type: 'mavlink-connection', required: false },
       identity: { value: '' },
       selectionMode: { value: 'all' },
-      sysids: { value: '' },
+      sysids: {
+        value: '',
+        validate: function (v) {
+          // Empty is fine when Selection isn't "list"; when the field is filled
+          // (or list mode is active) every token must be a MAVLink sysid.
+          if (v === undefined || v === null || String(v).trim() === '') return true;
+          return String(v).split(',').every(function (part) {
+            part = part.trim();
+            if (!part) return true;
+            var n = Number(part);
+            return Number.isInteger(n) && n >= 1 && n <= 255;
+          });
+        },
+      },
       vehicleType: { value: '' },
       firmwareFilter: { value: '' },
       armedFilter: { value: '' },

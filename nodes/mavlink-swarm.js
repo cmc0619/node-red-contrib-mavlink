@@ -270,9 +270,28 @@ function buildListStub(sysids) {
   };
 }
 
+/**
+ * Parse a comma-separated sysid list. Each id must be an integer in 1..255
+ * (MAVLink system id is a uint8; 0 is broadcast and not a swarm member).
+ * Bad tokens fail loudly — silently dropping `256` would send a partial swarm.
+ *
+ * @param {string|string[]} value
+ * @returns {number[]}
+ */
 function parseSysidList(value) {
-  return String(value || '')
-    .split(',')
-    .map((part) => Number(part.trim()))
-    .filter((n) => Number.isInteger(n) && n > 0);
+  const parts = Array.isArray(value)
+    ? value.map((part) => String(part).trim())
+    : String(value || '').split(',').map((part) => part.trim());
+  const ids = [];
+  for (const part of parts) {
+    if (part === '') continue;
+    const n = Number(part);
+    if (!Number.isInteger(n) || n < 1 || n > 255) {
+      throw new Error(
+        `mavlink-swarm: sysid must be an integer in 1..255 (got ${JSON.stringify(part)})`
+      );
+    }
+    ids.push(n);
+  }
+  return ids;
 }
