@@ -323,7 +323,6 @@ module.exports = function registerMavlinkVehicle(RED) {
     // Optional firmware/custom parameter-definition URL (PX4 / custom stacks).
     // Persisted only — the Param node may consume it; ArduPilot leaves it blank
     // (its per-family autotest URL is derived at runtime).
-    node.paramDefsUrl = (config.paramDefsUrl || '').trim();
     node.paramDefsUrl = typeof config.paramDefsUrl === 'string' ? config.paramDefsUrl.trim() : '';
 
     const problems = [];
