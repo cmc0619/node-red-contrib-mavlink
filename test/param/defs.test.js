@@ -68,6 +68,8 @@ test('assertSafeDefsUrl rejects non-https and private destinations (SSRF)', () =
   assert.throws(() => assertSafeDefsUrl('https://169.254.169.254/latest'), /private|link-local/i);
   assert.throws(() => assertSafeDefsUrl('https://[::ffff:10.0.0.8]/p.json'), /private|link-local/i);
   assert.throws(() => assertSafeDefsUrl('https://[::ffff:7f00:1]/p.json'), /private|link-local/i);
+  assert.throws(() => assertSafeDefsUrl('https://[fec0::1]/p.json'), /private|link-local/i);
+  assert.throws(() => assertSafeDefsUrl('https://[fd12::1]/p.json'), /private|link-local/i);
   assert.throws(() => assertSafeDefsUrl('https://localhost/p.json'), /not allowed/);
   assert.doesNotThrow(() => assertSafeDefsUrl('https://example.com/p.json'));
   assert.throws(
