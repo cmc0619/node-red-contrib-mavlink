@@ -130,10 +130,11 @@ test('all 85 common.xml command-param enum links are recovered (Arm is MAV_BOOL)
   );
 });
 
-test('never assume a dialect includes common.xml — icarous still resolves its base set', () => {
+test('never assume a dialect includes common.xml — icarous is self-contained', () => {
   const bundle = loadBundled('icarous');
-  assert.ok(bundle.messages.HEARTBEAT, 'HEARTBEAT reachable through the explicit chain');
-  assert.equal(bundle.files[0], 'minimal');
+  assert.deepEqual(bundle.files, ['icarous']);
+  assert.ok(bundle.messages.ICAROUS_HEARTBEAT);
+  assert.equal(bundle.messages.HEARTBEAT, undefined);
 });
 
 test('extension fields are flagged and ordered after base fields — SYS_STATUS', () => {

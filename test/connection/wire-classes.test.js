@@ -100,15 +100,14 @@ test('custom dialect message round-trips through the real wire', () => {
   assert.equal(frames[0].fields.uptime_ms, 42);
 });
 
-test('bundled messages still round-trip on a wire built from a custom bundle', () => {
+test('custom dialect without includes does not inherit the MSC wire preload', () => {
+  // Registry starts empty and follows bundle.files; widgetlink has no
+  // <include>, so HEARTBEAT is absent until the dialect graph provides it.
   const wire = createWire({ bundle: customBundle() });
-  const frame = wire.serialize(
-    { name: 'HEARTBEAT', fields: {} },
-    { sysid: 1, compid: 1, seq: 0 }
+  assert.throws(
+    () => wire.serialize({ name: 'HEARTBEAT', fields: {} }, { sysid: 1, compid: 1, seq: 0 }),
+    /no wire class for message 'HEARTBEAT'/
   );
-  const frames = wire.decode(frame);
-  assert.equal(frames.length, 1);
-  assert.equal(frames[0].name, 'HEARTBEAT');
 });
 
 test('partial name/id collisions fail loudly; matching includes are skipped', () => {

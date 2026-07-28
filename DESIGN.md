@@ -229,7 +229,9 @@ Fail loud on custom compile: missing include, cyclic include, msgid collision be
 files defining different messages. Redefinition of the same message is an override, resolved
 by include order, and shown as a diff against the same-named bundled dialect.
 
-Never assume a dialect includes `common.xml`. Some define their own base set.
+Never assume a dialect includes `common.xml`. Some define their own base set — measured:
+upstream `icarous.xml` has no `<include>`, so the bundled chain is `['icarous']` alone, not
+MSC forced underneath.
 
 ### Parameter definitions are a second, separate source
 
@@ -1401,6 +1403,16 @@ per-splitter override is the same feature scoped to one connection. There is no 
 to register into: the msgid→class lookup is the caller's job in `node-mavlink`, even for
 bundled dialects.
 *Check:* `node --test test/connection/wire-classes.test.js`
+
+**Wire registries start empty and follow the dialect include chain.**
+*Wrong belief:* every Connection preloads `minimal`/`standard`/`common`/`ardupilotmega` so any
+message in those modules encodes, regardless of the bound Vehicle Profile's dialect.
+*Fact:* `createWire` builds one msgid→class map per Connection from `bundle.files` (the same
+include order §4 already assembled), then synthesizes anything else in the bundle. Pick
+`icarous` and the catalog and wire carry only icarous; bind another Connection to
+`ardupilotmega` beside it and both registries coexist. A custom dialect with no `<include>`
+does not inherit HEARTBEAT from a hidden preload.
+*Check:* `node --test test/connection/wire-registry.test.js`
 
 **Node exposes no DSCP setter.**
 *Wrong belief:* traffic class is settable on a socket.
