@@ -1,9 +1,10 @@
 # Example flow catalog — `node-red-contrib-mavlink`
 
-Design-time catalog for the Node-RED example set. **This is a plan, not code** — every
-entry below is a brief the implementer turns into an importable flow JSON. Node names,
-preset ids, delivery tiers, config keys, and firmware facts are taken from the shipped
-nodes and `DESIGN.md`, so the flows can be built without re-deriving contracts.
+Index of the **shipped** importable Node-RED flows under `examples/` and
+`examples/sitl/`. Node names, preset ids, delivery tiers, config keys, and firmware
+facts match the package nodes and `DESIGN.md`. Section 3's README outline and section 4's
+rename table are historical notes from when the set was assembled — the JSON files are
+already in-tree.
 
 Contents:
 
@@ -100,8 +101,10 @@ importable tab per file with shared config nodes inline.
 - **Tab label:** `10 Sunday drone stroll`
 - **Story:** One button flies a whole joyride on an ArduCopter: arm, climb to 20 m in
   GUIDED, carve a lazy 200 m-wide circle, spin a full turn on the spot, do a single flip,
-  then land — each step waiting for the last to actually finish, not just be acked. It is
-  the headline demo of the completion tier and the command presets working as a chain.
+  then land. Steps with a completion condition (arm / set mode / takeoff / land) use
+  `delivery: "complete"` so the next cannot fire early; orbit, rotate, and FLIP use
+  `confirm` (ACK only — those presets have no completion key). Headline demo of the
+  completion tier and the command presets working as a chain.
 - **Nodes:** `local-identity`, `vehicle` (family `copter`, firmware `ardupilot`),
   `connection`, 7× `command`, `inject` per step, `debug` on each status port.
 - **Key config:** Chain on output 0, every step `delivery: "complete"` where a completion
@@ -109,8 +112,8 @@ importable tab per file with shared config nodes inline.
   1. `arm` (complete).
   2. `set_mode` GUIDED — `params {"1":1,"2":4}` (complete on active mode).
   3. `takeoff` — `params {"7":20}` (complete on relative alt 20 m).
-  4. `orbit` (DO_ORBIT) — `params {"1":100,"2":5,"3":0}` (radius 100 m ⇒ ~200 m circle,
-     5 m/s, center = current position, lat/lon/alt left 0); `delivery: "confirm"`.
+  4. `orbit` (DO_ORBIT) — `params {"1":100,"2":5,"3":0,"5":"NaN","6":"NaN","7":"NaN"}`
+     (radius 100 m ⇒ ~200 m circle, 5 m/s, center = current position via NaN); `confirm`.
   5. `rotate` (CONDITION_YAW relative) — `params {"1":360,"2":30,"3":1}` (360° CW at
      30°/s); `confirm`.
   6. `set_mode` FLIP — `params {"1":1,"2":14}`; `confirm`. Comment: ArduCopter-only; must
@@ -585,13 +588,14 @@ Short README to drop into the folder. Suggested sections:
    **separate connections**, one Vehicle Profile per stack. Note the deliberate 1–5 / 11–15
    gap: a mistyped sysid lands nowhere, not on the wrong stack.
 3. **Start the ArduPilot five** — the copy-paste loop:
-   ```
+   ```bash
    for i in 0 1 2 3 4; do \
      sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \
-       --out=udp:127.0.0.1:14551 & \
+       --out=udp:127.0.0.1:14550 & \
    done
    ```
-   Bind the ArduPilot Connection to `127.0.0.1:14550`, remote `127.0.0.1:14551`.
+   Bind the ArduPilot Connection to `127.0.0.1:14550` (receives `--out`), remote
+   `127.0.0.1:14551` (command destination).
 4. **Start the PX4 five** — best-effort with a caveat that PX4 multi-instance networking is
    version-specific: e.g. `./Tools/simulation/sitl_multiple_run.sh 5` (or per-instance
    `make px4_sitl` with `PX4_INSTANCE`), then set `MAV_SYS_ID` = 11–15 per instance. Note

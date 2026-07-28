@@ -1382,3 +1382,27 @@ without it. Deferring a transport after Connection lands creates a second integr
 for peer-table endpoints and quiet-send codes — avoid that split.
 *Check:* `node --test test/connection/transport-*.test.js`; Connection editor lists UDP/TCP/Serial
 with no “(not yet)”.
+
+**Move editor fields are mode-selected, not dual-labelled.**
+*Wrong belief:* Local and global Move fields can share rows labelled “North / Lat”.
+*Fact:* §6 destroys irrelevant fields on selection. Dual labels leave the wrong coordinate
+system visible. Per-field rows + `refreshVisibility()` on mode/delivery match Payload's
+topic/verb pattern.
+*Check:* `node --test test/nodes/move-html.test.js` — distinct `row-move-*` ids, no
+`North / Lat`.
+
+**Editor catalog fetches must honour `httpAdminRoot`.**
+*Wrong belief:* absolute `$.getJSON('/mavlink/…')` is fine because the admin API is always at `/`.
+*Fact:* Node-RED can mount the editor under `httpAdminRoot` (e.g. `/red`); bare `/mavlink/…`
+then 404s. Enums already used `RED.mavlink.adminApiUrl`; Command/Build/In/Swarm/Param/Vehicle
+must too. Server route registration stays `/mavlink/…` — only the browser URL is prefixed.
+*Check:* `node --test test/nodes/local-identity-html.test.js test/nodes/command-html.test.js
+test/nodes/param-html.test.js` — `adminApiUrl('/mavlink/enums')` under `/red` →
+`/red/mavlink/enums`; HTML drift tests forbid bare `'/mavlink/` in `$.getJSON`/`$.ajax`.
+
+**SITL `--out` targets the Node-RED bind port.**
+*Wrong belief:* `sim_vehicle.py --out udp:127.0.0.1:14551` pairs with Connection bind `14550`
+/ remote `14551`.
+*Fact:* `--out` is where MAVProxy *sends* telemetry. Node-RED receives on `bindPort` (`14550`)
+and *sends* commands to `remotePort` (`14551`, MAVProxy's listen). Point `--out` at `14550`.
+*Check:* examples under `examples/sitl/` and `examples/sitl/README.md`.

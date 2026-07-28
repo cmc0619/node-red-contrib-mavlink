@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl02-tab",
     "name": "Takeoff complete with short timeout (no mode/arm prep)",
-    "info": "Fire takeoff with delivery=complete and completionTimeout=8000 without first entering GUIDED or arming. ArduPilot may ACK the command yet never climb; the node should end on the timeout branch.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14551\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551. Do not arm or set GUIDED before pressing inject — that is the point.",
+    "info": "Fire takeoff with delivery=complete and completionTimeout=8000 without first entering GUIDED or arming. ArduPilot may ACK the command yet never climb; the node should end on the timeout branch.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551. Do not arm or set GUIDED before pressing inject — that is the point.",
     "x": 250,
     "y": 40,
     "wires": []

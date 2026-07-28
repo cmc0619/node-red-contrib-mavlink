@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl03-tab",
     "name": "Arm/takeoff immediately after deploy (retry on TEMPORARILY_REJECTED)",
-    "info": "Inject fires once at deploy to race GPS readiness. Arm then takeoff use delivery=confirm with maxRetries=5 so TEMPORARILY_REJECTED (1) triggers backoff and retry.\n\nLaunch (fresh ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14551\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551. Watch status port for retry count.",
+    "info": "Inject fires once at deploy to race GPS readiness. Arm then takeoff use delivery=confirm with maxRetries=5 so TEMPORARILY_REJECTED (1) triggers backoff and retry.\n\nLaunch (fresh ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551. Watch status port for retry count.",
     "x": 280,
     "y": 40,
     "wires": []

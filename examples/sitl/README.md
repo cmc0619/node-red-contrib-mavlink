@@ -17,11 +17,12 @@ stack.
 ```bash
 for i in 0 1 2 3 4; do \
   sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \
-    --out=udp:127.0.0.1:14551 & \
+    --out=udp:127.0.0.1:14550 & \
 done
 ```
 
-Bind the ArduPilot Connection to `127.0.0.1:14550`, remote `127.0.0.1:14551`.
+Bind the ArduPilot Connection to `127.0.0.1:14550` (receives SITL `--out`), remote
+`127.0.0.1:14551` (where Node-RED sends commands — MAVProxy's default listen).
 
 ## Start the PX4 five
 

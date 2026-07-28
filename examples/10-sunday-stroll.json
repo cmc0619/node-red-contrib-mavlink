@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex10-tab",
     "name": "Sunday drone stroll chain",
-    "info": "Chain on output 0 — completion where available (arm/GUIDED/takeoff/land), confirm for orbit/rotate/flip. Honesty: circle is DO_ORBIT (~200 m diameter at 100 m radius); flip is ArduCopter FLIP mode only (airborne + armed). SITL: sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14551. Bind 14550 → remote 14551.",
+    "info": "Chain on output 0 — completion where available (arm/GUIDED/takeoff/land), confirm for orbit/rotate/flip. Honesty: circle is DO_ORBIT (~200 m diameter at 100 m radius, center lat/lon/alt = NaN = current); flip is ArduCopter FLIP mode only (airborne + armed). SITL: sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550. Bind 14550 → remote 14551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -211,7 +211,7 @@
     "maxRetries": "3",
     "unconfirmedContinue": false,
     "completionTimeout": "60000",
-    "params": "{\"1\":100,\"2\":5,\"3\":0}",
+    "params": "{\"1\":100,\"2\":5,\"3\":0,\"5\":\"NaN\",\"6\":\"NaN\",\"7\":\"NaN\"}",
     "x": 440,
     "y": 160,
     "wires": [

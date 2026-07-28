@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex06-tab",
     "name": "Arm then takeoff (completion tier against ArduPilot Copter SITL)",
-    "info": "This flow targets sysid 1 (first ArduPilot SITL). Set completionTimeout to at least 30 s; ArduPilot typically sends IN_PROGRESS within 2 s then ACCEPTED once the vehicle is airborne.\n\nDelivery=complete blocks output 0 until the completion-tier ACCEPTED arrives. A timeout on output 1 means the vehicle accepted the command but never reached the target altitude (or the link was lost).\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551 for a local Copter SITL started with\n  sim_vehicle.py -v ArduCopter --out udp:127.0.0.1:14551",
+    "info": "This flow targets sysid 1 (first ArduPilot SITL). Set completionTimeout to at least 30 s; ArduPilot typically sends IN_PROGRESS within 2 s then ACCEPTED once the vehicle is airborne.\n\nDelivery=complete blocks output 0 until the completion-tier ACCEPTED arrives. A timeout on output 1 means the vehicle accepted the command but never reached the target altitude (or the link was lost).\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551 for a local Copter SITL started with\n  sim_vehicle.py -v ArduCopter --out udp:127.0.0.1:14550",
     "x": 230,
     "y": 40,
     "wires": []

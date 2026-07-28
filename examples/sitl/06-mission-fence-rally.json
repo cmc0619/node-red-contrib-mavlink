@@ -157,7 +157,7 @@
     "props": [
       {
         "p": "payload",
-        "v": "[{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.363,\"y\":149.165,\"z\":0},{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.364,\"y\":149.165,\"z\":0},{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.364,\"y\":149.166,\"z\":0}]",
+        "v": "[{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":3,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.363,\"y\":149.165,\"z\":0},{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":3,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.364,\"y\":149.165,\"z\":0},{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":3,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.364,\"y\":149.166,\"z\":0}]",
         "vt": "json"
       }
     ],
