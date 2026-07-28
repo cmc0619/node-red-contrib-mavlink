@@ -112,6 +112,69 @@ test('mavlink-payload shows one labeled field row per parameter (§6)', () => {
   );
 });
 
+test('mavlink-payload has rows for camera video stream parameters (§B)', () => {
+  assert.match(payloadHtml, /id="row-payload-streamId"/, 'streamId row for start/stop video');
+  assert.match(payloadHtml, /id="row-payload-statusFrequency"/, 'statusFrequency row for start-video');
+  assert.match(
+    payloadHtml,
+    /topic === 'camera' && \(verb === 'start-video' \|\| verb === 'stop-video'\)/,
+    'streamId shown for both start-video and stop-video'
+  );
+  assert.match(
+    payloadHtml,
+    /topic === 'camera' && verb === 'start-video'/,
+    'statusFrequency shown for start-video only'
+  );
+});
+
+test('mavlink-payload has rows for camera photo cameraId and sequence (§B)', () => {
+  assert.match(payloadHtml, /id="row-payload-cameraId"/, 'cameraId row for photo');
+  assert.match(payloadHtml, /id="row-payload-sequence"/, 'sequence row for photo');
+  assert.match(
+    payloadHtml,
+    /\(verb === 'photo' \|\| verb === 'set-mode'\)/,
+    'cameraId shown for photo and set-mode'
+  );
+});
+
+test('mavlink-payload has rows for camera trigger-distance shutter and trigger (§B)', () => {
+  assert.match(payloadHtml, /id="row-payload-shutter"/, 'shutter row for trigger-distance');
+  assert.match(payloadHtml, /id="row-payload-trigger"/, 'trigger row for trigger-distance');
+  assert.match(
+    payloadHtml,
+    /topic === 'camera' && verb === 'trigger-distance'/,
+    'shutter/trigger visibility gated on trigger-distance verb'
+  );
+});
+
+test('mavlink-payload has rows for gimbal set-mode stabilize flags (§B)', () => {
+  assert.match(payloadHtml, /id="row-payload-stabilizeRoll"/, 'stabilizeRoll row');
+  assert.match(payloadHtml, /id="row-payload-stabilizePitch"/, 'stabilizePitch row');
+  assert.match(payloadHtml, /id="row-payload-stabilizeYaw"/, 'stabilizeYaw row');
+  assert.match(
+    payloadHtml,
+    /topic === 'gimbal' && verb === 'set-mode'/,
+    'stabilize fields shown for gimbal set-mode'
+  );
+});
+
+test('mavlink-payload has rows for gimbal roi-set lat/lon/alt (§B)', () => {
+  assert.match(payloadHtml, /id="row-payload-lat"/, 'lat row for roi-set');
+  assert.match(payloadHtml, /id="row-payload-lon"/, 'lon row for roi-set');
+  assert.match(payloadHtml, /id="row-payload-alt"/, 'alt row for roi-set');
+  assert.match(
+    payloadHtml,
+    /topic === 'gimbal' && verb === 'roi-set'/,
+    'lat/lon/alt visibility gated on roi-set verb'
+  );
+});
+
+test('mavlink-payload has rows for gimbal manager aim flags and gimbalDeviceId (§B)', () => {
+  assert.match(payloadHtml, /id="row-payload-flags"/, 'flags row for manager aim');
+  assert.match(payloadHtml, /id="row-payload-gimbalDeviceId"/, 'gimbalDeviceId row for manager aim');
+  assert.match(payloadHtml, /isManager/, 'flags and gimbalDeviceId tied to manager path');
+});
+
 test('mavlink-payload does not leak action ids across release enum families', () => {
   assert.match(payloadHtml, /function savedForEnum/, 'enum family switches reset saved values');
   assert.match(

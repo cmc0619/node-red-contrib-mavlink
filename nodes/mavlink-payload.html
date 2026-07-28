@@ -13,18 +13,40 @@
       path: { value: 'legacy' },
       targetSystem: { value: 1, validate: RED.validators.number() },
       targetComponent: { value: 1, validate: RED.validators.number() },
+      /* camera photo */
+      cameraId: { value: 0, validate: RED.validators.number(true) },
       count: { value: 1, validate: RED.validators.number(true) },
       interval: { value: 0, validate: RED.validators.number(true) },
-      modeValue: { value: 0, validate: RED.validators.number(true) },
+      sequence: { value: 0, validate: RED.validators.number(true) },
+      /* camera start/stop video */
+      streamId: { value: 0, validate: RED.validators.number(true) },
+      statusFrequency: { value: 0, validate: RED.validators.number(true) },
+      /* camera trigger-distance */
       distance: { value: 0, validate: RED.validators.number(true) },
+      shutter: { value: 0, validate: RED.validators.number(true) },
+      trigger: { value: 1, validate: RED.validators.number(true) },
+      /* gimbal aim */
       pitch: { value: 0, validate: RED.validators.number(true) },
       roll: { value: 0, validate: RED.validators.number(true) },
       yaw: { value: 0, validate: RED.validators.number(true) },
       pitchRate: { value: 0, validate: RED.validators.number(true) },
       yawRate: { value: 0, validate: RED.validators.number(true) },
+      flags: { value: 0, validate: RED.validators.number(true) },
+      gimbalDeviceId: { value: 0, validate: RED.validators.number(true) },
+      /* gimbal set-mode */
+      modeValue: { value: 0, validate: RED.validators.number(true) },
+      stabilizeRoll: { value: 0, validate: RED.validators.number(true) },
+      stabilizePitch: { value: 0, validate: RED.validators.number(true) },
+      stabilizeYaw: { value: 0, validate: RED.validators.number(true) },
+      /* gimbal roi-set */
+      lat: { value: 0, validate: RED.validators.number(true) },
+      lon: { value: 0, validate: RED.validators.number(true) },
+      alt: { value: 0, validate: RED.validators.number(true) },
+      /* servo */
       servo: { value: 0, validate: RED.validators.number(true) },
       pwm: { value: 0, validate: RED.validators.number(true) },
       period: { value: 0, validate: RED.validators.number(true) },
+      /* release */
       instance: { value: 0, validate: RED.validators.number(true) },
       actionValue: { value: 0, validate: RED.validators.number(true) },
       length: { value: 0, validate: RED.validators.number(true) },
@@ -166,36 +188,69 @@
         var topic = $('#node-input-topic').val() || 'camera';
         var verb = $('#node-input-verb').val() || '';
         var path = $('#node-input-path').val() || 'legacy';
+        var isManager = topic === 'gimbal' && verb === 'aim' && path === 'manager';
         var show = {
-          path: topic === 'gimbal' && verb === 'aim',
-          count: (topic === 'camera' && verb === 'photo') || (topic === 'servo' && verb === 'repeat'),
-          interval: topic === 'camera' && verb === 'photo',
-          distance: topic === 'camera' && verb === 'trigger-distance',
-          mode: verb === 'set-mode' && (topic === 'camera' || topic === 'gimbal'),
-          pitch: topic === 'gimbal' && verb === 'aim',
-          roll: topic === 'gimbal' && verb === 'aim' && path === 'legacy',
-          yaw: topic === 'gimbal' && verb === 'aim',
-          pitchRate: topic === 'gimbal' && verb === 'aim' && path === 'manager',
-          yawRate: topic === 'gimbal' && verb === 'aim' && path === 'manager',
-          servo: topic === 'servo',
-          pwm: topic === 'servo',
-          period: topic === 'servo' && verb === 'repeat',
-          instance: topic === 'release' && (verb === 'gripper' || verb === 'winch'),
-          action: topic === 'release',
-          length: topic === 'release' && verb === 'winch',
-          rate: topic === 'release' && verb === 'winch'
+          /* camera */
+          cameraId:        (topic === 'camera' && (verb === 'photo' || verb === 'set-mode')),
+          count:           (topic === 'camera' && verb === 'photo') || (topic === 'servo' && verb === 'repeat'),
+          interval:        topic === 'camera' && verb === 'photo',
+          sequence:        topic === 'camera' && verb === 'photo',
+          streamId:        topic === 'camera' && (verb === 'start-video' || verb === 'stop-video'),
+          statusFrequency: topic === 'camera' && verb === 'start-video',
+          distance:        topic === 'camera' && verb === 'trigger-distance',
+          shutter:         topic === 'camera' && verb === 'trigger-distance',
+          trigger:         topic === 'camera' && verb === 'trigger-distance',
+          /* gimbal */
+          path:            topic === 'gimbal' && verb === 'aim',
+          pitch:           topic === 'gimbal' && verb === 'aim',
+          roll:            topic === 'gimbal' && verb === 'aim' && !isManager,
+          yaw:             topic === 'gimbal' && verb === 'aim',
+          pitchRate:       isManager,
+          yawRate:         isManager,
+          flags:           isManager,
+          gimbalDeviceId:  isManager,
+          mode:            verb === 'set-mode' && (topic === 'camera' || topic === 'gimbal'),
+          stabilizeRoll:   topic === 'gimbal' && verb === 'set-mode',
+          stabilizePitch:  topic === 'gimbal' && verb === 'set-mode',
+          stabilizeYaw:    topic === 'gimbal' && verb === 'set-mode',
+          lat:             topic === 'gimbal' && verb === 'roi-set',
+          lon:             topic === 'gimbal' && verb === 'roi-set',
+          alt:             topic === 'gimbal' && verb === 'roi-set',
+          /* servo */
+          servo:           topic === 'servo',
+          pwm:             topic === 'servo',
+          period:          topic === 'servo' && verb === 'repeat',
+          /* release */
+          instance:        topic === 'release' && (verb === 'gripper' || verb === 'winch'),
+          action:          topic === 'release',
+          length:          topic === 'release' && verb === 'winch',
+          rate:            topic === 'release' && verb === 'winch'
         };
 
-        $('#row-payload-path').toggle(!!show.path);
+        $('#row-payload-cameraId').toggle(!!show.cameraId);
         $('#row-payload-count').toggle(!!show.count);
         $('#row-payload-interval').toggle(!!show.interval);
+        $('#row-payload-sequence').toggle(!!show.sequence);
+        $('#row-payload-streamId').toggle(!!show.streamId);
+        $('#row-payload-statusFrequency').toggle(!!show.statusFrequency);
         $('#row-payload-distance').toggle(!!show.distance);
-        $('#row-payload-mode').toggle(!!show.mode);
+        $('#row-payload-shutter').toggle(!!show.shutter);
+        $('#row-payload-trigger').toggle(!!show.trigger);
+        $('#row-payload-path').toggle(!!show.path);
         $('#row-payload-pitch').toggle(!!show.pitch);
         $('#row-payload-roll').toggle(!!show.roll);
         $('#row-payload-yaw').toggle(!!show.yaw);
         $('#row-payload-pitchRate').toggle(!!show.pitchRate);
         $('#row-payload-yawRate').toggle(!!show.yawRate);
+        $('#row-payload-flags').toggle(!!show.flags);
+        $('#row-payload-gimbalDeviceId').toggle(!!show.gimbalDeviceId);
+        $('#row-payload-mode').toggle(!!show.mode);
+        $('#row-payload-stabilizeRoll').toggle(!!show.stabilizeRoll);
+        $('#row-payload-stabilizePitch').toggle(!!show.stabilizePitch);
+        $('#row-payload-stabilizeYaw').toggle(!!show.stabilizeYaw);
+        $('#row-payload-lat').toggle(!!show.lat);
+        $('#row-payload-lon').toggle(!!show.lon);
+        $('#row-payload-alt').toggle(!!show.alt);
         $('#row-payload-servo').toggle(!!show.servo);
         $('#row-payload-pwm').toggle(!!show.pwm);
         $('#row-payload-period').toggle(!!show.period);
@@ -302,18 +357,42 @@
   <div class="form-row" id="row-payload-path"><label for="node-input-path">Gimbal path</label><select id="node-input-path"><option value="legacy">DO_MOUNT_CONTROL</option><option value="manager">GIMBAL_MANAGER_SET_PITCHYAW</option></select></div>
   <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
   <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
+  <!-- camera photo -->
+  <div class="form-row" id="row-payload-cameraId"><label for="node-input-cameraId">Camera ID</label><input type="number" id="node-input-cameraId" step="1" style="width:80px"></div>
   <div class="form-row" id="row-payload-count"><label for="node-input-count">Count</label><input type="number" id="node-input-count" step="1" style="width:80px"></div>
   <div class="form-row" id="row-payload-interval"><label for="node-input-interval">Interval</label><input type="number" id="node-input-interval" step="any" style="width:80px"> s</div>
+  <div class="form-row" id="row-payload-sequence"><label for="node-input-sequence">Sequence</label><input type="number" id="node-input-sequence" step="1" style="width:80px"></div>
+  <!-- camera start/stop video -->
+  <div class="form-row" id="row-payload-streamId"><label for="node-input-streamId">Stream ID</label><input type="number" id="node-input-streamId" step="1" style="width:80px"></div>
+  <div class="form-row" id="row-payload-statusFrequency"><label for="node-input-statusFrequency">Status Hz</label><input type="number" id="node-input-statusFrequency" step="any" style="width:80px"> Hz</div>
+  <!-- camera trigger-distance -->
   <div class="form-row" id="row-payload-distance"><label for="node-input-distance">Distance</label><input type="number" id="node-input-distance" step="any" style="width:80px"> m</div>
+  <div class="form-row" id="row-payload-shutter"><label for="node-input-shutter">Shutter</label><input type="number" id="node-input-shutter" step="1" style="width:80px"> ms</div>
+  <div class="form-row" id="row-payload-trigger"><label for="node-input-trigger">Trigger</label><input type="number" id="node-input-trigger" step="1" style="width:80px" title="1=start triggering, 0=stop"></div>
+  <!-- camera/gimbal set-mode -->
   <div class="form-row" id="row-payload-mode"><label for="node-input-modeValue">Mode</label><select id="node-input-modeValue" style="width:70%"></select></div>
+  <!-- gimbal set-mode stabilize -->
+  <div class="form-row" id="row-payload-stabilizeRoll"><label for="node-input-stabilizeRoll">Stabilize roll</label><input type="number" id="node-input-stabilizeRoll" step="1" style="width:80px" title="0=disabled 1=enabled"></div>
+  <div class="form-row" id="row-payload-stabilizePitch"><label for="node-input-stabilizePitch">Stabilize pitch</label><input type="number" id="node-input-stabilizePitch" step="1" style="width:80px" title="0=disabled 1=enabled"></div>
+  <div class="form-row" id="row-payload-stabilizeYaw"><label for="node-input-stabilizeYaw">Stabilize yaw</label><input type="number" id="node-input-stabilizeYaw" step="1" style="width:80px" title="0=disabled 1=enabled"></div>
+  <!-- gimbal roi-set -->
+  <div class="form-row" id="row-payload-lat"><label for="node-input-lat">Latitude</label><input type="number" id="node-input-lat" step="any" style="width:120px"> deg</div>
+  <div class="form-row" id="row-payload-lon"><label for="node-input-lon">Longitude</label><input type="number" id="node-input-lon" step="any" style="width:120px"> deg</div>
+  <div class="form-row" id="row-payload-alt"><label for="node-input-alt">Altitude</label><input type="number" id="node-input-alt" step="any" style="width:80px"> m</div>
+  <!-- gimbal aim (both paths) -->
   <div class="form-row" id="row-payload-pitch"><label for="node-input-pitch">Pitch</label><input type="number" id="node-input-pitch" step="any" style="width:80px"> deg</div>
   <div class="form-row" id="row-payload-roll"><label for="node-input-roll">Roll</label><input type="number" id="node-input-roll" step="any" style="width:80px"> deg</div>
   <div class="form-row" id="row-payload-yaw"><label for="node-input-yaw">Yaw</label><input type="number" id="node-input-yaw" step="any" style="width:80px"> deg</div>
   <div class="form-row" id="row-payload-pitchRate"><label for="node-input-pitchRate">Pitch rate</label><input type="number" id="node-input-pitchRate" step="any" style="width:80px"> deg/s</div>
   <div class="form-row" id="row-payload-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="number" id="node-input-yawRate" step="any" style="width:80px"> deg/s</div>
+  <!-- gimbal manager aim extras -->
+  <div class="form-row" id="row-payload-flags"><label for="node-input-flags">Flags</label><input type="number" id="node-input-flags" step="1" style="width:80px"></div>
+  <div class="form-row" id="row-payload-gimbalDeviceId"><label for="node-input-gimbalDeviceId">Gimbal device</label><input type="number" id="node-input-gimbalDeviceId" step="1" style="width:80px"></div>
+  <!-- servo -->
   <div class="form-row" id="row-payload-servo"><label for="node-input-servo">Servo</label><input type="number" id="node-input-servo" step="1" style="width:80px"></div>
   <div class="form-row" id="row-payload-pwm"><label for="node-input-pwm">PWM</label><input type="number" id="node-input-pwm" step="1" style="width:80px"> us</div>
   <div class="form-row" id="row-payload-period"><label for="node-input-period">Period</label><input type="number" id="node-input-period" step="any" style="width:80px"> ms</div>
+  <!-- release -->
   <div class="form-row" id="row-payload-instance"><label for="node-input-instance">Instance</label><input type="number" id="node-input-instance" step="1" style="width:80px"></div>
   <div class="form-row" id="row-payload-action"><label for="node-input-actionValue">Action</label><select id="node-input-actionValue" style="width:70%"></select></div>
   <div class="form-row" id="row-payload-length"><label for="node-input-length">Length</label><input type="number" id="node-input-length" step="any" style="width:80px"> m</div>

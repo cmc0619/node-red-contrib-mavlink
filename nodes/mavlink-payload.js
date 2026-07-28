@@ -164,18 +164,41 @@ function failAck(node, emit, built, outcome) {
 
 function valuesFrom(config) {
   return {
+    /* camera photo */
+    cameraId: config.cameraId,
     count: config.count,
     interval: config.interval,
-    mode: config.modeValue,
+    sequence: config.sequence,
+    /* camera start/stop video */
+    streamId: config.streamId,
+    statusFrequency: config.statusFrequency,
+    /* camera trigger-distance */
     distance: config.distance,
+    shutter: config.shutter,
+    trigger: config.trigger,
+    /* camera/gimbal set-mode */
+    mode: config.modeValue,
+    /* gimbal set-mode stabilize */
+    stabilizeRoll: config.stabilizeRoll,
+    stabilizePitch: config.stabilizePitch,
+    stabilizeYaw: config.stabilizeYaw,
+    /* gimbal roi-set */
+    lat: config.lat,
+    lon: config.lon,
+    alt: config.alt,
+    /* gimbal aim */
     pitch: config.pitch,
     roll: config.roll,
     yaw: config.yaw,
     pitchRate: config.pitchRate,
     yawRate: config.yawRate,
+    flags: config.flags,
+    gimbalDeviceId: config.gimbalDeviceId,
+    /* servo */
     servo: config.servo,
     pwm: config.pwm,
     period: config.period,
+    /* release */
     instance: config.instance,
     action: config.actionValue,
     length: config.length,
