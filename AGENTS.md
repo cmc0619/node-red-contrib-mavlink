@@ -82,6 +82,492 @@ dispatch time and pick the sub-agent capability to match — subtle, correctness
 gets a stronger agent; mechanical or repetitive work gets a faster, lighter one. No fixed
 module-to-tier mapping; the dispatching agent decides per task.
 
+## Custom Node Development: Configuration Trust and Defensive-Code Rules
+
+These rules apply when creating or modifying custom Node-RED palette nodes.
+
+A custom Node-RED node normally has two distinct parts:
+
+- an editor definition in an `.html` file; and
+- a runtime implementation in a `.js` file.
+
+The editor definition controls static configuration, defaults, validation, form behavior, and
+serialization into the flow. The runtime implementation receives validated configuration and
+processes messages, connections, devices, and other dynamic data.
+
+Treat these as different trust boundaries.
+
+The editor definition is the schema and source of truth for static node configuration. Runtime
+code MUST trust guarantees established by:
+
+- `defaults`;
+- `required`;
+- `validate`;
+- configuration-node `type` declarations;
+- typed-input configuration;
+- `oneditprepare`;
+- `oneditsave`; and
+- other editor lifecycle code.
+
+The normal supported path is:
+
+1. A user adds the custom node from the palette.
+2. The user configures it through the Node-RED editor.
+3. The editor validates the configuration.
+4. The user deploys the flow.
+5. The runtime constructor receives the deployed configuration.
+
+Manually corrupted flow JSON, incomplete imports, and deployments forced despite editor errors
+are unsupported unless the task explicitly requires supporting them.
+
+### Inspect both halves of the custom node
+
+Before changing runtime configuration handling, inspect both the `.html` and `.js` definitions
+of the node.
+
+Do not add a runtime guard for `config.<property>` without first checking:
+
+- whether the property appears in `defaults`;
+- whether it has a default `value`;
+- whether it is marked `required`;
+- whether it has a `validate` function;
+- whether it references a configuration node through `type`;
+- whether it is populated by a normal editor input;
+- whether custom editor lifecycle code modifies or saves it;
+- whether it is a typed input with a companion type property; and
+- whether it is a credential rather than a normal configuration property.
+
+Never infer configuration nullability from the runtime JavaScript alone.
+
+### Classify every configuration property
+
+Every static configuration property MUST belong to one of these categories:
+
+1. Required and editor-validated.
+2. Optional with an editor-defined default.
+3. Optional without a default because absence has defined behavior.
+4. Conditionally required and conditionally editor-validated.
+5. A configuration-node reference.
+6. A typed or dynamic input whose configured expression is static but whose resolved value may
+   be dynamic.
+7. A credential.
+8. A documented legacy property handled by an explicit compatibility path.
+
+If a property does not fit one of these categories, clarify its contract before writing runtime
+handling.
+
+### Required editor-validated properties
+
+For a property whose editor definition guarantees presence and validity:
+
+- Runtime code MUST use the property directly.
+- Runtime code MUST NOT check whether it is null, undefined, blank, or missing.
+- Runtime code MUST NOT provide a second default or fallback.
+- Runtime code MUST NOT use optional chaining merely to tolerate an editor-invalid
+  configuration.
+- Runtime code MUST NOT add an error message or recovery branch for a state rejected by the
+  editor.
+- Runtime tests MUST NOT manufacture configurations that the editor rejects.
+
+Forbidden runtime redundancy:
+
+```js
+// Forbidden when targetSystem is required and editor-validated
+if (config.targetSystem == null) {
+    node.error("Target system is required");
+    return;
+}
+// Forbidden when timeout already has an editor default
+const timeout = config.timeout ?? 5000;
+// Forbidden speculative tolerance
+const mode = config.profile?.mode || "default";
+```
+
+Use the established configuration contract:
+
+```js
+node.targetSystem = config.targetSystem;
+node.timeout = Number(config.timeout);
+node.mode = config.profile.mode;
+```
+
+Type conversion is allowed when Node-RED serializes an editor value in a different
+representation than the runtime needs. Type conversion is not permission to invent a fallback
+for a missing required value.
+
+For example:
+
+```js
+node.timeout = Number(config.timeout);
+node.enabled = config.enabled === true;
+```
+
+### Defaults belong in the editor definition
+
+Static defaults MUST be declared once in the custom node's `defaults` definition.
+
+Example:
+
+```js
+defaults: {
+    timeout: {
+        value: 5000,
+        required: true,
+        validate: RED.validators.number()
+    }
+}
+```
+
+Do not repeat that default in the runtime:
+
+```js
+// Forbidden duplication
+node.timeout = config.timeout ?? 5000;
+```
+
+Use:
+
+```js
+node.timeout = Number(config.timeout);
+```
+
+A default is not defensive runtime behavior. It is part of the custom node's editor contract.
+
+### Validation belongs in the editor when configuration is static
+
+Use editor validation for static configuration requirements:
+
+- `required: true` for mandatory values;
+- `RED.validators.number()` for numeric values;
+- `RED.validators.regex()` for supported formats;
+- custom `validate` functions for ranges and cross-field rules;
+- configuration-node `type` declarations for references; and
+- conditional validation when requirements depend on another configured field.
+
+Runtime code MUST NOT duplicate validation already performed by the editor.
+
+Do not use truthiness to validate numbers or Booleans:
+
+```js
+// Incorrect because 0 and false may be valid
+if (!config.retryCount) {
+    // ...
+}
+```
+
+The editor validator must define the actual valid range or values.
+
+### Custom editor controls must preserve the contract
+
+If a property uses a custom editor widget rather than an automatically managed input:
+
+- `oneditprepare` MUST initialize the widget correctly.
+- `oneditsave` MUST save the value into the declared property.
+- `oneditcancel` and `oneditdelete` MUST clean up editor resources when necessary.
+- The saved property MUST still be represented in `defaults`.
+- Validation MUST reflect the value the widget actually saves.
+- Runtime fallbacks MUST NOT compensate for a broken editor widget.
+
+If the editor fails to save a required field, fix the editor. Do not bloat the runtime to
+tolerate the editor defect.
+
+### Conditional configuration
+
+If a field is required only for a particular mode, transport, command, or option, express that
+requirement in editor validation.
+
+For example, if `serialPort` is required only when `transport` is `serial`, the editor validator
+should enforce that relationship.
+
+Do not duplicate the same condition in the runtime merely to check whether the user completed
+the form.
+
+Runtime code may still branch on the selected mode to perform the requested behavior:
+
+```js
+if (config.transport === "serial") {
+    openSerialTransport(config.serialPort);
+} else {
+    openNetworkTransport(config.host, Number(config.port));
+}
+```
+
+That behavioral branch is legitimate. An additional check that `serialPort` exists is redundant
+when the editor already guarantees it.
+
+### Typed inputs and dynamic properties
+
+Typed inputs require special treatment because the editor validates the configured source, but
+it may not be able to validate the value resolved from a runtime message.
+
+For a typed input:
+
+- The configured value property and its companion type property MUST be declared correctly.
+- The editor MUST validate static configured values.
+- Runtime code MUST validate a value resolved from `msg`, flow context, global context,
+  environment variables, or another dynamic source when that value is required for the
+  operation.
+- Runtime code MUST NOT revalidate a literal value already validated by the editor.
+
+Example distinction:
+
+```js
+if (config.targetType === "num") {
+    // The editor validates the configured literal.
+    target = Number(config.target);
+} else {
+    // The editor can validate the property expression,
+    // but only runtime can determine whether the message contains it.
+    target = RED.util.evaluateNodeProperty(
+        config.target,
+        config.targetType,
+        node,
+        msg
+    );
+    if (target == null) {
+        node.error("The configured target could not be resolved", msg);
+        return;
+    }
+}
+```
+
+Validate the dynamic result, not the already-validated editor field that describes where to
+obtain it.
+
+### Message input is a runtime boundary
+
+Properties received through `msg` are dynamic runtime input and may require validation.
+
+Runtime validation is appropriate for:
+
+- required message properties;
+- dynamically selected property paths;
+- payload types;
+- numeric ranges;
+- MAVLink command arguments;
+- buffers and binary data;
+- externally supplied identifiers; and
+- values resolved from context or environment variables.
+
+Validate only the message properties the operation actually requires.
+
+Do not create a generic message-normalization framework merely because arbitrary malformed
+messages are theoretically possible.
+
+### Configuration-node references
+
+A configuration-node property has two related but distinct concepts:
+
+1. the configured reference ID; and
+2. the live configuration-node object or resource.
+
+If the editor marks the reference as required, runtime code MUST NOT repeatedly check whether
+the reference ID is missing.
+
+Example editor definition:
+
+```js
+defaults: {
+    connection: {
+        value: "",
+        type: "mavlink-connection",
+        required: true
+    }
+}
+```
+
+The runtime may resolve it once:
+
+```js
+node.connection = RED.nodes.getNode(config.connection);
+```
+
+Do not scatter checks for `config.connection` throughout the runtime.
+
+A live connection, socket, serial port, or device owned by the configuration node may still
+disconnect or fail after valid configuration. Handle those real operational failures where they
+occur.
+
+Validate connection readiness, connection state, and I/O failures. Do not repeatedly revalidate
+the editor-owned reference ID.
+
+If the project intentionally supports flows with deleted, missing, or unavailable configuration
+nodes, handle that once at the configuration-node resolution boundary and document why that
+unsupported editor state is being accepted.
+
+### Credentials
+
+Credentials are different from ordinary configuration because they may be omitted from exported
+flows or become unavailable after an import.
+
+Credential handling MAY validate that required secrets are available at runtime when their
+absence is a supported operational possibility.
+
+Credential checks MUST:
+
+- occur once at the credential boundary;
+- explain the legitimate path by which the credential may be absent;
+- avoid logging or exposing the credential;
+- produce a useful Node-RED status or error; and
+- avoid repeated checks throughout message-processing code.
+
+Do not treat every normal configuration property like a credential merely because credentials
+require special handling.
+
+### Runtime validation is appropriate only at real runtime boundaries
+
+Runtime code SHOULD validate data or operations the editor cannot guarantee, including:
+
+- `msg` properties;
+- dynamic typed-input results;
+- network responses;
+- file contents;
+- serial data;
+- device data;
+- API responses;
+- MAVLink messages;
+- mutable node, flow, or global context;
+- environment-dependent values;
+- credentials legitimately absent after import;
+- connection establishment;
+- connection loss;
+- timeouts;
+- resource exhaustion; and
+- documented legacy flow formats.
+
+These are genuine runtime conditions. Static required editor fields are not.
+
+### Proof-of-possibility rule
+
+Every new defensive branch MUST answer:
+
+> What supported execution path can reach this state?
+
+The answer must identify a real path through:
+
+- normal custom-node operation;
+- dynamic message input;
+- an external system;
+- a documented import or credential behavior;
+- a documented legacy flow format; or
+- an actual resource or connection failure.
+
+If no supported path exists, do not add the guard.
+
+The following are not supported paths unless the task explicitly says otherwise:
+
+- manually corrupted flow JSON;
+- forced deployment despite editor validation errors;
+- missing required fields rejected by the editor;
+- impossible combinations rejected by editor validation;
+- hypothetical future requirements;
+- "just in case";
+- "for robustness" without a concrete failure path; and
+- making unit tests pass when those tests construct impossible configurations.
+
+### Backward compatibility
+
+When an existing flow created by an older version of the custom node may legitimately lack a
+newly introduced property:
+
+- Handle it through one explicit migration or compatibility boundary.
+- Identify the version or historical flow shape being supported.
+- Add a focused compatibility test.
+- Do not scatter `??`, `||`, optional chaining, or missing-field checks throughout the runtime.
+- Remove the compatibility path when that legacy format is no longer supported.
+
+A hypothetical old flow is not sufficient justification. Confirm that the older published custom
+node actually produced that flow shape.
+
+### Failure behavior
+
+Do not silently repair violated internal invariants.
+
+If an invariant can genuinely be violated because of a programming defect, fail clearly at the
+nearest appropriate boundary.
+
+Do not add permissive fallback behavior throughout the custom node that hides:
+
+- an editor defect;
+- a serialization defect;
+- an incorrect property name;
+- a missing declaration in `defaults`;
+- a broken `oneditsave`;
+- an incorrect configuration-node type; or
+- a programming error.
+
+Fix the source of the invariant violation.
+
+### Testing boundaries
+
+Editor-focused tests should verify:
+
+- required fields;
+- default values;
+- custom validators;
+- conditional validation;
+- typed-input configuration;
+- custom widget persistence; and
+- correct configuration-node references.
+
+Runtime tests should begin with valid static node configuration and exercise:
+
+- valid message processing;
+- missing or malformed dynamic message values;
+- connection failures;
+- unavailable devices;
+- external protocol errors;
+- timeouts;
+- invalid API responses;
+- MAVLink errors; and
+- other demonstrated runtime conditions.
+
+Runtime constructor tests MUST NOT omit required editor-validated properties unless testing a
+documented compatibility path.
+
+Do not retain tests whose only purpose is protecting impossible configurations.
+
+A test does not prove that an invalid state must be supported when the test itself bypasses the
+Node-RED editor contract.
+
+### Bloat prevention
+
+Do not create helpers, normalizers, fallback objects, custom errors, wrappers, logging branches,
+or abstractions solely to handle states prohibited by the custom node's editor contract.
+
+Do not add:
+
+- a generic configuration sanitizer;
+- a second copy of editor validation;
+- fallback defaults in multiple runtime functions;
+- optional chaining throughout the runtime;
+- defensive copies of required scalar configuration;
+- compatibility code without an identified legacy version; or
+- speculative recovery code for hypothetical malformed flows.
+
+When removing a redundant guard, also remove its dedicated:
+
+- tests;
+- error messages;
+- helper functions;
+- comments;
+- fallback values; and
+- dead branches.
+
+Prefer the smallest custom-node implementation that handles:
+
+1. valid editor-produced configuration;
+2. required dynamic message validation; and
+3. demonstrated external or operational failures.
+
+Do not build infrastructure for imaginary failures.
+
+### Controlling rule
+
+Every defensive branch must name a supported execution path that can reach it.
+
+"The required custom-node editor field might somehow be null" is not a supported execution path.
+
 ## Cursor Cloud specific instructions
 
 ### Toolchain and environment
