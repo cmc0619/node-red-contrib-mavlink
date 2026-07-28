@@ -359,6 +359,75 @@ and a dropdown there would be wrong.
 **Help lives in hover text and the help panel.** Descriptions ride as tooltips. Inline hints
 are limited to units and range. The dialog stays compact.
 
+### Addressing and identity — the role × tier matrix
+
+Action-node dialogs inherit traits and override them, object-style: the **identity role** is the
+base class, the **delivery tier** is a mixin, node config overrides inherited values, and
+`msg.payload` is the runtime override of last resort. Two facts anchor the whole table:
+
+- **A Vehicle Profile is a class inbound and an address outbound.** Everything arriving on a
+  connection decodes against the profile's dialect (§7), and several airframes of that class may
+  share the wire. But every *outbound* message addresses one concrete sysid — the profile's
+  target defaults are numbers, never blank, and a fleet operator sets explicit targets per node.
+- **The identity role is the paradigm switch.** A `gcs` (or `custom`) identity talks *to*
+  vehicles and must say which one. A `companion` identity is *on* an airframe: its source sysid
+  is derived from that airframe, and its implied target is its own autopilot — same sysid,
+  compid 1. A companion belongs to one airframe (enforced at bind, §7), so nothing needs asking.
+
+**All reshaping is edit-dialog time.** Rows show and hide while the tray is open, exactly like
+the Move mode reshape. Deploy freezes the shape. At runtime only `msg.payload` overrides
+*values*; nothing changes shape. **Hidden is not honored:** a field hidden by the current
+role/tier is ignored at runtime even if an earlier configuration saved a value into it — the
+same rule the identity node already applies to role changes.
+
+**By role** — driven by the identity selected *on the node*, never inferred from the connection
+(sender nodes: Command, Move, Param, Payload, Mission):
+
+| | `gcs` / `custom` | `companion` |
+|---|---|---|
+| Send-as (identity) | dropdown of identities bound to the selected connection; first eligible preselected and written into config | same dropdown (with one bound identity it is simply shown selected — "hardcoded") |
+| Target sysid | shown; blank inherits the profile default | hidden — derived from the airframe (identity's own sysid) |
+| Target compid | shown; blank inherits the profile default | hidden, pinned to 1 (the autopilot) — except Payload, whose compid addresses a payload device and stays visible |
+
+**By tier** (same sender nodes):
+
+| Field | Build | wire tiers (Send / confirm / complete / collect / Stream) |
+|---|---|---|
+| Connection | hidden — nothing is sent; output 0 feeds `mavlink-out` or a Build-node trigger, which brings its own connection | shown, required |
+| Vehicle Profile | shown — supplies the editor catalogs (dialect), firmware, and the target defaults blank fields inherit | hidden — the profile arrives via the connection |
+| Send-as (identity) | hidden — source ids are stamped at the wire by whichever node eventually sends | per role table |
+| Target sysid/compid | shown — a builder must stamp targets | per role table |
+| Firmware (Param, Mission) | no dropdown — inherited from the Vehicle Profile field | no dropdown — inherited from the connection's profile |
+| Timeout / retries / band | hidden | shown |
+
+**Runtime target resolution**, one order everywhere, per field (sysid and compid resolve
+independently; a configured 0 is broadcast and survives; blank means inherit):
+
+1. `msg.payload.target`
+2. companion send-as identity → derived `{airframe sysid, 1}` (node config target ignored —
+   hidden is not honored; Payload's compid still resolves from its visible field)
+3. node config target
+4. profile default — the connection's bound profile on wire tiers, the node's Vehicle Profile
+   field on Build
+5. 1
+
+Confirm/complete matching (COMMAND_ACK, param echo) keys on the *same resolved target* — the
+matcher and the sender share one resolution, pinned by test.
+
+**Exceptions, deliberate:**
+
+- **Build node** — raw builds for the whole dialect. Its build tier takes a plain dialect
+  picker (bundled list, with a "from Vehicle Profile…" escape for custom XML) and needs no
+  connection, identity, or vehicle. On wire tiers the connection's profile governs the catalogs,
+  because that dialect is what the wire will encode.
+- **Swarm** — gcs-paradigm by nature. Its send-as dropdown offers only gcs-enabled identities
+  (`gcs` or `custom`, first one preselected); selection modes replace the single-target rows.
+  Build tier with `all`/`filter` selection still shows the connection — the live peer table is
+  the only place those selections can resolve. Build + explicit `list` needs no connection.
+- **In and State** — read side. Their sysid/compid fields are *filters* where blank means
+  everything; no target semantics, no reshape.
+- **Out** — fully message-driven; nothing to reshape.
+
 ### Node status
 
 The badge is the first thing anyone reads, and there are two vocabularies because there are two
@@ -729,6 +798,9 @@ Confirm does what was asked and reports whether it worked, without blocking for 
 period the operator did not choose. The operator changes it freely.
 
 Build's output goes to `mavlink-out`.
+
+Which config references and address fields a tier shows — and where blank targets inherit from —
+is governed by the role × tier matrix (§6).
 
 Move has no acknowledgement of any kind, so its third tier is **Stream** instead — sustained
 setpoints with TTL and stop, no confirmation possible.
