@@ -31,11 +31,28 @@ try {
 const DIALECTS_ROUTE = '/mavlink/dialects';
 /** Admin endpoint path for shared dialect enum catalogs. */
 const ENUMS_ROUTE = '/mavlink/enums';
+/** Admin endpoint base path for the downloadable XML dialect catalog (§4). */
+const XML_CATALOG_ROUTE = '/mavlink/xml-catalog';
 
 /** Whether the admin dialects route has been registered (once per process). */
 let _dialectsRouteRegistered = false;
 /** Whether the admin enums route has been registered (once per process). */
 let _enumsRouteRegistered = false;
+/** Whether the XML-catalog routes have been registered (once per process). */
+let _xmlCatalogRouteRegistered = false;
+
+/**
+ * Resolve the XML-catalog cache directory under the Node-RED user dir
+ * (`<userDir>/mavlink/xml`), falling back to the cwd when settings are absent.
+ *
+ * @param {object} RED
+ * @returns {string}
+ */
+function xmlCatalogBaseDir(RED) {
+  const path = require('path');
+  const userDir = (RED && RED.settings && RED.settings.userDir) || process.cwd();
+  return path.join(userDir, 'mavlink', 'xml');
+}
 
 module.exports = function registerMavlinkVehicle(RED) {
   if (!vehicleApi) {
@@ -166,6 +183,130 @@ module.exports = function registerMavlinkVehicle(RED) {
   }
 
   /**
+   * Downloadable MAVLink XML dialect catalog (§4). Downloaded XML files are
+   * managed *Custom* dialect paths, not a new runtime mode and not a
+   * replacement for bundled dialects. Registered once per process.
+   *
+   * GET  /mavlink/xml-catalog          list downloaded snapshots + file paths
+   * POST /mavlink/xml-catalog/update   download/refresh from an official source
+   * GET  /mavlink/xml-catalog/compare  informational diff vs the bundled dialect
+   */
+  if (!_xmlCatalogRouteRegistered) {
+    const path = require('path');
+    let catalogApi = null;
+    let catalogLoadError = null;
+    try {
+      catalogApi = require('../lib/metadata');
+    } catch (err) {
+      catalogLoadError = err;
+      if (RED.log && typeof RED.log.error === 'function') {
+        RED.log.error(`[mavlink-vehicle] XML catalog unavailable: ${err.message}`);
+      }
+    }
+
+    const newCatalog = () => new catalogApi.XmlCatalog({ baseDir: xmlCatalogBaseDir(RED) });
+    const catalogUnavailable = (res) =>
+      res.status(503).json({
+        ok: false,
+        error: catalogLoadError ? catalogLoadError.message : 'XML catalog unavailable',
+      });
+
+    // GET list: needs read permission (§6). Never discloses the absolute base
+    // dir — only the per-file paths a profile persists into customDialectPath.
+    RED.httpAdmin.get(
+      XML_CATALOG_ROUTE,
+      RED.auth.needsPermission('mavlink.read'),
+      (_req, res) => {
+        if (!catalogApi) {
+          return catalogUnavailable(res);
+        }
+        try {
+          const catalog = newCatalog();
+          const bundled = new Set(catalogApi.knownDialects());
+          const snapshots = catalog.list().map((m) => {
+            const unusableBy = new Map((m.unusable || []).map((u) => [u.file, u.missingIncludes]));
+            return {
+              snapshotId: m.snapshotId,
+              repo: m.repo,
+              ref: m.ref,
+              commit: m.commit,
+              downloadedAt: m.downloadedAt,
+              files: (m.files || []).map((f) => ({
+                name: f.name,
+                sha256: f.sha256,
+                bytes: f.bytes,
+                dialect: f.name.replace(/\.xml$/i, ''),
+                bundledExists: bundled.has(f.name.replace(/\.xml$/i, '')),
+                usable: !unusableBy.has(f.name),
+                missingIncludes: unusableBy.get(f.name) || [],
+                path: path.join(catalog.snapshotsDir(), m.snapshotId, f.name),
+              })),
+              missing: m.missing || [],
+              unusable: m.unusable || [],
+            };
+          });
+          res.json({ ok: true, snapshots });
+        } catch (err) {
+          res.status(500).json({ ok: false, error: err.message, code: err.code });
+        }
+      }
+    );
+
+    // POST update: downloads (network + disk write). No `mavlink.write` scope
+    // exists in this package, so it shares the read guard, matching the rest of
+    // the admin routes here.
+    RED.httpAdmin.post(
+      `${XML_CATALOG_ROUTE}/update`,
+      RED.auth.needsPermission('mavlink.read'),
+      (req, res) => {
+        if (!catalogApi) {
+          return catalogUnavailable(res);
+        }
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        // `repo`/`ref` are interpolated into GitHub URLs — constrain their shape
+        // so a crafted value cannot inject extra path segments server-side.
+        if (body.repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(String(body.repo))) {
+          return res.status(400).json({ ok: false, error: "repo must look like 'owner/name'." });
+        }
+        if (body.ref !== undefined && !/^[\w./-]+$/.test(String(body.ref))) {
+          return res.status(400).json({ ok: false, error: 'ref contains unsupported characters.' });
+        }
+        newCatalog()
+          .update({
+            repo: body.repo,
+            ref: body.ref,
+            files: Array.isArray(body.files) ? body.files : undefined,
+          })
+          .then((manifest) => res.json({ ok: true, manifest }))
+          .catch((err) => res.status(500).json({ ok: false, error: err.message, code: err.code }));
+      }
+    );
+
+    // GET compare: informational diff of a downloaded XML vs the bundled dialect.
+    RED.httpAdmin.get(
+      `${XML_CATALOG_ROUTE}/compare`,
+      RED.auth.needsPermission('mavlink.read'),
+      (req, res) => {
+        if (!catalogApi) {
+          return catalogUnavailable(res);
+        }
+        try {
+          const result = newCatalog().compare({
+            file: String(req.query.file || ''),
+            snapshot: req.query.snapshot ? String(req.query.snapshot) : undefined,
+          });
+          res.json({ ok: true, comparison: result });
+        } catch (err) {
+          const status = err.code === 'XML_CATALOG_FILE_NOT_FOUND' ? 404 : 500;
+          res.status(status).json({ ok: false, error: err.message, code: err.code });
+        }
+      }
+    );
+
+    _xmlCatalogRouteRegistered = true;
+  }
+
+  /**
    * @param {object} config  Node-RED node config from the editor
    */
   function MavlinkVehicleNode(config) {
@@ -176,6 +317,14 @@ module.exports = function registerMavlinkVehicle(RED) {
     node.firmware = normalizeFirmware(config.firmware);
     node.dialectSource = config.dialectSource === 'custom' ? 'custom' : 'bundled';
     node.dialect = config.dialect || 'ardupilotmega';
+    // Path to a MAVLink XML the Node-RED process can read; compiled at runtime
+    // when dialectSource is 'custom' (a downloaded catalog file fills this).
+    node.customDialectPath = (config.customDialectPath || '').trim();
+    // Optional firmware/custom parameter-definition URL (PX4 / custom stacks).
+    // Persisted only — the Param node may consume it; ArduPilot leaves it blank
+    // (its per-family autotest URL is derived at runtime).
+    node.paramDefsUrl = (config.paramDefsUrl || '').trim();
+    node.paramDefsUrl = typeof config.paramDefsUrl === 'string' ? config.paramDefsUrl.trim() : '';
 
     const problems = [];
 
@@ -199,6 +348,7 @@ module.exports = function registerMavlinkVehicle(RED) {
         name: config.name,
         dialectSource: node.dialectSource,
         dialect: node.dialect,
+        customDialectPath: node.customDialectPath,
         customDialectBundle: config.customDialectBundle || null,
       });
     } catch (err) {
@@ -241,6 +391,8 @@ module.exports = function registerMavlinkVehicle(RED) {
       firmware: node.firmware,
       dialect: node.dialect,
       dialectSource: node.dialectSource,
+      customDialectPath: node.customDialectPath,
+      paramDefsUrl: node.paramDefsUrl,
       defaultTargetSystem: node.defaultTargetSystem,
       defaultTargetComponent: node.defaultTargetComponent,
     });

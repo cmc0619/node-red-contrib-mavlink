@@ -32,7 +32,10 @@ function captureRoutes(nodesById) {
     },
     httpAdmin: {
       get(path, auth, handler) {
-        handlers.set(path, { auth, handler });
+        handlers.set(path, { auth, handler, method: 'get' });
+      },
+      post(path, auth, handler) {
+        handlers.set(path, { auth, handler, method: 'post' });
       },
     },
     auth: {
@@ -63,7 +66,17 @@ test('/mavlink/enums is registered once with mavlink.read auth', () => {
 
   assert.ok(handlers.has('/mavlink/enums'));
   assert.ok(handlers.has('/mavlink/dialects'));
-  assert.equal(permissions.filter((p) => p === 'mavlink.read').length, 2);
+  // dialects + enums are read-guarded; the xml-catalog routes add three more
+  // mavlink.read guards (list GET, update POST, compare GET).
+  assert.equal(permissions.filter((p) => p === 'mavlink.read').length, 5);
+});
+
+test('the XML-catalog admin routes register under /mavlink/xml-catalog', () => {
+  const { handlers } = captureRoutes({});
+
+  assert.equal(handlers.get('/mavlink/xml-catalog').method, 'get');
+  assert.equal(handlers.get('/mavlink/xml-catalog/update').method, 'post');
+  assert.equal(handlers.get('/mavlink/xml-catalog/compare').method, 'get');
 });
 
 test('deployed Vehicle Profile serves requested enums from its own bundle', () => {
