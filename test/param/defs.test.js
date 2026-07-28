@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 
 const {
   resolveDefsUrl,
+  assertSafeDefsUrl,
   parsePdefJson,
   fetchParamDefs,
   clearMemCache,
@@ -57,6 +58,19 @@ test('resolveDefsUrl returns custom URL when provided, regardless of firmware', 
 test('resolveDefsUrl ignores blank custom URL string', () => {
   assert.equal(resolveDefsUrl('copter', 'ardupilot', '   '), 'https://autotest.ardupilot.org/Parameters/ArduCopter/apm.pdef.json');
   assert.equal(resolveDefsUrl('generic', 'px4', '   '), null);
+});
+
+test('assertSafeDefsUrl rejects non-https and private destinations (SSRF)', () => {
+  assert.throws(() => assertSafeDefsUrl('http://example.com/p.json'), /https/);
+  assert.throws(() => assertSafeDefsUrl('https://127.0.0.1/p.json'), /private|link-local|not allowed/i);
+  assert.throws(() => assertSafeDefsUrl('https://192.168.1.9/p.json'), /private|link-local/i);
+  assert.throws(() => assertSafeDefsUrl('https://169.254.169.254/latest'), /private|link-local/i);
+  assert.throws(() => assertSafeDefsUrl('https://localhost/p.json'), /not allowed/);
+  assert.doesNotThrow(() => assertSafeDefsUrl('https://example.com/p.json'));
+  assert.throws(
+    () => resolveDefsUrl('copter', 'px4', 'https://10.0.0.5/secret.json'),
+    (err) => err.code === 'PARAM_DEFS_URL_FORBIDDEN'
+  );
 });
 
 /* ── parsePdefJson ──────────────────────────────────────────────── */

@@ -126,6 +126,26 @@ test('UDP transport setDscp marks the live socket without sending data', async (
   assert.equal(dg.sockets[0].sent.length, 0);
 });
 
+test('UDP transport setDscp uses ipv6 family for udp6 sockets', async () => {
+  const dg = mockDgram();
+  const calls = [];
+  const transport = new UdpTransport(
+    { bindAddress: '::', bindPort: 14550 },
+    {
+      dgram: dg.module,
+      markDscp: (socket, dscp, options) => {
+        calls.push({ type: socket.type, family: options.family, dscp });
+        return true;
+      },
+    }
+  );
+
+  await transport.open();
+  assert.equal(dg.sockets[0].type, 'udp6');
+  assert.equal(transport.setDscp(46), true);
+  assert.deepEqual(calls, [{ type: 'udp6', family: 'ipv6', dscp: 46 }]);
+});
+
 test('TCP transport setDscp marks the socket selected for the next send', async () => {
   const socket = new EventEmitter();
   socket.remoteAddress = '10.0.0.21';
