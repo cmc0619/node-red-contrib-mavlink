@@ -212,8 +212,10 @@ dependency order, reconcile, display. Same bundle shape. Compile once at upload.
 
 **Remote fetch / catalog.** The XML catalog downloads a pinned commit (source selectable:
 `mavlink/mavlink` or `ArduPilot/mavlink`), follows includes, timestamps the snapshot, and
-can replace or diff against the seed. Configuration happens on a bench with internet; the
-seed covers the boat.
+can replace or diff against the seed. The Vehicle editor exposes a **dialect library**:
+pick a dialect name, then a version (Seed, or a downloaded date). There is no separate
+custom-path mode — once XML is in the library it is a pulldown entry. Configuration
+updates happen on a bench with internet; the seed covers the boat.
 
 Fail loud on custom compile: missing include, cyclic include, msgid collision between two
 files defining different messages. Redefinition of the same message is an override, resolved
