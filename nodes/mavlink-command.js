@@ -32,6 +32,7 @@ const {
   RESULT_NAME,
   getPreset,
   buildParamArray,
+  mergeParams,
   AckWaiter,
   checkCompletion,
   waitForCompletion,
@@ -85,42 +86,6 @@ function resolveTarget(config, connNode) {
         ? connNode.connection._vehicle.targetCompid
         : 1;
   return { sysid, compid };
-}
-
-/**
- * Merge node-configured params with any override in msg.payload.
- *
- * If msg.payload is a plain object with numeric string keys, those values
- * override the configured params for the same indices.
- *
- * @param {object} config
- * @param {*} payload
- * @returns {Object<number, number>}  index (1–7) → value
- */
-function mergeParams(config, payload) {
-  const out = {};
-  let raw = {};
-  try {
-    if (config.params) raw = JSON.parse(config.params);
-  } catch { /* invalid saved JSON → start from empty */ }
-
-  for (const [k, v] of Object.entries(raw)) {
-    const idx = Number(k);
-    if (Number.isInteger(idx) && idx >= 1 && idx <= 7) {
-      // Number("NaN") → NaN — required for "keep current" sentinels in JSON config.
-      out[idx] = Number(v);
-    }
-  }
-
-  if (payload !== null && typeof payload === 'object' && !Array.isArray(payload)) {
-    for (const [k, v] of Object.entries(payload)) {
-      const idx = Number(k);
-      if (Number.isInteger(idx) && idx >= 1 && idx <= 7) {
-        out[idx] = Number(v);
-      }
-    }
-  }
-  return out;
 }
 
 /**
