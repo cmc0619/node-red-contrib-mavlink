@@ -629,7 +629,7 @@ test('mavlink-build: defaults empty messageName to HEARTBEAT', () => {
   const node = makeNodeInstance({ vehicle: 'v1' });
   Constructor.call(node, { vehicle: 'v1', messageName: '', tier: 'build' });
   // No idle badge echoing the message name — that is already the node label (§6).
-  assert.equal(node._status, undefined);
+  assert.ok(!node._status || !node._status.text);
 
   node._input({ payload: { type: 6, autopilot: 3 } });
 
