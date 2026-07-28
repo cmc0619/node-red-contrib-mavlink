@@ -1,0 +1,321 @@
+[
+  {
+    "id": "ex08-tab",
+    "type": "tab",
+    "label": "08 Param read\u2215set with defs",
+    "disabled": false,
+    "info": "Param read and set with parameter definition catalog. When the Vehicle Profile is deployed with a known vehicle family (copter/plane/rover/sub) and ArduPilot firmware, the Param node editor auto-fetches apm.pdef.json and shows param descriptions and enum values in the Param id datalist. PX4 requires a custom paramDefsUrl in the Vehicle Profile Advanced settings.",
+    "env": []
+  },
+  {
+    "id": "ex08-comment",
+    "type": "comment",
+    "z": "ex08-tab",
+    "name": "Param read\u2215set with definition catalog",
+    "info": "This flow demonstrates:\n\n1. Param read (Send tier) \u2014 reads ARMING_CHECK and shows the raw PARAM_VALUE on output 0.\n2. Param set (echo-confirm) \u2014 sets ARMING_CHECK=1 and confirms the write by matching the broadcast PARAM_VALUE echo.\n3. Param list (collect) \u2014 requests all params and collects them into one array on output 0.\n\nParameter definition catalog (DESIGN.md \u00a74):\n\u2022 ArduPilot copter/plane/rover/sub: the editor fetches defs from\n  https://autotest.ardupilot.org/Parameters/<Vehicle>/apm.pdef.json automatically.\n\u2022 PX4 / custom firmware: set paramDefsUrl in the Vehicle Profile \u2192 Advanced.\n\u2022 Generic / unknown family: no auto-defs; the Param id field remains free-form text.\n\nWith defs loaded, the Param id input becomes a searchable datalist. Selecting a param\nshows its description, unit, and range inline. For params with discrete values (enums),\nthe Value field offers a datalist of named options when Action=Set.",
+    "x": 210,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex08-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex08-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "ex08-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex08-vehicle",
+    "localIdentity": "ex08-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex08-inject-read",
+    "type": "inject",
+    "z": "ex08-tab",
+    "name": "Read ARMING_CHECK",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 160,
+    "wires": [
+      [
+        "ex08-read"
+      ]
+    ]
+  },
+  {
+    "id": "ex08-read",
+    "type": "mavlink-param",
+    "z": "ex08-tab",
+    "name": "Read ARMING_CHECK",
+    "connection": "ex08-connection",
+    "delivery": "send",
+    "action": "read",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "paramId": "ARMING_CHECK",
+    "paramIndex": -1,
+    "value": "",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "x": 420,
+    "y": 160,
+    "wires": [
+      [
+        "ex08-read-done"
+      ],
+      [
+        "ex08-read-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex08-inject-set",
+    "type": "inject",
+    "z": "ex08-tab",
+    "name": "Set ARMING_CHECK=1",
+    "props": [
+      {
+        "p": "payload",
+        "v": "{\"action\":\"set\",\"paramId\":\"ARMING_CHECK\",\"value\":1,\"paramType\":\"MAV_PARAM_TYPE_REAL32\"}",
+        "vt": "json"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 280,
+    "wires": [
+      [
+        "ex08-set"
+      ]
+    ]
+  },
+  {
+    "id": "ex08-set",
+    "type": "mavlink-param",
+    "z": "ex08-tab",
+    "name": "Set ARMING_CHECK (echo-confirm)",
+    "connection": "ex08-connection",
+    "delivery": "confirm",
+    "action": "set",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "paramId": "ARMING_CHECK",
+    "paramIndex": -1,
+    "value": "1",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "x": 440,
+    "y": 280,
+    "wires": [
+      [
+        "ex08-set-done"
+      ],
+      [
+        "ex08-set-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex08-inject-list",
+    "type": "inject",
+    "z": "ex08-tab",
+    "name": "Collect full list",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 400,
+    "wires": [
+      [
+        "ex08-list"
+      ]
+    ]
+  },
+  {
+    "id": "ex08-list",
+    "type": "mavlink-param",
+    "z": "ex08-tab",
+    "name": "Collect all params",
+    "connection": "ex08-connection",
+    "delivery": "collect",
+    "action": "request-list",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "paramId": "",
+    "paramIndex": -1,
+    "value": "",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "x": 400,
+    "y": 400,
+    "wires": [
+      [
+        "ex08-list-done"
+      ],
+      [
+        "ex08-list-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex08-read-done",
+    "type": "debug",
+    "z": "ex08-tab",
+    "name": "read continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 650,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "ex08-read-status",
+    "type": "debug",
+    "z": "ex08-tab",
+    "name": "read status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 650,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "ex08-set-done",
+    "type": "debug",
+    "z": "ex08-tab",
+    "name": "set continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 660,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "ex08-set-status",
+    "type": "debug",
+    "z": "ex08-tab",
+    "name": "set status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 660,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "ex08-list-done",
+    "type": "debug",
+    "z": "ex08-tab",
+    "name": "param list",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 630,
+    "y": 380,
+    "wires": []
+  },
+  {
+    "id": "ex08-list-status",
+    "type": "debug",
+    "z": "ex08-tab",
+    "name": "list status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 630,
+    "y": 440,
+    "wires": []
+  }
+]
