@@ -42,6 +42,48 @@
           );
         });
       }
+
+      /**
+       * §6: only the fields for the selected mode and delivery exist. Everything
+       * else is hidden — not greyed, not left over from another mode.
+       */
+      function refreshVisibility() {
+        var mode = $('#node-input-mode').val() || 'local-position';
+        var delivery = $('#node-input-delivery').val() || 'build';
+        var show = {
+          north: mode === 'local-position',
+          east: mode === 'local-position',
+          up: mode === 'local-position',
+          lat: mode === 'global-position',
+          lon: mode === 'global-position',
+          alt: mode === 'global-position',
+          vNorth: mode === 'local-velocity',
+          vEast: mode === 'local-velocity',
+          vUp: mode === 'local-velocity',
+          yaw: true,
+          yawRate: true,
+          interval: delivery === 'stream',
+          ttl: delivery === 'stream'
+        };
+
+        $('#row-move-north').toggle(!!show.north);
+        $('#row-move-east').toggle(!!show.east);
+        $('#row-move-up').toggle(!!show.up);
+        $('#row-move-lat').toggle(!!show.lat);
+        $('#row-move-lon').toggle(!!show.lon);
+        $('#row-move-alt').toggle(!!show.alt);
+        $('#row-move-vNorth').toggle(!!show.vNorth);
+        $('#row-move-vEast').toggle(!!show.vEast);
+        $('#row-move-vUp').toggle(!!show.vUp);
+        $('#row-move-yaw').toggle(!!show.yaw);
+        $('#row-move-yawRate').toggle(!!show.yawRate);
+        $('#row-move-interval').toggle(!!show.interval);
+        $('#row-move-ttl').toggle(!!show.ttl);
+      }
+
+      $('#node-input-mode').on('change', refreshVisibility);
+      $('#node-input-delivery').on('change', refreshVisibility);
+      refreshVisibility();
     }
   });
 </script>
@@ -53,16 +95,23 @@
   <div class="form-row"><label for="node-input-mode">Mode</label><select id="node-input-mode"><option value="local-position">Local position</option><option value="local-velocity">Local velocity</option><option value="global-position">Global position</option></select></div>
   <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
   <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
-  <div class="form-row"><label for="node-input-north">North / Lat</label><input type="text" id="node-input-north" placeholder="m north"><input type="text" id="node-input-lat" placeholder="deg lat" style="width:30%;"></div>
-  <div class="form-row"><label for="node-input-east">East / Lon</label><input type="text" id="node-input-east" placeholder="m east"><input type="text" id="node-input-lon" placeholder="deg lon" style="width:30%;"></div>
-  <div class="form-row"><label for="node-input-up">Up / Alt</label><input type="text" id="node-input-up" placeholder="m up"><input type="text" id="node-input-alt" placeholder="m alt" style="width:30%;"></div>
-  <div class="form-row"><label for="node-input-vNorth">Velocity</label><input type="text" id="node-input-vNorth" placeholder="north m/s"><input type="text" id="node-input-vEast" placeholder="east m/s" style="width:20%;"><input type="text" id="node-input-vUp" placeholder="up m/s" style="width:20%;"></div>
-  <div class="form-row"><label for="node-input-yaw">Yaw</label><input type="text" id="node-input-yaw" placeholder="rad"><input type="text" id="node-input-yawRate" placeholder="rad/s" style="width:30%;"></div>
-  <div class="form-row"><label for="node-input-intervalMs">Stream ms</label><input type="number" id="node-input-intervalMs"></div>
-  <div class="form-row"><label for="node-input-ttlMs">TTL ms</label><input type="number" id="node-input-ttlMs"></div>
+  <div class="form-row" id="row-move-north"><label for="node-input-north">Metres north</label><input type="text" id="node-input-north" step="any" style="width:120px"> m</div>
+  <div class="form-row" id="row-move-east"><label for="node-input-east">Metres east</label><input type="text" id="node-input-east" step="any" style="width:120px"> m</div>
+  <div class="form-row" id="row-move-up"><label for="node-input-up">Metres up</label><input type="text" id="node-input-up" step="any" style="width:120px"> m</div>
+  <div class="form-row" id="row-move-lat"><label for="node-input-lat">Degrees lat</label><input type="text" id="node-input-lat" step="any" style="width:120px"> deg</div>
+  <div class="form-row" id="row-move-lon"><label for="node-input-lon">Degrees lon</label><input type="text" id="node-input-lon" step="any" style="width:120px"> deg</div>
+  <div class="form-row" id="row-move-alt"><label for="node-input-alt">Metres alt</label><input type="text" id="node-input-alt" step="any" style="width:120px"> m</div>
+  <div class="form-row" id="row-move-vNorth"><label for="node-input-vNorth">North m/s</label><input type="text" id="node-input-vNorth" step="any" style="width:120px"> m/s</div>
+  <div class="form-row" id="row-move-vEast"><label for="node-input-vEast">East m/s</label><input type="text" id="node-input-vEast" step="any" style="width:120px"> m/s</div>
+  <div class="form-row" id="row-move-vUp"><label for="node-input-vUp">Up m/s</label><input type="text" id="node-input-vUp" step="any" style="width:120px"> m/s</div>
+  <div class="form-row" id="row-move-yaw"><label for="node-input-yaw">Yaw</label><input type="text" id="node-input-yaw" step="any" style="width:120px"> rad</div>
+  <div class="form-row" id="row-move-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="text" id="node-input-yawRate" step="any" style="width:120px"> rad/s</div>
+  <div class="form-row" id="row-move-interval"><label for="node-input-intervalMs">Stream interval</label><input type="number" id="node-input-intervalMs" style="width:80px"> ms</div>
+  <div class="form-row" id="row-move-ttl"><label for="node-input-ttlMs">TTL</label><input type="number" id="node-input-ttlMs" style="width:80px"> ms</div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-move">
   <p>Builds or sends SET_POSITION_TARGET_* messages. Local altitude and vertical velocity are entered up-positive; the node flips them once to MAVLink NED down-positive values.</p>
+  <p>Mode and delivery reshape the form (§6): only the parameters for the selected mode are shown. Stream interval and TTL appear only for Stream delivery.</p>
   <p>Output 0 continues only on success. Output 1 carries the status record for every terminal outcome.</p>
 </script>

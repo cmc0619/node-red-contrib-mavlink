@@ -1,0 +1,185 @@
+[
+  {
+    "id": "ex14-tab",
+    "type": "tab",
+    "label": "14 Peer table & events",
+    "disabled": false,
+    "info": "Live peer-table events and on-demand snapshots.",
+    "env": []
+  },
+  {
+    "id": "ex14-comment",
+    "type": "comment",
+    "z": "ex14-tab",
+    "name": "Peer table & events",
+    "info": "Feed mode emits edge events (peer-new, stale, expired, primary-changed, profile-mismatch, …). Snapshot on inject (optional 1 s repeat). Tip: point a PX4 vehicle at an ArduPilot-profile connection to see profile-mismatch. SITL bind 14550 → 14551.",
+    "x": 200,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex14-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex14-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex14-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex14-vehicle",
+    "localIdentity": "ex14-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex14-state-feed",
+    "type": "mavlink-state",
+    "z": "ex14-tab",
+    "name": "Event feed",
+    "connection": "ex14-connection",
+    "mode": "feed",
+    "events": "peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,multi-endpoint,profile-mismatch,statustext",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 360,
+    "y": 140,
+    "wires": [
+      [
+        "ex14-dbg-feed"
+      ]
+    ]
+  },
+  {
+    "id": "ex14-state-snapshot",
+    "type": "mavlink-state",
+    "z": "ex14-tab",
+    "name": "Snapshot",
+    "connection": "ex14-connection",
+    "mode": "snapshot",
+    "events": "",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 360,
+    "y": 260,
+    "wires": [
+      [
+        "ex14-dbg-snap"
+      ]
+    ]
+  },
+  {
+    "id": "ex14-inject-snap",
+    "type": "inject",
+    "z": "ex14-tab",
+    "name": "Snapshot now",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 260,
+    "wires": [
+      [
+        "ex14-state-snapshot"
+      ]
+    ]
+  },
+  {
+    "id": "ex14-inject-snap-1",
+    "type": "inject",
+    "z": "ex14-tab",
+    "name": "Snapshot sysid 1 only",
+    "props": [
+      {
+        "p": "payload",
+        "v": "{\"sysid\":1}",
+        "vt": "json"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 320,
+    "wires": [
+      [
+        "ex14-state-snapshot"
+      ]
+    ]
+  },
+  {
+    "id": "ex14-dbg-feed",
+    "type": "debug",
+    "z": "ex14-tab",
+    "name": "events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "ex14-dbg-snap",
+    "type": "debug",
+    "z": "ex14-tab",
+    "name": "snapshot",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 260,
+    "wires": []
+  }
+]

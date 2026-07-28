@@ -1,0 +1,456 @@
+[
+  {
+    "id": "ex22-tab",
+    "type": "tab",
+    "label": "22 Go-to tour",
+    "disabled": false,
+    "info": "GUIDED reposition hops with NaN yaw hold.",
+    "env": []
+  },
+  {
+    "id": "ex22-comment",
+    "type": "comment",
+    "z": "ex22-tab",
+    "name": "Go-to tour (NaN yaw)",
+    "info": "DO_REPOSITION with param4=NaN holds current heading. JSON.stringify cannot carry NaN — params use string \"NaN\". Bind 14550→14551.",
+    "x": 180,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex22-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex22-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex22-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex22-vehicle",
+    "localIdentity": "ex22-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex22-inject-prep",
+    "type": "inject",
+    "z": "ex22-tab",
+    "name": "Arm + GUIDED",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 160,
+    "wires": [
+      [
+        "ex22-cmd-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex22-cmd-arm",
+    "type": "mavlink-command",
+    "z": "ex22-tab",
+    "name": "Arm",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex22-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "x": 320,
+    "y": 160,
+    "wires": [
+      [
+        "ex22-cmd-guided"
+      ],
+      [
+        "ex22-debug-arm-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex22-cmd-guided",
+    "type": "mavlink-command",
+    "z": "ex22-tab",
+    "name": "GUIDED",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex22-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"1\":1,\"2\":4}",
+    "x": 520,
+    "y": 160,
+    "wires": [
+      [
+        "ex22-debug-prep-done"
+      ],
+      [
+        "ex22-debug-guided-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex22-debug-arm-status",
+    "type": "debug",
+    "z": "ex22-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex22-debug-guided-status",
+    "type": "debug",
+    "z": "ex22-tab",
+    "name": "guided status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex22-debug-prep-done",
+    "type": "debug",
+    "z": "ex22-tab",
+    "name": "prep done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "ex22-inject-a",
+    "type": "inject",
+    "z": "ex22-tab",
+    "name": "Go point A",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 280,
+    "wires": [
+      [
+        "ex22-cmd-a"
+      ]
+    ]
+  },
+  {
+    "id": "ex22-cmd-a",
+    "type": "mavlink-command",
+    "z": "ex22-tab",
+    "name": "Go point A",
+    "mode": "preset",
+    "preset": "reposition",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex22-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{\"1\":5,\"2\":0,\"3\":0,\"4\":\"NaN\",\"5\":-35.363261,\"6\":149.16523,\"7\":30}",
+    "x": 320,
+    "y": 280,
+    "wires": [
+      [
+        "ex22-debug-a-done"
+      ],
+      [
+        "ex22-debug-a-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex22-debug-a-status",
+    "type": "debug",
+    "z": "ex22-tab",
+    "name": "Go point A status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "ex22-debug-a-done",
+    "type": "debug",
+    "z": "ex22-tab",
+    "name": "Go point A done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "ex22-inject-b",
+    "type": "inject",
+    "z": "ex22-tab",
+    "name": "Go point B",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 380,
+    "wires": [
+      [
+        "ex22-cmd-b"
+      ]
+    ]
+  },
+  {
+    "id": "ex22-cmd-b",
+    "type": "mavlink-command",
+    "z": "ex22-tab",
+    "name": "Go point B",
+    "mode": "preset",
+    "preset": "reposition",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex22-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{\"1\":5,\"2\":0,\"3\":0,\"4\":\"NaN\",\"5\":-35.362761,\"6\":149.16573,\"7\":30}",
+    "x": 320,
+    "y": 380,
+    "wires": [
+      [
+        "ex22-debug-b-done"
+      ],
+      [
+        "ex22-debug-b-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex22-debug-b-status",
+    "type": "debug",
+    "z": "ex22-tab",
+    "name": "Go point B status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 440,
+    "wires": []
+  },
+  {
+    "id": "ex22-debug-b-done",
+    "type": "debug",
+    "z": "ex22-tab",
+    "name": "Go point B done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 380,
+    "wires": []
+  },
+  {
+    "id": "ex22-inject-c",
+    "type": "inject",
+    "z": "ex22-tab",
+    "name": "Go point C",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 480,
+    "wires": [
+      [
+        "ex22-cmd-c"
+      ]
+    ]
+  },
+  {
+    "id": "ex22-cmd-c",
+    "type": "mavlink-command",
+    "z": "ex22-tab",
+    "name": "Go point C",
+    "mode": "preset",
+    "preset": "reposition",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex22-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{\"1\":5,\"2\":0,\"3\":0,\"4\":\"NaN\",\"5\":-35.363761,\"6\":149.16473,\"7\":30}",
+    "x": 320,
+    "y": 480,
+    "wires": [
+      [
+        "ex22-debug-c-done"
+      ],
+      [
+        "ex22-debug-c-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex22-debug-c-status",
+    "type": "debug",
+    "z": "ex22-tab",
+    "name": "Go point C status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 540,
+    "wires": []
+  },
+  {
+    "id": "ex22-debug-c-done",
+    "type": "debug",
+    "z": "ex22-tab",
+    "name": "Go point C done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 480,
+    "wires": []
+  }
+]

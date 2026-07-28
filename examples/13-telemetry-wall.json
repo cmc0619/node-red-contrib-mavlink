@@ -1,0 +1,330 @@
+[
+  {
+    "id": "ex13-tab",
+    "type": "tab",
+    "label": "13 Telemetry wall",
+    "disabled": false,
+    "info": "Read-only telemetry dashboard with In filters and rate limits.",
+    "env": []
+  },
+  {
+    "id": "ex13-comment",
+    "type": "comment",
+    "z": "ex13-tab",
+    "name": "Telemetry wall",
+    "info": "Five In subscriptions keyed by (message, sysid, compid). ATTITUDE rate-limited 5 Hz; HEARTBEAT changed-only; GLOBAL_POSITION_INT 4 Hz sysid 1; VFR_HUD has no rate/changed filters (contrast with filtered views). Optional inject sets GLOBAL_POSITION_INT interval via set_message_interval (see example 15). SITL bind 14550 → 14551.",
+    "x": 200,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex13-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex13-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex13-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex13-vehicle",
+    "localIdentity": "ex13-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex13-in-heartbeat",
+    "type": "mavlink-in",
+    "z": "ex13-tab",
+    "name": "HEARTBEAT",
+    "connection": "ex13-connection",
+    "message": "HEARTBEAT",
+    "sysid": "",
+    "compid": "",
+    "changedOnly": true,
+    "rateLimit": 0,
+    "x": 200,
+    "y": 120,
+    "wires": [
+      [
+        "ex13-dbg-hb"
+      ]
+    ]
+  },
+  {
+    "id": "ex13-in-position",
+    "type": "mavlink-in",
+    "z": "ex13-tab",
+    "name": "GLOBAL_POSITION_INT",
+    "connection": "ex13-connection",
+    "message": "GLOBAL_POSITION_INT",
+    "sysid": "1",
+    "compid": "",
+    "changedOnly": false,
+    "rateLimit": 4,
+    "x": 200,
+    "y": 180,
+    "wires": [
+      [
+        "ex13-dbg-pos"
+      ]
+    ]
+  },
+  {
+    "id": "ex13-in-attitude",
+    "type": "mavlink-in",
+    "z": "ex13-tab",
+    "name": "ATTITUDE",
+    "connection": "ex13-connection",
+    "message": "ATTITUDE",
+    "sysid": "",
+    "compid": "",
+    "changedOnly": false,
+    "rateLimit": 5,
+    "x": 200,
+    "y": 240,
+    "wires": [
+      [
+        "ex13-dbg-att"
+      ]
+    ]
+  },
+  {
+    "id": "ex13-in-sysstatus",
+    "type": "mavlink-in",
+    "z": "ex13-tab",
+    "name": "SYS_STATUS",
+    "connection": "ex13-connection",
+    "message": "SYS_STATUS",
+    "sysid": "",
+    "compid": "",
+    "changedOnly": false,
+    "rateLimit": 0,
+    "x": 200,
+    "y": 300,
+    "wires": [
+      [
+        "ex13-dbg-sys"
+      ]
+    ]
+  },
+  {
+    "id": "ex13-in-vfr",
+    "type": "mavlink-in",
+    "z": "ex13-tab",
+    "name": "VFR_HUD (no extra filters)",
+    "connection": "ex13-connection",
+    "message": "VFR_HUD",
+    "sysid": "",
+    "compid": "",
+    "changedOnly": false,
+    "rateLimit": 0,
+    "x": 200,
+    "y": 360,
+    "wires": [
+      [
+        "ex13-dbg-vfr"
+      ]
+    ]
+  },
+  {
+    "id": "ex13-cmd-set-interval",
+    "type": "mavlink-command",
+    "z": "ex13-tab",
+    "name": "Set 4 Hz posn",
+    "mode": "preset",
+    "preset": "set_message_interval",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex13-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"1\":33,\"2\":250000}",
+    "x": 480,
+    "y": 180,
+    "wires": [
+      [
+        "ex13-dbg-cmd"
+      ],
+      [
+        "ex13-dbg-cmd-st"
+      ]
+    ]
+  },
+  {
+    "id": "ex13-inject-set-interval",
+    "type": "inject",
+    "z": "ex13-tab",
+    "name": "Set 4 Hz posn",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 180,
+    "wires": [
+      [
+        "ex13-cmd-set-interval"
+      ]
+    ]
+  },
+  {
+    "id": "ex13-dbg-hb",
+    "type": "debug",
+    "z": "ex13-tab",
+    "name": "heartbeat",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 430,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "ex13-dbg-pos",
+    "type": "debug",
+    "z": "ex13-tab",
+    "name": "position",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 430,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "ex13-dbg-att",
+    "type": "debug",
+    "z": "ex13-tab",
+    "name": "attitude",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 430,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "ex13-dbg-sys",
+    "type": "debug",
+    "z": "ex13-tab",
+    "name": "sys status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 430,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "ex13-dbg-vfr",
+    "type": "debug",
+    "z": "ex13-tab",
+    "name": "vfr hud",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 430,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "ex13-dbg-cmd",
+    "type": "debug",
+    "z": "ex13-tab",
+    "name": "interval continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 660,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "ex13-dbg-cmd-st",
+    "type": "debug",
+    "z": "ex13-tab",
+    "name": "interval status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 660,
+    "y": 220,
+    "wires": []
+  }
+]

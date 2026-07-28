@@ -1,0 +1,325 @@
+[
+  {
+    "id": "sitl04-tab",
+    "type": "tab",
+    "label": "SITL 04 Mode tables",
+    "disabled": false,
+    "info": "Set flight modes on ArduPilot and PX4 from each profile's mode table. ArduCopter GUIDED=4 vs PX4 encoded main/sub-mode bitfield — never cross-use mode numbers.",
+    "env": []
+  },
+  {
+    "id": "sitl04-comment",
+    "type": "comment",
+    "z": "sitl04-tab",
+    "name": "DO_SET_MODE per stack (ArduPilot small int vs PX4 bitfield)",
+    "info": "ArduPilot sysid 1: set_mode GUIDED with params {\"1\":1,\"2\":4} (custom_mode 4).\nPX4 sysid 11: set_mode POSCTL using the profile mode table — custom_mode is an encoded bitfield (example 196608 = POSCTL on many builds), NOT ArduPilot's 4.\n\nLaunch ArduPilot:\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\nLaunch PX4 (ports version-specific; verify your build):\n  make px4_sitl gazebo\n  # set MAV_SYS_ID=11; point PX4 Connection at your GCS port (often 14550 broadcast or 14570/14580)\n\nArduPilot Connection: bind 127.0.0.1:14550 → remote 127.0.0.1:14551.\nPX4 Connection: bind 127.0.0.1:14555 → remote per your PX4 GCS link.",
+    "x": 300,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl04-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl04-vehicle-ap",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl04-vehicle-px4",
+    "type": "mavlink-vehicle",
+    "name": "PX4 sysid 11",
+    "vehicleFamily": "copter",
+    "firmware": "px4",
+    "dialect": "common",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 11,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl04-connection-ap",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "sitl04-vehicle-ap",
+    "localIdentity": "sitl04-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl04-connection-px4",
+    "type": "mavlink-connection",
+    "name": "UDP PX4",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14555,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14550,
+    "broadcast": false,
+    "vehicle": "sitl04-vehicle-px4",
+    "localIdentity": "sitl04-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl04-inject-ap",
+    "type": "inject",
+    "z": "sitl04-tab",
+    "name": "ArduPilot GUIDED",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 160,
+    "wires": [
+      [
+        "sitl04-mode-ap"
+      ]
+    ]
+  },
+  {
+    "id": "sitl04-mode-ap",
+    "type": "mavlink-command",
+    "z": "sitl04-tab",
+    "name": "GUIDED (custom_mode 4)",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "sitl04-connection-ap",
+    "targetSysid": "1",
+    "targetCompid": "1",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":1,\"2\":4}",
+    "x": 360,
+    "y": 160,
+    "wires": [
+      [
+        "sitl04-ap-done"
+      ],
+      [
+        "sitl04-ap-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl04-inject-px4",
+    "type": "inject",
+    "z": "sitl04-tab",
+    "name": "PX4 POSCTL",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 300,
+    "wires": [
+      [
+        "sitl04-mode-px4"
+      ]
+    ]
+  },
+  {
+    "id": "sitl04-mode-px4",
+    "type": "mavlink-command",
+    "z": "sitl04-tab",
+    "name": "POSCTL (PX4 bitfield)",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "sitl04-connection-px4",
+    "targetSysid": "11",
+    "targetCompid": "1",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":1,\"2\":196608}",
+    "x": 360,
+    "y": 300,
+    "wires": [
+      [
+        "sitl04-px4-done"
+      ],
+      [
+        "sitl04-px4-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl04-state-ap",
+    "type": "mavlink-state",
+    "z": "sitl04-tab",
+    "name": "ArduPilot events",
+    "connection": "sitl04-connection-ap",
+    "mode": "feed",
+    "events": "heartbeat,primary-changed",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 600,
+    "y": 160,
+    "wires": [
+      [
+        "sitl04-state-debug"
+      ]
+    ]
+  },
+  {
+    "id": "sitl04-state-px4",
+    "type": "mavlink-state",
+    "z": "sitl04-tab",
+    "name": "PX4 events",
+    "connection": "sitl04-connection-px4",
+    "mode": "feed",
+    "events": "heartbeat,primary-changed",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 600,
+    "y": 300,
+    "wires": [
+      [
+        "sitl04-state-debug"
+      ]
+    ]
+  },
+  {
+    "id": "sitl04-ap-done",
+    "type": "debug",
+    "z": "sitl04-tab",
+    "name": "ap mode done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "sitl04-ap-status",
+    "type": "debug",
+    "z": "sitl04-tab",
+    "name": "ap mode status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "sitl04-px4-done",
+    "type": "debug",
+    "z": "sitl04-tab",
+    "name": "px4 mode done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "sitl04-px4-status",
+    "type": "debug",
+    "z": "sitl04-tab",
+    "name": "px4 mode status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "sitl04-state-debug",
+    "type": "debug",
+    "z": "sitl04-tab",
+    "name": "state events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 820,
+    "y": 220,
+    "wires": []
+  }
+]

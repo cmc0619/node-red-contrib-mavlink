@@ -1,0 +1,216 @@
+[
+  {
+    "id": "ex20-tab",
+    "type": "tab",
+    "label": "20 Companion origination",
+    "disabled": false,
+    "info": "Node-RED as onboard companion sharing vehicle sysid 1, compid 191.",
+    "env": []
+  },
+  {
+    "id": "ex20-comment",
+    "type": "comment",
+    "z": "ex20-tab",
+    "name": "Companion origination",
+    "info": "Companion role: MAV_TYPE_ONBOARD_CONTROLLER, autopilot INVALID. A companion sharing sysid is normal MAVLink; the peer table shows two components under sysid 1. Bind 14550→14551.",
+    "x": 180,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex20-identity",
+    "type": "mavlink-local-identity",
+    "name": "Companion identity",
+    "role": "companion",
+    "sourceSystemId": 1,
+    "sourceComponentId": 191,
+    "heartbeatType": "MAV_TYPE_ONBOARD_CONTROLLER",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex20-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex20-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex20-vehicle",
+    "localIdentity": "ex20-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex20-inject-nvf-once",
+    "type": "inject",
+    "z": "ex20-tab",
+    "name": "Send one NVF now",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 160,
+    "wires": [
+      [
+        "ex20-build-nvf"
+      ]
+    ]
+  },
+  {
+    "id": "ex20-build-nvf",
+    "type": "mavlink-build",
+    "z": "ex20-tab",
+    "name": "Metric NVF (send)",
+    "vehicle": "ex20-vehicle",
+    "connection": "ex20-connection",
+    "messageName": "NAMED_VALUE_FLOAT",
+    "fields": "{\"time_boot_ms\":0,\"name\":\"metric\",\"value\":42}",
+    "tier": "send",
+    "band": "2",
+    "repeatMs": 1000,
+    "x": 340,
+    "y": 160,
+    "wires": [
+      [
+        "ex20-debug-nvf"
+      ],
+      [
+        "ex20-debug-nvf-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex20-in-hb",
+    "type": "mavlink-in",
+    "z": "ex20-tab",
+    "name": "HEARTBEAT",
+    "connection": "ex20-connection",
+    "message": "HEARTBEAT",
+    "sysid": "",
+    "compid": "",
+    "changedOnly": false,
+    "rateLimit": 0,
+    "x": 340,
+    "y": 280,
+    "wires": [
+      [
+        "ex20-debug-hb"
+      ]
+    ]
+  },
+  {
+    "id": "ex20-state-feed",
+    "type": "mavlink-state",
+    "z": "ex20-tab",
+    "name": "Peer events",
+    "connection": "ex20-connection",
+    "mode": "feed",
+    "events": "peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,multi-endpoint,profile-mismatch,statustext",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 340,
+    "y": 400,
+    "wires": [
+      [
+        "ex20-debug-state"
+      ]
+    ]
+  },
+  {
+    "id": "ex20-debug-nvf-status",
+    "type": "debug",
+    "z": "ex20-tab",
+    "name": "nvf status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 340,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex20-debug-nvf",
+    "type": "debug",
+    "z": "ex20-tab",
+    "name": "nvf sent",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "ex20-debug-hb",
+    "type": "debug",
+    "z": "ex20-tab",
+    "name": "heartbeat",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "ex20-debug-state",
+    "type": "debug",
+    "z": "ex20-tab",
+    "name": "state events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 400,
+    "wires": []
+  }
+]

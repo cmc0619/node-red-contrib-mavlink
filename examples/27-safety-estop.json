@@ -1,24 +1,24 @@
 [
   {
-    "id": "ex06-tab",
+    "id": "ex27-tab",
     "type": "tab",
-    "label": "06 SITL completion takeoff",
+    "label": "27 Safety e-stop",
     "disabled": false,
-    "info": "Arm (confirm ACK) \u2192 Takeoff with completion-tier await on ArduPilot SITL sysid 1. Requires ArduPilot Copter SITL at 127.0.0.1:14551. The takeoff node uses delivery=complete which waits for IN_PROGRESS then ACCEPTED, distinguishing a real climb from a premature accept.",
+    "info": "Emergency force-disarm and flight termination, each gated.",
     "env": []
   },
   {
-    "id": "ex06-comment",
+    "id": "ex27-comment",
     "type": "comment",
-    "z": "ex06-tab",
-    "name": "Arm then takeoff (completion tier against ArduPilot Copter SITL)",
-    "info": "This flow targets sysid 1 (first ArduPilot SITL). Set completionTimeout to at least 30 s; ArduPilot typically sends IN_PROGRESS within 2 s then ACCEPTED once the vehicle is airborne.\n\nDelivery=complete blocks output 0 until the completion-tier ACCEPTED arrives. A timeout on output 1 means the vehicle accepted the command but never reached the target altitude (or the link was lost).\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551 for a local Copter SITL started with\n  sim_vehicle.py -v ArduCopter --out udp:127.0.0.1:14551",
-    "x": 230,
+    "z": "ex27-tab",
+    "name": "Safety e-stop",
+    "info": "⚠ Force disarm uses COMPONENT_ARM_DISARM param2=21196 (Emergency band, never coalesced). ⚠⚠ Flight termination requires msg.confirmed=true. Bind 14550→14551.",
+    "x": 180,
     "y": 40,
     "wires": []
   },
   {
-    "id": "ex06-identity",
+    "id": "ex27-identity",
     "type": "mavlink-local-identity",
     "name": "GCS identity",
     "role": "gcs",
@@ -28,29 +28,28 @@
     "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
   },
   {
-    "id": "ex06-vehicle",
+    "id": "ex27-vehicle",
     "type": "mavlink-vehicle",
-    "name": "ArduCopter sysid 1",
+    "name": "Vehicle profile",
     "vehicleFamily": "copter",
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "dialectSource": "bundled",
     "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "defaultTargetComponent": 1
   },
   {
-    "id": "ex06-connection",
+    "id": "ex27-connection",
     "type": "mavlink-connection",
-    "name": "UDP ArduPilot SITL",
+    "name": "UDP SITL",
     "mode": "udp",
     "bindHost": "127.0.0.1",
     "bindPort": 14550,
     "remoteHost": "127.0.0.1",
     "remotePort": 14551,
     "broadcast": false,
-    "vehicle": "ex06-vehicle",
-    "localIdentity": "ex06-identity",
+    "vehicle": "ex27-vehicle",
+    "localIdentity": "ex27-identity",
     "additionalIdentities": [],
     "signOutbound": false,
     "requireSigned": false,
@@ -62,10 +61,10 @@
     "disabled": false
   },
   {
-    "id": "ex06-inject",
+    "id": "ex27-inject-force-disarm",
     "type": "inject",
-    "z": "ex06-tab",
-    "name": "Start chain",
+    "z": "ex27-tab",
+    "name": "⚠ Force disarm (21196)",
     "props": [
       {
         "p": "payload"
@@ -82,71 +81,101 @@
     "y": 160,
     "wires": [
       [
-        "ex06-arm"
+        "ex27-cmd-disarm"
       ]
     ]
   },
   {
-    "id": "ex06-arm",
+    "id": "ex27-cmd-disarm",
     "type": "mavlink-command",
-    "z": "ex06-tab",
-    "name": "Arm (confirm ACK)",
+    "z": "ex27-tab",
+    "name": "Force disarm",
     "mode": "preset",
-    "preset": "arm",
+    "preset": "disarm",
     "advancedCommand": "",
     "delivery": "confirm",
-    "connection": "ex06-connection",
+    "connection": "ex27-connection",
     "targetSysid": "",
     "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
-    "completionTimeout": "30000",
-    "params": "{}",
-    "x": 330,
+    "completionTimeout": "60000",
+    "params": "{\"2\":21196}",
+    "x": 320,
     "y": 160,
     "wires": [
       [
-        "ex06-takeoff"
+        "ex27-debug-disarm-done"
       ],
       [
-        "ex06-arm-status"
+        "ex27-debug-disarm-status"
       ]
     ]
   },
   {
-    "id": "ex06-takeoff",
+    "id": "ex27-inject-flight-term",
+    "type": "inject",
+    "z": "ex27-tab",
+    "name": "⚠⚠ Flight termination (confirm)",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "confirmed",
+        "v": "true",
+        "vt": "bool"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 280,
+    "wires": [
+      [
+        "ex27-cmd-ft"
+      ]
+    ]
+  },
+  {
+    "id": "ex27-cmd-ft",
     "type": "mavlink-command",
-    "z": "ex06-tab",
-    "name": "Takeoff 10 m (completion)",
+    "z": "ex27-tab",
+    "name": "Flight termination",
     "mode": "preset",
-    "preset": "takeoff",
+    "preset": "flight_termination",
     "advancedCommand": "",
-    "delivery": "complete",
-    "connection": "ex06-connection",
+    "delivery": "confirm",
+    "connection": "ex27-connection",
     "targetSysid": "",
     "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
-    "completionTimeout": "120000",
-    "params": "{\"7\":10}",
-    "x": 570,
-    "y": 160,
+    "completionTimeout": "60000",
+    "params": "{\"1\":1}",
+    "x": 320,
+    "y": 280,
     "wires": [
       [
-        "ex06-chain-done"
+        "ex27-debug-ft-done"
       ],
       [
-        "ex06-takeoff-status"
+        "ex27-debug-ft-status"
       ]
     ]
   },
   {
-    "id": "ex06-chain-done",
+    "id": "ex27-debug-disarm-status",
     "type": "debug",
-    "z": "ex06-tab",
-    "name": "airborne",
+    "z": "ex27-tab",
+    "name": "disarm status",
     "active": true,
     "tosidebar": true,
     "console": false,
@@ -155,15 +184,32 @@
     "targetType": "full",
     "statusVal": "",
     "statusType": "auto",
-    "x": 780,
+    "x": 320,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex27-debug-disarm-done",
+    "type": "debug",
+    "z": "ex27-tab",
+    "name": "disarm done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
     "y": 160,
     "wires": []
   },
   {
-    "id": "ex06-arm-status",
+    "id": "ex27-debug-ft-status",
     "type": "debug",
-    "z": "ex06-tab",
-    "name": "arm status",
+    "z": "ex27-tab",
+    "name": "flight term status",
     "active": true,
     "tosidebar": true,
     "console": false,
@@ -172,15 +218,15 @@
     "targetType": "full",
     "statusVal": "",
     "statusType": "auto",
-    "x": 330,
-    "y": 240,
+    "x": 320,
+    "y": 340,
     "wires": []
   },
   {
-    "id": "ex06-takeoff-status",
+    "id": "ex27-debug-ft-done",
     "type": "debug",
-    "z": "ex06-tab",
-    "name": "takeoff status",
+    "z": "ex27-tab",
+    "name": "flight term done",
     "active": true,
     "tosidebar": true,
     "console": false,
@@ -189,8 +235,8 @@
     "targetType": "full",
     "statusVal": "",
     "statusType": "auto",
-    "x": 570,
-    "y": 240,
+    "x": 520,
+    "y": 280,
     "wires": []
   }
 ]

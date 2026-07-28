@@ -57,7 +57,7 @@
 
   function loadPresets(cb) {
     if (_presetGroups) { cb(_presetGroups); return; }
-    $.getJSON('/mavlink/command/presets', function (data) {
+    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/presets'), function (data) {
       _presetGroups = data.groups || [];
       cb(_presetGroups);
     }).fail(function () {
@@ -117,7 +117,7 @@
       return;
     }
     const seq = ++_catalogRequestSeq;
-    $.getJSON('/mavlink/command/commands', target.query, function (data) {
+    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
       if (seq !== _catalogRequestSeq) return; // stale — a newer request is in flight
       const catalog = {
         commands: data.commands || [],
@@ -141,7 +141,7 @@
       return;
     }
     const seq = ++_messageRequestSeq;
-    $.getJSON('/mavlink/build/messages', target.query, function (data) {
+    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/build/messages'), target.query, function (data) {
       if (seq !== _messageRequestSeq) return;
       const catalog = {
         messages: data.messages || [],

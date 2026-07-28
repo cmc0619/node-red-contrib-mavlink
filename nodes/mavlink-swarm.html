@@ -134,7 +134,7 @@
           cb(_msgCatalogByKey[target.key]);
           return;
         }
-        $.getJSON('/mavlink/build/messages', target.query, function (data) {
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/build/messages'), target.query, function (data) {
           if (seq !== _msgRequestSeq) return;
           var catalog = {
             messages: data.messages || [],
@@ -178,7 +178,7 @@
           cb(_cmdCatalogByKey[target.key]);
           return;
         }
-        $.getJSON('/mavlink/command/commands', target.query, function (data) {
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
           if (seq !== _cmdRequestSeq) return;
           var catalog = {
             commands: data.commands || [],

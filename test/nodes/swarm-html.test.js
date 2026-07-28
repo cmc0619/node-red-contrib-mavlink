@@ -27,7 +27,7 @@ test('vehicleType is a MAV_TYPE select, not a free-form number (§6)', () => {
 });
 
 test('vehicleType loads MAV_TYPE entries from the build/messages catalog', () => {
-  assert.match(html, /\/mavlink\/build\/messages/, 'dialect enum catalog is loaded from admin API');
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/build\/messages['"]\)/, 'dialect enum catalog is loaded from admin API');
   assert.match(html, /enums\.MAV_TYPE/, 'MAV_TYPE table is read from the catalog');
   assert.match(html, /function buildVehicleTypeDropdown/, 'dropdown is rebuilt from catalog entries');
   assert.match(html, /entry\.label/, 'option labels come from the catalog (value in parentheses)');
@@ -67,7 +67,7 @@ test('commandId is a MAV_CMD <select>, not a free-form number (§6)', () => {
 });
 
 test('commandId loads MAV_CMD entries from command/commands catalog', () => {
-  assert.match(html, /\/mavlink\/command\/commands/, 'dialect MAV_CMD catalog is loaded from admin API');
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/command\/commands['"]\)/, 'dialect MAV_CMD catalog is loaded from admin API');
   assert.match(html, /function buildCommandDropdown/, 'dropdown is rebuilt from catalog entries');
   assert.match(html, /entry\.label/, 'option labels come from the catalog (MAV_CMD_… (n))');
   assert.match(html, /entry\.value/, 'option values are numeric command ids');
@@ -77,4 +77,12 @@ test('commandId loads MAV_CMD entries from command/commands catalog', () => {
 test('commandId preserves the saved numeric value after async catalog load', () => {
   assert.match(html, /node\.commandId/, 'saved commandId is re-applied');
   assert.match(html, /not in dialect/, 'unknown saved values remain selectable');
+});
+
+test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(/, 'admin fetches must use adminApiUrl');
+  assert.ok(
+    !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
+    'bare absolute /mavlink getJSON paths must be gone'
+  );
 });

@@ -46,6 +46,14 @@
       },
       oneditprepare: function () {
         const node = this;
+
+        function mavlinkAdminUrl(path) {
+          if (RED.mavlink && RED.mavlink.adminApiUrl) {
+            return RED.mavlink.adminApiUrl(path);
+          }
+          return path;
+        }
+
         const $source   = $('#node-config-input-dialectSource');
         const $dialect  = $('#node-config-input-dialect');
         const $bundled  = $('#mav-bundled-dialect');
@@ -85,7 +93,7 @@
         }
 
         /* Fetch bundled dialect list from the admin endpoint (§6 editor endpoint). */
-        $.getJSON('mavlink/dialects')
+        $.getJSON(mavlinkAdminUrl('/mavlink/dialects'))
           .done(function (data) { populateBundled(data && data.dialects); toggleRows(); })
           .fail(function ()     { populateBundled(null); toggleRows(); });
 
@@ -112,7 +120,7 @@
         const $catalogStatus = $('#mav-catalog-status');
 
         function loadCatalog() {
-          $.getJSON('mavlink/xml-catalog')
+          $.getJSON(mavlinkAdminUrl('/mavlink/xml-catalog'))
             .done(function (data) {
               $catalog.empty();
               $('<option>').val('').text('-- downloaded XML (optional) --').appendTo($catalog);
@@ -149,7 +157,7 @@
           e.preventDefault();
           $catalogStatus.text('Downloading MAVLink XML from mavlink/mavlink...');
           $.ajax({
-            url: 'mavlink/xml-catalog/update',
+            url: mavlinkAdminUrl('/mavlink/xml-catalog/update'),
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({})
@@ -174,7 +182,7 @@
             return;
           }
           $catalogStatus.text('Comparing ' + file + ' with the bundled dialect...');
-          $.getJSON('mavlink/xml-catalog/compare', snapshot ? { file: file, snapshot: snapshot } : { file: file })
+          $.getJSON(mavlinkAdminUrl('/mavlink/xml-catalog/compare'), snapshot ? { file: file, snapshot: snapshot } : { file: file })
             .done(function (data) {
               const c = data && data.comparison;
               if (!c) {

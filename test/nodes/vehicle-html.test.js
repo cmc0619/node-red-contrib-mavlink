@@ -33,9 +33,10 @@ test('paramDefsUrl is persisted and shown as an input', () => {
 });
 
 test('the XML-catalog admin endpoints are wired under mavlink/xml-catalog', () => {
-  assert.match(html, /mavlink\/xml-catalog['"]\)/, 'list endpoint');
-  assert.match(html, /mavlink\/xml-catalog\/update/, 'update endpoint');
-  assert.match(html, /mavlink\/xml-catalog\/compare/, 'compare endpoint');
+  assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/dialects['"]\)/, 'dialects endpoint');
+  assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/xml-catalog['"]\)/, 'list endpoint');
+  assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/xml-catalog\/update['"]\)/, 'update endpoint');
+  assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/xml-catalog\/compare['"]\)/, 'compare endpoint');
 });
 
 test('the catalog picker fills the custom XML path field', () => {
@@ -49,4 +50,17 @@ test('the catalog picker fills the custom XML path field', () => {
 test('update posts JSON to the update endpoint', () => {
   assert.match(html, /method:\s*'POST'/);
   assert.match(html, /contentType:\s*'application\/json'/);
+});
+
+test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
+  assert.match(html, /function mavlinkAdminUrl/, 'vehicle guards adminApiUrl availability');
+  assert.match(html, /RED\.mavlink\.adminApiUrl/, 'vehicle delegates to shared adminApiUrl helper');
+  assert.ok(
+    !/\$\.getJSON\(\s*['"]mavlink\//.test(html),
+    'bare relative mavlink getJSON paths must be gone'
+  );
+  assert.ok(
+    !/url:\s*['"]mavlink\//.test(html),
+    'bare relative mavlink ajax url paths must be gone'
+  );
 });
