@@ -114,6 +114,22 @@ test('control hints attach verified orbit and reboot enums from the bundled XML'
   assert.equal(reboot.params.find((p) => p.index === 2).enum, 'REBOOT_SHUTDOWN_ACTION');
 });
 
+test('all 85 common.xml command-param enum links are recovered (Arm is MAV_BOOL)', () => {
+  const { COMMAND_PARAM_ENUMS } = require('../../lib/metadata/hints');
+  let links = 0;
+  for (const name of Object.keys(COMMAND_PARAM_ENUMS)) {
+    links += Object.keys(COMMAND_PARAM_ENUMS[name]).length;
+  }
+  assert.equal(links, 85);
+  const arm = loadBundled('common').commands.MAV_CMD_COMPONENT_ARM_DISARM;
+  assert.equal(arm.params.find((p) => p.index === 1).enum, 'MAV_BOOL');
+  assert.equal(
+    loadBundled('common').commands.MAV_CMD_DO_CHANGE_ALTITUDE.params.find((p) => p.index === 2)
+      .enum,
+    'MAV_FRAME'
+  );
+});
+
 test('never assume a dialect includes common.xml — icarous still resolves its base set', () => {
   const bundle = loadBundled('icarous');
   assert.ok(bundle.messages.HEARTBEAT, 'HEARTBEAT reachable through the explicit chain');
