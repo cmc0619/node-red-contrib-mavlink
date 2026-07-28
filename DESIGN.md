@@ -110,7 +110,9 @@ whole implementation, and building a parallel one is a spec violation — howeve
 costs. *Small is not a justification: the question is never how many lines a second mechanism
 adds, it is that a second mechanism now exists.* The runtime-side counterpart — trust
 editor-validated configuration, guard only real runtime boundaries — is the configuration-trust
-ruleset in `AGENTS.md`.
+ruleset in `AGENTS.md`. Rigor is relocated, not abandoned: pedantry belongs in the test suite,
+the lint gate, and the CI pipeline — pinned byte vectors, cross-validation against generated
+ground truth, drift asserts — never as defensive branches in the shipping code.
 
 | Job | The platform mechanism — and nothing else |
 |---|---|
