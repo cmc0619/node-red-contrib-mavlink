@@ -77,13 +77,12 @@ test('mavlink-mission target sysid/compid default to empty (inherit profile)', (
   assert.match(html, /emptyLabel:\s*'[^']*profile default[^']*'/, 'compid empty label names profile default');
 });
 
-test('mavlink-mission confirmClear row hidden on build tier', () => {
-  // The spec says confirmClear guards the destructive clear on wire tiers;
-  // hiding it on build is correct since a built plan is not destructive by itself.
-  assert.match(html, /mavlink-mission-confirm/, 'confirmClear row present');
-  assert.match(html, /isBuild/, 'build tier detection exists');
-  // The visibility for confirm row involves !isBuild condition.
-  assert.match(html, /!\s*isBuild/, 'confirmClear hidden on build tier');
+test('mavlink-mission confirmClear stays visible for clear on every tier', () => {
+  // The runtime confirm gate guards construction (it runs before the Build
+  // branch), so the checkbox must not hide on the build tier — hidden is not
+  // honored (§6), and a hidden-but-honored checkbox would be worse.
+  assert.match(html, /mavlink-mission-confirm'\)\.toggle\(op === 'clear'\)/,
+    'confirmClear visibility depends only on the clear operation');
 });
 
 test('mavlink-mission ensureConfigNodePicker called for vehicle', () => {

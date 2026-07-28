@@ -95,7 +95,7 @@ module.exports = function registerMavlinkBuild(RED) {
     // Resolve the dialect bundle per the role × tier matrix (§6).
     //   Build + plain dialect name → load from the bundled registry (no vehicle needed).
     //   Build + '__vehicle' or legacy (vehicle set, no dialect) → vehicle node's bundle.
-    //   Wire tier → explicit vehicle node if configured; else connection's bound dialect.
+    //   Wire tier → the connection's bound profile node's bundle (custom-safe).
     if (tier === TIER.BUILD) {
       const dialectName = config.dialect;
       if (dialectName && dialectName !== '__vehicle') {
@@ -115,21 +115,23 @@ module.exports = function registerMavlinkBuild(RED) {
         }
       }
     } else {
-      // Wire tier: prefer the explicitly configured vehicle node; fall back to
-      // the connection's bound dialect so flows without an explicit vehicle work.
-      const vehicleNode = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
-      if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
-        try {
-          bundle = vehicleNode.getDialect();
-        } catch (err) {
-          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
-          node.error(`mavlink-build: ${err.message}`);
-          return;
-        }
-      } else {
-        // connectionNode.vehicle.dialect is the snapshot name; loadBundled throws
-        // loud for unknown/custom dialects — correct per §2.
-        bundle = require('../lib/metadata').loadBundled(connectionNode.vehicle.dialect);
+      // Wire tier: the connection's bound profile governs — hidden is not
+      // honored, so a stale config.vehicle cannot override it (§6). Resolve the
+      // profile node and call getDialect(): that is the one invocation that
+      // works for bundled and custom XML dialects alike; loadBundled(name)
+      // would break custom profiles.
+      const profileId = connectionNode.vehicle && connectionNode.vehicle.id;
+      const profileNode = profileId ? RED.nodes.getNode(profileId) : null;
+      if (!profileNode || typeof profileNode.getDialect !== 'function') {
+        node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+        return;
+      }
+      try {
+        bundle = profileNode.getDialect();
+      } catch (err) {
+        node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+        node.error(`mavlink-build: ${err.message}`);
+        return;
       }
     }
 

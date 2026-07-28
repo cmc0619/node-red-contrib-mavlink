@@ -109,11 +109,11 @@
       function refreshRows() {
         var op = $op.val();
         $('.mavlink-mission-items').toggle(op === 'upload');
-        // confirmClear is only meaningful on wire tiers (clear is destructive send);
-        // hide it on build delivery to avoid confusion.
-        var delivery = $('#node-input-delivery').val() || 'confirm';
-        var isBuild = (delivery === 'build');
-        $('.mavlink-mission-confirm').toggle(op === 'clear' && !isBuild);
+        // The confirm gate guards *construction*, not just sending: a built
+        // MISSION_CLEAR_ALL forwarded to mavlink-out erases the plan. The
+        // runtime honors confirmClear on every tier, so the checkbox stays
+        // visible for clear on every tier — hidden is not honored (§6).
+        $('.mavlink-mission-confirm').toggle(op === 'clear');
       }
 
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */

@@ -26,20 +26,35 @@
     function resolveVehicleTarget() {
       var tierVal = $('#node-input-tier').val() || 'send';
       if (tierVal !== 'build') {
-        // Wire tier: derive catalog from the selected connection's vehicle profile.
+        // Wire tier: derive the catalog from the selected connection's vehicle
+        // profile. Pass the profile id, not just the dialect name — the admin
+        // route serves custom XML bundles only when given ?vehicle=<id>.
+        // No silent default: until a connection with a profile is selected the
+        // catalog is pending and the dialog says so (§6 — the connection's
+        // profile is the only legitimate dialect source on wire tiers).
         var connectionId = $('#node-input-connection').val() || '';
-        var dialect = 'ardupilotmega';
+        var connVehicleId = '';
+        var dialect = '';
         if (connectionId && RED.nodes && RED.nodes.node) {
           var connNode = RED.nodes.node(connectionId);
           if (connNode && connNode.vehicle && RED.nodes.node(connNode.vehicle)) {
+            connVehicleId = connNode.vehicle;
             var connVehicle = RED.nodes.node(connNode.vehicle);
             if (connVehicle && connVehicle.dialect) dialect = connVehicle.dialect;
           }
         }
+        if (connVehicleId) {
+          return {
+            key: 'vehicle:' + connVehicleId,
+            query: { vehicle: connVehicleId, dialect: dialect },
+            dialect: dialect,
+          };
+        }
         return {
-          key: 'dialect:' + dialect,
-          query: { dialect: dialect },
-          dialect: dialect,
+          key: 'pending:connection',
+          query: null,
+          dialect: '',
+          pending: 'Select a Connection first — its Vehicle Profile supplies the dialect for Send delivery.',
         };
       }
       // Build tier: use the dialect picker.
@@ -74,6 +89,13 @@
 
     function loadMessagesCatalog(cb) {
       var target = resolveVehicleTarget();
+      if (target.pending) {
+        var pendingCatalog = { messages: [], enums: {}, dialect: '', error: 'pending', errorHint: target.pending };
+        _msgCatalogByKey[target.key] = pendingCatalog;
+        _msgCatalogKey = target.key;
+        cb(pendingCatalog);
+        return;
+      }
       if (_msgCatalogByKey[target.key]) {
         _msgCatalogKey = target.key;
         cb(_msgCatalogByKey[target.key]);
@@ -106,6 +128,10 @@
 
     function loadCommandsCatalog(cb) {
       var target = resolveVehicleTarget();
+      if (target.pending) {
+        cb({ commands: [], enums: {}, dialect: '', error: 'pending', errorHint: target.pending });
+        return;
+      }
       if (_cmdCatalogByKey[target.key]) {
         cb(_cmdCatalogByKey[target.key]);
         return;
@@ -516,7 +542,9 @@
             return;
           }
           if (catalog.error && !(catalog.messages && catalog.messages.length)) {
-            container.append($('<div class="form-row"><em>Could not load messages for this Vehicle dialect. Deploy the Vehicle Profile (required for custom dialects).</em></div>'));
+            var hint = catalog.errorHint ||
+              'Could not load messages for this Vehicle dialect. Deploy the Vehicle Profile (required for custom dialects).';
+            container.append($('<div class="form-row"></div>').append($('<em></em>').text(hint)));
             return;
           }
           var msg = (catalog.messages || []).find(function (m) { return m.name === msgName; });
@@ -580,6 +608,17 @@
             sel = $select;
           }
           sel.empty();
+          if (catalog.errorHint) {
+            // Pending state: conditions not satisfied yet (e.g. no connection
+            // selected on Send delivery). Placeholder instead of a fake list —
+            // but it carries the saved name so a Done here never overwrites a
+            // valid saved selection with empty (§6).
+            sel.append($('<option></option>').val(prefer).text('(select a Connection)'));
+            sel.val(prefer);
+            sel.off('change.mavmsg').on('change.mavmsg', refreshFieldForm);
+            refreshFieldForm();
+            return;
+          }
           (catalog.messages || []).forEach(function (m) {
             sel.append($('<option></option>').val(m.name).text(m.label));
           });

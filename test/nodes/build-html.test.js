@@ -129,3 +129,28 @@ test('Build visibility logic references the dialect and vehicle rows', () => {
   assert.match(html, /updateVisibility/, 'oneditprepare must call updateVisibility');
   assert.match(html, /node-input-dialect/, 'visibility logic must reference the dialect select');
 });
+
+test('Build wire-tier catalog query carries the connection profile id (custom dialect support)', () => {
+  // The admin route serves custom XML bundles only when given ?vehicle=<id>;
+  // a bare ?dialect=<custom-name> 400s. The wire branch must therefore pass
+  // the connection profile id, not just the dialect name.
+  assert.match(
+    html,
+    /query:\s*\{\s*vehicle:\s*connVehicleId/,
+    'wire branch must include the connection profile id in the catalog query'
+  );
+});
+
+test('Build wire tier without a connection is pending, not a silent ardupilotmega default', () => {
+  assert.match(html, /pending:connection/, 'wire branch must return a pending catalog target');
+  assert.match(
+    html,
+    /Select a Connection first/,
+    'pending state must tell the operator what to do'
+  );
+  assert.match(
+    html,
+    /\(select a Connection\)/,
+    'message dropdown must show a placeholder while pending'
+  );
+});

@@ -129,6 +129,16 @@ function makeConnectionStub() {
   }
 
   const stub = {
+    // Real connections always expose the frozen profile snapshot; `id` is the
+    // profile node id the wire tier resolves for its dialect bundle.
+    vehicle: Object.freeze({
+      id: 'v1',
+      targetSysid: 1,
+      targetCompid: 1,
+      firmware: 'ardupilot',
+      dialect: 'test',
+      autopilot: 3,
+    }),
     subscribe(filter, handler) {
       const entry = { filter: filter || {}, handler };
       subscribers.push(entry);
@@ -579,6 +589,7 @@ test('mavlink-out: rejects unrecognised payload and emits error status on output
 test('mavlink-out: a connection send throw becomes a failed status record, not an uncaught throw', () => {
   const RED = makeRED();
   const throwingConn = {
+    vehicle: Object.freeze({ id: 'v1', dialect: 'test' }),
     send() { throw new Error('Control band full'); },
     subscribe() { return () => {}; },
   };
@@ -762,6 +773,7 @@ test('mavlink-build Send tier: a connection send throw becomes a failed status r
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
   const throwingConn = {
+    vehicle: Object.freeze({ id: 'v1', dialect: 'test' }),
     send() { throw new Error('Control band full'); },
     subscribe() { return () => {}; },
   };
@@ -972,6 +984,69 @@ test('mavlink-build: legacy config with vehicle but no dialect key still works',
   assert.deepEqual(out0.payload.message.fields, { type: 6, autopilot: 3 });
   assert.ok(isStatusRecord(out1));
   assert.equal(out1.result, 'built');
+});
+
+test('mavlink-build wire tier: custom-dialect connection profile resolves via getDialect(), not the bundled registry', () => {
+  const RED = makeRED();
+  // A custom XML profile: its dialect *name* is not in the bundled registry,
+  // so any loadBundled(name) path would throw at deploy. The bundle itself is
+  // the stub's compiled test bundle — getDialect() is the working invocation.
+  const customProfile = makeVehicleStub();
+  RED.nodes._register('v-custom', customProfile);
+  const { stub, sent } = makeConnectionStub();
+  RED.nodes._register('conn-1', {
+    ...stub,
+    vehicle: Object.freeze({ id: 'v-custom', dialect: 'my_custom_dialect' }),
+  });
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, {
+    connection: 'conn-1',
+    dialect: 'ardupilotmega', // stale build-tier picker value: ignored on wire
+    messageName: 'HEARTBEAT',
+    tier: 'send',
+    fields: JSON.stringify({ type: 6, autopilot: 3 }),
+  });
+
+  assert.notEqual(node._status && node._status.fill, 'red',
+    'custom wire dialect must not fail deploy');
+
+  node._input({ payload: {} });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].message.name, 'HEARTBEAT');
+});
+
+test('mavlink-build wire tier: stale hidden config.vehicle cannot override the connection profile (hidden is not honored)', () => {
+  const RED = makeRED();
+  // The stale explicit vehicle's bundle carries no HEARTBEAT; the connection
+  // profile's bundle does. If the wire tier honored the hidden vehicle field,
+  // deploy would flag 'unknown message'.
+  const staleProfile = makeVehicleStub();
+  staleProfile.getDialect = () => ({
+    dialect: 'stale', version: null, files: [], fetched: null, enums: {}, messages: {},
+  });
+  RED.nodes._register('v-stale', staleProfile);
+  RED.nodes._register('v1', makeVehicleStub());
+  const { stub, sent } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub); // stub.vehicle.id === 'v1'
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ vehicle: 'v-stale', connection: 'conn-1' });
+  Constructor.call(node, {
+    vehicle: 'v-stale',
+    connection: 'conn-1',
+    messageName: 'HEARTBEAT',
+    tier: 'send',
+    fields: '{}',
+  });
+
+  assert.notEqual(node._status && node._status.fill, 'red',
+    'connection profile governs the wire tier, not the hidden vehicle field');
+
+  node._input({ payload: {} });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].message.name, 'HEARTBEAT');
 });
 
 // ---------------------------------------------------------------------------
