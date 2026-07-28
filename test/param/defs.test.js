@@ -84,11 +84,10 @@ test('assertSafeDefsDestination rejects hostnames that resolve to private addres
       ]),
     (err) => err.code === 'PARAM_DEFS_URL_FORBIDDEN' && /private address/.test(err.message)
   );
-  await assert.doesNotReject(() =>
-    assertSafeDefsDestination('https://cdn.example/p.json', async () => [
-      { address: '93.184.216.34', family: 4 },
-    ])
-  );
+  const pinned = await assertSafeDefsDestination('https://cdn.example/p.json', async () => [
+    { address: '93.184.216.34', family: 4 },
+  ]);
+  assert.deepEqual(pinned, [{ address: '93.184.216.34', family: 4 }]);
 });
 
 test('fetchParamDefs refuses a hostname that DNS-maps to a private address', async () => {
