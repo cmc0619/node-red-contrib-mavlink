@@ -12,7 +12,7 @@ const path = require('node:path');
 
 const nodesDir = path.join(__dirname, '..', '..', 'nodes');
 
-test('shared validateUint8 helper is two-arg (NR 3.x string = invalid reason)', () => {
+test('shared validateUint8 helper is two-arg (string return = invalid reason)', () => {
   const html = fs.readFileSync(path.join(nodesDir, 'mavlink-local-identity.html'), 'utf8');
   assert.match(html, /RED\.mavlink\.validateUint8\s*=\s*function/);
   assert.match(

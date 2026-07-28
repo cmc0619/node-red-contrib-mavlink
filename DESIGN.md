@@ -1337,13 +1337,14 @@ Unknown dialect fails loud — never silent-fallback to `common`.
 body text. Treat them as reserved and no numbered field survives anywhere.
 *Check:* the four-case rule in §6.
 
-**Node-RED 3.x one-arg validators treat an error string as valid.**
+**One-arg editor validators treat an error string as valid.**
 *Wrong belief:* `validate: function (v) { return 'out of range'; }` reds the field — a string is
 falsy enough to mean invalid.
-*Fact:* Node-RED 3.x only treats a returned string (or array) as an invalid *reason* when the
+*Fact:* Node-RED only treats a returned string (or array) as an invalid *reason* when the
 validator's arity is 2 — `function (v, opt)`. A one-argument validator coerces the return with
 `!!`, so any non-empty string is truthy and the field passes. `RED.mavlink.validateUint8` and
-every custom validator that returns a reason string must declare `(v, opt)`.
+every custom validator that returns a reason string must declare `(v, opt)`. (Measured on the
+editor-client in Node-RED 4/5; same rule since 3.x.)
 *Check:* `rg -n "validateUint8|function \(v, _?opt\)" nodes/mavlink-local-identity.html`
 
 **`Buffer` already range-checks integers.**

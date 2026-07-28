@@ -28,7 +28,7 @@ Restart Node-RED. The nodes appear under the **MAVLink** palette (config nodes u
 **Configuration nodes**). Editor dialog screenshots live in
 [`docs/screenshots/`](docs/screenshots/).
 
-Requires Node.js 18+ and Node-RED 3.0+.
+Requires Node.js 18.5+ and Node-RED 4.0+. (Serial transport needs Node 20+ via optional `serialport`.)
 
 ### Docker / volume mount (`/module`, Unraid, etc.)
 
