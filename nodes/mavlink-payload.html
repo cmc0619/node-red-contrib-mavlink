@@ -13,7 +13,7 @@
       topic: { value: 'camera' },
       verb: { value: 'photo' },
       path: { value: 'legacy' },
-      targetSystem: { value: '', validate: RED.validators.number(true) },
+      targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
       targetComponent: { value: '', validate: RED.validators.number(true) },
       /* camera photo */
       cameraId: { value: 0, validate: RED.validators.number(true) },

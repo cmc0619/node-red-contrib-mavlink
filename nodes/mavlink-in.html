@@ -85,7 +85,7 @@
         name:        { value: '' },
         connection:  { value: '', type: 'mavlink-connection', required: true },
         message:     { value: '' },
-        sysid:       { value: '' },
+        sysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
         compid:      { value: '' },
         changedOnly: { value: false },
         rateLimit:   { value: 0 },
@@ -141,7 +141,7 @@
   </div>
   <div class="form-row">
     <label for="node-input-sysid"><i class="fa fa-filter"></i> Sysid</label>
-    <input type="text" id="node-input-sysid" placeholder="blank = all" style="width:80px">
+    <input type="number" id="node-input-sysid" min="0" max="255" placeholder="blank = all" style="width:80px">
   </div>
   <div class="form-row">
     <label for="node-input-compid"><i class="fa fa-filter"></i> Compid</label>
