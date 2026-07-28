@@ -84,7 +84,9 @@ module-to-tier mapping; the dispatching agent decides per task.
 
 ## Custom Node Development: Configuration Trust and Defensive-Code Rules
 
-These rules apply when creating or modifying custom Node-RED palette nodes.
+These rules apply when creating or modifying custom Node-RED palette nodes. They are the
+runtime-trust half of one policy; the editor-side half — use the stock platform mechanism for
+each job, never a parallel one — is the platform ruleset in `DESIGN.md` §2.
 
 A custom Node-RED node normally has two distinct parts:
 

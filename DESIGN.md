@@ -108,7 +108,9 @@ here and would not be in a bare Node process: the blast radius is one message in
 these jobs the platform ships the mechanism (nodered.org/docs/creating-nodes); using it is the
 whole implementation, and building a parallel one is a spec violation — however few lines it
 costs. *Small is not a justification: the question is never how many lines a second mechanism
-adds, it is that a second mechanism now exists.*
+adds, it is that a second mechanism now exists.* The runtime-side counterpart — trust
+editor-validated configuration, guard only real runtime boundaries — is the configuration-trust
+ruleset in `AGENTS.md`.
 
 | Job | The platform mechanism — and nothing else |
 |---|---|
