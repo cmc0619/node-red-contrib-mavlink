@@ -35,6 +35,8 @@ const {
   AckWaiter,
   checkCompletion,
   waitForCompletion,
+  buildCommandLong,
+  buildCommandInt,
 } = require('../lib/command');
 
 /** Band constant for outbound commands (CONTROL = 2). */
@@ -113,32 +115,22 @@ function mergeParams(config, payload) {
 }
 
 /**
- * Build a COMMAND_LONG decoded-shape message ready for Connection.send().
- *
- * @param {number}   commandId
- * @param {number}   targetSysid
- * @param {number}   targetCompid
- * @param {number[]} paramArray  7-element array [p1..p7]
- * @param {number}   confirmation
- * @returns {{name: string, fields: object}}
+ * Carrier forms a command may be sent in (§9 "resend in the other form").
+ * @enum {string}
  */
-function buildCommandLong(commandId, targetSysid, targetCompid, paramArray, confirmation) {
-  return {
-    name: 'COMMAND_LONG',
-    fields: {
-      target_system: targetSysid,
-      target_component: targetCompid,
-      command: commandId,
-      confirmation,
-      param1: paramArray[0],
-      param2: paramArray[1],
-      param3: paramArray[2],
-      param4: paramArray[3],
-      param5: paramArray[4],
-      param6: paramArray[5],
-      param7: paramArray[6],
-    },
-  };
+const CARRIER = { LONG: 'long', INT: 'int' };
+
+/**
+ * Given a wrong-carrier MAV_RESULT, return the carrier the vehicle is asking
+ * for, or null when the code is not a carrier-mismatch (§9).
+ *
+ * @param {number} resultCode
+ * @returns {'long'|'int'|null}
+ */
+function carrierWantedBy(resultCode) {
+  if (resultCode === MAV_RESULT.COMMAND_INT_ONLY) return CARRIER.INT;
+  if (resultCode === MAV_RESULT.COMMAND_LONG_ONLY) return CARRIER.LONG;
+  return null;
 }
 
 module.exports = function registerMavlinkCommand(RED) {
@@ -357,55 +349,127 @@ module.exports = function registerMavlinkCommand(RED) {
 
       node.status({ fill: 'blue', shape: 'dot', text: badge24(`${displayName}\u2026`) });
 
-      const waiter = new AckWaiter({
-        subscribe: (filter, handler) => connNode.subscribe(filter, handler),
-        sendFn: (confirmation) => {
-          const message = buildCommandLong(
-            commandId,
-            target.sysid,
-            target.compid,
-            paramArray,
-            confirmation
-          );
-          connNode.send(message, { band: BAND_CONTROL, target });
-        },
-        commandId,
-        targetSysid: target.sysid,
-        targetCompid: target.compid,
-        timeoutMs,
-        maxRetries: noAutoRetry ? 0 : maxRetries,
-        noAutoRetry,
-      });
+      // Frame for a COMMAND_INT resend (§9 "Coordinate frames"). The vehicle
+      // needs the right MAV_FRAME to read x/y/z; prefer a per-message override,
+      // then node config, else the carrier module's documented default (GLOBAL).
+      const frame =
+        msg.mavFrame !== undefined && msg.mavFrame !== null && msg.mavFrame !== ''
+          ? Number(msg.mavFrame)
+          : config.frame !== undefined && config.frame !== null && config.frame !== ''
+            ? Number(config.frame)
+            : undefined;
 
-      _activeWaiter = waiter;
-      let ackOutcome;
-      try {
-        ackOutcome = await waiter.start();
-      } finally {
-        if (_activeWaiter === waiter) _activeWaiter = null;
+      /**
+       * Build the wire message for a carrier at a given confirmation counter.
+       * COMMAND_INT has no confirmation byte, so it is ignored there; the
+       * params are converted from the LONG form by the carrier module (§9).
+       *
+       * @param {'long'|'int'} carrier
+       * @param {number} confirmation
+       * @returns {{name: string, fields: object}}
+       */
+      function buildCarrierMessage(carrier, confirmation) {
+        if (carrier === CARRIER.INT) {
+          return buildCommandInt(commandId, target.sysid, target.compid, paramArray, { frame });
+        }
+        return buildCommandLong(commandId, target.sysid, target.compid, paramArray, confirmation);
       }
 
-      // Handle carrier-type mismatch by noting it in the status record.
-      if (
-        ackOutcome.resultCode === MAV_RESULT.COMMAND_LONG_ONLY ||
-        ackOutcome.resultCode === MAV_RESULT.COMMAND_INT_ONLY
-      ) {
+      /**
+       * Run one AckWaiter transaction in the given carrier and resolve with its
+       * outcome. Registers itself as the node's active waiter for cancellation.
+       *
+       * @param {'long'|'int'} carrier
+       * @returns {Promise<object>} AckResult
+       */
+      async function runWaiter(carrier) {
+        const waiter = new AckWaiter({
+          subscribe: (filter, handler) => connNode.subscribe(filter, handler),
+          sendFn: (confirmation) => {
+            connNode.send(buildCarrierMessage(carrier, confirmation), { band: BAND_CONTROL, target });
+          },
+          commandId,
+          targetSysid: target.sysid,
+          targetCompid: target.compid,
+          timeoutMs,
+          maxRetries: noAutoRetry ? 0 : maxRetries,
+          noAutoRetry,
+        });
+        _activeWaiter = waiter;
+        try {
+          return await waiter.start();
+        } finally {
+          if (_activeWaiter === waiter) _activeWaiter = null;
+        }
+      }
+
+      // First attempt is always COMMAND_LONG (§9 default carrier).
+      let carrier = CARRIER.LONG;
+      let ackOutcome = await runWaiter(carrier);
+
+      // ── Carrier auto-resend (§9 "resend in the other form") ───────────────
+      // At most ONE swap per transaction. When the vehicle acks INT_ONLY (8) or
+      // LONG_ONLY (7) it will only accept the other carrier: warn and resend
+      // once in that form. A second wrong-carrier ack (the same code again, or
+      // a contradictory one) is failed loudly — no further silent retry.
+      const wanted = carrierWantedBy(ackOutcome.resultCode);
+      if (wanted && wanted !== carrier) {
+        const from = carrier;
+        carrier = wanted;
+        node.warn(
+          `mavlink-command: ${displayName} rejected as ` +
+            `${RESULT_NAME[ackOutcome.resultCode]} — resending as ` +
+            `COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'} (§9 carrier swap)`
+        );
+        node.status({
+          fill: 'blue',
+          shape: 'dot',
+          text: badge24(`retry ${carrier === CARRIER.INT ? 'INT' : 'LONG'} ${displayName}\u2026`),
+        });
+        ackOutcome = await runWaiter(carrier);
+
+        // Second attempt is the last: a repeated wrong-carrier ack cannot be
+        // resolved by another swap, so fail loud (§9 user requirement).
+        if (carrierWantedBy(ackOutcome.resultCode) !== null) {
+          const rec = makeRecord({
+            result: RESULT_NAME[ackOutcome.resultCode],
+            resultCode: ackOutcome.resultCode,
+            confirmedBy: 'ack',
+            retries: ackOutcome.retries,
+            elapsed: Date.now() - startMs,
+            detail:
+              `carrier swap ${from}\u2192${carrier} still rejected as ` +
+              `${RESULT_NAME[ackOutcome.resultCode]} — no carrier satisfies the vehicle`,
+          });
+          node.status({ fill: 'red', shape: 'ring', text: badge24(`wrong carrier ${displayName}`) });
+          node.error(`mavlink-command: ${rec.detail}`, msg);
+          emitStatus(rec, send, false);
+          done && done();
+          return;
+        }
+      } else if (wanted) {
+        // The vehicle asked for the carrier we already sent — a contradiction we
+        // cannot resolve by swapping. Fail loud rather than loop (§9).
         const rec = makeRecord({
           result: RESULT_NAME[ackOutcome.resultCode],
           resultCode: ackOutcome.resultCode,
           confirmedBy: 'ack',
           retries: ackOutcome.retries,
           elapsed: Date.now() - startMs,
-          detail: ackOutcome.resultCode === MAV_RESULT.COMMAND_INT_ONLY
-            ? 'resend as COMMAND_INT (not yet supported)'
-            : 'resend as COMMAND_LONG (not yet supported)',
+          detail:
+            `vehicle demands COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'} ` +
+            `but that carrier was already sent`,
         });
-        node.status({ fill: 'red', shape: 'ring', text: badge24(`wrong type ${displayName}`) });
+        node.status({ fill: 'red', shape: 'ring', text: badge24(`wrong carrier ${displayName}`) });
         node.error(`mavlink-command: ${rec.detail}`, msg);
         emitStatus(rec, send, false);
         done && done();
         return;
       }
+
+      // From here the outcome may be from either the original or swapped
+      // carrier; note a completed swap in the success/failure detail below.
+      const carrierSwapped = carrier !== CARRIER.LONG;
 
       // Timeout: check peer table for completion condition.
       if (ackOutcome.result === 'timeout') {
@@ -500,6 +564,7 @@ module.exports = function registerMavlinkCommand(RED) {
           confirmedBy: 'ack',
           retries: ackOutcome.retries,
           elapsed: Date.now() - startMs,
+          detail: carrierSwapped ? 'accepted after COMMAND_INT carrier swap (§9)' : null,
         });
         node.status({ fill: 'green', shape: 'dot', text: badge24(`${displayName} accepted`) });
         emitStatus(rec, send, true, rec);
@@ -514,7 +579,9 @@ module.exports = function registerMavlinkCommand(RED) {
         confirmedBy: ackOutcome.confirmedBy,
         retries: ackOutcome.retries,
         elapsed: Date.now() - startMs,
-        detail: ackOutcome.detail,
+        detail: carrierSwapped
+          ? `${ackOutcome.detail || RESULT_NAME[ackOutcome.resultCode] || 'failed'} (after COMMAND_INT carrier swap, §9)`
+          : ackOutcome.detail,
       });
       node.status({ fill: 'red', shape: 'ring', text: badge24(`${displayName} ${ackOutcome.result}`) });
       node.error(`mavlink-command: ${displayName} ${ackOutcome.result}`, msg);
