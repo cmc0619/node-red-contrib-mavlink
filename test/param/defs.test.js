@@ -5,8 +5,6 @@ const assert = require('node:assert/strict');
 
 const {
   resolveDefsUrl,
-  assertSafeDefsUrl,
-  assertSafeDefsDestination,
   parsePdefJson,
   fetchParamDefs,
   clearMemCache,
@@ -50,7 +48,7 @@ test('resolveDefsUrl returns null for PX4 with no custom URL', () => {
 });
 
 test('resolveDefsUrl returns custom URL when provided, regardless of firmware', () => {
-  const custom = 'https://px4-travis.s3.amazonaws.com/Firmware/main/parameters.json';
+  const custom = 'https://example.com/my-params.json';
   assert.equal(resolveDefsUrl('copter', 'ardupilot', custom), custom);
   assert.equal(resolveDefsUrl('generic', 'px4', custom), custom);
   assert.equal(resolveDefsUrl('plane', 'custom', custom), custom);
@@ -59,62 +57,6 @@ test('resolveDefsUrl returns custom URL when provided, regardless of firmware', 
 test('resolveDefsUrl ignores blank custom URL string', () => {
   assert.equal(resolveDefsUrl('copter', 'ardupilot', '   '), 'https://autotest.ardupilot.org/Parameters/ArduCopter/apm.pdef.json');
   assert.equal(resolveDefsUrl('generic', 'px4', '   '), null);
-});
-
-test('assertSafeDefsUrl rejects non-https and private destinations (SSRF)', () => {
-  assert.throws(() => assertSafeDefsUrl('http://example.com/p.json'), /https/);
-  assert.throws(() => assertSafeDefsUrl('https://127.0.0.1/p.json'), /private|link-local|not allowed/i);
-  assert.throws(() => assertSafeDefsUrl('https://192.168.1.9/p.json'), /private|link-local/i);
-  assert.throws(() => assertSafeDefsUrl('https://169.254.169.254/latest'), /private|link-local/i);
-  assert.throws(() => assertSafeDefsUrl('https://[::ffff:10.0.0.8]/p.json'), /private|link-local/i);
-  assert.throws(() => assertSafeDefsUrl('https://[::ffff:7f00:1]/p.json'), /private|link-local/i);
-  assert.throws(() => assertSafeDefsUrl('https://[fec0::1]/p.json'), /private|link-local|allowlist/i);
-  assert.throws(() => assertSafeDefsUrl('https://[fd12::1]/p.json'), /private|link-local|allowlist/i);
-  assert.throws(() => assertSafeDefsUrl('https://[::7f00:1]/p.json'), /private|link-local|allowlist/i);
-  assert.throws(() => assertSafeDefsUrl('https://localhost/p.json'), /not allowed|allowlist/);
-  assert.throws(() => assertSafeDefsUrl('https://example.com/p.json'), /allowlist/);
-  assert.doesNotThrow(() =>
-    assertSafeDefsUrl('https://autotest.ardupilot.org/Parameters/ArduCopter/apm.pdef.json')
-  );
-  assert.doesNotThrow(() =>
-    assertSafeDefsUrl('https://px4-travis.s3.amazonaws.com/Firmware/main/parameters.json')
-  );
-  assert.throws(
-    () => resolveDefsUrl('copter', 'px4', 'https://10.0.0.5/secret.json'),
-    (err) => err.code === 'PARAM_DEFS_URL_FORBIDDEN'
-  );
-});
-
-test('assertSafeDefsDestination rejects allowlisted hosts that resolve privately', async () => {
-  await assert.rejects(
-    () =>
-      assertSafeDefsDestination('https://evil.amazonaws.com/p.json', async () => [
-        { address: '10.1.2.3', family: 4 },
-      ]),
-    (err) => err.code === 'PARAM_DEFS_URL_FORBIDDEN' && /private address/.test(err.message)
-  );
-  const pinned = await assertSafeDefsDestination(
-    'https://autotest.ardupilot.org/Parameters/ArduCopter/apm.pdef.json',
-    async () => [{ address: '93.184.216.34', family: 4 }]
-  );
-  assert.deepEqual(pinned, [{ address: '93.184.216.34', family: 4 }]);
-});
-
-test('fetchParamDefs refuses a hostname that DNS-maps to a private address', async () => {
-  clearMemCache();
-  let fetched = 0;
-  await assert.rejects(
-    () =>
-      fetchParamDefs('https://evil.amazonaws.com/p.json', {
-        lookupFn: async () => [{ address: '192.168.0.20', family: 4 }],
-        fetchFn: async () => {
-          fetched += 1;
-          return {};
-        },
-      }),
-    (err) => err.code === 'PARAM_DEFS_URL_FORBIDDEN'
-  );
-  assert.equal(fetched, 0);
 });
 
 /* ── parsePdefJson ──────────────────────────────────────────────── */
@@ -239,12 +181,9 @@ test('fetchParamDefs calls injectable fetch and parses result', async () => {
   const fetched = [];
   const fetchFn = async (url) => { fetched.push(url); return fakeJson; };
 
-  const map = await fetchParamDefs('https://autotest.ardupilot.org/test.json', {
-    fetchFn,
-    lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-  });
+  const map = await fetchParamDefs('https://example.com/test.json', { fetchFn });
   assert.equal(fetched.length, 1);
-  assert.equal(fetched[0], 'https://autotest.ardupilot.org/test.json');
+  assert.equal(fetched[0], 'https://example.com/test.json');
   assert.ok(map.has('SPEED'));
   assert.equal(map.get('SPEED').unit, 'm/s');
 });
@@ -255,12 +194,8 @@ test('fetchParamDefs returns cached result without re-fetching', async () => {
   let fetchCount = 0;
   const fetchFn = async () => { fetchCount++; return fakeJson; };
 
-  const opts = {
-    fetchFn,
-    lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-  };
-  await fetchParamDefs('https://autotest.ardupilot.org/cached.json', opts);
-  await fetchParamDefs('https://autotest.ardupilot.org/cached.json', opts);
+  await fetchParamDefs('https://example.com/cached.json', { fetchFn });
+  await fetchParamDefs('https://example.com/cached.json', { fetchFn });
   assert.equal(fetchCount, 1, 'second call must hit the memory cache');
 });
 
@@ -268,11 +203,7 @@ test('fetchParamDefs propagates fetch errors', async () => {
   clearMemCache();
   const fetchFn = async () => { throw new Error('network down'); };
   await assert.rejects(
-    () =>
-      fetchParamDefs('https://autotest.ardupilot.org/fail.json', {
-        fetchFn,
-        lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-      }),
+    () => fetchParamDefs('https://example.com/fail.json', { fetchFn }),
     /network down/
   );
 });

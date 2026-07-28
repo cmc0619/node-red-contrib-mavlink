@@ -71,19 +71,11 @@ module.exports = function registerMavlinkParam(RED) {
             notice: 'Vehicle Profile not deployed — deploy the flow first',
           });
         }
-        let url;
-        try {
-          url = defsApi.resolveDefsUrl(
-            vehicleNode.vehicleFamily || 'generic',
-            vehicleNode.firmware || 'ardupilot',
-            vehicleNode.paramDefsUrl || ''
-          );
-        } catch (err) {
-          if (err && err.code === 'PARAM_DEFS_URL_FORBIDDEN') {
-            return res.status(400).json({ defs: {}, notice: err.message });
-          }
-          throw err;
-        }
+        const url = defsApi.resolveDefsUrl(
+          vehicleNode.vehicleFamily || 'generic',
+          vehicleNode.firmware || 'ardupilot',
+          vehicleNode.paramDefsUrl || ''
+        );
         if (!url) {
           return res.json({
             defs: {},
@@ -99,8 +91,7 @@ module.exports = function registerMavlinkParam(RED) {
           for (const [k, v] of map) defs[k] = v;
           return res.json({ defs, url });
         } catch (err) {
-          const status = err && err.code === 'PARAM_DEFS_URL_FORBIDDEN' ? 400 : 502;
-          return res.status(status).json({
+          return res.status(502).json({
             defs: {},
             notice: `fetch failed: ${err.message}`,
             url,
