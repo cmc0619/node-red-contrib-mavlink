@@ -97,7 +97,7 @@ module.exports = function registerMavlinkMission(RED) {
 
       const payload = objectPayload(msg.payload);
       const missionTypeKey = payload.missionType || config.missionType || 'mission';
-      const target = resolveTarget(config, payload);
+      const target = resolveTarget(config, payload, connNode);
 
       // Firmware gate: refuse a type the selected stack does not carry over
       // this protocol rather than sending a request it will silently no-op (§9,
@@ -260,13 +260,13 @@ module.exports = function registerMavlinkMission(RED) {
 /**
  * The firmware of the Connection's bound Vehicle Profile, when reachable, so
  * the mission-type gate matches the stack actually addressed (§9, §11).
+ * Uses the public `connNode.vehicle` surface; never reads private fields.
  *
  * @param {object|null} connNode  the Connection config node
  * @returns {string|null}
  */
 function boundFirmware(connNode) {
-  const vehicle = connNode && connNode.connection && connNode.connection._vehicle;
-  return vehicle && vehicle.firmware ? vehicle.firmware : null;
+  return (connNode && connNode.vehicle && connNode.vehicle.firmware) || null;
 }
 
 /**
@@ -336,20 +336,28 @@ function resolveItems(config, payload) {
 }
 
 /**
+ * Resolve the mission target from payload, node config, the Connection's
+ * Vehicle Profile, then a hardcoded 1.
+ *
+ * Precedence: payload.target → node config → `connNode.vehicle` → 1.
+ * A configured 0 (broadcast / all-components) must not be treated as unset.
+ *
  * @param {object} config
  * @param {object} payload
+ * @param {object|null|undefined} connNode  Connection config node (may be absent for Build)
  * @returns {{sysid: number, compid: number}}
  */
-function resolveTarget(config, payload) {
+function resolveTarget(config, payload, connNode) {
   const t = payload.target || {};
+  const profileSysid = connNode && connNode.vehicle && connNode.vehicle.targetSysid;
+  const profileCompid = connNode && connNode.vehicle && connNode.vehicle.targetCompid;
   return {
-    // Preserve configured 0 (broadcast / all-components) — do not treat as unset.
     sysid: Number(t.sysid ?? (config.targetSystem !== '' && config.targetSystem !== undefined
       ? config.targetSystem
-      : 1)),
+      : (profileSysid !== undefined && profileSysid !== null ? profileSysid : 1))),
     compid: Number(t.compid ?? (config.targetComponent !== '' && config.targetComponent !== undefined
       ? config.targetComponent
-      : 1)),
+      : (profileCompid !== undefined && profileCompid !== null ? profileCompid : 1))),
   };
 }
 

@@ -65,8 +65,12 @@ function resolveCommandId(config) {
 }
 
 /**
- * Resolve the target (sysid, compid) from config and connection vehicle
- * defaults.
+ * Resolve the target (sysid, compid) from config, then the Connection's
+ * public vehicle context, then the hardcoded default of 1.
+ *
+ * Precedence: explicit config value > Vehicle Profile defaults (via
+ * `connNode.vehicle`) > 1.  An empty string in config means inherit; a
+ * numeric 0 (broadcast) is a legitimate value and is preserved.
  *
  * @param {object} config
  * @param {object} connNode  Connection config node
@@ -76,14 +80,14 @@ function resolveTarget(config, connNode) {
   const sysid =
     config.targetSysid && Number(config.targetSysid) > 0
       ? Number(config.targetSysid)
-      : connNode.connection.peerTable._opts && connNode.connection._vehicle
-        ? connNode.connection._vehicle.targetSysid
+      : connNode.vehicle
+        ? connNode.vehicle.targetSysid
         : 1;
   const compid =
     config.targetCompid && Number(config.targetCompid) > 0
       ? Number(config.targetCompid)
-      : connNode.connection._vehicle
-        ? connNode.connection._vehicle.targetCompid
+      : connNode.vehicle
+        ? connNode.vehicle.targetCompid
         : 1;
   return { sysid, compid };
 }

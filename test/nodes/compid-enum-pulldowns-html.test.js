@@ -50,7 +50,7 @@ test('mavlink-command: static targetCompid is a MAV_COMPONENT select only', () =
   assert.ok(!html.includes('type="number" id="node-input-targetCompid"'));
   assert.match(html, /loadEnumsCatalog\(\['MAV_COMPONENT'\]/);
   assert.match(html, /fillCompIdSelect\([\s\S]*targetCompid/);
-  assert.match(html, /allowEmpty:\s*true[\s\S]*emptyLabel:\s*'\(default\)'/);
+  assert.match(html, /allowEmpty:\s*true[\s\S]*emptyLabel:\s*'\(profile default\)'/);
 });
 
 test('mavlink-state: filter targetComponent allows blank = any', () => {

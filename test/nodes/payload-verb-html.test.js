@@ -184,6 +184,13 @@ test('mavlink-payload does not leak action ids across release enum families', ()
   );
 });
 
+test('mavlink-payload target sysid/compid default to empty (inherit profile) not 1', () => {
+  assert.match(payloadHtml, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
+  assert.match(payloadHtml, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
+  assert.match(payloadHtml, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
+  assert.match(payloadHtml, /emptyLabel:\s*'[^']*profile default[^']*'/, 'compid empty label names profile default');
+});
+
 test('mavlink-payload fractional params use step=any', () => {
   for (const id of [
     'node-input-interval',

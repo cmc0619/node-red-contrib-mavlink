@@ -105,6 +105,58 @@ test('mavlink-param confirm set scopes its PARAM_VALUE subscription to the targe
   assert.equal(conn.subs[0].filter.compid, 1, 'subscription scoped to target compid');
 });
 
+test('mavlink-param inherits Vehicle Profile target when config is empty', () => {
+  const conn = { vehicle: { targetSysid: 42, targetCompid: 191 }, send() {}, subscribe() { return () => {}; } };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'build',
+    action: 'read',
+    targetSystem: '',
+    targetComponent: '',
+    connection: 'conn',
+    firmware: 'ardupilot',
+  });
+  let sent;
+
+  node.emit(
+    'input',
+    { payload: { paramId: 'ARMING_CHECK' } },
+    (messages) => { sent = messages; },
+    () => {}
+  );
+
+  assert.equal(sent[0].payload.fields.target_system, 42);
+  assert.equal(sent[0].payload.fields.target_component, 191);
+});
+
+test('mavlink-param explicit config value wins over Vehicle Profile', () => {
+  const conn = { vehicle: { targetSysid: 42, targetCompid: 191 }, send() {}, subscribe() { return () => {}; } };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'build',
+    action: 'read',
+    targetSystem: 7,
+    targetComponent: 100,
+    connection: 'conn',
+    firmware: 'ardupilot',
+  });
+  let sent;
+
+  node.emit(
+    'input',
+    { payload: { paramId: 'ARMING_CHECK' } },
+    (messages) => { sent = messages; },
+    () => {}
+  );
+
+  assert.equal(sent[0].payload.fields.target_system, 7);
+  assert.equal(sent[0].payload.fields.target_component, 100);
+});
+
 test('mavlink-param cancels a prior in-flight subscription when a second op starts', () => {
   const conn = connStub();
   const RED = redStub({ conn });

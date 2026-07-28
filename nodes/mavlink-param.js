@@ -150,7 +150,10 @@ module.exports = function registerMavlinkParam(RED) {
         }
 
         const payload = objectPayload(msg.payload);
-        const request = requestFrom(config, payload);
+        // Resolve the connection node early so requestFrom can fall back to
+        // the Vehicle Profile target defaults even on the Build tier.
+        const connNode = RED.nodes.getNode(config.connection);
+        const request = requestFrom(config, payload, connNode);
         const message = buildParamMessage(request);
         const delivery = config.delivery || 'build';
 
@@ -233,19 +236,34 @@ module.exports = function registerMavlinkParam(RED) {
 };
 
 /**
+ * Build a normalized param request from payload, node config, the
+ * Connection's Vehicle Profile, then a hardcoded 1.
+ *
+ * Precedence: payload.target → node config → `connNode.vehicle` → 1.
+ * A configured 0 (broadcast) is a legitimate address and must survive.
+ *
  * @param {object} config
  * @param {object} payload
+ * @param {object|null|undefined} connNode  Connection config node (may be absent for Build)
  * @returns {object} normalized param request
  */
-function requestFrom(config, payload) {
+function requestFrom(config, payload, connNode) {
   const target = payload.target || {};
   return {
     action: payload.action || config.action || 'read',
     target: {
-      // Nullish-preserving: a configured 0 is a legitimate broadcast address
-      // and must not fall through the `||` chain to the default of 1.
-      sysid: Number(firstDefined(target.sysid, config.targetSystem, 1)),
-      compid: Number(firstDefined(target.compid, config.targetComponent, 1)),
+      sysid: Number(firstDefined(
+        target.sysid,
+        config.targetSystem,
+        connNode && connNode.vehicle && connNode.vehicle.targetSysid,
+        1
+      )),
+      compid: Number(firstDefined(
+        target.compid,
+        config.targetComponent,
+        connNode && connNode.vehicle && connNode.vehicle.targetCompid,
+        1
+      )),
     },
     paramId: payload.paramId || config.paramId,
     // paramIndex 0 is a valid index; keep it rather than letting `||` drop it to

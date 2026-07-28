@@ -11,8 +11,8 @@
       topic: { value: 'camera' },
       verb: { value: 'photo' },
       path: { value: 'legacy' },
-      targetSystem: { value: 1, validate: RED.validators.number() },
-      targetComponent: { value: 1, validate: RED.validators.number() },
+      targetSystem: { value: '', validate: RED.validators.number(true) },
+      targetComponent: { value: '', validate: RED.validators.number(true) },
       /* camera photo */
       cameraId: { value: 0, validate: RED.validators.number(true) },
       count: { value: 1, validate: RED.validators.number(true) },
@@ -338,7 +338,7 @@
           RED.mavlink.fillCompIdSelect(
             $('#node-input-targetComponent'),
             ((catalog || {}).enums || {}).MAV_COMPONENT || [],
-            { saved: node.targetComponent }
+            { allowEmpty: true, emptyLabel: '(profile default)', saved: node.targetComponent }
           );
         });
       }
@@ -355,7 +355,7 @@
   <div class="form-row"><label for="node-input-topic">Topic</label><select id="node-input-topic"><option value="camera">Camera</option><option value="gimbal">Gimbal</option><option value="servo">Servo</option><option value="release">Release</option></select></div>
   <div class="form-row"><label for="node-input-verb">Verb</label><select id="node-input-verb"></select></div>
   <div class="form-row" id="row-payload-path"><label for="node-input-path">Gimbal path</label><select id="node-input-path"><option value="legacy">DO_MOUNT_CONTROL</option><option value="manager">GIMBAL_MANAGER_SET_PITCHYAW</option></select></div>
-  <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
   <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <!-- camera photo -->
   <div class="form-row" id="row-payload-cameraId"><label for="node-input-cameraId">Camera ID</label><input type="number" id="node-input-cameraId" step="1" style="width:80px"></div>

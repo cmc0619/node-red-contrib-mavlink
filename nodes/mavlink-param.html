@@ -8,8 +8,8 @@
       delivery: { value: 'build' },
       action: { value: 'read' },
       firmware: { value: 'ardupilot' },
-      targetSystem: { value: 1, validate: RED.validators.number() },
-      targetComponent: { value: 1, validate: RED.validators.number() },
+      targetSystem: { value: '', validate: RED.validators.number(true) },
+      targetComponent: { value: '', validate: RED.validators.number(true) },
       paramId: { value: '' },
       paramIndex: { value: -1, validate: RED.validators.number(true) },
       value: { value: '', validate: RED.validators.number(true) },
@@ -32,7 +32,7 @@
           RED.mavlink.fillCompIdSelect(
             $('#node-input-targetComponent'),
             (catalog.enums || {}).MAV_COMPONENT || [],
-            { saved: node.targetComponent }
+            { allowEmpty: true, emptyLabel: '(profile default)', saved: node.targetComponent }
           );
         });
       }
@@ -146,7 +146,7 @@
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and echo-confirm</option><option value="collect">Request list and collect</option></select></div>
   <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action"><option value="read">Read one</option><option value="set">Set one</option><option value="request-list">Request list</option></select></div>
   <div class="form-row"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
-  <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
   <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row">
     <label for="node-input-paramId">Param id</label>

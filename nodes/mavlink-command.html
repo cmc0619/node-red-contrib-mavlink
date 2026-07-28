@@ -281,7 +281,7 @@
           RED.mavlink.fillCompIdSelect(
             $('#node-input-targetCompid'),
             ((catalog || {}).enums || {}).MAV_COMPONENT || [],
-            { allowEmpty: true, emptyLabel: '(default)', saved: saved }
+            { allowEmpty: true, emptyLabel: '(profile default)', saved: saved }
           );
         });
       }
@@ -790,7 +790,7 @@
 
   <div class="form-row">
     <label for="node-input-targetSysid" style="width:120px">Target sysid</label>
-    <input type="number" id="node-input-targetSysid" placeholder="(connection default)" style="width:80px">
+    <input type="number" id="node-input-targetSysid" placeholder="(profile default)" style="width:80px">
     <label for="node-input-targetCompid" style="margin-left:10px;width:80px">Compid</label>
     <select id="node-input-targetCompid" style="width:80px"></select>
   </div>

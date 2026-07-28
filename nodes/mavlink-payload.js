@@ -38,6 +38,9 @@ module.exports = function registerMavlinkPayload(RED) {
           return;
         }
 
+        // Resolve the connection node early so the target fallback chain can
+        // use the Vehicle Profile defaults even on the Build tier.
+        const connectionNode = RED.nodes.getNode(config.connection);
         const payload = objectPayload(msg.payload);
         const built = buildPayloadMessage({
           topic: payload.topic || config.topic || 'camera',
@@ -45,8 +48,18 @@ module.exports = function registerMavlinkPayload(RED) {
           path: payload.path || config.path || 'legacy',
           target: {
             // Nullish-preserving so a configured 0 (broadcast) survives.
-            sysid: Number(firstDefined(payload.target && payload.target.sysid, config.targetSystem, 1)),
-            compid: Number(firstDefined(payload.target && payload.target.compid, config.targetComponent, 1)),
+            sysid: Number(firstDefined(
+              payload.target && payload.target.sysid,
+              config.targetSystem,
+              connectionNode && connectionNode.vehicle && connectionNode.vehicle.targetSysid,
+              1
+            )),
+            compid: Number(firstDefined(
+              payload.target && payload.target.compid,
+              config.targetComponent,
+              connectionNode && connectionNode.vehicle && connectionNode.vehicle.targetCompid,
+              1
+            )),
           },
           values: payload.values || valuesFrom(config),
         });
@@ -58,7 +71,6 @@ module.exports = function registerMavlinkPayload(RED) {
           return;
         }
 
-        const connectionNode = RED.nodes.getNode(config.connection);
         if (!connectionNode || typeof connectionNode.send !== 'function') {
           throw new Error('mavlink-payload requires a Connection');
         }

@@ -143,7 +143,7 @@ makes unreachable.
 |---|---|
 | `mavlink-local-identity` | Who is Node-RED on the wire? Owns source sysid and compid, the role preset, heartbeat content and interval, and the signing credential reference |
 | `mavlink-vehicle` | Who is being addressed, in what dialect? Owns dialect selection — bundled or custom — the XML upload and download, and the catalog picker |
-| `mavlink-connection` | How does traffic move, and stay channel-correct? Owns the transport (UDP, TCP, serial), the peer table, its bound Vehicle Profile, the outbound queue and its bands, signing switches and channel state, the default identity plus opt-in additional ones, and the disable switch |
+| `mavlink-connection` | How does traffic move, and stay channel-correct? Owns the transport (UDP, TCP, serial), the peer table, its bound Vehicle Profile, the outbound queue and its bands, signing switches and channel state, the default identity plus opt-in additional ones, and the disable switch. Palette nodes reach the runtime through `node.subscribe`, `node.send`, `node.peerTable`, and `node.vehicle` — a frozen snapshot `{targetSysid, targetCompid, firmware, dialect, autopilot}` that palette nodes use to inherit the profile's target defaults; explicit node config wins, empty editor fields mean inherit |
 
 **Palette nodes**
 
@@ -1406,3 +1406,15 @@ test/nodes/param-html.test.js` — `adminApiUrl('/mavlink/enums')` under `/red` 
 *Fact:* `--out` is where MAVProxy *sends* telemetry. Node-RED receives on `bindPort` (`14550`)
 and *sends* commands to `remotePort` (`14551`, MAVProxy's listen). Point `--out` at `14550`.
 *Check:* examples under `examples/sitl/` and `examples/sitl/README.md`.
+
+**Vehicle Profile target defaults only reach the Connection runtime, not palette nodes.**
+*Wrong belief:* setting `defaultTargetSystem = 42` in a Vehicle Profile propagates to every
+palette node that addresses a target; nodes without an explicit config default to 1.
+*Fact:* target resolution is payload.target → node config → `connNode.vehicle` → 1. The
+Connection exposes its bound profile as a frozen public `node.vehicle` snapshot; palette nodes
+(Command, Move, Param, Payload, Mission) read it as a fallback before hardcoding 1. Leaving the
+editor's sysid/compid fields blank means "inherit from the profile"; saving an explicit 1 means
+exactly 1 — no migration of existing flows. Command no longer reads `connection._vehicle`.
+*Check:* `node --test test/move/node.test.js test/param/node.test.js
+test/payload/node.test.js test/mission/node.test.js test/command/node.test.js` — look for
+"inherits Vehicle Profile target" tests.

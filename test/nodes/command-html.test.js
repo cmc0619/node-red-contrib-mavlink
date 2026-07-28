@@ -149,6 +149,27 @@ test('Command CompID reloads when Connection changes', () => {
   );
 });
 
+test('mavlink-command target sysid/compid use "(profile default)" wording', () => {
+  assert.match(
+    html,
+    /placeholder="[^"]*profile default[^"]*"/,
+    'sysid placeholder says profile default'
+  );
+  assert.match(
+    html,
+    /emptyLabel:\s*'\(profile default\)'/,
+    'compid empty label says profile default'
+  );
+  assert.ok(
+    !html.includes('(connection default)'),
+    '(connection default) wording must be gone'
+  );
+  assert.ok(
+    !/emptyLabel:\s*'\(default\)'/.test(html),
+    '(default) compid wording must be gone'
+  );
+});
+
 test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
   assert.match(html, /RED\.mavlink\.adminApiUrl\(/, 'admin fetches must use adminApiUrl');
   assert.ok(

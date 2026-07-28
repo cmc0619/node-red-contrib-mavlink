@@ -97,6 +97,58 @@ test('mavlink-payload confirm tier halts the chain on a DENIED ack', async () =>
   node.emit('close', () => {});
 });
 
+test('mavlink-payload inherits Vehicle Profile target when config is empty', () => {
+  const conn = { vehicle: { targetSysid: 42, targetCompid: 191 }, send() {}, subscribe() { return () => {}; } };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    delivery: 'build',
+    topic: 'servo',
+    verb: 'set',
+    targetSystem: '',
+    targetComponent: '',
+    connection: 'conn',
+  });
+  let sent;
+
+  node.emit(
+    'input',
+    { payload: { values: { servo: 1, pwm: 1500 } } },
+    (messages) => { sent = messages; },
+    () => {}
+  );
+
+  assert.equal(sent[0].payload.fields.target_system, 42);
+  assert.equal(sent[0].payload.fields.target_component, 191);
+});
+
+test('mavlink-payload explicit config value wins over Vehicle Profile', () => {
+  const conn = { vehicle: { targetSysid: 42, targetCompid: 191 }, send() {}, subscribe() { return () => {}; } };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    delivery: 'build',
+    topic: 'servo',
+    verb: 'set',
+    targetSystem: 7,
+    targetComponent: 100,
+    connection: 'conn',
+  });
+  let sent;
+
+  node.emit(
+    'input',
+    { payload: { values: { servo: 1, pwm: 1500 } } },
+    (messages) => { sent = messages; },
+    () => {}
+  );
+
+  assert.equal(sent[0].payload.fields.target_system, 7);
+  assert.equal(sent[0].payload.fields.target_component, 100);
+});
+
 test('mavlink-payload gimbal manager setpoint stays unconfirmed even on the confirm tier', () => {
   const conn = connStub();
   const RED = redStub({ conn });

@@ -158,6 +158,72 @@ test('Async handler contains a throw as a terminal failed status plus done(err)'
   assert.ok(doneErr instanceof Error, 'done(err) was called');
 });
 
+test('resolveTarget: empty config inherits Vehicle Profile target from connNode.vehicle', async () => {
+  const conn = connStub({ targetSysid: 42, targetCompid: 191 });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'build',
+    connection: 'conn',
+    targetSysid: '',
+    targetCompid: '',
+  });
+
+  let sent;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.fields.target_system, 42);
+  assert.equal(sent[0].payload.fields.target_component, 191);
+});
+
+test('resolveTarget: explicit config value wins over Vehicle Profile', async () => {
+  const conn = connStub({ targetSysid: 42, targetCompid: 191 });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'build',
+    connection: 'conn',
+    targetSysid: '7',
+    targetCompid: '100',
+  });
+
+  let sent;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.fields.target_system, 7);
+  assert.equal(sent[0].payload.fields.target_component, 100);
+});
+
+test('resolveTarget: no vehicle context falls back to 1', async () => {
+  const conn = connStub(null);
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'build',
+    connection: 'conn',
+    targetSysid: '',
+    targetCompid: '',
+  });
+
+  let sent;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.fields.target_system, 1);
+  assert.equal(sent[0].payload.fields.target_component, 1);
+});
+
 test('Send/confirm tier with no connection fails loud instead of silently building', async () => {
   const RED = redStub({});
   require('../../nodes/mavlink-command')(RED);
@@ -174,13 +240,16 @@ test('Send/confirm tier with no connection fails loud instead of silently buildi
   assert.ok(/no connection/.test(sent[1].detail));
 });
 
-function connStub() {
+function connStub(vehicleOverride) {
   const subs = [];
   const sent = [];
   return {
     subs,
     sent,
     peerTable: null,
+    vehicle: vehicleOverride !== undefined
+      ? vehicleOverride
+      : { targetSysid: 1, targetCompid: 1 },
     send(message, opts) { sent.push({ message, opts }); },
     subscribe(filter, handler) {
       const entry = { filter, handler };

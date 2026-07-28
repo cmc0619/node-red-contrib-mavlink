@@ -145,7 +145,7 @@ test('clear Build tier is gated before the plan is built (§9 destructive gate)'
 test('firmware gate follows the Connection Vehicle Profile, not stale node config (§11)', async () => {
   const conn = new StubConnection();
   // Bound profile is PX4; the node config independently (and stalely) says ardupilot.
-  conn.connection = { _vehicle: { firmware: 'px4' } };
+  conn.vehicle = { firmware: 'px4', targetSysid: 1, targetCompid: 1 };
   const Node = loadNode(conn);
   const node = new Node({
     operation: 'download',
@@ -186,6 +186,54 @@ test('download end-to-end: progress on output 1, success on both ports', async (
   assert.equal(terminal[0].payload.result, 'succeeded', 'continue port fires only on success');
   assert.equal(terminal[1].result, 'succeeded');
   assert.equal(terminal[1].count, 2);
+});
+
+test('mission resolveTarget inherits Vehicle Profile target when config is empty', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { targetSysid: 42, targetCompid: 191, firmware: 'ardupilot' };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 0, mission_type: 0 } });
+    }
+  });
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+    targetSystem: '',
+    targetComponent: '',
+  });
+
+  const { outputs } = await runInput(node, { payload: {} });
+  const terminal = outputs.at(-1);
+  assert.equal(terminal[1].target.sysid, 42);
+  assert.equal(terminal[1].target.compid, 191);
+});
+
+test('mission resolveTarget explicit config wins over Vehicle Profile', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { targetSysid: 42, targetCompid: 191, firmware: 'ardupilot' };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 0, mission_type: 0 } });
+    }
+  });
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+    targetSystem: 7,
+    targetComponent: 100,
+  });
+
+  const { outputs } = await runInput(node, { payload: {} });
+  const terminal = outputs.at(-1);
+  assert.equal(terminal[1].target.sysid, 7);
+  assert.equal(terminal[1].target.compid, 100);
 });
 
 test('a busy lock refuses a second same-type transfer on the node', async () => {

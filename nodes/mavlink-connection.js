@@ -12,7 +12,7 @@
  * and Local Identity config nodes, and hands a plain snapshot to the
  * {@link Connection} runtime in `lib/connection`, which owns every piece of
  * behaviour. Palette nodes reach the runtime through `node.subscribe`,
- * `node.send`, and `node.peerTable`.
+ * `node.send`, `node.peerTable`, and `node.vehicle`.
  *
  * References are captured at construction and released in `close`; the config
  * nodes are never re-resolved during teardown (§7).
@@ -47,6 +47,16 @@ module.exports = function registerMavlinkConnection(RED) {
     const vehicleNode = RED.nodes.getNode(config.vehicle);
     const bundle = vehicleNode.getDialect();
     const defaults = vehicleNode.getDefaults();
+
+    // Public frozen snapshot so palette nodes can inherit target defaults from
+    // the Vehicle Profile without reaching into private runtime fields.
+    node.vehicle = Object.freeze({
+      targetSysid: defaults.defaultTargetSystem,
+      targetCompid: defaults.defaultTargetComponent,
+      firmware: defaults.firmware,
+      dialect: defaults.dialect,
+      autopilot: firmwareAutopilot(defaults.firmware),
+    });
 
     const identityIds = [config.localIdentity, ...(config.additionalIdentities || [])].filter(
       Boolean

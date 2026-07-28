@@ -23,10 +23,11 @@ module.exports = function registerMavlinkMove(RED) {
           return;
         }
 
+        const connectionNode = RED.nodes.getNode(config.connection);
         const payload = objectPayload(msg.payload);
         const message = buildMoveMessage({
           mode: payload.mode || config.mode || 'local-position',
-          target: targetFrom(config, payload),
+          target: targetFrom(config, payload, connectionNode),
           position: payload.position || positionFrom(config),
           velocity: payload.velocity || velocityFrom(config),
           yaw: valueFrom(payload, config, 'yaw'),
@@ -38,14 +39,13 @@ module.exports = function registerMavlinkMove(RED) {
         if (delivery === 'build') {
           completeBuild(node, emit, message);
         } else {
-          const connectionNode = RED.nodes.getNode(config.connection);
           if (!connectionNode || typeof connectionNode.send !== 'function') {
             throw new Error('mavlink-move requires a Connection for send/stream delivery');
           }
           const options = {
             connection: connectionNode,
             message,
-            target: targetFrom(config, payload),
+            target: targetFrom(config, payload, connectionNode),
             identityId: config.identity || payload.identityId,
             intervalMs: Number(config.intervalMs || payload.intervalMs || 100),
             ttlMs: Number(config.ttlMs || payload.ttlMs || 1000),
@@ -100,13 +100,34 @@ function statusRecord(result, detail, extra = {}) {
   return { _mavlinkStatus: true, node: 'mavlink-move', result, detail, ...extra };
 }
 
-function targetFrom(config, payload) {
+/**
+ * Resolve the move target from payload, node config, the Connection's Vehicle
+ * Profile, then a hardcoded 1.
+ *
+ * Precedence: payload.target → node config → `connNode.vehicle` → 1.
+ * A configured 0 is a legitimate broadcast address and must survive (not fall
+ * through the `||` chain).
+ *
+ * @param {object} config
+ * @param {object} payload
+ * @param {object|null|undefined} connNode  Connection config node (may be absent for Build)
+ * @returns {{sysid: number, compid: number}}
+ */
+function targetFrom(config, payload, connNode) {
   const target = payload.target || {};
-  // Nullish-preserving: a configured 0 is a legitimate broadcast address and
-  // must not fall through the `||` chain to the default of 1.
   return {
-    sysid: Number(firstDefined(target.sysid, config.targetSystem, 1)),
-    compid: Number(firstDefined(target.compid, config.targetComponent, 1)),
+    sysid: Number(firstDefined(
+      target.sysid,
+      config.targetSystem,
+      connNode && connNode.vehicle && connNode.vehicle.targetSysid,
+      1
+    )),
+    compid: Number(firstDefined(
+      target.compid,
+      config.targetComponent,
+      connNode && connNode.vehicle && connNode.vehicle.targetCompid,
+      1
+    )),
   };
 }
 

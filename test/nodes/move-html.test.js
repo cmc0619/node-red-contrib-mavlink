@@ -88,3 +88,11 @@ test('mavlink-move keeps target sysid/compid and MAV_COMPONENT catalog', () => {
   assert.match(html, /fillCompIdSelect/, 'compid select uses shared helper');
   assert.match(html, /ensureConfigNodePicker/, 'connection picker remains');
 });
+
+test('mavlink-move target sysid/compid default to empty (inherit profile) not 1', () => {
+  assert.match(html, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
+  assert.match(html, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
+  assert.match(html, /RED\.validators\.number\(true\)/, 'blank-allowed validator is used');
+  assert.match(html, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
+  assert.match(html, /emptyLabel:\s*'[^']*profile default[^']*'/, 'compid empty label names profile default');
+});
