@@ -187,12 +187,11 @@ module.exports = function registerMavlinkVehicle(RED) {
    * managed *Custom* dialect paths, not a new runtime mode and not a
    * replacement for bundled dialects. Registered once per process.
    *
-   * GET  /mavlink/xml-catalog          list downloaded snapshots + file paths
+   * GET  /mavlink/xml-catalog          dialect library (name → seed + dated versions)
    * POST /mavlink/xml-catalog/update   download/refresh from an official source
-   * GET  /mavlink/xml-catalog/compare  informational diff vs the bundled dialect
+   * GET  /mavlink/xml-catalog/compare  informational diff vs the seed dialect
    */
   if (!_xmlCatalogRouteRegistered) {
-    const path = require('path');
     let catalogApi = null;
     let catalogLoadError = null;
     try {
@@ -222,30 +221,8 @@ module.exports = function registerMavlinkVehicle(RED) {
         }
         try {
           const catalog = newCatalog();
-          const bundled = new Set(catalogApi.knownDialects());
-          const snapshots = catalog.list().map((m) => {
-            const unusableBy = new Map((m.unusable || []).map((u) => [u.file, u.missingIncludes]));
-            return {
-              snapshotId: m.snapshotId,
-              repo: m.repo,
-              ref: m.ref,
-              commit: m.commit,
-              downloadedAt: m.downloadedAt,
-              files: (m.files || []).map((f) => ({
-                name: f.name,
-                sha256: f.sha256,
-                bytes: f.bytes,
-                dialect: f.name.replace(/\.xml$/i, ''),
-                bundledExists: bundled.has(f.name.replace(/\.xml$/i, '')),
-                usable: !unusableBy.has(f.name),
-                missingIncludes: unusableBy.get(f.name) || [],
-                path: path.join(catalog.snapshotsDir(), m.snapshotId, f.name),
-              })),
-              missing: m.missing || [],
-              unusable: m.unusable || [],
-            };
-          });
-          res.json({ ok: true, snapshots });
+          const library = catalogApi.dialectLibrary(catalog);
+          res.json({ ok: true, dialects: library.dialects });
         } catch (err) {
           res.status(500).json({ ok: false, error: err.message, code: err.code });
         }
@@ -315,14 +292,14 @@ module.exports = function registerMavlinkVehicle(RED) {
 
     node.vehicleFamily = normalizeFamily(config.vehicleFamily);
     node.firmware = normalizeFirmware(config.firmware);
+    node.dialect = (config.dialect || 'ardupilotmega').toLowerCase();
+    // `seed` or a catalog snapshot id. Legacy flows may omit this and use
+    // dialectSource/customDialectPath — resolveDialect still understands them.
+    node.dialectRevision = config.dialectRevision ||
+      (config.dialectSource === 'custom' ? '' : 'seed');
     node.dialectSource = config.dialectSource === 'custom' ? 'custom' : 'bundled';
-    node.dialect = config.dialect || 'ardupilotmega';
-    // Path to a MAVLink XML the Node-RED process can read; compiled at runtime
-    // when dialectSource is 'custom' (a downloaded catalog file fills this).
     node.customDialectPath = (config.customDialectPath || '').trim();
     // Optional firmware/custom parameter-definition URL (PX4 / custom stacks).
-    // Persisted only — the Param node may consume it; ArduPilot leaves it blank
-    // (its per-family autotest URL is derived at runtime).
     node.paramDefsUrl = typeof config.paramDefsUrl === 'string' ? config.paramDefsUrl.trim() : '';
 
     const problems = [];
@@ -337,18 +314,15 @@ module.exports = function registerMavlinkVehicle(RED) {
     /** @type {import('../lib/metadata').DialectBundle|null} */
     node._bundle = null;
 
-    /**
-     * Load the dialect. For bundled this is synchronous and always succeeds
-     * when the editor validated the name. For custom without a bundle, marks
-     * the node invalid.
-     */
     try {
       node._bundle = resolveDialect({
         name: config.name,
-        dialectSource: node.dialectSource,
         dialect: node.dialect,
+        dialectRevision: node.dialectRevision || undefined,
+        dialectSource: node.dialectSource,
         customDialectPath: node.customDialectPath,
         customDialectBundle: config.customDialectBundle || null,
+        catalogBaseDir: xmlCatalogBaseDir(RED),
       });
     } catch (err) {
       problems.push(err.message.slice(0, 80));
@@ -389,6 +363,7 @@ module.exports = function registerMavlinkVehicle(RED) {
       vehicleFamily: node.vehicleFamily,
       firmware: node.firmware,
       dialect: node.dialect,
+      dialectRevision: node.dialectRevision || 'seed',
       dialectSource: node.dialectSource,
       customDialectPath: node.customDialectPath,
       paramDefsUrl: node.paramDefsUrl,

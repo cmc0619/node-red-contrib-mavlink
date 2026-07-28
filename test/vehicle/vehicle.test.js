@@ -159,21 +159,17 @@ test('resolveDialect custom prefers a supplied bundle over a path', () => {
   assert.equal(result, fakeBundle);
 });
 
-test('resolveDialect custom without path or bundle → throws mentioning the XML path', () => {
+test('resolveDialect custom without path or bundle → throws naming the profile', () => {
   assert.throws(
     () => resolveDialect({ name: 'My Profile', dialectSource: 'custom' }),
-    /xml path/i
+    /My Profile/
   );
 });
 
-test('resolveDialect custom without path or bundle names the profile', () => {
-  let message = '';
-  try {
-    resolveDialect({ name: 'My Profile', dialectSource: 'custom' });
-  } catch (err) {
-    message = err.message;
-  }
-  assert.ok(message.includes('My Profile'));
+test('resolveDialect dialectRevision seed loads the shipped dialect', () => {
+  const bundle = resolveDialect({ dialect: 'icarous', dialectRevision: 'seed' });
+  assert.equal(bundle.dialect, 'icarous');
+  assert.ok(bundle.messages.ICAROUS_HEARTBEAT);
 });
 
 /* ---------- parseTargetUint8 ---------- */

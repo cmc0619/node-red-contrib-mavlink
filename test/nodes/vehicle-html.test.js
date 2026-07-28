@@ -1,9 +1,8 @@
 'use strict';
 
 /**
- * Vehicle Profile editor: the custom dialect stub is replaced by an XML-path
- * input plus a downloadable-catalog picker (§4, §6), and a param-defs URL is
- * persisted. These are static assertions against the editor HTML.
+ * Vehicle Profile editor: dialect + dated revision pulldowns (seed + catalog),
+ * no bundled/custom path split. Static assertions against the editor HTML.
  */
 
 const test = require('node:test');
@@ -21,10 +20,18 @@ test('the old "not yet implemented" custom stub is gone', () => {
   assert.ok(!/not yet implemented/i.test(html), 'stub copy must be removed');
 });
 
-test('customDialectPath is a validated default and a text input', () => {
-  assert.match(html, /customDialectPath:\s*\{/);
-  assert.match(html, /validate:\s*function/);
-  assert.match(html, /<input type="text" id="node-config-input-customDialectPath"/);
+test('dialect and dialectRevision are the persisted library picks', () => {
+  assert.match(html, /dialect:\s*\{\s*value:\s*'ardupilotmega'/);
+  assert.match(html, /dialectRevision:\s*\{\s*value:\s*'seed'/);
+  assert.match(html, /id="node-config-input-dialect"/);
+  assert.match(html, /id="node-config-input-dialectRevision"/);
+});
+
+test('there is no custom-path dialect mode in the editor', () => {
+  assert.ok(!/id="node-config-input-dialectSource"/.test(html));
+  assert.ok(!/id="node-config-input-customDialectPath"/.test(html));
+  assert.ok(!/id="mav-catalog-pick"/.test(html));
+  assert.ok(!/\$path\.val\(p\)/.test(html));
 });
 
 test('paramDefsUrl is persisted and shown as an input', () => {
@@ -33,18 +40,15 @@ test('paramDefsUrl is persisted and shown as an input', () => {
 });
 
 test('the XML-catalog admin endpoints are wired under mavlink/xml-catalog', () => {
-  assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/dialects['"]\)/, 'dialects endpoint');
   assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/xml-catalog['"]\)/, 'list endpoint');
   assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/xml-catalog\/update['"]\)/, 'update endpoint');
   assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/xml-catalog\/compare['"]\)/, 'compare endpoint');
 });
 
-test('the catalog picker fills the custom XML path field', () => {
-  assert.match(html, /id="mav-catalog-pick"/);
+test('catalog actions update and compare are present', () => {
   assert.match(html, /id="mav-catalog-update"/);
   assert.match(html, /id="mav-catalog-compare"/);
-  // Picking a catalog file writes into the path input.
-  assert.match(html, /\$path\.val\(p\)/);
+  assert.match(html, /Compare with seed/);
 });
 
 test('update posts JSON to the update endpoint', () => {
