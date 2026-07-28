@@ -23,6 +23,7 @@
  * echo or dropped list message cannot leave the flow open forever.
  */
 
+const path = require('node:path');
 const {
   buildParamMessage,
   createParamListCollector,
@@ -40,7 +41,67 @@ const {
 /** Default param transaction timeout (ms). */
 const DEFAULT_TIMEOUT_MS = 10000;
 
+/** Admin route for the parameter definition catalog. */
+const PARAM_DEFS_ROUTE = '/mavlink/param/defs';
+
+/** Guard against double-registering the admin route (one per process). */
+let _paramDefsRouteRegistered = false;
+
 module.exports = function registerMavlinkParam(RED) {
+  if (!_paramDefsRouteRegistered && RED.httpAdmin && RED.auth) {
+    let defsApi = null;
+    try { defsApi = require('../lib/param/defs'); } catch { }
+
+    RED.httpAdmin.get(
+      PARAM_DEFS_ROUTE,
+      RED.auth.needsPermission('mavlink.read'),
+      async (req, res) => {
+        if (!defsApi) {
+          return res.status(503).json({ defs: {}, notice: 'param defs library unavailable' });
+        }
+        const vehicleId = typeof req.query.vehicle === 'string'
+          ? req.query.vehicle.trim() : '';
+        if (!vehicleId) {
+          return res.json({ defs: {}, notice: 'no vehicle id supplied' });
+        }
+        const vehicleNode = RED.nodes.getNode(vehicleId);
+        if (!vehicleNode) {
+          return res.json({
+            defs: {},
+            notice: 'Vehicle Profile not deployed — deploy the flow first',
+          });
+        }
+        const url = defsApi.resolveDefsUrl(
+          vehicleNode.vehicleFamily || 'generic',
+          vehicleNode.firmware || 'ardupilot',
+          vehicleNode.paramDefsUrl || ''
+        );
+        if (!url) {
+          return res.json({
+            defs: {},
+            notice: 'no parameter definitions available for this vehicle family and firmware',
+          });
+        }
+        const userDir = (RED.settings && RED.settings.userDir) || '';
+        const cacheDir = userDir
+          ? path.join(userDir, 'mavlink', 'param-defs') : undefined;
+        try {
+          const map = await defsApi.fetchParamDefs(url, { cacheDir });
+          const defs = {};
+          for (const [k, v] of map) defs[k] = v;
+          return res.json({ defs, url });
+        } catch (err) {
+          return res.status(502).json({
+            defs: {},
+            notice: `fetch failed: ${err.message}`,
+            url,
+          });
+        }
+      }
+    );
+    _paramDefsRouteRegistered = true;
+  }
+
   function MavlinkParamNode(config) {
     RED.nodes.createNode(this, config);
     const node = this;
