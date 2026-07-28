@@ -55,7 +55,7 @@
         var vehicleId = connectionNode.vehicle;
         if (!vehicleId) return;
 
-        $.getJSON('/mavlink/param/defs', { vehicle: vehicleId }, function (data) {
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), { vehicle: vehicleId }, function (data) {
           _paramDefs = data.defs || {};
           _defsNotice = data.notice || '';
           _defsLoaded = true;

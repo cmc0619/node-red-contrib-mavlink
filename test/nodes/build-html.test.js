@@ -40,7 +40,7 @@ test('Build messageName defaults to HEARTBEAT and is a <select>', () => {
 });
 
 test('Build reshapes fields from message metadata and handles COMMAND_LONG/INT', () => {
-  assert.match(html, /\/mavlink\/build\/messages/);
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/build\/messages['"]\)/);
   assert.match(html, /function refreshFieldForm/);
   assert.match(html, /spec\.enum/);
   assert.match(html, /COMMAND_LONG/);
@@ -93,4 +93,12 @@ test('Build COMMAND_LONG/INT command params render bitmasks as numeric multi-sel
   assert.match(renderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'command bitmask params use native multi-select');
   assert.match(renderer, /\.val\(String\(entry\.value\)\)/, 'command bitmask options carry numeric values');
   assert.match(html, /kind === ['"]bitmask-mask['"]/, 'collector stores one numeric mask for command params');
+});
+
+test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(/, 'admin fetches must use adminApiUrl');
+  assert.ok(
+    !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
+    'bare absolute /mavlink getJSON paths must be gone'
+  );
 });

@@ -27,7 +27,7 @@ test('message filter is a dialect <select>, not free-form text (§6)', () => {
 });
 
 test('message filter loads dialect messages from build/messages catalog', () => {
-  assert.match(html, /\/mavlink\/build\/messages/, 'dialect message catalog is loaded from admin API');
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/build\/messages['"]\)/, 'dialect message catalog is loaded from admin API');
   assert.match(html, /function buildMessageDropdown/, 'dropdown is rebuilt from catalog entries');
   assert.match(html, /entry\.name/, 'option values are message names');
   assert.match(html, /entry\.label/, 'option labels come from the catalog (NAME (id))');
@@ -44,4 +44,12 @@ test('message filter preserves the saved message name after async catalog load',
   assert.match(html, /node\.message/, 'saved message is re-applied');
   assert.match(html, /const prefer = current \|\| saved|var prefer = current \|\| saved/, 'in-progress selection wins over saved');
   assert.match(html, /not in dialect/, 'unknown saved values remain selectable');
+});
+
+test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(/, 'admin fetches must use adminApiUrl');
+  assert.ok(
+    !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
+    'bare absolute /mavlink getJSON paths must be gone'
+  );
 });

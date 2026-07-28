@@ -36,7 +36,7 @@ test('advanced command is a MAV_CMD <select>, not a free-form number (§6/§9)',
     !html.includes('type="number" id="node-input-advancedCommand"'),
     'the free-form numeric id field must be gone'
   );
-  assert.match(html, /\/mavlink\/command\/commands/, 'dialect MAV_CMD list is loaded from admin API');
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/command\/commands['"]\)/, 'dialect MAV_CMD list is loaded from admin API');
   assert.match(html, /function buildAdvancedDropdown/, 'async load re-applies the saved command');
 });
 
@@ -132,7 +132,7 @@ test('preset renderer loads enum and message catalogs for selects', () => {
   );
 
   assert.match(html, /RED\.mavlink\.loadEnumsCatalog/, 'preset enums use shared enum helper');
-  assert.match(html, /\/mavlink\/build\/messages/, 'message ids load from the shared messages API');
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/build\/messages['"]\)/, 'message ids load from the shared messages API');
   assert.match(html, /function presetParamInput/, 'preset branch has a shared input renderer');
   assert.match(presetBlock, /presetParamInput\(spec\)/, 'preset branch calls the shared input renderer');
   assert.match(html, /spec\.messages/, 'message-backed preset params become selects');
@@ -146,5 +146,13 @@ test('Command CompID reloads when Connection changes', () => {
     html,
     /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
     'Connection change refreshes MAV_COMPONENT for the new dialect'
+  );
+});
+
+test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(/, 'admin fetches must use adminApiUrl');
+  assert.ok(
+    !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
+    'bare absolute /mavlink getJSON paths must be gone'
   );
 });

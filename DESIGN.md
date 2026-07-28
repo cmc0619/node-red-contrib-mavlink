@@ -1080,7 +1080,7 @@ by silence. Update this list when an item lands.
 | **Full command-param `enum=` recovery** | **done** | All 85 common.xml `<param enum=`> links in `lib/metadata/hints.js` (e.g. Arm → `MAV_BOOL`). |
 | **Move editor §6 reshape** | open | Runtime OK; dialog still crams local/global fields on shared rows. |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
-| **`httpAdminRoot` on non-enum admin routes** | open | Deferred; enums use `adminApiUrl`; other catalogs still absolute `/mavlink/…`. |
+| **`httpAdminRoot` on non-enum admin routes** | **done** | Command/Build/In/Swarm/Param/Vehicle editor catalogs use `RED.mavlink.adminApiUrl('/mavlink/…')`. |
 | **SITL example flows** | **done** | Examples 06–09 assume the five+five rig (completion takeoff, sequential swarm, param defs, command+mission). |
 | **SITL-backed tests (§13)** | open | Fixture suite in CI; firmware behaviour still needs the live five+five rig. |
 | **Cross-connection swarm** | out of scope | As designed (§10): two Connections → two Swarm nodes. |
