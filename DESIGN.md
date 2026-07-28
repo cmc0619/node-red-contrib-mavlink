@@ -104,6 +104,24 @@ synchronously inside an input handler and it is caught, routed to Catch nodes an
 pane, and every other flow keeps running. This is why "let it crash" is a reasonable position
 here and would not be in a bare Node process: the blast radius is one message in one node.
 
+**The platform ruleset.** This is Node-RED node code, not Node.js application code. For each of
+these jobs the platform ships the mechanism (nodered.org/docs/creating-nodes); using it is the
+whole implementation, and building a parallel one is a spec violation — however few lines it
+costs. *Small is not a justification: the question is never how many lines a second mechanism
+adds, it is that a second mechanism now exists.*
+
+| Job | The platform mechanism — and nothing else |
+|---|---|
+| "this field must be set / valid" | `required` / `validate` on the property definition. The editor reds the field and puts the missing-config marker on the node. No bespoke pending states, placeholder options, or hint rows for unconfigured fields |
+| dialog fields load and save | `node-input-<prop>` / `node-config-input-<prop>` ids auto-populate and auto-save. `oneditprepare`/`oneditsave` exist only for what that cannot do: dynamically built selects, TypedInput, reshaping |
+| dialog layout and widgets | `form-row` rows, `red-ui-button`, `TypedInput`, `RED.editor.createEditor` — no custom widget where a stock one exists |
+| runtime state in the editor | `node.status({fill, shape, text})` — text under 20 characters, `{}` clears |
+| errors while handling a message | report through `done(err)` or `node.error(err, msg)` so Catch nodes fire; input handlers take `(msg, send, done)` and never throw uncaught |
+| replying in a flow | reuse the received `msg` object; send via the listener-provided `send` |
+| cleanup on redeploy | the `close` handler (accepting `done` when async) |
+| help text | `data-help-name` with `<h3>` sections and `message-properties` definition lists |
+| node design | one well-defined purpose per node; forgiving in accepted input types, consistent and documented in what it sends |
+
 **The exception, and it is the only one that matters:** Node-RED does *not* contain asynchronous
 failures. An unhandled promise rejection, or an `error` event on a socket with no listener, kills
 the runtime and takes every unrelated flow with it. So the discipline goes there and nowhere

@@ -136,21 +136,10 @@ test('Build wire-tier catalog query carries the connection profile id (custom di
   // the connection profile id, not just the dialect name.
   assert.match(
     html,
-    /query:\s*\{\s*vehicle:\s*connVehicleId/,
+    /query:\s*\{\s*vehicle:\s*connNode\.vehicle/,
     'wire branch must include the connection profile id in the catalog query'
   );
-});
-
-test('Build wire tier without a connection is pending, not a silent ardupilotmega default', () => {
-  assert.match(html, /pending:connection/, 'wire branch must return a pending catalog target');
-  assert.match(
-    html,
-    /Select a Connection first/,
-    'pending state must tell the operator what to do'
-  );
-  assert.match(
-    html,
-    /\(select a Connection\)/,
-    'message dropdown must show a placeholder while pending'
-  );
+  // "Not configured yet" is the required-field validation's job (red field +
+  // node marker) — no bespoke pending mechanism in the dialog.
+  assert.doesNotMatch(html, /pending/, 'no hand-rolled pending state');
 });
