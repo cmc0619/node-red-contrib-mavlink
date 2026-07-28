@@ -54,13 +54,6 @@ module.exports = function registerMavlinkBuild(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    // Vehicle is required: it carries the dialect bundle.
-    const vehicleNode = RED.nodes.getNode(config.vehicle);
-    if (!vehicleNode || typeof vehicleNode.getDialect !== 'function') {
-      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
-      return;
-    }
-
     // Connection is optional — needed for Send tier.
     const connectionNode = config.connection ? RED.nodes.getNode(config.connection) : null;
     const hasConnection = connectionNode && typeof connectionNode.send === 'function';
@@ -99,14 +92,45 @@ module.exports = function registerMavlinkBuild(RED) {
     /** @type {import('../lib/metadata').DialectBundle|null} */
     let bundle = null;
 
-    // Load the dialect bundle. The vehicle node holds it in memory; this is a
-    // cheap synchronous retrieval — no I/O, no async.
-    try {
-      bundle = vehicleNode.getDialect();
-    } catch (err) {
-      node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
-      node.error(`mavlink-build: ${err.message}`);
-      return;
+    // Resolve the dialect bundle per the role × tier matrix (§6).
+    //   Build + plain dialect name → load from the bundled registry (no vehicle needed).
+    //   Build + '__vehicle' or legacy (vehicle set, no dialect) → vehicle node's bundle.
+    //   Wire tier → explicit vehicle node if configured; else connection's bound dialect.
+    if (tier === TIER.BUILD) {
+      const dialectName = config.dialect;
+      if (dialectName && dialectName !== '__vehicle') {
+        bundle = require('../lib/metadata').loadBundled(dialectName);
+      } else {
+        const vehicleNode = RED.nodes.getNode(config.vehicle);
+        if (!vehicleNode || typeof vehicleNode.getDialect !== 'function') {
+          node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+          return;
+        }
+        try {
+          bundle = vehicleNode.getDialect();
+        } catch (err) {
+          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+          node.error(`mavlink-build: ${err.message}`);
+          return;
+        }
+      }
+    } else {
+      // Wire tier: prefer the explicitly configured vehicle node; fall back to
+      // the connection's bound dialect so flows without an explicit vehicle work.
+      const vehicleNode = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
+      if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
+        try {
+          bundle = vehicleNode.getDialect();
+        } catch (err) {
+          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+          node.error(`mavlink-build: ${err.message}`);
+          return;
+        }
+      } else {
+        // connectionNode.vehicle.dialect is the snapshot name; loadBundled throws
+        // loud for unknown/custom dialects — correct per §2.
+        bundle = require('../lib/metadata').loadBundled(connectionNode.vehicle.dialect);
+      }
     }
 
     const messageMeta = bundle.messages[messageName];

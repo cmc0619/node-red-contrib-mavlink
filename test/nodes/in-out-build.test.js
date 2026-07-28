@@ -911,6 +911,70 @@ test('integration: Build tier output is forwarded and sent by mavlink-out', () =
 });
 
 // ---------------------------------------------------------------------------
+// mavlink-build: dialect config without vehicle (§6 role × tier matrix)
+// ---------------------------------------------------------------------------
+
+test('mavlink-build Build tier: plain dialect config loads bundled dialect without a vehicle', () => {
+  const RED = makeRED();
+  // No vehicle registered — the node must bootstrap from the bundled dialect.
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance();
+  Constructor.call(node, {
+    // No vehicle.
+    dialect: 'common',
+    messageName: 'HEARTBEAT',
+    tier: 'build',
+    fields: '{}',
+  });
+
+  assert.notEqual(
+    node._status && node._status.fill, 'red',
+    'node must not be in error state when dialect resolves without a vehicle'
+  );
+
+  node._input({ payload: {} });
+
+  assert.equal(node._sends.length, 1);
+  const [out0, out1] = node._sends[0];
+  assert.ok(out0, 'output 0 must fire');
+  assert.equal(out0.payload.messageName, 'HEARTBEAT');
+  assert.equal(out0.payload.tier, TIER.BUILD);
+  assert.ok(out0.payload.message, 'payload.message must be present');
+  assert.equal(out0.payload.message.name, 'HEARTBEAT');
+  assert.ok(isStatusRecord(out1), 'output 1 must be a status record');
+  assert.equal(out1.result, 'built');
+});
+
+test('mavlink-build: legacy config with vehicle but no dialect key still works', () => {
+  const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ vehicle: 'v1' });
+  // No 'dialect' property in config — mimics flows saved before the dialect
+  // picker was added; the vehicle node provides the bundle as before.
+  Constructor.call(node, {
+    vehicle: 'v1',
+    messageName: 'HEARTBEAT',
+    tier: 'build',
+    fields: JSON.stringify({ type: 6, autopilot: 3 }),
+  });
+
+  assert.notEqual(node._status && node._status.fill, 'red');
+
+  node._input({ payload: {} });
+
+  assert.equal(node._sends.length, 1);
+  const [out0, out1] = node._sends[0];
+  assert.ok(out0);
+  assert.equal(out0.payload.messageName, 'HEARTBEAT');
+  assert.deepEqual(out0.payload.message.fields, { type: 6, autopilot: 3 });
+  assert.ok(isStatusRecord(out1));
+  assert.equal(out1.result, 'built');
+});
+
+// ---------------------------------------------------------------------------
 // shouldSuppress contract (unit, for completeness in this file)
 // ---------------------------------------------------------------------------
 
