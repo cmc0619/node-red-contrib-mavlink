@@ -47,7 +47,7 @@
         connection: { value: '', type: 'mavlink-connection', required: true },
         mode: { value: 'snapshot' },
         events: { value: 'stale,expired,statustext' },
-        targetSystem: { value: '', validate: RED.validators.number(true) },
+        targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
         targetComponent: { value: '', validate: RED.validators.number(true) }
       },
       inputs: 1,

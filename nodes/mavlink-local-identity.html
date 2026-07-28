@@ -258,33 +258,32 @@
     };
 
     /**
-     * Editor-side uint8 validator. Blank is allowed; the runtime applies the
-     * role preset default. Source ids disallow 0 (broadcast / all).
+     * Editor-side uint8 range check. Blank is allowed (inherit / optional).
+     * Two-argument form so Node-RED 3.x treats a returned string as the
+     * invalid reason (one-arg validators treat any string as truthy/valid).
      *
-     * @param {number} min  lower bound (1 for source ids)
-     * @returns {function(*): true|string}
+     * @param {number} min  0 for target ids (broadcast), 1 for source ids
+     * @returns {function(*, object=): true|string}
      */
-    function mavUint8Validator(min) {
-      return function (v) {
-        if (v === undefined || v === null || String(v).trim() === '') {
-          return true;
-        }
-        const n = Number(v);
+    RED.mavlink.validateUint8 = function (min) {
+      return function (v, _opt) {
+        if (v === undefined || v === null || String(v).trim() === '') return true;
+        var n = Number(v);
         if (!Number.isInteger(n) || n < min || n > 255) {
           return 'must be an integer between ' + min + ' and 255';
         }
         return true;
       };
+    };
+
+    function mavUint8Validator(min) {
+      return RED.mavlink.validateUint8(min);
     }
 
-    function positiveNumberValidator(v) {
-      if (v === undefined || v === null || String(v).trim() === '') {
-        return true;
-      }
-      const n = Number(v);
-      if (!Number.isFinite(n) || n <= 0) {
-        return 'must be a positive number';
-      }
+    function positiveNumberValidator(v, _opt) {
+      if (v === undefined || v === null || String(v).trim() === '') return true;
+      var n = Number(v);
+      if (!Number.isFinite(n) || n <= 0) return 'must be a positive number';
       return true;
     }
 
@@ -294,14 +293,14 @@
      * a value.
      */
     function mavIdentityIdValidator(min) {
-      const rangeCheck = mavUint8Validator(min);
-      return function (v) {
-        const role = $('#node-config-input-role').val() || this.role || 'gcs';
-        const blank = v === undefined || v === null || String(v).trim() === '';
+      var rangeCheck = mavUint8Validator(min);
+      return function (v, opt) {
+        var role = $('#node-config-input-role').val() || this.role || 'gcs';
+        var blank = v === undefined || v === null || String(v).trim() === '';
         if (role === 'companion') {
-          return blank ? true : rangeCheck.call(this, v);
+          return blank ? true : rangeCheck.call(this, v, opt);
         }
-        return blank ? 'required for this role' : rangeCheck.call(this, v);
+        return blank ? 'required for this role' : rangeCheck.call(this, v, opt);
       };
     }
 

@@ -4,17 +4,9 @@
      * Editor-side uint8 validator for target ids. Blank is allowed (runtime
      * applies the default). Target ids allow 0 (broadcast); source ids do not.
      */
+    // Shared helper from mavlink-local-identity.html (loads first).
     function mavUint8Validator(min) {
-      return function (v) {
-        if (v === undefined || v === null || String(v).trim() === '') {
-          return true;
-        }
-        const n = Number(v);
-        if (!Number.isInteger(n) || n < min || n > 255) {
-          return 'must be an integer between ' + min + ' and 255';
-        }
-        return true;
-      };
+      return RED.mavlink.validateUint8(min);
     }
 
     RED.nodes.registerType('mavlink-vehicle', {

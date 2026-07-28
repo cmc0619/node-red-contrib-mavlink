@@ -260,7 +260,7 @@
       vehicle:           { value: '', type: 'mavlink-vehicle', required: false },
       connection:        { value: '', type: 'mavlink-connection', required: false },
       identity:          { value: '' },
-      targetSysid:       { value: '' },
+      targetSysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
       targetCompid:      { value: '' },
       timeout:           { value: '10000' },
       maxRetries:        { value: '3' },
@@ -886,7 +886,7 @@
 
   <div class="form-row" id="row-cmd-target">
     <label for="node-input-targetSysid" style="width:120px">Target sysid</label>
-    <input type="number" id="node-input-targetSysid" placeholder="(profile default)" style="width:80px">
+    <input type="number" id="node-input-targetSysid" min="0" max="255" placeholder="(profile default)" style="width:80px">
     <label for="node-input-targetCompid" style="margin-left:10px;width:80px">Compid</label>
     <select id="node-input-targetCompid" style="width:80px"></select>
   </div>

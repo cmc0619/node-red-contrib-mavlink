@@ -9,7 +9,7 @@
       identity: { value: '' },
       delivery: { value: 'build' },
       action: { value: 'read' },
-      targetSystem: { value: '', validate: RED.validators.number(true) },
+      targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
       targetComponent: { value: '', validate: RED.validators.number(true) },
       paramId: { value: '' },
       paramIndex: { value: -1, validate: RED.validators.number(true) },
