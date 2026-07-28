@@ -259,8 +259,8 @@
 
     /**
      * Editor-side uint8 range check. Blank is allowed (inherit / optional).
-     * Two-argument form so Node-RED 3.x treats a returned string as the
-     * invalid reason (one-arg validators treat any string as truthy/valid).
+     * Two-argument form so Node-RED treats a returned string as the invalid
+     * reason (one-arg validators treat any string as truthy/valid).
      *
      * @param {number} min  0 for target ids (broadcast), 1 for source ids
      * @returns {function(*, object=): true|string}
