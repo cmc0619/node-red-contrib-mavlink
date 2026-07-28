@@ -181,36 +181,47 @@ function dialectKey(fileName) {
   return fileName.replace(/\.xml$/i, '').toLowerCase();
 }
 
-async function main() {
-  const opts = parseArgs(process.argv.slice(2));
-  const { repo, ref, commit, files } = await collectXml(opts);
-  const fetchedAt = new Date().toISOString();
-
-  const xmlDir = path.join(SEED_DIR, 'xml');
-  const bundlesDir = path.join(SEED_DIR, 'bundles');
-  fs.rmSync(SEED_DIR, { recursive: true, force: true });
-  fs.mkdirSync(xmlDir, { recursive: true });
-  fs.mkdirSync(bundlesDir, { recursive: true });
-
-  const fileMeta = [];
-  for (const [name, text] of Object.entries(files).sort(([a], [b]) => a.localeCompare(b))) {
-    fs.writeFileSync(path.join(xmlDir, name), text);
-    fileMeta.push({ name, sha256: sha256(text), bytes: Buffer.byteLength(text, 'utf8') });
-  }
+/**
+ * Compile every selectable root and write a complete seed tree under `seedDir`.
+ * Stages into a sibling temp directory and only replaces `seedDir` when every
+ * selectable root compiles — a partial failure must not delete the previous
+ * seed (and drop dialects from the package).
+ *
+ * @param {object} opts
+ * @param {Object<string, string>} opts.files  basename → XML text
+ * @param {string} opts.repo
+ * @param {string} opts.ref
+ * @param {string} opts.commit
+ * @param {string} [opts.fetchedAt]
+ * @param {string} [opts.seedDir]  default shipped seed path
+ * @param {boolean} [opts.quiet]
+ * @returns {{manifest: object, seedDir: string}}
+ */
+function writeSeed(opts) {
+  const seedDir = opts.seedDir || SEED_DIR;
+  const repo = opts.repo;
+  const ref = opts.ref;
+  const commit = opts.commit;
+  const fetchedAt = opts.fetchedAt || new Date().toISOString();
+  const files = opts.files;
+  const log = opts.quiet ? () => {} : console.log.bind(console);
+  const errLog = opts.quiet ? () => {} : console.error.bind(console);
 
   const dialects = [];
   const compileErrors = [];
+  /** @type {Object<string, object>} */
+  const compiled = {};
+
   for (const name of Object.keys(files).sort()) {
     if (SKIP_ROOTS.has(name)) continue;
     const key = dialectKey(name);
     try {
       const bundle = compileXml(files, name);
-      // Stable API key is lowercase; keep compiler's dialect/files as-is for provenance.
       const persisted = Object.assign({}, bundle, {
         dialect: key,
         fetched: { repo, commit, fetchedAt },
       });
-      fs.writeFileSync(path.join(bundlesDir, `${key}.json`), `${JSON.stringify(persisted)}\n`);
+      compiled[key] = persisted;
       dialects.push({
         name: key,
         entry: name,
@@ -218,18 +229,32 @@ async function main() {
         messageCount: Object.keys(persisted.messages).length,
         enumCount: Object.keys(persisted.enums).length,
       });
-      console.log(`compiled ${key} (${persisted.files.length} files, ${dialects[dialects.length - 1].messageCount} messages)`);
+      log(`compiled ${key} (${persisted.files.length} files, ${dialects[dialects.length - 1].messageCount} messages)`);
     } catch (err) {
       compileErrors.push({ entry: name, error: err.message });
-      console.error(`FAIL ${name}: ${err.message}`);
+      errLog(`FAIL ${name}: ${err.message}`);
     }
   }
 
+  if (compileErrors.length) {
+    const detail = compileErrors.map((e) => `${e.entry}: ${e.error}`).join('; ');
+    throw new Error(
+      `Seed compile failed for ${compileErrors.length} selectable root(s); ` +
+        `previous seed left untouched. ${detail}`
+    );
+  }
   if (dialects.length === 0) {
     throw new Error('No dialects compiled into the seed');
   }
 
-  fs.writeFileSync(path.join(SEED_DIR, 'NOTICE'), MIT_NOTICE);
+  const fileMeta = Object.keys(files)
+    .sort()
+    .map((name) => ({
+      name,
+      sha256: sha256(files[name]),
+      bytes: Buffer.byteLength(files[name], 'utf8'),
+    }));
+
   const manifest = {
     schemaVersion: 1,
     repo,
@@ -242,17 +267,60 @@ async function main() {
     bundlesDir: 'bundles',
     files: fileMeta,
     dialects,
-    compileErrors,
+    compileErrors: [],
   };
-  fs.writeFileSync(path.join(SEED_DIR, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(`\nSeed written to ${SEED_DIR}`);
-  console.log(`commit ${commit} — ${dialects.length} dialects, ${fileMeta.length} xml files`);
-  if (compileErrors.length) {
-    console.log(`${compileErrors.length} root(s) failed to compile (recorded in manifest)`);
+
+  // Stage beside the live seed, then swap — never rm the live tree first.
+  const staging = `${seedDir}.staging-${process.pid}`;
+  const backup = `${seedDir}.bak-${process.pid}`;
+  fs.rmSync(staging, { recursive: true, force: true });
+  fs.mkdirSync(path.join(staging, 'xml'), { recursive: true });
+  fs.mkdirSync(path.join(staging, 'bundles'), { recursive: true });
+
+  for (const [name, text] of Object.entries(files)) {
+    fs.writeFileSync(path.join(staging, 'xml', name), text);
   }
+  for (const [key, persisted] of Object.entries(compiled)) {
+    fs.writeFileSync(path.join(staging, 'bundles', `${key}.json`), `${JSON.stringify(persisted)}\n`);
+  }
+  fs.writeFileSync(path.join(staging, 'NOTICE'), MIT_NOTICE);
+  fs.writeFileSync(path.join(staging, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+
+  fs.rmSync(backup, { recursive: true, force: true });
+  if (fs.existsSync(seedDir)) {
+    fs.renameSync(seedDir, backup);
+  }
+  try {
+    fs.renameSync(staging, seedDir);
+  } catch (err) {
+    if (fs.existsSync(backup)) {
+      fs.renameSync(backup, seedDir);
+    }
+    throw err;
+  }
+  fs.rmSync(backup, { recursive: true, force: true });
+
+  log(`\nSeed written to ${seedDir}`);
+  log(`commit ${commit} — ${dialects.length} dialects, ${fileMeta.length} xml files`);
+  return { manifest, seedDir };
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+async function main() {
+  const opts = parseArgs(process.argv.slice(2));
+  const { repo, ref, commit, files } = await collectXml(opts);
+  writeSeed({ files, repo, ref, commit });
+}
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  writeSeed,
+  dialectKey,
+  SKIP_ROOTS,
+  SEED_DIR,
+};
