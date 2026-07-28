@@ -1,0 +1,192 @@
+[
+  {
+    "id": "ex26-tab",
+    "type": "tab",
+    "label": "26 Connection bridge",
+    "disabled": false,
+    "info": "Mirror telemetry from source connection to downstream GCS link.",
+    "env": []
+  },
+  {
+    "id": "ex26-comment",
+    "type": "comment",
+    "z": "ex26-tab",
+    "name": "Connection bridge",
+    "info": "In→Out passthrough across two Connections (source 14550→14551, mirror 14560→14561). Out band Bulk (4). Passive bridge; optional Mirror on/off sends payload:false to Out to suppress a manual forward.",
+    "x": 180,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex26-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex26-vehicle-src",
+    "type": "mavlink-vehicle",
+    "name": "Source vehicle",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex26-vehicle-mirror",
+    "type": "mavlink-vehicle",
+    "name": "Mirror vehicle",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex26-connection-src",
+    "type": "mavlink-connection",
+    "name": "Source link",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex26-vehicle-src",
+    "localIdentity": "ex26-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex26-connection-mirror",
+    "type": "mavlink-connection",
+    "name": "Mirror link",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14560,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14561,
+    "broadcast": false,
+    "vehicle": "ex26-vehicle-mirror",
+    "localIdentity": "ex26-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex26-in",
+    "type": "mavlink-in",
+    "z": "ex26-tab",
+    "name": "Telemetry in",
+    "connection": "ex26-connection-src",
+    "message": "",
+    "sysid": "",
+    "compid": "",
+    "changedOnly": false,
+    "rateLimit": 0,
+    "x": 280,
+    "y": 160,
+    "wires": [
+      [
+        "ex26-out"
+      ]
+    ]
+  },
+  {
+    "id": "ex26-out",
+    "type": "mavlink-out",
+    "z": "ex26-tab",
+    "name": "Mirror out (Bulk)",
+    "connection": "ex26-connection-mirror",
+    "band": "4",
+    "x": 520,
+    "y": 160,
+    "wires": [
+      [
+        "ex26-debug-mirror"
+      ],
+      [
+        "ex26-debug-out-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex26-inject-mirror-off",
+    "type": "inject",
+    "z": "ex26-tab",
+    "name": "Mirror on/off",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "false",
+    "payloadType": "bool",
+    "x": 130,
+    "y": 280,
+    "wires": [
+      [
+        "ex26-out"
+      ]
+    ]
+  },
+  {
+    "id": "ex26-debug-mirror",
+    "type": "debug",
+    "z": "ex26-tab",
+    "name": "mirrored",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "ex26-debug-out-status",
+    "type": "debug",
+    "z": "ex26-tab",
+    "name": "out status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 220,
+    "wires": []
+  }
+]

@@ -1,0 +1,262 @@
+[
+  {
+    "id": "ex19-tab",
+    "type": "tab",
+    "label": "19 Build & Out",
+    "disabled": false,
+    "info": "Build STATUSTEXT by hand, forward through Out; stream NAMED_VALUE_FLOAT with repeat metering.",
+    "env": []
+  },
+  {
+    "id": "ex19-comment",
+    "type": "comment",
+    "z": "ex19-tab",
+    "name": "Build & Out handoff",
+    "info": "Build tier STATUSTEXT → mavlink-out (Control band). Second Build node streams NAMED_VALUE_FLOAT at 1 Hz on Bulk band (4). char[] text is padded/truncated by the codec. Bind 127.0.0.1:14550 → 14551.",
+    "x": 180,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex19-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex19-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex19-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex19-vehicle",
+    "localIdentity": "ex19-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex19-inject-st",
+    "type": "inject",
+    "z": "ex19-tab",
+    "name": "Build STATUSTEXT",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 160,
+    "wires": [
+      [
+        "ex19-build-st"
+      ]
+    ]
+  },
+  {
+    "id": "ex19-build-st",
+    "type": "mavlink-build",
+    "z": "ex19-tab",
+    "name": "STATUSTEXT (build)",
+    "vehicle": "ex19-vehicle",
+    "connection": "ex19-connection",
+    "messageName": "STATUSTEXT",
+    "fields": "{\"severity\":6,\"text\":\"hello from Node-RED\"}",
+    "tier": "build",
+    "band": "2",
+    "repeatMs": 0,
+    "x": 340,
+    "y": 160,
+    "wires": [
+      [
+        "ex19-out"
+      ],
+      [
+        "ex19-debug-st-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex19-out",
+    "type": "mavlink-out",
+    "z": "ex19-tab",
+    "name": "Out (Control)",
+    "connection": "ex19-connection",
+    "band": "2",
+    "x": 560,
+    "y": 160,
+    "wires": [
+      [
+        "ex19-debug-st-out"
+      ],
+      [
+        "ex19-debug-out-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex19-inject-nvf-toggle",
+    "type": "inject",
+    "z": "ex19-tab",
+    "name": "Toggle NVF stream",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "false",
+    "payloadType": "bool",
+    "x": 130,
+    "y": 280,
+    "wires": [
+      [
+        "ex19-build-nvf"
+      ]
+    ]
+  },
+  {
+    "id": "ex19-build-nvf",
+    "type": "mavlink-build",
+    "z": "ex19-tab",
+    "name": "NVF stream (send)",
+    "vehicle": "ex19-vehicle",
+    "connection": "ex19-connection",
+    "messageName": "NAMED_VALUE_FLOAT",
+    "fields": "{\"time_boot_ms\":0,\"name\":\"demo\",\"value\":1}",
+    "tier": "send",
+    "band": "4",
+    "repeatMs": 1000,
+    "x": 340,
+    "y": 280,
+    "wires": [
+      [
+        "ex19-debug-nvf-out"
+      ],
+      [
+        "ex19-debug-nvf-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex19-debug-st-status",
+    "type": "debug",
+    "z": "ex19-tab",
+    "name": "st build status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 340,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex19-debug-st-out",
+    "type": "debug",
+    "z": "ex19-tab",
+    "name": "st sent",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "ex19-debug-out-status",
+    "type": "debug",
+    "z": "ex19-tab",
+    "name": "out status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex19-debug-nvf-out",
+    "type": "debug",
+    "z": "ex19-tab",
+    "name": "nvf sent",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "ex19-debug-nvf-status",
+    "type": "debug",
+    "z": "ex19-tab",
+    "name": "nvf status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 340,
+    "y": 340,
+    "wires": []
+  }
+]

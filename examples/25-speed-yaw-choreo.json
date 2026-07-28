@@ -1,0 +1,501 @@
+[
+  {
+    "id": "ex25-tab",
+    "type": "tab",
+    "label": "25 Speed & yaw choreography",
+    "disabled": false,
+    "info": "Change speed, absolute yaw, relative rotate in GUIDED.",
+    "env": []
+  },
+  {
+    "id": "ex25-comment",
+    "type": "comment",
+    "z": "ex25-tab",
+    "name": "Speed & yaw choreography",
+    "info": "Yaw pins param4=0 (absolute); Rotate pins param4=1 (relative). Prep: arm→GUIDED→takeoff (complete). Bind 14550→14551.",
+    "x": 180,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex25-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex25-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex25-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex25-vehicle",
+    "localIdentity": "ex25-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex25-inject-prep",
+    "type": "inject",
+    "z": "ex25-tab",
+    "name": "Prep (arm/GUIDED/takeoff)",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 160,
+    "wires": [
+      [
+        "ex25-cmd-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex25-cmd-arm",
+    "type": "mavlink-command",
+    "z": "ex25-tab",
+    "name": "Arm",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex25-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "x": 320,
+    "y": 160,
+    "wires": [
+      [
+        "ex25-cmd-guided"
+      ],
+      [
+        "ex25-debug-arm-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex25-cmd-guided",
+    "type": "mavlink-command",
+    "z": "ex25-tab",
+    "name": "GUIDED",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex25-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"1\":1,\"2\":4}",
+    "x": 520,
+    "y": 160,
+    "wires": [
+      [
+        "ex25-cmd-takeoff"
+      ],
+      [
+        "ex25-debug-guided-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex25-cmd-takeoff",
+    "type": "mavlink-command",
+    "z": "ex25-tab",
+    "name": "Takeoff 10 m",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex25-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"7\":10}",
+    "x": 720,
+    "y": 160,
+    "wires": [
+      [
+        "ex25-debug-prep-done"
+      ],
+      [
+        "ex25-debug-takeoff-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex25-inject-speed",
+    "type": "inject",
+    "z": "ex25-tab",
+    "name": "Speed 8 m/s",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 260,
+    "wires": [
+      [
+        "ex25-cmd-speed"
+      ]
+    ]
+  },
+  {
+    "id": "ex25-cmd-speed",
+    "type": "mavlink-command",
+    "z": "ex25-tab",
+    "name": "Speed 8 m/s",
+    "mode": "preset",
+    "preset": "change_speed",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex25-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{\"1\":1,\"2\":8,\"3\":-1}",
+    "x": 320,
+    "y": 260,
+    "wires": [
+      [
+        "ex25-debug-speed-done"
+      ],
+      [
+        "ex25-debug-speed-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex25-inject-yaw",
+    "type": "inject",
+    "z": "ex25-tab",
+    "name": "Face 90°",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 340,
+    "wires": [
+      [
+        "ex25-cmd-yaw"
+      ]
+    ]
+  },
+  {
+    "id": "ex25-cmd-yaw",
+    "type": "mavlink-command",
+    "z": "ex25-tab",
+    "name": "Face 90°",
+    "mode": "preset",
+    "preset": "yaw",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex25-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{\"1\":90,\"2\":20,\"3\":1}",
+    "x": 320,
+    "y": 340,
+    "wires": [
+      [
+        "ex25-debug-yaw-done"
+      ],
+      [
+        "ex25-debug-yaw-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex25-inject-rotate",
+    "type": "inject",
+    "z": "ex25-tab",
+    "name": "Rotate +45°",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 420,
+    "wires": [
+      [
+        "ex25-cmd-rotate"
+      ]
+    ]
+  },
+  {
+    "id": "ex25-cmd-rotate",
+    "type": "mavlink-command",
+    "z": "ex25-tab",
+    "name": "Rotate +45°",
+    "mode": "preset",
+    "preset": "rotate",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex25-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{\"1\":45,\"2\":20,\"3\":1}",
+    "x": 320,
+    "y": 420,
+    "wires": [
+      [
+        "ex25-debug-rotate-done"
+      ],
+      [
+        "ex25-debug-rotate-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex25-debug-arm-status",
+    "type": "debug",
+    "z": "ex25-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex25-debug-guided-status",
+    "type": "debug",
+    "z": "ex25-tab",
+    "name": "guided status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex25-debug-takeoff-status",
+    "type": "debug",
+    "z": "ex25-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex25-debug-prep-done",
+    "type": "debug",
+    "z": "ex25-tab",
+    "name": "prep done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 900,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "ex25-debug-speed-status",
+    "type": "debug",
+    "z": "ex25-tab",
+    "name": "speed status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "ex25-debug-speed-done",
+    "type": "debug",
+    "z": "ex25-tab",
+    "name": "speed done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "ex25-debug-yaw-status",
+    "type": "debug",
+    "z": "ex25-tab",
+    "name": "yaw status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 400,
+    "wires": []
+  },
+  {
+    "id": "ex25-debug-yaw-done",
+    "type": "debug",
+    "z": "ex25-tab",
+    "name": "yaw done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "ex25-debug-rotate-status",
+    "type": "debug",
+    "z": "ex25-tab",
+    "name": "rotate status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 480,
+    "wires": []
+  },
+  {
+    "id": "ex25-debug-rotate-done",
+    "type": "debug",
+    "z": "ex25-tab",
+    "name": "rotate done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 420,
+    "wires": []
+  }
+]

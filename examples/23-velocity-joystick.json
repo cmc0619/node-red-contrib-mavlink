@@ -1,0 +1,413 @@
+[
+  {
+    "id": "ex23-tab",
+    "type": "tab",
+    "label": "23 Velocity joystick",
+    "disabled": false,
+    "info": "Stream local velocity setpoints with TTL stop.",
+    "env": []
+  },
+  {
+    "id": "ex23-comment",
+    "type": "comment",
+    "z": "ex23-tab",
+    "name": "Velocity joystick",
+    "info": "Move local-velocity stream. Up is up-positive in the UI, flipped once to NED at encode. Stop inject sends payload:false. Bind 14550→14551.",
+    "x": 180,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex23-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex23-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex23-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex23-vehicle",
+    "localIdentity": "ex23-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex23-inject-prep",
+    "type": "inject",
+    "z": "ex23-tab",
+    "name": "Arm + GUIDED",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 160,
+    "wires": [
+      [
+        "ex23-cmd-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex23-cmd-arm",
+    "type": "mavlink-command",
+    "z": "ex23-tab",
+    "name": "Arm",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex23-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{}",
+    "x": 320,
+    "y": 160,
+    "wires": [
+      [
+        "ex23-cmd-guided"
+      ],
+      [
+        "ex23-debug-arm-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex23-cmd-guided",
+    "type": "mavlink-command",
+    "z": "ex23-tab",
+    "name": "GUIDED",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex23-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{\"1\":1,\"2\":4}",
+    "x": 520,
+    "y": 160,
+    "wires": [
+      [
+        "ex23-debug-prep-done"
+      ],
+      [
+        "ex23-debug-guided-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex23-move",
+    "type": "mavlink-move",
+    "z": "ex23-tab",
+    "name": "Velocity stream",
+    "connection": "ex23-connection",
+    "delivery": "stream",
+    "mode": "local-velocity",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "north": 0,
+    "east": 0,
+    "up": 0,
+    "vNorth": 0,
+    "vEast": 0,
+    "vUp": 0,
+    "lat": "",
+    "lon": "",
+    "alt": "",
+    "yaw": "",
+    "yawRate": "",
+    "intervalMs": 100,
+    "ttlMs": 500,
+    "x": 720,
+    "y": 360,
+    "wires": [
+      [
+        "ex23-debug-move-out"
+      ],
+      [
+        "ex23-debug-move-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex23-inject-stop",
+    "type": "inject",
+    "z": "ex23-tab",
+    "name": "■ Stop",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "false",
+    "payloadType": "bool",
+    "x": 130,
+    "y": 560,
+    "wires": [
+      [
+        "ex23-move"
+      ]
+    ]
+  },
+  {
+    "id": "ex23-debug-arm-status",
+    "type": "debug",
+    "z": "ex23-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex23-debug-guided-status",
+    "type": "debug",
+    "z": "ex23-tab",
+    "name": "guided status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex23-debug-prep-done",
+    "type": "debug",
+    "z": "ex23-tab",
+    "name": "prep done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "ex23-debug-move-out",
+    "type": "debug",
+    "z": "ex23-tab",
+    "name": "move continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 900,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "ex23-debug-move-status",
+    "type": "debug",
+    "z": "ex23-tab",
+    "name": "move status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 420,
+    "wires": []
+  },
+  {
+    "id": "ex23-inject-fwd",
+    "type": "inject",
+    "z": "ex23-tab",
+    "name": "Fwd 2 m/s",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"velocity\":{\"north\":2,\"east\":0,\"up\":0}}",
+    "payloadType": "json",
+    "x": 130,
+    "y": 260,
+    "wires": [
+      [
+        "ex23-move"
+      ]
+    ]
+  },
+  {
+    "id": "ex23-inject-back",
+    "type": "inject",
+    "z": "ex23-tab",
+    "name": "Back 2 m/s",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"velocity\":{\"north\":-2,\"east\":0,\"up\":0}}",
+    "payloadType": "json",
+    "x": 130,
+    "y": 320,
+    "wires": [
+      [
+        "ex23-move"
+      ]
+    ]
+  },
+  {
+    "id": "ex23-inject-left",
+    "type": "inject",
+    "z": "ex23-tab",
+    "name": "Left",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"velocity\":{\"north\":0,\"east\":-2,\"up\":0}}",
+    "payloadType": "json",
+    "x": 130,
+    "y": 380,
+    "wires": [
+      [
+        "ex23-move"
+      ]
+    ]
+  },
+  {
+    "id": "ex23-inject-right",
+    "type": "inject",
+    "z": "ex23-tab",
+    "name": "Right",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"velocity\":{\"north\":0,\"east\":2,\"up\":0}}",
+    "payloadType": "json",
+    "x": 130,
+    "y": 440,
+    "wires": [
+      [
+        "ex23-move"
+      ]
+    ]
+  },
+  {
+    "id": "ex23-inject-up",
+    "type": "inject",
+    "z": "ex23-tab",
+    "name": "Up 1 m/s",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"velocity\":{\"north\":0,\"east\":0,\"up\":1}}",
+    "payloadType": "json",
+    "x": 130,
+    "y": 500,
+    "wires": [
+      [
+        "ex23-move"
+      ]
+    ]
+  }
+]

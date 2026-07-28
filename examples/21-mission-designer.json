@@ -1,0 +1,498 @@
+[
+  {
+    "id": "ex21-tab",
+    "type": "tab",
+    "label": "21 Mission designer",
+    "disabled": false,
+    "info": "Upload/download mission, fence, rally; clear behind confirmation.",
+    "env": []
+  },
+  {
+    "id": "ex21-comment",
+    "type": "comment",
+    "z": "ex21-tab",
+    "name": "Mission designer",
+    "info": "Four-item survey mission (NAV_WAYPOINT + DO_CHANGE_SPEED). Fence/rally are ArduPilot-only. Failed upload never degrades into clear. Bind 14550→14551.",
+    "x": 180,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex21-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex21-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex21-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex21-vehicle",
+    "localIdentity": "ex21-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex21-inject-upload-mission",
+    "type": "inject",
+    "z": "ex21-tab",
+    "name": "Upload mission",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"items\":[{\"frame\":3,\"command\":16,\"current\":1,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.363261,\"y\":149.16523,\"z\":30},{\"frame\":3,\"command\":16,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.362761,\"y\":149.16573,\"z\":30},{\"frame\":3,\"command\":16,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.363761,\"y\":149.16473,\"z\":30},{\"frame\":3,\"command\":178,\"current\":0,\"autocontinue\":1,\"param1\":1,\"param2\":5,\"param3\":-1,\"param4\":0,\"x\":0,\"y\":0,\"z\":0}]}",
+    "payloadType": "json",
+    "x": 130,
+    "y": 160,
+    "wires": [
+      [
+        "ex21-mission-upload"
+      ]
+    ]
+  },
+  {
+    "id": "ex21-mission-upload",
+    "type": "mavlink-mission",
+    "z": "ex21-tab",
+    "name": "Upload mission",
+    "connection": "ex21-connection",
+    "delivery": "confirm",
+    "operation": "upload",
+    "missionType": "mission",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "items": "",
+    "confirmClear": false,
+    "timeout": "",
+    "maxRetries": "",
+    "x": 360,
+    "y": 160,
+    "wires": [
+      [
+        "ex21-debug-upload-items"
+      ],
+      [
+        "ex21-debug-upload-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex21-inject-download-mission",
+    "type": "inject",
+    "z": "ex21-tab",
+    "name": "Download mission",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 240,
+    "wires": [
+      [
+        "ex21-mission-download"
+      ]
+    ]
+  },
+  {
+    "id": "ex21-mission-download",
+    "type": "mavlink-mission",
+    "z": "ex21-tab",
+    "name": "Download mission",
+    "connection": "ex21-connection",
+    "delivery": "confirm",
+    "operation": "download",
+    "missionType": "mission",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "items": "",
+    "confirmClear": false,
+    "timeout": "",
+    "maxRetries": "",
+    "x": 360,
+    "y": 240,
+    "wires": [
+      [
+        "ex21-debug-download-items"
+      ],
+      [
+        "ex21-debug-download-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex21-inject-upload-fence",
+    "type": "inject",
+    "z": "ex21-tab",
+    "name": "Upload fence",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"items\":[{\"frame\":3,\"command\":5001,\"current\":1,\"autocontinue\":1,\"param1\":3,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":0,\"y\":0,\"z\":0},{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.363261,\"y\":149.16523,\"z\":0},{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.362761,\"y\":149.16573,\"z\":0},{\"frame\":3,\"command\":5001,\"current\":0,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.363761,\"y\":149.16473,\"z\":0}]}",
+    "payloadType": "json",
+    "x": 130,
+    "y": 320,
+    "wires": [
+      [
+        "ex21-mission-fence"
+      ]
+    ]
+  },
+  {
+    "id": "ex21-mission-fence",
+    "type": "mavlink-mission",
+    "z": "ex21-tab",
+    "name": "Upload fence",
+    "connection": "ex21-connection",
+    "delivery": "confirm",
+    "operation": "upload",
+    "missionType": "fence",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "items": "",
+    "confirmClear": false,
+    "timeout": "",
+    "maxRetries": "",
+    "x": 360,
+    "y": 320,
+    "wires": [
+      [
+        "ex21-debug-fence-items"
+      ],
+      [
+        "ex21-debug-fence-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex21-inject-upload-rally",
+    "type": "inject",
+    "z": "ex21-tab",
+    "name": "Upload rally",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"items\":[{\"frame\":3,\"command\":5100,\"current\":1,\"autocontinue\":1,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":-35.363261,\"y\":149.16523,\"z\":30}]}",
+    "payloadType": "json",
+    "x": 130,
+    "y": 400,
+    "wires": [
+      [
+        "ex21-mission-rally"
+      ]
+    ]
+  },
+  {
+    "id": "ex21-mission-rally",
+    "type": "mavlink-mission",
+    "z": "ex21-tab",
+    "name": "Upload rally",
+    "connection": "ex21-connection",
+    "delivery": "confirm",
+    "operation": "upload",
+    "missionType": "rally",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "items": "",
+    "confirmClear": false,
+    "timeout": "",
+    "maxRetries": "",
+    "x": 360,
+    "y": 400,
+    "wires": [
+      [
+        "ex21-debug-rally-items"
+      ],
+      [
+        "ex21-debug-rally-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex21-inject-clear-mission",
+    "type": "inject",
+    "z": "ex21-tab",
+    "name": "⚠ Clear mission (confirm)",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "confirmed",
+        "v": "true",
+        "vt": "bool"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 480,
+    "wires": [
+      [
+        "ex21-mission-clear"
+      ]
+    ]
+  },
+  {
+    "id": "ex21-mission-clear",
+    "type": "mavlink-mission",
+    "z": "ex21-tab",
+    "name": "Clear mission",
+    "connection": "ex21-connection",
+    "delivery": "confirm",
+    "operation": "clear",
+    "missionType": "mission",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "items": "",
+    "confirmClear": false,
+    "timeout": "",
+    "maxRetries": "",
+    "x": 360,
+    "y": 480,
+    "wires": [
+      [
+        "ex21-debug-clear-done"
+      ],
+      [
+        "ex21-debug-clear-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex21-debug-upload-status",
+    "type": "debug",
+    "z": "ex21-tab",
+    "name": "upload status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 360,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex21-debug-upload-items",
+    "type": "debug",
+    "z": "ex21-tab",
+    "name": "upload items",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload.items",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "ex21-debug-download-status",
+    "type": "debug",
+    "z": "ex21-tab",
+    "name": "download status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 360,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "ex21-debug-download-items",
+    "type": "debug",
+    "z": "ex21-tab",
+    "name": "downloaded items",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload.items",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "ex21-debug-fence-status",
+    "type": "debug",
+    "z": "ex21-tab",
+    "name": "fence status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 360,
+    "y": 380,
+    "wires": []
+  },
+  {
+    "id": "ex21-debug-fence-items",
+    "type": "debug",
+    "z": "ex21-tab",
+    "name": "fence items",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload.items",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "ex21-debug-rally-status",
+    "type": "debug",
+    "z": "ex21-tab",
+    "name": "rally status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 360,
+    "y": 460,
+    "wires": []
+  },
+  {
+    "id": "ex21-debug-rally-items",
+    "type": "debug",
+    "z": "ex21-tab",
+    "name": "rally items",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload.items",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 400,
+    "wires": []
+  },
+  {
+    "id": "ex21-debug-clear-status",
+    "type": "debug",
+    "z": "ex21-tab",
+    "name": "clear status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 360,
+    "y": 540,
+    "wires": []
+  },
+  {
+    "id": "ex21-debug-clear-done",
+    "type": "debug",
+    "z": "ex21-tab",
+    "name": "clear done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 480,
+    "wires": []
+  }
+]

@@ -1,0 +1,387 @@
+[
+  {
+    "id": "ex24-tab",
+    "type": "tab",
+    "label": "24 Formation nudge",
+    "disabled": false,
+    "info": "Swarm Move velocity across sysids — dry-run, sequential, broadcast.",
+    "env": []
+  },
+  {
+    "id": "ex24-comment",
+    "type": "comment",
+    "z": "ex24-tab",
+    "name": "Formation nudge",
+    "info": "Swarm fans Move local-velocity north=1 m/s across sysids 1–5. Broadcast pins target_system=0 (single-stack only). Bind 14550→14551.",
+    "x": 180,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex24-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex24-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex24-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex24-vehicle",
+    "localIdentity": "ex24-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex24-inject-dry",
+    "type": "inject",
+    "z": "ex24-tab",
+    "name": "Dry run",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 160,
+    "wires": [
+      [
+        "ex24-swarm-dry"
+      ]
+    ]
+  },
+  {
+    "id": "ex24-swarm-dry",
+    "type": "mavlink-swarm",
+    "z": "ex24-tab",
+    "name": "Nudge (dry run)",
+    "connection": "ex24-connection",
+    "selectionMode": "list",
+    "sysids": "1,2,3,4,5",
+    "vehicleType": "",
+    "firmwareFilter": "",
+    "armedFilter": "",
+    "executionMode": "sequential",
+    "intervalMs": 150,
+    "dryRun": true,
+    "delivery": "build",
+    "actionType": "move",
+    "commandId": 400,
+    "preset": "",
+    "params": "{}",
+    "moveMode": "local-velocity",
+    "north": 0,
+    "east": 0,
+    "up": 0,
+    "vNorth": 1,
+    "vEast": 0,
+    "vUp": 0,
+    "lat": "",
+    "lon": "",
+    "alt": "",
+    "topic": "camera",
+    "verb": "photo",
+    "path": "legacy",
+    "paramAction": "set",
+    "paramId": "",
+    "value": "",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "firmware": "ardupilot",
+    "timeoutMs": 10000,
+    "x": 320,
+    "y": 160,
+    "wires": [
+      [
+        "ex24-debug-dry-done"
+      ],
+      [
+        "ex24-debug-dry-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex24-inject-seq",
+    "type": "inject",
+    "z": "ex24-tab",
+    "name": "Nudge (sequential)",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 280,
+    "wires": [
+      [
+        "ex24-swarm-seq"
+      ]
+    ]
+  },
+  {
+    "id": "ex24-swarm-seq",
+    "type": "mavlink-swarm",
+    "z": "ex24-tab",
+    "name": "Nudge (sequential)",
+    "connection": "ex24-connection",
+    "selectionMode": "list",
+    "sysids": "1,2,3,4,5",
+    "vehicleType": "",
+    "firmwareFilter": "",
+    "armedFilter": "",
+    "executionMode": "sequential",
+    "intervalMs": 150,
+    "dryRun": false,
+    "delivery": "send",
+    "actionType": "move",
+    "commandId": 400,
+    "preset": "",
+    "params": "{}",
+    "moveMode": "local-velocity",
+    "north": 0,
+    "east": 0,
+    "up": 0,
+    "vNorth": 1,
+    "vEast": 0,
+    "vUp": 0,
+    "lat": "",
+    "lon": "",
+    "alt": "",
+    "topic": "camera",
+    "verb": "photo",
+    "path": "legacy",
+    "paramAction": "set",
+    "paramId": "",
+    "value": "",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "firmware": "ardupilot",
+    "timeoutMs": 10000,
+    "x": 320,
+    "y": 280,
+    "wires": [
+      [
+        "ex24-debug-seq-done"
+      ],
+      [
+        "ex24-debug-seq-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex24-inject-bcast",
+    "type": "inject",
+    "z": "ex24-tab",
+    "name": "Nudge (broadcast)",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 400,
+    "wires": [
+      [
+        "ex24-swarm-bcast"
+      ]
+    ]
+  },
+  {
+    "id": "ex24-swarm-bcast",
+    "type": "mavlink-swarm",
+    "z": "ex24-tab",
+    "name": "Nudge (broadcast)",
+    "connection": "ex24-connection",
+    "selectionMode": "list",
+    "sysids": "1,2,3,4,5",
+    "vehicleType": "",
+    "firmwareFilter": "",
+    "armedFilter": "",
+    "executionMode": "broadcast",
+    "intervalMs": 150,
+    "dryRun": false,
+    "delivery": "send",
+    "actionType": "move",
+    "commandId": 400,
+    "preset": "",
+    "params": "{}",
+    "moveMode": "local-velocity",
+    "north": 0,
+    "east": 0,
+    "up": 0,
+    "vNorth": 1,
+    "vEast": 0,
+    "vUp": 0,
+    "lat": "",
+    "lon": "",
+    "alt": "",
+    "topic": "camera",
+    "verb": "photo",
+    "path": "legacy",
+    "paramAction": "set",
+    "paramId": "",
+    "value": "",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "firmware": "ardupilot",
+    "timeoutMs": 10000,
+    "x": 320,
+    "y": 400,
+    "wires": [
+      [
+        "ex24-debug-bcast-done"
+      ],
+      [
+        "ex24-debug-bcast-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex24-debug-dry-status",
+    "type": "debug",
+    "z": "ex24-tab",
+    "name": "dry status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "ex24-debug-dry-done",
+    "type": "debug",
+    "z": "ex24-tab",
+    "name": "dry plan",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "ex24-debug-seq-status",
+    "type": "debug",
+    "z": "ex24-tab",
+    "name": "seq status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "ex24-debug-seq-done",
+    "type": "debug",
+    "z": "ex24-tab",
+    "name": "seq aggregate",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "ex24-debug-bcast-status",
+    "type": "debug",
+    "z": "ex24-tab",
+    "name": "bcast status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 460,
+    "wires": []
+  },
+  {
+    "id": "ex24-debug-bcast-done",
+    "type": "debug",
+    "z": "ex24-tab",
+    "name": "bcast aggregate",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 400,
+    "wires": []
+  }
+]
