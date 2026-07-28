@@ -104,6 +104,28 @@ synchronously inside an input handler and it is caught, routed to Catch nodes an
 pane, and every other flow keeps running. This is why "let it crash" is a reasonable position
 here and would not be in a bare Node process: the blast radius is one message in one node.
 
+**The platform ruleset.** This is Node-RED node code, not Node.js application code. For each of
+these jobs the platform ships the mechanism (nodered.org/docs/creating-nodes); using it is the
+whole implementation, and building a parallel one is a spec violation — however few lines it
+costs. *Small is not a justification: the question is never how many lines a second mechanism
+adds, it is that a second mechanism now exists.* The runtime-side counterpart — trust
+editor-validated configuration, guard only real runtime boundaries — is the configuration-trust
+ruleset in `AGENTS.md`. Rigor is relocated, not abandoned: pedantry belongs in the test suite,
+the lint gate, and the CI pipeline — pinned byte vectors, cross-validation against generated
+ground truth, drift asserts — never as defensive branches in the shipping code.
+
+| Job | The platform mechanism — and nothing else |
+|---|---|
+| "this field must be set / valid" | `required` / `validate` on the property definition. The editor reds the field and puts the missing-config marker on the node. No bespoke pending states, placeholder options, or hint rows for unconfigured fields |
+| dialog fields load and save | `node-input-<prop>` / `node-config-input-<prop>` ids auto-populate and auto-save. `oneditprepare`/`oneditsave` exist only for what that cannot do: dynamically built selects, TypedInput, reshaping |
+| dialog layout and widgets | `form-row` rows, `red-ui-button`, `TypedInput`, `RED.editor.createEditor` — no custom widget where a stock one exists |
+| runtime state in the editor | `node.status({fill, shape, text})` — text under 20 characters, `{}` clears |
+| errors while handling a message | report through `done(err)` or `node.error(err, msg)` so Catch nodes fire; input handlers take `(msg, send, done)` and never throw uncaught |
+| replying in a flow | reuse the received `msg` object; send via the listener-provided `send` |
+| cleanup on redeploy | the `close` handler (accepting `done` when async) |
+| help text | `data-help-name` with `<h3>` sections and `message-properties` definition lists |
+| node design | one well-defined purpose per node; forgiving in accepted input types, consistent and documented in what it sends |
+
 **The exception, and it is the only one that matters:** Node-RED does *not* contain asynchronous
 failures. An unhandled promise rejection, or an `error` event on a socket with no listener, kills
 the runtime and takes every unrelated flow with it. So the discipline goes there and nowhere
@@ -143,7 +165,7 @@ makes unreachable.
 |---|---|
 | `mavlink-local-identity` | Who is Node-RED on the wire? Owns source sysid and compid, the role preset, heartbeat content and interval, and the signing credential reference |
 | `mavlink-vehicle` | Who is being addressed, in what dialect? Owns dialect selection — bundled or custom — the XML upload and download, and the catalog picker |
-| `mavlink-connection` | How does traffic move, and stay channel-correct? Owns the transport (UDP, TCP, serial), the peer table, its bound Vehicle Profile, the outbound queue and its bands, signing switches and channel state, the default identity plus opt-in additional ones, and the disable switch |
+| `mavlink-connection` | How does traffic move, and stay channel-correct? Owns the transport (UDP, TCP, serial), the peer table, its bound Vehicle Profile, the outbound queue and its bands, signing switches and channel state, the default identity plus opt-in additional ones, and the disable switch. Palette nodes reach the runtime through `node.subscribe`, `node.send`, `node.peerTable`, and `node.vehicle` — a frozen snapshot `{id, targetSysid, targetCompid, firmware, dialect, autopilot}` that palette nodes use to inherit the profile's target defaults; explicit node config wins, empty editor fields mean inherit. `id` is the profile node id: anything needing the compiled bundle resolves that node and calls `getDialect()` — never a bundled-registry lookup by name, which breaks custom XML dialects |
 
 **Palette nodes**
 
@@ -358,6 +380,75 @@ and a dropdown there would be wrong.
 
 **Help lives in hover text and the help panel.** Descriptions ride as tooltips. Inline hints
 are limited to units and range. The dialog stays compact.
+
+### Addressing and identity — the role × tier matrix
+
+Action-node dialogs inherit traits and override them, object-style: the **identity role** is the
+base class, the **delivery tier** is a mixin, node config overrides inherited values, and
+`msg.payload` is the runtime override of last resort. Two facts anchor the whole table:
+
+- **A Vehicle Profile is a class inbound and an address outbound.** Everything arriving on a
+  connection decodes against the profile's dialect (§7), and several airframes of that class may
+  share the wire. But every *outbound* message addresses one concrete sysid — the profile's
+  target defaults are numbers, never blank, and a fleet operator sets explicit targets per node.
+- **The identity role is the paradigm switch.** A `gcs` (or `custom`) identity talks *to*
+  vehicles and must say which one. A `companion` identity is *on* an airframe: its source sysid
+  is derived from that airframe, and its implied target is its own autopilot — same sysid,
+  compid 1. A companion belongs to one airframe (enforced at bind, §7), so nothing needs asking.
+
+**All reshaping is edit-dialog time.** Rows show and hide while the tray is open, exactly like
+the Move mode reshape. Deploy freezes the shape. At runtime only `msg.payload` overrides
+*values*; nothing changes shape. **Hidden is not honored:** a field hidden by the current
+role/tier is ignored at runtime even if an earlier configuration saved a value into it — the
+same rule the identity node already applies to role changes.
+
+**By role** — driven by the identity selected *on the node*, never inferred from the connection
+(sender nodes: Command, Move, Param, Payload, Mission):
+
+| | `gcs` / `custom` | `companion` |
+|---|---|---|
+| Send-as (identity) | dropdown of identities bound to the selected connection; first eligible preselected and written into config | same dropdown (with one bound identity it is simply shown selected — "hardcoded") |
+| Target sysid | shown; blank inherits the profile default | hidden — derived from the airframe (identity's own sysid) |
+| Target compid | shown; blank inherits the profile default | hidden, pinned to 1 (the autopilot) — except Payload, whose compid addresses a payload device and stays visible |
+
+**By tier** (same sender nodes):
+
+| Field | Build | wire tiers (Send / confirm / complete / collect / Stream) |
+|---|---|---|
+| Connection | hidden — nothing is sent; output 0 feeds `mavlink-out` or a Build-node trigger, which brings its own connection | shown, required |
+| Vehicle Profile | shown — supplies the editor catalogs (dialect), firmware, and the target defaults blank fields inherit | hidden — the profile arrives via the connection |
+| Send-as (identity) | hidden — source ids are stamped at the wire by whichever node eventually sends | per role table |
+| Target sysid/compid | shown — a builder must stamp targets | per role table |
+| Firmware (Param, Mission) | no dropdown — inherited from the Vehicle Profile field | no dropdown — inherited from the connection's profile |
+| Timeout / retries / band | hidden | shown |
+
+**Runtime target resolution**, one order everywhere, per field (sysid and compid resolve
+independently; a configured 0 is broadcast and survives; blank means inherit):
+
+1. `msg.payload.target`
+2. companion send-as identity → derived `{airframe sysid, 1}` (node config target ignored —
+   hidden is not honored; Payload's compid still resolves from its visible field)
+3. node config target
+4. profile default — the connection's bound profile on wire tiers, the node's Vehicle Profile
+   field on Build
+5. 1
+
+Confirm/complete matching (COMMAND_ACK, param echo) keys on the *same resolved target* — the
+matcher and the sender share one resolution, pinned by test.
+
+**Exceptions, deliberate:**
+
+- **Build node** — raw builds for the whole dialect. Its build tier takes a plain dialect
+  picker (bundled list, with a "from Vehicle Profile…" escape for custom XML) and needs no
+  connection, identity, or vehicle. On wire tiers the connection's profile governs the catalogs,
+  because that dialect is what the wire will encode.
+- **Swarm** — gcs-paradigm by nature. Its send-as dropdown offers only gcs-enabled identities
+  (`gcs` or `custom`, first one preselected); selection modes replace the single-target rows.
+  Build tier with `all`/`filter` selection still shows the connection — the live peer table is
+  the only place those selections can resolve. Build + explicit `list` needs no connection.
+- **In and State** — read side. Their sysid/compid fields are *filters* where blank means
+  everything; no target semantics, no reshape.
+- **Out** — fully message-driven; nothing to reshape.
 
 ### Node status
 
@@ -729,6 +820,9 @@ Confirm does what was asked and reports whether it worked, without blocking for 
 period the operator did not choose. The operator changes it freely.
 
 Build's output goes to `mavlink-out`.
+
+Which config references and address fields a tier shows — and where blank targets inherit from —
+is governed by the role × tier matrix (§6).
 
 Move has no acknowledgement of any kind, so its third tier is **Stream** instead — sustained
 setpoints with TTL and stop, no confirmation possible.
@@ -1276,6 +1370,28 @@ indication. Off by default, never advancing the timestamp store (§7).
 serves. There is no `node-mavlink-mappings` package.
 *Check:* `npm view node-mavlink repository.url`
 
+**Custom dialect messages have no `node-mavlink` wire classes — synthesize them.**
+*Wrong belief:* once a custom XML compiles to a bundle (§4), `node-mavlink` can frame its
+messages; only the metadata was missing.
+*Fact:* `node-mavlink` serializes through generated `MavLinkData` subclasses and its packet
+splitter validates CRCs against `mavlink-mappings`' `MSG_ID_MAGIC_NUMBER` table — a custom
+message has neither, so serialize throws "no wire class" and inbound frames are dropped at the
+CRC gate. Both are recoverable at runtime: the compiled bundle carries wire types, array
+lengths, and extension flags in declaration order, which is everything the generator itself
+derives layout from (stable size-descending sort, extensions appended, x25 CRC_EXTRA), and the
+splitter accepts a `{ magicNumbers }` override. `lib/connection/wire-classes.js` synthesizes the
+classes; correctness is pinned by regenerating every bundled message and requiring identical
+layout to the generated classes. A custom dialect that *includes* a bundled message (same name
+and msgid, matching CRC_EXTRA and payload length) keeps the generated class; any other
+collision — name-only, id-only, or same identity with a redefined layout — throws at wire
+construction rather than encoding custom fields under a bundled schema. `node-mavlink` also
+exports `registerCustomMessageMagicNumber(msgid, magic)`, but it mutates the process-global CRC
+table (every connection inherits it, and it throws on re-registration at redeploy) — the
+per-splitter override is the same feature scoped to one connection. There is no class registry
+to register into: the msgid→class lookup is the caller's job in `node-mavlink`, even for
+bundled dialects.
+*Check:* `node --test test/connection/wire-classes.test.js`
+
 **Node exposes no DSCP setter.**
 *Wrong belief:* traffic class is settable on a socket.
 *Fact:* `dgram` offers broadcast, TTL, multicast and buffer sizes; `net.Socket` offers timeout,
@@ -1406,3 +1522,29 @@ test/nodes/param-html.test.js` — `adminApiUrl('/mavlink/enums')` under `/red` 
 *Fact:* `--out` is where MAVProxy *sends* telemetry. Node-RED receives on `bindPort` (`14550`)
 and *sends* commands to `remotePort` (`14551`, MAVProxy's listen). Point `--out` at `14550`.
 *Check:* examples under `examples/sitl/` and `examples/sitl/README.md`.
+
+**Vehicle Profile target defaults only reach the Connection runtime, not palette nodes.**
+*Wrong belief:* setting `defaultTargetSystem = 42` in a Vehicle Profile propagates to every
+palette node that addresses a target; nodes without an explicit config default to 1.
+*Fact:* target resolution follows the §6 role × tier matrix (payload.target → companion
+derivation → node config → profile default → 1), implemented once in `lib/addressing`. The
+Connection exposes its bound profile as a frozen public `node.vehicle` snapshot. Leaving the
+editor's sysid/compid fields blank means "inherit"; saving an explicit 1 means exactly 1 — no
+migration of existing flows. Command no longer reads `connection._vehicle`.
+*Check:* `node --test test/addressing/resolve.test.js` plus the per-node suites — look for
+"inherits Vehicle Profile target" tests.
+
+**Sender nodes do not own independent firmware dropdowns or unconditional address fields.**
+*Wrong belief:* Param and Mission carry their own firmware selects, every sender always shows
+connection + target fields, and Build (the node) requires a Vehicle Profile.
+*Fact:* the §6 role × tier matrix governs. Build tier shows a Vehicle Profile picker and hides
+connection/identity/timing rows; wire tiers derive firmware and target defaults from the
+connection's profile; a companion send-as identity derives the target ({airframe sysid, 1}) and
+hides the fields (Payload keeps its compid — it addresses a payload device); the Build node
+takes a plain dialect picker (`__vehicle` escape for custom XML); Swarm offers only gcs/custom
+identities and needs no connection for build+list. Hidden fields are ignored at runtime. Ack,
+param-echo, and mission protocol matching key on the same resolved target as the send.
+*Check:* `node --test test/addressing/resolve.test.js test/command/node.test.js
+test/move/node.test.js test/param/node.test.js test/payload/node.test.js
+test/mission/node.test.js test/swarm/node.test.js test/nodes/in-out-build.test.js` — look for
+"companion", "role × tier", and "build+list" tests.

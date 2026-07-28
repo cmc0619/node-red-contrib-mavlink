@@ -24,23 +24,54 @@
     var _cmdRequestSeq = 0;
 
     function resolveVehicleTarget() {
+      var tierVal = $('#node-input-tier').val() || 'send';
+      if (tierVal !== 'build') {
+        // Wire tier: derive the catalog from the selected connection's vehicle
+        // profile. Pass the profile id, not just the dialect name — the admin
+        // route serves custom XML bundles only when given ?vehicle=<id>.
+        // With no connection selected yet, the required-field validation
+        // already reds the node; the catalog just shows the default dialect.
+        var connectionId = $('#node-input-connection').val() || '';
+        if (connectionId && RED.nodes && RED.nodes.node) {
+          var connNode = RED.nodes.node(connectionId);
+          var connVehicle = connNode && connNode.vehicle ? RED.nodes.node(connNode.vehicle) : null;
+          if (connVehicle) {
+            return {
+              key: 'vehicle:' + connNode.vehicle,
+              query: { vehicle: connNode.vehicle, dialect: connVehicle.dialect || '' },
+              dialect: connVehicle.dialect || '',
+            };
+          }
+        }
+        return { key: 'dialect:ardupilotmega', query: { dialect: 'ardupilotmega' }, dialect: 'ardupilotmega' };
+      }
+      // Build tier: use the dialect picker.
+      var dialectVal = $('#node-input-dialect').val() || 'ardupilotmega';
+      if (dialectVal !== '__vehicle') {
+        return {
+          key: 'dialect:' + dialectVal,
+          query: { dialect: dialectVal },
+          dialect: dialectVal,
+        };
+      }
+      // '__vehicle' escape: derive from the selected Vehicle Profile.
       var vehicleId = $('#node-input-vehicle').val() || '';
-      var dialect = 'ardupilotmega';
+      var vehicleDialect = 'ardupilotmega';
       if (vehicleId && RED.nodes && RED.nodes.node) {
         var vehicle = RED.nodes.node(vehicleId);
-        if (vehicle && vehicle.dialect) dialect = vehicle.dialect;
+        if (vehicle && vehicle.dialect) vehicleDialect = vehicle.dialect;
       }
       if (vehicleId) {
         return {
           key: 'vehicle:' + vehicleId,
-          query: { vehicle: vehicleId, dialect: dialect },
-          dialect: dialect,
+          query: { vehicle: vehicleId, dialect: vehicleDialect },
+          dialect: vehicleDialect,
         };
       }
       return {
-        key: 'dialect:' + dialect,
-        query: { dialect: dialect },
-        dialect: dialect,
+        key: 'dialect:' + vehicleDialect,
+        query: { dialect: vehicleDialect },
+        dialect: vehicleDialect,
       };
     }
 
@@ -179,8 +210,38 @@
       color: '#6ea6d7',
       defaults: {
         name:        { value: '' },
-        vehicle:     { value: '', type: 'mavlink-vehicle', required: true },
-        connection:  { value: '', type: 'mavlink-connection' },
+        dialect:     {
+          value: 'ardupilotmega',
+          validate: function (v) {
+            var $t = $('#node-input-tier');
+            var tier = ($t && $t.length) ? $t.val() : (this.tier || 'send');
+            if (tier === 'build') return !!v;
+            return true;
+          },
+        },
+        vehicle:     {
+          value: '',
+          type: 'mavlink-vehicle',
+          required: false,
+          validate: function (v) {
+            var $t = $('#node-input-tier');
+            var tier = ($t && $t.length) ? $t.val() : (this.tier || 'send');
+            var $d = $('#node-input-dialect');
+            var dialect = ($d && $d.length && $d.val()) ? $d.val() : (this.dialect || 'ardupilotmega');
+            if (tier === 'build' && dialect === '__vehicle') return !!v;
+            return true;
+          },
+        },
+        connection:  {
+          value: '',
+          type: 'mavlink-connection',
+          validate: function (v) {
+            var $t = $('#node-input-tier');
+            var tier = ($t && $t.length) ? $t.val() : (this.tier || 'send');
+            if (tier !== 'build') return !!v;
+            return true;
+          },
+        },
         messageName: { value: 'HEARTBEAT' },
         fields:      { value: '{}' },
         tier:        { value: 'send' },
@@ -232,15 +293,30 @@
         });
         $band.val(node.band !== undefined ? String(node.band) : '2');
 
-        function updateConnectionRow() {
-          if ($tier.val() === 'build') {
+        function updateVisibility() {
+          var tierVal = $tier.val();
+          var dialectVal = $('#node-input-dialect').val() || node.dialect || 'ardupilotmega';
+          if (tierVal === 'build') {
             $('#mav-connection-row').hide();
+            $('#mav-dialect-row').show();
+            if (dialectVal === '__vehicle') {
+              $('#mav-vehicle-row').show();
+            } else {
+              $('#mav-vehicle-row').hide();
+            }
           } else {
             $('#mav-connection-row').show();
+            $('#mav-dialect-row').hide();
+            $('#mav-vehicle-row').hide();
           }
         }
-        $tier.on('change', updateConnectionRow);
-        updateConnectionRow();
+        $tier.on('change', function () {
+          _msgCatalogByKey = {};
+          _cmdCatalogByKey = {};
+          updateVisibility();
+          reloadCatalogs();
+        });
+        updateVisibility();
 
         function formRow(label, control) {
           var row = $('<div class="form-row"></div>');
@@ -442,15 +518,11 @@
             container.append($('<div class="form-row"><em>Loading message fields\u2026</em></div>'));
             return;
           }
-          if (catalog.error && !(catalog.messages && catalog.messages.length)) {
-            container.append($('<div class="form-row"><em>Could not load messages for this Vehicle dialect. Deploy the Vehicle Profile (required for custom dialects).</em></div>'));
-            return;
-          }
+          // Catalog empty/failed: leave Fields blank. Missing Connection /
+          // Vehicle Profile already reds the node via defaults.validate —
+          // a second prose error adds nothing (§2 / AGENTS.md).
           var msg = (catalog.messages || []).find(function (m) { return m.name === msgName; });
-          if (!msg) {
-            container.append($('<div class="form-row"><em>Message not in this dialect.</em></div>'));
-            return;
-          }
+          if (!msg) return;
 
           if (COMMAND_MESSAGES[msg.name]) {
             // COMMAND_LONG / COMMAND_INT: named command params, never Param 1–7 (§6).
@@ -527,13 +599,52 @@
         }
 
         $('#node-input-vehicle').on('change', function () {
-          // Drop cached catalogs when the Vehicle (and dialect) changes.
-          _msgCatalogByKey = {};
-          _cmdCatalogByKey = {};
-          reloadCatalogs();
+          if ($tier.val() === 'build' && $('#node-input-dialect').val() === '__vehicle') {
+            _msgCatalogByKey = {};
+            _cmdCatalogByKey = {};
+            reloadCatalogs();
+          }
         });
 
-        reloadCatalogs();
+        $('#node-input-connection').on('change', function () {
+          if ($tier.val() !== 'build') {
+            _msgCatalogByKey = {};
+            _cmdCatalogByKey = {};
+            reloadCatalogs();
+          }
+        });
+
+        // Populate dialect picker from the server's bundled list; reload catalogs
+        // once ready so the message dropdown uses the correct dialect from the start.
+        var $dialect = $('#node-input-dialect');
+        $dialect.on('change', function () {
+          _msgCatalogByKey = {};
+          _cmdCatalogByKey = {};
+          updateVisibility();
+          reloadCatalogs();
+        });
+        (function initDialectPicker() {
+          var savedDialect = node.dialect || 'ardupilotmega';
+          $.getJSON(RED.mavlink.adminApiUrl('/mavlink/dialects'), function (data) {
+            $dialect.empty();
+            (data.dialects || []).forEach(function (d) {
+              $dialect.append($('<option>').val(d).text(d));
+            });
+            $dialect.append($('<option>').val('__vehicle').text('from Vehicle Profile\u2026'));
+            $dialect.val(savedDialect);
+            updateVisibility();
+            reloadCatalogs();
+          }).fail(function () {
+            $dialect.empty();
+            if (savedDialect !== '__vehicle') {
+              $dialect.append($('<option>').val(savedDialect).text(savedDialect));
+            }
+            $dialect.append($('<option>').val('__vehicle').text('from Vehicle Profile\u2026'));
+            $dialect.val(savedDialect);
+            updateVisibility();
+            reloadCatalogs();
+          });
+        }());
       },
       oneditsave: function () {
         var $root = $('#node-input-fields-container');
@@ -550,7 +661,11 @@
     <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
     <input type="text" id="node-input-name" placeholder="Name">
   </div>
-  <div class="form-row">
+  <div class="form-row" id="mav-dialect-row">
+    <label for="node-input-dialect"><i class="fa fa-list"></i> Dialect</label>
+    <select id="node-input-dialect" style="width:70%"></select>
+  </div>
+  <div class="form-row" id="mav-vehicle-row">
     <label for="node-input-vehicle"><i class="fa fa-plane"></i> Vehicle</label>
     <input type="text" id="node-input-vehicle">
   </div>
@@ -610,8 +725,12 @@
   are text. <code>COMMAND_LONG</code> / <code>COMMAND_INT</code> use a MAV_CMD
   dropdown and that command's named params — never a Param 1–7 grid. Bitmask
   fields use native multi-selects; Ctrl/Cmd-click multiple flags.</p>
-  <p><b>Delivery</b>: <i>Build</i> encodes and emits without sending. <i>Send</i>
-  enqueues directly on the Connection.</p>
+  <p><b>Dialect</b> (Build delivery): pick a bundled dialect from the dropdown.
+  Choose <i>from Vehicle Profile…</i> to use a custom XML dialect; the Vehicle
+  Profile field then appears. On wire deliveries the connection's profile
+  governs, so the Dialect and Vehicle rows are hidden.</p>
+  <p><b>Delivery</b>: <i>Build</i> encodes and emits without sending; no
+  connection needed. <i>Send</i> enqueues directly on the Connection.</p>
   <p><b>Repeat</b>: when set, the node fires independently of inbound triggers at
   the configured interval. The status badge shows the achieved rate alongside the
   configured rate.</p>

@@ -67,23 +67,39 @@
   }
 
   /**
-   * Resolve which Vehicle / dialect the Advanced list should load.
-   * Uses the editor-side config graph (RED.nodes.node), not a runtime lookup.
+   * Resolve which Vehicle / dialect the Advanced list and enum catalogs should
+   * load, respecting the role × tier matrix (DESIGN.md §6):
+   *   - Build tier: the node's own Vehicle Profile field governs.
+   *   - Wire tiers: the bound Connection's profile governs.
    *
    * @returns {{key: string, query: object, dialect: string, vehicleId: string}}
    */
   function resolveCatalogTarget() {
-    const connId = $('#node-input-connection').val();
+    const tier = $('#node-input-delivery').val() || 'confirm';
+    const isBuild = tier === 'build';
     let vehicleId = '';
     let dialect = 'ardupilotmega';
-    if (connId && typeof RED !== 'undefined' && RED.nodes && RED.nodes.node) {
-      const conn = RED.nodes.node(connId);
-      if (conn && conn.vehicle) {
-        vehicleId = conn.vehicle;
-        const vehicle = RED.nodes.node(conn.vehicle);
+
+    if (isBuild) {
+      // Build tier: catalog source is the node's own Vehicle Profile picker.
+      vehicleId = $('#node-input-vehicle').val() || '';
+      if (vehicleId && typeof RED !== 'undefined' && RED.nodes && RED.nodes.node) {
+        const vehicle = RED.nodes.node(vehicleId);
         if (vehicle && vehicle.dialect) dialect = vehicle.dialect;
       }
+    } else {
+      // Wire tiers: catalog source is the connection's bound vehicle profile.
+      const connId = $('#node-input-connection').val();
+      if (connId && typeof RED !== 'undefined' && RED.nodes && RED.nodes.node) {
+        const conn = RED.nodes.node(connId);
+        if (conn && conn.vehicle) {
+          vehicleId = conn.vehicle;
+          const vehicle = RED.nodes.node(conn.vehicle);
+          if (vehicle && vehicle.dialect) dialect = vehicle.dialect;
+        }
+      }
     }
+
     // Prefer vehicle id so a deployed custom profile serves its own bundle.
     // Include dialect so an undeployed bundled profile can still serve a
     // catalog; custom without a live node gets a 404 (never a silent default).
@@ -241,7 +257,9 @@
       preset:            { value: 'arm' },
       advancedCommand:   { value: '' },
       delivery:          { value: 'confirm' },
+      vehicle:           { value: '', type: 'mavlink-vehicle', required: false },
       connection:        { value: '', type: 'mavlink-connection', required: false },
+      identity:          { value: '' },
       targetSysid:       { value: '' },
       targetCompid:      { value: '' },
       timeout:           { value: '10000' },
@@ -269,8 +287,45 @@
       const container = $('#node-input-params-container');
 
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
+        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
       }
+
+      // ── Identity (send-as) select ──────────────────────────────────────────
+      function refreshIdentitySelect() {
+        if (!(RED.mavlink && RED.mavlink.fillIdentitySelect)) return;
+        const connId = $('#node-input-connection').val();
+        RED.mavlink.fillIdentitySelect($('#node-input-identity'), connId, { saved: node.identity });
+      }
+
+      // ── Role × tier visibility matrix (DESIGN.md §6) ──────────────────────
+      function refreshVisibility() {
+        const tier = $('#node-input-delivery').val() || 'confirm';
+        const isBuild = tier === 'build';
+
+        // Build tier: show vehicle row; hide wire-tier rows.
+        $('#row-cmd-vehicle')[isBuild ? 'show' : 'hide']();
+        $('#row-cmd-connection')[isBuild ? 'hide' : 'show']();
+        $('#row-cmd-identity')[isBuild ? 'hide' : 'show']();
+        $('#row-cmd-timeout')[isBuild ? 'hide' : 'show']();
+        $('#row-cmd-maxRetries')[isBuild ? 'hide' : 'show']();
+        $('#row-cmd-unconfirmedContinue')[isBuild ? 'hide' : 'show']();
+
+        if (!isBuild) {
+          // Wire tiers: companion identity → target sysid/compid are derived, hide them.
+          const identityId = $('#node-input-identity').val();
+          const role = RED.mavlink && RED.mavlink.identityRole
+            ? RED.mavlink.identityRole(identityId)
+            : 'gcs';
+          const isCompanion = role === 'companion';
+          $('#row-cmd-target')[isCompanion ? 'hide' : 'show']();
+        } else {
+          // Build tier always shows the target rows (must stamp targets).
+          $('#row-cmd-target').show();
+        }
+      }
+
+      $('#node-input-identity').on('change', refreshVisibility);
 
       function reloadTargetCompId() {
         if (!(RED.mavlink && RED.mavlink.loadEnumsCatalog)) return;
@@ -281,7 +336,7 @@
           RED.mavlink.fillCompIdSelect(
             $('#node-input-targetCompid'),
             ((catalog || {}).enums || {}).MAV_COMPONENT || [],
-            { allowEmpty: true, emptyLabel: '(default)', saved: saved }
+            { allowEmpty: true, emptyLabel: '(profile default)', saved: saved }
           );
         });
       }
@@ -400,10 +455,39 @@
         refreshDelivery();
         // Connection binds a Vehicle Profile → dialect; CompID + Advanced follow it.
         reloadTargetCompId();
+        // Re-fill the identity dropdown for the newly selected connection.
+        refreshIdentitySelect();
+        refreshVisibility();
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
         if ($('#node-input-mode').val() === 'preset') refreshParamFields();
       });
-      $('#node-input-delivery').on('change', refreshCompletionRow);
+
+      $('#node-input-vehicle').on('change', function () {
+        // Vehicle Profile change invalidates build-tier catalogs.
+        if ($('#node-input-delivery').val() === 'build') {
+          presetEnumsCatalog = { enums: {} };
+          presetEnumsLoaded = false;
+          presetEnumRequestSeq += 1;
+          presetMessagesCatalog = null;
+          presetMessagesKey = '';
+          if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
+          if ($('#node-input-mode').val() === 'preset') refreshParamFields();
+        }
+      });
+
+      $('#node-input-delivery').on('change', function () {
+        refreshCompletionRow();
+        refreshVisibility();
+        // Tier switch may change catalog source (build→vehicle, wire→connection).
+        // Invalidate all cached dialect data and reload.
+        presetEnumsCatalog = { enums: {} };
+        presetEnumsLoaded = false;
+        presetEnumRequestSeq += 1;
+        presetMessagesCatalog = null;
+        presetMessagesKey = '';
+        if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
+        if ($('#node-input-mode').val() === 'preset') refreshParamFields();
+      });
 
       function refreshCompletionRow() {
         const isComplete = $('#node-input-delivery').val() === 'complete';
@@ -690,9 +774,11 @@
       $('#node-input-mode').on('change', refreshSafetyNotice);
 
       // ── Initial state ──────────────────────────────────────────────────────
+      refreshIdentitySelect();
       applyMode(node.mode || 'preset');
       refreshSafetyNotice();
       refreshCompletionRow();
+      refreshVisibility();
     },
 
     oneditsave: function () {
@@ -766,9 +852,19 @@
 
   <hr style="margin:8px 0">
 
-  <div class="form-row">
+  <div class="form-row" id="row-cmd-vehicle">
+    <label for="node-input-vehicle" style="width:120px">Vehicle Profile</label>
+    <input type="text" id="node-input-vehicle" style="width:240px">
+  </div>
+
+  <div class="form-row" id="row-cmd-connection">
     <label for="node-input-connection" style="width:120px">Connection</label>
     <input type="text" id="node-input-connection" style="width:240px">
+  </div>
+
+  <div class="form-row" id="row-cmd-identity">
+    <label for="node-input-identity" style="width:120px">Send as</label>
+    <select id="node-input-identity" style="width:240px"></select>
   </div>
 
   <div class="form-row">
@@ -788,25 +884,25 @@
 
   <hr style="margin:8px 0">
 
-  <div class="form-row">
+  <div class="form-row" id="row-cmd-target">
     <label for="node-input-targetSysid" style="width:120px">Target sysid</label>
-    <input type="number" id="node-input-targetSysid" placeholder="(connection default)" style="width:80px">
+    <input type="number" id="node-input-targetSysid" placeholder="(profile default)" style="width:80px">
     <label for="node-input-targetCompid" style="margin-left:10px;width:80px">Compid</label>
     <select id="node-input-targetCompid" style="width:80px"></select>
   </div>
 
-  <div class="form-row">
+  <div class="form-row" id="row-cmd-timeout">
     <label for="node-input-timeout" style="width:120px">ACK timeout</label>
     <input type="number" id="node-input-timeout" style="width:80px"> ms
   </div>
 
-  <div class="form-row">
+  <div class="form-row" id="row-cmd-maxRetries">
     <label for="node-input-maxRetries" style="width:120px">Max retries</label>
     <input type="number" id="node-input-maxRetries" style="width:60px">
     <span style="margin-left:6px;color:#888;font-size:11px">TEMPORARILY_REJECTED backoff</span>
   </div>
 
-  <div class="form-row">
+  <div class="form-row" id="row-cmd-unconfirmedContinue">
     <label style="width:120px">On timeout</label>
     <input type="checkbox" id="node-input-unconfirmedContinue" style="width:auto;margin-right:6px">
     <label for="node-input-unconfirmedContinue" style="width:auto">Continue chain if unconfirmed</label>
@@ -824,6 +920,13 @@
       command parameters for the matching param index.
       <code>false</code> suppresses the command (nothing is sent or emitted).
     </dd>
+    <dt class="optional">payload.target <span class="property-type">object</span></dt>
+    <dd>
+      <code>{ sysid, compid }</code> — runtime override for the target address; takes
+      precedence over every other resolution step including companion derivation.
+    </dd>
+    <dt class="optional">payload.identityId <span class="property-type">string</span></dt>
+    <dd>Runtime override for the send-as Local Identity node id.</dd>
     <dt class="optional">confirmed <span class="property-type">boolean</span></dt>
     <dd>Must be <code>true</code> for Safety presets (e.g. Flight Termination).</dd>
   </dl>
@@ -850,20 +953,38 @@
 
   <h3>Delivery tiers</h3>
   <ul>
-    <li><b>Build</b> — construct the COMMAND_LONG and emit on output 1; no send.</li>
+    <li><b>Build</b> — construct the COMMAND_LONG and emit on output 0; no send. Uses the
+        <em>Vehicle Profile</em> field for the dialect and default target; identity and
+        connection are not used.</li>
     <li><b>Send</b> — fire-and-forget; no acknowledgement waiting.</li>
     <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; retry on TEMPORARILY_REJECTED.</li>
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
         vehicle state satisfies the command's completion condition (Arm, Takeoff, Land, Set Mode).</li>
   </ul>
 
+  <h3>Role × tier matrix</h3>
+  <p>
+    The dialog reshapes at edit time based on the selected delivery tier and identity role.
+    At runtime only <code>msg.payload</code> can override values; hidden fields are not honored.
+  </p>
+  <ul>
+    <li><b>Build tier</b>: Vehicle Profile row shown; Connection, identity, timeout, and retry
+        rows hidden. Target sysid/compid inherit from the Vehicle Profile's defaults.</li>
+    <li><b>Wire tiers</b> (Send / confirm / complete): Connection shown (required); identity
+        (send-as) shown. Target rows follow the identity role:</li>
+    <li><b>gcs / custom identity</b>: target sysid and compid shown; blank inherits the
+        connection's vehicle profile default.</li>
+    <li><b>companion identity</b>: target sysid and compid hidden — target is derived from
+        the companion's airframe sysid and fixed compid 1.</li>
+  </ul>
+
   <h3>Mode</h3>
   <p>
     <b>Preset</b> — hand-curated commands with pinned params and friendly names.
-    <b>Advanced</b> — every <code>MAV_CMD</code> in the Connection's Vehicle dialect as a
-    dropdown (name and numeric id); all seven params exposed. The list follows the
-    bound Vehicle Profile when a Connection is selected. Bitmask params render as
-    multi-selects; Ctrl/Cmd-click multiple flags and the editor stores their numeric mask.
+    <b>Advanced</b> — every <code>MAV_CMD</code> in the dialect as a dropdown; all
+    params exposed. Build tier uses the Vehicle Profile field; wire tiers use the
+    bound connection's profile. Bitmask params render as multi-selects;
+    Ctrl/Cmd-click multiple flags and the editor stores their numeric mask.
   </p>
 
   <h3>Details</h3>
@@ -875,5 +996,10 @@
     On ACK timeout the node checks the peer table. If the completion condition is
     satisfied, the command is confirmed by observed state. Otherwise the result is
     <em>unconfirmed</em>; output 0 does not fire unless <em>Continue chain if unconfirmed</em> is enabled.
+  </p>
+  <p>
+    COMMAND_ACK matching keys on the same resolved target as the send: a companion
+    identity's derived address <code>{airframe sysid, 1}</code> is used for both sending
+    and settling the acknowledgement transaction.
   </p>
 </script>

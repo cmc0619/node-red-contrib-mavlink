@@ -44,6 +44,11 @@ const {
   buildClearAll,
   buildItemInt,
 } = require('../lib/mission');
+const {
+  resolveActionTarget,
+  resolveFirmware,
+  profileFromVehicleNode,
+} = require('../lib/addressing');
 
 module.exports = function registerMavlinkMission(RED) {
   function MavlinkMissionNode(config) {
@@ -53,11 +58,6 @@ module.exports = function registerMavlinkMission(RED) {
     const operation = config.operation || OPERATION.DOWNLOAD;
     const connNode = config.connection ? RED.nodes.getNode(config.connection) : null;
     const delivery = config.delivery || (connNode ? 'confirm' : 'build');
-    // The firmware gate must follow the Connection's bound Vehicle Profile, not
-    // an independent default that can drift out of sync with it (§9 "Firmware
-    // gates the type list", §11). Prefer the connection's profile firmware;
-    // fall back to node config, then ArduPilot.
-    const firmware = boundFirmware(connNode) || config.firmware || 'ardupilot';
     const timeoutMs = config.timeout ? Number(config.timeout) : undefined;
     const maxRetries = config.maxRetries !== undefined && config.maxRetries !== ''
       ? Number(config.maxRetries)
@@ -97,11 +97,30 @@ module.exports = function registerMavlinkMission(RED) {
 
       const payload = objectPayload(msg.payload);
       const missionTypeKey = payload.missionType || config.missionType || 'mission';
-      const target = resolveTarget(config, payload);
 
-      // Firmware gate: refuse a type the selected stack does not carry over
-      // this protocol rather than sending a request it will silently no-op (§9,
-      // §11).
+      // Build tier: profile from Vehicle Profile field, no identity.
+      // Wire tiers: profile from Connection's bound Vehicle, identity from config/payload.
+      const profile = delivery === 'build'
+        ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
+        : (connNode && connNode.vehicle) || null;
+      const identityNode = delivery !== 'build'
+        ? RED.nodes.getNode(payload.identityId || config.identity)
+        : null;
+
+      // Firmware gate: follows profile (not stored config.firmware which is hidden —
+      // hidden is not honored, §6). Payload override is the only runtime escape.
+      const firmware = resolveFirmware(payload.firmware, profile);
+
+      const target = resolveActionTarget({
+        payloadTarget: payload.target,
+        configSysid: config.targetSystem,
+        configCompid: config.targetComponent,
+        identityNode,
+        profile,
+      });
+
+      // Refuse a type the selected stack does not carry over this protocol rather
+      // than sending a request it will silently no-op (§9, §11).
       const supported = supportedMissionTypes(firmware);
       if (!supported.includes(missionTypeKey)) {
         const rec = record(operation, missionTypeKey, target, {
@@ -197,7 +216,7 @@ module.exports = function registerMavlinkMission(RED) {
           connNode.send(message, {
             band: BAND.BULK,
             target,
-            identityId: config.identity || payload.identityId,
+            identityId: payload.identityId || config.identity,
           }),
         subscribe: (filter, handler) => connNode.subscribe(filter, handler),
         target,
@@ -256,18 +275,6 @@ module.exports = function registerMavlinkMission(RED) {
 
   RED.nodes.registerType('mavlink-mission', MavlinkMissionNode);
 };
-
-/**
- * The firmware of the Connection's bound Vehicle Profile, when reachable, so
- * the mission-type gate matches the stack actually addressed (§9, §11).
- *
- * @param {object|null} connNode  the Connection config node
- * @returns {string|null}
- */
-function boundFirmware(connNode) {
-  const vehicle = connNode && connNode.connection && connNode.connection._vehicle;
-  return vehicle && vehicle.firmware ? vehicle.firmware : null;
-}
 
 /**
  * Build a status record for output 1. Every record carries the operation and
@@ -333,24 +340,6 @@ function resolveItems(config, payload) {
     return parsed;
   }
   return [];
-}
-
-/**
- * @param {object} config
- * @param {object} payload
- * @returns {{sysid: number, compid: number}}
- */
-function resolveTarget(config, payload) {
-  const t = payload.target || {};
-  return {
-    // Preserve configured 0 (broadcast / all-components) — do not treat as unset.
-    sysid: Number(t.sysid ?? (config.targetSystem !== '' && config.targetSystem !== undefined
-      ? config.targetSystem
-      : 1)),
-    compid: Number(t.compid ?? (config.targetComponent !== '' && config.targetComponent !== undefined
-      ? config.targetComponent
-      : 1)),
-  };
 }
 
 /**

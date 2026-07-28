@@ -74,22 +74,35 @@
       return $el && $el.length ? String($el.val() || '').trim() : '';
     }
 
+    /**
+     * Catalog source follows the role × tier matrix (DESIGN.md §6): on Build
+     * tier the node's own Vehicle Profile / dialect fields govern; on wire
+     * tiers the connection's bound profile governs, because that dialect is
+     * what the wire will encode. Dialogs without a delivery field keep the
+     * connection-derived behaviour.
+     */
     function currentEnumQuery(names) {
       var query = {};
-      var vehicle = valueFromSelector('#node-input-vehicle');
+      var buildTier = valueFromSelector('#node-input-delivery') === 'build';
+      var vehicle = '';
       var dialect = valueFromSelector('#node-input-dialect') ||
         valueFromSelector('#node-config-input-dialect');
 
-      if (!vehicle) {
+      if (!buildTier) {
         var connection = valueFromSelector('#node-input-connection');
         if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
           var conn = RED.nodes.node(connection);
           if (conn && conn.vehicle) {
             vehicle = conn.vehicle;
-            var profile = RED.nodes.node(conn.vehicle);
-            if (!dialect && profile && profile.dialect) dialect = profile.dialect;
+            var connProfile = RED.nodes.node(conn.vehicle);
+            if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
           }
         }
+      }
+      if (!vehicle) vehicle = valueFromSelector('#node-input-vehicle');
+      if (vehicle && !dialect && RED.nodes && typeof RED.nodes.node === 'function') {
+        var ownProfile = RED.nodes.node(vehicle);
+        if (ownProfile && ownProfile.dialect) dialect = ownProfile.dialect;
       }
 
       if (vehicle) query.vehicle = vehicle;
@@ -176,6 +189,72 @@
      */
     RED.mavlink.fillCompIdSelect = function ($select, entries, opts) {
       RED.mavlink.fillEnumSelect($select, entries, opts || {});
+    };
+
+    /**
+     * Normalized role of a Local Identity config node, editor-side.
+     * Unknown / unset resolves to 'gcs' (show-everything shape).
+     *
+     * @param {string} identityId
+     * @returns {'gcs'|'companion'|'custom'}
+     */
+    RED.mavlink.identityRole = function (identityId) {
+      var idNode = identityId && RED.nodes && typeof RED.nodes.node === 'function'
+        ? RED.nodes.node(identityId)
+        : null;
+      var role = idNode && idNode.role;
+      return role === 'companion' || role === 'custom' ? role : 'gcs';
+    };
+
+    /**
+     * Identities bound to a Connection (default first, then additionals),
+     * optionally filtered by role (§6 matrix: swarm passes ['gcs','custom']).
+     *
+     * @param {string} connectionId
+     * @param {string[]} [rolesAllowed]
+     * @returns {Array<{id: string, role: string, label: string}>}
+     */
+    RED.mavlink.identityOptionsFor = function (connectionId, rolesAllowed) {
+      var out = [];
+      if (!connectionId || !RED.nodes || typeof RED.nodes.node !== 'function') return out;
+      var conn = RED.nodes.node(connectionId);
+      if (!conn) return out;
+      var ids = [conn.localIdentity].concat(conn.additionalIdentities || []);
+      var seen = {};
+      ids.forEach(function (id) {
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        var idNode = RED.nodes.node(id);
+        if (!idNode) return;
+        var role = RED.mavlink.identityRole(id);
+        if (rolesAllowed && rolesAllowed.indexOf(role) === -1) return;
+        out.push({ id: id, role: role, label: (idNode.name || 'identity') + ' (' + role + ')' });
+      });
+      return out;
+    };
+
+    /**
+     * Fill a send-as identity select with the identities bound to the selected
+     * connection. When the saved id is not eligible (or empty), the first
+     * eligible identity is preselected — and thereby written into config on
+     * Done (§6 matrix: prefill is explicit, runtime never infers).
+     *
+     * @param {object} $select  jQuery select
+     * @param {string} connectionId
+     * @param {{rolesAllowed?: string[], saved?: string}} [opts]
+     * @returns {string} the selected identity id ('' when none eligible)
+     */
+    RED.mavlink.fillIdentitySelect = function ($select, connectionId, opts) {
+      opts = opts || {};
+      var options = RED.mavlink.identityOptionsFor(connectionId, opts.rolesAllowed);
+      $select.empty();
+      options.forEach(function (o) {
+        $select.append($('<option></option>').val(o.id).text(o.label));
+      });
+      var eligible = options.some(function (o) { return o.id === opts.saved; });
+      var selected = eligible ? opts.saved : (options.length ? options[0].id : '');
+      $select.val(selected);
+      return selected;
     };
 
     /**

@@ -4,9 +4,23 @@
     color: '#ffe6cc',
     defaults: {
       name: { value: '' },
-      connection: { value: '', type: 'mavlink-connection', required: true },
+      connection: { value: '', type: 'mavlink-connection', required: false },
+      identity: { value: '' },
       selectionMode: { value: 'all' },
-      sysids: { value: '' },
+      sysids: {
+        value: '',
+        validate: function (v) {
+          // Empty is fine when Selection isn't "list"; when the field is filled
+          // (or list mode is active) every token must be a MAVLink sysid.
+          if (v === undefined || v === null || String(v).trim() === '') return true;
+          return String(v).split(',').every(function (part) {
+            part = part.trim();
+            if (!part) return true;
+            var n = Number(part);
+            return Number.isInteger(n) && n >= 1 && n <= 255;
+          });
+        },
+      },
       vehicleType: { value: '' },
       firmwareFilter: { value: '' },
       armedFilter: { value: '' },
@@ -221,19 +235,42 @@
         loadCommandsCatalog(buildCommandDropdown);
       }
 
+      function refreshIdentitySelect() {
+        var connId = $('#node-input-connection').val();
+        RED.mavlink.fillIdentitySelect($('#node-input-identity'), connId, {
+          rolesAllowed: ['gcs', 'custom'],
+          saved: node.identity
+        });
+      }
+
+      function refreshVisibility() {
+        var d = $('#node-input-delivery').val() || 'build';
+        var sel = $('#node-input-selectionMode').val() || 'all';
+        var isBuildList = d === 'build' && sel === 'list';
+        $('#row-swarm-connection').toggle(!isBuildList);
+        $('#row-swarm-identity').toggle(d !== 'build');
+      }
+
       $('#node-input-connection').on('change', function () {
         refreshVehicleTypeOptions();
         refreshCommandOptions();
+        refreshIdentitySelect();
+        refreshVisibility();
       });
+      $('#node-input-delivery').on('change', refreshVisibility);
+      $('#node-input-selectionMode').on('change', refreshVisibility);
       refreshVehicleTypeOptions();
       refreshCommandOptions();
+      refreshIdentitySelect();
+      refreshVisibility();
     }
   });
 </script>
 
 <script type="text/html" data-template-name="mavlink-swarm">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
-  <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-swarm-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-swarm-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-selectionMode">Selection</label><select id="node-input-selectionMode"><option value="all">All active vehicles</option><option value="list">Explicit sysid list</option><option value="filter">Filter</option></select></div>
   <div class="form-row"><label for="node-input-sysids">Sysids</label><input type="text" id="node-input-sysids" placeholder="1,2,3"></div>
   <div class="form-row"><label for="node-input-vehicleType">Type filter</label><select id="node-input-vehicleType"></select></div>
@@ -267,6 +304,8 @@
   <p>Fans one single-message MAVLink action out across the active vehicles selected from a Connection peer table.</p>
   <p>Sequential mode sends one targeted message per member at the configured interval. Broadcast mode sends one packet with target_system 0 and target_component 1.</p>
   <p>Output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail. Mission actions and parameter list requests are refused.</p>
+  <p><b>Send as</b> — selects the GCS or custom identity that stamps source SysID/CompID on outbound frames. Only identities with a <code>gcs</code> or <code>custom</code> role are offered. Hidden on Build delivery (source ids are stamped at the wire by the sending node).</p>
+  <p>The Connection is not required when Delivery is <b>Build</b> and Selection is <b>Explicit sysid list</b> — the list resolves without a live peer table. All other combinations (all/filter even in Build) still require a Connection because the peer table is the only place those selections resolve.</p>
   <p>Broadcast requires the <i>All active vehicles</i> selection: a broadcast packet reaches every vehicle on the link, so it cannot honour a filtered or explicit-list subset. Use sequential fan-out for a subset.</p>
   <p>Safety commands (Flight Termination) are refused unless the <b>Confirm</b> box is ticked or <code>msg.confirmed = true</code> is set.</p>
 </script>

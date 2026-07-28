@@ -5,10 +5,12 @@
     defaults: {
       name: { value: '' },
       connection: { value: '', type: 'mavlink-connection' },
+      vehicle: { value: '', type: 'mavlink-vehicle', required: false },
+      identity: { value: '' },
       delivery: { value: 'build' },
       mode: { value: 'local-position' },
-      targetSystem: { value: 1, validate: RED.validators.number() },
-      targetComponent: { value: 1, validate: RED.validators.number() },
+      targetSystem: { value: '', validate: RED.validators.number(true) },
+      targetComponent: { value: '', validate: RED.validators.number(true) },
       north: { value: 0, validate: RED.validators.number(true) },
       east: { value: 0, validate: RED.validators.number(true) },
       up: { value: 0, validate: RED.validators.number(true) },
@@ -32,25 +34,48 @@
       var node = this;
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
+
+      if (RED.mavlink && RED.mavlink.fillIdentitySelect) {
+        RED.mavlink.fillIdentitySelect(
+          $('#node-input-identity'),
+          node.connection,
+          { saved: node.identity }
+        );
+      }
+
       if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
         RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
           RED.mavlink.fillCompIdSelect(
             $('#node-input-targetComponent'),
             (catalog.enums || {}).MAV_COMPONENT || [],
-            { saved: node.targetComponent }
+            { allowEmpty: true, emptyLabel: '(profile default)', saved: node.targetComponent }
           );
         });
       }
 
       /**
-       * §6: only the fields for the selected mode and delivery exist. Everything
-       * else is hidden — not greyed, not left over from another mode.
+       * §6: only the fields for the selected mode, delivery, and identity role
+       * exist. Everything else is hidden — not greyed, not left over from another mode.
+       * Build → vehicle shown; connection/identity hidden.
+       * Wire → connection/identity shown; vehicle hidden.
+       * Companion (wire) → target sysid AND compid hidden (derived from airframe).
        */
       function refreshVisibility() {
         var mode = $('#node-input-mode').val() || 'local-position';
         var delivery = $('#node-input-delivery').val() || 'build';
+        var isBuild = delivery === 'build';
+        var isWire = !isBuild;
+        var identityId = isWire ? $('#node-input-identity').val() : '';
+        var isCompanion = isWire && RED.mavlink.identityRole(identityId) === 'companion';
+
         var show = {
+          vehicle: isBuild,
+          connection: isWire,
+          identity: isWire,
+          targetSystem: isBuild || !isCompanion,
+          targetComponent: isBuild || !isCompanion,
           north: mode === 'local-position',
           east: mode === 'local-position',
           up: mode === 'local-position',
@@ -66,6 +91,11 @@
           ttl: delivery === 'stream'
         };
 
+        $('#row-move-vehicle').toggle(!!show.vehicle);
+        $('#row-move-connection').toggle(!!show.connection);
+        $('#row-move-identity').toggle(!!show.identity);
+        $('#row-move-targetSystem').toggle(!!show.targetSystem);
+        $('#row-move-targetComponent').toggle(!!show.targetComponent);
         $('#row-move-north').toggle(!!show.north);
         $('#row-move-east').toggle(!!show.east);
         $('#row-move-up').toggle(!!show.up);
@@ -83,6 +113,17 @@
 
       $('#node-input-mode').on('change', refreshVisibility);
       $('#node-input-delivery').on('change', refreshVisibility);
+      $('#node-input-identity').on('change', refreshVisibility);
+      $('#node-input-connection').on('change', function () {
+        if (RED.mavlink && RED.mavlink.fillIdentitySelect) {
+          RED.mavlink.fillIdentitySelect(
+            $('#node-input-identity'),
+            $(this).val(),
+            { saved: node.identity }
+          );
+        }
+        refreshVisibility();
+      });
       refreshVisibility();
     }
   });
@@ -90,11 +131,13 @@
 
 <script type="text/html" data-template-name="mavlink-move">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
-  <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-move-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-move-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
+  <div class="form-row" id="row-move-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="stream">Stream</option></select></div>
   <div class="form-row"><label for="node-input-mode">Mode</label><select id="node-input-mode"><option value="local-position">Local position</option><option value="local-velocity">Local velocity</option><option value="global-position">Global position</option></select></div>
-  <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
-  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
+  <div class="form-row" id="row-move-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
+  <div class="form-row" id="row-move-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row" id="row-move-north"><label for="node-input-north">Metres north</label><input type="text" id="node-input-north" step="any" style="width:120px"> m</div>
   <div class="form-row" id="row-move-east"><label for="node-input-east">Metres east</label><input type="text" id="node-input-east" step="any" style="width:120px"> m</div>
   <div class="form-row" id="row-move-up"><label for="node-input-up">Metres up</label><input type="text" id="node-input-up" step="any" style="width:120px"> m</div>
@@ -113,5 +156,6 @@
 <script type="text/html" data-help-name="mavlink-move">
   <p>Builds or sends SET_POSITION_TARGET_* messages. Local altitude and vertical velocity are entered up-positive; the node flips them once to MAVLink NED down-positive values.</p>
   <p>Mode and delivery reshape the form (§6): only the parameters for the selected mode are shown. Stream interval and TTL appear only for Stream delivery.</p>
+  <p>On <b>Build</b> delivery the Vehicle Profile supplies dialect and target defaults. On <b>Send</b> or <b>Stream</b> delivery a Connection is required and the Send-as identity determines addressing: a companion identity derives the target sysid from its airframe and pins compid to 1 (the autopilot).</p>
   <p>Output 0 continues only on success. Output 1 carries the status record for every terminal outcome.</p>
 </script>

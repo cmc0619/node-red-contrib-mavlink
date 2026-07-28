@@ -184,6 +184,13 @@ test('mavlink-payload does not leak action ids across release enum families', ()
   );
 });
 
+test('mavlink-payload target sysid/compid default to empty (inherit profile) not 1', () => {
+  assert.match(payloadHtml, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
+  assert.match(payloadHtml, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
+  assert.match(payloadHtml, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
+  assert.match(payloadHtml, /emptyLabel:\s*'[^']*profile default[^']*'/, 'compid empty label names profile default');
+});
+
 test('mavlink-payload fractional params use step=any', () => {
   for (const id of [
     'node-input-interval',
@@ -203,4 +210,61 @@ test('mavlink-payload fractional params use step=any', () => {
       `${id} must accept fractional values`
     );
   }
+});
+
+test('mavlink-payload has vehicle and identity defaults for role × tier matrix (§6)', () => {
+  assert.match(payloadHtml, /vehicle:\s*\{\s*value:\s*''/, 'vehicle default is empty string');
+  assert.match(payloadHtml, /type:\s*'mavlink-vehicle'/, 'vehicle is a config node type');
+  assert.match(payloadHtml, /identity:\s*\{\s*value:\s*''/, 'identity default is empty string');
+  assert.match(payloadHtml, /fillIdentitySelect/, 'fillIdentitySelect fills the identity dropdown');
+  assert.match(payloadHtml, /id="row-payload-vehicle"/, 'vehicle row has ID for tier-driven toggling');
+  assert.match(payloadHtml, /id="row-payload-identity"/, 'identity row has ID for tier-driven toggling');
+  assert.match(payloadHtml, /id="row-payload-connection"/, 'connection row has ID for tier-driven toggling');
+  assert.match(payloadHtml, /ensureConfigNodePicker[^)]*'vehicle'/, 'vehicle uses config node picker');
+});
+
+test('mavlink-payload companion hides sysid row but NOT compid row (§6 spec exception)', () => {
+  assert.match(payloadHtml, /isCompanion/, 'companion flag drives visibility');
+  assert.match(payloadHtml, /id="row-payload-targetSystem"/, 'targetSystem row has ID');
+  assert.match(payloadHtml, /id="row-payload-targetComponent"/, 'targetComponent row has ID');
+  // sysid is gated by companion
+  assert.match(
+    payloadHtml,
+    /targetSystem:\s*isBuild\s*\|\|\s*!isCompanion/,
+    'sysid gated by companion for payload'
+  );
+  // compid is NOT gated by companion (spec exception: payload device address stays visible)
+  assert.match(
+    payloadHtml,
+    /targetComponent:\s*true/,
+    'compid always visible for payload (payload device address exception)'
+  );
+  assert.ok(
+    !payloadHtml.includes('targetComponent: isBuild || !isCompanion'),
+    'payload compid row must NOT be gated the same as move (no isCompanion suppression)'
+  );
+});
+
+test('mavlink-payload build tier shows vehicle, hides connection/identity/timeout/retry (§6)', () => {
+  assert.match(payloadHtml, /vehicle:\s*isBuild/, 'vehicle row shown only for build tier');
+  assert.match(payloadHtml, /connection:\s*isWire/, 'connection row shown only for wire tiers');
+  assert.match(payloadHtml, /identity:\s*isWire/, 'identity row shown only for wire tiers');
+  assert.match(payloadHtml, /timeout:\s*isWire/, 'timeout row shown only for wire tiers');
+  assert.match(payloadHtml, /maxRetries:\s*isWire/, 'maxRetries row shown only for wire tiers');
+  assert.match(payloadHtml, /id="row-payload-timeout"/, 'timeout row has ID for toggling');
+  assert.match(payloadHtml, /id="row-payload-maxRetries"/, 'maxRetries row has ID for toggling');
+});
+
+test('mavlink-payload fills identity select and re-fills on connection change (§6)', () => {
+  assert.match(
+    payloadHtml,
+    /\$\('#node-input-identity'\)\.on\('change', refreshVisibility\)/,
+    'identity change triggers visibility refresh'
+  );
+  assert.match(
+    payloadHtml,
+    /\$\('#node-input-connection'\)\.on\('change'/,
+    'connection change handler exists'
+  );
+  assert.match(payloadHtml, /fillIdentitySelect[^)]*\$\('#node-input-identity'\)/, 'identity refilled on connection change');
 });

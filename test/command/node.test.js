@@ -158,6 +158,73 @@ test('Async handler contains a throw as a terminal failed status plus done(err)'
   assert.ok(doneErr instanceof Error, 'done(err) was called');
 });
 
+test('resolveTarget: wire tier empty config inherits Vehicle Profile target from connNode.vehicle', async () => {
+  const conn = connStub({ targetSysid: 42, targetCompid: 191 });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  // Wire tier (send) with empty target config — must inherit from connNode.vehicle.
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'send',
+    connection: 'conn',
+    targetSysid: '',
+    targetCompid: '',
+  });
+
+  let sent;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.fields.target_system, 42);
+  assert.equal(sent[0].payload.fields.target_component, 191);
+});
+
+test('resolveTarget: explicit config value wins over Vehicle Profile', async () => {
+  const conn = connStub({ targetSysid: 42, targetCompid: 191 });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'build',
+    connection: 'conn',
+    targetSysid: '7',
+    targetCompid: '100',
+  });
+
+  let sent;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.fields.target_system, 7);
+  assert.equal(sent[0].payload.fields.target_component, 100);
+});
+
+test('resolveTarget: no vehicle context falls back to 1', async () => {
+  const conn = connStub(null);
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'build',
+    connection: 'conn',
+    targetSysid: '',
+    targetCompid: '',
+  });
+
+  let sent;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.fields.target_system, 1);
+  assert.equal(sent[0].payload.fields.target_component, 1);
+});
+
 test('Send/confirm tier with no connection fails loud instead of silently building', async () => {
   const RED = redStub({});
   require('../../nodes/mavlink-command')(RED);
@@ -174,13 +241,186 @@ test('Send/confirm tier with no connection fails loud instead of silently buildi
   assert.ok(/no connection/.test(sent[1].detail));
 });
 
-function connStub() {
+test('resolveTarget: companion identity derives {airframe sysid, 1} as target', async () => {
+  const identityStub = {
+    role: 'companion',
+    derivesSysidFromVehicle: true,
+    getIdentity: () => ({ sysid: 42, compid: 191 }),
+  };
+  const conn = connStub({ targetSysid: 99, targetCompid: 99 });
+  const RED = redStub({ conn, identity: identityStub });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'send',
+    connection: 'conn',
+    identity: 'identity',
+    targetSysid: '',
+    targetCompid: '',
+  });
+
+  let sent;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.fields.target_system, 42, 'companion sysid derived from airframe');
+  assert.equal(sent[0].payload.fields.target_component, 1, 'companion compid pinned to 1');
+});
+
+test('resolveTarget: msg.payload.target overrides companion derivation', async () => {
+  const identityStub = {
+    role: 'companion',
+    derivesSysidFromVehicle: true,
+    getIdentity: () => ({ sysid: 42, compid: 191 }),
+  };
+  const conn = connStub({ targetSysid: 99, targetCompid: 99 });
+  const RED = redStub({ conn, identity: identityStub });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'send',
+    connection: 'conn',
+    identity: 'identity',
+    targetSysid: '',
+    targetCompid: '',
+  });
+
+  let sent;
+  node.emit('input', { payload: { target: { sysid: 10, compid: 20 } } }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.fields.target_system, 10, 'payload.target.sysid wins over companion derivation');
+  assert.equal(sent[0].payload.fields.target_component, 20, 'payload.target.compid wins over companion derivation');
+});
+
+test('resolveTarget: config 0 is broadcast and survives (new semantics)', async () => {
+  const conn = connStub({ targetSysid: 42, targetCompid: 191 });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'send',
+    connection: 'conn',
+    targetSysid: '0',
+    targetCompid: '0',
+  });
+
+  let sent;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.fields.target_system, 0, 'config 0 = broadcast, must not be treated as inherit');
+  assert.equal(sent[0].payload.fields.target_component, 0, 'config 0 compid = broadcast, must not be treated as inherit');
+});
+
+test('resolveTarget: build tier inherits from config.vehicle profile stub', async () => {
+  const vehicleStub = {
+    defaultTargetSystem: 77,
+    defaultTargetComponent: 78,
+    firmware: 'ardupilot',
+  };
+  const RED = redStub({ vehicle: vehicleStub });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'build',
+    vehicle: 'vehicle',
+    targetSysid: '',
+    targetCompid: '',
+  });
+
+  let sent;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.fields.target_system, 77, 'build tier inherits sysid from config.vehicle');
+  assert.equal(sent[0].payload.fields.target_component, 78, 'build tier inherits compid from config.vehicle');
+});
+
+test('ack-matcher pin: companion target used for COMMAND_ACK matching; ack from sysid 1 ignored', async () => {
+  const identityStub = {
+    role: 'companion',
+    derivesSysidFromVehicle: true,
+    getIdentity: () => ({ sysid: 42, compid: 191 }),
+  };
+  const conn = connStubWithInject({ targetSysid: 1, targetCompid: 1 });
+  const RED = redStub({ conn, identity: identityStub });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',   // commandId 400
+    delivery: 'confirm',
+    connection: 'conn',
+    identity: 'identity',
+    targetSysid: '',
+    targetCompid: '',
+    timeout: '5000',
+  });
+
+  let result;
+  node.emit('input', { payload: null }, (m) => { result = m; }, () => {});
+  await tick();
+
+  // Wrong source — sysid 1 must not settle the transaction.
+  conn.injectAck({ command: 400, result: 0 }, 1, 1);
+  await tick();
+  assert.equal(result, undefined, 'ack from sysid 1 must not settle the transaction');
+
+  // Correct source — sysid 42 compid 1 (companion derived target) must settle.
+  conn.injectAck({ command: 400, result: 0 }, 42, 1);
+  await tick();
+
+  assert.ok(result, 'ack from companion-derived target settles the transaction');
+  assert.equal(result[1].result, 'accepted');
+
+  node.emit('close', () => {});
+});
+
+function connStubWithInject(vehicleOverride) {
   const subs = [];
   const sent = [];
   return {
     subs,
     sent,
     peerTable: null,
+    vehicle: vehicleOverride !== undefined
+      ? vehicleOverride
+      : { targetSysid: 1, targetCompid: 1 },
+    send(message, opts) { sent.push({ message, opts }); },
+    subscribe(filter, handler) {
+      const entry = { filter, handler };
+      subs.push(entry);
+      return () => {
+        const i = subs.indexOf(entry);
+        if (i >= 0) subs.splice(i, 1);
+      };
+    },
+    injectAck(fields, sysid, compid) {
+      const decoded = { name: 'COMMAND_ACK', sysid, compid, fields };
+      for (const { handler } of subs.slice()) handler(decoded);
+    },
+  };
+}
+
+function connStub(vehicleOverride) {
+  const subs = [];
+  const sent = [];
+  return {
+    subs,
+    sent,
+    peerTable: null,
+    vehicle: vehicleOverride !== undefined
+      ? vehicleOverride
+      : { targetSysid: 1, targetCompid: 1 },
     send(message, opts) { sent.push({ message, opts }); },
     subscribe(filter, handler) {
       const entry = { filter, handler };

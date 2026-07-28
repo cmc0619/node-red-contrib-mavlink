@@ -3,6 +3,7 @@
 const { buildPayloadMessage } = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
 const { AckWaiter } = require('../lib/command');
+const { resolveActionTarget, profileFromVehicleNode } = require('../lib/addressing/resolve');
 
 const BADGE_MAX = 24;
 
@@ -38,35 +39,51 @@ module.exports = function registerMavlinkPayload(RED) {
           return;
         }
 
+        const delivery = config.delivery || 'build';
+        const connectionNode = delivery !== 'build'
+          ? RED.nodes.getNode(config.connection)
+          : null;
         const payload = objectPayload(msg.payload);
+
+        const profile = delivery === 'build'
+          ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
+          : (connectionNode && connectionNode.vehicle) || null;
+        const identityNode = delivery === 'build'
+          ? null
+          : RED.nodes.getNode(payload.identityId || config.identity);
+
+        // Payload: compidFromConfig keeps the compid field authoritative even
+        // under a companion identity — compid addresses a payload device, not
+        // the autopilot (DESIGN.md §6 spec'd exception).
+        const target = resolveActionTarget({
+          payloadTarget: payload.target,
+          configSysid: config.targetSystem,
+          configCompid: config.targetComponent,
+          identityNode,
+          profile,
+          compidFromConfig: true,
+        });
+
         const built = buildPayloadMessage({
           topic: payload.topic || config.topic || 'camera',
           verb: payload.verb || config.verb || 'photo',
           path: payload.path || config.path || 'legacy',
-          target: {
-            // Nullish-preserving so a configured 0 (broadcast) survives.
-            sysid: Number(firstDefined(payload.target && payload.target.sysid, config.targetSystem, 1)),
-            compid: Number(firstDefined(payload.target && payload.target.compid, config.targetComponent, 1)),
-          },
+          target,
           values: payload.values || valuesFrom(config),
         });
 
-        const delivery = config.delivery || 'build';
         if (delivery === 'build') {
           completeBuild(node, emit, built);
           if (done) done();
           return;
         }
 
-        const connectionNode = RED.nodes.getNode(config.connection);
         if (!connectionNode || typeof connectionNode.send !== 'function') {
           throw new Error('mavlink-payload requires a Connection');
         }
-        const target = {
-          sysid: built.message.fields.target_system,
-          compid: built.message.fields.target_component,
-        };
-        const identityId = config.identity || payload.identityId;
+        // Payload-first, matching the target derivation above: the runtime
+        // override must drive both the source stamp and the derived target.
+        const identityId = payload.identityId || config.identity;
 
         // Confirm tier for a command-backed verb: send the COMMAND_LONG and
         // wait for its COMMAND_ACK so a later DENIED / TEMPORARILY_REJECTED /
@@ -234,13 +251,6 @@ function statusRecord(result, detail, extra = {}) {
 
 function objectPayload(payload) {
   return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
-}
-
-function firstDefined(...values) {
-  for (const v of values) {
-    if (v !== undefined && v !== null && v !== '') return v;
-  }
-  return undefined;
 }
 
 function cap(text) {

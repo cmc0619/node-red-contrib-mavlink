@@ -37,6 +37,12 @@ const {
   shouldSuppress,
   applyActionStatus,
 } = require('../lib/delivery');
+const {
+  resolveActionTarget,
+  resolveFirmware,
+  profileFromVehicleNode,
+  firstDefined,
+} = require('../lib/addressing');
 
 /** Default param transaction timeout (ms). */
 const DEFAULT_TIMEOUT_MS = 10000;
@@ -150,9 +156,20 @@ module.exports = function registerMavlinkParam(RED) {
         }
 
         const payload = objectPayload(msg.payload);
-        const request = requestFrom(config, payload);
-        const message = buildParamMessage(request);
         const delivery = config.delivery || 'build';
+
+        // Build tier: profile from Vehicle Profile field, no identity.
+        // Wire tiers: profile from the Connection's bound Vehicle, identity from config/payload.
+        const connNode = delivery !== 'build' ? RED.nodes.getNode(config.connection) : null;
+        const profile = delivery === 'build'
+          ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
+          : (connNode && connNode.vehicle) || null;
+        const identityNode = delivery !== 'build'
+          ? RED.nodes.getNode(payload.identityId || config.identity)
+          : null;
+
+        const request = requestFrom(config, payload, { identityNode, profile });
+        const message = buildParamMessage(request);
 
         if (delivery === 'build') {
           completeBuild(node, emit, message);
@@ -164,7 +181,7 @@ module.exports = function registerMavlinkParam(RED) {
         connectionNode.send(message, {
           band: request.action === 'request-list' ? BAND.BULK : BAND.CONTROL,
           target: request.target,
-          identityId: config.identity || payload.identityId,
+          identityId: payload.identityId || config.identity,
         });
 
         // Scope the PARAM_VALUE subscription to the addressed vehicle so a
@@ -177,7 +194,6 @@ module.exports = function registerMavlinkParam(RED) {
         const isCollectList = delivery === 'collect' && request.action === 'request-list';
 
         if (!isConfirmSet && !isCollectList) {
-          // Fire-and-forget send: no echo to wait on.
           completeResult(node, emit, 'succeeded', 'sent', message);
           if (done) done();
           return;
@@ -233,42 +249,38 @@ module.exports = function registerMavlinkParam(RED) {
 };
 
 /**
+ * Build a normalized param request from payload, node config, identity node,
+ * and profile (per the role × tier matrix, DESIGN.md §6).
+ *
+ * Resolution order per field (sysid/compid): msg.payload.target →
+ * companion derivation → config → profile default → 1.
+ * Firmware: payload override → profile → 'ardupilot'. Stored config.firmware
+ * is not consulted (hidden is not honored, §6).
+ *
  * @param {object} config
  * @param {object} payload
+ * @param {{identityNode: object|null, profile: object|null}} ctx
  * @returns {object} normalized param request
  */
-function requestFrom(config, payload) {
-  const target = payload.target || {};
+function requestFrom(config, payload, { identityNode, profile }) {
+  const target = resolveActionTarget({
+    payloadTarget: payload.target,
+    configSysid: config.targetSystem,
+    configCompid: config.targetComponent,
+    identityNode,
+    profile,
+  });
   return {
     action: payload.action || config.action || 'read',
-    target: {
-      // Nullish-preserving: a configured 0 is a legitimate broadcast address
-      // and must not fall through the `||` chain to the default of 1.
-      sysid: Number(firstDefined(target.sysid, config.targetSystem, 1)),
-      compid: Number(firstDefined(target.compid, config.targetComponent, 1)),
-    },
+    target,
     paramId: payload.paramId || config.paramId,
     // paramIndex 0 is a valid index; keep it rather than letting `||` drop it to
     // the library's -1 default. Absent (undefined) is left for the library.
     paramIndex: firstDefined(payload.paramIndex, config.paramIndex),
     value: payload.value !== undefined ? payload.value : config.value,
     paramType: payload.paramType || config.paramType || 'MAV_PARAM_TYPE_REAL32',
-    firmware: payload.firmware || config.firmware || 'ardupilot',
+    firmware: resolveFirmware(payload.firmware, profile),
   };
-}
-
-/**
- * Return the first argument that is neither undefined, null, nor the empty
- * string. Preserves an explicit 0 (unlike `||`).
- *
- * @param {...*} values
- * @returns {*}
- */
-function firstDefined(...values) {
-  for (const v of values) {
-    if (v !== undefined && v !== null && v !== '') return v;
-  }
-  return undefined;
 }
 
 function requireConnection(RED, id) {

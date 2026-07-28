@@ -40,6 +40,11 @@ const {
   buildCommandInt,
 } = require('../lib/command');
 
+const {
+  resolveActionTarget,
+  profileFromVehicleNode,
+} = require('../lib/addressing');
+
 /** Band constant for outbound commands (CONTROL = 2). */
 const BAND_CONTROL = 2;
 
@@ -62,30 +67,6 @@ function resolveCommandId(config) {
   }
   const preset = getPreset(config.preset);
   return preset ? preset.commandId : null;
-}
-
-/**
- * Resolve the target (sysid, compid) from config and connection vehicle
- * defaults.
- *
- * @param {object} config
- * @param {object} connNode  Connection config node
- * @returns {{sysid: number, compid: number}}
- */
-function resolveTarget(config, connNode) {
-  const sysid =
-    config.targetSysid && Number(config.targetSysid) > 0
-      ? Number(config.targetSysid)
-      : connNode.connection.peerTable._opts && connNode.connection._vehicle
-        ? connNode.connection._vehicle.targetSysid
-        : 1;
-  const compid =
-    config.targetCompid && Number(config.targetCompid) > 0
-      ? Number(config.targetCompid)
-      : connNode.connection._vehicle
-        ? connNode.connection._vehicle.targetCompid
-        : 1;
-  return { sysid, compid };
 }
 
 /**
@@ -221,7 +202,36 @@ module.exports = function registerMavlinkCommand(RED) {
       }
 
       const paramArray = getParams(msg.payload);
-      const target = connNode ? resolveTarget(config, connNode) : { sysid: 1, compid: 1 };
+      const payloadTarget =
+        (msg.payload && typeof msg.payload === 'object') ? msg.payload.target : undefined;
+      const identityId =
+        (msg.payload && typeof msg.payload === 'object' && msg.payload.identityId != null
+          ? msg.payload.identityId
+          : config.identity) || '';
+
+      let target;
+      if (delivery === 'build') {
+        // Build tier: profile comes from the node's own Vehicle Profile field.
+        // Connection and identity are ignored — hidden is not honored (§6).
+        const vehicleNode = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
+        target = resolveActionTarget({
+          payloadTarget,
+          configSysid: config.targetSysid,
+          configCompid: config.targetCompid,
+          profile: profileFromVehicleNode(vehicleNode),
+        });
+      } else {
+        // Wire tiers: profile comes from the bound connection's vehicle context.
+        const identityNode = identityId ? RED.nodes.getNode(identityId) : null;
+        target = resolveActionTarget({
+          payloadTarget,
+          configSysid: config.targetSysid,
+          configCompid: config.targetCompid,
+          identityNode,
+          profile: connNode ? connNode.vehicle : null,
+        });
+      }
+
       const startMs = Date.now();
 
       function makeRecord(fields) {
@@ -306,7 +316,7 @@ module.exports = function registerMavlinkCommand(RED) {
           0
         );
         node.status({ fill: 'blue', shape: 'dot', text: badge24(`sending ${displayName}\u2026`) });
-        connNode.send(message, { band: BAND_CONTROL, target });
+        connNode.send(message, { band: BAND_CONTROL, target, identityId });
         const rec = makeRecord({ result: 'sent', confirmedBy: 'none', elapsed: 0 });
         node.status({ fill: 'green', shape: 'dot', text: badge24(`sent ${displayName}`) });
         emitStatus(rec, send, true, message);
@@ -360,7 +370,7 @@ module.exports = function registerMavlinkCommand(RED) {
         const waiter = new AckWaiter({
           subscribe: (filter, handler) => connNode.subscribe(filter, handler),
           sendFn: (confirmation) => {
-            connNode.send(buildCarrierMessage(carrier, confirmation), { band: BAND_CONTROL, target });
+            connNode.send(buildCarrierMessage(carrier, confirmation), { band: BAND_CONTROL, target, identityId });
           },
           commandId,
           targetSysid: target.sysid,

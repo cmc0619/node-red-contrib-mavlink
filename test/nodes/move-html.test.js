@@ -88,3 +88,59 @@ test('mavlink-move keeps target sysid/compid and MAV_COMPONENT catalog', () => {
   assert.match(html, /fillCompIdSelect/, 'compid select uses shared helper');
   assert.match(html, /ensureConfigNodePicker/, 'connection picker remains');
 });
+
+test('mavlink-move target sysid/compid default to empty (inherit profile) not 1', () => {
+  assert.match(html, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
+  assert.match(html, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
+  assert.match(html, /RED\.validators\.number\(true\)/, 'blank-allowed validator is used');
+  assert.match(html, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
+  assert.match(html, /emptyLabel:\s*'[^']*profile default[^']*'/, 'compid empty label names profile default');
+});
+
+test('mavlink-move has vehicle and identity defaults for role × tier matrix (§6)', () => {
+  assert.match(html, /vehicle:\s*\{\s*value:\s*''/, 'vehicle default is empty string');
+  assert.match(html, /type:\s*'mavlink-vehicle'/, 'vehicle is a config node type');
+  assert.match(html, /identity:\s*\{\s*value:\s*''/, 'identity default is empty string');
+  assert.match(html, /ensureConfigNodePicker[^)]*'vehicle'/, 'vehicle uses config node picker');
+  assert.match(html, /id="node-input-identity"/, 'identity select exists in template');
+  assert.match(html, /id="row-move-vehicle"/, 'vehicle row has ID for tier-driven toggling');
+  assert.match(html, /id="row-move-identity"/, 'identity row has ID for tier-driven toggling');
+  assert.match(html, /id="row-move-connection"/, 'connection row has ID for tier-driven toggling');
+});
+
+test('mavlink-move fills identity select and re-fills on connection change (§6)', () => {
+  assert.match(html, /fillIdentitySelect/, 'fillIdentitySelect fills the identity dropdown');
+  assert.match(
+    html,
+    /\$\('#node-input-identity'\)\.on\('change', refreshVisibility\)/,
+    'identity change triggers visibility refresh'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-connection'\)\.on\('change'/,
+    'connection change handler exists'
+  );
+  assert.match(html, /fillIdentitySelect[^)]*\$\('#node-input-identity'\)/, 'identity refilled on connection change');
+});
+
+test('mavlink-move companion hides both target sysid and compid rows (§6)', () => {
+  assert.match(html, /isCompanion/, 'companion flag drives visibility');
+  assert.match(html, /id="row-move-targetSystem"/, 'targetSystem row has ID for toggling');
+  assert.match(html, /id="row-move-targetComponent"/, 'targetComponent row has ID for toggling');
+  assert.match(
+    html,
+    /targetSystem:\s*isBuild\s*\|\|\s*!isCompanion/,
+    'sysid gated by companion for move'
+  );
+  assert.match(
+    html,
+    /targetComponent:\s*isBuild\s*\|\|\s*!isCompanion/,
+    'compid also gated by companion for move (no spec exception here)'
+  );
+});
+
+test('mavlink-move build tier shows vehicle, hides connection/identity (§6)', () => {
+  assert.match(html, /vehicle:\s*isBuild/, 'vehicle row shown only for build tier');
+  assert.match(html, /connection:\s*isWire/, 'connection row shown only for wire tiers');
+  assert.match(html, /identity:\s*isWire/, 'identity row shown only for wire tiers');
+});

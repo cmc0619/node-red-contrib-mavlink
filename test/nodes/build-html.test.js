@@ -102,3 +102,44 @@ test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
     'bare absolute /mavlink getJSON paths must be gone'
   );
 });
+
+test('Build dialect default is ardupilotmega', () => {
+  assert.match(
+    html,
+    /dialect:\s*\{\s*value:\s*'ardupilotmega'/,
+    'defaults.dialect.value must be ardupilotmega'
+  );
+});
+
+test('Build dialect select includes __vehicle escape option', () => {
+  assert.match(html, /__vehicle/, 'dialect select must have __vehicle option value');
+  assert.match(html, /from Vehicle Profile/, 'dialect select must label the escape option');
+});
+
+test('Build vehicle default no longer has required: true', () => {
+  assert.ok(
+    !html.includes('required: true'),
+    'vehicle must not carry required: true once the dialect picker is added'
+  );
+});
+
+test('Build visibility logic references the dialect and vehicle rows', () => {
+  assert.match(html, /mav-dialect-row/, 'template must have a mav-dialect-row element');
+  assert.match(html, /mav-vehicle-row/, 'template must have a mav-vehicle-row element');
+  assert.match(html, /updateVisibility/, 'oneditprepare must call updateVisibility');
+  assert.match(html, /node-input-dialect/, 'visibility logic must reference the dialect select');
+});
+
+test('Build wire-tier catalog query carries the connection profile id (custom dialect support)', () => {
+  // The admin route serves custom XML bundles only when given ?vehicle=<id>;
+  // a bare ?dialect=<custom-name> 400s. The wire branch must therefore pass
+  // the connection profile id, not just the dialect name.
+  assert.match(
+    html,
+    /query:\s*\{\s*vehicle:\s*connNode\.vehicle/,
+    'wire branch must include the connection profile id in the catalog query'
+  );
+  // "Not configured yet" is the required-field validation's job (red field +
+  // node marker) — no bespoke pending mechanism in the dialog.
+  assert.doesNotMatch(html, /pending/, 'no hand-rolled pending state');
+});

@@ -4,16 +4,18 @@
     color: '#e9e4ff',
     defaults: {
       name: { value: '' },
+      vehicle: { value: '', type: 'mavlink-vehicle', required: false },
       connection: { value: '', type: 'mavlink-connection' },
+      identity: { value: '' },
       delivery: { value: 'build' },
       action: { value: 'read' },
-      firmware: { value: 'ardupilot' },
-      targetSystem: { value: 1, validate: RED.validators.number() },
-      targetComponent: { value: 1, validate: RED.validators.number() },
+      targetSystem: { value: '', validate: RED.validators.number(true) },
+      targetComponent: { value: '', validate: RED.validators.number(true) },
       paramId: { value: '' },
       paramIndex: { value: -1, validate: RED.validators.number(true) },
       value: { value: '', validate: RED.validators.number(true) },
-      paramType: { value: 'MAV_PARAM_TYPE_REAL32' }
+      paramType: { value: 'MAV_PARAM_TYPE_REAL32' },
+      timeout: { value: '', validate: RED.validators.number(true) }
     },
     inputs: 1,
     outputs: 2,
@@ -23,45 +25,99 @@
     oneditprepare: function () {
       var node = this;
 
-      /* ── Component picker ─────────────────────────────────── */
+      /* ── Connection and vehicle pickers ───────────────────────── */
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
+
+      /* ── Identity select ──────────────────────────────────────── */
+      function refreshIdentitySelect() {
+        if (!(RED.mavlink && RED.mavlink.fillIdentitySelect)) return;
+        var connectionId = $('#node-input-connection').val() || '';
+        RED.mavlink.fillIdentitySelect(
+          $('#node-input-identity'),
+          connectionId,
+          { saved: node.identity }
+        );
+      }
+
+      /* ── Component picker ─────────────────────────────────────── */
       if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
         RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
           RED.mavlink.fillCompIdSelect(
             $('#node-input-targetComponent'),
             (catalog.enums || {}).MAV_COMPONENT || [],
-            { saved: node.targetComponent }
+            { allowEmpty: true, emptyLabel: '(profile default)', saved: node.targetComponent }
           );
         });
       }
 
-      /* ── Param definition catalog ─────────────────────────── */
-      var _paramDefs = {};        // paramId → { description, unit, min, max, increment, values }
+      /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
+      function refreshVisibility() {
+        var delivery = $('#node-input-delivery').val() || 'build';
+        var isBuild = (delivery === 'build');
+
+        /* tier-driven rows */
+        $('#row-vehicle').toggle(isBuild);
+        $('#row-connection').toggle(!isBuild);
+        $('#row-identity').toggle(!isBuild);
+        $('#row-timeout').toggle(!isBuild);
+
+        /* role-driven rows: companion hides both target rows */
+        if (!isBuild) {
+          var identityId = $('#node-input-identity').val() || '';
+          var role = RED.mavlink && RED.mavlink.identityRole
+            ? RED.mavlink.identityRole(identityId)
+            : 'gcs';
+          var isCompanion = (role === 'companion');
+          $('#row-targetSystem').toggle(!isCompanion);
+          $('#row-targetComponent').toggle(!isCompanion);
+        } else {
+          /* build tier always shows target rows */
+          $('#row-targetSystem').show();
+          $('#row-targetComponent').show();
+        }
+      }
+
+      /* ── Param definition catalog ─────────────────────────────── */
+      var _paramDefs = {};
       var _defsLoaded = false;
       var _defsNotice = '';
 
       /**
-       * Read the vehicle id through the selected connection, then ask the
-       * admin route for defs. Silently no-ops if the connection or vehicle
-       * is not yet deployed.
+       * Tier-aware defs load: build tier reads vehicle from the vehicle field;
+       * wire tiers read it through the selected connection's profile.
+       * Request sequencing prevents a stale response from overwriting a newer one.
        */
+      var _defsSeq = 0;
       function loadParamDefs() {
-        var connectionId = $('#node-input-connection').val();
-        if (!connectionId) return;
-        var connectionNode = RED.nodes.node(connectionId);
-        if (!connectionNode) return;
-        var vehicleId = connectionNode.vehicle;
+        var delivery = $('#node-input-delivery').val() || 'build';
+        var vehicleId = '';
+
+        if (delivery === 'build') {
+          vehicleId = $('#node-input-vehicle').val() || '';
+        } else {
+          var connectionId = $('#node-input-connection').val() || '';
+          if (!connectionId) return;
+          var connectionNode = RED.nodes && typeof RED.nodes.node === 'function'
+            ? RED.nodes.node(connectionId) : null;
+          if (!connectionNode) return;
+          vehicleId = connectionNode.vehicle || '';
+        }
+
         if (!vehicleId) return;
 
+        var seq = ++_defsSeq;
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), { vehicle: vehicleId }, function (data) {
+          if (seq !== _defsSeq) return;
           _paramDefs = data.defs || {};
           _defsNotice = data.notice || '';
           _defsLoaded = true;
           rebuildParamIdDatalist();
           refreshParamInfo();
         }).fail(function () {
+          if (seq !== _defsSeq) return;
           _paramDefs = {};
           _defsLoaded = true;
           rebuildParamIdDatalist();
@@ -80,7 +136,6 @@
             : id;
           $list.append($('<option></option>').val(id).text(label));
         }
-        /* Swap paramId to datalist-backed input or plain input. */
         var hasDefs = ids.length > 0;
         $('#node-input-paramId').attr('list', hasDefs ? 'mav-param-id-list' : null);
         $('#row-param-defs-tip').toggle(!hasDefs && _defsLoaded && !!_defsNotice);
@@ -104,7 +159,6 @@
         } else {
           $('#row-param-info').hide();
         }
-        /* When action is set, populate value datalist with enum options. */
         var action = $('#node-input-action').val() || 'read';
         var $valueList = $('#mav-param-value-list');
         $valueList.empty();
@@ -121,20 +175,34 @@
         }
       }
 
-      /* Reload defs when connection changes. */
+      /* Reload defs when tier-influencing fields change. */
+      $('#node-input-delivery').on('change', function () {
+        _paramDefs = {};
+        _defsLoaded = false;
+        refreshVisibility();
+        loadParamDefs();
+      });
       $('#node-input-connection').on('change', function () {
+        _paramDefs = {};
+        _defsLoaded = false;
+        refreshIdentitySelect();
+        loadParamDefs();
+      });
+      $('#node-input-vehicle').on('change', function () {
         _paramDefs = {};
         _defsLoaded = false;
         loadParamDefs();
       });
+      $('#node-input-identity').on('change', function () {
+        refreshVisibility();
+      });
 
-      /* Refresh info panel when paramId changes. */
       $('#node-input-paramId').on('input change', refreshParamInfo);
-
-      /* Refresh value datalist when action changes. */
       $('#node-input-action').on('change', refreshParamInfo);
 
-      /* Initial load. */
+      /* Initial state. */
+      refreshIdentitySelect();
+      refreshVisibility();
       loadParamDefs();
     }
   });
@@ -142,12 +210,13 @@
 
 <script type="text/html" data-template-name="mavlink-param">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
-  <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and echo-confirm</option><option value="collect">Request list and collect</option></select></div>
+  <div class="form-row" id="row-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
+  <div class="form-row" id="row-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-identity"><label for="node-input-identity">Send-as</label><select id="node-input-identity"></select></div>
   <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action"><option value="read">Read one</option><option value="set">Set one</option><option value="request-list">Request list</option></select></div>
-  <div class="form-row"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
-  <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
-  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
+  <div class="form-row" id="row-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
+  <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row">
     <label for="node-input-paramId">Param id</label>
     <input type="text" id="node-input-paramId" maxlength="16" list="mav-param-id-list" placeholder="e.g. FS_GCS_ENABLE">
@@ -168,11 +237,13 @@
     <datalist id="mav-param-value-list"></datalist>
   </div>
   <div class="form-row"><label for="node-input-paramType">Type</label><select id="node-input-paramType"><option value="MAV_PARAM_TYPE_REAL32">REAL32 (9)</option><option value="MAV_PARAM_TYPE_UINT8">UINT8 (1)</option><option value="MAV_PARAM_TYPE_INT8">INT8 (2)</option><option value="MAV_PARAM_TYPE_UINT16">UINT16 (3)</option><option value="MAV_PARAM_TYPE_INT16">INT16 (4)</option><option value="MAV_PARAM_TYPE_UINT32">UINT32 (5)</option><option value="MAV_PARAM_TYPE_INT32">INT32 (6)</option></select></div>
+  <div class="form-row" id="row-timeout"><label for="node-input-timeout">Timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="10000"></div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-param">
   <p>Reads one parameter, sets one parameter, or requests a full list. Set confirmation is by matching the PARAM_VALUE echo, not COMMAND_ACK.</p>
+  <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — firmware and target defaults come from the <b>Vehicle Profile</b> field. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Send-as</b> identity stamps the source address.</p>
+  <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). For GCS/custom identities, fill target sysid/compid or leave blank to inherit the profile default.</p>
   <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast.</p>
-  <p>When the flow is deployed and the Vehicle Profile has a known family, the <b>Param id</b> field becomes a searchable datalist showing all available parameter names with their descriptions. ArduPilot definitions are fetched automatically from the autotest server; PX4 or custom firmware requires a <b>Param defs URL</b> in the Vehicle Profile advanced settings.</p>
-  <p>For parameters with a discrete value set, the <b>Value</b> field offers a datalist of named options when the <b>Set</b> action is selected.</p>
+  <p>When the flow is deployed and the Vehicle Profile has a known family, the <b>Param id</b> field becomes a searchable datalist. ArduPilot definitions are fetched automatically; PX4 or custom firmware requires a <b>Param defs URL</b> in the Vehicle Profile advanced settings.</p>
 </script>
