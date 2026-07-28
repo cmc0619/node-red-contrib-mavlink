@@ -30,13 +30,16 @@ const XML = (body) => `<?xml version="1.0"?>\n<mavlink>${body}</mavlink>`;
 
 /* ---------- knownDialects ---------- */
 
-test('knownDialects returns the 10 bundled dialect names', () => {
-  const expected = [
+test('knownDialects returns seeded dialect names including the classic ten', () => {
+  const classic = [
     'minimal', 'standard', 'common', 'ardupilotmega',
     'uavionix', 'icarous', 'asluav', 'development', 'ualberta', 'storm32',
   ];
   const known = knownDialects();
-  assert.deepEqual(known.sort(), expected.sort());
+  for (const name of classic) {
+    assert.ok(known.includes(name), `missing seeded dialect ${name}`);
+  }
+  assert.ok(known.length >= classic.length);
 });
 
 /* ---------- FIRMWARE_TYPES ---------- */

@@ -1,0 +1,317 @@
+{
+  "schemaVersion": 1,
+  "repo": "mavlink/mavlink",
+  "ref": "master",
+  "commit": "de1e078a3a7c53c9262a95b7417959a0f8bf4150",
+  "fetchedAt": "2026-07-28T23:18:00.594Z",
+  "license": "MIT",
+  "licenseNote": "MAVLink message definition XML — see NOTICE and https://mavlink.io/en/#license",
+  "xmlDir": "xml",
+  "bundlesDir": "bundles",
+  "files": [
+    {
+      "name": "all.xml",
+      "sha256": "2de9dcd65711d8f88bc07da5fcb8ed7d04fbda404fa5b9a5e329c57541bb73cb",
+      "bytes": 4191
+    },
+    {
+      "name": "ardupilotmega.xml",
+      "sha256": "8cff0bf2ae5bec60d16118bf37e1ec6e9f55f54aecc486df0b18f89977479047",
+      "bytes": 117801
+    },
+    {
+      "name": "ASLUAV.xml",
+      "sha256": "c5e15be9309138de988ee4a744bfb431cfa1aed52dd4bc93466fee484fe4197c",
+      "bytes": 20320
+    },
+    {
+      "name": "AVSSUAS.xml",
+      "sha256": "9ee1641e0c7f6be25faa817a1d17715dc79dfecbce0ba15833a0559cef1c1c1c",
+      "bytes": 10370
+    },
+    {
+      "name": "common.xml",
+      "sha256": "d52b11535a6d05bde21ca9cc9ef1f86522bb6700c152c108d7b68df63b4ff65b",
+      "bytes": 691838
+    },
+    {
+      "name": "csAirLink.xml",
+      "sha256": "f5b5ba62d0b65953438981ca95fc45dceb98d63601dfc0705ad91184227ee24d",
+      "bytes": 1099
+    },
+    {
+      "name": "cubepilot.xml",
+      "sha256": "b4f76d660b41b16746f67fa8e17321ea6b65448791045154105f29b3a70ce7b9",
+      "bytes": 2738
+    },
+    {
+      "name": "development.xml",
+      "sha256": "fbc4c27af39794aeffd4ef626b733310855e918349fc3f1e3126f814c983ed5e",
+      "bytes": 57031
+    },
+    {
+      "name": "icarous.xml",
+      "sha256": "e40ec11a6d76b48eb815c101c96b1849c76a8ba5302a01d39f1941ff9c501bbb",
+      "bytes": 2879
+    },
+    {
+      "name": "loweheiser.xml",
+      "sha256": "31f20f01d436f2fbaaaf86f4a51c60cc01bc42722ae4c5ad403afeaaaa512deb",
+      "bytes": 3617
+    },
+    {
+      "name": "marsh.xml",
+      "sha256": "fd2749db90344b90425416b0b47d7079fc5c0bed3b56f7be18a67d3a67151ed0",
+      "bytes": 19124
+    },
+    {
+      "name": "minimal.xml",
+      "sha256": "7bbf84456396089cf4dd9661ebe94e48a81009c047e826ed2778b4b9be60145c",
+      "bytes": 48366
+    },
+    {
+      "name": "paparazzi.xml",
+      "sha256": "1920f6542ac9099f688543d0b32f962b6079992b6af33605e88f4e60f0d05b2b",
+      "bytes": 2076
+    },
+    {
+      "name": "python_array_test.xml",
+      "sha256": "746802e2e2c45c55f8e862d59213668fe3f35db9241e304f723a669792e7ed13",
+      "bytes": 3316
+    },
+    {
+      "name": "standard.xml",
+      "sha256": "fd57e0f3e767821310ba51384faeb6d7a6141f279cecfffe6c7c14b9385569ca",
+      "bytes": 10458
+    },
+    {
+      "name": "stemstudios.xml",
+      "sha256": "5867900b262a81868a8034ff948df8c1907b30d2e32ee45d08ddf5f3f7bf0192",
+      "bytes": 3564
+    },
+    {
+      "name": "storm32.xml",
+      "sha256": "55d7b66ec1e698e7b8562df81ee564f21bb8745f9af1243889df65e0b154e42d",
+      "bytes": 37046
+    },
+    {
+      "name": "test.xml",
+      "sha256": "20c62176c93f3a9fee8ce0af70facd7f9e5d9047df2cb2cbad3acfde902d8fbb",
+      "bytes": 1561
+    },
+    {
+      "name": "ualberta.xml",
+      "sha256": "c9103962c2b2300be92b4159605a650bb8f72d0071f3e45655fced7683c5d20d",
+      "bytes": 3233
+    },
+    {
+      "name": "uAvionix.xml",
+      "sha256": "288ce94228833ce7823d4775bc3c0ad3fedd3e0d01684119223a61c44eba9e9a",
+      "bytes": 16092
+    }
+  ],
+  "dialects": [
+    {
+      "name": "asluav",
+      "entry": "ASLUAV.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml",
+        "common.xml",
+        "ASLUAV.xml"
+      ],
+      "messageCount": 251,
+      "enumCount": 162
+    },
+    {
+      "name": "avssuas",
+      "entry": "AVSSUAS.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml",
+        "common.xml",
+        "AVSSUAS.xml"
+      ],
+      "messageCount": 238,
+      "enumCount": 163
+    },
+    {
+      "name": "ardupilotmega",
+      "entry": "ardupilotmega.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml",
+        "common.xml",
+        "uAvionix.xml",
+        "icarous.xml",
+        "loweheiser.xml",
+        "cubepilot.xml",
+        "csAirLink.xml",
+        "ardupilotmega.xml"
+      ],
+      "messageCount": 325,
+      "enumCount": 221
+    },
+    {
+      "name": "common",
+      "entry": "common.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml",
+        "common.xml"
+      ],
+      "messageCount": 234,
+      "enumCount": 160
+    },
+    {
+      "name": "csairlink",
+      "entry": "csAirLink.xml",
+      "files": [
+        "csAirLink.xml"
+      ],
+      "messageCount": 2,
+      "enumCount": 1
+    },
+    {
+      "name": "cubepilot",
+      "entry": "cubepilot.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml",
+        "common.xml",
+        "cubepilot.xml"
+      ],
+      "messageCount": 239,
+      "enumCount": 160
+    },
+    {
+      "name": "development",
+      "entry": "development.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml",
+        "common.xml",
+        "development.xml"
+      ],
+      "messageCount": 248,
+      "enumCount": 175
+    },
+    {
+      "name": "icarous",
+      "entry": "icarous.xml",
+      "files": [
+        "icarous.xml"
+      ],
+      "messageCount": 2,
+      "enumCount": 2
+    },
+    {
+      "name": "loweheiser",
+      "entry": "loweheiser.xml",
+      "files": [
+        "minimal.xml",
+        "loweheiser.xml"
+      ],
+      "messageCount": 2,
+      "enumCount": 7
+    },
+    {
+      "name": "marsh",
+      "entry": "marsh.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml",
+        "common.xml",
+        "marsh.xml"
+      ],
+      "messageCount": 239,
+      "enumCount": 166
+    },
+    {
+      "name": "minimal",
+      "entry": "minimal.xml",
+      "files": [
+        "minimal.xml"
+      ],
+      "messageCount": 1,
+      "enumCount": 6
+    },
+    {
+      "name": "paparazzi",
+      "entry": "paparazzi.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml",
+        "common.xml",
+        "paparazzi.xml"
+      ],
+      "messageCount": 239,
+      "enumCount": 160
+    },
+    {
+      "name": "standard",
+      "entry": "standard.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml"
+      ],
+      "messageCount": 3,
+      "enumCount": 9
+    },
+    {
+      "name": "stemstudios",
+      "entry": "stemstudios.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml",
+        "common.xml",
+        "stemstudios.xml"
+      ],
+      "messageCount": 236,
+      "enumCount": 161
+    },
+    {
+      "name": "storm32",
+      "entry": "storm32.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml",
+        "common.xml",
+        "uAvionix.xml",
+        "icarous.xml",
+        "loweheiser.xml",
+        "cubepilot.xml",
+        "csAirLink.xml",
+        "ardupilotmega.xml",
+        "storm32.xml"
+      ],
+      "messageCount": 337,
+      "enumCount": 229
+    },
+    {
+      "name": "uavionix",
+      "entry": "uAvionix.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml",
+        "common.xml",
+        "uAvionix.xml"
+      ],
+      "messageCount": 242,
+      "enumCount": 173
+    },
+    {
+      "name": "ualberta",
+      "entry": "ualberta.xml",
+      "files": [
+        "minimal.xml",
+        "standard.xml",
+        "common.xml",
+        "ualberta.xml"
+      ],
+      "messageCount": 237,
+      "enumCount": 163
+    }
+  ],
+  "compileErrors": []
+}

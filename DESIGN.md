@@ -182,56 +182,49 @@ makes unreachable.
 | `mavlink-state` | peer table reads, transitions, snapshots |
 | `mavlink-swarm` | group fan-out with aggregation |
 
-**Dependencies.** `node-mavlink` for the wire protocol, `mavlink-mappings` for bundled
-definitions, an XML parser, and `serialport` as an **optional** dependency lazy-loaded only
+**Dependencies.** `node-mavlink` for framing/CRC/signing primitives, a shipped MAVLink XML
+seed (`seed/mavlink`) for dialect definitions, an XML parser, and `serialport` as an
+**optional** dependency lazy-loaded only
 when a serial connection is used. UDP and TCP installs must load and pass tests without it;
 selecting serial when it is absent gives a clear error, not a native module stack trace.
 
 Both npm packages are already the ArduPilot line — install nothing else (§14).
 
 
-## 4. Metadata — registry for bundled, XML for custom
+## 4. Metadata — seeded XML is the dialect authority
 
-**Do not vendor dialect XML.** Bundled dialects come from the `mavlink-mappings` package
-(the ArduPilot line on npm). That package is the registry: message classes, `REGISTRY`,
-enums, and CRC-extra tables. One loader merges modules in include order into a dialect
-**bundle** — the same shape custom dialects produce after compile — so everything
-downstream is identical code and custom dialects are not second-class.
+**Ship a pinned MAVLink XML seed.** Dialect definitions come from upstream
+`mavlink/mavlink` `message_definitions/v1.0` (MIT — see `seed/mavlink/NOTICE` and
+https://mavlink.io/en/#license), not from `mavlink-mappings`. `scripts/generate-seed.js`
+pins a commit, copies every XML file, walks `<include>` for each selectable root, and
+writes precompiled {@link DialectBundle} JSON under `seed/mavlink/bundles/`. Runtime
+`loadBundled(name)` reads those artifacts. Offline works on first install; a catalog
+update overlays a newer snapshot under the Node-RED userDir when internet is available.
 
-**Bundled.** Ten dialects: common, minimal, standard, ardupilotmega, asluav, development,
-icarous, storm32, uavionix, ualberta. Load them from `mavlink-mappings`; never ship copies
-of their XML. Cache the assembled bundle per dialect name — bundles are immutable once
-built, and a profile loads its dialect on every deploy.
+**One bundle shape.** Seeded dialects, custom uploads, and catalog downloads all compile
+to the same {@link DialectBundle}. Field `enum=`, command-param enums, descriptions, and
+the real include chain come from the XML — no `.d.ts` recovery and no hand-maintained
+`DIALECT_CHAINS` table.
 
-**What the registry drops, and how to recover it.** The compiled JS keeps wire types and
-drops the field→enum association (`enum=` on `<field>`). The package's shipped `.d.ts`
-files retain it as property types (`type: MavType`) and carry message/field/enum/command
-descriptions as JSDoc. Parse those declarations offline — no XML fetch — to recover enum
-dropdowns and editor help for bundled dialects. Measured: that recovers message-field enums
-and labeled command-param help; it does **not** recover param-level `enum=` links (e.g.
-`MAV_CMD_DO_CHANGE_SPEED` param 1 → `SPEED_TYPE`). Those are a small, explicit control-hint
-table for the cases the UI needs, not a reason to vendor XML.
+**Custom.** Upload the full include chain. No resolution against the seed — the user
+provides every file the graph references. Compile from XML, resolve includes in
+dependency order, reconcile, display. Same bundle shape. Compile once at upload.
 
-**Custom.** Upload the full include chain. No resolution against bundled definitions — the
-user provides every file the graph references. Compile from XML, resolve includes in
-dependency order, reconcile, display. Same bundle shape as a registry load. Compile once at
-upload; it is not a per-deploy cost.
-
-**Remote fetch.** Pulling current official XML from GitHub is supported for *custom*
-profiles and for comparing a downloaded snapshot against the installed registry dialect —
-not as a substitute for the bundled path. Configuration happens on a bench with internet.
-Make the source selectable — `mavlink/mavlink` or `ArduPilot/mavlink` — though as of now
-they are byte-identical for `ardupilotmega.xml`, so neither is privileged. Pin the ref to a
-commit before downloading, record that commit, and follow includes at download time so a
-snapshot is self-contained.
+**Remote fetch / catalog.** The XML catalog downloads a pinned commit (source selectable:
+`mavlink/mavlink` or `ArduPilot/mavlink`), follows includes, timestamps the snapshot, and
+can replace or diff against the seed. Configuration happens on a bench with internet; the
+seed covers the boat.
 
 Fail loud on custom compile: missing include, cyclic include, msgid collision between two
 files defining different messages. Redefinition of the same message is an override, resolved
-by include order, and shown as a diff against the same-named bundled dialect.
+by include order, and shown as a diff against the same-named seeded dialect.
 
 Never assume a dialect includes `common.xml`. Some define their own base set — measured:
-upstream `icarous.xml` has no `<include>`, so the bundled chain is `['icarous']` alone, not
-MSC forced underneath.
+upstream `icarous.xml` has no `<include>`, so the seeded bundle is `['icarous.xml']` alone.
+
+**Wire classes.** Message classes are synthesized from the bundle for every dialect
+(including seeded ones). `node-mavlink` remains for framing, CRC, splitter/parser, and
+signing HMAC — not for dialect registries.
 
 ### Parameter definitions are a second, separate source
 

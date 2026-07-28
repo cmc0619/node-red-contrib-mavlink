@@ -9,7 +9,7 @@ Full design and behaviour are specified in [DESIGN.md](DESIGN.md).
 From your Node-RED user directory (usually `~/.node-red`, or `/data` in the official Docker image).
 
 **Do not** `npm install /path/to/checkout` alone. Modern npm symlinks a local path and does
-**not** install that package's dependencies, so `require('mavlink-mappings')` fails at palette
+**not** install that package's dependencies, so `require('node-mavlink')` fails at palette
 load. Use one of:
 
 ```bash
@@ -36,7 +36,7 @@ If the log shows a require stack under `/module/lib/...`, Node-RED is loading th
 checkout directly. A bare mount has no `node_modules`:
 
 ```text
-[node-red-contrib-mavlink/mavlink-command] Error: Cannot find module 'mavlink-mappings'
+[node-red-contrib-mavlink/mavlink-connection] Error: Cannot find module 'node-mavlink'
 ```
 
 Install dependencies **on the mount** (so resolution from `/module/lib/...` succeeds):

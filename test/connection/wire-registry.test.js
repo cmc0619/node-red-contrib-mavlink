@@ -28,7 +28,7 @@ test('wire registry follows the bundle include chain — minimal has HEARTBEAT, 
 
 test('icarous wire carries only icarous messages — not the forced MSC spine', () => {
   const bundle = loadBundled('icarous');
-  assert.deepEqual(bundle.files, ['icarous']);
+  assert.deepEqual(bundle.files, ['icarous.xml']);
   assert.ok(bundle.messages.ICAROUS_HEARTBEAT);
   assert.equal(bundle.messages.HEARTBEAT, undefined);
 
@@ -47,6 +47,7 @@ test('icarous wire carries only icarous messages — not the forced MSC spine', 
 
 test('two wires from different dialects coexist with independent registries', () => {
   const icarous = createWire({ bundle: loadBundled('icarous') });
+  const minimal = createWire({ bundle: loadBundled('minimal') });
   const apm = createWire({ bundle: loadBundled('ardupilotmega') });
 
   assert.doesNotThrow(() =>
@@ -58,15 +59,19 @@ test('two wires from different dialects coexist with independent registries', ()
   );
 
   assert.doesNotThrow(() =>
-    apm.serialize(
+    minimal.serialize(
       { name: 'HEARTBEAT', fields: { type: 6, autopilot: 8, base_mode: 0, custom_mode: 0, system_status: 0, mavlink_version: 3 } },
       { sysid: 1, compid: 1, seq: 0 }
     )
   );
-  // ardupilotmega's bundled chain does not pull icarous (our chain is MSC+APM).
   assert.throws(
-    () => apm.serialize({ name: 'ICAROUS_HEARTBEAT', fields: { status: 0 } }, { sysid: 1, compid: 1, seq: 0 }),
+    () => minimal.serialize({ name: 'ICAROUS_HEARTBEAT', fields: { status: 0 } }, { sysid: 1, compid: 1, seq: 0 }),
     /no wire class for message 'ICAROUS_HEARTBEAT'/
+  );
+
+  // Upstream ardupilotmega.xml includes icarous — the seed preserves that.
+  assert.doesNotThrow(() =>
+    apm.serialize({ name: 'ICAROUS_HEARTBEAT', fields: { status: 0 } }, { sysid: 1, compid: 1, seq: 0 })
   );
 });
 
