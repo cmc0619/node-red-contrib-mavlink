@@ -86,3 +86,85 @@ test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
     'bare absolute /mavlink getJSON paths must be gone'
   );
 });
+
+test('identity defaults to empty string and fillIdentitySelect is called with gcs+custom filter (§6)', () => {
+  assert.match(
+    html,
+    /identity:\s*\{\s*value:\s*''\s*\}/,
+    'identity property defaults to empty string'
+  );
+  assert.match(
+    html,
+    /RED\.mavlink\.fillIdentitySelect\(/,
+    'fillIdentitySelect is called to populate the Send-as dropdown'
+  );
+  assert.match(
+    html,
+    /rolesAllowed.*\[.*['"]gcs['"].*,.*['"]custom['"]/,
+    "rolesAllowed filters to ['gcs','custom'] (gcs-paradigm by nature, §6)"
+  );
+  assert.match(
+    html,
+    /<select id="node-input-identity"/,
+    'Send-as identity field is a plain <select>'
+  );
+  assert.match(
+    html,
+    /node\.identity/,
+    'saved identity is passed to fillIdentitySelect as the saved option'
+  );
+});
+
+test('connection row hidden only for build+list; identity row hidden for build delivery (§6 exception)', () => {
+  assert.match(
+    html,
+    /d === 'build' && sel === 'list'/,
+    'build+list condition governs connection-row visibility'
+  );
+  assert.match(html, /row-swarm-connection/, 'connection row has an id for visibility toggling');
+  assert.match(html, /row-swarm-identity/, 'identity row has an id for visibility toggling');
+  assert.match(
+    html,
+    /d !== 'build'/,
+    'identity row is hidden when delivery is build (source ids stamped at the wire)'
+  );
+});
+
+test('identity is re-filled when connection selection changes', () => {
+  assert.match(
+    html,
+    /refreshIdentitySelect/,
+    'refreshIdentitySelect helper is defined'
+  );
+  assert.match(
+    html,
+    /#node-input-connection.*change|change.*#node-input-connection/,
+    'connection change event handler is wired'
+  );
+  // The connection change handler must call refreshIdentitySelect.
+  const changeHandlerMatch = html.match(
+    /#node-input-connection['"]\)\.on\(['"]change['"][^)]*\)\s*\{([\s\S]*?)\}/
+  );
+  assert.ok(
+    changeHandlerMatch && /refreshIdentitySelect/.test(changeHandlerMatch[0]),
+    'refreshIdentitySelect is called inside the connection change handler'
+  );
+});
+
+test('refreshVisibility is wired to both delivery and selectionMode changes', () => {
+  assert.match(
+    html,
+    /function refreshVisibility/,
+    'refreshVisibility function is defined'
+  );
+  assert.match(
+    html,
+    /#node-input-delivery.*change.*refreshVisibility|refreshVisibility.*#node-input-delivery.*change/,
+    'delivery change is wired to refreshVisibility'
+  );
+  assert.match(
+    html,
+    /#node-input-selectionMode.*change.*refreshVisibility|refreshVisibility.*#node-input-selectionMode.*change/,
+    'selectionMode change is wired to refreshVisibility'
+  );
+});

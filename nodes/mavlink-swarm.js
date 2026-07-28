@@ -9,7 +9,14 @@ module.exports = function registerMavlinkSwarm(RED) {
     const node = this;
     const connectionNode = config.connection ? RED.nodes.getNode(config.connection) : null;
 
-    if (!connectionNode || !connectionNode.peerTable) {
+    // Build + explicit list resolves without a peer table (§6 exception): the
+    // sysids are known at deploy time. All other combinations — including
+    // build+all and build+filter — still need the live peer table.
+    const cfgIsBuildList =
+      (config.delivery || 'build') === 'build' &&
+      (config.selectionMode || 'all') === 'list';
+
+    if (!cfgIsBuildList && (!connectionNode || !connectionNode.peerTable)) {
       delivery.applyActionStatus(node, 'invalid', 'invalid config');
     }
 
@@ -29,17 +36,32 @@ module.exports = function registerMavlinkSwarm(RED) {
       }
 
       try {
+        const payload = objectPayload(msg.payload);
+        const selection = selectionFrom(config, payload);
+        const effectiveDelivery = payload.delivery || config.delivery || 'build';
+        const effectiveSelectionMode = selection.mode || 'all';
+
+        let effectiveConnection = connectionNode;
         if (!connectionNode || !connectionNode.peerTable) {
-          throw new Error('mavlink-swarm requires a Connection with a peer table');
+          if (effectiveDelivery === 'build' && effectiveSelectionMode === 'list') {
+            // No connection needed: build messages for the explicit sysid list
+            // without consulting a live peer table (§6 Swarm exception).
+            effectiveConnection = buildListStub(selection.sysids);
+          } else {
+            const rule = effectiveDelivery === 'build'
+              ? `build+${effectiveSelectionMode} selection requires a Connection — ` +
+                `the live peer table is the only place ${effectiveSelectionMode} selection can resolve`
+              : 'requires a Connection with a peer table';
+            throw new Error(`mavlink-swarm: ${rule}`);
+          }
         }
 
-        const payload = objectPayload(msg.payload);
         const aggregate = await executeSwarm({
-          connection: connectionNode,
+          connection: effectiveConnection,
           action: actionFrom(config, payload),
-          selection: selectionFrom(config, payload),
+          selection,
           mode: payload.executionMode || config.executionMode || 'sequential',
-          delivery: payload.delivery || config.delivery || 'build',
+          delivery: effectiveDelivery,
           dryRun: payload.dryRun !== undefined ? !!payload.dryRun : !!config.dryRun,
           intervalMs: numberOption(payload, config, 'intervalMs', 100),
           timeoutMs: numberOption(payload, config, 'timeoutMs', 10000),
@@ -213,4 +235,44 @@ function numberOption(payload, config, key, fallback) {
 
 function objectPayload(payload) {
   return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+}
+
+/**
+ * Synthetic connection used when delivery=build and selectionMode=list with no
+ * real Connection configured. Peer table returns one active autopilot entry per
+ * listed sysid so executeSwarm can build targeted messages without needing a
+ * live peer table (§6 Swarm exception).
+ *
+ * @param {string|string[]} sysids  Raw sysids value from config or payload.
+ * @returns {object}
+ */
+function buildListStub(sysids) {
+  const ids = parseSysidList(sysids);
+  return {
+    peerTable: {
+      snapshot() {
+        return ids.map((sysid) => ({
+          sysid,
+          components: [{ compid: 1, state: 'active', type: 0, firmware: null, armed: false, autopilot: 0 }],
+        }));
+      },
+      getComponent(sysid, compid) {
+        if (!ids.includes(sysid) || compid !== 1) return undefined;
+        return { compid: 1, state: 'active', type: 0, firmware: null, armed: false, autopilot: 0 };
+      },
+    },
+    send() {
+      throw new Error('mavlink-swarm: build-mode list stub does not send — output goes to mavlink-out');
+    },
+    subscribe() {
+      return () => {};
+    },
+  };
+}
+
+function parseSysidList(value) {
+  return String(value || '')
+    .split(',')
+    .map((part) => Number(part.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0);
 }
