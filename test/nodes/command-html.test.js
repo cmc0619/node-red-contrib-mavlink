@@ -177,3 +177,100 @@ test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
     'bare absolute /mavlink getJSON paths must be gone'
   );
 });
+
+test('vehicle and identity defaults are declared', () => {
+  assert.match(
+    html,
+    /vehicle:\s*\{\s*value:\s*''\s*,\s*type:\s*'mavlink-vehicle'/,
+    'vehicle default with mavlink-vehicle type must exist'
+  );
+  assert.match(
+    html,
+    /identity:\s*\{\s*value:\s*''\s*\}/,
+    'identity default must exist'
+  );
+});
+
+test('fillIdentitySelect is called to populate the identity select', () => {
+  assert.match(
+    html,
+    /RED\.mavlink\.fillIdentitySelect\(/,
+    'fillIdentitySelect must be called'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-identity'\)/,
+    'identity select must be referenced as #node-input-identity'
+  );
+  assert.match(
+    html,
+    /saved:\s*node\.identity/,
+    'saved identity must be passed to fillIdentitySelect'
+  );
+});
+
+test('refreshVisibility handles delivery and identity change events', () => {
+  assert.match(html, /function refreshVisibility/, 'refreshVisibility function must exist');
+  assert.match(
+    html,
+    /\$\('#node-input-delivery'\)\.on\('change'[\s\S]*refreshVisibility|refreshVisibility[\s\S]*\$\('#node-input-delivery'\)\.on\('change'/,
+    'delivery change must trigger refreshVisibility'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-identity'\)\.on\('change',\s*refreshVisibility\)/,
+    'identity change must trigger refreshVisibility'
+  );
+});
+
+test('build tier hides connection row; wire tiers show it', () => {
+  const vis = html.slice(
+    html.indexOf('function refreshVisibility'),
+    html.indexOf('$\'#node-input-identity\'.on') !== -1
+      ? html.indexOf('$\'#node-input-identity\'.on')
+      : html.indexOf("$('#node-input-identity').on")
+  );
+  assert.match(
+    html,
+    /row-cmd-vehicle/,
+    'row-cmd-vehicle id must exist in template'
+  );
+  assert.match(
+    html,
+    /row-cmd-connection/,
+    'row-cmd-connection id must exist in template'
+  );
+  assert.match(
+    vis,
+    /#row-cmd-connection/,
+    'connection row must be toggled in refreshVisibility'
+  );
+  assert.match(
+    vis,
+    /#row-cmd-vehicle/,
+    'vehicle row must be toggled in refreshVisibility'
+  );
+  assert.match(
+    vis,
+    /isBuild\s*\?\s*'hide'\s*:\s*'show'\s*\]\(\)/,
+    'connection/identity rows hidden in build tier'
+  );
+});
+
+test('companion identity hides target sysid/compid rows', () => {
+  assert.match(
+    html,
+    /row-cmd-target/,
+    'row-cmd-target id must exist'
+  );
+  assert.match(
+    html,
+    /isCompanion\s*\?\s*'hide'\s*:\s*'show'/,
+    'target row hidden when companion identity selected'
+  );
+  assert.match(
+    html,
+    /identityRole\(identityId\)/,
+    'identity role is checked via RED.mavlink.identityRole'
+  );
+});
