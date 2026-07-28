@@ -188,7 +188,7 @@
   <p>Downloads, uploads, or clears a mission, fence, or rally plan over the MAVLink mission protocol — the one exchange the vehicle drives.</p>
   <p>Output 0 (continue) fires only on a successful <code>MISSION_ACK</code>. Output 1 (status) carries progress records (phase and item counts) as they happen and the terminal record either way.</p>
   <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on output 0 without sending — firmware and target defaults come from the <b>Vehicle Profile</b> field. <i>Send and confirm</i> runs the transfer to its acknowledgement over the selected <b>Connection</b>.</p>
-  <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type list is gated by the connection's bound firmware — PX4 does not carry fence and rally the same way as ArduPilot.</p>
+  <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type list is gated by the effective firmware — the Vehicle Profile on Build, the connection's bound profile on wire tiers — because PX4 does not carry fence and rally the same way as ArduPilot.</p>
   <p><b>Upload</b> answers whatever sequence the vehicle requests. A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>.</p>
   <p><b>Clear</b> is destructive and requires confirmation: tick the box or set <code>msg.confirmed = true</code>.</p>
   <p>Set <code>msg.payload === false</code> to suppress. A status record fed back into the input is refused.</p>
