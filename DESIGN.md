@@ -1081,7 +1081,7 @@ by silence. Update this list when an item lands.
 | **Move editor §6 reshape** | **done** | Per-field rows + mode/delivery visibility in the Move dialog. |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
 | **`httpAdminRoot` on non-enum admin routes** | **done** | Command/Build/In/Swarm/Param/Vehicle editor catalogs use `RED.mavlink.adminApiUrl('/mavlink/…')`. |
-| **SITL example flows** | **done** | Former examples 06–09 moved under `examples/sitl/`; expanded sitl set (01–14) + regular 10–27 (regular set may land in parallel). |
+| **SITL example flows** | **done** | Former 06–09 under `examples/sitl/` (01–14 rig flows + README); regular demos 01–05 and 10–27 in `examples/` (see `CATALOG.md`). |
 | **SITL-backed tests (§13)** | open | Fixture suite in CI; firmware behaviour still needs the live five+five rig. |
 | **Cross-connection swarm** | out of scope | As designed (§10): two Connections → two Swarm nodes. |
 
