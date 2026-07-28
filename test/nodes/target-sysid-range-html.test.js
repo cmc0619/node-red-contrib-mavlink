@@ -51,7 +51,9 @@ for (const [file, prop] of TARGET_FILES) {
 
 test('vehicle defaultTargetSystem still uses the shared uint8 validator', () => {
   const html = fs.readFileSync(path.join(nodesDir, 'mavlink-vehicle.html'), 'utf8');
-  assert.match(html, /RED\.mavlink\.validateUint8/);
-  assert.match(html, /defaultTargetSystem:\s*\{\s*value:\s*1,\s*validate:\s*mavUint8Validator\(0\)/);
+  assert.match(
+    html,
+    /defaultTargetSystem:\s*\{\s*value:\s*1,\s*validate:\s*RED\.mavlink\.validateUint8\(0\)/
+  );
   assert.match(html, /id="node-config-input-defaultTargetSystem"[^>]*min="0"[^>]*max="255"/);
 });
