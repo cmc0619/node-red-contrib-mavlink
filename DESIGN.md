@@ -1377,7 +1377,11 @@ lengths, and extension flags in declaration order, which is everything the gener
 derives layout from (stable size-descending sort, extensions appended, x25 CRC_EXTRA), and the
 splitter accepts a `{ magicNumbers }` override. `lib/connection/wire-classes.js` synthesizes the
 classes; correctness is pinned by regenerating every bundled message and requiring identical
-layout to the generated classes.
+layout to the generated classes. `node-mavlink` also exports
+`registerCustomMessageMagicNumber(msgid, magic)`, but it mutates the process-global CRC table
+(every connection inherits it, and it throws on re-registration at redeploy) — the per-splitter
+override is the same feature scoped to one connection. There is no class registry to register
+into: the msgid→class lookup is the caller's job in `node-mavlink`, even for bundled dialects.
 *Check:* `node --test test/connection/wire-classes.test.js`
 
 **Node exposes no DSCP setter.**
