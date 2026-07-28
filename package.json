@@ -19,6 +19,10 @@
     "mavlink-mappings": "^1.0.22-20260311",
     "node-mavlink": "^2.3.0"
   },
+  "optionalDependencies": {
+    "serialport": "^12.0.0"
+  },
+
   "devDependencies": {
     "eslint": "^10.8.0"
   },

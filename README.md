@@ -55,7 +55,7 @@ the user directory with `--install-links` or a tarball (above) so the palette lo
 |------|------|
 | `mavlink-local-identity` | Source sysid/compid, role preset, heartbeat, signing credential |
 | `mavlink-vehicle` | Dialect selection, bundled or custom XML, default target ids |
-| `mavlink-connection` | UDP transport (TCP/serial stubbed “not yet”), peer table, queue, signing, heartbeats |
+| `mavlink-connection` | UDP / TCP / serial transport, peer table, queue, signing, heartbeats |
 | `mavlink-in` | Subscribe to decoded traffic with filters |
 | `mavlink-out` | Send raw or pre-built messages |
 | `mavlink-build` | Build any dialect message with delivery tiers |

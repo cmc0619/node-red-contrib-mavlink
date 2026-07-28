@@ -1053,16 +1053,36 @@ to know the mode table.
    that touches a wire value depends on this, and nothing above it is trustworthy until it
    passes.
 3. **Config nodes and identity resolution.**
-4. **Connection: UDP, peer table, queue, lifecycle — with room for signing.** Signing
+4. **Connection: transports, peer table, queue, lifecycle — with room for signing.** Signing
    is off by default at runtime, but the channel state must carry link ID, sequence, and replay
    memory from the first commit. The feature is optional; the state model accommodating it is
-   not. Bolting it on later means reworking Connection. Then TCP, then serial.
+   not. Bolting it on later means reworking Connection. **UDP, TCP, and serial ship together**
+   on the same driver contract (shallow write, wait for accept/drain, then dequeue). Serial
+   lazy-loads optional `serialport`; UDP/TCP installs must work without it.
 5. **In, Out, Build.** First end-to-end traffic.
 6. **Command, Move, Param, Payload, State.**
 7. **Mission.**
 8. **Swarm.**
 9. **Examples**, once node contracts are stable. Examples are a product surface, not a test
    directory.
+
+### Remaining after the §12 spine
+
+The spine above is in tree. What follows was skipped, stubbed, or left partial — not abandoned
+by silence. Update this list when an item lands.
+
+| Item | Notes |
+|---|---|
+| **Custom dialect upload in the Vehicle editor** | Compile/fetch exist; the UI still says upload is not implemented. |
+| **Command node `COMMAND_INT`** | Presets/advanced send `COMMAND_LONG`; `COMMAND_INT_ONLY` fails with “not yet supported”. Build can emit INT. |
+| **DSCP socket marking** | Band→DSCP constants exist; no native `setsockopt` optional dep yet (§7). Queue behaviour does not depend on marks. |
+| **Param definition catalog** | No `apm.pdef.xml` / PX4 defs pipeline; Param id stays free-form text until that catalog exists (§4). |
+| **Full command-param `enum=` recovery** | Small hints table only until the 85 XML links are recovered without vendoring (§14). |
+| **Move editor §6 reshape** | Runtime OK; dialog still crams local/global fields on shared rows. |
+| **Payload verb field completeness** | Aim/release/photo paths wired; video stream ids, ROI lat/lon/alt, stabilize flags, etc. still runtime-only. |
+| **`httpAdminRoot` on non-enum admin routes** | Enums use `adminApiUrl`; messages/commands/presets still absolute `/mavlink/…`. |
+| **SITL-backed tests (§13)** | Fixture suite only in CI; firmware behaviour needs the five+five rig. |
+| **Cross-connection swarm** | Explicitly out of scope this pass (§10). |
 
 ## 13. Testing and SITL
 
@@ -1352,3 +1372,12 @@ returns an empty list for every dialect, so the editor falls back to `#1 (not in
 Bundled reconstruction must re-prefix members with `MAV_COMP_ID_`, not `MAV_COMPONENT_`.
 *Check:* `node -e "const {listEnumsCatalog}=require('./lib/metadata'); console.log(listEnumsCatalog('ardupilotmega',['MAV_COMPONENT']).enums.MAV_COMPONENT.find(e=>e.value===1))"`
 — expect `{ name: 'MAV_COMP_ID_AUTOPILOT1', value: 1, label: 'MAV_COMP_ID_AUTOPILOT1 (1)', … }`.
+
+**UDP, TCP, and serial ship on one Connection contract.**
+*Wrong belief:* §12 meant UDP first, with TCP and serial as later follow-ups that can diverge.
+*Fact:* All three share the driver-side shallow-write / drain contract (§7). Serial is an
+optional `serialport` dependency lazy-loaded only when selected; UDP/TCP installs must work
+without it. Deferring a transport after Connection lands creates a second integration pass
+for peer-table endpoints and quiet-send codes — avoid that split.
+*Check:* `node --test test/connection/transport-*.test.js`; Connection editor lists UDP/TCP/Serial
+with no “(not yet)”.

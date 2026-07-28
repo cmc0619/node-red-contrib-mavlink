@@ -72,6 +72,21 @@ test('Connection editor does not expose heartbeat interval or UDP broadcast cont
   );
 });
 
+test('Connection editor offers UDP, TCP, and serial without “not yet” stubs', () => {
+  assert.match(html, /<option value="udp">UDP<\/option>/);
+  assert.match(html, /<option value="tcp">TCP<\/option>/);
+  assert.match(html, /<option value="serial">Serial<\/option>/);
+  assert.ok(!html.includes('(not yet)'), 'transport options must not be stubbed');
+  assert.match(html, /function refreshTransportRows/, 'mode toggles transport field rows');
+  assert.match(html, /node-config-input-serialPath/, 'serial path field is present');
+  assert.match(html, /node-config-input-baudRate/, 'baud field is present');
+  assert.match(
+    html,
+    /serialPath:[\s\S]*validate:[\s\S]*mode !== 'serial'[\s\S]*trim\(\)\.length > 0/,
+    'serial path is required in serial mode'
+  );
+});
+
 test('Local Identity editor exposes heartbeatIntervalMs', () => {
   assert.match(
     identityHtml,

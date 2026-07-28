@@ -127,6 +127,29 @@ test('markPrimaryFailed rotates the primary and emits primary-changed', () => {
   assert.deepEqual(table.endpointFor(1, 1), EP2);
 });
 
+test('markPrimaryFailed clears a sole failed endpoint', () => {
+  const table = new PeerTable({ now: () => 0 });
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP1, 0);
+  assert.deepEqual(table.endpointFor(1, 1), EP1);
+
+  const next = table.markPrimaryFailed(1, 1);
+  assert.equal(next, null);
+  assert.equal(table.endpointFor(1, 1), null);
+  assert.equal(table.getComponent(1, 1).endpoints.size, 0);
+});
+
+test('markPrimaryFailed never reselects a previously failed endpoint', () => {
+  const table = new PeerTable({ now: () => 0 });
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP1, 0);
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP2, 1);
+
+  assert.deepEqual(table.markPrimaryFailed(1, 1), EP2);
+  assert.equal(table.getComponent(1, 1).endpoints.has('10.0.0.5:14550'), false);
+  assert.equal(table.markPrimaryFailed(1, 1), null);
+  assert.equal(table.endpointFor(1, 1), null);
+  assert.equal(table.getComponent(1, 1).endpoints.size, 0);
+});
+
 test('a HEARTBEAT contradicting the bound profile emits profile-mismatch once', () => {
   const table = new PeerTable({ now: () => 0, profileAutopilot: 3 }); // ArduPilot profile
   const mismatches = [];
