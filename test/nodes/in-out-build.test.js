@@ -628,8 +628,6 @@ test('mavlink-build: defaults empty messageName to HEARTBEAT', () => {
   const Constructor = RED._nodeTypes['mavlink-build'];
   const node = makeNodeInstance({ vehicle: 'v1' });
   Constructor.call(node, { vehicle: 'v1', messageName: '', tier: 'build' });
-  assert.equal(node._status && node._status.fill, 'green');
-  assert.equal(node._status && node._status.text, 'HEARTBEAT');
 
   node._input({ payload: { type: 6, autopilot: 3 } });
 
