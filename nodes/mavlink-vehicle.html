@@ -25,6 +25,19 @@
         firmware:              { value: 'ardupilot', required: true },
         dialect:               { value: 'ardupilotmega', required: true },
         dialectSource:         { value: 'bundled' },
+        customDialectPath:     {
+          value: '',
+          /* Require a path when the source is custom, so an empty path is
+             caught in the editor rather than only at deploy time. */
+          validate: function (v) {
+            const src = $('#node-config-input-dialectSource').val() || this.dialectSource;
+            if (src && src !== 'bundled') {
+              return !!(v && String(v).trim());
+            }
+            return true;
+          }
+        },
+        paramDefsUrl:          { value: '' },
         defaultTargetSystem:   { value: 1, validate: mavUint8Validator(0) },
         defaultTargetComponent:{ value: 1, validate: mavUint8Validator(0) }
       },
@@ -37,6 +50,7 @@
         const $dialect  = $('#node-config-input-dialect');
         const $bundled  = $('#mav-bundled-dialect');
         const $firmware = $('#node-config-input-firmware');
+        const $path     = $('#node-config-input-customDialectPath');
         const FALLBACK  = ['ardupilotmega', 'common', 'minimal'];
 
         /* Firmware → dialect suggestion (§6: fields are created by selection) */
@@ -57,8 +71,7 @@
           syncDialect();
         }
 
-        /* §6: enums show (value) in parentheses — dialect dropdown uses name only
-           (dialects are not MAVLink enum entries), but the firmware dropdown does. */
+        /* §6: dialect dropdown uses name only (dialects are not enum entries). */
         function populateBundled(list) {
           $bundled.empty();
           (list && list.length ? list : FALLBACK).forEach(function (d) {
@@ -91,6 +104,108 @@
             syncDialect();
           }
         });
+
+        /* --- downloadable XML catalog picker (§4) ------------------------
+           Downloaded XMLs are managed *Custom* paths: picking one fills the
+           XML path field. This is not a third dialect source. */
+        const $catalog = $('#mav-catalog-pick');
+        const $catalogStatus = $('#mav-catalog-status');
+
+        function loadCatalog() {
+          $.getJSON('mavlink/xml-catalog')
+            .done(function (data) {
+              $catalog.empty();
+              $('<option>').val('').text('-- downloaded XML (optional) --').appendTo($catalog);
+              const snapshots = (data && data.snapshots) || [];
+              let count = 0;
+              snapshots.forEach(function (snap) {
+                (snap.files || []).forEach(function (f) {
+                  if (f.usable === false) { return; }
+                  const when = snap.downloadedAt ? new Date(snap.downloadedAt).toISOString().slice(0, 10) : '';
+                  const label = f.name + '  [' + snap.repo + '@' + snap.ref + ' ' + when + ']' +
+                    (f.bundledExists ? ' (bundled exists)' : ' (not bundled)');
+                  $('<option>').val(f.path).text(label)
+                    .attr('data-file', f.name)
+                    .attr('data-snapshot', snap.snapshotId)
+                    .appendTo($catalog);
+                  count += 1;
+                });
+              });
+              $catalogStatus.text(count ? '' : 'No downloaded XML yet — use "Update catalog".');
+            })
+            .fail(function () {
+              $catalogStatus.text('Catalog unavailable.');
+            });
+        }
+
+        $catalog.on('change', function () {
+          const p = $(this).val();
+          if (p) {
+            $path.val(p);
+          }
+        });
+
+        $('#mav-catalog-update').on('click', function (e) {
+          e.preventDefault();
+          $catalogStatus.text('Downloading MAVLink XML from mavlink/mavlink...');
+          $.ajax({
+            url: 'mavlink/xml-catalog/update',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({})
+          })
+            .done(function () {
+              $catalogStatus.text('Downloaded. Pick a file below.');
+              loadCatalog();
+            })
+            .fail(function (xhr) {
+              const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'download failed';
+              $catalogStatus.text('Update failed: ' + msg);
+            });
+        });
+
+        $('#mav-catalog-compare').on('click', function (e) {
+          e.preventDefault();
+          const opt = $catalog.find('option:selected');
+          const file = opt.attr('data-file');
+          const snapshot = opt.attr('data-snapshot');
+          if (!file) {
+            $catalogStatus.text('Pick a downloaded XML to compare.');
+            return;
+          }
+          $catalogStatus.text('Comparing ' + file + ' with the bundled dialect...');
+          $.getJSON('mavlink/xml-catalog/compare', snapshot ? { file: file, snapshot: snapshot } : { file: file })
+            .done(function (data) {
+              const c = data && data.comparison;
+              if (!c) {
+                $catalogStatus.text('No comparison available.');
+                return;
+              }
+              if (c.error) {
+                $catalogStatus.text(file + ': ' + c.error);
+                return;
+              }
+              if (!c.bundledExists) {
+                $catalogStatus.text(file + ': not present in the bundled dialects (new dialect).');
+                return;
+              }
+              if (!c.comparable || !c.diff) {
+                $catalogStatus.text(file + ': a bundled dialect exists (deeper diff unavailable).');
+                return;
+              }
+              const d = c.diff;
+              $catalogStatus.text(
+                file + ' vs bundled — messages: +' + d.addedMessages.length + ' / -' + d.removedMessages.length +
+                ' / changed ' + d.changedMessages.length + '; enums: +' + d.addedEnums.length + ' / -' + d.removedEnums.length + '.'
+              );
+            })
+            .fail(function (xhr) {
+              const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'comparison failed';
+              $catalogStatus.text('Comparison failed: ' + msg);
+            });
+        });
+
+        loadCatalog();
 
         if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
           RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
@@ -168,11 +283,31 @@
       <select id="mav-bundled-dialect" style="width:60%;"></select>
     </div>
     <div class="form-row mav-dialect-custom" style="display:none;">
-      <label>Custom dialect</label>
-      <span class="form-tips">
-        Supply a pre-compiled dialect bundle via the HTTP API or future upload mechanism.
-        The runtime marks this profile invalid until a bundle is provided.
-      </span>
+      <label for="node-config-input-customDialectPath">XML path</label>
+      <input type="text" id="node-config-input-customDialectPath" placeholder="/path/to/custom.xml">
+    </div>
+    <div class="form-tips mav-dialect-custom" style="display:none;">
+      A MAVLink XML file the Node-RED process can read. Its
+      <code>&lt;include&gt;</code> graph is resolved from the file's own
+      directory and compiled at runtime. Invalid XML or a missing include fails
+      loudly (the profile marks itself invalid) rather than falling back.
+    </div>
+    <div class="form-row mav-dialect-custom" style="display:none;">
+      <label for="mav-catalog-pick">Downloaded XML</label>
+      <select id="mav-catalog-pick" style="width:60%;"></select>
+    </div>
+    <div class="form-row mav-dialect-custom" style="display:none; margin-left:104px;">
+      <button id="mav-catalog-update" class="red-ui-button">Update catalog</button>
+      <button id="mav-catalog-compare" class="red-ui-button">Compare with bundled</button>
+    </div>
+    <div class="form-tips mav-dialect-custom" id="mav-catalog-status" style="display:none; min-height:1em;"></div>
+    <div class="form-row">
+      <label for="node-config-input-paramDefsUrl">Param defs URL</label>
+      <input type="text" id="node-config-input-paramDefsUrl" placeholder="(optional) PX4 / custom parameter metadata URL">
+    </div>
+    <div class="form-tips">
+      Optional URL to firmware parameter definitions (PX4 / custom stacks). Leave
+      blank for ArduPilot — its per-family metadata URL is derived at runtime.
     </div>
   </div>
   <!-- hidden persisted value keeps the saved dialect name across async dropdown loads -->
@@ -216,6 +351,20 @@
   <h3>Dialect source (Advanced)</h3>
   <ul>
     <li><b>Bundled</b> — one of the ten dialects loaded from <code>mavlink-mappings</code>.</li>
-    <li><b>Custom</b> — a pre-compiled dialect bundle (upload mechanism not yet implemented).</li>
+    <li><b>Custom</b> — a single <b>XML path</b> to a MAVLink dialect file the Node-RED process can
+    read (local or mounted). Its <code>&lt;include&gt;</code> graph is resolved from the file's own
+    directory and compiled at runtime. Invalid XML or a missing include fails loudly (the profile
+    marks itself invalid) rather than falling back to a bundled dialect.</li>
   </ul>
+  <h3>Downloaded XML catalog (Advanced)</h3>
+  <p>Optionally download official MAVLink XML dialects into a local catalog under
+  <code>&lt;userDir&gt;/mavlink/xml</code> and pick one here — it just fills the XML path above (a
+  managed Custom path, not a replacement for bundled dialects). <b>Update catalog</b> downloads the
+  latest set from <code>mavlink/mavlink</code>; <b>Compare with bundled</b> reports how the selected
+  file differs from the same-named bundled dialect. Downloads are self-contained (every
+  <code>&lt;include&gt;</code> is fetched together), so the runtime compiler never reaches the network.</p>
+  <h3>Param defs URL (Advanced)</h3>
+  <p>Optional URL to firmware parameter definitions for PX4 or custom stacks. Persisted on the
+  profile for the Param node to consume; ArduPilot can leave it blank, as its per-family metadata
+  URL is derived at runtime.</p>
 </script>

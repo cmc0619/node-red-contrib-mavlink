@@ -24,8 +24,13 @@ const { EventEmitter } = require('node:events');
 function mockDgram() {
   const sockets = [];
   const module = {
-    createSocket() {
+    createSocket(typeOrOptions) {
       const socket = new EventEmitter();
+      const type =
+        typeof typeOrOptions === 'string'
+          ? typeOrOptions
+          : (typeOrOptions && typeOrOptions.type) || 'udp4';
+      socket.type = type;
       socket.sent = [];
       socket.closed = false;
       socket.bind = (port, address) => {

@@ -12,6 +12,9 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const {
   FIRMWARE_TYPES,
@@ -22,6 +25,8 @@ const {
   parseTargetUint8,
   knownDialects,
 } = require('../../lib/vehicle');
+
+const XML = (body) => `<?xml version="1.0"?>\n<mavlink>${body}</mavlink>`;
 
 /* ---------- knownDialects ---------- */
 
@@ -121,14 +126,44 @@ test('resolveDialect custom with bundle → returns the supplied bundle', () => 
   assert.equal(result, fakeBundle);
 });
 
-test('resolveDialect custom without bundle → throws mentioning upload', () => {
+test('resolveDialect custom with a path → compiles the XML from disk', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-veh-'));
+  const base = path.join(dir, 'base.xml');
+  const entry = path.join(dir, 'entry.xml');
+  fs.writeFileSync(base, XML('<messages><message id="0" name="HEARTBEAT"><field type="uint8_t" name="t">t</field></message></messages>'));
+  fs.writeFileSync(entry, XML('<include>base.xml</include><messages><message id="42" name="ENTRY"><field type="uint8_t" name="e">e</field></message></messages>'));
+
+  const bundle = resolveDialect({ dialectSource: 'custom', customDialectPath: entry });
+  assert.equal(bundle.dialect, 'entry');
+  assert.deepEqual(Object.keys(bundle.messages).sort(), ['ENTRY', 'HEARTBEAT']);
+});
+
+test('resolveDialect custom with a bad path → fails loud (never falls back)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-veh-'));
   assert.throws(
-    () => resolveDialect({ name: 'My Profile', dialectSource: 'custom' }),
-    /upload xml files first/i
+    () => resolveDialect({ dialectSource: 'custom', customDialectPath: path.join(dir, 'nope.xml') }),
+    (e) => e.code === 'XML_DIALECT_READ_FAILED'
   );
 });
 
-test('resolveDialect custom without bundle names the profile', () => {
+test('resolveDialect custom prefers a supplied bundle over a path', () => {
+  const fakeBundle = { dialect: 'custom-test', enums: {}, messages: {} };
+  const result = resolveDialect({
+    dialectSource: 'custom',
+    customDialectPath: '/does/not/matter.xml',
+    customDialectBundle: fakeBundle,
+  });
+  assert.equal(result, fakeBundle);
+});
+
+test('resolveDialect custom without path or bundle → throws mentioning the XML path', () => {
+  assert.throws(
+    () => resolveDialect({ name: 'My Profile', dialectSource: 'custom' }),
+    /xml path/i
+  );
+});
+
+test('resolveDialect custom without path or bundle names the profile', () => {
   let message = '';
   try {
     resolveDialect({ name: 'My Profile', dialectSource: 'custom' });

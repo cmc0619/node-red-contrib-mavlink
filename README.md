@@ -78,6 +78,10 @@ Importable flows live in [`examples/`](examples/). In the Node-RED editor: **Imp
 | `03-param-read-set.json` | Param read (MAV_SYSID) and set (FS_GCS_ENABLE) as separate injects |
 | `04-mission-upload-download.json` | Mission upload then download |
 | `05-swarm-arm.json` | Swarm sequential arm — dry-run then live |
+| `06-sitl-completion-takeoff.json` | Arm + completion-tier takeoff against ArduPilot Copter SITL |
+| `07-ardupilot-swarm-sequential.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
+| `08-param-read-set-defs.json` | Param read, set, and list — with notes on the definition catalog |
+| `09-command-mission.json` | Command presets, advanced `SET_MESSAGE_INTERVAL`, mission upload/download |
 
 Before deploying against a vehicle or SITL, set each example's **Connection** endpoints (`bind` is where traffic arrives — typically `127.0.0.1:14550`; `remote` is the vehicle/SITL input — often `14551`) and match the **Vehicle** dialect and default target system id to your link.
 

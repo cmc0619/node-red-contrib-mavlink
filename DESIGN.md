@@ -1071,18 +1071,19 @@ to know the mode table.
 The spine above is in tree. What follows was skipped, stubbed, or left partial — not abandoned
 by silence. Update this list when an item lands.
 
-| Item | Notes |
-|---|---|
-| **Custom dialect upload in the Vehicle editor** | Compile/fetch exist; the UI still says upload is not implemented. |
-| **Command node `COMMAND_INT`** | Presets/advanced send `COMMAND_LONG`; `COMMAND_INT_ONLY` fails with “not yet supported”. Build can emit INT. |
-| **DSCP socket marking** | Band→DSCP constants exist; no native `setsockopt` optional dep yet (§7). Queue behaviour does not depend on marks. |
-| **Param definition catalog** | No `apm.pdef.xml` / PX4 defs pipeline; Param id stays free-form text until that catalog exists (§4). |
-| **Full command-param `enum=` recovery** | Small hints table only until the 85 XML links are recovered without vendoring (§14). |
-| **Move editor §6 reshape** | Runtime OK; dialog still crams local/global fields on shared rows. |
-| **Payload verb field completeness** | Aim/release/photo paths wired; video stream ids, ROI lat/lon/alt, stabilize flags, etc. still runtime-only. |
-| **`httpAdminRoot` on non-enum admin routes** | Enums use `adminApiUrl`; messages/commands/presets still absolute `/mavlink/…`. |
-| **SITL-backed tests (§13)** | Fixture suite only in CI; firmware behaviour needs the five+five rig. |
-| **Cross-connection swarm** | Explicitly out of scope this pass (§10). |
+| Item | Status | Notes |
+|---|---|---|
+| **Custom dialect upload in the Vehicle editor** | **done** | Custom XML path + downloadable catalog (`/mavlink/xml-catalog`); runtime `compileXmlFromFile` with include walk; no silent fallback. |
+| **Command node `COMMAND_INT`** | **done** | Confirm path starts LONG; on `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns, converts once (param5–7 ↔ x/y/z, global frames ×1e7), resends; second wrong-carrier fails loud. |
+| **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
+| **Param definition catalog** | **done** | `lib/param/defs.js` fetches ArduPilot `apm.pdef.json` by family or Vehicle `paramDefsUrl` (PX4/custom); cache; Param editor datalist + units/enums. |
+| **Full command-param `enum=` recovery** | **done** | All 85 common.xml `<param enum=`> links in `lib/metadata/hints.js` (e.g. Arm → `MAV_BOOL`). |
+| **Move editor §6 reshape** | open | Runtime OK; dialog still crams local/global fields on shared rows. |
+| **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
+| **`httpAdminRoot` on non-enum admin routes** | open | Deferred; enums use `adminApiUrl`; other catalogs still absolute `/mavlink/…`. |
+| **SITL example flows** | **done** | Examples 06–09 assume the five+five rig (completion takeoff, sequential swarm, param defs, command+mission). |
+| **SITL-backed tests (§13)** | open | Fixture suite in CI; firmware behaviour still needs the live five+five rig. |
+| **Cross-connection swarm** | out of scope | As designed (§10): two Connections → two Swarm nodes. |
 
 ## 13. Testing and SITL
 

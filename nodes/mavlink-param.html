@@ -22,6 +22,8 @@
     label: function () { return this.name || 'mavlink param'; },
     oneditprepare: function () {
       var node = this;
+
+      /* ── Component picker ─────────────────────────────────── */
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
       }
@@ -34,6 +36,106 @@
           );
         });
       }
+
+      /* ── Param definition catalog ─────────────────────────── */
+      var _paramDefs = {};        // paramId → { description, unit, min, max, increment, values }
+      var _defsLoaded = false;
+      var _defsNotice = '';
+
+      /**
+       * Read the vehicle id through the selected connection, then ask the
+       * admin route for defs. Silently no-ops if the connection or vehicle
+       * is not yet deployed.
+       */
+      function loadParamDefs() {
+        var connectionId = $('#node-input-connection').val();
+        if (!connectionId) return;
+        var connectionNode = RED.nodes.node(connectionId);
+        if (!connectionNode) return;
+        var vehicleId = connectionNode.vehicle;
+        if (!vehicleId) return;
+
+        $.getJSON('/mavlink/param/defs', { vehicle: vehicleId }, function (data) {
+          _paramDefs = data.defs || {};
+          _defsNotice = data.notice || '';
+          _defsLoaded = true;
+          rebuildParamIdDatalist();
+          refreshParamInfo();
+        }).fail(function () {
+          _paramDefs = {};
+          _defsLoaded = true;
+          rebuildParamIdDatalist();
+        });
+      }
+
+      function rebuildParamIdDatalist() {
+        var $list = $('#mav-param-id-list');
+        $list.empty();
+        var ids = Object.keys(_paramDefs).sort();
+        for (var i = 0; i < ids.length; i++) {
+          var id = ids[i];
+          var def = _paramDefs[id];
+          var label = def.description
+            ? id + ' \u2014 ' + def.description.slice(0, 60)
+            : id;
+          $list.append($('<option></option>').val(id).text(label));
+        }
+        /* Swap paramId to datalist-backed input or plain input. */
+        var hasDefs = ids.length > 0;
+        $('#node-input-paramId').attr('list', hasDefs ? 'mav-param-id-list' : null);
+        $('#row-param-defs-tip').toggle(!hasDefs && _defsLoaded && !!_defsNotice);
+        if (!hasDefs && _defsLoaded && _defsNotice) {
+          $('#mav-param-defs-tip-text').text(_defsNotice);
+        }
+      }
+
+      function refreshParamInfo() {
+        var id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
+        var def = _paramDefs[id];
+        if (def && (def.description || def.unit)) {
+          var parts = [];
+          if (def.description) parts.push(def.description);
+          if (def.unit) parts.push('Unit: ' + def.unit);
+          if (def.min !== undefined || def.max !== undefined) {
+            parts.push('Range: ' + (def.min !== undefined ? def.min : '?') + ' – ' + (def.max !== undefined ? def.max : '?'));
+          }
+          $('#mav-param-info-text').text(parts.join(' | '));
+          $('#row-param-info').show();
+        } else {
+          $('#row-param-info').hide();
+        }
+        /* When action is set, populate value datalist with enum options. */
+        var action = $('#node-input-action').val() || 'read';
+        var $valueList = $('#mav-param-value-list');
+        $valueList.empty();
+        if (action === 'set' && def && def.values && def.values.length) {
+          for (var i = 0; i < def.values.length; i++) {
+            var entry = def.values[i];
+            $valueList.append(
+              $('<option></option>').val(String(entry.value)).text(entry.label + ' (' + entry.value + ')')
+            );
+          }
+          $('#node-input-value').attr('list', 'mav-param-value-list');
+        } else {
+          $('#node-input-value').attr('list', null);
+        }
+      }
+
+      /* Reload defs when connection changes. */
+      $('#node-input-connection').on('change', function () {
+        _paramDefs = {};
+        _defsLoaded = false;
+        loadParamDefs();
+      });
+
+      /* Refresh info panel when paramId changes. */
+      $('#node-input-paramId').on('input change', refreshParamInfo);
+
+      /* Refresh value datalist when action changes. */
+      $('#node-input-action').on('change', refreshParamInfo);
+
+      /* Initial load. */
+      loadParamDefs();
     }
   });
 </script>
@@ -46,13 +148,31 @@
   <div class="form-row"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
   <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
   <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
-  <div class="form-row"><label for="node-input-paramId">Param id</label><input type="text" id="node-input-paramId" maxlength="16"></div>
+  <div class="form-row">
+    <label for="node-input-paramId">Param id</label>
+    <input type="text" id="node-input-paramId" maxlength="16" list="mav-param-id-list" placeholder="e.g. FS_GCS_ENABLE">
+    <datalist id="mav-param-id-list"></datalist>
+  </div>
+  <div class="form-row" id="row-param-info" style="display:none">
+    <label>&nbsp;</label>
+    <span id="mav-param-info-text" style="font-size:0.85em;color:#888;"></span>
+  </div>
+  <div class="form-row" id="row-param-defs-tip" style="display:none">
+    <label>&nbsp;</label>
+    <span id="mav-param-defs-tip-text" class="form-tips" style="font-size:0.85em;"></span>
+  </div>
   <div class="form-row"><label for="node-input-paramIndex">Index</label><input type="number" id="node-input-paramIndex"></div>
-  <div class="form-row"><label for="node-input-value">Value</label><input type="text" id="node-input-value"></div>
+  <div class="form-row">
+    <label for="node-input-value">Value</label>
+    <input type="text" id="node-input-value" list="mav-param-value-list">
+    <datalist id="mav-param-value-list"></datalist>
+  </div>
   <div class="form-row"><label for="node-input-paramType">Type</label><select id="node-input-paramType"><option value="MAV_PARAM_TYPE_REAL32">REAL32 (9)</option><option value="MAV_PARAM_TYPE_UINT8">UINT8 (1)</option><option value="MAV_PARAM_TYPE_INT8">INT8 (2)</option><option value="MAV_PARAM_TYPE_UINT16">UINT16 (3)</option><option value="MAV_PARAM_TYPE_INT16">INT16 (4)</option><option value="MAV_PARAM_TYPE_UINT32">UINT32 (5)</option><option value="MAV_PARAM_TYPE_INT32">INT32 (6)</option></select></div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-param">
   <p>Reads one parameter, sets one parameter, or requests a full list. Set confirmation is by matching the PARAM_VALUE echo, not COMMAND_ACK.</p>
   <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast.</p>
+  <p>When the flow is deployed and the Vehicle Profile has a known family, the <b>Param id</b> field becomes a searchable datalist showing all available parameter names with their descriptions. ArduPilot definitions are fetched automatically from the autotest server; PX4 or custom firmware requires a <b>Param defs URL</b> in the Vehicle Profile advanced settings.</p>
+  <p>For parameters with a discrete value set, the <b>Value</b> field offers a datalist of named options when the <b>Set</b> action is selected.</p>
 </script>
