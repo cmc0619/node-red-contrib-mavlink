@@ -1,0 +1,360 @@
+[
+  {
+    "id": "ex15-tab",
+    "type": "tab",
+    "label": "15 Telemetry rates",
+    "disabled": false,
+    "info": "Request, stream, and stop message intervals.",
+    "env": []
+  },
+  {
+    "id": "ex15-comment",
+    "type": "comment",
+    "z": "ex15-tab",
+    "name": "Telemetry rates",
+    "info": "REQUEST_MESSAGE (ATTITUDE once), SET_MESSAGE_INTERVAL (GLOBAL_POSITION_INT 5 Hz), stop interval. In node proves rate change. Params: msg 33 @ 200000 µs = 5 Hz. SITL bind 14550 → 14551.",
+    "x": 200,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex15-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex15-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex15-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex15-vehicle",
+    "localIdentity": "ex15-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex15-cmd-req-att",
+    "type": "mavlink-command",
+    "z": "ex15-tab",
+    "name": "Request ATTITUDE",
+    "mode": "preset",
+    "preset": "request_message",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex15-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"1\":30}",
+    "x": 360,
+    "y": 100,
+    "wires": [
+      [
+        "ex15-dbg-req"
+      ],
+      [
+        "ex15-dbg-req-st"
+      ]
+    ]
+  },
+  {
+    "id": "ex15-cmd-set-pos",
+    "type": "mavlink-command",
+    "z": "ex15-tab",
+    "name": "Stream posn 5 Hz",
+    "mode": "preset",
+    "preset": "set_message_interval",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex15-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"1\":33,\"2\":200000}",
+    "x": 360,
+    "y": 180,
+    "wires": [
+      [
+        "ex15-dbg-set"
+      ],
+      [
+        "ex15-dbg-set-st"
+      ]
+    ]
+  },
+  {
+    "id": "ex15-cmd-stop-pos",
+    "type": "mavlink-command",
+    "z": "ex15-tab",
+    "name": "Stop posn",
+    "mode": "preset",
+    "preset": "stop_message_interval",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex15-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"1\":33}",
+    "x": 360,
+    "y": 260,
+    "wires": [
+      [
+        "ex15-dbg-stop"
+      ],
+      [
+        "ex15-dbg-stop-st"
+      ]
+    ]
+  },
+  {
+    "id": "ex15-in-pos",
+    "type": "mavlink-in",
+    "z": "ex15-tab",
+    "name": "GLOBAL_POSITION_INT",
+    "connection": "ex15-connection",
+    "message": "GLOBAL_POSITION_INT",
+    "sysid": "",
+    "compid": "",
+    "changedOnly": false,
+    "rateLimit": 0,
+    "x": 360,
+    "y": 340,
+    "wires": [
+      [
+        "ex15-dbg-in"
+      ]
+    ]
+  },
+  {
+    "id": "ex15-inject-req",
+    "type": "inject",
+    "z": "ex15-tab",
+    "name": "Request ATTITUDE",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 100,
+    "wires": [
+      [
+        "ex15-cmd-req-att"
+      ]
+    ]
+  },
+  {
+    "id": "ex15-inject-set",
+    "type": "inject",
+    "z": "ex15-tab",
+    "name": "Stream posn 5 Hz",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 180,
+    "wires": [
+      [
+        "ex15-cmd-set-pos"
+      ]
+    ]
+  },
+  {
+    "id": "ex15-inject-stop",
+    "type": "inject",
+    "z": "ex15-tab",
+    "name": "Stop posn",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 260,
+    "wires": [
+      [
+        "ex15-cmd-stop-pos"
+      ]
+    ]
+  },
+  {
+    "id": "ex15-dbg-req",
+    "type": "debug",
+    "z": "ex15-tab",
+    "name": "request continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "ex15-dbg-req-st",
+    "type": "debug",
+    "z": "ex15-tab",
+    "name": "request status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 130,
+    "wires": []
+  },
+  {
+    "id": "ex15-dbg-set",
+    "type": "debug",
+    "z": "ex15-tab",
+    "name": "set continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "ex15-dbg-set-st",
+    "type": "debug",
+    "z": "ex15-tab",
+    "name": "set status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 210,
+    "wires": []
+  },
+  {
+    "id": "ex15-dbg-stop",
+    "type": "debug",
+    "z": "ex15-tab",
+    "name": "stop continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "ex15-dbg-stop-st",
+    "type": "debug",
+    "z": "ex15-tab",
+    "name": "stop status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 290,
+    "wires": []
+  },
+  {
+    "id": "ex15-dbg-in",
+    "type": "debug",
+    "z": "ex15-tab",
+    "name": "position stream",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 340,
+    "wires": []
+  }
+]

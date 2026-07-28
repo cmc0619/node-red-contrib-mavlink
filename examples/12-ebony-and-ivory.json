@@ -1,0 +1,651 @@
+[
+  {
+    "id": "ex12-tab",
+    "type": "tab",
+    "label": "12 Ebony & Ivory",
+    "disabled": false,
+    "info": "Dual-stack demo: ArduPilot (Ebony, sysid 1) and PX4 (Ivory, sysid 11) on separate connections sharing one GCS identity.",
+    "env": []
+  },
+  {
+    "id": "ex12-comment",
+    "type": "comment",
+    "z": "ex12-tab",
+    "name": "Ebony & Ivory dual stack",
+    "info": "ArduPilot: bind 127.0.0.1:14550 → remote 14551 (sysid 1). PX4: bind 14560 → remote 14561 (sysid 11) — PX4 SITL ports are version-specific; verify against your build (commonly 14550/14570/14580). Do NOT reuse ArduPilot custom_mode numbers on PX4; Ivory uses takeoff without hardcoded GUIDED. Launch: sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14551 and PX4 SITL with MAV_SYS_ID=11.",
+    "x": 200,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex12-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex12-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Ebony (ArduPilot)",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex12-vehicle-px4",
+    "type": "mavlink-vehicle",
+    "name": "Ivory (PX4)",
+    "vehicleFamily": "copter",
+    "firmware": "px4",
+    "dialect": "common",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 11,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex12-conn-ap",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex12-vehicle",
+    "localIdentity": "ex12-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex12-conn-px4",
+    "type": "mavlink-connection",
+    "name": "UDP PX4",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14560,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14561,
+    "broadcast": false,
+    "vehicle": "ex12-vehicle-px4",
+    "localIdentity": "ex12-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 1,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex12-cmd-ap-arm",
+    "type": "mavlink-command",
+    "z": "ex12-tab",
+    "name": "Ebony arm",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex12-conn-ap",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "x": 320,
+    "y": 120,
+    "wires": [
+      [
+        "ex12-cmd-ap-guided"
+      ],
+      [
+        "ex12-dbg-ap-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-cmd-ap-guided",
+    "type": "mavlink-command",
+    "z": "ex12-tab",
+    "name": "Ebony GUIDED",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex12-conn-ap",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"1\":1,\"2\":4}",
+    "x": 500,
+    "y": 120,
+    "wires": [
+      [
+        "ex12-cmd-ap-takeoff"
+      ],
+      [
+        "ex12-dbg-ap-guided"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-cmd-ap-takeoff",
+    "type": "mavlink-command",
+    "z": "ex12-tab",
+    "name": "Ebony takeoff",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex12-conn-ap",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"7\":10}",
+    "x": 680,
+    "y": 120,
+    "wires": [
+      [
+        "ex12-dbg-ap-takeoff"
+      ],
+      [
+        "ex12-dbg-ap-takeoff-st"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-cmd-px4-arm",
+    "type": "mavlink-command",
+    "z": "ex12-tab",
+    "name": "Ivory arm",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex12-conn-px4",
+    "targetSysid": "11",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "x": 320,
+    "y": 240,
+    "wires": [
+      [
+        "ex12-cmd-px4-takeoff"
+      ],
+      [
+        "ex12-dbg-px4-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-cmd-px4-takeoff",
+    "type": "mavlink-command",
+    "z": "ex12-tab",
+    "name": "Ivory takeoff",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex12-conn-px4",
+    "targetSysid": "11",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"7\":10}",
+    "x": 500,
+    "y": 240,
+    "wires": [
+      [
+        "ex12-dbg-px4-takeoff"
+      ],
+      [
+        "ex12-dbg-px4-takeoff-st"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-cmd-ap-rtl",
+    "type": "mavlink-command",
+    "z": "ex12-tab",
+    "name": "Ebony RTL",
+    "mode": "preset",
+    "preset": "rtl",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex12-conn-ap",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "x": 320,
+    "y": 360,
+    "wires": [
+      [
+        "ex12-dbg-ap-rtl"
+      ],
+      [
+        "ex12-dbg-ap-rtl-st"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-cmd-px4-rtl",
+    "type": "mavlink-command",
+    "z": "ex12-tab",
+    "name": "Ivory RTL",
+    "mode": "preset",
+    "preset": "rtl",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex12-conn-px4",
+    "targetSysid": "11",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "x": 500,
+    "y": 360,
+    "wires": [
+      [
+        "ex12-dbg-px4-rtl"
+      ],
+      [
+        "ex12-dbg-px4-rtl-st"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-state-feed-ap",
+    "type": "mavlink-state",
+    "z": "ex12-tab",
+    "name": "Ebony events",
+    "connection": "ex12-conn-ap",
+    "mode": "feed",
+    "events": "peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,multi-endpoint,profile-mismatch,statustext",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 320,
+    "y": 440,
+    "wires": [
+      [
+        "ex12-dbg-feed-ap"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-state-feed-px4",
+    "type": "mavlink-state",
+    "z": "ex12-tab",
+    "name": "Ivory events",
+    "connection": "ex12-conn-px4",
+    "mode": "feed",
+    "events": "peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,multi-endpoint,profile-mismatch,statustext",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 500,
+    "y": 440,
+    "wires": [
+      [
+        "ex12-dbg-feed-px4"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-inject-both-up",
+    "type": "inject",
+    "z": "ex12-tab",
+    "name": "▶ Both up",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 180,
+    "wires": [
+      [
+        "ex12-cmd-ap-arm",
+        "ex12-cmd-px4-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-inject-ebony",
+    "type": "inject",
+    "z": "ex12-tab",
+    "name": "Ebony (ArduPilot) up",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 120,
+    "wires": [
+      [
+        "ex12-cmd-ap-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-inject-ivory",
+    "type": "inject",
+    "z": "ex12-tab",
+    "name": "Ivory (PX4) up",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 240,
+    "wires": [
+      [
+        "ex12-cmd-px4-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-inject-both-rtl",
+    "type": "inject",
+    "z": "ex12-tab",
+    "name": "Both land/RTL",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 360,
+    "wires": [
+      [
+        "ex12-cmd-ap-rtl",
+        "ex12-cmd-px4-rtl"
+      ]
+    ]
+  },
+  {
+    "id": "ex12-dbg-ap-arm",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ebony arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "ex12-dbg-ap-guided",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ebony guided status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 500,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "ex12-dbg-ap-takeoff",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ebony takeoff continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 680,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "ex12-dbg-ap-takeoff-st",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ebony takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 680,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "ex12-dbg-px4-arm",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ivory arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "ex12-dbg-px4-takeoff",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ivory takeoff continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 500,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "ex12-dbg-px4-takeoff-st",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ivory takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 500,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "ex12-dbg-ap-rtl",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ebony rtl continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 420,
+    "wires": []
+  },
+  {
+    "id": "ex12-dbg-ap-rtl-st",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ebony rtl status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 440,
+    "wires": []
+  },
+  {
+    "id": "ex12-dbg-px4-rtl",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ivory rtl continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 500,
+    "y": 420,
+    "wires": []
+  },
+  {
+    "id": "ex12-dbg-px4-rtl-st",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ivory rtl status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 500,
+    "y": 440,
+    "wires": []
+  },
+  {
+    "id": "ex12-dbg-feed-ap",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ebony feed",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 680,
+    "y": 440,
+    "wires": []
+  },
+  {
+    "id": "ex12-dbg-feed-px4",
+    "type": "debug",
+    "z": "ex12-tab",
+    "name": "ivory feed",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 680,
+    "y": 480,
+    "wires": []
+  }
+]

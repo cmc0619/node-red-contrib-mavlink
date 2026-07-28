@@ -1,0 +1,319 @@
+[
+  {
+    "id": "ex16-tab",
+    "type": "tab",
+    "label": "16 Parameter inspector",
+    "disabled": false,
+    "info": "Read, set (echo-confirm), and list parameters.",
+    "env": []
+  },
+  {
+    "id": "ex16-comment",
+    "type": "comment",
+    "z": "ex16-tab",
+    "name": "Parameter inspector",
+    "info": "Read WPNAV_SPEED; set to 500 (echo-confirmed, not COMMAND_ACK); request-list collects full set (timeout 20 s). Set is echo-confirmed; PX4 params use int/float union (see SITL S5). Vehicle family copter. SITL bind 14550 → 14551.",
+    "x": 200,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex16-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex16-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex16-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex16-vehicle",
+    "localIdentity": "ex16-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex16-param-read",
+    "type": "mavlink-param",
+    "z": "ex16-tab",
+    "name": "Read WPNAV_SPEED",
+    "connection": "ex16-connection",
+    "delivery": "send",
+    "action": "read",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "paramId": "WPNAV_SPEED",
+    "paramIndex": -1,
+    "value": "",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "x": 380,
+    "y": 120,
+    "wires": [
+      [
+        "ex16-dbg-read"
+      ],
+      [
+        "ex16-dbg-read-st"
+      ]
+    ]
+  },
+  {
+    "id": "ex16-param-set",
+    "type": "mavlink-param",
+    "z": "ex16-tab",
+    "name": "Set WPNAV_SPEED=500",
+    "connection": "ex16-connection",
+    "delivery": "confirm",
+    "action": "set",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "paramId": "WPNAV_SPEED",
+    "paramIndex": -1,
+    "value": "500",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "x": 380,
+    "y": 200,
+    "wires": [
+      [
+        "ex16-dbg-set"
+      ],
+      [
+        "ex16-dbg-set-st"
+      ]
+    ]
+  },
+  {
+    "id": "ex16-param-list",
+    "type": "mavlink-param",
+    "z": "ex16-tab",
+    "name": "List all",
+    "connection": "ex16-connection",
+    "delivery": "collect",
+    "action": "request-list",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "paramId": "",
+    "paramIndex": -1,
+    "value": "",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "x": 380,
+    "y": 280,
+    "wires": [
+      [
+        "ex16-dbg-list"
+      ],
+      [
+        "ex16-dbg-list-st"
+      ]
+    ],
+    "timeout": "20000"
+  },
+  {
+    "id": "ex16-inject-read",
+    "type": "inject",
+    "z": "ex16-tab",
+    "name": "Read WPNAV_SPEED",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 120,
+    "wires": [
+      [
+        "ex16-param-read"
+      ]
+    ]
+  },
+  {
+    "id": "ex16-inject-set",
+    "type": "inject",
+    "z": "ex16-tab",
+    "name": "Set WPNAV_SPEED=500",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 200,
+    "wires": [
+      [
+        "ex16-param-set"
+      ]
+    ]
+  },
+  {
+    "id": "ex16-inject-list",
+    "type": "inject",
+    "z": "ex16-tab",
+    "name": "List all",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 280,
+    "wires": [
+      [
+        "ex16-param-list"
+      ]
+    ]
+  },
+  {
+    "id": "ex16-dbg-read",
+    "type": "debug",
+    "z": "ex16-tab",
+    "name": "read continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "ex16-dbg-read-st",
+    "type": "debug",
+    "z": "ex16-tab",
+    "name": "read status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 150,
+    "wires": []
+  },
+  {
+    "id": "ex16-dbg-set",
+    "type": "debug",
+    "z": "ex16-tab",
+    "name": "set continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "ex16-dbg-set-st",
+    "type": "debug",
+    "z": "ex16-tab",
+    "name": "set status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 230,
+    "wires": []
+  },
+  {
+    "id": "ex16-dbg-list",
+    "type": "debug",
+    "z": "ex16-tab",
+    "name": "list continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "ex16-dbg-list-st",
+    "type": "debug",
+    "z": "ex16-tab",
+    "name": "list status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 310,
+    "wires": []
+  }
+]

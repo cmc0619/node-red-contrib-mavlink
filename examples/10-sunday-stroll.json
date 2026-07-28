@@ -1,0 +1,595 @@
+[
+  {
+    "id": "ex10-tab",
+    "type": "tab",
+    "label": "10 Sunday drone stroll",
+    "disabled": false,
+    "info": "Headline joyride: arm → GUIDED → takeoff → DO_ORBIT circle → spin → FLIP mode → land. Each step chains on output 0 with completion/confirm tiers. ArduCopter SITL: bind 127.0.0.1:14550, remote 14551. Circle = DO_ORBIT (real command, not a path planner). Flip = FLIP flight mode (14), not MAV_CMD_DO_FLIP. PX4 would need different mode numbers.",
+    "env": []
+  },
+  {
+    "id": "ex10-comment",
+    "type": "comment",
+    "z": "ex10-tab",
+    "name": "Sunday drone stroll chain",
+    "info": "Chain on output 0 — completion where available (arm/GUIDED/takeoff/land), confirm for orbit/rotate/flip. Honesty: circle is DO_ORBIT (~200 m diameter at 100 m radius); flip is ArduCopter FLIP mode only (airborne + armed). SITL: sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14551. Bind 14550 → remote 14551.",
+    "x": 180,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex10-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex10-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1
+  },
+  {
+    "id": "ex10-connection",
+    "type": "mavlink-connection",
+    "name": "UDP SITL",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex10-vehicle",
+    "localIdentity": "ex10-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex10-cmd-arm",
+    "type": "mavlink-command",
+    "z": "ex10-tab",
+    "name": "Arm",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex10-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "x": 320,
+    "y": 160,
+    "wires": [
+      [
+        "ex10-cmd-guided"
+      ],
+      [
+        "ex10-dbg-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-dbg-arm",
+    "type": "debug",
+    "z": "ex10-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "ex10-cmd-guided",
+    "type": "mavlink-command",
+    "z": "ex10-tab",
+    "name": "GUIDED",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex10-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"1\":1,\"2\":4}",
+    "x": 360,
+    "y": 160,
+    "wires": [
+      [
+        "ex10-cmd-takeoff"
+      ],
+      [
+        "ex10-dbg-guided"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-dbg-guided",
+    "type": "debug",
+    "z": "ex10-tab",
+    "name": "guided status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 360,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "ex10-cmd-takeoff",
+    "type": "mavlink-command",
+    "z": "ex10-tab",
+    "name": "Takeoff 20 m",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex10-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"7\":20}",
+    "x": 400,
+    "y": 160,
+    "wires": [
+      [
+        "ex10-cmd-orbit"
+      ],
+      [
+        "ex10-dbg-takeoff"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-dbg-takeoff",
+    "type": "debug",
+    "z": "ex10-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 400,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "ex10-cmd-orbit",
+    "type": "mavlink-command",
+    "z": "ex10-tab",
+    "name": "Circle 200 m",
+    "mode": "preset",
+    "preset": "orbit",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex10-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{\"1\":100,\"2\":5,\"3\":0}",
+    "x": 440,
+    "y": 160,
+    "wires": [
+      [
+        "ex10-cmd-rotate"
+      ],
+      [
+        "ex10-dbg-orbit"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-dbg-orbit",
+    "type": "debug",
+    "z": "ex10-tab",
+    "name": "orbit status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 440,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "ex10-cmd-rotate",
+    "type": "mavlink-command",
+    "z": "ex10-tab",
+    "name": "Spin 360°",
+    "mode": "preset",
+    "preset": "rotate",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex10-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{\"1\":360,\"2\":30,\"3\":1}",
+    "x": 480,
+    "y": 160,
+    "wires": [
+      [
+        "ex10-cmd-flip"
+      ],
+      [
+        "ex10-dbg-rotate"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-dbg-rotate",
+    "type": "debug",
+    "z": "ex10-tab",
+    "name": "rotate status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 480,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "ex10-cmd-flip",
+    "type": "mavlink-command",
+    "z": "ex10-tab",
+    "name": "Flip",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex10-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{\"1\":1,\"2\":14}",
+    "x": 520,
+    "y": 160,
+    "wires": [
+      [
+        "ex10-cmd-land"
+      ],
+      [
+        "ex10-dbg-flip"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-dbg-flip",
+    "type": "debug",
+    "z": "ex10-tab",
+    "name": "flip status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 520,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "ex10-cmd-land",
+    "type": "mavlink-command",
+    "z": "ex10-tab",
+    "name": "Land",
+    "mode": "preset",
+    "preset": "land",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "ex10-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "x": 560,
+    "y": 160,
+    "wires": [
+      [
+        "ex10-dbg-done"
+      ],
+      [
+        "ex10-dbg-land"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-dbg-land",
+    "type": "debug",
+    "z": "ex10-tab",
+    "name": "land status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "ex10-dbg-done",
+    "type": "debug",
+    "z": "ex10-tab",
+    "name": "stroll complete",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 600,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "ex10-inject-start",
+    "type": "inject",
+    "z": "ex10-tab",
+    "name": "▶ Start stroll",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 160,
+    "wires": [
+      [
+        "ex10-cmd-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-inject-manual-arm",
+    "type": "inject",
+    "z": "ex10-tab",
+    "name": "1 Arm",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 300,
+    "wires": [
+      [
+        "ex10-cmd-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-inject-manual-guided",
+    "type": "inject",
+    "z": "ex10-tab",
+    "name": "2 GUIDED",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 340,
+    "wires": [
+      [
+        "ex10-cmd-guided"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-inject-manual-takeoff",
+    "type": "inject",
+    "z": "ex10-tab",
+    "name": "3 Takeoff 20 m",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 380,
+    "wires": [
+      [
+        "ex10-cmd-takeoff"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-inject-manual-orbit",
+    "type": "inject",
+    "z": "ex10-tab",
+    "name": "4 Circle 200 m",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 420,
+    "wires": [
+      [
+        "ex10-cmd-orbit"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-inject-manual-rotate",
+    "type": "inject",
+    "z": "ex10-tab",
+    "name": "5 Spin 360°",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 460,
+    "wires": [
+      [
+        "ex10-cmd-rotate"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-inject-manual-flip",
+    "type": "inject",
+    "z": "ex10-tab",
+    "name": "6 Flip",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 500,
+    "wires": [
+      [
+        "ex10-cmd-flip"
+      ]
+    ]
+  },
+  {
+    "id": "ex10-inject-manual-land",
+    "type": "inject",
+    "z": "ex10-tab",
+    "name": "7 Land",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 540,
+    "wires": [
+      [
+        "ex10-cmd-land"
+      ]
+    ]
+  }
+]
