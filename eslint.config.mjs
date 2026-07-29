@@ -58,7 +58,7 @@ const nodeRules = {
       // Supported Node 18 releases expose node:test and fetch even though
       // plugin-n records their later non-experimental milestone.
       allowExperimental: true,
-      ignores: ['test', 'test.after', 'test.before'],
+      ignores: ['test'],
     },
   ],
 };
@@ -97,6 +97,18 @@ export default [
     rules: {
       ...correctnessRules,
       ...nodeRules,
+    },
+  },
+  {
+    files: ['integration/**/*.js'],
+    rules: {
+      'n/no-unsupported-features/node-builtins': [
+        'error',
+        {
+          allowExperimental: true,
+          ignores: ['test', 'test.after', 'test.before'],
+        },
+      ],
     },
   },
   {
