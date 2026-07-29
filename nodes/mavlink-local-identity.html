@@ -69,6 +69,26 @@
       return entry.name + ' (' + entry.value + ')';
     };
 
+    /**
+     * Editor-side copy of lib/metadata/naming.js isFalseTrueEnum. Client HTML
+     * cannot require() the Node module, so keep this rule mirrored here.
+     *
+     * @param {Array<{name: string, value: number|string}|string>|null|undefined} entries
+     * @returns {boolean}
+     */
+    RED.mavlink.isFalseTrueEnum = function (entries) {
+      if (!Array.isArray(entries) || entries.length === 0) return false;
+      var hasFalse = false;
+      var hasTrue = false;
+      entries.forEach(function (entry) {
+        var name = typeof entry === 'string' ? entry : entry && entry.name;
+        if (typeof name !== 'string') return;
+        if (name === 'FALSE' || name.slice(-6) === '_FALSE') hasFalse = true;
+        if (name === 'TRUE' || name.slice(-5) === '_TRUE') hasTrue = true;
+      });
+      return hasFalse && hasTrue;
+    };
+
     function valueFromSelector(selector) {
       var $el = $(selector);
       return $el && $el.length ? String($el.val() || '').trim() : '';
@@ -105,18 +125,35 @@
     function currentEnumQuery(names) {
       var query = {};
       var buildTier = valueFromSelector('#node-input-delivery') === 'build';
+      if (buildTier) {
+        var buildDialect = valueFromSelector('#node-input-dialect');
+        if (buildDialect && buildDialect !== '__vehicle') {
+          query.dialect = buildDialect;
+        } else if (buildDialect === '__vehicle') {
+          var buildVehicle = valueFromSelector('#node-input-vehicle');
+          if (buildVehicle) {
+            query.vehicle = buildVehicle;
+            if (RED.nodes && typeof RED.nodes.node === 'function') {
+              var buildProfile = RED.nodes.node(buildVehicle);
+              if (buildProfile && buildProfile.dialect) query.dialect = buildProfile.dialect;
+            }
+          }
+        }
+        if (!query.dialect && !query.vehicle) return query;
+        addEnumNames(query, names);
+        return query;
+      }
+
       var vehicle = '';
       var dialect = valueFromSelector('#node-input-dialect') ||
         valueFromSelector('#node-config-input-dialect');
 
-      if (!buildTier) {
-        var connection = valueFromSelector('#node-input-connection');
-        if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
-          var conn = RED.nodes.node(connection);
-          vehicle = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
-          var connProfile = vehicle ? RED.nodes.node(vehicle) : null;
-          if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
-        }
+      var connection = valueFromSelector('#node-input-connection');
+      if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
+        var conn = RED.nodes.node(connection);
+        vehicle = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
+        var connProfile = vehicle ? RED.nodes.node(vehicle) : null;
+        if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
       }
       if (!vehicle) vehicle = valueFromSelector('#node-input-vehicle');
       if (vehicle && !dialect && RED.nodes && typeof RED.nodes.node === 'function') {
@@ -126,12 +163,16 @@
 
       if (vehicle) query.vehicle = vehicle;
       if (dialect) query.dialect = dialect;
+      addEnumNames(query, names);
+      return query;
+    }
+
+    function addEnumNames(query, names) {
       if (Array.isArray(names) && names.length) {
         query.names = names.join(',');
       } else if (typeof names === 'string' && names.trim()) {
         query.names = names.trim();
       }
-      return query;
     }
     RED.mavlink.currentCatalogQuery = currentEnumQuery;
 
@@ -146,6 +187,57 @@
       var root = (RED.settings && RED.settings.httpAdminRoot) || '/';
       if (root.slice(-1) !== '/') root += '/';
       return root + String(path || '').replace(/^\//, '');
+    };
+
+    /**
+     * Populate a Build-tier dialect select without inventing a default dialect.
+     * Empty remains selected until the editor's required validator accepts a
+     * concrete dialect or the Vehicle Profile escape (§6).
+     *
+     * @param {object} $select  jQuery select
+     * @param {{saved?: string, includeVehicleEscape?: boolean, onReady?: function}} [opts]
+     */
+    RED.mavlink.populateDialectSelect = function ($select, opts) {
+      opts = opts || {};
+      var saved = opts.saved !== undefined && opts.saved !== null
+        ? String(opts.saved)
+        : String($select.val() || '');
+      var includeVehicleEscape = opts.includeVehicleEscape !== false;
+
+      function appendOption(value, label) {
+        $select.append($('<option></option>').val(value).text(label));
+      }
+
+      function hasOption(value) {
+        return $select.find('option[value="' + value + '"]').length > 0;
+      }
+
+      function finish(dialects) {
+        $select.empty();
+        appendOption('', '\u2014');
+        (dialects || []).forEach(function (dialect) {
+          appendOption(String(dialect), String(dialect));
+        });
+        if (includeVehicleEscape) {
+          appendOption('__vehicle', 'from Vehicle Profile\u2026');
+        }
+        if (saved && !hasOption(saved)) {
+          appendOption(saved, saved);
+        }
+        $select.val(saved || '');
+        if (typeof $select.trigger === 'function') {
+          $select.trigger('change');
+        }
+        if (typeof opts.onReady === 'function') {
+          opts.onReady();
+        }
+      }
+
+      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/dialects'), function (data) {
+        finish((data && data.dialects) || []);
+      }).fail(function () {
+        finish([]);
+      });
     };
 
     /**
