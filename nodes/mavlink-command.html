@@ -1077,14 +1077,26 @@
         <dd>The status record on success; the built <code>COMMAND_LONG</code> message in Build mode.</dd>
       </dl>
     </li>
-    <li>Status
+    <li>Status — plain status object at the message root on every terminal outcome:
       <dl class="message-properties">
-        <dt>payload <span class="property-type">object</span></dt>
-        <dd>Status record on every terminal outcome:
-          <code>result</code>, <code>resultCode</code>, <code>confirmedBy</code>,
-          <code>target</code>, <code>elapsed</code>, <code>retries</code>,
-          <code>command</code>, <code>commandId</code>, <code>detail</code>.
-        </dd>
+        <dt>result <span class="property-type">string</span></dt>
+        <dd>Outcome name (<code>accepted</code>, <code>failed</code>, <code>unconfirmed</code>, …).</dd>
+        <dt>resultCode <span class="property-type">number | null</span></dt>
+        <dd>MAV_RESULT code when the outcome came from COMMAND_ACK.</dd>
+        <dt>confirmedBy <span class="property-type">string</span></dt>
+        <dd><code>ack</code>, <code>state</code>, or <code>none</code>.</dd>
+        <dt>target <span class="property-type">object</span></dt>
+        <dd>Resolved <code>{ sysid, compid }</code>.</dd>
+        <dt>elapsed <span class="property-type">number</span></dt>
+        <dd>Milliseconds from start to terminal outcome.</dd>
+        <dt>retries <span class="property-type">number</span></dt>
+        <dd>COMMAND_ACK retries performed.</dd>
+        <dt>command <span class="property-type">string</span></dt>
+        <dd>Friendly command name when known.</dd>
+        <dt>commandId <span class="property-type">number</span></dt>
+        <dd>MAV_CMD value.</dd>
+        <dt>detail <span class="property-type">string | null</span></dt>
+        <dd>Extra human-readable context.</dd>
       </dl>
     </li>
   </ol>

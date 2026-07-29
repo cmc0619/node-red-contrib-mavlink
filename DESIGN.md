@@ -1647,5 +1647,5 @@ both notify Catch and finish the message.
 `lib/delivery` (it calls `done(err)`, or `node.error` only when `done` is missing). A throw
 that escapes the handler is contained by Node-RED (§2) but is not the preferred path — catch
 and `done(err)`.
-*Check:* `rg -n 'node\\.error\\([^)]*\\)[\\s\\S]{0,40}done\\(\\)' nodes/mavlink-*.js` finds no
-input-handler pairs; `node --test test/delivery/delivery.test.js test/swarm/node.test.js`.
+*Check:* `node --test test/delivery/catch-path-scan.test.js` (source scan of `nodes/mavlink-*.js`);
+`node --test test/delivery/delivery.test.js test/swarm/node.test.js`.
