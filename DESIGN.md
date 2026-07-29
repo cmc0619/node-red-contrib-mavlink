@@ -193,13 +193,14 @@ Both npm packages are already the ArduPilot line — install nothing else (§14)
 
 ## 4. Metadata — seeded XML is the dialect authority
 
-**Ship a pinned MAVLink XML seed.** Dialect definitions come from upstream
-`mavlink/mavlink` `message_definitions/v1.0` (MIT — see `seed/mavlink/NOTICE` and
-https://mavlink.io/en/#license), not from `mavlink-mappings`. `scripts/generate-seed.js`
-pins a commit, copies every XML file, walks `<include>` for each selectable root, and
-writes precompiled {@link DialectBundle} JSON under `seed/mavlink/bundles/`. Runtime
-`loadBundled(name)` reads those artifacts. Offline works on first install; a catalog
-update overlays a newer snapshot under the Node-RED userDir when internet is available.
+**Ship a pinned MAVLink seed blob.** Dialect definitions come from upstream
+`mavlink/mavlink` `message_definitions/v1.0` (MIT — see https://mavlink.io/en/#license),
+not from `mavlink-mappings`. `scripts/generate-seed.js` pins a commit, walks `<include>`
+for each selectable root, and writes a **single** gzipped JSON file
+`seed/mavlink.seed.gz` (NOTICE + manifest with `stamp` `YYYY-MM-DD-<shortsha>` + every
+precompiled {@link DialectBundle}). Runtime gunzips once into memory. A weekly GitHub
+Action refreshes the blob and opens a PR when upstream moves. Catalog updates still
+overlay newer XML under the Node-RED userDir when internet is available.
 
 **One bundle shape.** Seeded dialects, custom uploads, and catalog downloads all compile
 to the same {@link DialectBundle}. Field `enum=`, command-param enums, descriptions, and

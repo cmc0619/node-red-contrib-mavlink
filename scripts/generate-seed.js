@@ -4,13 +4,11 @@
 /**
  * Build the shipped dialect seed from upstream MAVLink XML.
  *
- * Downloads (or copies) `message_definitions/v1.0/*.xml` from a pinned
- * mavlink/mavlink commit, writes them under `seed/mavlink/xml/`, compiles every
- * dialect root into a persisted {@link DialectBundle} JSON under
- * `seed/mavlink/bundles/`, and records provenance in `seed/mavlink/manifest.json`.
- *
- * The XML definitions are MIT-licensed per https://mavlink.io/en/#license —
- * NOTICE carries that text. Re-run whenever dialects should move forward:
+ * Output is a **single** gzipped JSON blob:
+ *   seed/mavlink.seed.gz
+ * containing NOTICE text, a provenance manifest (commit, fetchedAt / stamp),
+ * and every precompiled DialectBundle. Runtime gunzips once and serves
+ * dialects from memory — no tree of XML/JSON files in git.
  *
  *   node scripts/generate-seed.js
  *   node scripts/generate-seed.js --source-dir /path/to/mavlink
@@ -20,15 +18,18 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const { compileXml } = require('../lib/metadata/compile');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
-const SEED_DIR = path.join(REPO_ROOT, 'seed', 'mavlink');
+const SEED_DIR = path.join(REPO_ROOT, 'seed');
+/** Stable path the runtime loads. */
+const SEED_FILE = path.join(SEED_DIR, 'mavlink.seed.gz');
 const DEFINITIONS_DIR = 'message_definitions/v1.0';
 
 /** Dialects we do not ship as selectable roots (generator tests / meta). */
 const SKIP_ROOTS = new Set([
-  'all.xml', // umbrella include of everything — not a real vehicle dialect
+  'all.xml',
   'python_array_test.xml',
   'test.xml',
 ]);
@@ -128,7 +129,7 @@ async function fetchRemoteFile(repo, commit, file) {
 }
 
 /**
- * @param {string} sourceDir  mavlink repo root
+ * @param {string} sourceDir
  * @returns {{commit: string, files: Object<string, string>}}
  */
 function loadFromSourceDir(sourceDir) {
@@ -146,7 +147,7 @@ function loadFromSourceDir(sourceDir) {
       commit = head;
     }
   } catch {
-    // plain checkout without .git — commit stays unknown; caller should prefer --ref fetch
+    // plain checkout without .git
   }
   const files = {};
   for (const name of fs.readdirSync(defDir).filter((f) => f.endsWith('.xml'))) {
@@ -182,27 +183,40 @@ function dialectKey(fileName) {
 }
 
 /**
- * Compile every selectable root and write a complete seed tree under `seedDir`.
- * Stages into a sibling temp directory and only replaces `seedDir` when every
- * selectable root compiles — a partial failure must not delete the previous
- * seed (and drop dialects from the package).
+ * Human + machine stamp: UTC date + short commit.
+ *
+ * @param {string} fetchedAt  ISO timestamp
+ * @param {string} commit
+ * @returns {string}
+ */
+function makeStamp(fetchedAt, commit) {
+  const day = new Date(fetchedAt).toISOString().slice(0, 10);
+  const short = String(commit || 'unknown').slice(0, 7);
+  return `${day}-${short}`;
+}
+
+/**
+ * Compile every selectable root into one gzipped seed blob.
+ * Compiles fully before touching the live file; a partial failure leaves the
+ * previous seed untouched and throws.
  *
  * @param {object} opts
- * @param {Object<string, string>} opts.files  basename → XML text
+ * @param {Object<string, string>} opts.files
  * @param {string} opts.repo
  * @param {string} opts.ref
  * @param {string} opts.commit
  * @param {string} [opts.fetchedAt]
- * @param {string} [opts.seedDir]  default shipped seed path
+ * @param {string} [opts.seedFile]  default seed/mavlink.seed.gz
  * @param {boolean} [opts.quiet]
- * @returns {{manifest: object, seedDir: string}}
+ * @returns {{payload: object, seedFile: string, stamp: string}}
  */
 function writeSeed(opts) {
-  const seedDir = opts.seedDir || SEED_DIR;
+  const seedFile = opts.seedFile || SEED_FILE;
   const repo = opts.repo;
   const ref = opts.ref;
   const commit = opts.commit;
   const fetchedAt = opts.fetchedAt || new Date().toISOString();
+  const stamp = makeStamp(fetchedAt, commit);
   const files = opts.files;
   const log = opts.quiet ? () => {} : console.log.bind(console);
   const errLog = opts.quiet ? () => {} : console.error.bind(console);
@@ -210,7 +224,7 @@ function writeSeed(opts) {
   const dialects = [];
   const compileErrors = [];
   /** @type {Object<string, object>} */
-  const compiled = {};
+  const bundles = {};
 
   for (const name of Object.keys(files).sort()) {
     if (SKIP_ROOTS.has(name)) continue;
@@ -221,7 +235,7 @@ function writeSeed(opts) {
         dialect: key,
         fetched: { repo, commit, fetchedAt },
       });
-      compiled[key] = persisted;
+      bundles[key] = persisted;
       dialects.push({
         name: key,
         entry: name,
@@ -255,54 +269,35 @@ function writeSeed(opts) {
       bytes: Buffer.byteLength(files[name], 'utf8'),
     }));
 
-  const manifest = {
-    schemaVersion: 1,
-    repo,
-    ref,
-    commit,
-    fetchedAt,
-    license: 'MIT',
-    licenseNote: 'MAVLink message definition XML — see NOTICE and https://mavlink.io/en/#license',
-    xmlDir: 'xml',
-    bundlesDir: 'bundles',
-    files: fileMeta,
-    dialects,
-    compileErrors: [],
+  const payload = {
+    schemaVersion: 2,
+    stamp,
+    notice: MIT_NOTICE,
+    manifest: {
+      schemaVersion: 2,
+      stamp,
+      repo,
+      ref,
+      commit,
+      fetchedAt,
+      license: 'MIT',
+      licenseNote: 'MAVLink message definition XML — see NOTICE and https://mavlink.io/en/#license',
+      files: fileMeta,
+      dialects,
+      compileErrors: [],
+    },
+    bundles,
   };
 
-  // Stage beside the live seed, then swap — never rm the live tree first.
-  const staging = `${seedDir}.staging-${process.pid}`;
-  const backup = `${seedDir}.bak-${process.pid}`;
-  fs.rmSync(staging, { recursive: true, force: true });
-  fs.mkdirSync(path.join(staging, 'xml'), { recursive: true });
-  fs.mkdirSync(path.join(staging, 'bundles'), { recursive: true });
+  const gz = zlib.gzipSync(Buffer.from(JSON.stringify(payload), 'utf8'), { level: 9 });
+  fs.mkdirSync(path.dirname(seedFile), { recursive: true });
+  const staging = `${seedFile}.staging-${process.pid}`;
+  fs.writeFileSync(staging, gz);
+  fs.renameSync(staging, seedFile);
 
-  for (const [name, text] of Object.entries(files)) {
-    fs.writeFileSync(path.join(staging, 'xml', name), text);
-  }
-  for (const [key, persisted] of Object.entries(compiled)) {
-    fs.writeFileSync(path.join(staging, 'bundles', `${key}.json`), `${JSON.stringify(persisted)}\n`);
-  }
-  fs.writeFileSync(path.join(staging, 'NOTICE'), MIT_NOTICE);
-  fs.writeFileSync(path.join(staging, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-
-  fs.rmSync(backup, { recursive: true, force: true });
-  if (fs.existsSync(seedDir)) {
-    fs.renameSync(seedDir, backup);
-  }
-  try {
-    fs.renameSync(staging, seedDir);
-  } catch (err) {
-    if (fs.existsSync(backup)) {
-      fs.renameSync(backup, seedDir);
-    }
-    throw err;
-  }
-  fs.rmSync(backup, { recursive: true, force: true });
-
-  log(`\nSeed written to ${seedDir}`);
-  log(`commit ${commit} — ${dialects.length} dialects, ${fileMeta.length} xml files`);
-  return { manifest, seedDir };
+  log(`\nSeed written to ${seedFile}`);
+  log(`stamp ${stamp} — ${dialects.length} dialects, ${fileMeta.length} xml sources, ${gz.length} bytes gzipped`);
+  return { payload, seedFile, stamp, manifest: payload.manifest };
 }
 
 async function main() {
@@ -321,6 +316,8 @@ if (require.main === module) {
 module.exports = {
   writeSeed,
   dialectKey,
+  makeStamp,
   SKIP_ROOTS,
   SEED_DIR,
+  SEED_FILE,
 };

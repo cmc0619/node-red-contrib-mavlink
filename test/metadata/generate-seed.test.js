@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const zlib = require('zlib');
 
 const { writeSeed } = require('../../scripts/generate-seed');
 
@@ -30,7 +31,6 @@ const GOOD_ICAROUS = `<?xml version="1.0"?>
 </mavlink>
 `;
 
-/** Broken: missing include — compileXml fails loud. */
 const BAD_ROOT = `<?xml version="1.0"?>
 <mavlink>
   <version>3</version>
@@ -39,15 +39,15 @@ const BAD_ROOT = `<?xml version="1.0"?>
 </mavlink>
 `;
 
-test('writeSeed replaces the seed only when every selectable root compiles', () => {
-  const seedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-seed-ok-'));
-  fs.rmSync(seedDir, { recursive: true, force: true });
+test('writeSeed emits one gzipped blob with stamp and every bundle', () => {
+  const seedFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mav-seed-ok-')), 'mavlink.seed.gz');
 
-  const { manifest } = writeSeed({
-    seedDir,
+  const { stamp, manifest } = writeSeed({
+    seedFile,
     repo: 'mavlink/mavlink',
     ref: 'master',
-    commit: 'abc123',
+    commit: 'abcdef0123456789',
+    fetchedAt: '2026-07-28T12:00:00.000Z',
     quiet: true,
     files: {
       'minimal.xml': GOOD_MINIMAL,
@@ -55,37 +55,43 @@ test('writeSeed replaces the seed only when every selectable root compiles', () 
     },
   });
 
+  assert.equal(stamp, '2026-07-28-abcdef0');
+  assert.ok(fs.existsSync(seedFile));
   assert.equal(manifest.dialects.length, 2);
-  assert.ok(fs.existsSync(path.join(seedDir, 'bundles', 'minimal.json')));
-  assert.ok(fs.existsSync(path.join(seedDir, 'bundles', 'icarous.json')));
-  assert.deepEqual(manifest.compileErrors, []);
+
+  const payload = JSON.parse(zlib.gunzipSync(fs.readFileSync(seedFile)).toString('utf8'));
+  assert.equal(payload.schemaVersion, 2);
+  assert.equal(payload.stamp, stamp);
+  assert.ok(payload.bundles.minimal);
+  assert.ok(payload.bundles.icarous);
+  assert.ok(payload.notice.includes('MIT'));
 });
 
-test('writeSeed leaves the previous seed untouched when any selectable root fails', () => {
-  const seedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-seed-prev-'));
-  fs.rmSync(seedDir, { recursive: true, force: true });
+test('writeSeed leaves the previous blob untouched when any selectable root fails', () => {
+  const seedFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mav-seed-prev-')), 'mavlink.seed.gz');
 
   writeSeed({
-    seedDir,
+    seedFile,
     repo: 'mavlink/mavlink',
     ref: 'master',
-    commit: 'aaa111',
+    commit: 'aaa1111',
+    fetchedAt: '2026-07-01T00:00:00.000Z',
     quiet: true,
     files: {
       'minimal.xml': GOOD_MINIMAL,
       'icarous.xml': GOOD_ICAROUS,
     },
   });
-  const before = fs.readFileSync(path.join(seedDir, 'manifest.json'), 'utf8');
-  assert.ok(fs.existsSync(path.join(seedDir, 'bundles', 'icarous.json')));
+  const before = fs.readFileSync(seedFile);
 
   assert.throws(
     () =>
       writeSeed({
-        seedDir,
+        seedFile,
         repo: 'mavlink/mavlink',
         ref: 'master',
-        commit: 'bbb222',
+        commit: 'bbb2222',
+        fetchedAt: '2026-07-28T00:00:00.000Z',
         quiet: true,
         files: {
           'minimal.xml': GOOD_MINIMAL,
@@ -96,10 +102,9 @@ test('writeSeed leaves the previous seed untouched when any selectable root fail
     /Seed compile failed.*broken\.xml/s
   );
 
-  // Previous seed must still be the live tree — icarous must not disappear.
-  assert.equal(fs.readFileSync(path.join(seedDir, 'manifest.json'), 'utf8'), before);
-  assert.ok(fs.existsSync(path.join(seedDir, 'bundles', 'icarous.json')));
-  assert.ok(!fs.existsSync(path.join(seedDir, 'bundles', 'broken.json')));
-  const manifest = JSON.parse(before);
-  assert.equal(manifest.commit, 'aaa111');
+  assert.deepEqual(fs.readFileSync(seedFile), before);
+  const payload = JSON.parse(zlib.gunzipSync(before).toString('utf8'));
+  assert.equal(payload.stamp, '2026-07-01-aaa1111');
+  assert.ok(payload.bundles.icarous);
+  assert.equal(payload.bundles.broken, undefined);
 });

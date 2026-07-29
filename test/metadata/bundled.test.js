@@ -3,14 +3,14 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
-const path = require('path');
 
-const { knownDialects, loadBundled, seedRoot, readManifest } = require('../../lib/metadata/bundled');
-
-/**
- * Seeded dialect loads (shipped `seed/mavlink`): real upstream XML include
- * chains, precompiled bundles, MIT-licensed message definitions.
- */
+const {
+  knownDialects,
+  loadBundled,
+  seedRoot,
+  readManifest,
+  seedStamp,
+} = require('../../lib/metadata/bundled');
 
 const CORE = [
   'minimal',
@@ -25,15 +25,15 @@ const CORE = [
   'storm32',
 ];
 
-test('seed ships NOTICE, manifest, xml, and precompiled bundles', () => {
-  const root = seedRoot();
-  assert.ok(fs.existsSync(path.join(root, 'NOTICE')));
-  assert.ok(fs.existsSync(path.join(root, 'manifest.json')));
-  assert.ok(fs.existsSync(path.join(root, 'xml', 'common.xml')));
-  assert.ok(fs.existsSync(path.join(root, 'bundles', 'common.json')));
+test('seed ships as a single gzipped blob with stamp + MIT notice', () => {
+  const blob = seedRoot();
+  assert.ok(blob.endsWith('mavlink.seed.gz'));
+  assert.ok(fs.existsSync(blob));
   const manifest = readManifest();
   assert.equal(manifest.license, 'MIT');
   assert.ok(manifest.commit && manifest.commit.length >= 7);
+  assert.ok(manifest.stamp);
+  assert.equal(seedStamp(), manifest.stamp);
   assert.ok(manifest.dialects.length >= CORE.length);
 });
 
@@ -50,7 +50,6 @@ test('seeded dialects load with real include files and provenance', () => {
   for (const name of CORE) {
     const bundle = loadBundled(name);
     assert.equal(bundle.dialect, name);
-    assert.ok(bundle.version === 3 || bundle.version === null || typeof bundle.version === 'number');
     assert.ok(bundle.fetched && bundle.fetched.commit);
     assert.ok(bundle.files.length >= 1);
     assert.ok(
