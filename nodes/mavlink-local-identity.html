@@ -211,6 +211,11 @@
         $select.val(String(entries[0][valueKey]));
       }
       syncEnumSelectTitle();
+      // Node-RED attaches change→validateNodeEditor before oneditprepare; async
+      // fills must re-fire change or a pre-fill `input-error` sticks (§6).
+      if (typeof $select.trigger === 'function') {
+        $select.trigger('change');
+      }
     };
 
     /**
@@ -436,6 +441,15 @@
         var enumLoadToken = { cancelled: false };
         node._mavEnumLoadToken = enumLoadToken;
 
+        // CompID is an empty <select> until /mavlink/enums returns. Node-RED
+        // validates immediately after oneditprepare — seed the saved numeric
+        // id first so GCS/custom do not flash `required for this role`.
+        if (RED.mavlink && typeof RED.mavlink.fillCompIdSelect === 'function') {
+          RED.mavlink.fillCompIdSelect($compid, [], {
+            saved: $compid.val() || node.sourceComponentId
+          });
+        }
+
         if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
           RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMPONENT'], function (catalog) {
             var enums = (catalog && catalog.enums) || {};
@@ -482,12 +496,14 @@
             var curCmp = String($compid.val()).trim();
             if (curCmp === '' || Number($compid.val()) === prev.compid) {
               $compid.val(next.compid);
+              $compid.trigger('change');
             }
           }
           /* heartbeat type */
           var hb = String($hbType.val()).trim();
           if (hb === '' || hb === prev.heartbeatType) {
             $hbType.val(next.heartbeatType);
+            $hbType.trigger('change');
           }
 
           applyVisibility(role);
