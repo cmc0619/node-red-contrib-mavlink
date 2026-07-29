@@ -21,4 +21,4 @@ Completed on branch `cursor/build-tier-dialect-picker-f3a0`.
 ## Scope
 
 - Changed files in this task: 12 including this report.
-- Branch file count versus `main`: 40 after force-adding this ignored report, under the 50-file cap.
+- Branch file count versus `main`: 44 after force-adding this ignored report, under the 50-file cap.
