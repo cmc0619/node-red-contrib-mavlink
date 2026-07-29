@@ -273,6 +273,23 @@ test('server peer disconnect emits endpoint-gone for stream-decoder cleanup', as
   assert.deepEqual(gone, { address: '10.0.0.1', port: 1 });
 });
 
+test('client disconnect emits endpoint-gone for stream-decoder cleanup', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport(
+    { remoteAddress: '10.0.0.9', remotePort: 5760 },
+    { net: net.module }
+  );
+  await transport.open();
+
+  const gone = await new Promise((resolve) => {
+    transport.once('endpoint-gone', resolve);
+    // Client close also emits error/close — ignore those for this assertion.
+    transport.on('error', () => {});
+    net.clients[0].emit('close');
+  });
+  assert.deepEqual(gone, { address: '10.0.0.9', port: 5760 });
+});
+
 test('server peer error does not emit transport error for remaining clients', async () => {
   const net = mockNet();
   const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });

@@ -106,22 +106,48 @@ test('decoder map LRU-evicts when over maxDecoders (UDP churn bound)', () => {
   const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
   const full = heartbeatFrame(wire);
   const ep = (n) => ({ address: '10.0.0.' + n, port: 14550 });
+  // Same `now` for every call — Map re-insertion order must decide warmth, not
+  // millisecond Date.now() advancement (CodeRabbit #33).
+  const t = 1_000_000;
 
-  wire.decode(full, ep(1));
-  wire.decode(full, ep(2));
+  wire.decode(full, ep(1), t);
+  wire.decode(full, ep(2), t);
   assert.equal(wire.decoderCount(), 2);
 
   // Touch ep(1) so it is warmer than ep(2); allocating ep(3) should drop ep(2).
-  wire.decode(full, ep(1));
-  wire.decode(full, ep(3));
+  wire.decode(full, ep(1), t);
+  wire.decode(full, ep(3), t);
   assert.equal(wire.decoderCount(), 2);
 
   // ep(1) still warm — completing a partial there must not need a fresh sync hunt
   // from a wiped pipeline. ep(2) was evicted.
   const partial = full.subarray(0, 6);
-  assert.equal(wire.decode(partial, ep(1)).length, 0);
-  assert.equal(wire.decode(full.subarray(6), ep(1)).length, 1);
+  assert.equal(wire.decode(partial, ep(1), t).length, 0);
+  assert.equal(wire.decode(full.subarray(6), ep(1), t).length, 1);
 
   // Fresh ep(2) after eviction starts clean (full frame decodes alone).
-  assert.equal(wire.decode(full, ep(2)).length, 1);
+  assert.equal(wire.decode(full, ep(2), t).length, 1);
+});
+
+test('cap pressure prefers never-validated pipelines over a live peer mid-frame', () => {
+  const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
+  const full = heartbeatFrame(wire);
+  const ep = (n) => ({ address: '10.0.0.' + n, port: 14550 });
+  const t = 2_000_000;
+  const junk = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]);
+
+  // Legitimate peer validates, then parks a partial frame.
+  assert.equal(wire.decode(full, ep(1), t).length, 1);
+  assert.equal(wire.decode(full.subarray(0, 6), ep(1), t + 1).length, 0);
+
+  // Spoof fills the last slot without ever validating.
+  assert.equal(wire.decode(junk, ep(2), t + 2).length, 0);
+  assert.equal(wire.decoderCount(), 2);
+
+  // Another spoof must evict the never-validated slot, not the mid-frame peer.
+  assert.equal(wire.decode(junk, ep(3), t + 3).length, 0);
+  assert.equal(wire.decoderCount(), 2);
+
+  // Completing the legitimate partial still works.
+  assert.equal(wire.decode(full.subarray(6), ep(1), t + 4).length, 1);
 });
