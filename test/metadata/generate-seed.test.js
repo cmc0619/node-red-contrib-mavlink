@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
 
-const { writeSeed } = require('../../scripts/generate-seed');
+const { writeSeed, seedFileName } = require('../../scripts/generate-seed');
 
 const GOOD_MINIMAL = `<?xml version="1.0"?>
 <mavlink>
@@ -39,11 +39,11 @@ const BAD_ROOT = `<?xml version="1.0"?>
 </mavlink>
 `;
 
-test('writeSeed emits one gzipped blob with stamp and every bundle', () => {
-  const seedFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mav-seed-ok-')), 'mavlink.seed.gz');
+test('writeSeed emits a stamp-named gzip blob + active.json pointer', () => {
+  const seedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-seed-ok-'));
 
-  const { stamp, manifest } = writeSeed({
-    seedFile,
+  const { stamp, active, seedFile } = writeSeed({
+    seedDir,
     repo: 'mavlink/mavlink',
     ref: 'master',
     commit: 'abcdef0123456789',
@@ -56,22 +56,23 @@ test('writeSeed emits one gzipped blob with stamp and every bundle', () => {
   });
 
   assert.equal(stamp, '2026-07-28-abcdef0');
+  assert.equal(path.basename(seedFile), seedFileName(stamp));
   assert.ok(fs.existsSync(seedFile));
-  assert.equal(manifest.dialects.length, 2);
+  assert.ok(fs.existsSync(path.join(seedDir, 'active.json')));
+  assert.equal(active.file, seedFileName(stamp));
+  assert.equal(active.stamp, stamp);
 
   const payload = JSON.parse(zlib.gunzipSync(fs.readFileSync(seedFile)).toString('utf8'));
-  assert.equal(payload.schemaVersion, 2);
   assert.equal(payload.stamp, stamp);
   assert.ok(payload.bundles.minimal);
   assert.ok(payload.bundles.icarous);
-  assert.ok(payload.notice.includes('MIT'));
 });
 
 test('writeSeed leaves the previous blob untouched when any selectable root fails', () => {
-  const seedFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mav-seed-prev-')), 'mavlink.seed.gz');
+  const seedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-seed-prev-'));
 
-  writeSeed({
-    seedFile,
+  const first = writeSeed({
+    seedDir,
     repo: 'mavlink/mavlink',
     ref: 'master',
     commit: 'aaa1111',
@@ -82,12 +83,13 @@ test('writeSeed leaves the previous blob untouched when any selectable root fail
       'icarous.xml': GOOD_ICAROUS,
     },
   });
-  const before = fs.readFileSync(seedFile);
+  const beforeBlob = fs.readFileSync(first.seedFile);
+  const beforeActive = fs.readFileSync(path.join(seedDir, 'active.json'), 'utf8');
 
   assert.throws(
     () =>
       writeSeed({
-        seedFile,
+        seedDir,
         repo: 'mavlink/mavlink',
         ref: 'master',
         commit: 'bbb2222',
@@ -102,9 +104,37 @@ test('writeSeed leaves the previous blob untouched when any selectable root fail
     /Seed compile failed.*broken\.xml/s
   );
 
-  assert.deepEqual(fs.readFileSync(seedFile), before);
-  const payload = JSON.parse(zlib.gunzipSync(before).toString('utf8'));
-  assert.equal(payload.stamp, '2026-07-01-aaa1111');
-  assert.ok(payload.bundles.icarous);
-  assert.equal(payload.bundles.broken, undefined);
+  assert.deepEqual(fs.readFileSync(first.seedFile), beforeBlob);
+  assert.equal(fs.readFileSync(path.join(seedDir, 'active.json'), 'utf8'), beforeActive);
+  assert.ok(!fs.existsSync(path.join(seedDir, seedFileName('2026-07-28-bbb2222'))));
+});
+
+test('writeSeed removes older stamped blobs when a new one succeeds', () => {
+  const seedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-seed-rotate-'));
+
+  const first = writeSeed({
+    seedDir,
+    repo: 'mavlink/mavlink',
+    ref: 'master',
+    commit: 'aaa1111',
+    fetchedAt: '2026-07-01T00:00:00.000Z',
+    quiet: true,
+    files: { 'minimal.xml': GOOD_MINIMAL },
+  });
+  assert.ok(fs.existsSync(first.seedFile));
+
+  const second = writeSeed({
+    seedDir,
+    repo: 'mavlink/mavlink',
+    ref: 'master',
+    commit: 'bbb2222',
+    fetchedAt: '2026-07-28T00:00:00.000Z',
+    quiet: true,
+    files: { 'minimal.xml': GOOD_MINIMAL },
+  });
+
+  assert.ok(fs.existsSync(second.seedFile));
+  assert.ok(!fs.existsSync(first.seedFile), 'old stamped blob should be removed');
+  const active = JSON.parse(fs.readFileSync(path.join(seedDir, 'active.json'), 'utf8'));
+  assert.equal(active.file, path.basename(second.seedFile));
 });

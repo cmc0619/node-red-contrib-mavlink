@@ -3,6 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
+const path = require('path');
 
 const {
   knownDialects,
@@ -25,10 +26,15 @@ const CORE = [
   'storm32',
 ];
 
-test('seed ships as a single gzipped blob with stamp + MIT notice', () => {
+test('seed ships as a stamp-named gzip blob pointed at by active.json', () => {
   const blob = seedRoot();
-  assert.ok(blob.endsWith('mavlink.seed.gz'));
+  assert.match(path.basename(blob), /^mavlink-\d{4}-\d{2}-\d{2}-[0-9a-f]+\.seed\.gz$/);
   assert.ok(fs.existsSync(blob));
+  const active = JSON.parse(
+    fs.readFileSync(path.join(path.dirname(blob), 'active.json'), 'utf8')
+  );
+  assert.equal(active.file, path.basename(blob));
+  assert.equal(active.stamp, seedStamp());
   const manifest = readManifest();
   assert.equal(manifest.license, 'MIT');
   assert.ok(manifest.commit && manifest.commit.length >= 7);

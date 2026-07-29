@@ -1,6 +1,6 @@
 name: Refresh MAVLink seed
 
-# Weekly auto-refresh of seed/mavlink.seed.gz from upstream XML.
+# Weekly auto-refresh of the stamped seed blob from upstream XML.
 # Also runnable by hand from the Actions tab.
 on:
   schedule:
@@ -41,12 +41,11 @@ jobs:
           commit-message: 'chore(seed): refresh MAVLink dialect seed'
           title: 'chore(seed): refresh MAVLink dialect seed'
           body: |
-            Automated refresh of `seed/mavlink.seed.gz` from `mavlink/mavlink`.
+            Automated refresh of the stamped seed blob from `mavlink/mavlink`.
 
-            Stamp and commit are inside the blob manifest (`stamp`, `commit`, `fetchedAt`).
-            One file change — not a tree of XML/JSON dialects.
+            Files: `seed/active.json` + `seed/mavlink-YYYY-MM-DD-<sha>.seed.gz`
+            (older stamped blobs are removed by the generator).
           branch: chore/refresh-mavlink-seed
           delete-branch: true
           add-paths: |
-            seed/mavlink.seed.gz
-            seed/README.md
+            seed/

@@ -4,11 +4,11 @@
 /**
  * Build the shipped dialect seed from upstream MAVLink XML.
  *
- * Output is a **single** gzipped JSON blob:
- *   seed/mavlink.seed.gz
- * containing NOTICE text, a provenance manifest (commit, fetchedAt / stamp),
- * and every precompiled DialectBundle. Runtime gunzips once and serves
- * dialects from memory — no tree of XML/JSON files in git.
+ * Output is a **single** gzipped JSON blob named with the stamp:
+ *   seed/mavlink-YYYY-MM-DD-<shortsha>.seed.gz
+ * plus a tiny pointer `seed/active.json` so the runtime can find it.
+ * The blob holds NOTICE, provenance manifest, and every precompiled
+ * DialectBundle. Runtime gunzips once — no tree of XML/JSON files in git.
  *
  *   node scripts/generate-seed.js
  *   node scripts/generate-seed.js --source-dir /path/to/mavlink
@@ -23,9 +23,17 @@ const { compileXml } = require('../lib/metadata/compile');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SEED_DIR = path.join(REPO_ROOT, 'seed');
-/** Stable path the runtime loads. */
-const SEED_FILE = path.join(SEED_DIR, 'mavlink.seed.gz');
+/** Pointer the runtime reads to locate the dated blob. */
+const ACTIVE_FILE = path.join(SEED_DIR, 'active.json');
 const DEFINITIONS_DIR = 'message_definitions/v1.0';
+
+/**
+ * @param {string} stamp
+ * @returns {string} basename e.g. mavlink-2026-07-29-de1e078.seed.gz
+ */
+function seedFileName(stamp) {
+  return `mavlink-${stamp}.seed.gz`;
+}
 
 /** Dialects we do not ship as selectable roots (generator tests / meta). */
 const SKIP_ROOTS = new Set([
@@ -206,17 +214,20 @@ function makeStamp(fetchedAt, commit) {
  * @param {string} opts.ref
  * @param {string} opts.commit
  * @param {string} [opts.fetchedAt]
- * @param {string} [opts.seedFile]  default seed/mavlink.seed.gz
+ * @param {string} [opts.seedDir]  directory for the blob + active.json
  * @param {boolean} [opts.quiet]
- * @returns {{payload: object, seedFile: string, stamp: string}}
+ * @returns {{payload: object, seedFile: string, stamp: string, active: object}}
  */
 function writeSeed(opts) {
-  const seedFile = opts.seedFile || SEED_FILE;
+  const seedDir = opts.seedDir || SEED_DIR;
   const repo = opts.repo;
   const ref = opts.ref;
   const commit = opts.commit;
   const fetchedAt = opts.fetchedAt || new Date().toISOString();
   const stamp = makeStamp(fetchedAt, commit);
+  const baseName = seedFileName(stamp);
+  const seedFile = path.join(seedDir, baseName);
+  const activeFile = path.join(seedDir, 'active.json');
   const files = opts.files;
   const log = opts.quiet ? () => {} : console.log.bind(console);
   const errLog = opts.quiet ? () => {} : console.error.bind(console);
@@ -290,14 +301,36 @@ function writeSeed(opts) {
   };
 
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(payload), 'utf8'), { level: 9 });
-  fs.mkdirSync(path.dirname(seedFile), { recursive: true });
+  fs.mkdirSync(seedDir, { recursive: true });
+
+  // Write blob + pointer only after a full compile success (above). Staging
+  // the gz avoids a truncated live file if the process dies mid-write.
   const staging = `${seedFile}.staging-${process.pid}`;
   fs.writeFileSync(staging, gz);
   fs.renameSync(staging, seedFile);
 
+  const active = {
+    file: baseName,
+    stamp,
+    repo,
+    ref,
+    commit,
+    fetchedAt,
+  };
+  const activeStaging = `${activeFile}.staging-${process.pid}`;
+  fs.writeFileSync(activeStaging, `${JSON.stringify(active, null, 2)}\n`);
+  fs.renameSync(activeStaging, activeFile);
+
+  // Drop older stamped blobs so git stays at one seed file.
+  for (const name of fs.readdirSync(seedDir)) {
+    if (/^mavlink-.+\.seed\.gz$/.test(name) && name !== baseName) {
+      fs.unlinkSync(path.join(seedDir, name));
+    }
+  }
+
   log(`\nSeed written to ${seedFile}`);
   log(`stamp ${stamp} — ${dialects.length} dialects, ${fileMeta.length} xml sources, ${gz.length} bytes gzipped`);
-  return { payload, seedFile, stamp, manifest: payload.manifest };
+  return { payload, seedFile, stamp, active, manifest: payload.manifest };
 }
 
 async function main() {
@@ -317,7 +350,8 @@ module.exports = {
   writeSeed,
   dialectKey,
   makeStamp,
+  seedFileName,
   SKIP_ROOTS,
   SEED_DIR,
-  SEED_FILE,
+  ACTIVE_FILE,
 };
