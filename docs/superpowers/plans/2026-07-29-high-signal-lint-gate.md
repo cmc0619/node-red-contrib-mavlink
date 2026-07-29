@@ -17,7 +17,7 @@
 - Preserve the codec-specific prohibition on bitwise operators.
 - Ordinary CI must remain deterministic and use read-only GitHub permissions.
 - SITL remains outside ordinary pull-request CI.
-- Open a draft pull request and do not merge it.
+- Open a ready-for-review pull request and do not merge it.
 
 ---
 
@@ -98,6 +98,7 @@ test: expose lint coverage gaps
 **Files:**
 - Delete: `eslint.config.js`
 - Create: `eslint.config.mjs`
+- Modify: `DESIGN.md`
 - Modify: `package.json`
 - Modify: `package-lock.json`
 - Modify only files with genuine new lint errors discovered by the completed configuration.
@@ -166,9 +167,24 @@ Run: `npm run lint`
 
 Expected: PASS with zero warnings and zero errors.
 
-- [ ] **Step 6: Commit the lint gate**
+- [ ] **Step 6: Update the authoritative lint design**
 
-Commit the config, dependency lock changes, and any narrow correctness fixes with message:
+Rewrite `DESIGN.md` §13 "Required lints" so it lists the expanded correctness,
+Node.js, Promise, and inline HTML scopes without adding style or JSDoc rules.
+Preserve the statement that lint is not a test. Add a §14 ground-truth entry
+recording that `eslint-plugin-html` catches JavaScript correctness errors inside
+Node-RED editor `<script type="text/javascript">` blocks while existing
+editor/runtime drift tests continue to cover markup and contract alignment.
+Record the coverage-guard command:
+
+```bash
+npm run test:lint-config
+```
+
+- [ ] **Step 7: Commit the lint gate**
+
+Commit `DESIGN.md`, the config, dependency lock changes, and any narrow
+correctness fixes with message:
 
 ```text
 ci: strengthen lint coverage
@@ -239,7 +255,7 @@ ci: validate Node-RED package metadata
 
 **Interfaces:**
 - Consumes: the completed branch.
-- Produces: a verified draft pull request targeting `main`.
+- Produces: a verified ready-for-review pull request targeting `main`.
 
 - [ ] **Step 1: Run fresh full verification**
 
@@ -277,7 +293,7 @@ Important findings, then rerun Step 1.
 
 - [ ] **Step 4: Push and open the pull request**
 
-Push `agent/strengthen-lint-gate` and open a draft PR targeting `main` titled:
+Push `agent/strengthen-lint-gate` and open a ready-for-review PR targeting `main` titled:
 
 ```text
 ci: strengthen Node-RED lint gate

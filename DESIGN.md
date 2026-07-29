@@ -1270,21 +1270,24 @@ reported verified on a lint pass.
 
 ### Required lints
 
-The gate is deliberately small: high-signal correctness rules only, no formatting, no style
-churn. Rules here have to stay cheap to keep green, or the gate becomes something people work
-around instead of something that catches defects. Every rule below earned its place by shipping
-a bug without it.
+The gate is deliberately focused: high-signal correctness, Node.js compatibility/dependency
+checks, and Promise API misuse only — no formatting, style, complexity, SonarJS, or JSDoc rules.
+Rules here have to stay cheap to keep green, or the gate becomes something people work around
+instead of something that catches defects.
 
-| Rule | Setting | Why |
+| Rule set | Setting | Why |
 |---|---|---|
-| `no-undef` | error | A deleted declaration or a missing `require` otherwise lints clean and fails only at runtime, on whichever rarely-exercised branch touches it first. This is the rule most worth having. |
-| `no-unused-vars` | error | Catches dead imports and abandoned bindings — the residue of a refactor that half-happened. |
-| `no-unreachable` | error | Code after a `return` or `throw` is either a mistake or a lie about control flow. |
+| `@eslint/js` recommended | error | The maintained ESLint correctness baseline catches undefined names, unreachable code, dead bindings, precision loss, discarded error causes, and similar defects without imposing a house style. MAVLink's intentional NUL-stripping regexes exempt `no-control-regex`; empty `catch` blocks are allowed where absence is the fallback contract. |
+| `eslint-plugin-n` dependency checks | error | `no-deprecated-api`, `no-extraneous-require`, and `no-missing-require` catch Node.js/package mistakes. The optional `sockopt` module and `node-mavlink`-provided `mavlink-mappings` are explicit resolution exceptions. |
+| `eslint-plugin-n` compatibility checks | error | `no-unsupported-features/es-builtins`, `no-unsupported-features/es-syntax`, and `no-unsupported-features/node-builtins` enforce the package's Node `>=18.5` floor. The builtins check allows experimental APIs and explicitly ignores `test`, `test.before`, and `test.after` because the CI-pinned Node 18 runtime exposes them (as it does `fetch`) before their later non-experimental milestones; newer modules such as `node:sqlite` still fail. |
+| `eslint-plugin-promise` API checks | error | `no-new-statics`, `no-return-in-finally`, `no-return-wrap`, and `valid-params` catch concrete Promise API/control-flow mistakes without imposing chaining style or rejecting Node-RED's callback boundaries. |
 | `no-bitwise` | error, **codec directory only** | The field codec builds masks arithmetically (§5). Banning the operators makes that a build failure rather than a review comment, in the bug class that historically cost the most rework. Runtime code elsewhere is unaffected. |
 
 `no-unused-vars` needs four options, each for a reason:
 
 - `caughtErrors: 'all'` — an unused catch binding is a swallowed error wearing a name.
+- `caughtErrorsIgnorePattern: '^_'` — `_err` is the explicit escape for a deliberately ignored
+  fallback error.
 - `ignoreRestSiblings: true` — rest-destructuring past keys deliberately omits them; those
   siblings are the mechanism, not dead code.
 - `varsIgnorePattern: '^_'` and `argsIgnorePattern: '^_'` — an underscore prefix is the escape
@@ -1293,17 +1296,21 @@ a bug without it.
 Set `reportUnusedDisableDirectives: 'error'`. A disable comment for a rule that no longer fires
 is itself stale, and stale suppressions are how a gate quietly stops gating.
 
-**Scope: `lib/`, `nodes/`, `test/`, and the lint config itself.** Editor HTML inline scripts stay
-out — linting them needs an HTML processor plugin, and their real exposure is a control the
-runtime reads that the template never renders, which no linter can see. Editor-versus-runtime
-drift tests cover that instead: source-level asserts that the template binds the right control
-ids, loads the right admin endpoints, and contains the §6 rendering branches. Those are the
-fixture form for editor HTML until a Node-RED editor harness exists; full jsdom simulation of
-delayed AJAX / typedInput attach is not on the §13 pain-point list.
+**Scope: `lib/`, `nodes/`, `scripts/`, `test/`, `integration/`, the lint config, and editor
+JavaScript inside `nodes/**/*.html`.** `eslint-plugin-html` extracts JavaScript from Node-RED's
+`<script type="text/javascript">` blocks; `globals` supplies the standard Node and browser
+environments, with `RED`, `$`, and `jQuery` declared read-only. Editor-versus-runtime drift tests
+still cover what JavaScript lint cannot: control ids, templates, admin endpoints, and §6 rendering
+contracts.
 
-**Declare Node globals explicitly rather than importing the `globals` package.** The list is
-short, it documents exactly what this codebase reaches for outside its own modules, and the gate
-stays dependency-free. All `readonly` except `module` and `exports`.
+`npm run test:lint-config` probes both integration JavaScript and inline editor JavaScript with a
+deliberate undefined name. It prevents a future config edit from silently dropping either scope.
+CI also runs the exact-version official Node-RED package scorecard
+(`npm run validate:node-red`) once on Node 22; it complements lint by inspecting package metadata
+and declared node files. The scorecard's recommendations are advisory warnings unless the tool
+returns a failing exit code. It runs as an isolated `npm exec` tool rather than a project
+dependency because its legacy transitive graph has known high/critical audit findings; the
+tradeoff is a live registry download during this CI step.
 
 ## 14. Ground truth
 
@@ -1324,6 +1331,26 @@ next agent reads only this file.
 sequential PRs. Count: `git diff --name-only <base>...HEAD | wc -l`.
 
 ---
+
+**Inline Node-RED editor JavaScript is useful lint scope even though HTML contract tests remain
+necessary.**
+*Wrong belief:* every editor convention is author-local, so linting `nodes/*.html` adds little
+beyond the existing editor/runtime drift tests.
+*Fact:* `eslint-plugin-html` extracts ordinary JavaScript from Node-RED editor
+`<script type="text/javascript">` blocks and catches author-independent correctness defects such
+as undefined names and dead bindings. Drift tests remain responsible for markup and
+editor/runtime contract alignment.
+*Check:* `npm run test:lint-config`
+
+**Locking the legacy Node-RED scorecard into the project is not a free hermeticity win.**
+*Wrong belief:* adding `node-red-dev@0.1.6` to `devDependencies` is strictly better than invoking
+that exact tool version outside the project dependency graph.
+*Fact:* the exact dev dependency adds hundreds of legacy packages and currently introduces
+high/critical audit findings into this repository's lockfile. CI invokes the exact scorecard
+version in an isolated `npm exec` environment instead. This deliberately accepts registry
+availability and transitive-resolution risk without making the legacy toolchain part of normal
+installs.
+*Check:* `scorecard_tmp="$(mktemp -d)" && npm install --prefix "$scorecard_tmp" --package-lock-only --ignore-scripts --save-dev --save-exact node-red-dev@0.1.6 && npm audit --prefix "$scorecard_tmp" --audit-level=high`
 
 **Dialect authority is the seed blob, not `mavlink-mappings` and not a path upload.**
 *Wrong belief:* §4 still requires a Vehicle-editor custom XML path/upload, or loading dialects

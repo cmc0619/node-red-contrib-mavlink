@@ -55,6 +55,10 @@ jobs:
       - name: Package contents
         run: npm pack --dry-run
 
+      - name: Node-RED package validation
+        if: matrix.node_version == '22.13.0'
+        run: npm run validate:node-red
+
   package-install:
     name: Package and install
     runs-on: ubuntu-latest
