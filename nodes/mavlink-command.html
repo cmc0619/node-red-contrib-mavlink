@@ -68,7 +68,8 @@
   /**
    * Resolve which Vehicle / dialect the Advanced list and enum catalogs should
    * load, respecting the role × tier matrix (DESIGN.md §6):
-   *   - Build tier: the node's own Vehicle Profile field governs.
+   *   - Build tier: the Dialect picker governs; Vehicle Profile is used only
+   *     when the picker is set to the explicit `from Vehicle Profile…` escape.
    *   - Wire tiers: the bound Connection's profile governs.
    *
    * @returns {{key: string, query: object, dialect: string, vehicleId: string}}

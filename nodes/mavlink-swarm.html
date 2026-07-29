@@ -340,6 +340,12 @@
         $('#row-swarm-identity').toggle(d !== 'build');
       }
 
+      function refreshCatalogsAndVisibility() {
+        refreshVehicleTypeOptions();
+        refreshCommandOptions();
+        refreshVisibility();
+      }
+
       var $dialect = $('#node-input-dialect');
       $dialect.on('change', function () {
         refreshVehicleTypeOptions();
@@ -362,8 +368,8 @@
         refreshIdentitySelect();
         refreshVisibility();
       });
-      $('#node-input-delivery').on('change', refreshVisibility);
-      $('#node-input-selectionMode').on('change', refreshVisibility);
+      $('#node-input-delivery').on('change', refreshCatalogsAndVisibility);
+      $('#node-input-selectionMode').on('change', refreshCatalogsAndVisibility);
       refreshVehicleTypeOptions();
       refreshCommandOptions();
       refreshIdentitySelect();

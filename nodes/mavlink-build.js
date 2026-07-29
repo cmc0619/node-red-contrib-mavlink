@@ -92,13 +92,15 @@ module.exports = function registerMavlinkBuild(RED) {
 
     // Resolve the dialect bundle per the role × tier matrix (§6).
     //   Build + plain dialect name → load from the bundled registry (no vehicle needed).
-    //   Build + '__vehicle' or legacy (vehicle set, no dialect) → vehicle node's bundle.
+    //   Build + '__vehicle' → vehicle node's bundle.
     //   Wire tier → the connection's bound profile node's bundle (custom-safe).
     if (tier === TIER.BUILD) {
       const dialectName = config.dialect;
-      if (dialectName && dialectName !== '__vehicle') {
-        bundle = require('../lib/metadata').loadBundled(dialectName);
-      } else {
+      if (!dialectName) {
+        node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+        return;
+      }
+      if (dialectName === '__vehicle') {
         const vehicleNode = RED.nodes.getNode(config.vehicle);
         if (!vehicleNode || typeof vehicleNode.getDialect !== 'function') {
           node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
@@ -111,6 +113,8 @@ module.exports = function registerMavlinkBuild(RED) {
           node.error(`mavlink-build: ${err.message}`);
           return;
         }
+      } else {
+        bundle = require('../lib/metadata').loadBundled(dialectName);
       }
     } else {
       // Wire tier: the connection's bound profile governs — hidden is not

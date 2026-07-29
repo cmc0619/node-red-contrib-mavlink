@@ -249,8 +249,11 @@ test('populateDialectSelect re-selects saved dialect without defaulting unsaved 
   assert.deepEqual(select.triggered, ['change']);
 });
 
-test('loadEnumsCatalog calls the shared enum route with a comma names list', () => {
-  const context = loadHelpers();
+test('loadEnumsCatalog calls the shared enum route with a catalog source and comma names list', () => {
+  const context = loadHelpers({
+    '#node-input-delivery': 'build',
+    '#node-input-dialect': 'common',
+  });
   let payload = null;
 
   context.RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_COMPONENT'], (catalog) => {
@@ -259,7 +262,7 @@ test('loadEnumsCatalog calls the shared enum route with a comma names list', () 
 
   assert.deepEqual(plain(context.$.lastRequest), {
     url: '/mavlink/enums',
-    query: { names: 'MAV_TYPE,MAV_COMPONENT' },
+    query: { dialect: 'common', names: 'MAV_TYPE,MAV_COMPONENT' },
   });
   assert.equal(payload.dialect, 'common');
 });
@@ -332,6 +335,19 @@ test('currentCatalogQuery on wire tiers keeps the connection profile behavior', 
     vehicle: 'vehicle-1',
     dialect: 'ardupilotmega',
   });
+});
+
+test('currentCatalogQuery on wire tiers ignores stale own vehicle and dialect without a connection profile', () => {
+  const context = loadHelpers({
+    '#node-input-delivery': 'send',
+    '#node-input-connection': '',
+    '#node-input-dialect': 'development',
+    '#node-input-vehicle': 'stale-vehicle',
+  }, {
+    'stale-vehicle': { dialect: 'common' },
+  });
+
+  assert.deepEqual(plain(context.RED.mavlink.currentCatalogQuery(['MAV_TYPE'])), {});
 });
 
 test('fillEnumSelect writes numeric string values and re-selects saved entries', () => {

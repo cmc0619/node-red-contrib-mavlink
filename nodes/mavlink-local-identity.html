@@ -145,9 +145,7 @@
       }
 
       var vehicle = '';
-      var dialect = valueFromSelector('#node-input-dialect') ||
-        valueFromSelector('#node-config-input-dialect');
-
+      var dialect = '';
       var connection = valueFromSelector('#node-input-connection');
       if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
         var conn = RED.nodes.node(connection);
@@ -155,11 +153,7 @@
         var connProfile = vehicle ? RED.nodes.node(vehicle) : null;
         if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
       }
-      if (!vehicle) vehicle = valueFromSelector('#node-input-vehicle');
-      if (vehicle && !dialect && RED.nodes && typeof RED.nodes.node === 'function') {
-        var ownProfile = RED.nodes.node(vehicle);
-        if (ownProfile && ownProfile.dialect) dialect = ownProfile.dialect;
-      }
+      if (!vehicle) return query;
 
       if (vehicle) query.vehicle = vehicle;
       if (dialect) query.dialect = dialect;

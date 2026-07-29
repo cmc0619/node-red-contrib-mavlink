@@ -207,20 +207,27 @@ test('sysids field validates each token as a MAVLink sysid (1..255)', () => {
   assert.match(html, /n >= 1 && n <= 255/, 'validator bounds each token to 1..255');
 });
 
-test('refreshVisibility is wired to both delivery and selectionMode changes', () => {
+test('delivery and selectionMode changes reload catalogs and refresh visibility', () => {
   assert.match(
     html,
     /function refreshVisibility/,
     'refreshVisibility function is defined'
   );
-  assert.match(
-    html,
-    /#node-input-delivery.*change.*refreshVisibility|refreshVisibility.*#node-input-delivery.*change/,
-    'delivery change is wired to refreshVisibility'
+  assert.match(html, /function refreshCatalogsAndVisibility/, 'combined reload helper is defined');
+  const deliveryHandler = html.match(
+    /#node-input-delivery['"]\)\.on\(['"]change['"],\s*refreshCatalogsAndVisibility\)/
   );
-  assert.match(
-    html,
-    /#node-input-selectionMode.*change.*refreshVisibility|refreshVisibility.*#node-input-selectionMode.*change/,
-    'selectionMode change is wired to refreshVisibility'
+  const selectionHandler = html.match(
+    /#node-input-selectionMode['"]\)\.on\(['"]change['"],\s*refreshCatalogsAndVisibility\)/
   );
+  assert.ok(deliveryHandler, 'delivery change reloads catalogs');
+  assert.ok(selectionHandler, 'selectionMode change reloads catalogs');
+  const helperStart = html.indexOf('function refreshCatalogsAndVisibility');
+  const helper = html.slice(
+    helperStart,
+    html.indexOf('var $dialect', helperStart)
+  );
+  assert.match(helper, /refreshVehicleTypeOptions\(\)/, 'MAV_TYPE catalog is reloaded');
+  assert.match(helper, /refreshCommandOptions\(\)/, 'MAV_CMD catalog is reloaded');
+  assert.match(helper, /refreshVisibility\(\)/, 'visibility is still refreshed');
 });
