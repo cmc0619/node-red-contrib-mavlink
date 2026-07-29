@@ -1169,8 +1169,11 @@ Vehicle Profile carries the firmware field: PX4, ArduPilot, or custom. It affect
 
 - **Flight modes** — entirely different tables, and custom mode is a firmware-specific bitfield.
 - **Mission types** — as above.
-- **Parameter types** — PX4 uses an int/float union in the parameter slot. Reinterpret the bit
-  pattern; do not cast numerically, or the parameter is corrupted on the vehicle.
+- **Parameter encoding** — `PARAM_SET` / `PARAM_VALUE` carry typed values in a float slot.
+  Encoding is resolved as: explicit `msg.payload.paramEncoding` (`bytewise` | `c-cast`) →
+  peer `AUTOPILOT_VERSION.capabilities` (`PARAM_ENCODE_BYTEWISE` / `PARAM_ENCODE_C_CAST`) →
+  firmware fallback (PX4 → bytewise bit-cast; otherwise C-cast). Do not invent encoding from
+  firmware alone when the peer has advertised a capability bit.
 - **Command support** — not every `MAV_CMD` is implemented by both stacks.
 
 Custom means: use the compiled dialect, offer no firmware-specific behavior, and do not pretend
@@ -1649,3 +1652,13 @@ that escapes the handler is contained by Node-RED (§2) but is not the preferred
 and `done(err)`.
 *Check:* `node --test test/delivery/catch-path-scan.test.js` (source scan of `nodes/mavlink-*.js`);
 `node --test test/delivery/delivery.test.js test/swarm/node.test.js`.
+
+**Param encoding follows override → capabilities → firmware, not firmware alone.**
+*Wrong belief:* `firmware === 'px4'` is the only signal for bytewise int/float union encoding;
+peer `AUTOPILOT_VERSION.capabilities` is stored for display and unused at send time.
+*Fact:* Spec bits are `MAV_PROTOCOL_CAPABILITY_PARAM_ENCODE_BYTEWISE` (16) and
+`…_PARAM_ENCODE_C_CAST` (131072). Resolution is explicit `msg.payload.paramEncoding` → those
+capability bits from the peer table → firmware fallback (PX4 → bytewise, else C-cast). ArduPilot
+often omits the C_CAST bit, so firmware fallback remains required.
+*Check:* `node --test test/param/param.test.js test/param/node.test.js` — look for
+`resolveParamEncoding` / capabilities tests.

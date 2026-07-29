@@ -226,6 +226,85 @@ test('mavlink-param build tier inherits from config.vehicle (sysid 77, compid 78
   assert.equal(sent[0].payload.fields.target_component, 78, 'compid from vehicle node');
 });
 
+test('mavlink-param capabilities beat ardupilot firmware for bytewise encoding', () => {
+  const { paramValueToWire } = require('../../lib/codec');
+  const { CAP_PARAM_ENCODE_BYTEWISE } = require('../../lib/param');
+  const peerTable = {
+    getComponent(sysid, compid) {
+      if (Number(sysid) === 1 && Number(compid) === 1) {
+        return { capabilities: CAP_PARAM_ENCODE_BYTEWISE };
+      }
+      return undefined;
+    },
+  };
+  const conn = connStubFull({
+    vehicle: { targetSysid: 1, targetCompid: 1, firmware: 'ardupilot' },
+    peerTable,
+  });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'send',
+    action: 'set',
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+  });
+
+  node.emit(
+    'input',
+    { payload: { paramId: 'BAT_N_CELLS', value: 3, paramType: 'MAV_PARAM_TYPE_INT32' } },
+    () => {},
+    () => {}
+  );
+
+  assert.equal(
+    conn.sent[0].message.fields.param_value,
+    paramValueToWire(3, 'MAV_PARAM_TYPE_INT32'),
+    'BYTEWISE capability encodes via float bit-cast despite ardupilot firmware'
+  );
+});
+
+test('mavlink-param msg.payload.paramEncoding overrides peer capabilities', () => {
+  const { CAP_PARAM_ENCODE_BYTEWISE } = require('../../lib/param');
+  const peerTable = {
+    getComponent() {
+      return { capabilities: CAP_PARAM_ENCODE_BYTEWISE };
+    },
+  };
+  const conn = connStubFull({
+    vehicle: { targetSysid: 1, targetCompid: 1, firmware: 'px4' },
+    peerTable,
+  });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'send',
+    action: 'set',
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+  });
+
+  node.emit(
+    'input',
+    {
+      payload: {
+        paramId: 'BAT_N_CELLS',
+        value: 3,
+        paramType: 'MAV_PARAM_TYPE_INT32',
+        paramEncoding: 'c-cast',
+      },
+    },
+    () => {},
+    () => {}
+  );
+
+  assert.equal(conn.sent[0].message.fields.param_value, 3, 'explicit c-cast wins');
+});
+
 test('mavlink-param firmware follows profile not stale config (profile px4 → firmware px4)', () => {
   // PX4 uses a float-reinterpret encoding for integer params. This test
   // verifies that the request firmware comes from the profile, not config.firmware.
@@ -327,6 +406,7 @@ function connStubFull(opts) {
     subs,
     sent,
     vehicle: opts.vehicle || null,
+    peerTable: opts.peerTable || null,
     send(message, options) {
       sent.push({ message, options });
     },
