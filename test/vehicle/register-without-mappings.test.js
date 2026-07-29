@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Vehicle type must still register when mavlink-mappings is unavailable so
- * Connection / Build keep standard config-node edit/add pickers.
+ * Vehicle type must still register and load a seeded dialect when
+ * mavlink-mappings is unavailable — metadata no longer depends on it.
  *
  * Runs the stub program in a child process so parallel suite workers that
  * already loaded mavlink-mappings cannot poison the stub.

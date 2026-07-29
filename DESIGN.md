@@ -164,7 +164,7 @@ makes unreachable.
 | Type | Answers |
 |---|---|
 | `mavlink-local-identity` | Who is Node-RED on the wire? Owns source sysid and compid, the role preset, heartbeat content and interval, and the signing credential reference |
-| `mavlink-vehicle` | Who is being addressed, in what dialect? Owns dialect selection — bundled or custom — the XML upload and download, and the catalog picker |
+| `mavlink-vehicle` | Who is being addressed, in what dialect? Owns the **dialect library** pickers (dialect name + version: Seed or a catalog date) and the catalog refresh/compare actions |
 | `mavlink-connection` | How does traffic move, and stay channel-correct? Owns the transport (UDP, TCP, serial), the peer table, its bound Vehicle Profile, the outbound queue and its bands, signing switches and channel state, the default identity plus opt-in additional ones, and the disable switch. Palette nodes reach the runtime through `node.subscribe`, `node.send`, `node.peerTable`, and `node.vehicle` — a frozen snapshot `{id, targetSysid, targetCompid, firmware, dialect, autopilot}` that palette nodes use to inherit the profile's target defaults; explicit node config wins, empty editor fields mean inherit. `id` is the profile node id: anything needing the compiled bundle resolves that node and calls `getDialect()` — never a bundled-registry lookup by name, which breaks custom XML dialects |
 
 **Palette nodes**
@@ -182,54 +182,63 @@ makes unreachable.
 | `mavlink-state` | peer table reads, transitions, snapshots |
 | `mavlink-swarm` | group fan-out with aggregation |
 
-**Dependencies.** `node-mavlink` for the wire protocol, `mavlink-mappings` for bundled
-definitions, an XML parser, and `serialport` as an **optional** dependency lazy-loaded only
+**Dependencies.** `node-mavlink` for framing/CRC/signing primitives, a shipped MAVLink XML
+seed (`seed/mavlink`) for dialect definitions, an XML parser, and `serialport` as an
+**optional** dependency lazy-loaded only
 when a serial connection is used. UDP and TCP installs must load and pass tests without it;
 selecting serial when it is absent gives a clear error, not a native module stack trace.
 
 Both npm packages are already the ArduPilot line — install nothing else (§14).
 
 
-## 4. Metadata — registry for bundled, XML for custom
+## 4. Metadata — seeded XML is the dialect authority
 
-**Do not vendor dialect XML.** Bundled dialects come from the `mavlink-mappings` package
-(the ArduPilot line on npm). That package is the registry: message classes, `REGISTRY`,
-enums, and CRC-extra tables. One loader merges modules in include order into a dialect
-**bundle** — the same shape custom dialects produce after compile — so everything
-downstream is identical code and custom dialects are not second-class.
+**Ship a pinned MAVLink seed blob.** Dialect definitions come from upstream
+`mavlink/mavlink` `message_definitions/v1.0` (MIT — see https://mavlink.io/en/#license),
+not from `mavlink-mappings`. `scripts/generate-seed.js` pins a commit, walks `<include>`
+for each selectable root, and writes a **single** gzipped JSON file named with the stamp —
+`seed/mavlink-YYYY-MM-DD-<shortsha>.seed.gz` — plus `seed/active.json` pointing at it
+(NOTICE + manifest + every precompiled {@link DialectBundle}). Runtime resolves the
+pointer and gunzips once into memory. A weekly GitHub Action refreshes the blob and
+opens a PR when upstream moves. Catalog updates still overlay newer XML under the
+Node-RED userDir when internet is available.
 
-**Bundled.** Ten dialects: common, minimal, standard, ardupilotmega, asluav, development,
-icarous, storm32, uavionix, ualberta. Load them from `mavlink-mappings`; never ship copies
-of their XML. Cache the assembled bundle per dialect name — bundles are immutable once
-built, and a profile loads its dialect on every deploy.
+**One bundle shape.** Seeded dialects and catalog downloads compile to the same
+{@link DialectBundle}. Field `enum=`, command-param enums, descriptions, and the real
+include chain come from the XML — no `.d.ts` recovery and no hand-maintained
+`DIALECT_CHAINS` table.
 
-**What the registry drops, and how to recover it.** The compiled JS keeps wire types and
-drops the field→enum association (`enum=` on `<field>`). The package's shipped `.d.ts`
-files retain it as property types (`type: MavType`) and carry message/field/enum/command
-descriptions as JSDoc. Parse those declarations offline — no XML fetch — to recover enum
-dropdowns and editor help for bundled dialects. Measured: that recovers message-field enums
-and labeled command-param help; it does **not** recover param-level `enum=` links (e.g.
-`MAV_CMD_DO_CHANGE_SPEED` param 1 → `SPEED_TYPE`). Those are a small, explicit control-hint
-table for the cases the UI needs, not a reason to vendor XML.
+**Dialect library (editor).** Pick a dialect name, then a version: **Seed** (the shipped
+blob) or a **downloaded catalog date**. There is **no** free-text XML path mode and **no**
+per-profile file-upload control in the Vehicle dialog. Official (and fork) XML enters the
+library via catalog update under the Node-RED userDir; once it is there it is only a
+pulldown entry. Configuration updates happen on a bench with internet; the seed covers the
+boat.
 
-**Custom.** Upload the full include chain. No resolution against bundled definitions — the
-user provides every file the graph references. Compile from XML, resolve includes in
-dependency order, reconcile, display. Same bundle shape as a registry load. Compile once at
-upload; it is not a per-deploy cost.
+**Legacy custom path.** Old flows that still persist `dialectSource: custom` +
+`customDialectPath` keep compiling at runtime. The editor surfaces them as Version =
+"Custom path (legacy)" until the user picks Seed or a catalog date (which clears the path).
+Do not treat that escape as a supported way to add new dialects.
 
-**Remote fetch.** Pulling current official XML from GitHub is supported for *custom*
-profiles and for comparing a downloaded snapshot against the installed registry dialect —
-not as a substitute for the bundled path. Configuration happens on a bench with internet.
-Make the source selectable — `mavlink/mavlink` or `ArduPilot/mavlink` — though as of now
-they are byte-identical for `ardupilotmega.xml`, so neither is privileged. Pin the ref to a
-commit before downloading, record that commit, and follow includes at download time so a
-snapshot is self-contained.
+**Private / vendor dialects (deferred).** Ingesting a private include chain that is not in
+any catalog snapshot is future work. When it lands it must join the same library shape
+(compile once into a {@link DialectBundle}, then a pulldown entry) — not resurrect a
+path field. Until then, vendor XML is out of scope for the editor.
 
-Fail loud on custom compile: missing include, cyclic include, msgid collision between two
-files defining different messages. Redefinition of the same message is an override, resolved
-by include order, and shown as a diff against the same-named bundled dialect.
+**Remote fetch / catalog.** The XML catalog downloads a pinned commit (source selectable:
+`mavlink/mavlink` or `ArduPilot/mavlink`), follows includes, timestamps the snapshot, and
+can replace or diff against the seed.
 
-Never assume a dialect includes `common.xml`. Some define their own base set.
+Fail loud on compile: missing include, cyclic include, msgid collision between two files
+defining different messages. Redefinition of the same message is an override, resolved by
+include order, and shown as a diff against the same-named seeded dialect.
+
+Never assume a dialect includes `common.xml`. Some define their own base set — measured:
+upstream `icarous.xml` has no `<include>`, so the seeded bundle is `['icarous.xml']` alone.
+
+**Wire classes.** Message classes are synthesized from the bundle for every dialect
+(including seeded ones). `node-mavlink` remains for framing, CRC, splitter/parser, and
+signing HMAC — not for dialect registries.
 
 ### Parameter definitions are a second, separate source
 
@@ -1140,9 +1149,9 @@ to know the mode table.
 
 ## 12. Build order
 
-1. **Metadata pipeline.** Registry load from `mavlink-mappings` (bundled), `.d.ts` metadata
-   recovery, custom XML compile with include resolution, the shared bundle shape. Nothing else
-   is buildable until enumeration works.
+1. **Metadata pipeline.** Seed blob + catalog overlays, XML compile with include resolution,
+   the shared bundle shape, dialect library pickers. Nothing else is buildable until
+   enumeration works.
 2. **The field codec (§5).** The standalone conversion library and its test suite. Everything
    that touches a wire value depends on this, and nothing above it is trustworthy until it
    passes.
@@ -1167,7 +1176,7 @@ by silence. Update this list when an item lands.
 
 | Item | Status | Notes |
 |---|---|---|
-| **Custom dialect upload in the Vehicle editor** | **done** | Custom XML path + downloadable catalog (`/mavlink/xml-catalog`); runtime `compileXmlFromFile` with include walk; no silent fallback. |
+| **Custom dialect upload in the Vehicle editor** | deferred | Superseded by the dialect library (Seed + catalog dates). No path/upload UI. Legacy `customDialectPath` still resolves; private-dialect library ingestion is future work. |
 | **Command node `COMMAND_INT`** | **done** | Confirm path starts LONG; on `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns, converts once (param5–7 ↔ x/y/z, global frames ×1e7), resends; second wrong-carrier fails loud. |
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
 | **Param definition catalog** | **done** | `lib/param/defs.js` fetches ArduPilot `apm.pdef.json` by family or Vehicle `paramDefsUrl` (PX4/custom); cache; Param editor datalist + units/enums. |
@@ -1285,46 +1294,43 @@ next agent reads only this file.
 **Pull requests stay at or under 50 files.** Larger layers split by module boundary into
 sequential PRs. Count: `git diff --name-only <base>...HEAD | wc -l`.
 
-**Command-param enum hints stay a small table until a complete recovery exists.** The 85
-`<param enum=`> links in upstream XML are real, but regenerating all of them into the
-bundled path without vendoring XML is a separate deliverable. Omitting a hint renders a
-number field (wrong for that param) — prefer adding the one you need over inventing a
-second metadata pipeline. Do not treat "fill all 85 by hand in one PR" as the bar.
+**Command-param enum hints stay a small table for UI gaps only.** Most `<param enum=`>
+links arrive via the seed/catalog compile. Omitting a remaining hint still renders a number
+field (wrong for that param) — prefer adding the one you need over inventing a second
+metadata pipeline or restoring path upload.
 
 ---
 
-**Bundled dialects are the npm registry, not vendored XML.**
-*Wrong belief:* §4 requires shipping copies of the ten dialect XML files under `dialects/`.
-*Fact:* `mavlink-mappings` already ships the compiled registry (`REGISTRY`, enums, CRC-extra).
-Vendoring XML duplicates what `npm install` provides, drifts from the locked package version,
-and was the wrong first move. Custom dialects still compile from user-supplied XML; remote
-fetch is for custom/compare, not for the bundled path.
-*Check:* `npm pack mavlink-mappings --dry-run` — JS and `.d.ts` only; no `*.xml`.
+**Dialect authority is the seed blob, not `mavlink-mappings` and not a path upload.**
+*Wrong belief:* §4 still requires a Vehicle-editor custom XML path/upload, or loading dialects
+from the `mavlink-mappings` npm registry / vendored `dialects/*.xml`.
+*Fact:* shipped dialects come from `seed/mavlink-YYYY-MM-DD-<sha>.seed.gz` (pointer in
+`seed/active.json`). The editor is dialect + version (Seed or a catalog date) only. Catalog
+refresh overlays newer official XML under the Node-RED userDir. Legacy `customDialectPath`
+is a migration escape, not a supported add-dialect path. Private-dialect library ingestion
+is deferred (§4, §12 remaining table).
+*Check:* `node -e "const {knownDialects,seedStamp}=require('./lib/metadata/bundled'); console.log(seedStamp(), knownDialects().slice(0,3))"`
 
-**Message-field `enum=` is recoverable from the shipped `.d.ts`.**
-*Wrong belief:* because the compiled JS drops field→enum links, bundled dropdowns need XML.
-*Fact:* generated declarations type enum-backed fields with the enum class (`type: MavType`)
-while plain fields use wire aliases (`customMode: uint32_t`). Parsing those property types
-offline recovers the association. Proven in `node-red-contrib-mavlink-ai`
-(`lib/dialects/field-enums.js`, `message-metadata.js`).
-*Check:* `node -e "const fs=require('fs'),p=require('path'),d=p.dirname(require.resolve('mavlink-mappings')); console.log(fs.readFileSync(p.join(d,'lib/minimal.d.ts'),'utf8').match(/type: MavType/)!=null)"`
+**Message-field `enum=` comes from the compiled seed/catalog XML, not `.d.ts` recovery.**
+*Wrong belief:* because an old path recovered field→enum links from `mavlink-mappings` `.d.ts`,
+that pipeline is still required.
+*Fact:* the seed (and catalog compiles) carry `enum=` from upstream XML into
+{@link DialectBundle}. No `.d.ts` scrape for the dialect library.
 
-**Command-param `enum=` is in the XML, not in the registry package.**
-*Wrong belief:* either every command-param dropdown must be hand-maintained, or the bundled
-path must compile from vendored XML.
-*Fact:* `<param enum="…">` exists in the XML (85 in `common.xml`), and the generated
-`mavlink-mappings` `.d.ts` keeps the label/description but drops that enum link. Message-field
-enums *are* recoverable from `.d.ts` property types. Command-param enums that the UI needs are
-a small explicit control-hint table on top of the registry — not a reason to ship dialect XML.
-*Check:* parse a bundled `.d.ts` for `MavCmd` / command class accessors; confirm param `enum=`
-is absent there and present in upstream XML.
+**Command-param `enum=` is in the XML (and the seed); hints fill gaps the UI still needs.**
+*Wrong belief:* either every command-param dropdown must be hand-maintained, or the editor
+must offer a custom XML upload to recover them.
+*Fact:* `<param enum="…">` exists in the XML (85 in `common.xml`) and is compiled into the
+bundle. A small explicit control-hint table remains only where the UI needs a label the
+bundle does not yet surface cleanly — not a reason to restore path upload.
 
-**Registry modules still need an include merge.**
-*Wrong belief:* `require('mavlink-mappings').common` is a complete dialect.
-*Fact:* the package keeps each XML file's own messages/enums in a separate module. Loading
-`common` must merge `minimal` → `standard` → `common` (and likewise for every other dialect).
-Unknown dialect fails loud — never silent-fallback to `common`.
-*Check:* `node -e "const m=require('mavlink-mappings'); console.log(!!m.common.REGISTRY[0], Object.keys(m.minimal.REGISTRY||{}).slice(0,3))"`
+**Seed bundles already carry the include chain.**
+*Wrong belief:* runtime must merge `mavlink-mappings` modules (`minimal` → `standard` →
+`common`, …) or force MSC under every dialect.
+*Fact:* `scripts/generate-seed.js` walks `<include>` per selectable root into
+`bundle.files`; wire registries follow that list and start empty otherwise. Unknown dialect
+fails loud — never silent-fallback to `common`.
+*Check:* `node --test test/connection/wire-registry.test.js`
 
 **Params without `enum=` are scalars, not gaps.**
 *Wrong belief:* 85 of 947 is poor coverage.
@@ -1401,6 +1407,16 @@ per-splitter override is the same feature scoped to one connection. There is no 
 to register into: the msgid→class lookup is the caller's job in `node-mavlink`, even for
 bundled dialects.
 *Check:* `node --test test/connection/wire-classes.test.js`
+
+**Wire registries start empty and follow the dialect include chain.**
+*Wrong belief:* every Connection preloads `minimal`/`standard`/`common`/`ardupilotmega` so any
+message in those modules encodes, regardless of the bound Vehicle Profile's dialect.
+*Fact:* `createWire` builds one msgid→class map per Connection from `bundle.files` (the same
+include order §4 already assembled), then synthesizes anything else in the bundle. Pick
+`icarous` and the catalog and wire carry only icarous; bind another Connection to
+`ardupilotmega` beside it and both registries coexist. A custom dialect with no `<include>`
+does not inherit HEARTBEAT from a hidden preload.
+*Check:* `node --test test/connection/wire-registry.test.js`
 
 **Node exposes no DSCP setter.**
 *Wrong belief:* traffic class is settable on a socket.
@@ -1551,8 +1567,9 @@ connection + target fields, and Build (the node) requires a Vehicle Profile.
 connection/identity/timing rows; wire tiers derive firmware and target defaults from the
 connection's profile; a companion send-as identity derives the target ({airframe sysid, 1}) and
 hides the fields (Payload keeps its compid — it addresses a payload device); the Build node
-takes a plain dialect picker (`__vehicle` escape for custom XML); Swarm offers only gcs/custom
-identities and needs no connection for build+list. Hidden fields are ignored at runtime. Ack,
+takes a plain dialect picker (`__vehicle` escape for the connection's Vehicle Profile dialect);
+Swarm offers only gcs/custom identities and needs no connection for build+list. Hidden fields
+are ignored at runtime. Ack,
 param-echo, and mission protocol matching key on the same resolved target as the send.
 *Check:* `node --test test/addressing/resolve.test.js test/command/node.test.js
 test/move/node.test.js test/param/node.test.js test/payload/node.test.js

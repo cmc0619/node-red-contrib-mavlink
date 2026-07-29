@@ -1,0 +1,54 @@
+name: Refresh MAVLink seed
+
+# Weekly auto-refresh of the stamped seed blob from upstream XML.
+# Also runnable by hand from the Actions tab.
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'mavlink/mavlink ref (branch, tag, or SHA)'
+        required: false
+        default: 'master'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate seed
+        env:
+          # Pass dispatch input via env so it is never interpolated into the shell script.
+          MAVLINK_REF: ${{ inputs.ref || 'master' }}
+        run: node scripts/generate-seed.js --repo mavlink/mavlink --ref "$MAVLINK_REF"
+
+      - name: Open PR when the seed changed
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c # v6.1.0
+        with:
+          commit-message: 'chore(seed): refresh MAVLink dialect seed'
+          title: 'chore(seed): refresh MAVLink dialect seed'
+          body: |
+            Automated refresh of the stamped seed blob from `mavlink/mavlink`.
+
+            Files: `seed/active.json` + `seed/mavlink-YYYY-MM-DD-<sha>.seed.gz`
+            (older stamped blobs are removed by the generator).
+          branch: chore/refresh-mavlink-seed
+          delete-branch: true
+          add-paths: |
+            seed/

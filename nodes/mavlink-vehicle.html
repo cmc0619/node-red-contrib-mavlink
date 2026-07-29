@@ -1,9 +1,5 @@
 <script type="text/javascript">
   (function () {
-    /**
-     * Editor-side uint8 validator for target ids. Blank is allowed (runtime
-     * applies the default). Target ids allow 0 (broadcast); source ids do not.
-     */
     RED.nodes.registerType('mavlink-vehicle', {
       category: 'config',
       defaults: {
@@ -11,19 +7,10 @@
         vehicleFamily:         { value: 'generic', required: true },
         firmware:              { value: 'ardupilot', required: true },
         dialect:               { value: 'ardupilotmega', required: true },
+        dialectRevision:       { value: 'seed', required: true },
+        /* Legacy fields kept so old flows still load; unused in the editor. */
         dialectSource:         { value: 'bundled' },
-        customDialectPath:     {
-          value: '',
-          /* Require a path when the source is custom, so an empty path is
-             caught in the editor rather than only at deploy time. */
-          validate: function (v) {
-            const src = $('#node-config-input-dialectSource').val() || this.dialectSource;
-            if (src && src !== 'bundled') {
-              return !!(v && String(v).trim());
-            }
-            return true;
-          }
-        },
+        customDialectPath:     { value: '' },
         paramDefsUrl:          { value: '' },
         defaultTargetSystem:   { value: 1, validate: RED.mavlink.validateUint8(0) },
         defaultTargetComponent:{ value: 1, validate: RED.mavlink.validateUint8(0) }
@@ -41,108 +28,109 @@
           return path;
         }
 
-        const $source   = $('#node-config-input-dialectSource');
-        const $dialect  = $('#node-config-input-dialect');
-        const $bundled  = $('#mav-bundled-dialect');
+        const $dialect = $('#node-config-input-dialect');
+        const $revision = $('#node-config-input-dialectRevision');
         const $firmware = $('#node-config-input-firmware');
-        const $path     = $('#node-config-input-customDialectPath');
-        const FALLBACK  = ['ardupilotmega', 'common', 'minimal'];
-
-        /* Firmware → dialect suggestion (§6: fields are created by selection) */
+        const $status = $('#mav-catalog-status');
         const FIRMWARE_DIALECT = { ardupilot: 'ardupilotmega', px4: 'development', custom: 'common' };
+        let library = [];
 
-        function bundledSelection() {
-          return $bundled.val() || (node.dialect && node.dialect !== 'custom' ? node.dialect : 'ardupilotmega');
-        }
-
-        function syncDialect() {
-          $dialect.val($source.val() === 'bundled' ? bundledSelection() : 'custom');
-        }
-
-        function toggleRows() {
-          const bundled = $source.val() === 'bundled';
-          $('.mav-dialect-bundled').toggle(bundled);
-          $('.mav-dialect-custom').toggle(!bundled);
-          syncDialect();
-        }
-
-        /* §6: dialect dropdown uses name only (dialects are not enum entries). */
-        function populateBundled(list) {
-          $bundled.empty();
-          (list && list.length ? list : FALLBACK).forEach(function (d) {
-            $('<option>').val(d).text(d).appendTo($bundled);
-          });
-          const saved = (node.dialect && node.dialect !== 'custom') ? node.dialect : 'ardupilotmega';
-          if (!$bundled.find('option[value="' + saved + '"]').length) {
-            $('<option>').val(saved).text(saved).appendTo($bundled);
+        function dialectRow(name) {
+          for (let i = 0; i < library.length; i++) {
+            if (library[i].name === name) return library[i];
           }
-          $bundled.val(saved);
+          return null;
         }
 
-        /* Fetch bundled dialect list from the admin endpoint (§6 editor endpoint). */
-        $.getJSON(mavlinkAdminUrl('/mavlink/dialects'))
-          .done(function (data) { populateBundled(data && data.dialects); toggleRows(); })
-          .fail(function ()     { populateBundled(null); toggleRows(); });
+        function populateDialects(prefer) {
+          const names = library.map(function (d) { return d.name; });
+          $dialect.empty();
+          if (!names.length) {
+            ['ardupilotmega', 'common', 'minimal'].forEach(function (d) {
+              $('<option>').val(d).text(d).appendTo($dialect);
+            });
+          } else {
+            names.forEach(function (d) {
+              $('<option>').val(d).text(d).appendTo($dialect);
+            });
+          }
+          const want = prefer || node.dialect || 'ardupilotmega';
+          if (!$dialect.find('option[value="' + want + '"]').length) {
+            $('<option>').val(want).text(want).appendTo($dialect);
+          }
+          $dialect.val(want);
+          populateRevisions(initialRevisionPrefer());
+        }
 
-        $source.val(node.dialectSource === 'custom' ? 'custom' : 'bundled');
-        $source.on('change', toggleRows);
-        $bundled.on('change', syncDialect);
+        /** Legacy custom-path profiles keep working until the user picks Seed/a date. */
+        function hasLegacyCustomPath() {
+          return node.dialectSource === 'custom' && !!(node.customDialectPath || '').trim();
+        }
 
-        /* Picking a firmware suggests its canonical dialect. */
-        $firmware.on('change', function () {
-          const want = FIRMWARE_DIALECT[$firmware.val()];
-          if (want && $source.val() === 'bundled') {
-            if (!$bundled.find('option[value="' + want + '"]').length) {
-              $('<option>').val(want).text(want).appendTo($bundled);
+        function initialRevisionPrefer() {
+          if (hasLegacyCustomPath()) {
+            const rev = node.dialectRevision;
+            if (!rev || rev === 'seed' || rev === 'bundled' || rev === 'legacy-path') {
+              return 'legacy-path';
             }
-            $bundled.val(want);
-            syncDialect();
           }
-        });
+          return node.dialectRevision || 'seed';
+        }
 
-        /* --- downloadable XML catalog picker (§4) ------------------------
-           Downloaded XMLs are managed *Custom* paths: picking one fills the
-           XML path field. This is not a third dialect source. */
-        const $catalog = $('#mav-catalog-pick');
-        const $catalogStatus = $('#mav-catalog-status');
+        function populateRevisions(prefer) {
+          const row = dialectRow($dialect.val());
+          const versions = (row && row.versions) ? row.versions.slice() : [{ id: 'seed', label: 'Seed (shipped)' }];
+          if (hasLegacyCustomPath()) {
+            versions.unshift({
+              id: 'legacy-path',
+              label: 'Custom path (legacy)',
+              kind: 'legacy'
+            });
+          }
+          $revision.empty();
+          versions.forEach(function (v) {
+            $('<option>').val(v.id).text(v.label)
+              .attr('data-kind', v.kind || '')
+              .attr('data-entry', v.entryFile || '')
+              .appendTo($revision);
+          });
+          const want = prefer || 'seed';
+          if ($revision.find('option[value="' + want + '"]').length) {
+            $revision.val(want);
+          } else {
+            $revision.val(versions[0].id);
+          }
+        }
 
-        function loadCatalog() {
+        function loadLibrary(done) {
           $.getJSON(mavlinkAdminUrl('/mavlink/xml-catalog'))
             .done(function (data) {
-              $catalog.empty();
-              $('<option>').val('').text('-- downloaded XML (optional) --').appendTo($catalog);
-              const snapshots = (data && data.snapshots) || [];
-              let count = 0;
-              snapshots.forEach(function (snap) {
-                (snap.files || []).forEach(function (f) {
-                  if (f.usable === false) { return; }
-                  const when = snap.downloadedAt ? new Date(snap.downloadedAt).toISOString().slice(0, 10) : '';
-                  const label = f.name + '  [' + snap.repo + '@' + snap.ref + ' ' + when + ']' +
-                    (f.bundledExists ? ' (bundled exists)' : ' (not bundled)');
-                  $('<option>').val(f.path).text(label)
-                    .attr('data-file', f.name)
-                    .attr('data-snapshot', snap.snapshotId)
-                    .appendTo($catalog);
-                  count += 1;
-                });
-              });
-              $catalogStatus.text(count ? '' : 'No downloaded XML yet — use "Update catalog".');
+              library = (data && data.dialects) || [];
+              $status.text(library.length ? '' : 'Dialect library empty — Update catalog when online.');
+              if (done) done();
             })
             .fail(function () {
-              $catalogStatus.text('Catalog unavailable.');
+              library = [];
+              $status.text('Dialect library unavailable.');
+              if (done) done();
             });
         }
 
-        $catalog.on('change', function () {
-          const p = $(this).val();
-          if (p) {
-            $path.val(p);
+        $dialect.on('change', function () {
+          populateRevisions('seed');
+        });
+
+        $firmware.on('change', function () {
+          const want = FIRMWARE_DIALECT[$firmware.val()];
+          if (want && $dialect.find('option[value="' + want + '"]').length) {
+            $dialect.val(want);
+            populateRevisions('seed');
           }
         });
 
         $('#mav-catalog-update').on('click', function (e) {
           e.preventDefault();
-          $catalogStatus.text('Downloading MAVLink XML from mavlink/mavlink...');
+          $status.text('Downloading MAVLink XML from mavlink/mavlink...');
           $.ajax({
             url: mavlinkAdminUrl('/mavlink/xml-catalog/update'),
             method: 'POST',
@@ -150,57 +138,66 @@
             data: JSON.stringify({})
           })
             .done(function () {
-              $catalogStatus.text('Downloaded. Pick a file below.');
-              loadCatalog();
+              $status.text('Catalog updated.');
+              const keepDialect = $dialect.val();
+              const keepRev = $revision.val();
+              loadLibrary(function () {
+                populateDialects(keepDialect);
+                populateRevisions(keepRev);
+              });
             })
             .fail(function (xhr) {
               const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'download failed';
-              $catalogStatus.text('Update failed: ' + msg);
+              $status.text('Update failed: ' + msg);
             });
         });
 
         $('#mav-catalog-compare').on('click', function (e) {
           e.preventDefault();
-          const opt = $catalog.find('option:selected');
-          const file = opt.attr('data-file');
-          const snapshot = opt.attr('data-snapshot');
-          if (!file) {
-            $catalogStatus.text('Pick a downloaded XML to compare.');
+          const dialect = $dialect.val();
+          const rev = $revision.val();
+          const opt = $revision.find('option:selected');
+          const entry = opt.attr('data-entry') || (dialect + '.xml');
+          if (!rev || rev === 'seed' || rev === 'legacy-path') {
+            $status.text('Pick a downloaded date to compare against the seed.');
             return;
           }
-          $catalogStatus.text('Comparing ' + file + ' with the bundled dialect...');
-          $.getJSON(mavlinkAdminUrl('/mavlink/xml-catalog/compare'), snapshot ? { file: file, snapshot: snapshot } : { file: file })
+          $status.text('Comparing ' + entry + ' with seed...');
+          $.getJSON(mavlinkAdminUrl('/mavlink/xml-catalog/compare'), { file: entry, snapshot: rev })
             .done(function (data) {
               const c = data && data.comparison;
               if (!c) {
-                $catalogStatus.text('No comparison available.');
+                $status.text('No comparison available.');
                 return;
               }
               if (c.error) {
-                $catalogStatus.text(file + ': ' + c.error);
+                $status.text(entry + ': ' + c.error);
                 return;
               }
               if (!c.bundledExists) {
-                $catalogStatus.text(file + ': not present in the bundled dialects (new dialect).');
+                $status.text(entry + ': not present in the seed (new dialect).');
                 return;
               }
               if (!c.comparable || !c.diff) {
-                $catalogStatus.text(file + ': a bundled dialect exists (deeper diff unavailable).');
+                $status.text(entry + ': seed exists (deeper diff unavailable).');
                 return;
               }
               const d = c.diff;
-              $catalogStatus.text(
-                file + ' vs bundled — messages: +' + d.addedMessages.length + ' / -' + d.removedMessages.length +
-                ' / changed ' + d.changedMessages.length + '; enums: +' + d.addedEnums.length + ' / -' + d.removedEnums.length + '.'
+              $status.text(
+                entry + ' vs seed — messages: +' + d.addedMessages.length + ' / -' + d.removedMessages.length +
+                ' / changed ' + d.changedMessages.length + '; enums: +' + d.addedEnums.length +
+                ' / -' + d.removedEnums.length + '.'
               );
             })
             .fail(function (xhr) {
               const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'comparison failed';
-              $catalogStatus.text('Comparison failed: ' + msg);
+              $status.text('Comparison failed: ' + msg);
             });
         });
 
-        loadCatalog();
+        loadLibrary(function () {
+          populateDialects(node.dialect);
+        });
 
         if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
           RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
@@ -213,11 +210,15 @@
         }
       },
       oneditsave: function () {
-        /* Keep hidden `dialect` field in sync with the visible bundled picker. */
-        const source = $('#node-config-input-dialectSource').val();
-        const picked = $('#mav-bundled-dialect').val() ||
-          (this.dialect && this.dialect !== 'custom' ? this.dialect : 'ardupilotmega');
-        $('#node-config-input-dialect').val(source === 'bundled' ? picked : 'custom');
+        const rev = $('#node-config-input-dialectRevision').val();
+        if (rev === 'legacy-path' && (this.customDialectPath || '').trim()) {
+          /* Keep compiling the existing absolute XML path. */
+          this.dialectSource = 'custom';
+          this.dialectRevision = 'legacy-path';
+        } else {
+          this.dialectSource = 'bundled';
+          this.customDialectPath = '';
+        }
       }
     });
   })();
@@ -267,35 +268,22 @@
   </div>
   <div class="mav-advanced" style="display:none;">
     <div class="form-row">
-      <label for="node-config-input-dialectSource">Dialect source</label>
-      <select id="node-config-input-dialectSource">
-        <option value="bundled">Bundled</option>
-        <option value="custom">Custom</option>
-      </select>
+      <label for="node-config-input-dialect">Dialect</label>
+      <select id="node-config-input-dialect" style="width:70%;"></select>
     </div>
-    <div class="form-row mav-dialect-bundled">
-      <label for="mav-bundled-dialect">Bundled dialect</label>
-      <select id="mav-bundled-dialect" style="width:60%;"></select>
+    <div class="form-row">
+      <label for="node-config-input-dialectRevision">Version</label>
+      <select id="node-config-input-dialectRevision" style="width:70%;"></select>
     </div>
-    <div class="form-row mav-dialect-custom" style="display:none;">
-      <label for="node-config-input-customDialectPath">XML path</label>
-      <input type="text" id="node-config-input-customDialectPath" placeholder="/path/to/custom.xml">
+    <div class="form-tips">
+      Pick a dialect, then a date. <b>Seed</b> is the offline copy shipped with the package.
+      <b>Update catalog</b> downloads a newer snapshot when you have internet; it appears as another date.
     </div>
-    <div class="form-tips mav-dialect-custom" style="display:none;">
-      A MAVLink XML file the Node-RED process can read. Its
-      <code>&lt;include&gt;</code> graph is resolved from the file's own
-      directory and compiled at runtime. Invalid XML or a missing include fails
-      loudly (the profile marks itself invalid) rather than falling back.
-    </div>
-    <div class="form-row mav-dialect-custom" style="display:none;">
-      <label for="mav-catalog-pick">Downloaded XML</label>
-      <select id="mav-catalog-pick" style="width:60%;"></select>
-    </div>
-    <div class="form-row mav-dialect-custom" style="display:none; margin-left:104px;">
+    <div class="form-row" style="margin-left:104px;">
       <button id="mav-catalog-update" class="red-ui-button">Update catalog</button>
-      <button id="mav-catalog-compare" class="red-ui-button">Compare with bundled</button>
+      <button id="mav-catalog-compare" class="red-ui-button">Compare with seed</button>
     </div>
-    <div class="form-tips mav-dialect-custom" id="mav-catalog-status" style="display:none; min-height:1em;"></div>
+    <div class="form-tips" id="mav-catalog-status" style="min-height:1em;"></div>
     <div class="form-row">
       <label for="node-config-input-paramDefsUrl">Param defs URL</label>
       <input type="text" id="node-config-input-paramDefsUrl" placeholder="(optional) PX4 / custom parameter metadata URL">
@@ -305,8 +293,6 @@
       blank for ArduPilot — its per-family metadata URL is derived at runtime.
     </div>
   </div>
-  <!-- hidden persisted value keeps the saved dialect name across async dropdown loads -->
-  <input type="hidden" id="node-config-input-dialect">
   <script type="text/javascript">
     (function () {
       $('#node-mav-advanced-toggle').on('click', function (e) {
@@ -331,35 +317,15 @@
   <p>It owns nothing about the local side — source SysID/CompID, heartbeat identity, and signing
   belong to the <b>Local Identity</b> config node. Selecting a Vehicle Profile can never change
   who this Node-RED runtime is on the wire.</p>
-  <h3>Vehicle family</h3>
-  <p>Used for ArduPilot mode tables and parameter metadata. <b>Generic</b> applies no
-  vehicle-specific metadata — correct for PX4, custom stacks, and unknown vehicles.</p>
-  <h3>Firmware</h3>
+  <h3>Dialect library</h3>
+  <p>Dialects come from the shipped <b>seed</b> (offline) or a dated catalog download. Pick the
+  dialect name, then the version date. There is no separate custom-path mode — once XML is in
+  the library it is a pulldown entry.</p>
+  <h3>Details</h3>
   <ul>
-    <li><b>ArduPilot</b> — selects <code>ardupilotmega</code> dialect and ArduPilot mode tables.</li>
-    <li><b>PX4</b> — selects <code>development</code> dialect (PX4 emits development-only messages).</li>
-    <li><b>Custom</b> — no firmware-specific behavior; dialect used as-is.</li>
+    <li><b>Vehicle</b> — family for mode tables and parameter metadata.</li>
+    <li><b>Firmware</b> — ArduPilot, PX4, or custom (suggests a dialect).</li>
+    <li><b>Target SysID / CompID</b> — defaults blank palette fields inherit on wire tiers.</li>
+    <li><b>Dialect / Version</b> — Advanced: seed or a downloaded snapshot date.</li>
   </ul>
-  <h3>Target SysID / CompID</h3>
-  <p>Default destination for outbound messages. Commonly <code>1</code>/<code>1</code> for the
-  autopilot component.</p>
-  <h3>Dialect source (Advanced)</h3>
-  <ul>
-    <li><b>Bundled</b> — one of the ten dialects loaded from <code>mavlink-mappings</code>.</li>
-    <li><b>Custom</b> — a single <b>XML path</b> to a MAVLink dialect file the Node-RED process can
-    read (local or mounted). Its <code>&lt;include&gt;</code> graph is resolved from the file's own
-    directory and compiled at runtime. Invalid XML or a missing include fails loudly (the profile
-    marks itself invalid) rather than falling back to a bundled dialect.</li>
-  </ul>
-  <h3>Downloaded XML catalog (Advanced)</h3>
-  <p>Optionally download official MAVLink XML dialects into a local catalog under
-  <code>&lt;userDir&gt;/mavlink/xml</code> and pick one here — it just fills the XML path above (a
-  managed Custom path, not a replacement for bundled dialects). <b>Update catalog</b> downloads the
-  latest set from <code>mavlink/mavlink</code>; <b>Compare with bundled</b> reports how the selected
-  file differs from the same-named bundled dialect. Downloads are self-contained (every
-  <code>&lt;include&gt;</code> is fetched together), so the runtime compiler never reaches the network.</p>
-  <h3>Param defs URL (Advanced)</h3>
-  <p>Optional URL to firmware parameter definitions for PX4 or custom stacks. Persisted on the
-  profile for the Param node to consume; ArduPilot can leave it blank, as its per-family metadata
-  URL is derived at runtime.</p>
 </script>

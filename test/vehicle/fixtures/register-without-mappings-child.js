@@ -2,9 +2,10 @@
 
 /**
  * Child-process fixture: stub out mavlink-mappings, load mavlink-vehicle, and
- * assert the type still registers (DESIGN.md §14 config-node picker ground truth).
+ * assert the type still registers and can load a seeded dialect (seed is the
+ * dialect authority — mappings is unused for metadata).
  *
- * Exit codes: 0 OK, 2 type missing, 3 getDialect did not throw, 4 wrong error.
+ * Exit codes: 0 OK, 2 type missing, 3 getDialect threw, 4 wrong dialect.
  */
 
 const { EventEmitter } = require('node:events');
@@ -23,7 +24,10 @@ const register = require(path.resolve(__dirname, '../../../nodes/mavlink-vehicle
 const types = {};
 const RED = {
   log: { error() {} },
-  httpAdmin: { get() {} },
+  httpAdmin: {
+    get() {},
+    post() {},
+  },
   auth: { needsPermission() { return (_r, _s, n) => n && n(); } },
   nodes: {
     createNode(node, config) {
@@ -44,15 +48,17 @@ if (typeof types['mavlink-vehicle'] !== 'function') {
 }
 
 const node = new types['mavlink-vehicle']({ id: 'v1', dialect: 'ardupilotmega' });
+let bundle;
 try {
-  node.getDialect();
-  console.error('GETDIALECT_DID_NOT_THROW');
-  process.exit(3);
+  bundle = node.getDialect();
 } catch (err) {
-  if (!/mavlink-mappings/.test(err.message)) {
-    console.error('WRONG_ERROR', err.message);
-    process.exit(4);
-  }
+  console.error('GETDIALECT_THREW', err.message);
+  process.exit(3);
+}
+
+if (!bundle || bundle.dialect !== 'ardupilotmega' || !bundle.messages.HEARTBEAT) {
+  console.error('WRONG_DIALECT', bundle && bundle.dialect);
+  process.exit(4);
 }
 
 console.log('OK');

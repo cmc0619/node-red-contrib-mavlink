@@ -57,9 +57,10 @@ test('listCommandsCatalog includes params and referenced enums for Advanced UI',
   assert.ok(Array.isArray(catalog.enums.SPEED_TYPE));
   assert.ok(catalog.enums.SPEED_TYPE.some((e) => e.value === 0 && e.label === 'SPEED_TYPE_AIRSPEED (0)'));
 
-  // No raw Param-N placeholders — only metadata-backed params.
+  // Active params carry labels/descriptions; reserved slots may be blank.
   for (const p of changeSpeed.params) {
-    assert.ok(p.label || p.description, 'every param has a label or description');
+    if (p.reserved) continue;
+    assert.ok(p.label || p.description, 'every active param has a label or description');
   }
 });
 

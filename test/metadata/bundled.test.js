@@ -2,18 +2,18 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
 
-const { knownDialects, loadBundled } = require('../../lib/metadata');
+const {
+  knownDialects,
+  loadBundled,
+  seedRoot,
+  readManifest,
+  seedStamp,
+} = require('../../lib/metadata/bundled');
 
-/**
- * Registry-load pain points and ground truths (DESIGN.md §4, §13, §14): all ten
- * bundled dialects assemble from `mavlink-mappings`; the include-chain merge
- * surfaces HEARTBEAT / MAV_AUTOPILOT on `common` (they live in `minimal.xml`);
- * `.d.ts` recovery fills field->enum; the control-hint table supplies
- * DO_CHANGE_SPEED param 1 -> SPEED_TYPE; an unknown dialect fails loud.
- */
-
-const TEN = [
+const CORE = [
   'minimal',
   'standard',
   'common',
@@ -26,19 +26,42 @@ const TEN = [
   'storm32',
 ];
 
-test('knownDialects lists exactly the ten bundled dialects', () => {
-  assert.deepEqual(knownDialects().sort(), [...TEN].sort());
+test('seed ships as a stamp-named gzip blob pointed at by active.json', () => {
+  const blob = seedRoot();
+  assert.match(path.basename(blob), /^mavlink-\d{4}-\d{2}-\d{2}-[0-9a-f]+\.seed\.gz$/);
+  assert.ok(fs.existsSync(blob));
+  const active = JSON.parse(
+    fs.readFileSync(path.join(path.dirname(blob), 'active.json'), 'utf8')
+  );
+  assert.equal(active.file, path.basename(blob));
+  assert.equal(active.stamp, seedStamp());
+  const manifest = readManifest();
+  assert.equal(manifest.license, 'MIT');
+  assert.ok(manifest.commit && manifest.commit.length >= 7);
+  assert.ok(manifest.stamp);
+  assert.equal(seedStamp(), manifest.stamp);
+  assert.ok(manifest.dialects.length >= CORE.length);
 });
 
-test('all ten bundled dialects assemble with the entry module last and no fetch/overrides', () => {
-  for (const name of TEN) {
+test('knownDialects lists every seeded dialect, including the classic ten', () => {
+  const names = knownDialects();
+  for (const name of CORE) {
+    assert.ok(names.includes(name), `missing ${name}`);
+  }
+  assert.ok(names.includes('cubepilot'));
+  assert.ok(names.includes('csairlink'));
+});
+
+test('seeded dialects load with real include files and provenance', () => {
+  for (const name of CORE) {
     const bundle = loadBundled(name);
     assert.equal(bundle.dialect, name);
-    assert.equal(bundle.version, null);
-    assert.equal(bundle.fetched, null);
-    assert.deepEqual(bundle.overrides, []);
-    assert.equal(bundle.files[bundle.files.length - 1], name);
-    assert.ok(Object.keys(bundle.enums).length > 0, `${name} has enums`);
+    assert.ok(bundle.fetched && bundle.fetched.commit);
+    assert.ok(bundle.files.length >= 1);
+    assert.ok(
+      bundle.files[bundle.files.length - 1].toLowerCase().startsWith(name),
+      `${name} entry should be last in files`
+    );
     assert.ok(Object.keys(bundle.messages).length > 0, `${name} has messages`);
   }
 });
@@ -53,10 +76,14 @@ test('an unknown dialect fails loud, naming the available set (no common fallbac
 
 test('HEARTBEAT and MAV_AUTOPILOT resolve when loading common — they live in minimal.xml', () => {
   const bundle = loadBundled('common');
-  assert.ok(bundle.messages.HEARTBEAT, 'HEARTBEAT present via include merge');
-  assert.ok(bundle.enums.MAV_AUTOPILOT, 'MAV_AUTOPILOT present via include merge');
-  assert.equal(bundle.enums.MAV_AUTOPILOT.name, 'MAV_AUTOPILOT');
-  assert.ok(bundle.enums.MAV_AUTOPILOT.entries.some((e) => e.name === 'MAV_AUTOPILOT_ARDUPILOTMEGA' && e.value === 3));
+  assert.ok(bundle.messages.HEARTBEAT);
+  assert.ok(bundle.enums.MAV_AUTOPILOT);
+  assert.ok(
+    bundle.enums.MAV_AUTOPILOT.entries.some(
+      (e) => e.name === 'MAV_AUTOPILOT_ARDUPILOTMEGA' && e.value === 3
+    )
+  );
+  assert.deepEqual(bundle.files, ['minimal.xml', 'standard.xml', 'common.xml']);
 });
 
 test('messagesById maps a string key to a name — messagesById["0"] is HEARTBEAT', () => {
@@ -65,75 +92,51 @@ test('messagesById maps a string key to a name — messagesById["0"] is HEARTBEA
   assert.equal(bundle.messages.HEARTBEAT.id, 0);
 });
 
-test('.d.ts recovery fills a message field enum — HEARTBEAT.type -> MAV_TYPE', () => {
+test('XML field enums survive compile — HEARTBEAT.type -> MAV_TYPE', () => {
   const fields = loadBundled('common').messages.HEARTBEAT.fields;
   const type = fields.find((f) => f.name === 'type');
   assert.equal(type.enum, 'MAV_TYPE');
   assert.equal(type.type, 'uint8_t');
   const custom = fields.find((f) => f.name === 'custom_mode');
-  assert.equal(custom.enum, null, 'a plain wire field has no enum');
+  assert.equal(custom.enum, null);
 });
 
-test('bitmask detection: MAV_MODE_FLAG is a bitmask, MAV_TYPE is not; base_mode displays bitmask', () => {
+test('bitmask detection: MAV_MODE_FLAG is a bitmask, MAV_TYPE is not', () => {
   const bundle = loadBundled('common');
   assert.equal(bundle.enums.MAV_MODE_FLAG.bitmask, true);
   assert.equal(bundle.enums.MAV_TYPE.bitmask, false);
   const baseMode = bundle.messages.HEARTBEAT.fields.find((f) => f.name === 'base_mode');
   assert.equal(baseMode.enum, 'MAV_MODE_FLAG');
-  assert.equal(baseMode.display, 'bitmask');
 });
 
-test('control-hint table gives DO_CHANGE_SPEED param 1 the SPEED_TYPE enum with a recovered label', () => {
-  const cmd = loadBundled('common').commands.MAV_CMD_DO_CHANGE_SPEED;
-  assert.ok(cmd, 'command present');
-  const p1 = cmd.params.find((p) => p.index === 1);
-  assert.equal(p1.label, 'Speed Type');
-  assert.equal(p1.enum, 'SPEED_TYPE');
-  const p2 = cmd.params.find((p) => p.index === 2);
-  assert.equal(p2.units, 'm/s', 'units recovered from the command class .d.ts');
-});
-
-test('DO_REPOSITION hint maps flags (param 2), not latitude (param 5)', () => {
-  const cmd = loadBundled('common').commands.MAV_CMD_DO_REPOSITION;
-  assert.equal(cmd.params.find((p) => p.index === 2).enum, 'MAV_DO_REPOSITION_FLAGS');
-  assert.equal(cmd.params.find((p) => p.index === 5).enum, null);
-});
-
-test('control hints attach verified orbit and reboot enums from the bundled XML', () => {
-  const bundle = loadBundled('common');
-
-  assert.ok(bundle.enums.ORBIT_YAW_BEHAVIOUR, 'orbit yaw enum is present in the bundle');
+test('command-param enums come from XML — DO_CHANGE_SPEED / ARM / REPOSITION', () => {
+  const common = loadBundled('common');
+  const speed = common.commands.MAV_CMD_DO_CHANGE_SPEED;
+  assert.equal(speed.params.find((p) => p.index === 1).enum, 'SPEED_TYPE');
+  assert.equal(speed.params.find((p) => p.index === 1).label, 'Speed Type');
+  assert.equal(speed.params.find((p) => p.index === 2).units, 'm/s');
   assert.equal(
-    bundle.commands.MAV_CMD_DO_ORBIT.params.find((p) => p.index === 3).enum,
-    'ORBIT_YAW_BEHAVIOUR'
+    common.commands.MAV_CMD_COMPONENT_ARM_DISARM.params.find((p) => p.index === 1).enum,
+    'MAV_BOOL'
   );
-
-  assert.ok(bundle.enums.REBOOT_SHUTDOWN_ACTION, 'reboot action enum is present in the bundle');
-  const reboot = bundle.commands.MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN;
-  assert.equal(reboot.params.find((p) => p.index === 1).enum, 'REBOOT_SHUTDOWN_ACTION');
-  assert.equal(reboot.params.find((p) => p.index === 2).enum, 'REBOOT_SHUTDOWN_ACTION');
+  const repo = common.commands.MAV_CMD_DO_REPOSITION;
+  assert.equal(repo.params.find((p) => p.index === 2).enum, 'MAV_DO_REPOSITION_FLAGS');
+  assert.equal(repo.params.find((p) => p.index === 5).enum, null);
 });
 
-test('all 85 common.xml command-param enum links are recovered (Arm is MAV_BOOL)', () => {
-  const { COMMAND_PARAM_ENUMS } = require('../../lib/metadata/hints');
-  let links = 0;
-  for (const name of Object.keys(COMMAND_PARAM_ENUMS)) {
-    links += Object.keys(COMMAND_PARAM_ENUMS[name]).length;
-  }
-  assert.equal(links, 85);
-  const arm = loadBundled('common').commands.MAV_CMD_COMPONENT_ARM_DISARM;
-  assert.equal(arm.params.find((p) => p.index === 1).enum, 'MAV_BOOL');
-  assert.equal(
-    loadBundled('common').commands.MAV_CMD_DO_CHANGE_ALTITUDE.params.find((p) => p.index === 2)
-      .enum,
-    'MAV_FRAME'
-  );
-});
-
-test('never assume a dialect includes common.xml — icarous still resolves its base set', () => {
+test('never assume a dialect includes common.xml — icarous is self-contained', () => {
   const bundle = loadBundled('icarous');
-  assert.ok(bundle.messages.HEARTBEAT, 'HEARTBEAT reachable through the explicit chain');
-  assert.equal(bundle.files[0], 'minimal');
+  assert.deepEqual(bundle.files, ['icarous.xml']);
+  assert.ok(bundle.messages.ICAROUS_HEARTBEAT);
+  assert.equal(bundle.messages.HEARTBEAT, undefined);
+});
+
+test('ardupilotmega include closure follows upstream (uAvionix, icarous, …)', () => {
+  const bundle = loadBundled('ardupilotmega');
+  assert.ok(bundle.files.includes('uAvionix.xml'));
+  assert.ok(bundle.files.includes('icarous.xml'));
+  assert.ok(bundle.messages.ICAROUS_HEARTBEAT);
+  assert.ok(bundle.messages.HEARTBEAT);
 });
 
 test('extension fields are flagged and ordered after base fields — SYS_STATUS', () => {
@@ -154,6 +157,6 @@ test('ardupilotmega extends MAV_CMD with entries common does not carry', () => {
   assert.equal(loadBundled('common').commands.MAV_CMD_NAV_ALTITUDE_WAIT, undefined);
 });
 
-test('a bundled bundle is plain JSON-serializable data', () => {
+test('a seeded bundle is plain JSON-serializable data', () => {
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(loadBundled('ardupilotmega'))));
 });

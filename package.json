@@ -12,11 +12,21 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "test": "node --test lib/**/test/*.test.js test/**/*.test.js"
+    "test": "node --test lib/**/test/*.test.js test/**/*.test.js",
+    "generate-seed": "node scripts/generate-seed.js"
   },
+  "files": [
+    "lib",
+    "nodes",
+    "examples",
+    "seed",
+    "README.md",
+    "LICENSE",
+    "DESIGN.md",
+    "AGENTS.md"
+  ],
   "dependencies": {
     "fast-xml-parser": "^5.10.1",
-    "mavlink-mappings": "^1.0.22-20260311",
     "node-mavlink": "^2.3.0"
   },
   "optionalDependencies": {

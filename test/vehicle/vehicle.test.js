@@ -30,13 +30,16 @@ const XML = (body) => `<?xml version="1.0"?>\n<mavlink>${body}</mavlink>`;
 
 /* ---------- knownDialects ---------- */
 
-test('knownDialects returns the 10 bundled dialect names', () => {
-  const expected = [
+test('knownDialects returns seeded dialect names including the classic ten', () => {
+  const classic = [
     'minimal', 'standard', 'common', 'ardupilotmega',
     'uavionix', 'icarous', 'asluav', 'development', 'ualberta', 'storm32',
   ];
   const known = knownDialects();
-  assert.deepEqual(known.sort(), expected.sort());
+  for (const name of classic) {
+    assert.ok(known.includes(name), `missing seeded dialect ${name}`);
+  }
+  assert.ok(known.length >= classic.length);
 });
 
 /* ---------- FIRMWARE_TYPES ---------- */
@@ -156,21 +159,17 @@ test('resolveDialect custom prefers a supplied bundle over a path', () => {
   assert.equal(result, fakeBundle);
 });
 
-test('resolveDialect custom without path or bundle → throws mentioning the XML path', () => {
+test('resolveDialect custom without path or bundle → throws naming the profile', () => {
   assert.throws(
     () => resolveDialect({ name: 'My Profile', dialectSource: 'custom' }),
-    /xml path/i
+    /My Profile/
   );
 });
 
-test('resolveDialect custom without path or bundle names the profile', () => {
-  let message = '';
-  try {
-    resolveDialect({ name: 'My Profile', dialectSource: 'custom' });
-  } catch (err) {
-    message = err.message;
-  }
-  assert.ok(message.includes('My Profile'));
+test('resolveDialect dialectRevision seed loads the shipped dialect', () => {
+  const bundle = resolveDialect({ dialect: 'icarous', dialectRevision: 'seed' });
+  assert.equal(bundle.dialect, 'icarous');
+  assert.ok(bundle.messages.ICAROUS_HEARTBEAT);
 });
 
 /* ---------- parseTargetUint8 ---------- */
