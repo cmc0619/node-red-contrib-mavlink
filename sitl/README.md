@@ -71,19 +71,24 @@ vehicle sysid with component **191**.
 
 ## Logging
 
+From `sitl/` (after `cd sitl`):
+
 **Compose console**
 
 ```bash
-docker compose -f sitl/docker-compose.yml logs -f ap-1
+docker compose logs -f ap-1
 ```
 
 **Flight logs (arm-only)**  
 ArduPilot starts with `LOG_DISARMED 0`. PX4 sets `SDLOG_MODE=1` (arm→disarm) via
-`params/px4-logging.env`. After you arm a vehicle:
+`params/px4-logging.env`. Entrypoints symlink firmware log dirs to the Compose
+`./logs/<service>` mount.
 
 ```bash
-./sitl/check-logs.sh --logs-root sitl/logs --expect-armed ap-1
-ls -la sitl/logs/ap-1
+touch logs/ap-1/.arm-marker          # immediately before arming
+# …arm in Node-RED…
+./check-logs.sh --logs-root logs --expect-armed ap-1 --newer-than-marker
+ls -la logs/ap-1
 ```
 
 Open `.BIN` in Mission Planner / UAV Log Viewer; `.ulg` with `ulog_info` if installed.
@@ -91,10 +96,15 @@ Open `.BIN` in Mission Planner / UAV Log Viewer; `.ulg` with `ulog_info` if inst
 ## Useful commands
 
 ```bash
-docker compose -f sitl/docker-compose.yml --profile sitl ps
-docker compose -f sitl/docker-compose.yml --profile sitl down
-docker compose -f sitl/docker-compose.yml --profile sitl up -d --build ap-1   # one vehicle
+# from sitl/
+docker compose --profile sitl ps
+docker compose --profile sitl down
+docker compose --profile sitl up -d --build ap-1   # one vehicle
+docker compose --profile sitl --profile nodered up -d   # + Node-RED (host network)
 ```
+
+The `nodered` profile uses `network_mode: host` so flows that bind `127.0.0.1:14550`
+(etc.) receive the same UDP the vehicles send to `host.docker.internal`.
 
 ## Troubleshooting
 

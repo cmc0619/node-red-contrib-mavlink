@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl06-tab",
     "name": "Mission/fence/rally per firmware (ArduPilot all three; PX4 fence fails)",
-    "info": "ArduPilot sysid 1: upload mission, fence polygon, and rally point.\nPX4 sysid 11: fence upload should fail-loud (px4 does not support fence).\n\nLaunch ArduPilot:\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14551\nLaunch PX4 (sysid 11; verify ports):\n  make px4_sitl gazebo\n\nArduPilot Connection: bind 127.0.0.1:14550 \u2192 remote 127.0.0.1:14551.\nPX4 Connection: bind 127.0.0.1:14560 \u2192 remote 127.0.0.1:14561.",
+    "info": "ArduPilot sysid 1: upload mission, fence polygon, and rally point.\nPX4 sysid 11: fence upload should fail-loud (px4 does not support fence).\n\nLaunch ArduPilot:\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\nLaunch PX4 (sysid 11; verify ports):\n  make px4_sitl gazebo\n\nArduPilot Connection: bind 127.0.0.1:14550 \u2192 remote 127.0.0.1:14551.\nPX4 Connection: bind 127.0.0.1:14560 \u2192 remote 127.0.0.1:14561.",
     "x": 310,
     "y": 40,
     "wires": []

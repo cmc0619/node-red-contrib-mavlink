@@ -1,16 +1,18 @@
-# Optional convenience image. The Compose lab uses `px4io/px4-sitl:latest` directly
-# with `scripts/entrypoint-px4.sh` mounted — prefer that path.
-# This Dockerfile remains for operators who want a pre-baked wrapper tag.
+# Optional convenience image. Compose uses `px4io/px4-sitl:latest` directly with
+# `scripts/entrypoint-px4.sh` mounted — prefer that path.
 ARG PX4_SITL_IMAGE=px4io/px4-sitl:latest
 FROM ${PX4_SITL_IMAGE}
 
 USER root
-COPY scripts/entrypoint-px4.sh /usr/local/bin/entrypoint-px4.sh
-COPY params/px4-logging.env /params/px4-logging.env
-RUN chmod +x /usr/local/bin/entrypoint-px4.sh \
- && mkdir -p /logs \
- && chmod 777 /logs
+RUN if ! id -u px4 >/dev/null 2>&1; then useradd -m -s /bin/bash px4; fi \
+ && mkdir -p /logs /params \
+ && chown -R px4:px4 /logs /params /opt/px4 2>/dev/null || chown -R px4:px4 /logs /params
 
+COPY --chown=px4:px4 scripts/entrypoint-px4.sh /usr/local/bin/entrypoint-px4.sh
+COPY --chown=px4:px4 params/px4-logging.env /params/px4-logging.env
+RUN chmod +x /usr/local/bin/entrypoint-px4.sh
+
+USER px4
 ENV PX4_SIM_MODEL=sihsim_quadx \
     HEADLESS=1
 

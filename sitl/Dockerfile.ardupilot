@@ -32,7 +32,7 @@ WORKDIR /home/sitl
 RUN git clone --depth 1 --branch "${ARDUPILOT_REF}" https://github.com/ArduPilot/ardupilot.git \
  && cd ardupilot \
  && git submodule update --init --recursive --depth 1 \
- && sudo DEBIAN_FRONTEND=noninteractive TZ=UTC \
+ && DEBIAN_FRONTEND=noninteractive TZ=UTC \
       Tools/environment_install/install-prereqs-ubuntu.sh -y \
  && ./waf configure --board sitl \
  && ./waf copter

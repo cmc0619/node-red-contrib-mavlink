@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # Best-effort proof that armed SITL services wrote a flight log.
-# Usage: check-logs.sh --logs-root DIR [--expect-armed NAME ...]
+# Usage:
+#   check-logs.sh --logs-root DIR [--expect-armed NAME ...] [--newer-than-marker]
+#
+# With --newer-than-marker, each service dir must contain a `.arm-marker` file
+# (touch it just before arming) and a non-empty .bin/.ulg newer than that marker.
 set -euo pipefail
 
 ROOT="sitl/logs"
 EXPECT=()
+NEWER_MARKER=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -16,8 +21,12 @@ while [[ $# -gt 0 ]]; do
       EXPECT+=("$2")
       shift 2
       ;;
+    --newer-than-marker)
+      NEWER_MARKER=1
+      shift
+      ;;
     -h|--help)
-      echo "Usage: $0 --logs-root DIR [--expect-armed NAME ...]" >&2
+      echo "Usage: $0 --logs-root DIR [--expect-armed NAME ...] [--newer-than-marker]" >&2
       exit 0
       ;;
     *)
@@ -40,11 +49,39 @@ for name in "${EXPECT[@]}"; do
     fail=1
     continue
   fi
-  if ! find "$dir" -type f \( -iname '*.bin' -o -iname '*.ulg' \) 2>/dev/null | grep -q .; then
-    echo "check-logs: no flight log (.bin/.ulg) under $dir" >&2
+
+  marker=""
+  if [[ "$NEWER_MARKER" -eq 1 ]]; then
+    marker="$dir/.arm-marker"
+    if [[ ! -f "$marker" ]]; then
+      echo "check-logs: missing $marker (touch it immediately before arm)" >&2
+      fail=1
+      continue
+    fi
+  fi
+
+  found=""
+  while IFS= read -r -d '' f; do
+    # Reject empty files — a touch-created placeholder is not a flight log.
+    if [[ ! -s "$f" ]]; then
+      continue
+    fi
+    if [[ -n "$marker" && ! "$f" -nt "$marker" ]]; then
+      continue
+    fi
+    found="$f"
+    break
+  done < <(find "$dir" -type f \( -iname '*.bin' -o -iname '*.ulg' \) -print0 2>/dev/null)
+
+  if [[ -z "$found" ]]; then
+    if [[ "$NEWER_MARKER" -eq 1 ]]; then
+      echo "check-logs: no non-empty .bin/.ulg newer than $marker under $dir" >&2
+    else
+      echo "check-logs: no non-empty flight log (.bin/.ulg) under $dir" >&2
+    fi
     fail=1
   else
-    echo "check-logs: ok $name"
+    echo "check-logs: ok $name ($found)"
   fi
 done
 

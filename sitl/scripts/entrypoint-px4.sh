@@ -24,6 +24,10 @@ else
   PX4_PREFIX=/opt/px4
 fi
 
+# Persist ulogs into the Compose bind mount (PX4 writes ./log under the prefix).
+rm -rf "${PX4_PREFIX}/log"
+ln -sfn /logs "${PX4_PREFIX}/log"
+
 MAVLINK_RC="${PX4_PREFIX}/etc/init.d-posix/px4-rc.mavlink"
 RCS="${PX4_PREFIX}/etc/init.d-posix/rcS"
 
