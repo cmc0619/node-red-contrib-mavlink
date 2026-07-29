@@ -611,7 +611,10 @@ Connection keeps one *serialize* registry, but each network peer (`address:port`
 `MavLinkPacketSplitter` pipeline. Sharing one splitter across peers lets a partial frame from
 vehicle A contaminate the next bytes from vehicle B. TCP peer disconnect releases that
 decoder; idle UDP pipelines are evicted on the peer-table expire interval (TCP/serial do
-**not** age-evict — only `endpoint-gone` / Connection close). A hard cap (default **100**)
+**not** age-evict — only `endpoint-gone` / Connection close). A TCP `endpoint-gone` fires
+only while that socket still owns the `address:port` map slot — a delayed close after the
+same tuple reconnects must not wipe the replacement stream's decoder (emit once on
+supersede instead). A hard cap (default **100**)
 evicts under pressure: never-validated junk (empty buffer or no MAVLink STX) first, then
 validated pipelines whose splitter buffer is empty, then Map-order LRU among remaining
 mid-frame entries — including a peer whose *first* frame is still incomplete (not yet
