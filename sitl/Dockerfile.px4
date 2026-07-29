@@ -1,0 +1,20 @@
+# Optional convenience image. Compose pins px4io/px4-sitl by digest with
+# `scripts/entrypoint-px4.sh` mounted — prefer that path.
+ARG PX4_SITL_IMAGE=px4io/px4-sitl@sha256:bab4270c4849b7027df4bd760c79d743d738c81d7830dde14c4cc5714f781216
+FROM ${PX4_SITL_IMAGE}
+
+USER root
+RUN if ! id -u px4 >/dev/null 2>&1; then useradd -m -s /bin/bash px4; fi \
+ && mkdir -p /logs /params \
+ && chown -R px4:px4 /logs /params /opt/px4 2>/dev/null || chown -R px4:px4 /logs /params
+
+COPY --chown=px4:px4 scripts/entrypoint-px4.sh /usr/local/bin/entrypoint-px4.sh
+COPY --chown=px4:px4 params/px4-logging.env /params/px4-logging.env
+RUN chmod +x /usr/local/bin/entrypoint-px4.sh
+
+USER px4
+ENV PX4_SIM_MODEL=sihsim_quadx \
+    HEADLESS=1
+
+VOLUME ["/logs"]
+ENTRYPOINT ["/bin/bash", "/usr/local/bin/entrypoint-px4.sh"]

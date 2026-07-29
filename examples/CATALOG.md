@@ -156,12 +156,11 @@ importable tab per file with shared config nodes inline.
 - **Nodes:** one `local-identity`; **two** `vehicle` (ardupilot/`ardupilotmega` +
   px4/`common` or `ardupilotmega`); **two** `connection`; per-side `command` arm→takeoff;
   `inject`; `state` feed to watch both; `debug`.
-- **Key config:** ArduPilot connection bind `14550`→`14551`; PX4 connection bind `14555`→
-  a PX4 SITL MAVLink port (comment: PX4 ports are version-specific — commonly the GCS link
-  on `14550` broadcast or `14570`/`14580`; the operator sets it). ArduPilot side sets mode
-  GUIDED (`custom_mode 4`); PX4 side comment: **do not** reuse ArduPilot mode numbers —
-  either take off via PX4's takeoff which auto-switches, or use the profile mode table
-  (SITL S4). Both arm+takeoff run in parallel from one inject.
+- **Key config:** ArduPilot connection bind `14550`→`14551`; PX4 connection bind `14560`→`14561`
+  (Docker lab / current examples). ArduPilot side sets mode GUIDED (`custom_mode 4`); PX4
+  side comment: **do not** reuse ArduPilot mode numbers — either take off via PX4's takeoff
+  which auto-switches, or use the profile mode table (SITL S4). Both arm+takeoff run in
+  parallel from one inject.
 - **Inject buttons:** **`▶ Both up`** (fans to both sides), **`Ebony (ArduPilot) up`**,
   **`Ivory (PX4) up`**, **`Both land/RTL`**.
 
@@ -429,7 +428,7 @@ instances it needs. Filenames restart at `01` inside the folder.
 - **Nodes:** config triplet (ArduPilot sysid 1), `command` arm(confirm)→takeoff(complete),
   `inject`, `debug`.
 - **Config/launch:** bind `14550`→`14551`; `completionTimeout ≥ 30000`.
-  `sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14551`.
+  `sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550`.
 
 ### sitl/02 — Completion timeout: accepts but never climbs
 
@@ -525,8 +524,21 @@ instances it needs. Filenames restart at `01` inside the folder.
   connection, because a broadcast is single-stack). The whole-rig integration demo.
 - **Nodes:** 1 identity, 2 vehicles, 2 connections, 2× `swarm` (`broadcast` arm per stack),
   `state` feed, `inject`, `debug`.
-- **Config/launch:** both launch loops; comment: PX4 multi-instance ports differ from
-  ArduPilot; set `MAV_SYS_ID` 11–15 per PX4 instance.
+- **Config/launch:** prefer `sitl/docker-compose.yml` (`--profile sitl`); AP bind
+  `14550`→`14551`, PX4 bind `14560`→`14561`.
+
+### SITL 15 — Companion ArduPilot (sysid 20)
+
+- **File:** `examples/sitl/15-companion-ap.json` · **Tab:** `SITL 15 Companion AP`
+- **Story:** Node-RED companion identity sharing sysid 20 / compid 191 on the lab companion ports.
+- **Key config:** bind `14540`→`14541`; vehicle firmware ardupilot; Docker service `ap-companion-20`.
+
+### SITL 16 — Companion PX4 (sysid 21)
+
+- **File:** `examples/sitl/16-companion-px4.json` · **Tab:** `SITL 16 Companion PX4`
+- **Story:** Companion identity sharing sysid 21 on PX4 companion ports.
+- **Key config:** bind `14542`→`14543`; vehicle firmware px4; Docker service `px4-companion-21`.
+
 
 ### sitl/11 — Broadcast vs sequential arm, confirmed by state
 
@@ -572,7 +584,7 @@ instances it needs. Filenames restart at `01` inside the folder.
   one connection, showing target-by-sysid routing on a shared link.
 - **Nodes:** config triplet, `command` arm + advanced `set_message_interval`, `mission`
   upload/download to sysid 2, `inject`, `debug`.
-- **Config/launch:** two ArduCopter instances (sysid 1, 2) both `--out=udp:127.0.0.1:14551`.
+- **Config/launch:** two ArduCopter instances (sysid 1, 2) both `--out=udp:127.0.0.1:14550`.
 
 ---
 

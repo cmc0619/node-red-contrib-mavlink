@@ -1,191 +1,191 @@
 [
-  {
-    "id": "sitl09-tab",
-    "type": "tab",
-    "label": "SITL 09 Swarm member expires",
-    "disabled": false,
-    "info": "Sequential fan-out across five ArduPilot sysids; kill one SITL mid-run. Aggregate reports the dropped member as failed without aborting the rest.",
-    "env": []
-  },
-  {
-    "id": "sitl09-comment",
-    "type": "comment",
-    "z": "sitl09-tab",
-    "name": "Sequential arm ×5 — kill one instance after start",
-    "info": "Start sequential arm with 500 ms pacing (time to kill one process). Watch State feed for expired events. Expect four succeeded + one failed in the aggregate.\n\nLaunch five ArduCopter instances:\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14551 &\n  done\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551. After inject, kill one sim_vehicle PID before pacing completes.",
-    "x": 280,
-    "y": 40,
-    "wires": []
-  },
-  {
-    "id": "sitl09-identity",
-    "type": "mavlink-local-identity",
-    "name": "GCS identity",
-    "role": "gcs",
-    "sourceSystemId": 255,
-    "sourceComponentId": 190,
-    "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
-  },
-  {
-    "id": "sitl09-vehicle",
-    "type": "mavlink-vehicle",
-    "name": "ArduPilot fleet",
-    "vehicleFamily": "copter",
-    "firmware": "ardupilot",
-    "dialect": "ardupilotmega",
-    "dialectSource": "bundled",
-    "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
-  },
-  {
-    "id": "sitl09-connection",
-    "type": "mavlink-connection",
-    "name": "UDP ArduPilot 5×SITL",
-    "mode": "udp",
-    "bindHost": "127.0.0.1",
-    "bindPort": 14550,
-    "remoteHost": "127.0.0.1",
-    "remotePort": 14551,
-    "broadcast": false,
-    "vehicle": "sitl09-vehicle",
-    "localIdentity": "sitl09-identity",
-    "additionalIdentities": [],
-    "signOutbound": false,
-    "requireSigned": false,
-    "acceptInvalid": false,
-    "linkId": 0,
-    "heartbeatInterval": 1000,
-    "staleMs": "",
-    "expireMs": "",
-    "disabled": false
-  },
-  {
-    "id": "sitl09-state",
-    "type": "mavlink-state",
-    "z": "sitl09-tab",
-    "name": "Peer events",
-    "connection": "sitl09-connection",
-    "mode": "feed",
-    "events": "expired,stale,peer-new",
-    "targetSystem": "",
-    "targetComponent": "",
-    "x": 600,
-    "y": 280,
-    "wires": [
-      [
-        "sitl09-state-debug"
-      ]
-    ]
-  },
-  {
-    "id": "sitl09-inject",
-    "type": "inject",
-    "z": "sitl09-tab",
-    "name": "Arm ×5 (kill one mid-run)",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 160,
-    "y": 160,
-    "wires": [
-      [
-        "sitl09-swarm"
-      ]
-    ]
-  },
-  {
-    "id": "sitl09-swarm",
-    "type": "mavlink-swarm",
-    "z": "sitl09-tab",
-    "name": "Arm sequential (confirm)",
-    "connection": "sitl09-connection",
-    "selectionMode": "list",
-    "sysids": "1,2,3,4,5",
-    "vehicleType": "",
-    "firmwareFilter": "",
-    "armedFilter": "",
-    "executionMode": "sequential",
-    "intervalMs": 500,
-    "dryRun": false,
-    "topic": "command",
-    "verb": "arm",
-    "delivery": "confirm",
-    "preset": "arm",
-    "advancedCommand": "",
-    "timeout": "10000",
-    "maxRetries": "3",
-    "params": "{}",
-    "x": 390,
-    "y": 160,
-    "wires": [
-      [
-        "sitl09-done"
-      ],
-      [
-        "sitl09-status"
-      ]
-    ]
-  },
-  {
-    "id": "sitl09-done",
-    "type": "debug",
-    "z": "sitl09-tab",
-    "name": "aggregate",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 620,
-    "y": 140,
-    "wires": []
-  },
-  {
-    "id": "sitl09-status",
-    "type": "debug",
-    "z": "sitl09-tab",
-    "name": "swarm status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 620,
-    "y": 200,
-    "wires": []
-  },
-  {
-    "id": "sitl09-state-debug",
-    "type": "debug",
-    "z": "sitl09-tab",
-    "name": "expired events",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "payload",
-    "targetType": "msg",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 820,
-    "y": 280,
-    "wires": []
-  }
+    {
+        "id": "sitl09-tab",
+        "type": "tab",
+        "label": "SITL 09 Swarm member expires",
+        "disabled": false,
+        "info": "Sequential fan-out across five ArduPilot sysids; kill one SITL mid-run. Aggregate reports the dropped member as failed without aborting the rest.",
+        "env": []
+    },
+    {
+        "id": "sitl09-comment",
+        "type": "comment",
+        "z": "sitl09-tab",
+        "name": "Sequential arm \u00d75 \u2014 kill one instance after start",
+        "info": "Start sequential arm with 500 ms pacing (time to kill one process). Watch State feed for expired events. Expect four succeeded + one failed in the aggregate.\n\nLaunch five ArduCopter instances:\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. After inject, kill one sim_vehicle PID before pacing completes.",
+        "x": 280,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "sitl09-identity",
+        "type": "mavlink-local-identity",
+        "name": "GCS identity",
+        "role": "gcs",
+        "sourceSystemId": 255,
+        "sourceComponentId": 190,
+        "heartbeatType": "MAV_TYPE_GCS",
+        "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    },
+    {
+        "id": "sitl09-vehicle",
+        "type": "mavlink-vehicle",
+        "name": "ArduPilot fleet",
+        "vehicleFamily": "copter",
+        "firmware": "ardupilot",
+        "dialect": "ardupilotmega",
+        "dialectSource": "bundled",
+        "defaultTargetSystem": 1,
+        "defaultTargetComponent": 1,
+        "paramDefsUrl": ""
+    },
+    {
+        "id": "sitl09-connection",
+        "type": "mavlink-connection",
+        "name": "UDP ArduPilot 5\u00d7SITL",
+        "mode": "udp",
+        "bindHost": "0.0.0.0",
+        "bindPort": 14550,
+        "remoteHost": "127.0.0.1",
+        "remotePort": 14551,
+        "broadcast": false,
+        "vehicle": "sitl09-vehicle",
+        "localIdentity": "sitl09-identity",
+        "additionalIdentities": [],
+        "signOutbound": false,
+        "requireSigned": false,
+        "acceptInvalid": false,
+        "linkId": 0,
+        "heartbeatInterval": 1000,
+        "staleMs": "",
+        "expireMs": "",
+        "disabled": false
+    },
+    {
+        "id": "sitl09-state",
+        "type": "mavlink-state",
+        "z": "sitl09-tab",
+        "name": "Peer events",
+        "connection": "sitl09-connection",
+        "mode": "feed",
+        "events": "expired,stale,peer-new",
+        "targetSystem": "",
+        "targetComponent": "",
+        "x": 600,
+        "y": 280,
+        "wires": [
+            [
+                "sitl09-state-debug"
+            ]
+        ]
+    },
+    {
+        "id": "sitl09-inject",
+        "type": "inject",
+        "z": "sitl09-tab",
+        "name": "Arm \u00d75 (kill one mid-run)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 160,
+        "y": 160,
+        "wires": [
+            [
+                "sitl09-swarm"
+            ]
+        ]
+    },
+    {
+        "id": "sitl09-swarm",
+        "type": "mavlink-swarm",
+        "z": "sitl09-tab",
+        "name": "Arm sequential (confirm)",
+        "connection": "sitl09-connection",
+        "selectionMode": "list",
+        "sysids": "1,2,3,4,5",
+        "vehicleType": "",
+        "firmwareFilter": "",
+        "armedFilter": "",
+        "executionMode": "sequential",
+        "intervalMs": 500,
+        "dryRun": false,
+        "topic": "command",
+        "verb": "arm",
+        "delivery": "confirm",
+        "preset": "arm",
+        "advancedCommand": "",
+        "timeout": "10000",
+        "maxRetries": "3",
+        "params": "{}",
+        "x": 390,
+        "y": 160,
+        "wires": [
+            [
+                "sitl09-done"
+            ],
+            [
+                "sitl09-status"
+            ]
+        ]
+    },
+    {
+        "id": "sitl09-done",
+        "type": "debug",
+        "z": "sitl09-tab",
+        "name": "aggregate",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 620,
+        "y": 140,
+        "wires": []
+    },
+    {
+        "id": "sitl09-status",
+        "type": "debug",
+        "z": "sitl09-tab",
+        "name": "swarm status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 620,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "sitl09-state-debug",
+        "type": "debug",
+        "z": "sitl09-tab",
+        "name": "expired events",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 820,
+        "y": 280,
+        "wires": []
+    }
 ]
