@@ -120,7 +120,7 @@ ground truth, drift asserts — never as defensive branches in the shipping code
 | dialog fields load and save | `node-input-<prop>` / `node-config-input-<prop>` ids auto-populate and auto-save. `oneditprepare`/`oneditsave` exist only for what that cannot do: dynamically built selects, TypedInput, reshaping |
 | dialog layout and widgets | `form-row` rows, `red-ui-button`, `TypedInput`, `RED.editor.createEditor` — no custom widget where a stock one exists |
 | runtime state in the editor | `node.status({fill, shape, text})` — text under 20 characters, `{}` clears |
-| errors while handling a message | report through `done(err)` or `node.error(err, msg)` so Catch nodes fire; input handlers take `(msg, send, done)` and never throw uncaught |
+| errors while handling a message | **one** Catch path: `done(err)` when `done` is present; `node.error(err, msg)` only if there is no `done`. Never `node.error` then bare `done()` — that is the wrong pairing (Catch via error, message finished as success). Do not leave throws uncaught from the handler; catch and call `done(err)`. (§2 notes that a slipped throw is contained by Node-RED — that is a safety net, not the preferred path.) |
 | replying in a flow | reuse the received `msg` object; send via the listener-provided `send` |
 | cleanup on redeploy | the `close` handler (accepting `done` when async) |
 | help text | `data-help-name` with `<h3>` sections and `message-properties` definition lists |
@@ -817,23 +817,26 @@ target, elapsed time, retry count. This is the Debug wire, and it is always the 
 regardless of what happened. Branching on failure is a `switch` on the result, which is cheaper
 than the alternative of teeing successes out of port 0 to see them.
 
-Failures also call `node.error()` so Catch nodes keep working. That is independent of the ports.
+Failures report through **`done(err)`** when the input handler has a `done` callback
+(`node.error(err, msg)` only if `done` is absent). Never `node.error` then bare `done()`.
+That is independent of the ports.
 
 Mission and Param conform: their progress updates are status records, not a separate port.
+Status records are plain objects on output 1 (typically at message root: `msg.result`, …) —
+there is no stamp, marker field, or miswire refusal.
 
 ### What triggers an action node
 
 A node fires on message arrival, as everything in Node-RED does. Requiring a specific trigger
 value would break the commonest flow there is — an inject node wired straight to a Command node,
-whose default payload is a timestamp. Two exceptions, both narrow:
+whose default payload is a timestamp. One narrow exception:
 
 - **`msg.payload === false` suppresses.** The node does nothing and emits nothing, which gives a
   `switch` upstream an explicit way to hold a chain without inventing a convention.
-- **A status record is refused.** Every record leaving output 1 carries a marker; an action node
-  receiving one emits a status record naming the miswire and does not act. Both ports look
-  identical on the canvas, so wiring status into the next action node is the mistake worth
-  engineering against — it would otherwise advance the chain on failures.
 
+Do **not** refuse status records (or any other shape) as a special "miswire" class. Output 0
+already does not fire on failure, so chaining on continue is what stops the flow; wiring
+output 1 into another action is operator error, not something the runtime stamps and rejects.
 Payload contents supply parameters where the node is configured to read them from the message,
 and are ignored otherwise.
 
@@ -1622,3 +1625,27 @@ param-echo, and mission protocol matching key on the same resolved target as the
 test/move/node.test.js test/param/node.test.js test/payload/node.test.js
 test/mission/node.test.js test/swarm/node.test.js test/nodes/in-out-build.test.js` — look for
 "companion", "role × tier", and "build+list" tests.
+
+**Status records are not stamped, and action nodes do not refuse them on input.**
+*Wrong belief:* Every output-1 record needs `__mavlinkStatusRecord__` (or `_mavlinkStatus` in
+`msg.payload`) so the next action node can detect a miswire and refuse to run — "both ports
+look identical, so engineer against the mistake."
+*Fact:* Silence on output 0 already stops the chain on failure. A stamp/refusal path is
+guardrail for bad wiring, not protocol. Status records are plain objects on output 1 (root
+fields such as `result` / `detail`). The only suppress sentinel is `msg.payload === false`.
+Catch uses `done(err)` when available — not `node.error` then bare `done()`.
+Palette category is lowercase `'mavlink'` for every palette node; State declares `outputs: 2`.
+*Check:* `rg -n '__mavlinkStatusRecord__|_mavlinkStatus|refuseIfStatus|isStatusRecord' lib nodes`
+returns nothing; `node --test test/delivery/delivery.test.js test/command/node.test.js
+test/move/node.test.js test/payload/node.test.js test/state/node.test.js`.
+
+**Input-handler Catch is `done(err)`, not `node.error` + bare `done()`.**
+*Wrong belief:* Calling `node.error(err, msg)` then `done()` (no argument) is the safe way to
+both notify Catch and finish the message.
+*Fact:* With a `done` callback, `done(err)` is the single Catch path. `node.error` then bare
+`done()` pairs an error report with a successful finish. Use `reportDoneError` from
+`lib/delivery` (it calls `done(err)`, or `node.error` only when `done` is missing). A throw
+that escapes the handler is contained by Node-RED (§2) but is not the preferred path — catch
+and `done(err)`.
+*Check:* `node --test test/delivery/catch-path-scan.test.js` (source scan of `nodes/mavlink-*.js`);
+`node --test test/delivery/delivery.test.js test/swarm/node.test.js`.

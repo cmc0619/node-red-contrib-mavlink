@@ -3,7 +3,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const delivery = require('../../lib/delivery');
 const {
   executeSwarm,
   guardSwarmInput,
@@ -166,15 +165,8 @@ test('member expiring mid-run is reported failed while later members continue', 
   assert.match(result.members.find((m) => m.sysid === 2).detail, /expired|stale/);
 });
 
-test('suppress does nothing and status records are refused', () => {
+test('suppress does nothing', () => {
   assert.deepEqual(guardSwarmInput({ payload: false }), { action: 'suppress' });
-
-  const status = delivery.makeStatusRecord({ result: 'failed' });
-  const refusal = guardSwarmInput(status);
-
-  assert.equal(refusal.action, 'refuse');
-  assert.equal(refusal.record.result, 'refused');
-  assert.equal(delivery.isStatusRecord(refusal.record), true);
 });
 
 test('broadcast aggregate warns about mixed firmware for uniform commands', async () => {

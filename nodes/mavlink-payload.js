@@ -7,6 +7,10 @@ const {
 const { BAND } = require('../lib/connection/bands');
 const { AckWaiter } = require('../lib/command');
 const { resolveActionTarget, profileFromVehicleNode } = require('../lib/addressing/resolve');
+const {
+  shouldSuppress,
+  reportDoneError,
+} = require('../lib/delivery');
 
 const BADGE_MAX = 24;
 const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';
@@ -33,12 +37,7 @@ module.exports = function registerMavlinkPayload(RED) {
     node.on('input', (msg, send, done) => {
       const emit = send || ((messages) => node.send(messages));
       try {
-        if (msg.payload === false) {
-          if (done) done();
-          return;
-        }
-        if (msg.payload && msg.payload._mavlinkStatus) {
-          emit([null, { payload: statusRecord('rejected', 'status input refused') }]);
+        if (shouldSuppress(msg)) {
           if (done) done();
           return;
         }
@@ -117,15 +116,14 @@ module.exports = function registerMavlinkPayload(RED) {
               if (activeWaiter === waiter) activeWaiter = null;
               if (outcome.result === 'accepted') {
                 completeAck(node, emit, built, outcome);
+                if (done) done();
               } else {
-                failAck(node, emit, built, outcome);
+                failAck(node, emit, built, outcome, msg, done);
               }
-              if (done) done();
             })
             .catch((err) => {
               if (activeWaiter === waiter) activeWaiter = null;
-              fail(node, emit, err);
-              if (done) done(err);
+              fail(node, emit, err, msg, done);
             });
           return;
         }
@@ -136,8 +134,7 @@ module.exports = function registerMavlinkPayload(RED) {
         completeResult(node, emit, 'succeeded', detail, built);
         if (done) done();
       } catch (err) {
-        fail(node, emit, err);
-        if (done) done(err);
+        fail(node, emit, err, msg, done);
       }
     });
 
@@ -244,33 +241,29 @@ function completeAck(node, emit, built, outcome) {
   node.status({ fill: 'green', shape: 'dot', text: cap(`ack ${built.message.name}`) });
   emit([
     { payload: { result: 'succeeded', message: built.message } },
-    {
-      payload: statusRecord('succeeded', 'command-ack accepted', {
-        confirmation: built.confirmation,
-        resultCode: outcome.resultCode,
-        confirmedBy: outcome.confirmedBy,
-        retries: outcome.retries,
-        elapsed: outcome.elapsed,
-      }),
-    },
+    statusRecord('succeeded', 'command-ack accepted', {
+      confirmation: built.confirmation,
+      resultCode: outcome.resultCode,
+      confirmedBy: outcome.confirmedBy,
+      retries: outcome.retries,
+      elapsed: outcome.elapsed,
+    }),
   ]);
 }
 
-function failAck(node, emit, built, outcome) {
+function failAck(node, emit, built, outcome, msg, done) {
   node.status({ fill: 'red', shape: 'ring', text: cap(`${built.message.name} ${outcome.result}`) });
-  node.error(`mavlink-payload: ${built.message.name} ${outcome.result}`);
   emit([
     null,
-    {
-      payload: statusRecord(outcome.result, outcome.detail || 'command not accepted', {
-        confirmation: built.confirmation,
-        resultCode: outcome.resultCode,
-        confirmedBy: outcome.confirmedBy,
-        retries: outcome.retries,
-        elapsed: outcome.elapsed,
-      }),
-    },
+    statusRecord(outcome.result, outcome.detail || 'command not accepted', {
+      confirmation: built.confirmation,
+      resultCode: outcome.resultCode,
+      confirmedBy: outcome.confirmedBy,
+      retries: outcome.retries,
+      elapsed: outcome.elapsed,
+    }),
   ]);
+  reportDoneError(node, new Error(`mavlink-payload: ${built.message.name} ${outcome.result}`), msg, done);
 }
 
 function valuesFrom(config) {
@@ -321,7 +314,7 @@ function completeBuild(node, emit, built) {
   node.status({ fill: 'green', shape: 'dot', text: cap('built payload') });
   emit([
     { payload: built.message },
-    { payload: statusRecord('succeeded', 'built', { confirmation: built.confirmation }) },
+    statusRecord('succeeded', 'built', { confirmation: built.confirmation }),
   ]);
 }
 
@@ -329,18 +322,18 @@ function completeResult(node, emit, result, detail, built) {
   node.status({ fill: 'green', shape: 'dot', text: cap(detail) });
   emit([
     { payload: { result, message: built.message } },
-    { payload: statusRecord(result, detail, { confirmation: built.confirmation }) },
+    statusRecord(result, detail, { confirmation: built.confirmation }),
   ]);
 }
 
-function fail(node, emit, err) {
+function fail(node, emit, err, msg, done) {
   node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
-  node.error(err);
-  emit([null, { payload: statusRecord('failed', err.message) }]);
+  emit([null, statusRecord('failed', err.message)]);
+  reportDoneError(node, err, msg, done);
 }
 
 function statusRecord(result, detail, extra = {}) {
-  return { _mavlinkStatus: true, node: 'mavlink-payload', result, detail, ...extra };
+  return { node: 'mavlink-payload', result, detail, ...extra };
 }
 
 function objectPayload(payload) {

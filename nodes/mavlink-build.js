@@ -26,21 +26,19 @@
  *   output 0  — continue: built message (Build tier) or pass-through (Send)
  *   output 1  — status:   fires on every terminal outcome
  *
- * Suppression and miswire (§9):
+ * Suppression (§9):
  *   `msg.payload === false`   → silent suppress; neither output fires
- *   input is a status record  → refuse; output 1 fires, node.error() is called
  */
 
 const { encodeMessage } = require('../lib/codec');
 const { BAND } = require('../lib/connection');
 const {
   TIER,
-  isStatusRecord,
   makeStatusRecord,
   shouldSuppress,
-  refuseIfStatus,
   applyActionStatus,
   capBadge,
+  reportDoneError,
 } = require('../lib/delivery');
 
 /** Module-scope guard — the constructor is recreated each factory call. */
@@ -154,14 +152,16 @@ module.exports = function registerMavlinkBuild(RED) {
      *
      * @param {object|null} triggerMsg  the inbound Node-RED msg, or null when
      *   fired from the repeat timer
+     * @param {Function|undefined} done  input-handler done callback, when this
+     *   execution came from an inbound message
+     * @returns {boolean} true when execution completed successfully
      */
-    function execute(triggerMsg) {
+    function execute(triggerMsg, done) {
       // Merge config defaults with any per-message overrides from the trigger.
       const overrides =
         triggerMsg &&
         triggerMsg.payload !== null &&
         typeof triggerMsg.payload === 'object' &&
-        !isStatusRecord(triggerMsg) &&
         !Array.isArray(triggerMsg.payload)
           ? triggerMsg.payload
           : {};
@@ -179,9 +179,13 @@ module.exports = function registerMavlinkBuild(RED) {
           timestamp: Date.now(),
         });
         applyActionStatus(node, 'error', capBadge(err.message));
-        if (triggerMsg) node.error(`mavlink-build encode: ${err.message}`, triggerMsg);
         node.send([null, sr]);
-        return;
+        if (triggerMsg) {
+          reportDoneError(node, new Error(`mavlink-build encode: ${err.message}`), triggerMsg, done);
+        } else {
+          node.error(`mavlink-build encode: ${err.message}`, {});
+        }
+        return false;
       }
 
       const builtMessage = { name: messageName, fields: encodedFields };
@@ -199,7 +203,7 @@ module.exports = function registerMavlinkBuild(RED) {
         });
         applyActionStatus(node, 'ok', capBadge(messageName));
         node.send([outMsg, sr]);
-        return;
+        return true;
       }
 
       // Send tier: enqueue on the connection queue.
@@ -210,9 +214,9 @@ module.exports = function registerMavlinkBuild(RED) {
       const identityId = (triggerMsg && triggerMsg.identityId) || undefined;
 
       // The queue send can throw synchronously (full Control band, unknown
-      // identity, disabled connection). A throw from a repeat-timer callback is
-      // an async source Node-RED does not contain (§2), so route every failure
-      // through a status record + node.error() rather than letting it escape.
+      // identity, disabled connection). Input-triggered failures go through the
+      // handler's Catch path; timer-triggered failures have no input `done`, so
+      // they use the legacy node.error path rather than escaping.
       try {
         connectionNode.send(builtMessage, { band, target, identityId });
       } catch (err) {
@@ -225,9 +229,13 @@ module.exports = function registerMavlinkBuild(RED) {
           timestamp: Date.now(),
         });
         applyActionStatus(node, 'error', capBadge(err.message));
-        node.error(`mavlink-build send: ${err.message}`, triggerMsg || {});
         node.send([null, sr]);
-        return;
+        if (triggerMsg) {
+          reportDoneError(node, new Error(`mavlink-build send: ${err.message}`), triggerMsg, done);
+        } else {
+          node.error(`mavlink-build send: ${err.message}`, {});
+        }
+        return false;
       }
 
       // Track achieved rate.
@@ -261,20 +269,17 @@ module.exports = function registerMavlinkBuild(RED) {
         : capBadge(messageName);
       applyActionStatus(node, 'ok', rateLabel);
       node.send([outMsg, sr]);
+      return true;
     }
 
     // Input handler.
-    node.on('input', (msg) => {
-      if (shouldSuppress(msg)) return;
-
-      const refusal = refuseIfStatus(msg);
-      if (refusal) {
-        node.error('mavlink-build: status record received as input — check wiring', msg);
-        node.send([null, refusal]);
+    node.on('input', (msg, _send, done) => {
+      if (shouldSuppress(msg)) {
+        if (done) done();
         return;
       }
 
-      execute(msg);
+      if (execute(msg, done) && done) done();
     });
 
     // Repeat timer.

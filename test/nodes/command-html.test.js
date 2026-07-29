@@ -280,3 +280,17 @@ test('companion identity hides target sysid/compid rows', () => {
     'identity role is checked via RED.mavlink.identityRole'
   );
 });
+
+test('command help documents status fields at message root, not under payload', () => {
+  const help = html.slice(
+    html.indexOf('data-help-name="mavlink-command"'),
+    html.lastIndexOf('</script>')
+  );
+  const statusBlock = help.slice(help.indexOf('<li>Status'), help.indexOf('<h3>Delivery'));
+  assert.match(statusBlock, /<dt>result\b/, 'status help lists msg.result');
+  assert.match(statusBlock, /<dt>resultCode\b/);
+  assert.ok(
+    !/<dt>payload\b/.test(statusBlock),
+    'status help must not nest fields under payload'
+  );
+});

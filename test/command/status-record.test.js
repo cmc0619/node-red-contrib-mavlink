@@ -1,15 +1,12 @@
 'use strict';
 
 /**
- * Status-record tests (DESIGN.md §9, brief: "status-record refuse").
+ * Status-record tests (DESIGN.md §9).
  *
  * Tests:
- *   - makeStatusRecord produces the expected shape with the marker field
- *   - isStatusRecord correctly identifies records and non-records
- *   - The miswire guard in the command node logic:
- *     a status record passed as input must be identified and refused
- *   - A plain message object is NOT a status record
- *   - Various edge cases: null, primitives, objects without the marker
+ *   - makeStatusRecord produces the expected plain-object shape
+ *   - command-specific defaults are filled in
+ *   - MAV_RESULT tables expose stable command result metadata
  */
 
 const test = require('node:test');
@@ -17,19 +14,27 @@ const assert = require('node:assert/strict');
 
 const {
   makeStatusRecord,
-  isStatusRecord,
   MAV_RESULT,
-  MARKER,
   TERMINAL_RESULTS,
   SUCCESS_RESULTS,
   RESULT_NAME,
 } = require('../../lib/command');
 
-// ── makeStatusRecord shape ─────────────────────────────────────────────────
+// -- makeStatusRecord shape --------------------------------------------------
 
-test('makeStatusRecord carries the marker field', () => {
+test('makeStatusRecord returns the default plain-object shape', () => {
   const rec = makeStatusRecord({ result: 'accepted' });
-  assert.equal(rec[MARKER], true);
+  assert.deepEqual(rec, {
+    result: 'accepted',
+    resultCode: null,
+    confirmedBy: 'none',
+    target: null,
+    elapsed: 0,
+    retries: 0,
+    command: null,
+    commandId: null,
+    detail: null,
+  });
 });
 
 test('makeStatusRecord includes all required fields', () => {
@@ -67,89 +72,7 @@ test('makeStatusRecord fills defaults for optional fields', () => {
   assert.equal(rec.detail, null);
 });
 
-// ── isStatusRecord identification ─────────────────────────────────────────
-
-test('isStatusRecord returns true for a status record', () => {
-  const rec = makeStatusRecord({ result: 'accepted' });
-  assert.equal(isStatusRecord(rec), true);
-});
-
-test('isStatusRecord returns false for null', () => {
-  assert.equal(isStatusRecord(null), false);
-});
-
-test('isStatusRecord returns false for a plain object without marker', () => {
-  assert.equal(isStatusRecord({ payload: 'hello' }), false);
-});
-
-test('isStatusRecord returns false for a number', () => {
-  assert.equal(isStatusRecord(42), false);
-});
-
-test('isStatusRecord returns false for a string', () => {
-  assert.equal(isStatusRecord('accepted'), false);
-});
-
-test('isStatusRecord returns false for an object with marker set to false', () => {
-  assert.equal(isStatusRecord({ [MARKER]: false }), false);
-});
-
-test('isStatusRecord returns false for an array', () => {
-  assert.equal(isStatusRecord([]), false);
-});
-
-test('isStatusRecord returns false for undefined', () => {
-  assert.equal(isStatusRecord(undefined), false);
-});
-
-// ── Miswire guard simulation ───────────────────────────────────────────────
-// Simulate the guard logic at the node boundary without instantiating Node-RED.
-
-function simulateInput(msg) {
-  if (msg.payload === false) return { action: 'suppress' };
-  if (isStatusRecord(msg)) return { action: 'miswire' };
-  return { action: 'proceed' };
-}
-
-test('miswire guard: a status record on input returns action=miswire', () => {
-  const rec = makeStatusRecord({ result: 'accepted', commandId: 400 });
-  const result = simulateInput(rec);
-  assert.equal(result.action, 'miswire');
-});
-
-test('miswire guard: a plain message on input returns action=proceed', () => {
-  const result = simulateInput({ payload: { 1: 1 } });
-  assert.equal(result.action, 'proceed');
-});
-
-test('miswire guard: an inject-default timestamp payload returns action=proceed', () => {
-  // The commonest flow: inject node wired directly → payload is a timestamp.
-  const result = simulateInput({ payload: Date.now() });
-  assert.equal(result.action, 'proceed');
-});
-
-test('miswire guard: null payload is not a status record', () => {
-  const result = simulateInput({ payload: null });
-  assert.equal(result.action, 'proceed');
-});
-
-test('miswire guard: an empty object payload is not a status record', () => {
-  const result = simulateInput({ payload: {} });
-  assert.equal(result.action, 'proceed');
-});
-
-// The miswire guard emits a status record naming the miswire itself.
-test('a miswire status record is itself a status record', () => {
-  const miswire = makeStatusRecord({
-    result: 'miswire',
-    detail: 'input is a status record — check wiring',
-    commandId: 400,
-  });
-  assert.equal(isStatusRecord(miswire), true);
-  assert.equal(miswire.result, 'miswire');
-});
-
-// ── MAV_RESULT tables ──────────────────────────────────────────────────────
+// -- MAV_RESULT tables -------------------------------------------------------
 
 test('TERMINAL_RESULTS contains ACCEPTED, not IN_PROGRESS', () => {
   assert.equal(TERMINAL_RESULTS.has(MAV_RESULT.ACCEPTED), true);
@@ -166,36 +89,4 @@ test('RESULT_NAME maps every MAV_RESULT to a non-empty string', () => {
     assert.ok(RESULT_NAME[v], `MAV_RESULT.${k} (${v}) must have a RESULT_NAME`);
     assert.ok(typeof RESULT_NAME[v] === 'string' && RESULT_NAME[v].length > 0);
   }
-});
-
-// ── Status record cannot be confused with a normal message ─────────────────
-
-test('a COMMAND_ACK decoded message is not a status record', () => {
-  const ack = {
-    name: 'COMMAND_ACK',
-    sysid: 1,
-    compid: 1,
-    fields: { command: 400, result: 0 },
-  };
-  assert.equal(isStatusRecord(ack), false);
-});
-
-test('a COMMAND_LONG built message is not a status record', () => {
-  const cmd = {
-    name: 'COMMAND_LONG',
-    fields: {
-      target_system: 1,
-      target_component: 1,
-      command: 400,
-      confirmation: 0,
-      param1: 1,
-      param2: 0,
-      param3: 0,
-      param4: 0,
-      param5: 0,
-      param6: 0,
-      param7: 0,
-    },
-  };
-  assert.equal(isStatusRecord(cmd), false);
 });

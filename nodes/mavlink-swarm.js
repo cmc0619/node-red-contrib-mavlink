@@ -3,6 +3,8 @@
 const delivery = require('../lib/delivery');
 const { executeSwarm, guardSwarmInput } = require('../lib/swarm');
 
+const { reportDoneError } = delivery;
+
 module.exports = function registerMavlinkSwarm(RED) {
   function MavlinkSwarmNode(config) {
     RED.nodes.createNode(this, config);
@@ -24,13 +26,6 @@ module.exports = function registerMavlinkSwarm(RED) {
       const emit = send || ((messages) => node.send(messages));
       const guard = guardSwarmInput(msg);
       if (guard.action === 'suppress') {
-        if (done) done();
-        return;
-      }
-      if (guard.action === 'refuse') {
-        delivery.applyActionStatus(node, 'error', 'refused');
-        node.error('mavlink-swarm: received a status record on input (miswire)', msg);
-        emit([null, guard.record]);
         if (done) done();
         return;
       }
@@ -71,18 +66,17 @@ module.exports = function registerMavlinkSwarm(RED) {
         });
 
         applyAggregateStatus(node, aggregate);
-        if (!aggregate.success && aggregate.result !== 'dry_run') {
-          node.error(`mavlink-swarm: ${aggregate.result}`, msg);
-        }
-        // Output 1 carries the aggregate status record at the message root (its
-        // delivery marker on the top-level object), matching the Command node
-        // and lib/delivery, so wiring output 1 back into an action node is
-        // refused as a miswire. Output 0 (continue) wraps the aggregate under
-        // msg.payload as a normal trigger (§9).
+        // Output 1 carries the aggregate status record at the message root.
+        // Output 0 (continue) wraps the aggregate under msg.payload as a normal
+        // trigger (§9).
         emit(aggregate.continue
           ? [{ payload: aggregate }, aggregate]
           : [null, aggregate]);
-        if (done) done();
+        if (!aggregate.success && aggregate.result !== 'dry_run') {
+          reportDoneError(node, new Error(`mavlink-swarm: ${aggregate.result}`), msg, done);
+        } else if (done) {
+          done();
+        }
       } catch (err) {
         const record = delivery.makeStatusRecord({
           node: 'mavlink-swarm',
@@ -92,9 +86,8 @@ module.exports = function registerMavlinkSwarm(RED) {
           detail: err.message,
         });
         delivery.applyActionStatus(node, 'error', err.message);
-        node.error(err, msg);
         emit([null, record]);
-        if (done) done(err);
+        reportDoneError(node, err, msg, done);
       }
     });
   }

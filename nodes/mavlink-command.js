@@ -22,12 +22,10 @@
  *
  * Guard the input:
  *   msg.payload === false → suppress (§9 "What triggers an action node")
- *   isStatusRecord(msg)  → emit miswire on output 1, do not act (§9)
  */
 
 const {
   makeStatusRecord,
-  isStatusRecord,
   MAV_RESULT,
   RESULT_NAME,
   getPreset,
@@ -44,6 +42,11 @@ const {
   resolveActionTarget,
   profileFromVehicleNode,
 } = require('../lib/addressing');
+
+const {
+  shouldSuppress,
+  reportDoneError,
+} = require('../lib/delivery');
 
 /** Band constant for outbound commands (CONTROL = 2). */
 const BAND_CONTROL = 2;
@@ -155,16 +158,10 @@ module.exports = function registerMavlinkCommand(RED) {
     /**
      * Emit a status record on output 1 and optionally on output 0.
      *
-     * The status record is emitted as the top-level message on output 1 (its
-     * own marker at the message root), matching how `mavlink-out` and
-     * `mavlink-build` emit records via `lib/delivery`. This keeps the shared
-     * marker on the object that `isStatusRecord(msg)` inspects, so wiring
-     * output 1 back into any action node's input is refused as a miswire
-     * rather than executed (§9 "A status record is refused").
+     * Output 1 receives the status record at the message root. Output 0
+     * (continue) still wraps its trigger under `msg.payload`.
      *
-     * Output 0 (continue) still wraps its trigger under `msg.payload`.
-     *
-     * @param {object} record  status record carrying the delivery marker
+     * @param {object} record  status record for output 1
      * @param {Function} sendFn  Node-RED send function
      * @param {boolean} continueOut  whether to also fire output 0
      * @param {*} [send0Payload]  payload for output 0 when continuing
@@ -179,24 +176,7 @@ module.exports = function registerMavlinkCommand(RED) {
 
     async function handleInput(msg, send, done) {
       // § Suppress: msg.payload === false → do nothing.
-      if (msg.payload === false) {
-        done && done();
-        return;
-      }
-
-      // § Miswire guard: refuse a status record.
-      if (isStatusRecord(msg)) {
-        const miswire = makeStatusRecord({
-          result: 'miswire',
-          resultCode: null,
-          confirmedBy: 'none',
-          command: commandName,
-          commandId,
-          detail: 'input is a status record — check wiring (output 1 must not feed input)',
-        });
-        node.status({ fill: 'red', shape: 'ring', text: badge24('miswire') });
-        node.error('mavlink-command: received a status record on input (miswire)', msg);
-        emitStatus(miswire, send, false);
+      if (shouldSuppress(msg)) {
         done && done();
         return;
       }
@@ -243,6 +223,10 @@ module.exports = function registerMavlinkCommand(RED) {
         });
       }
 
+      function failDone(detail) {
+        reportDoneError(node, new Error(`mavlink-command: ${detail}`), msg, done);
+      }
+
       // ── Safety preset confirmation check ──────────────────────────────────
       // Runs before Build as well as send tiers: a built Flight Termination
       // envelope on output 0 can be forwarded straight to mavlink-out, so the
@@ -257,9 +241,8 @@ module.exports = function registerMavlinkCommand(RED) {
           detail: 'safety command requires msg.confirmed = true',
         });
         node.status({ fill: 'red', shape: 'ring', text: badge24(`confirm ${displayName}`) });
-        node.error('mavlink-command: safety command blocked — set msg.confirmed = true', msg);
         emitStatus(rec, send, false);
-        done && done();
+        failDone('safety command blocked — set msg.confirmed = true');
         return;
       }
 
@@ -275,9 +258,8 @@ module.exports = function registerMavlinkCommand(RED) {
           detail: `no connection configured for ${delivery} delivery`,
         });
         node.status({ fill: 'red', shape: 'ring', text: badge24('invalid config') });
-        node.error(`mavlink-command: ${displayName} has no connection for ${delivery} delivery`, msg);
         emitStatus(rec, send, false);
-        done && done();
+        failDone(`${displayName} has no connection for ${delivery} delivery`);
         return;
       }
 
@@ -426,9 +408,8 @@ module.exports = function registerMavlinkCommand(RED) {
               `${RESULT_NAME[ackOutcome.resultCode]} — no carrier satisfies the vehicle`,
           });
           node.status({ fill: 'red', shape: 'ring', text: badge24(`wrong carrier ${displayName}`) });
-          node.error(`mavlink-command: ${rec.detail}`, msg);
           emitStatus(rec, send, false);
-          done && done();
+          failDone(rec.detail);
           return;
         }
       } else if (wanted) {
@@ -445,9 +426,8 @@ module.exports = function registerMavlinkCommand(RED) {
             `but that carrier was already sent`,
         });
         node.status({ fill: 'red', shape: 'ring', text: badge24(`wrong carrier ${displayName}`) });
-        node.error(`mavlink-command: ${rec.detail}`, msg);
         emitStatus(rec, send, false);
-        done && done();
+        failDone(rec.detail);
         return;
       }
 
@@ -492,10 +472,9 @@ module.exports = function registerMavlinkCommand(RED) {
           detail: ackOutcome.detail,
         });
         node.status({ fill: 'red', shape: 'ring', text: badge24(`timeout ${displayName}`) });
-        node.error(`mavlink-command: ${displayName} timed out`, msg);
         const cont = unconfirmedContinue;
         emitStatus(rec, send, cont, cont ? rec : undefined);
-        done && done();
+        failDone(`${displayName} timed out`);
         return;
       }
 
@@ -534,8 +513,9 @@ module.exports = function registerMavlinkCommand(RED) {
               detail: compOutcome.detail,
             });
             node.status({ fill: 'red', shape: 'ring', text: badge24(`${displayName} timeout`) });
-            node.error(`mavlink-command: ${displayName} completion timeout`, msg);
             emitStatus(rec, send, false);
+            failDone(`${displayName} completion timeout`);
+            return;
           }
           done && done();
           return;
@@ -568,15 +548,14 @@ module.exports = function registerMavlinkCommand(RED) {
           : ackOutcome.detail,
       });
       node.status({ fill: 'red', shape: 'ring', text: badge24(`${displayName} ${ackOutcome.result}`) });
-      node.error(`mavlink-command: ${displayName} ${ackOutcome.result}`, msg);
       emitStatus(rec, send, false);
-      done && done();
+      failDone(`${displayName} ${ackOutcome.result}`);
     }
 
     // Wrap the async handler so any throw or rejection becomes a terminal
-    // status record on output 1 plus done(err), never an unhandled promise
-    // rejection. Node-RED does not await async input handlers, so an uncaught
-    // rejection would otherwise crash the process or silently drop the flow.
+    // status record on output 1 and one Catch-compatible error report.
+    // Node-RED does not await async input handlers, so an uncaught rejection
+    // would otherwise crash the process or silently drop the flow.
     node.on('input', (msg, send, done) => {
       Promise.resolve()
         .then(() => handleInput(msg, send, done))
@@ -595,8 +574,7 @@ module.exports = function registerMavlinkCommand(RED) {
           } catch {
             /* send may be unavailable if the runtime already tore down */
           }
-          node.error(err, msg);
-          if (done) done(err);
+          reportDoneError(node, err, msg, done);
         });
     });
 

@@ -4,11 +4,10 @@
  * Tests for lib/delivery — the shared chain-model helpers (DESIGN.md §9).
  *
  * Coverage:
- *   - isStatusRecord: marker detection, false positives, non-objects
- *   - makeStatusRecord: marker present, fields preserved, marker not overridable
+ *   - makeStatusRecord: plain object shape and field preservation
  *   - shouldSuppress: exact `=== false` semantics
- *   - refuseIfStatus: null for normal msgs, refusal record for status records
  *   - capBadge: length capping, ellipsis, exactly-24 pass-through
+ *   - reportDoneError: one Catch path only (`done(err)` or `node.error`)
  *   - TIER constants: values are stable strings
  */
 
@@ -16,53 +15,21 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  STATUS_RECORD_MARKER,
   TIER,
   BADGE_MAX,
-  isStatusRecord,
   makeStatusRecord,
   shouldSuppress,
-  refuseIfStatus,
   capBadge,
+  reportDoneError,
 } = require('../../lib/delivery');
-
-// ---------------------------------------------------------------------------
-// isStatusRecord
-// ---------------------------------------------------------------------------
-
-test('isStatusRecord: returns false for a plain object without the marker', () => {
-  assert.equal(isStatusRecord({ payload: 'hello' }), false);
-});
-
-test('isStatusRecord: returns false for null', () => {
-  assert.equal(isStatusRecord(null), false);
-});
-
-test('isStatusRecord: returns false for a string', () => {
-  assert.equal(isStatusRecord('some string'), false);
-});
-
-test('isStatusRecord: returns false for a number', () => {
-  assert.equal(isStatusRecord(42), false);
-});
-
-test('isStatusRecord: returns true for an object stamped by makeStatusRecord', () => {
-  const sr = makeStatusRecord({ result: 'sent' });
-  assert.equal(isStatusRecord(sr), true);
-});
-
-test('isStatusRecord: the marker must be exactly true, not truthy', () => {
-  const fake = { [STATUS_RECORD_MARKER]: 1 };
-  assert.equal(isStatusRecord(fake), false);
-});
 
 // ---------------------------------------------------------------------------
 // makeStatusRecord
 // ---------------------------------------------------------------------------
 
-test('makeStatusRecord: stamps the marker', () => {
-  const sr = makeStatusRecord({ result: 'ok' });
-  assert.equal(sr[STATUS_RECORD_MARKER], true);
+test('makeStatusRecord: returns a plain object with the provided fields', () => {
+  const sr = makeStatusRecord({ result: 'ok', reason: 'accepted' });
+  assert.deepEqual(sr, { result: 'ok', reason: 'accepted' });
 });
 
 test('makeStatusRecord: preserves all provided fields', () => {
@@ -72,14 +39,9 @@ test('makeStatusRecord: preserves all provided fields', () => {
   assert.equal(sr.retries, 3);
 });
 
-test('makeStatusRecord: the marker cannot be overridden by a field named the same', () => {
-  // STATUS_RECORD_MARKER is set first; spreading fields after could theoretically
-  // override it if the spread wins. The implementation sets the marker then
-  // spreads fields — so a field with the marker key in `fields` would override
-  // the marker. But the contract only guarantees the marker is present; callers
-  // must not pass conflicting keys. Verify the normal case.
+test('makeStatusRecord: contains only the provided keys', () => {
   const sr = makeStatusRecord({ result: 'ok' });
-  assert.equal(isStatusRecord(sr), true);
+  assert.deepEqual(Object.keys(sr), ['result']);
 });
 
 test('makeStatusRecord: two calls produce independent objects', () => {
@@ -118,35 +80,6 @@ test('shouldSuppress: false for a normal object payload', () => {
   assert.equal(shouldSuppress({ payload: { type: 6 } }), false);
 });
 
-// ---------------------------------------------------------------------------
-// refuseIfStatus
-// ---------------------------------------------------------------------------
-
-test('refuseIfStatus: returns null for a plain message', () => {
-  assert.equal(refuseIfStatus({ payload: { type: 6 } }), null);
-});
-
-test('refuseIfStatus: returns null for an empty object', () => {
-  assert.equal(refuseIfStatus({}), null);
-});
-
-test('refuseIfStatus: returns a status record for a status record input', () => {
-  const input = makeStatusRecord({ result: 'sent' });
-  const refusal = refuseIfStatus(input);
-  assert.ok(refusal !== null, 'should not be null');
-  assert.equal(isStatusRecord(refusal), true, 'refusal must itself be a status record');
-  assert.equal(refusal.result, 'refused');
-  assert.ok(typeof refusal.reason === 'string', 'should carry a reason');
-});
-
-test('refuseIfStatus: returned refusal does not mutate the input', () => {
-  const input = makeStatusRecord({ result: 'sent', data: 'original' });
-  refuseIfStatus(input);
-  assert.equal(input.result, 'sent');
-  assert.equal(input.data, 'original');
-});
-
-// ---------------------------------------------------------------------------
 // capBadge
 // ---------------------------------------------------------------------------
 
@@ -180,6 +113,44 @@ test('capBadge: coerces non-string input via String()', () => {
 });
 
 // ---------------------------------------------------------------------------
+// reportDoneError
+// ---------------------------------------------------------------------------
+
+test('reportDoneError: uses done(err) without also calling node.error', () => {
+  const err = new Error('boom');
+  const msg = { payload: 1 };
+  let doneArg;
+  let nodeErrorCalled = false;
+  const node = {
+    error() {
+      nodeErrorCalled = true;
+    },
+  };
+
+  reportDoneError(node, err, msg, (received) => {
+    doneArg = received;
+  });
+
+  assert.equal(doneArg, err);
+  assert.equal(nodeErrorCalled, false);
+});
+
+test('reportDoneError: falls back to node.error when done is unavailable', () => {
+  const err = new Error('boom');
+  const msg = { payload: 1 };
+  let nodeErrorArgs;
+  const node = {
+    error(...args) {
+      nodeErrorArgs = args;
+    },
+  };
+
+  reportDoneError(node, err, msg);
+
+  assert.deepEqual(nodeErrorArgs, [err, msg]);
+});
+
+// ---------------------------------------------------------------------------
 // TIER constants
 // ---------------------------------------------------------------------------
 
@@ -200,13 +171,8 @@ test('TIER.SEND_AWAIT is the string "sendAwait"', () => {
 });
 
 // ---------------------------------------------------------------------------
-// STATUS_RECORD_MARKER
+// BADGE_MAX
 // ---------------------------------------------------------------------------
-
-test('STATUS_RECORD_MARKER is a non-empty string', () => {
-  assert.equal(typeof STATUS_RECORD_MARKER, 'string');
-  assert.ok(STATUS_RECORD_MARKER.length > 0);
-});
 
 test('BADGE_MAX is 24', () => {
   assert.equal(BADGE_MAX, 24);

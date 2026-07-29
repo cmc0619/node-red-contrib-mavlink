@@ -22,8 +22,7 @@ test('mavlink-move node builds a local-position message and emits status on outp
 
   assert.equal(sent[0].payload.name, 'SET_POSITION_TARGET_LOCAL_NED');
   assert.equal(sent[0].payload.fields.z, -3);
-  assert.equal(sent[1].payload.result, 'succeeded');
-  assert.equal(sent[1].payload._mavlinkStatus, true);
+  assert.equal(sent[1].result, 'succeeded');
 });
 
 test('mavlink-move inherits Vehicle Profile target when config is empty', () => {

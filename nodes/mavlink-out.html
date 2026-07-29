@@ -9,7 +9,7 @@
     ];
 
     RED.nodes.registerType('mavlink-out', {
-      category: 'MAVLink',
+      category: 'mavlink',
       color: '#6ea6d7',
       defaults: {
         name:       { value: '' },
@@ -82,5 +82,5 @@
   </ol>
   <h3>Details</h3>
   <p>Set <code>msg.payload = false</code> to suppress the node silently.</p>
-  <p>If output 1 is wired back to this node's input, a refusal status record is emitted instead of sending.</p>
+  <p>Output 0 continues only on success. Output 1 carries a plain status record on every terminal outcome — there is no miswire refusal if status is wired back into an action input.</p>
 </script>

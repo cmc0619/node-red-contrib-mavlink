@@ -25,20 +25,19 @@
  *   output 0  — continue: the original msg, fired once the message is accepted
  *                into the queue (fire-and-forget — this is not an ACK)
  *   output 1  — status:   a status record on every terminal outcome including
- *                success; also fires when the input is suppressed or refused
+ *                success
  *
- * Suppression and miswire (§9):
+ * Suppression (§9):
  *   `msg.payload === false`   → silent suppress; neither output fires
- *   input is a status record  → refuse; output 1 fires, node.error() is called
  */
 
 const { BAND } = require('../lib/connection');
 const {
   makeStatusRecord,
   shouldSuppress,
-  refuseIfStatus,
   applyActionStatus,
   capBadge,
+  reportDoneError,
 } = require('../lib/delivery');
 
 module.exports = function registerMavlinkOut(RED) {
@@ -62,15 +61,11 @@ module.exports = function registerMavlinkOut(RED) {
 
     node.status({ fill: 'grey', shape: 'ring', text: '' });
 
-    node.on('input', (msg) => {
+    node.on('input', (msg, send, done) => {
+      const emit = send || ((messages) => node.send(messages));
       // §9 suppress: msg.payload === false → silent no-op.
-      if (shouldSuppress(msg)) return;
-
-      // §9 refuse: a status record fed into an action node is a miswire.
-      const refusal = refuseIfStatus(msg);
-      if (refusal) {
-        node.error('mavlink-out: status record received as input — check wiring', msg);
-        node.send([null, refusal]);
+      if (shouldSuppress(msg)) {
+        if (done) done();
         return;
       }
 
@@ -82,8 +77,8 @@ module.exports = function registerMavlinkOut(RED) {
           timestamp: Date.now(),
         });
         applyActionStatus(node, 'error', 'bad payload');
-        node.error('mavlink-out: unrecognised payload shape', msg);
-        node.send([null, sr]);
+        emit([null, sr]);
+        reportDoneError(node, new Error('mavlink-out: unrecognised payload shape'), msg, done);
         return;
       }
 
@@ -93,8 +88,8 @@ module.exports = function registerMavlinkOut(RED) {
 
       // The queue send can throw synchronously — a full Control band, an
       // unknown identity, a disabled connection. Route the failure through a
-      // status record + node.error() so it never escapes as an uncaught throw
-      // (§2) and the chain halts (output 0 stays silent).
+      // status record + the input handler's Catch path so it never escapes as
+      // an uncaught throw (§2) and the chain halts (output 0 stays silent).
       try {
         connectionNode.send(message, { band, target, identityId });
       } catch (err) {
@@ -106,8 +101,8 @@ module.exports = function registerMavlinkOut(RED) {
           timestamp: Date.now(),
         });
         applyActionStatus(node, 'error', capBadge(err.message));
-        node.error(`mavlink-out: ${err.message}`, msg);
-        node.send([null, sr]);
+        emit([null, sr]);
+        reportDoneError(node, new Error(`mavlink-out: ${err.message}`), msg, done);
         return;
       }
 
@@ -118,7 +113,8 @@ module.exports = function registerMavlinkOut(RED) {
         timestamp: Date.now(),
       });
       applyActionStatus(node, 'ok', capBadge(message.name));
-      node.send([msg, sr]);
+      emit([msg, sr]);
+      if (done) done();
     });
 
     node.on('close', (_done) => {

@@ -3,8 +3,7 @@
 /**
  * mavlink-command node tests (DESIGN.md §9). Covers the review findings:
  *   - safety confirmation requires a strict boolean true (not a truthy token)
- *   - the status record is emitted as the top-level message on output 1 so the
- *     shared marker sits where isStatusRecord() looks, making a miswire refuse
+ *   - the status record is emitted as the top-level message on output 1
  *   - the Build tier reports a 'built' status record on output 1
  *   - the async input handler contains throws/rejections as a terminal status
  *     plus done(err), never an unhandled rejection
@@ -15,8 +14,6 @@
 const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-
-const { isStatusRecord } = require('../../lib/command');
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -32,30 +29,7 @@ test('Build tier: output 0 carries the COMMAND_LONG and output 1 a top-level sta
 
   assert.ok(sent, 'outputs fired');
   assert.equal(sent[0].payload.name, 'COMMAND_LONG');
-  assert.ok(isStatusRecord(sent[1]), 'output 1 marker is on the message itself');
   assert.equal(sent[1].result, 'built');
-});
-
-test('Wiring output 1 back into the input is refused as a miswire, not executed', async () => {
-  const RED = redStub({});
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({ mode: 'preset', preset: 'arm', delivery: 'build' });
-
-  // Capture a real output-1 status record from a Build.
-  let first;
-  node.emit('input', { payload: null }, (m) => { first = m; }, () => {});
-  await tick();
-  const statusRecord = first[1];
-  assert.ok(isStatusRecord(statusRecord));
-
-  // Feed that status record straight back in as the input message.
-  let second;
-  node.emit('input', statusRecord, (m) => { second = m; }, () => {});
-  await tick();
-
-  assert.equal(second[0], null, 'output 0 must not fire on a miswire');
-  assert.equal(second[1].result, 'miswire');
 });
 
 test('Safety preset refuses a truthy-but-non-boolean confirmation token', async () => {

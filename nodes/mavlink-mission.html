@@ -191,5 +191,5 @@
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type list is gated by the effective firmware — the Vehicle Profile on Build, the connection's bound profile on wire tiers — because PX4 does not carry fence and rally the same way as ArduPilot.</p>
   <p><b>Upload</b> answers whatever sequence the vehicle requests. A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>.</p>
   <p><b>Clear</b> is destructive and requires confirmation: tick the box or set <code>msg.confirmed = true</code>.</p>
-  <p>Set <code>msg.payload === false</code> to suppress. A status record fed back into the input is refused.</p>
+  <p>Set <code>msg.payload === false</code> to suppress. Status records are plain objects on output 1; they are not refused if wired into another action input — chain control is silence on output 0.</p>
 </script>
