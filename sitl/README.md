@@ -120,14 +120,15 @@ The `nodered` profile uses `network_mode: host` so flows that bind `127.0.0.1:14
 
 ## Measured bring-up
 
-**ArduPilot:** with the gateway fallback, HEARTBEAT sysid **1** arrives on host UDP **14550**
-(`OUT_HOST=host.docker.internal` → container default gateway when `host-gateway`≠bridge GW).
+Entrypoints log `out=udp:<gateway-ip>:…` when `host-gateway` would otherwise point at idle
+`docker0`. On this lab host that selects `172.18.0.1` for `sitl_default`.
 
-**PX4:**
+**PX4:** `docker compose --profile sitl up -d` emits HEARTBEATs with sysids **11–15** on UDP
+**14560** and sysid **21** on **14542** (re-checked after the gateway fallback).
 
-On a host with working Docker, `docker compose --profile sitl up -d` for the PX4
-services was verified to emit HEARTBEATs with sysids **11–15** on UDP **14560** and
-sysid **21** on **14542**. ArduPilot image build is separate (first compile is long).
+**ArduPilot:** image builds locally (`nrc-mavlink-ap-sitl:local`). Telemetry path matches PX4
+once SITL past “Waiting for internal clock bits”; first `sim_vehicle` bring-up can stall there
+on nested Docker — restart the service or check `/tmp/ArduCopter.log` inside the container.
 
 ## CI note
 
