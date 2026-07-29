@@ -10,7 +10,12 @@ cd sitl
 docker compose --profile sitl up -d --build
 ```
 
-Point a host Node-RED (with this package installed) at the ports below, or also start Node-RED in Compose:
+`prepare-logs` creates writable `./logs/<service>/` dirs before vehicles start
+(avoids root-owned bind mounts that block DataFlash / ulogs).
+
+Point a host Node-RED (with this package installed) at the ports below — Connections
+must bind **`0.0.0.0`** (not `127.0.0.1`) so UDP from the Compose bridge reaches them.
+Or also start Node-RED in Compose:
 
 ```bash
 docker compose --profile sitl --profile nodered up -d --build
@@ -28,10 +33,10 @@ but works in restricted VMs).
 
 | Role | Sysids | Node-RED bind → remote | SITL sends telemetry to |
 |------|--------|------------------------|-------------------------|
-| ArduPilot GCS fleet | 1–5 | **14550 → 14551** | host `14550` |
-| PX4 GCS fleet | 11–15 | **14560 → 14561** | host `14560` |
-| AP companion vehicle | 20 | **14540 → 14541** | host `14540` |
-| PX4 companion vehicle | 21 | **14542 → 14543** | host `14542` |
+| ArduPilot GCS fleet | 1–5 | **`0.0.0.0:14550` → `14551`** | host `14550` |
+| PX4 GCS fleet | 11–15 | **`0.0.0.0:14560` → `14561`** | host `14560` |
+| AP companion vehicle | 20 | **`0.0.0.0:14540` → `14541`** | host `14540` |
+| PX4 companion vehicle | 21 | **`0.0.0.0:14542` → `14543`** | host `14542` |
 
 Existing GCS examples expect AP on `14550/14551` and PX4 on `14560/14561`. Companion
 lab flows are `examples/sitl/15-companion-ap.json` and `16-companion-px4.json`.
@@ -105,8 +110,8 @@ docker compose --profile sitl up -d --build ap-1   # one vehicle
 docker compose --profile sitl --profile nodered up -d   # + Node-RED (host network)
 ```
 
-The `nodered` profile uses `network_mode: host` so flows that bind `127.0.0.1:14550`
-(etc.) receive the same UDP the vehicles send to `host.docker.internal`.
+The `nodered` profile uses `network_mode: host` so flows that bind `0.0.0.0:14550`
+(etc.) receive UDP vehicles send to the Compose bridge gateway.
 
 ## Troubleshooting
 

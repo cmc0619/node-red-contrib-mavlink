@@ -4,7 +4,8 @@
 #
 # Compose `extra_hosts: host.docker.internal:host-gateway` often maps to docker0
 # (172.17.0.1) even when the container sits on a user-defined bridge (172.18.x).
-# Prefer the container default gateway in that case.
+# For that name only, prefer the container default gateway when DNS disagrees.
+# Custom OUT_HOST values must resolve; never invent a gateway for a typo.
 
 resolve_out_host_ip() {
   local requested="${1:-host.docker.internal}"
@@ -29,10 +30,6 @@ resolve_out_host_ip() {
   fi
   if [[ -n "${resolved}" ]]; then
     printf '%s\n' "${resolved}"
-    return 0
-  fi
-  if [[ -n "${gw}" ]]; then
-    printf '%s\n' "${gw}"
     return 0
   fi
   printf '\n'

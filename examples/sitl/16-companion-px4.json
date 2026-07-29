@@ -1,217 +1,217 @@
 [
-  {
-    "id": "sitl16-tab",
-    "type": "tab",
-    "label": "SITL 16 Companion PX4",
-    "disabled": false,
-    "info": "Node-RED as onboard companion sharing vehicle sysid 21, compid 191. Lab ports bind 14542\u219214543.",
-    "env": []
-  },
-  {
-    "id": "sitl16-comment",
-    "type": "comment",
-    "z": "sitl16-tab",
-    "name": "Companion SITL",
-    "info": "Companion role: MAV_TYPE_ONBOARD_CONTROLLER. Shares sysid 21 with the SITL vehicle; peer table shows two components. Bind 14542\u219214543. Prefer Docker lab: see sitl/README.md.",
-    "x": 200,
-    "y": 40,
-    "wires": []
-  },
-  {
-    "id": "sitl16-identity",
-    "type": "mavlink-local-identity",
-    "name": "Companion identity",
-    "role": "companion",
-    "sourceSystemId": 21,
-    "sourceComponentId": 191,
-    "heartbeatType": "MAV_TYPE_ONBOARD_CONTROLLER",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
-  },
-  {
-    "id": "sitl16-vehicle",
-    "type": "mavlink-vehicle",
-    "name": "Vehicle profile",
-    "vehicleFamily": "copter",
-    "firmware": "px4",
-    "dialect": "common",
-    "dialectSource": "bundled",
-    "defaultTargetSystem": 21,
-    "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
-  },
-  {
-    "id": "sitl16-connection",
-    "type": "mavlink-connection",
-    "name": "UDP companion 21",
-    "mode": "udp",
-    "bindHost": "127.0.0.1",
-    "bindPort": 14542,
-    "remoteHost": "127.0.0.1",
-    "remotePort": 14543,
-    "broadcast": false,
-    "vehicle": "sitl16-vehicle",
-    "localIdentity": "sitl16-identity",
-    "additionalIdentities": [],
-    "signOutbound": false,
-    "requireSigned": false,
-    "acceptInvalid": false,
-    "linkId": 0,
-    "heartbeatInterval": 1000,
-    "staleMs": "",
-    "expireMs": "",
-    "disabled": false
-  },
-  {
-    "id": "sitl16-inject-nvf",
-    "type": "inject",
-    "z": "sitl16-tab",
-    "name": "Send one NVF now",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 150,
-    "y": 160,
-    "wires": [
-      [
-        "sitl16-build-nvf"
-      ]
-    ]
-  },
-  {
-    "id": "sitl16-build-nvf",
-    "type": "mavlink-build",
-    "z": "sitl16-tab",
-    "name": "Metric NVF (send)",
-    "vehicle": "sitl16-vehicle",
-    "connection": "sitl16-connection",
-    "messageName": "NAMED_VALUE_FLOAT",
-    "fields": "{\"time_boot_ms\":0,\"name\":\"metric\",\"value\":42}",
-    "tier": "send",
-    "band": "2",
-    "repeatMs": 1000,
-    "x": 360,
-    "y": 160,
-    "wires": [
-      [
-        "sitl16-debug-nvf"
-      ],
-      [
-        "sitl16-debug-nvf-status"
-      ]
-    ]
-  },
-  {
-    "id": "sitl16-in-hb",
-    "type": "mavlink-in",
-    "z": "sitl16-tab",
-    "name": "HEARTBEAT",
-    "connection": "sitl16-connection",
-    "message": "HEARTBEAT",
-    "sysid": "",
-    "compid": "",
-    "changedOnly": false,
-    "rateLimit": 0,
-    "x": 360,
-    "y": 280,
-    "wires": [
-      [
-        "sitl16-debug-hb"
-      ]
-    ]
-  },
-  {
-    "id": "sitl16-state",
-    "type": "mavlink-state",
-    "z": "sitl16-tab",
-    "name": "Peer events",
-    "connection": "sitl16-connection",
-    "mode": "feed",
-    "events": "peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,multi-endpoint,profile-mismatch,statustext",
-    "targetSystem": "",
-    "targetComponent": "",
-    "x": 360,
-    "y": 400,
-    "wires": [
-      [
-        "sitl16-debug-state"
-      ]
-    ]
-  },
-  {
-    "id": "sitl16-debug-nvf-status",
-    "type": "debug",
-    "z": "sitl16-tab",
-    "name": "nvf status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 360,
-    "y": 220,
-    "wires": []
-  },
-  {
-    "id": "sitl16-debug-nvf",
-    "type": "debug",
-    "z": "sitl16-tab",
-    "name": "nvf sent",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 580,
-    "y": 160,
-    "wires": []
-  },
-  {
-    "id": "sitl16-debug-hb",
-    "type": "debug",
-    "z": "sitl16-tab",
-    "name": "heartbeat",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 580,
-    "y": 280,
-    "wires": []
-  },
-  {
-    "id": "sitl16-debug-state",
-    "type": "debug",
-    "z": "sitl16-tab",
-    "name": "state events",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 580,
-    "y": 400,
-    "wires": []
-  }
+    {
+        "id": "sitl16-tab",
+        "type": "tab",
+        "label": "SITL 16 Companion PX4",
+        "disabled": false,
+        "info": "Node-RED as onboard companion sharing vehicle sysid 21, compid 191. Lab ports bind 14542\u219214543.",
+        "env": []
+    },
+    {
+        "id": "sitl16-comment",
+        "type": "comment",
+        "z": "sitl16-tab",
+        "name": "Companion SITL",
+        "info": "Companion role: MAV_TYPE_ONBOARD_CONTROLLER. Shares sysid 21 with the SITL vehicle; peer table shows two components. Bind 14542\u219214543. Prefer Docker lab: see sitl/README.md.",
+        "x": 200,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "sitl16-identity",
+        "type": "mavlink-local-identity",
+        "name": "Companion identity",
+        "role": "companion",
+        "sourceSystemId": 21,
+        "sourceComponentId": 191,
+        "heartbeatType": "MAV_TYPE_ONBOARD_CONTROLLER",
+        "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    },
+    {
+        "id": "sitl16-vehicle",
+        "type": "mavlink-vehicle",
+        "name": "Vehicle profile",
+        "vehicleFamily": "copter",
+        "firmware": "px4",
+        "dialect": "common",
+        "dialectSource": "bundled",
+        "defaultTargetSystem": 21,
+        "defaultTargetComponent": 1,
+        "paramDefsUrl": ""
+    },
+    {
+        "id": "sitl16-connection",
+        "type": "mavlink-connection",
+        "name": "UDP companion 21",
+        "mode": "udp",
+        "bindHost": "0.0.0.0",
+        "bindPort": 14542,
+        "remoteHost": "127.0.0.1",
+        "remotePort": 14543,
+        "broadcast": false,
+        "vehicle": "sitl16-vehicle",
+        "localIdentity": "sitl16-identity",
+        "additionalIdentities": [],
+        "signOutbound": false,
+        "requireSigned": false,
+        "acceptInvalid": false,
+        "linkId": 0,
+        "heartbeatInterval": 1000,
+        "staleMs": "",
+        "expireMs": "",
+        "disabled": false
+    },
+    {
+        "id": "sitl16-inject-nvf",
+        "type": "inject",
+        "z": "sitl16-tab",
+        "name": "Send one NVF now",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 160,
+        "wires": [
+            [
+                "sitl16-build-nvf"
+            ]
+        ]
+    },
+    {
+        "id": "sitl16-build-nvf",
+        "type": "mavlink-build",
+        "z": "sitl16-tab",
+        "name": "Metric NVF (send)",
+        "vehicle": "sitl16-vehicle",
+        "connection": "sitl16-connection",
+        "messageName": "NAMED_VALUE_FLOAT",
+        "fields": "{\"time_boot_ms\":0,\"name\":\"metric\",\"value\":42}",
+        "tier": "send",
+        "band": "2",
+        "repeatMs": 1000,
+        "x": 360,
+        "y": 160,
+        "wires": [
+            [
+                "sitl16-debug-nvf"
+            ],
+            [
+                "sitl16-debug-nvf-status"
+            ]
+        ]
+    },
+    {
+        "id": "sitl16-in-hb",
+        "type": "mavlink-in",
+        "z": "sitl16-tab",
+        "name": "HEARTBEAT",
+        "connection": "sitl16-connection",
+        "message": "HEARTBEAT",
+        "sysid": "",
+        "compid": "",
+        "changedOnly": false,
+        "rateLimit": 0,
+        "x": 360,
+        "y": 280,
+        "wires": [
+            [
+                "sitl16-debug-hb"
+            ]
+        ]
+    },
+    {
+        "id": "sitl16-state",
+        "type": "mavlink-state",
+        "z": "sitl16-tab",
+        "name": "Peer events",
+        "connection": "sitl16-connection",
+        "mode": "feed",
+        "events": "peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,multi-endpoint,profile-mismatch,statustext",
+        "targetSystem": "",
+        "targetComponent": "",
+        "x": 360,
+        "y": 400,
+        "wires": [
+            [
+                "sitl16-debug-state"
+            ]
+        ]
+    },
+    {
+        "id": "sitl16-debug-nvf-status",
+        "type": "debug",
+        "z": "sitl16-tab",
+        "name": "nvf status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 360,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "sitl16-debug-nvf",
+        "type": "debug",
+        "z": "sitl16-tab",
+        "name": "nvf sent",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 580,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "sitl16-debug-hb",
+        "type": "debug",
+        "z": "sitl16-tab",
+        "name": "heartbeat",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 580,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "sitl16-debug-state",
+        "type": "debug",
+        "z": "sitl16-tab",
+        "name": "state events",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 580,
+        "y": 400,
+        "wires": []
+    }
 ]

@@ -25,10 +25,12 @@ Compose profiles:
 
 | Profile | Default | Contents |
 |---------|---------|----------|
-| `sitl` | yes | 12 vehicle services |
-| `nodered` | no | Node-RED with this package installed + lab flows preloaded |
+| `sitl` | no — pass `--profile sitl` | 12 vehicle services |
+| `nodered` | no — pass `--profile nodered` | Node-RED with this package installed + lab flows preloaded |
 
-Operators may run Node-RED on the host against published localhost ports (normal path for existing examples), or opt into the `nodered` profile for an all-in-one lab.
+Start vehicles with `docker compose --profile sitl up`. Operators may run Node-RED on the
+host against the published ports (normal path for existing examples), or also pass
+`--profile nodered` for an all-in-one lab.
 
 ```text
                     ┌─────────────────────────────────────┐

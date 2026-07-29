@@ -14,6 +14,15 @@ function run(args) {
   return spawnSync('bash', [SCRIPT, ...args], { encoding: 'utf8' });
 }
 
+test('check-logs rejects missing --logs-root / --expect-armed operands', () => {
+  let r = run(['--logs-root']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /--logs-root requires/);
+  r = run(['--logs-root', '/tmp', '--expect-armed']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /--expect-armed requires/);
+});
+
 test('check-logs fails when armed service has no flight log', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sitl-logs-'));
   fs.mkdirSync(path.join(root, 'ap-1'));

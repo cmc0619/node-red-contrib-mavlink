@@ -1,151 +1,151 @@
 [
-  {
-    "id": "sitl02-tab",
-    "type": "tab",
-    "label": "SITL 02 Completion timeout",
-    "disabled": false,
-    "info": "Deliberately provoke completion-tier timeout: takeoff without GUIDED/arm prep so the vehicle may accept yet never reach altitude. Output 0 stays silent; status names the timeout.",
-    "env": []
-  },
-  {
-    "id": "sitl02-comment",
-    "type": "comment",
-    "z": "sitl02-tab",
-    "name": "Takeoff complete with short timeout (no mode/arm prep)",
-    "info": "Fire takeoff with delivery=complete and completionTimeout=8000 without first entering GUIDED or arming. ArduPilot may ACK the command yet never climb; the node should end on the timeout branch.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551. Do not arm or set GUIDED before pressing inject — that is the point.",
-    "x": 250,
-    "y": 40,
-    "wires": []
-  },
-  {
-    "id": "sitl02-identity",
-    "type": "mavlink-local-identity",
-    "name": "GCS identity",
-    "role": "gcs",
-    "sourceSystemId": 255,
-    "sourceComponentId": 190,
-    "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
-  },
-  {
-    "id": "sitl02-vehicle",
-    "type": "mavlink-vehicle",
-    "name": "ArduCopter sysid 1",
-    "vehicleFamily": "copter",
-    "firmware": "ardupilot",
-    "dialect": "ardupilotmega",
-    "dialectSource": "bundled",
-    "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
-  },
-  {
-    "id": "sitl02-connection",
-    "type": "mavlink-connection",
-    "name": "UDP ArduPilot SITL",
-    "mode": "udp",
-    "bindHost": "127.0.0.1",
-    "bindPort": 14550,
-    "remoteHost": "127.0.0.1",
-    "remotePort": 14551,
-    "broadcast": false,
-    "vehicle": "sitl02-vehicle",
-    "localIdentity": "sitl02-identity",
-    "additionalIdentities": [],
-    "signOutbound": false,
-    "requireSigned": false,
-    "acceptInvalid": false,
-    "linkId": 0,
-    "heartbeatInterval": 1000,
-    "staleMs": "",
-    "expireMs": "",
-    "disabled": false
-  },
-  {
-    "id": "sitl02-inject",
-    "type": "inject",
-    "z": "sitl02-tab",
-    "name": "Takeoff (no prep)",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 150,
-    "y": 160,
-    "wires": [
-      [
-        "sitl02-takeoff"
-      ]
-    ]
-  },
-  {
-    "id": "sitl02-takeoff",
-    "type": "mavlink-command",
-    "z": "sitl02-tab",
-    "name": "Takeoff 10 m (timeout)",
-    "mode": "preset",
-    "preset": "takeoff",
-    "advancedCommand": "",
-    "delivery": "complete",
-    "connection": "sitl02-connection",
-    "targetSysid": "",
-    "targetCompid": "",
-    "timeout": "10000",
-    "maxRetries": "0",
-    "unconfirmedContinue": false,
-    "completionTimeout": "8000",
-    "params": "{\"7\":10}",
-    "x": 380,
-    "y": 160,
-    "wires": [
-      [
-        "sitl02-done"
-      ],
-      [
-        "sitl02-status"
-      ]
-    ]
-  },
-  {
-    "id": "sitl02-done",
-    "type": "debug",
-    "z": "sitl02-tab",
-    "name": "airborne (unexpected)",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 610,
-    "y": 140,
-    "wires": []
-  },
-  {
-    "id": "sitl02-status",
-    "type": "debug",
-    "z": "sitl02-tab",
-    "name": "takeoff status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 610,
-    "y": 200,
-    "wires": []
-  }
+    {
+        "id": "sitl02-tab",
+        "type": "tab",
+        "label": "SITL 02 Completion timeout",
+        "disabled": false,
+        "info": "Deliberately provoke completion-tier timeout: takeoff without GUIDED/arm prep so the vehicle may accept yet never reach altitude. Output 0 stays silent; status names the timeout.",
+        "env": []
+    },
+    {
+        "id": "sitl02-comment",
+        "type": "comment",
+        "z": "sitl02-tab",
+        "name": "Takeoff complete with short timeout (no mode/arm prep)",
+        "info": "Fire takeoff with delivery=complete and completionTimeout=8000 without first entering GUIDED or arming. ArduPilot may ACK the command yet never climb; the node should end on the timeout branch.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. Do not arm or set GUIDED before pressing inject \u2014 that is the point.",
+        "x": 250,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "sitl02-identity",
+        "type": "mavlink-local-identity",
+        "name": "GCS identity",
+        "role": "gcs",
+        "sourceSystemId": 255,
+        "sourceComponentId": 190,
+        "heartbeatType": "MAV_TYPE_GCS",
+        "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    },
+    {
+        "id": "sitl02-vehicle",
+        "type": "mavlink-vehicle",
+        "name": "ArduCopter sysid 1",
+        "vehicleFamily": "copter",
+        "firmware": "ardupilot",
+        "dialect": "ardupilotmega",
+        "dialectSource": "bundled",
+        "defaultTargetSystem": 1,
+        "defaultTargetComponent": 1,
+        "paramDefsUrl": ""
+    },
+    {
+        "id": "sitl02-connection",
+        "type": "mavlink-connection",
+        "name": "UDP ArduPilot SITL",
+        "mode": "udp",
+        "bindHost": "0.0.0.0",
+        "bindPort": 14550,
+        "remoteHost": "127.0.0.1",
+        "remotePort": 14551,
+        "broadcast": false,
+        "vehicle": "sitl02-vehicle",
+        "localIdentity": "sitl02-identity",
+        "additionalIdentities": [],
+        "signOutbound": false,
+        "requireSigned": false,
+        "acceptInvalid": false,
+        "linkId": 0,
+        "heartbeatInterval": 1000,
+        "staleMs": "",
+        "expireMs": "",
+        "disabled": false
+    },
+    {
+        "id": "sitl02-inject",
+        "type": "inject",
+        "z": "sitl02-tab",
+        "name": "Takeoff (no prep)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 160,
+        "wires": [
+            [
+                "sitl02-takeoff"
+            ]
+        ]
+    },
+    {
+        "id": "sitl02-takeoff",
+        "type": "mavlink-command",
+        "z": "sitl02-tab",
+        "name": "Takeoff 10 m (timeout)",
+        "mode": "preset",
+        "preset": "takeoff",
+        "advancedCommand": "",
+        "delivery": "complete",
+        "connection": "sitl02-connection",
+        "targetSysid": "",
+        "targetCompid": "",
+        "timeout": "10000",
+        "maxRetries": "0",
+        "unconfirmedContinue": false,
+        "completionTimeout": "8000",
+        "params": "{\"7\":10}",
+        "x": 380,
+        "y": 160,
+        "wires": [
+            [
+                "sitl02-done"
+            ],
+            [
+                "sitl02-status"
+            ]
+        ]
+    },
+    {
+        "id": "sitl02-done",
+        "type": "debug",
+        "z": "sitl02-tab",
+        "name": "airborne (unexpected)",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 610,
+        "y": 140,
+        "wires": []
+    },
+    {
+        "id": "sitl02-status",
+        "type": "debug",
+        "z": "sitl02-tab",
+        "name": "takeoff status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 610,
+        "y": 200,
+        "wires": []
+    }
 ]

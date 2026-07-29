@@ -26,17 +26,21 @@ fi
 mkdir -p /logs
 cd /home/sitl/ardupilot
 
-# Persist DataFlash into the Compose bind mount. sim_vehicle / SITL write under
-# ./logs relative to the tree (and sometimes under the aircraft dir after -w).
-rm -rf /home/sitl/ardupilot/logs
+# Persist DataFlash into the Compose bind mount. sim_vehicle -w writes under the
+# aircraft directory's logs/ as well as (sometimes) the tree-level logs/.
+AIRCRAFT="lab-ap-${SYSID}"
+mkdir -p "/home/sitl/ardupilot/${AIRCRAFT}"
+rm -rf /home/sitl/ardupilot/logs "/home/sitl/ardupilot/${AIRCRAFT}/logs"
 ln -sfn /logs /home/sitl/ardupilot/logs
+ln -sfn /logs "/home/sitl/ardupilot/${AIRCRAFT}/logs"
 export HOME="/home/sitl"
 
-echo "entrypoint-ap: sysid=${SYSID} instance=${INSTANCE} out=udp:${OUT_IP}:${OUT_PORT} (from ${OUT_HOST}) home=${LAT},${LON},${HOME_ALT}"
+echo "entrypoint-ap: sysid=${SYSID} instance=${INSTANCE} out=udp:${OUT_IP}:${OUT_PORT} (from ${OUT_HOST}) home=${LAT},${LON},${HOME_ALT} aircraft=${AIRCRAFT}"
 
 exec sim_vehicle.py -v ArduCopter \
   -I "${INSTANCE}" \
   --sysid "${SYSID}" \
+  --aircraft "${AIRCRAFT}" \
   --custom-location="${LAT},${LON},${HOME_ALT},270" \
   --add-param-file=/params/ap-logging.parm \
   --out="udp:${OUT_IP}:${OUT_PORT}" \

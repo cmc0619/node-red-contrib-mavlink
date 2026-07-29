@@ -4,7 +4,7 @@
 
 **Goal:** Ship a Compose lab with 5 ArduPilot + 5 PX4 + 2 companion SITL containers, arm-only flight logs, example port retargets, companion flows, and a short operator `sitl/README.md`.
 
-**Architecture:** One container per vehicle under `sitl/`. Vehicles UDP to the host via `host.docker.internal`. Compose profile `sitl` is default; optional `nodered` profile adds Node-RED. Examples use AP `14550/14551` and PX4 `14560/14561`.
+**Architecture:** One container per vehicle under `sitl/`. Vehicles UDP to the host via `host.docker.internal`. Start with `docker compose --profile sitl up` (optional `--profile nodered` adds Node-RED). Examples use AP `14550/14551` and PX4 `14560/14561`.
 
 **Tech Stack:** Docker Compose v2, ArduPilot SITL (`sim_vehicle.py` / MAVProxy), PX4 SITL, Node-RED (optional profile), bash for `check-logs.sh`
 

@@ -14,10 +14,18 @@ NEWER_MARKER=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --logs-root)
+      if [[ $# -lt 2 || -z "${2}" ]]; then
+        echo "check-logs: --logs-root requires a directory" >&2
+        exit 2
+      fi
       ROOT="$2"
       shift 2
       ;;
     --expect-armed)
+      if [[ $# -lt 2 || -z "${2}" ]]; then
+        echo "check-logs: --expect-armed requires a service name" >&2
+        exit 2
+      fi
       EXPECT+=("$2")
       shift 2
       ;;
@@ -43,6 +51,11 @@ fi
 
 fail=0
 for name in "${EXPECT[@]}"; do
+  if [[ -z "${name}" ]]; then
+    echo "check-logs: empty service name" >&2
+    fail=1
+    continue
+  fi
   dir="$ROOT/$name"
   if [[ ! -d "$dir" ]]; then
     echo "check-logs: missing directory $dir" >&2

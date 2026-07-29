@@ -1723,7 +1723,6 @@ named-firmware step remains required when capabilities are absent.
 *Check:* `node --test test/param/param.test.js test/addressing/resolve.test.js` — look for
 `resolveParamEncoding` / unresolved / firstDefined firmware tests.
 
-<<<<<<< HEAD
 **Target resolution is once; builders do not re-default; no hardcoded final `1`.**
 *Wrong belief:* Move/Param/Payload need local (or shared) `normalizeTarget`; runtime must
 re-parse uint8 ids; and when every field is blank `resolveActionTarget` invents `{1,1}`.
@@ -1746,17 +1745,6 @@ null-guards. Do not reintroduce target→`1` fallbacks in builders or stream-sto
 companion derivation in `lib/addressing/resolve.js` should remain; `node --test
 test/addressing/resolve.test.js test/move/move.test.js`.
 
-=======
-**Target resolution is once; builders do not re-default.**
-*Wrong belief:* Move/Param/Payload need local (or shared) `normalizeTarget`, and runtime
-must re-parse sysid/compid with `parseUint8` / `parseTargetUint8` / `parseIdentityUint8`.
-*Fact:* `resolveActionTarget` is the only defaulting path (→ 1). Builders use
-`input.target` directly. Range checks are `RED.mavlink.validateUint8` in the editor.
-Flow `msg` is programmer-trusted.
-*Check:* `node --test test/addressing/resolve.test.js test/move/move.test.js
-test/param/param.test.js`; no `normalizeTarget` / `parseUint8` under `lib/` or `nodes/`.
-
->>>>>>> f1acf34 (fix(sitl): fail loudly when PX4 host or vendor files missing)
 **PX4 example GCS bind is 14560, not 14555.**
 *Wrong belief:* dual-stack examples used bind `14555` as a neutral gap port between ArduPilot
 instance 0 (`14550/14551`) and instance 1 (`14560`).
@@ -1764,14 +1752,3 @@ instance 0 (`14550/14551`) and instance 1 (`14560`).
 confuses operators. Lab and examples use PX4 GCS **14560→14561**, companions **14540/14542**.
 Operator guide: [`sitl/README.md`](sitl/README.md).
 *Check:* `rg '14555' examples` is empty; `examples/sitl/10-dual-stack-ten.json` bindPort 14560.
-
-**Compose `host-gateway` is not always the bridge the container uses.**
-*Wrong belief:* `extra_hosts: host.docker.internal:host-gateway` always yields an address that
-reaches host UDP listeners from a Compose service.
-*Fact:* On nested/Docker-Desktop-like hosts, `host-gateway` can resolve to idle `docker0`
-(`172.17.0.1`) while the service attaches to `sitl_default` (`172.18.0.1`). Vehicles then send
-telemetry into a black hole. Lab entrypoints resolve `OUT_HOST` and, for
-`host.docker.internal`, prefer the container default gateway from `/proc/net/route` when it
-differs from `getent`.
-*Check:* `sitl/scripts/resolve-out-host.sh`; `docker compose … up -d ap-1` then HEARTBEAT on
-host UDP 14550.

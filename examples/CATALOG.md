@@ -428,7 +428,7 @@ instances it needs. Filenames restart at `01` inside the folder.
 - **Nodes:** config triplet (ArduPilot sysid 1), `command` arm(confirm)→takeoff(complete),
   `inject`, `debug`.
 - **Config/launch:** bind `14550`→`14551`; `completionTimeout ≥ 30000`.
-  `sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14551`.
+  `sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550`.
 
 ### sitl/02 — Completion timeout: accepts but never climbs
 
@@ -584,7 +584,7 @@ instances it needs. Filenames restart at `01` inside the folder.
   one connection, showing target-by-sysid routing on a shared link.
 - **Nodes:** config triplet, `command` arm + advanced `set_message_interval`, `mission`
   upload/download to sysid 2, `inject`, `debug`.
-- **Config/launch:** two ArduCopter instances (sysid 1, 2) both `--out=udp:127.0.0.1:14551`.
+- **Config/launch:** two ArduCopter instances (sysid 1, 2) both `--out=udp:127.0.0.1:14550`.
 
 ---
 

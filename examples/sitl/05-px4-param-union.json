@@ -1,192 +1,192 @@
 [
-  {
-    "id": "sitl05-tab",
-    "type": "tab",
-    "label": "SITL 05 PX4 param union",
-    "disabled": false,
-    "info": "Set an integer PX4 parameter and read it back to verify the int/float union survives \u2014 observable only against real PX4 firmware.",
-    "env": []
-  },
-  {
-    "id": "sitl05-comment",
-    "type": "comment",
-    "z": "sitl05-tab",
-    "name": "PX4 INT32 param set then read (union, not float cast)",
-    "info": "Sets COM_RC_IN_MODE as MAV_PARAM_TYPE_INT32 then reads it back. The echo integer must match exactly \u2014 a float-cast neighbour value means the union was mishandled.\n\nLaunch PX4 SITL (sysid 11; ports version-specific):\n  make px4_sitl gazebo\n  # export MAV_SYS_ID=11; point Connection remote at your PX4 GCS port\n\nConnection: bind 127.0.0.1:14560, remote 127.0.0.1:14561.",
-    "x": 260,
-    "y": 40,
-    "wires": []
-  },
-  {
-    "id": "sitl05-identity",
-    "type": "mavlink-local-identity",
-    "name": "GCS identity",
-    "role": "gcs",
-    "sourceSystemId": 255,
-    "sourceComponentId": 190,
-    "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
-  },
-  {
-    "id": "sitl05-vehicle",
-    "type": "mavlink-vehicle",
-    "name": "PX4 sysid 11",
-    "vehicleFamily": "copter",
-    "firmware": "px4",
-    "dialect": "common",
-    "dialectSource": "bundled",
-    "defaultTargetSystem": 11,
-    "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
-  },
-  {
-    "id": "sitl05-connection",
-    "type": "mavlink-connection",
-    "name": "UDP PX4 SITL",
-    "mode": "udp",
-    "bindHost": "127.0.0.1",
-    "bindPort": 14560,
-    "remoteHost": "127.0.0.1",
-    "remotePort": 14561,
-    "broadcast": false,
-    "vehicle": "sitl05-vehicle",
-    "localIdentity": "sitl05-identity",
-    "additionalIdentities": [],
-    "signOutbound": false,
-    "requireSigned": false,
-    "acceptInvalid": false,
-    "linkId": 0,
-    "heartbeatInterval": 1000,
-    "staleMs": "",
-    "expireMs": "",
-    "disabled": false
-  },
-  {
-    "id": "sitl05-inject",
-    "type": "inject",
-    "z": "sitl05-tab",
-    "name": "Set then read",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 130,
-    "y": 160,
-    "wires": [
-      [
-        "sitl05-set"
-      ]
-    ]
-  },
-  {
-    "id": "sitl05-set",
-    "type": "mavlink-param",
-    "z": "sitl05-tab",
-    "name": "Set COM_RC_IN_MODE=4",
-    "connection": "sitl05-connection",
-    "delivery": "confirm",
-    "action": "set",
-    "firmware": "px4",
-    "targetSystem": 11,
-    "targetComponent": 1,
-    "paramId": "COM_RC_IN_MODE",
-    "paramIndex": -1,
-    "value": "4",
-    "paramType": "MAV_PARAM_TYPE_INT32",
-    "x": 350,
-    "y": 160,
-    "wires": [
-      [
-        "sitl05-read"
-      ],
-      [
-        "sitl05-set-status"
-      ]
-    ]
-  },
-  {
-    "id": "sitl05-read",
-    "type": "mavlink-param",
-    "z": "sitl05-tab",
-    "name": "Read COM_RC_IN_MODE",
-    "connection": "sitl05-connection",
-    "delivery": "send",
-    "action": "read",
-    "firmware": "px4",
-    "targetSystem": 11,
-    "targetComponent": 1,
-    "paramId": "COM_RC_IN_MODE",
-    "paramIndex": -1,
-    "value": "",
-    "paramType": "MAV_PARAM_TYPE_INT32",
-    "x": 580,
-    "y": 160,
-    "wires": [
-      [
-        "sitl05-read-done"
-      ],
-      [
-        "sitl05-read-status"
-      ]
-    ]
-  },
-  {
-    "id": "sitl05-set-status",
-    "type": "debug",
-    "z": "sitl05-tab",
-    "name": "set status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 350,
-    "y": 240,
-    "wires": []
-  },
-  {
-    "id": "sitl05-read-done",
-    "type": "debug",
-    "z": "sitl05-tab",
-    "name": "read value",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "payload",
-    "targetType": "msg",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 780,
-    "y": 140,
-    "wires": []
-  },
-  {
-    "id": "sitl05-read-status",
-    "type": "debug",
-    "z": "sitl05-tab",
-    "name": "read status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 780,
-    "y": 200,
-    "wires": []
-  }
+    {
+        "id": "sitl05-tab",
+        "type": "tab",
+        "label": "SITL 05 PX4 param union",
+        "disabled": false,
+        "info": "Set an integer PX4 parameter and read it back to verify the int/float union survives \u2014 observable only against real PX4 firmware.",
+        "env": []
+    },
+    {
+        "id": "sitl05-comment",
+        "type": "comment",
+        "z": "sitl05-tab",
+        "name": "PX4 INT32 param set then read (union, not float cast)",
+        "info": "Sets COM_RC_IN_MODE as MAV_PARAM_TYPE_INT32 then reads it back. The echo integer must match exactly \u2014 a float-cast neighbour value means the union was mishandled.\n\nLaunch PX4 SITL (sysid 11; ports version-specific):\n  make px4_sitl gazebo\n  # export MAV_SYS_ID=11; point Connection remote at your PX4 GCS port\n\nConnection: bind 0.0.0.0:14560, remote 127.0.0.1:14561.",
+        "x": 260,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "sitl05-identity",
+        "type": "mavlink-local-identity",
+        "name": "GCS identity",
+        "role": "gcs",
+        "sourceSystemId": 255,
+        "sourceComponentId": 190,
+        "heartbeatType": "MAV_TYPE_GCS",
+        "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    },
+    {
+        "id": "sitl05-vehicle",
+        "type": "mavlink-vehicle",
+        "name": "PX4 sysid 11",
+        "vehicleFamily": "copter",
+        "firmware": "px4",
+        "dialect": "common",
+        "dialectSource": "bundled",
+        "defaultTargetSystem": 11,
+        "defaultTargetComponent": 1,
+        "paramDefsUrl": ""
+    },
+    {
+        "id": "sitl05-connection",
+        "type": "mavlink-connection",
+        "name": "UDP PX4 SITL",
+        "mode": "udp",
+        "bindHost": "0.0.0.0",
+        "bindPort": 14560,
+        "remoteHost": "127.0.0.1",
+        "remotePort": 14561,
+        "broadcast": false,
+        "vehicle": "sitl05-vehicle",
+        "localIdentity": "sitl05-identity",
+        "additionalIdentities": [],
+        "signOutbound": false,
+        "requireSigned": false,
+        "acceptInvalid": false,
+        "linkId": 0,
+        "heartbeatInterval": 1000,
+        "staleMs": "",
+        "expireMs": "",
+        "disabled": false
+    },
+    {
+        "id": "sitl05-inject",
+        "type": "inject",
+        "z": "sitl05-tab",
+        "name": "Set then read",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 160,
+        "wires": [
+            [
+                "sitl05-set"
+            ]
+        ]
+    },
+    {
+        "id": "sitl05-set",
+        "type": "mavlink-param",
+        "z": "sitl05-tab",
+        "name": "Set COM_RC_IN_MODE=4",
+        "connection": "sitl05-connection",
+        "delivery": "confirm",
+        "action": "set",
+        "firmware": "px4",
+        "targetSystem": 11,
+        "targetComponent": 1,
+        "paramId": "COM_RC_IN_MODE",
+        "paramIndex": -1,
+        "value": "4",
+        "paramType": "MAV_PARAM_TYPE_INT32",
+        "x": 350,
+        "y": 160,
+        "wires": [
+            [
+                "sitl05-read"
+            ],
+            [
+                "sitl05-set-status"
+            ]
+        ]
+    },
+    {
+        "id": "sitl05-read",
+        "type": "mavlink-param",
+        "z": "sitl05-tab",
+        "name": "Read COM_RC_IN_MODE",
+        "connection": "sitl05-connection",
+        "delivery": "send",
+        "action": "read",
+        "firmware": "px4",
+        "targetSystem": 11,
+        "targetComponent": 1,
+        "paramId": "COM_RC_IN_MODE",
+        "paramIndex": -1,
+        "value": "",
+        "paramType": "MAV_PARAM_TYPE_INT32",
+        "x": 580,
+        "y": 160,
+        "wires": [
+            [
+                "sitl05-read-done"
+            ],
+            [
+                "sitl05-read-status"
+            ]
+        ]
+    },
+    {
+        "id": "sitl05-set-status",
+        "type": "debug",
+        "z": "sitl05-tab",
+        "name": "set status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 350,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "sitl05-read-done",
+        "type": "debug",
+        "z": "sitl05-tab",
+        "name": "read value",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 780,
+        "y": 140,
+        "wires": []
+    },
+    {
+        "id": "sitl05-read-status",
+        "type": "debug",
+        "z": "sitl05-tab",
+        "name": "read status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 780,
+        "y": 200,
+        "wires": []
+    }
 ]

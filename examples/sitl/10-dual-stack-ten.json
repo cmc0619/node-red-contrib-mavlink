@@ -1,335 +1,335 @@
 [
-  {
-    "id": "sitl10-tab",
-    "type": "tab",
-    "label": "SITL 10 Dual-stack \u00d710",
-    "disabled": false,
-    "info": "Both stacks live: five ArduPilot (sysids 1\u20135) + five PX4 (11\u201315). State feed shows all ten peers; broadcast arm per connection (broadcast is single-stack).",
-    "env": []
-  },
-  {
-    "id": "sitl10-comment",
-    "type": "comment",
-    "z": "sitl10-tab",
-    "name": "Ten-vehicle rig \u2014 two connections, two broadcast arms",
-    "info": "ArduPilot sysids 1\u20135 on one connection; PX4 sysids 11\u201315 on another. Broadcast arm must be issued per connection \u2014 target_system=0 is single-stack only.\n\nPrefer Docker lab:\n  cd sitl && docker compose --profile sitl up -d --build\n\nManual ArduPilot five (telemetry to bind 14550):\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nArduPilot Connection: bind 127.0.0.1:14550 \u2192 remote 127.0.0.1:14551.\nPX4 Connection: bind 127.0.0.1:14560 \u2192 remote 127.0.0.1:14561.",
-    "x": 300,
-    "y": 40,
-    "wires": []
-  },
-  {
-    "id": "sitl10-identity",
-    "type": "mavlink-local-identity",
-    "name": "GCS identity",
-    "role": "gcs",
-    "sourceSystemId": 255,
-    "sourceComponentId": 190,
-    "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
-  },
-  {
-    "id": "sitl10-vehicle-ap",
-    "type": "mavlink-vehicle",
-    "name": "ArduPilot fleet",
-    "vehicleFamily": "copter",
-    "firmware": "ardupilot",
-    "dialect": "ardupilotmega",
-    "dialectSource": "bundled",
-    "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
-  },
-  {
-    "id": "sitl10-vehicle-px4",
-    "type": "mavlink-vehicle",
-    "name": "PX4 fleet",
-    "vehicleFamily": "copter",
-    "firmware": "px4",
-    "dialect": "common",
-    "dialectSource": "bundled",
-    "defaultTargetSystem": 11,
-    "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
-  },
-  {
-    "id": "sitl10-connection-ap",
-    "type": "mavlink-connection",
-    "name": "UDP ArduPilot 5\u00d7",
-    "mode": "udp",
-    "bindHost": "127.0.0.1",
-    "bindPort": 14550,
-    "remoteHost": "127.0.0.1",
-    "remotePort": 14551,
-    "broadcast": false,
-    "vehicle": "sitl10-vehicle-ap",
-    "localIdentity": "sitl10-identity",
-    "additionalIdentities": [],
-    "signOutbound": false,
-    "requireSigned": false,
-    "acceptInvalid": false,
-    "linkId": 0,
-    "heartbeatInterval": 1000,
-    "staleMs": "",
-    "expireMs": "",
-    "disabled": false
-  },
-  {
-    "id": "sitl10-connection-px4",
-    "type": "mavlink-connection",
-    "name": "UDP PX4 5\u00d7",
-    "mode": "udp",
-    "bindHost": "127.0.0.1",
-    "bindPort": 14560,
-    "remoteHost": "127.0.0.1",
-    "remotePort": 14561,
-    "broadcast": false,
-    "vehicle": "sitl10-vehicle-px4",
-    "localIdentity": "sitl10-identity",
-    "additionalIdentities": [],
-    "signOutbound": false,
-    "requireSigned": false,
-    "acceptInvalid": false,
-    "linkId": 0,
-    "heartbeatInterval": 1000,
-    "staleMs": "",
-    "expireMs": "",
-    "disabled": false
-  },
-  {
-    "id": "sitl10-state-ap",
-    "type": "mavlink-state",
-    "z": "sitl10-tab",
-    "name": "ArduPilot peers",
-    "connection": "sitl10-connection-ap",
-    "mode": "feed",
-    "events": "peer-new,heartbeat",
-    "targetSystem": "",
-    "targetComponent": "",
-    "x": 620,
-    "y": 300,
-    "wires": [
-      [
-        "sitl10-state-debug"
-      ]
-    ]
-  },
-  {
-    "id": "sitl10-state-px4",
-    "type": "mavlink-state",
-    "z": "sitl10-tab",
-    "name": "PX4 peers",
-    "connection": "sitl10-connection-px4",
-    "mode": "feed",
-    "events": "peer-new,heartbeat",
-    "targetSystem": "",
-    "targetComponent": "",
-    "x": 620,
-    "y": 380,
-    "wires": [
-      [
-        "sitl10-state-debug"
-      ]
-    ]
-  },
-  {
-    "id": "sitl10-inject-ap",
-    "type": "inject",
-    "z": "sitl10-tab",
-    "name": "Broadcast arm AP 1\u20135",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 160,
-    "y": 160,
-    "wires": [
-      [
-        "sitl10-swarm-ap"
-      ]
-    ]
-  },
-  {
-    "id": "sitl10-swarm-ap",
-    "type": "mavlink-swarm",
-    "z": "sitl10-tab",
-    "name": "Arm broadcast (AP)",
-    "connection": "sitl10-connection-ap",
-    "selectionMode": "list",
-    "sysids": "1,2,3,4,5",
-    "vehicleType": "",
-    "firmwareFilter": "",
-    "armedFilter": "",
-    "executionMode": "broadcast",
-    "intervalMs": 100,
-    "dryRun": false,
-    "topic": "command",
-    "verb": "arm",
-    "delivery": "send",
-    "preset": "arm",
-    "advancedCommand": "",
-    "timeout": "10000",
-    "maxRetries": "0",
-    "params": "{}",
-    "x": 390,
-    "y": 160,
-    "wires": [
-      [
-        "sitl10-ap-done"
-      ],
-      [
-        "sitl10-ap-status"
-      ]
-    ]
-  },
-  {
-    "id": "sitl10-inject-px4",
-    "type": "inject",
-    "z": "sitl10-tab",
-    "name": "Broadcast arm PX4 11\u201315",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 180,
-    "y": 280,
-    "wires": [
-      [
-        "sitl10-swarm-px4"
-      ]
-    ]
-  },
-  {
-    "id": "sitl10-swarm-px4",
-    "type": "mavlink-swarm",
-    "z": "sitl10-tab",
-    "name": "Arm broadcast (PX4)",
-    "connection": "sitl10-connection-px4",
-    "selectionMode": "list",
-    "sysids": "11,12,13,14,15",
-    "vehicleType": "",
-    "firmwareFilter": "",
-    "armedFilter": "",
-    "executionMode": "broadcast",
-    "intervalMs": 100,
-    "dryRun": false,
-    "topic": "command",
-    "verb": "arm",
-    "delivery": "send",
-    "preset": "arm",
-    "advancedCommand": "",
-    "timeout": "10000",
-    "maxRetries": "0",
-    "params": "{}",
-    "x": 400,
-    "y": 280,
-    "wires": [
-      [
-        "sitl10-px4-done"
-      ],
-      [
-        "sitl10-px4-status"
-      ]
-    ]
-  },
-  {
-    "id": "sitl10-ap-done",
-    "type": "debug",
-    "z": "sitl10-tab",
-    "name": "ap broadcast",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 620,
-    "y": 140,
-    "wires": []
-  },
-  {
-    "id": "sitl10-ap-status",
-    "type": "debug",
-    "z": "sitl10-tab",
-    "name": "ap status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 620,
-    "y": 200,
-    "wires": []
-  },
-  {
-    "id": "sitl10-px4-done",
-    "type": "debug",
-    "z": "sitl10-tab",
-    "name": "px4 broadcast",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 630,
-    "y": 260,
-    "wires": []
-  },
-  {
-    "id": "sitl10-px4-status",
-    "type": "debug",
-    "z": "sitl10-tab",
-    "name": "px4 status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 630,
-    "y": 320,
-    "wires": []
-  },
-  {
-    "id": "sitl10-state-debug",
-    "type": "debug",
-    "z": "sitl10-tab",
-    "name": "peer events",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "payload",
-    "targetType": "msg",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 850,
-    "y": 340,
-    "wires": []
-  }
+    {
+        "id": "sitl10-tab",
+        "type": "tab",
+        "label": "SITL 10 Dual-stack \u00d710",
+        "disabled": false,
+        "info": "Both stacks live: five ArduPilot (sysids 1\u20135) + five PX4 (11\u201315). State feed shows all ten peers; broadcast arm per connection (broadcast is single-stack).",
+        "env": []
+    },
+    {
+        "id": "sitl10-comment",
+        "type": "comment",
+        "z": "sitl10-tab",
+        "name": "Ten-vehicle rig \u2014 two connections, two broadcast arms",
+        "info": "ArduPilot sysids 1\u20135 on one connection; PX4 sysids 11\u201315 on another. Broadcast arm must be issued per connection \u2014 target_system=0 is single-stack only.\n\nPrefer Docker lab:\n  cd sitl && docker compose --profile sitl up -d --build\n\nManual ArduPilot five (telemetry to bind 14550):\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nArduPilot Connection: bind 0.0.0.0:14550 \u2192 remote 127.0.0.1:14551.\nPX4 Connection: bind 0.0.0.0:14560 \u2192 remote 127.0.0.1:14561.",
+        "x": 300,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "sitl10-identity",
+        "type": "mavlink-local-identity",
+        "name": "GCS identity",
+        "role": "gcs",
+        "sourceSystemId": 255,
+        "sourceComponentId": 190,
+        "heartbeatType": "MAV_TYPE_GCS",
+        "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    },
+    {
+        "id": "sitl10-vehicle-ap",
+        "type": "mavlink-vehicle",
+        "name": "ArduPilot fleet",
+        "vehicleFamily": "copter",
+        "firmware": "ardupilot",
+        "dialect": "ardupilotmega",
+        "dialectSource": "bundled",
+        "defaultTargetSystem": 1,
+        "defaultTargetComponent": 1,
+        "paramDefsUrl": ""
+    },
+    {
+        "id": "sitl10-vehicle-px4",
+        "type": "mavlink-vehicle",
+        "name": "PX4 fleet",
+        "vehicleFamily": "copter",
+        "firmware": "px4",
+        "dialect": "common",
+        "dialectSource": "bundled",
+        "defaultTargetSystem": 11,
+        "defaultTargetComponent": 1,
+        "paramDefsUrl": ""
+    },
+    {
+        "id": "sitl10-connection-ap",
+        "type": "mavlink-connection",
+        "name": "UDP ArduPilot 5\u00d7",
+        "mode": "udp",
+        "bindHost": "0.0.0.0",
+        "bindPort": 14550,
+        "remoteHost": "127.0.0.1",
+        "remotePort": 14551,
+        "broadcast": false,
+        "vehicle": "sitl10-vehicle-ap",
+        "localIdentity": "sitl10-identity",
+        "additionalIdentities": [],
+        "signOutbound": false,
+        "requireSigned": false,
+        "acceptInvalid": false,
+        "linkId": 0,
+        "heartbeatInterval": 1000,
+        "staleMs": "",
+        "expireMs": "",
+        "disabled": false
+    },
+    {
+        "id": "sitl10-connection-px4",
+        "type": "mavlink-connection",
+        "name": "UDP PX4 5\u00d7",
+        "mode": "udp",
+        "bindHost": "0.0.0.0",
+        "bindPort": 14560,
+        "remoteHost": "127.0.0.1",
+        "remotePort": 14561,
+        "broadcast": false,
+        "vehicle": "sitl10-vehicle-px4",
+        "localIdentity": "sitl10-identity",
+        "additionalIdentities": [],
+        "signOutbound": false,
+        "requireSigned": false,
+        "acceptInvalid": false,
+        "linkId": 0,
+        "heartbeatInterval": 1000,
+        "staleMs": "",
+        "expireMs": "",
+        "disabled": false
+    },
+    {
+        "id": "sitl10-state-ap",
+        "type": "mavlink-state",
+        "z": "sitl10-tab",
+        "name": "ArduPilot peers",
+        "connection": "sitl10-connection-ap",
+        "mode": "feed",
+        "events": "peer-new,heartbeat",
+        "targetSystem": "",
+        "targetComponent": "",
+        "x": 620,
+        "y": 300,
+        "wires": [
+            [
+                "sitl10-state-debug"
+            ]
+        ]
+    },
+    {
+        "id": "sitl10-state-px4",
+        "type": "mavlink-state",
+        "z": "sitl10-tab",
+        "name": "PX4 peers",
+        "connection": "sitl10-connection-px4",
+        "mode": "feed",
+        "events": "peer-new,heartbeat",
+        "targetSystem": "",
+        "targetComponent": "",
+        "x": 620,
+        "y": 380,
+        "wires": [
+            [
+                "sitl10-state-debug"
+            ]
+        ]
+    },
+    {
+        "id": "sitl10-inject-ap",
+        "type": "inject",
+        "z": "sitl10-tab",
+        "name": "Broadcast arm AP 1\u20135",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 160,
+        "y": 160,
+        "wires": [
+            [
+                "sitl10-swarm-ap"
+            ]
+        ]
+    },
+    {
+        "id": "sitl10-swarm-ap",
+        "type": "mavlink-swarm",
+        "z": "sitl10-tab",
+        "name": "Arm broadcast (AP)",
+        "connection": "sitl10-connection-ap",
+        "selectionMode": "list",
+        "sysids": "1,2,3,4,5",
+        "vehicleType": "",
+        "firmwareFilter": "",
+        "armedFilter": "",
+        "executionMode": "broadcast",
+        "intervalMs": 100,
+        "dryRun": false,
+        "topic": "command",
+        "verb": "arm",
+        "delivery": "send",
+        "preset": "arm",
+        "advancedCommand": "",
+        "timeout": "10000",
+        "maxRetries": "0",
+        "params": "{}",
+        "x": 390,
+        "y": 160,
+        "wires": [
+            [
+                "sitl10-ap-done"
+            ],
+            [
+                "sitl10-ap-status"
+            ]
+        ]
+    },
+    {
+        "id": "sitl10-inject-px4",
+        "type": "inject",
+        "z": "sitl10-tab",
+        "name": "Broadcast arm PX4 11\u201315",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 180,
+        "y": 280,
+        "wires": [
+            [
+                "sitl10-swarm-px4"
+            ]
+        ]
+    },
+    {
+        "id": "sitl10-swarm-px4",
+        "type": "mavlink-swarm",
+        "z": "sitl10-tab",
+        "name": "Arm broadcast (PX4)",
+        "connection": "sitl10-connection-px4",
+        "selectionMode": "list",
+        "sysids": "11,12,13,14,15",
+        "vehicleType": "",
+        "firmwareFilter": "",
+        "armedFilter": "",
+        "executionMode": "broadcast",
+        "intervalMs": 100,
+        "dryRun": false,
+        "topic": "command",
+        "verb": "arm",
+        "delivery": "send",
+        "preset": "arm",
+        "advancedCommand": "",
+        "timeout": "10000",
+        "maxRetries": "0",
+        "params": "{}",
+        "x": 400,
+        "y": 280,
+        "wires": [
+            [
+                "sitl10-px4-done"
+            ],
+            [
+                "sitl10-px4-status"
+            ]
+        ]
+    },
+    {
+        "id": "sitl10-ap-done",
+        "type": "debug",
+        "z": "sitl10-tab",
+        "name": "ap broadcast",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 620,
+        "y": 140,
+        "wires": []
+    },
+    {
+        "id": "sitl10-ap-status",
+        "type": "debug",
+        "z": "sitl10-tab",
+        "name": "ap status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 620,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "sitl10-px4-done",
+        "type": "debug",
+        "z": "sitl10-tab",
+        "name": "px4 broadcast",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 630,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "sitl10-px4-status",
+        "type": "debug",
+        "z": "sitl10-tab",
+        "name": "px4 status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 630,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "sitl10-state-debug",
+        "type": "debug",
+        "z": "sitl10-tab",
+        "name": "peer events",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 850,
+        "y": 340,
+        "wires": []
+    }
 ]
