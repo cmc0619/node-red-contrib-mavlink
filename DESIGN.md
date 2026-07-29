@@ -1566,12 +1566,14 @@ items. Fence and rally validators stay strict to their families.
 `rg "DO_JUMP|CONDITION_DELAY" ` against a captured mission download.
 
 **Missing Vehicle Profile must not invent a dialect catalog.**
-*Wrong belief:* `GET /mavlink/command/commands?vehicle=<id>` can fall through to
-`ardupilotmega` when `RED.nodes.getNode(id)` misses (editor open before Deploy).
-*Fact:* the editor caches the response under `vehicle:<id>`. A silent default would pin the
-wrong MAV_CMD list to that key. A miss returns 404 unless the request also names an
-allow-listed bundled `?dialect=`; `custom` without a live profile is never served.
-*Check:* `node --test test/command/commands-route.test.js`
+*Wrong belief:* `GET /mavlink/command/commands?vehicle=<id>` (or `/mavlink/enums` with no
+query) can fall through to `ardupilotmega` when `RED.nodes.getNode(id)` misses or the editor
+has not chosen a dialect yet.
+*Fact:* the editor caches under `vehicle:<id>` / `dialect:<name>`. A silent default would pin
+the wrong MAV_CMD/enum list to that key. A missing profile returns 404 unless the request also
+names an allow-listed bundled `?dialect=`; `custom` without a live profile is never served.
+An empty catalog query (no `vehicle`, no `dialect`) returns 400 — not a default dialect.
+*Check:* `node --test test/command/commands-route.test.js test/vehicle/enums-route.test.js`
 
 **Config-node refs use Node-RED's select + edit/add, never free-form ids.**
 *Wrong belief:* a plain `<input>` with `defaults.foo.type = 'mavlink-vehicle'` is enough, or a
