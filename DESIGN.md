@@ -1567,8 +1567,9 @@ connection + target fields, and Build (the node) requires a Vehicle Profile.
 connection/identity/timing rows; wire tiers derive firmware and target defaults from the
 connection's profile; a companion send-as identity derives the target ({airframe sysid, 1}) and
 hides the fields (Payload keeps its compid — it addresses a payload device); the Build node
-takes a plain dialect picker (`__vehicle` escape for custom XML); Swarm offers only gcs/custom
-identities and needs no connection for build+list. Hidden fields are ignored at runtime. Ack,
+takes a plain dialect picker (`__vehicle` escape for the connection's Vehicle Profile dialect);
+Swarm offers only gcs/custom identities and needs no connection for build+list. Hidden fields
+are ignored at runtime. Ack,
 param-echo, and mission protocol matching key on the same resolved target as the send.
 *Check:* `node --test test/addressing/resolve.test.js test/command/node.test.js
 test/move/node.test.js test/param/node.test.js test/payload/node.test.js
