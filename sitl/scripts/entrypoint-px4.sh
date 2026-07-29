@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch one PX4 SITL instance. Sends GCS MAVLink to OUT_HOST:OUT_PORT.
+# Wrapper around px4io/px4-sitl's entrypoint for the nrc lab port/sysid map.
 # Required: SYSID. Optional: INSTANCE, OUT_HOST, OUT_PORT.
 set -euo pipefail
 
@@ -11,56 +11,74 @@ OUT_PORT="${OUT_PORT:-14560}"
 if [[ -f /params/px4-logging.env ]]; then
   # shellcheck disable=SC1091
   set -a
+  # shellcheck source=/dev/null
   source /params/px4-logging.env
   set +a
 fi
 
 mkdir -p /logs
+
+if [[ -d /opt/px4-gazebo ]]; then
+  PX4_PREFIX=/opt/px4-gazebo
+else
+  PX4_PREFIX=/opt/px4
+fi
+
+MAVLINK_RC="${PX4_PREFIX}/etc/init.d-posix/px4-rc.mavlink"
+RCS="${PX4_PREFIX}/etc/init.d-posix/rcS"
+
+# Resolve Docker host for MAVLink (IPv4 only — same approach as upstream entrypoint).
+DOCKER_HOST_IP="$(getent ahostsv4 "${OUT_HOST}" 2>/dev/null | awk '/STREAM/ { print $1; exit }' || true)"
+if [[ -z "${DOCKER_HOST_IP}" ]]; then
+  DOCKER_HOST_IP="$(getent ahostsv4 host.docker.internal 2>/dev/null | awk '/STREAM/ { print $1; exit }' || true)"
+fi
+
+if [[ -n "${DOCKER_HOST_IP}" && -f "${MAVLINK_RC}" ]]; then
+  # Point GCS MAVLink at host:OUT_PORT (lab uses 14560, not the image default 14550).
+  sed -i -E \
+    "s|mavlink start -x -u \\\$udp_gcs_port_local -r 4000000 -f.*|mavlink start -x -u \$udp_gcs_port_local -r 4000000 -f -t ${DOCKER_HOST_IP} -o ${OUT_PORT}|" \
+    "${MAVLINK_RC}"
+  # Companion / offboard remote stays on 14540+instance by default; for companion
+  # containers OUT_PORT is already 14542 and we also retarget the onboard link.
+  if [[ "${OUT_PORT}" == "14542" || "${OUT_PORT}" == "14540" ]]; then
+    sed -i -E \
+      "s|mavlink start -x -u \\\$udp_offboard_port_local -r 4000000 -f -m onboard -o \\\$udp_offboard_port_remote.*|mavlink start -x -u \$udp_offboard_port_local -r 4000000 -f -m onboard -o ${OUT_PORT} -t ${DOCKER_HOST_IP}|" \
+      "${MAVLINK_RC}"
+  fi
+fi
+
+# MAVLink reads MAV_SYS_ID when `. px4-rc.mavlink` runs — set it immediately before.
+# Airframes also reset it earlier, so an early-only set is not enough.
+if [[ -f "${RCS}" ]] && ! grep -q 'nrc_lab_params_pre_mavlink' "${RCS}"; then
+  tmp="$(mktemp)"
+  awk -v sysid="${SYSID}" -v sdlog="${SDLOG_MODE:-1}" '
+    /\. px4-rc\.mavlink/ && !done {
+      print "# nrc_lab_params_pre_mavlink — must precede mavlink start"
+      print "param set MAV_SYS_ID " sysid
+      print "param set SDLOG_MODE " sdlog
+      done=1
+    }
+    { print }
+  ' "${RCS}" > "${tmp}"
+  mv "${tmp}" "${RCS}"
+fi
+
 export PX4_SIM_MODEL="${PX4_SIM_MODEL:-sihsim_quadx}"
 export HEADLESS="${HEADLESS:-1}"
 
-# Working dir inside the official image (layout may vary by tag).
-WORK="${PX4_WORKDIR:-/root/PX4-Autopilot}"
-if [[ ! -d "$WORK" ]]; then
-  WORK="$(find / -maxdepth 3 -type d -name 'PX4-Autopilot' 2>/dev/null | head -n1 || true)"
-fi
-if [[ -z "${WORK}" || ! -d "${WORK}" ]]; then
-  echo "entrypoint-px4: cannot find PX4-Autopilot tree in image" >&2
-  ls -la / || true
-  exit 1
-fi
-cd "$WORK"
+# Stop boot-time file logging if the logger still opened one (SDLOG_MODE=1 intent).
+if [[ -f "${RCS}" ]] && ! grep -q 'nrc_lab_params_tail' "${RCS}"; then
+  cat >> "${RCS}" <<EOF
 
-# Inject sysid + arm-only logging + GCS target into POSIX extras.
-EXTRAS_DIR="${WORK}/build/px4_sitl_default/etc/init.d-posix"
-mkdir -p /tmp/px4-extras
-cat > /tmp/px4-extras/99_nrc_lab <<EOF
-#!/bin/sh
+# nrc_lab_params_tail
 param set MAV_SYS_ID ${SYSID}
 param set SDLOG_MODE ${SDLOG_MODE:-1}
-# Re-point GCS MAVLink remote at the Node-RED bind (host).
-# Local port follows PX4 convention 18570+instance.
-mavlink stop-all || true
-mavlink start -x -u \$((18570 + ${INSTANCE})) -r 4000000 -f -o ${OUT_PORT} -t ${OUT_HOST}
+logger stop || true
 EOF
-chmod +x /tmp/px4-extras/99_nrc_lab
-
-# Prefer dropping into ROMFS extras if present; else rely on PX4_SIM_MODEL startup + param file.
-if [[ -d "${EXTRAS_DIR}" ]]; then
-  cp /tmp/px4-extras/99_nrc_lab "${EXTRAS_DIR}/99_nrc_lab" || true
 fi
 
-echo "entrypoint-px4: sysid=${SYSID} instance=${INSTANCE} gcs=${OUT_HOST}:${OUT_PORT} model=${PX4_SIM_MODEL}"
+echo "entrypoint-px4: sysid=${SYSID} instance=${INSTANCE} gcs=${DOCKER_HOST_IP:-${OUT_HOST}}:${OUT_PORT} model=${PX4_SIM_MODEL}"
 
-# Official image CMD is usually a helper; fall back to make px4_sitl.
-if [[ -x /entrypoint.sh ]]; then
-  export PX4_SYS_AUTOSTART="${PX4_SYS_AUTOSTART:-1001}"
-  exec /entrypoint.sh
-fi
-
-if [[ -x ./build/px4_sitl_default/bin/px4 ]]; then
-  exec ./build/px4_sitl_default/bin/px4 -i "${INSTANCE}" -d
-fi
-
-echo "entrypoint-px4: no known PX4 launch path; inspect the base image" >&2
-exit 1
+# Prefer upstream binary with instance; working dir = install prefix (has etc/).
+cd "${PX4_PREFIX}"
+exec "${PX4_PREFIX}/bin/px4" -i "${INSTANCE}" -d

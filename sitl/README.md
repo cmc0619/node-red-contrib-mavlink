@@ -18,7 +18,11 @@ docker compose --profile sitl --profile nodered up -d --build
 ```
 
 First build of the ArduPilot image is large and slow (compiles SITL). PX4 uses the
-official `px4io/px4-sitl` image as a base.
+official `px4io/px4-sitl` image directly (no local rebuild).
+
+**Nested Docker note:** if `docker run` fails with overlay/whiteout errors, set
+`"storage-driver": "vfs"` in `/etc/docker/daemon.json` and restart the daemon (slower,
+but works in restricted VMs).
 
 ## Port and sysid map
 
@@ -101,6 +105,12 @@ docker compose -f sitl/docker-compose.yml --profile sitl up -d --build ap-1   # 
 | Only sysid 1 answers commands | Wait for HEARTBEATs so the peer table learns each UDP source port |
 | PX4 silent | Confirm image tag still provides SIH (`PX4_SIM_MODEL=sihsim_quadx`); check entrypoint logs |
 | `check-logs` fails after arm | List `sitl/logs/<service>`; firmware may write under a nested folder (checker searches recursively) |
+
+## Measured bring-up (PX4)
+
+On a host with working Docker, `docker compose --profile sitl up -d` for the PX4
+services was verified to emit HEARTBEATs with sysids **11–15** on UDP **14560** and
+sysid **21** on **14542**. ArduPilot image build is separate (first compile is long).
 
 ## CI note
 

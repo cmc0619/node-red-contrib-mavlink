@@ -1,7 +1,6 @@
-# Thin wrapper around the official PX4 SITL prebuilt image.
-# Build: docker build -f sitl/Dockerfile.px4 -t nrc-mavlink-px4-sitl sitl/
-# Override PX4_SITL_IMAGE if you need a different tag.
-
+# Optional convenience image. The Compose lab uses `px4io/px4-sitl:latest` directly
+# with `scripts/entrypoint-px4.sh` mounted — prefer that path.
+# This Dockerfile remains for operators who want a pre-baked wrapper tag.
 ARG PX4_SITL_IMAGE=px4io/px4-sitl:latest
 FROM ${PX4_SITL_IMAGE}
 
@@ -16,4 +15,4 @@ ENV PX4_SIM_MODEL=sihsim_quadx \
     HEADLESS=1
 
 VOLUME ["/logs"]
-ENTRYPOINT ["/usr/local/bin/entrypoint-px4.sh"]
+ENTRYPOINT ["/bin/bash", "/usr/local/bin/entrypoint-px4.sh"]
