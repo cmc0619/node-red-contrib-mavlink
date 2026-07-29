@@ -111,3 +111,27 @@ test('missing Vehicle Profile with custom dialect is refused', () => {
   assert.deepEqual(res.body.fields, {});
   assert.match(res.body.notice, /not deployed/i);
 });
+
+test('field-tip resolution errors remain generic', () => {
+  const handlers = captureRoutes({
+    veh1: {
+      getDialect() {
+        throw new Error('/private/dialect.xml');
+      },
+    },
+  });
+  const res = mockRes();
+  handlers.get('/mavlink/payload/field-tips')(
+    { query: { topic: 'camera', verb: 'photo', vehicle: 'veh1' } },
+    res
+  );
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, {
+    fields: {},
+    error: 'field tips unavailable',
+  });
+  assert.ok(
+    !JSON.stringify(res.body).includes('/private/'),
+    'client body must not leak filesystem paths'
+  );
+});
