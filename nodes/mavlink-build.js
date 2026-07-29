@@ -358,14 +358,19 @@ module.exports = function registerMavlinkBuild(RED) {
             return res.json(listMessagesCatalog(requested));
           }
 
-          const dialect = requested || 'ardupilotmega';
-          if (dialect === 'custom') {
+          if (!requested) {
+            return res.status(400).json({
+              error: 'dialect is required',
+              dialects: knownDialects(),
+            });
+          }
+          if (requested === 'custom') {
             return res.status(400).json({
               error: 'custom dialect requires a deployed Vehicle Profile (?vehicle=id)',
               dialects: knownDialects(),
             });
           }
-          res.json(listMessagesCatalog(dialect));
+          res.json(listMessagesCatalog(requested));
         } catch (err) {
           res.status(400).json({
             error: err.message,
