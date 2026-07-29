@@ -1,18 +1,25 @@
 # SITL example flows
 
-These flows require a live SITL rig because they test firmware behaviour that cannot be
-faked with fixtures: completion timing, mode tables, the PX4 parameter int/float union,
-mission/fence/rally per stack, swarm pacing across five vehicles, and signing. The
-top-level [`examples/`](../) demos work against any MAVLink link; these need real firmware.
+These flows need live firmware behaviour (completion timing, mode tables, PX4 param
+union, mission/fence/rally, swarm pacing, signing). Prefer the **Docker lab** in
+[`sitl/README.md`](../../sitl/README.md) over hand-built trees.
 
 ## The rig
 
-The testing rig runs **five ArduPilot** instances at system IDs **1–5** and **five PX4**
-instances at **11–15**, on **separate connections**, each with its own Vehicle Profile.
-The gap between 5 and 11 is deliberate: a mistyped sysid lands nowhere, not on the wrong
-stack.
+| Stack | Sysids | Node-RED bind → remote |
+|-------|--------|------------------------|
+| ArduPilot GCS | 1–5 | `14550` → `14551` |
+| PX4 GCS | 11–15 | `14560` → `14561` |
+| AP companion | 20 | `14540` → `14541` |
+| PX4 companion | 21 | `14542` → `14543` |
 
-## Start the ArduPilot five
+```bash
+cd sitl && docker compose --profile sitl up -d --build
+```
+
+### Manual launch (without Docker)
+
+ArduPilot five (telemetry to GCS bind `14550`):
 
 ```bash
 for i in 0 1 2 3 4; do \
@@ -21,44 +28,13 @@ for i in 0 1 2 3 4; do \
 done
 ```
 
-Bind the ArduPilot Connection to `127.0.0.1:14550` (receives SITL `--out`), remote
-`127.0.0.1:14551` (where Node-RED sends commands — MAVProxy's default listen).
-
-## Start the PX4 five
-
-PX4 multi-instance networking is version-specific. A common approach:
-
-```bash
-./Tools/simulation/sitl_multiple_run.sh 5
-```
-
-—or per-instance `make px4_sitl` with `PX4_INSTANCE`—then set `MAV_SYS_ID` = **11–15** per
-instance.
-
-PX4 emits its GCS MAVLink on a different port set than ArduPilot. Point the PX4
-Connection at the port your build uses (commonly `14550` broadcast or `14570`/`14580`) and
-**verify against your PX4 version** — do not assume ArduPilot's ports.
-
-## One vs five instances
-
-Most flows use a single instance. Swarm and dual-stack flows use five per stack. Each
-flow's tab comment names exactly which instances it needs.
-
-## Signing
-
-Signing needs extra setup: a matching key on the SITL side. [`12-signing.json`](12-signing.json)
-documents the dry-run procedure. Signing is off by default in all other examples.
-
-## What is not provisioned here
-
-SITL itself is the operator's local rig; nothing in this package launches it for you. The
-fixture test suite (`node --test`) covers everything that does not need firmware.
-Cross-connection swarm is out of scope (see `DESIGN.md`).
+PX4 five: set `MAV_SYS_ID` 11–15 and point GCS MAVLink at `127.0.0.1:14560` (version-specific;
+the Docker entrypoint does this for you).
 
 ## Safety
 
-SITL only — but several flows arm, fly, flip, terminate, or force-disarm. Never point these
-at a real vehicle without understanding each step.
+SITL only — several flows arm, fly, or force-disarm. Never point them at a real vehicle
+without understanding each step.
 
 ## Flow index
 
@@ -78,3 +54,5 @@ at a real vehicle without understanding each step.
 | `12-signing.json` | SITL 12 Signing | 1× ArduPilot (+ signing setup) |
 | `13-param-defs-live.json` | SITL 13 Param defs (live) | 1× ArduPilot |
 | `14-command-mission-basics.json` | SITL 14 Command & mission basics | 2× ArduPilot |
+| `15-companion-ap.json` | SITL 15 Companion AP | companion AP sysid 20 |
+| `16-companion-px4.json` | SITL 16 Companion PX4 | companion PX4 sysid 21 |

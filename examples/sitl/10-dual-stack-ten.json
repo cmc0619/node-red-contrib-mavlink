@@ -2,17 +2,17 @@
   {
     "id": "sitl10-tab",
     "type": "tab",
-    "label": "SITL 10 Dual-stack ×10",
+    "label": "SITL 10 Dual-stack \u00d710",
     "disabled": false,
-    "info": "Both stacks live: five ArduPilot (sysids 1–5) + five PX4 (11–15). State feed shows all ten peers; broadcast arm per connection (broadcast is single-stack).",
+    "info": "Both stacks live: five ArduPilot (sysids 1\u20135) + five PX4 (11\u201315). State feed shows all ten peers; broadcast arm per connection (broadcast is single-stack).",
     "env": []
   },
   {
     "id": "sitl10-comment",
     "type": "comment",
     "z": "sitl10-tab",
-    "name": "Ten-vehicle rig — two connections, two broadcast arms",
-    "info": "ArduPilot sysids 1–5 on one connection; PX4 sysids 11–15 on another. Broadcast arm must be issued per connection — target_system=0 is single-stack only.\n\nLaunch ArduPilot five:\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14551 &\n  done\nLaunch PX4 five (version-specific; set MAV_SYS_ID 11–15 per instance):\n  ./Tools/simulation/sitl_multiple_run.sh 5\n\nArduPilot Connection: bind 127.0.0.1:14550 → remote 127.0.0.1:14551.\nPX4 Connection: bind 127.0.0.1:14555 → remote per your PX4 GCS port.",
+    "name": "Ten-vehicle rig \u2014 two connections, two broadcast arms",
+    "info": "ArduPilot sysids 1\u20135 on one connection; PX4 sysids 11\u201315 on another. Broadcast arm must be issued per connection \u2014 target_system=0 is single-stack only.\n\nPrefer Docker lab:\n  cd sitl && docker compose --profile sitl up -d --build\n\nManual ArduPilot five (telemetry to bind 14550):\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nArduPilot Connection: bind 127.0.0.1:14550 \u2192 remote 127.0.0.1:14551.\nPX4 Connection: bind 127.0.0.1:14560 \u2192 remote 127.0.0.1:14561.",
     "x": 300,
     "y": 40,
     "wires": []
@@ -54,7 +54,7 @@
   {
     "id": "sitl10-connection-ap",
     "type": "mavlink-connection",
-    "name": "UDP ArduPilot 5×",
+    "name": "UDP ArduPilot 5\u00d7",
     "mode": "udp",
     "bindHost": "127.0.0.1",
     "bindPort": 14550,
@@ -76,12 +76,12 @@
   {
     "id": "sitl10-connection-px4",
     "type": "mavlink-connection",
-    "name": "UDP PX4 5×",
+    "name": "UDP PX4 5\u00d7",
     "mode": "udp",
     "bindHost": "127.0.0.1",
-    "bindPort": 14555,
+    "bindPort": 14560,
     "remoteHost": "127.0.0.1",
-    "remotePort": 14550,
+    "remotePort": 14561,
     "broadcast": false,
     "vehicle": "sitl10-vehicle-px4",
     "localIdentity": "sitl10-identity",
@@ -135,7 +135,7 @@
     "id": "sitl10-inject-ap",
     "type": "inject",
     "z": "sitl10-tab",
-    "name": "Broadcast arm AP 1–5",
+    "name": "Broadcast arm AP 1\u20135",
     "props": [
       {
         "p": "payload"
@@ -193,7 +193,7 @@
     "id": "sitl10-inject-px4",
     "type": "inject",
     "z": "sitl10-tab",
-    "name": "Broadcast arm PX4 11–15",
+    "name": "Broadcast arm PX4 11\u201315",
     "props": [
       {
         "p": "payload"

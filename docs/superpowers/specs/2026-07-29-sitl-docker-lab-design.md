@@ -1,7 +1,7 @@
 # SITL Docker lab (five+five + companions)
 
 **Date:** 2026-07-29  
-**Status:** Approved for planning  
+**Status:** Implemented (Docker daemon bring-up is operator-side; CI does not run the lab)  
 **Related:** DESIGN.md §6 (mixed fleet / two Connections), §13 (SITL rig), `examples/sitl/`
 
 ## Goal

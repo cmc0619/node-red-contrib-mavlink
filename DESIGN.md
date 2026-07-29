@@ -1217,8 +1217,9 @@ by silence. Update this list when an item lands.
 | **Move editor §6 reshape** | **done** | Per-field rows + mode/delivery visibility in the Move dialog. |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
 | **`httpAdminRoot` on non-enum admin routes** | **done** | Command/Build/In/Swarm/Param/Vehicle editor catalogs use `RED.mavlink.adminApiUrl('/mavlink/…')`. |
-| **SITL example flows** | **done** | Former 06–09 under `examples/sitl/` (01–14 rig flows + README); regular demos 01–05 and 10–27 in `examples/` (see `CATALOG.md`). |
-| **SITL-backed tests (§13)** | open | Fixture suite in CI; firmware behaviour still needs the live five+five rig. |
+| **SITL example flows** | **done** | `examples/sitl/` 01–16 (incl. companion 15–16) + README; regular demos in `examples/` (see `CATALOG.md`). |
+| **SITL Docker lab** | **done** | Compose under [`sitl/`](sitl/README.md): 5× AP + 5× PX4 + companions 20/21; arm-only logs; optional `nodered` profile. |
+| **SITL-backed tests (§13)** | open | Fixture suite in CI; firmware behaviour still needs the live five+five rig (local Docker lab). |
 | **Cross-connection swarm** | out of scope | As designed (§10): two Connections → two Swarm nodes. |
 
 ## 13. Testing and SITL
@@ -1228,6 +1229,13 @@ PX4 11–15. The gap is deliberate: a mistyped sysid lands nowhere rather than o
 The two stacks sit on separate connections with one profile each, which is the arrangement the
 design expects rather than a testing convenience. Five vehicles per connection is what exercises
 the peer table, queue pacing, and swarm fan-out. Examples use one instance or five.
+GCS ports for examples and the Docker lab: ArduPilot **14550→14551**, PX4 **14560→14561**.
+Companion-mode vehicles (sysid **20** AP / **21** PX4) use **14540→14541** and
+**14542→14543**.
+
+**Docker lab.** A Compose harness that launches this rig (plus the companion pair) lives under
+[`sitl/`](sitl/README.md). Operator instructions stay there — this section defines the rig;
+`sitl/README.md` is how to run it.
 
 **Test sources are two, and only two.** Pain points conceived up front, written before the code
 they guard. Then one regression test per bug, added when the bug is found. No coverage target —
@@ -1704,3 +1712,11 @@ corrupt integer `PARAM_SET`). ArduPilot often omits the C_CAST bit, so firmware 
 remains required.
 *Check:* `node --test test/param/param.test.js test/param/node.test.js` — look for
 `resolveParamEncoding` / capabilities tests.
+
+**PX4 example GCS bind is 14560, not 14555.**
+*Wrong belief:* dual-stack examples used bind `14555` as a neutral gap port between ArduPilot
+instance 0 (`14550/14551`) and instance 1 (`14560`).
+*Fact:* ArduPilot `-I N` defaults occupy `14550 + 10×N`, so `14555` sits inside that band and
+confuses operators. Lab and examples use PX4 GCS **14560→14561**, companions **14540/14542**.
+Operator guide: [`sitl/README.md`](sitl/README.md).
+*Check:* `rg '14555' examples` is empty; `examples/sitl/10-dual-stack-ten.json` bindPort 14560.

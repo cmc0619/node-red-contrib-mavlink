@@ -1,0 +1,217 @@
+[
+  {
+    "id": "sitl15-tab",
+    "type": "tab",
+    "label": "SITL 15 Companion AP",
+    "disabled": false,
+    "info": "Node-RED as onboard companion sharing vehicle sysid 20, compid 191. Lab ports bind 14540\u219214541.",
+    "env": []
+  },
+  {
+    "id": "sitl15-comment",
+    "type": "comment",
+    "z": "sitl15-tab",
+    "name": "Companion SITL",
+    "info": "Companion role: MAV_TYPE_ONBOARD_CONTROLLER. Shares sysid 20 with the SITL vehicle; peer table shows two components. Bind 14540\u219214541. Prefer Docker lab: see sitl/README.md.",
+    "x": 200,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl15-identity",
+    "type": "mavlink-local-identity",
+    "name": "Companion identity",
+    "role": "companion",
+    "sourceSystemId": 20,
+    "sourceComponentId": 191,
+    "heartbeatType": "MAV_TYPE_ONBOARD_CONTROLLER",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl15-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 20,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl15-connection",
+    "type": "mavlink-connection",
+    "name": "UDP companion 20",
+    "mode": "udp",
+    "bindHost": "127.0.0.1",
+    "bindPort": 14540,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14541,
+    "broadcast": false,
+    "vehicle": "sitl15-vehicle",
+    "localIdentity": "sitl15-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl15-inject-nvf",
+    "type": "inject",
+    "z": "sitl15-tab",
+    "name": "Send one NVF now",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 160,
+    "wires": [
+      [
+        "sitl15-build-nvf"
+      ]
+    ]
+  },
+  {
+    "id": "sitl15-build-nvf",
+    "type": "mavlink-build",
+    "z": "sitl15-tab",
+    "name": "Metric NVF (send)",
+    "vehicle": "sitl15-vehicle",
+    "connection": "sitl15-connection",
+    "messageName": "NAMED_VALUE_FLOAT",
+    "fields": "{\"time_boot_ms\":0,\"name\":\"metric\",\"value\":42}",
+    "tier": "send",
+    "band": "2",
+    "repeatMs": 1000,
+    "x": 360,
+    "y": 160,
+    "wires": [
+      [
+        "sitl15-debug-nvf"
+      ],
+      [
+        "sitl15-debug-nvf-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl15-in-hb",
+    "type": "mavlink-in",
+    "z": "sitl15-tab",
+    "name": "HEARTBEAT",
+    "connection": "sitl15-connection",
+    "message": "HEARTBEAT",
+    "sysid": "",
+    "compid": "",
+    "changedOnly": false,
+    "rateLimit": 0,
+    "x": 360,
+    "y": 280,
+    "wires": [
+      [
+        "sitl15-debug-hb"
+      ]
+    ]
+  },
+  {
+    "id": "sitl15-state",
+    "type": "mavlink-state",
+    "z": "sitl15-tab",
+    "name": "Peer events",
+    "connection": "sitl15-connection",
+    "mode": "feed",
+    "events": "peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,multi-endpoint,profile-mismatch,statustext",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 360,
+    "y": 400,
+    "wires": [
+      [
+        "sitl15-debug-state"
+      ]
+    ]
+  },
+  {
+    "id": "sitl15-debug-nvf-status",
+    "type": "debug",
+    "z": "sitl15-tab",
+    "name": "nvf status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 360,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl15-debug-nvf",
+    "type": "debug",
+    "z": "sitl15-tab",
+    "name": "nvf sent",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "sitl15-debug-hb",
+    "type": "debug",
+    "z": "sitl15-tab",
+    "name": "heartbeat",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "sitl15-debug-state",
+    "type": "debug",
+    "z": "sitl15-tab",
+    "name": "state events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 400,
+    "wires": []
+  }
+]
