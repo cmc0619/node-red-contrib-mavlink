@@ -1710,12 +1710,11 @@ remains required.
 *Check:* `node --test test/param/param.test.js test/param/node.test.js` — look for
 `resolveParamEncoding` / capabilities tests.
 
-**Target defaulting is one helper in `lib/addressing`; flow `msg` is not an untrusted boundary.**
-*Wrong belief:* Move/Param/Payload each need a local `normalizeTarget`, and runtime must
-reject malformed `msg.payload.target` the way an API would reject end-user input.
-*Fact:* Local copies were pure DRY drift. One `normalizeTarget` (missing → 1, same as the
-old builders) lives in `lib/addressing`. `msg.payload` is written by the flow programmer
-(trusted) — do not add payload guardrails. Validate wire/device/connection failures, not
-programmer messages.
+**Target defaulting and config-node uint8 parsing live once in `lib/addressing`.**
+*Wrong belief:* Move/Param/Payload each need a local `normalizeTarget`; Vehicle and Local
+Identity each need their own uint8 parser (targets allow 0, sources disallow it).
+*Fact:* One `normalizeTarget` (missing → 1). One `parseUint8` (`[0, 255]`) for config-node
+constructors — source min `1` is an editor rule (`validateUint8(1)`); runtime does not
+re-encode that floor. Flow `msg` is programmer-trusted — no payload guardrails.
 *Check:* `node --test test/addressing/resolve.test.js test/move/move.test.js
-test/param/param.test.js`.
+test/param/param.test.js test/identity/presets.test.js`.

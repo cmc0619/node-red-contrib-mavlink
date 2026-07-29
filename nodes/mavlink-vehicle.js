@@ -83,9 +83,9 @@ module.exports = function registerMavlinkVehicle(RED) {
     normalizeFirmware,
     normalizeFamily,
     resolveDialect,
-    parseTargetUint8,
     knownDialects,
   } = vehicleApi;
+  const { parseUint8 } = require('../lib/addressing');
 
   /**
    * Register the admin HTTP endpoint that serves the bundled dialect list to
@@ -304,8 +304,8 @@ module.exports = function registerMavlinkVehicle(RED) {
 
     const problems = [];
 
-    const sysResult = parseTargetUint8(config.defaultTargetSystem, 'Default target system', 1);
-    const cmpResult = parseTargetUint8(config.defaultTargetComponent, 'Default target component', 1);
+    const sysResult = parseUint8(config.defaultTargetSystem, 'Default target system', 1);
+    const cmpResult = parseUint8(config.defaultTargetComponent, 'Default target component', 1);
     if (sysResult.error) problems.push(sysResult.error);
     if (cmpResult.error) problems.push(cmpResult.error);
     node.defaultTargetSystem = sysResult.value;

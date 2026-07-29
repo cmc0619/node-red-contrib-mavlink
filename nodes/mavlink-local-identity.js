@@ -22,11 +22,11 @@
 const {
   normalizeRole,
   rolePreset,
-  parseIdentityUint8,
   heartbeatFields,
   bindVehicleSysid,
   releaseVehicleSysid,
 } = require('../lib/identity');
+const { parseUint8 } = require('../lib/addressing');
 
 module.exports = function registerMavlinkLocalIdentity(RED) {
   /**
@@ -63,17 +63,15 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
       node.sourceSystemId = null;
       node.sourceComponentId = 191;
     } else {
-      const sysidResult = parseIdentityUint8(
+      const sysidResult = parseUint8(
         config.sourceSystemId,
         'Source SysID',
-        preset.sysid || 255,
-        1
+        preset.sysid || 255
       );
-      const compidResult = parseIdentityUint8(
+      const compidResult = parseUint8(
         config.sourceComponentId,
         'Source CompID',
-        preset.compid || 190,
-        1
+        preset.compid || 190
       );
       if (sysidResult.error) problems.push(sysidResult.error);
       if (compidResult.error) problems.push(compidResult.error);

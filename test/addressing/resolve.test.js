@@ -8,6 +8,7 @@ const {
   resolveFirmware,
   profileFromVehicleNode,
   normalizeTarget,
+  parseUint8,
 } = require('../../lib/addressing');
 
 const PROFILE = { targetSysid: 42, targetCompid: 191, firmware: 'px4' };
@@ -125,4 +126,12 @@ test('normalizeTarget: missing → 1; explicit 0 kept; numeric strings coerced',
   assert.deepEqual(normalizeTarget({}), { sysid: 1, compid: 1 });
   assert.deepEqual(normalizeTarget({ sysid: 0, compid: 0 }), { sysid: 0, compid: 0 });
   assert.deepEqual(normalizeTarget({ sysid: '7', compid: '191' }), { sysid: 7, compid: 191 });
+});
+
+test('parseUint8: blank → fallback; 0 and 255 ok; out of range errors', () => {
+  assert.equal(parseUint8(undefined, 'SysID', 1).value, 1);
+  assert.equal(parseUint8(0, 'SysID', 1).value, 0);
+  assert.equal(parseUint8(255, 'CompID', 1).value, 255);
+  assert.match(parseUint8(256, 'SysID', 1).error, /\[0, 255\]/);
+  assert.match(parseUint8('abc', 'SysID', 1).error, /SysID/);
 });
