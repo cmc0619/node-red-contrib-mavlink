@@ -42,8 +42,9 @@ ENV PATH="/home/sitl/ardupilot/Tools/autotest:/home/sitl/.local/bin:${PATH}" \
 
 USER root
 COPY scripts/entrypoint-ap.sh /usr/local/bin/entrypoint-ap.sh
+COPY scripts/resolve-out-host.sh /usr/local/bin/resolve-out-host.sh
 COPY params/ap-logging.parm /params/ap-logging.parm
-RUN chmod +x /usr/local/bin/entrypoint-ap.sh \
+RUN chmod +x /usr/local/bin/entrypoint-ap.sh /usr/local/bin/resolve-out-host.sh \
  && mkdir -p /logs \
  && chown -R sitl:sitl /logs /params
 
