@@ -21,10 +21,10 @@ x-ap: &ap
     OUT_PORT: "14550"
 
 x-px4: &px4
-  build:
-    context: .
-    dockerfile: Dockerfile.px4
-  image: nrc-mavlink-px4-sitl:local
+  # Official prebuilt SIH image — no local FROM-build (avoids whiteout issues on
+  # some hosts). Lab wiring is the mounted entrypoint.
+  image: px4io/px4-sitl:latest
+  entrypoint: ["/bin/bash", "/usr/local/bin/entrypoint-px4.sh"]
   profiles: ["sitl"]
   restart: unless-stopped
   extra_hosts:
@@ -100,6 +100,7 @@ services:
       INSTANCE: "0"
     volumes:
       - ./logs/px4-11:/logs
+      - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
 
   px4-12:
@@ -111,6 +112,7 @@ services:
       INSTANCE: "1"
     volumes:
       - ./logs/px4-12:/logs
+      - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
 
   px4-13:
@@ -122,6 +124,7 @@ services:
       INSTANCE: "2"
     volumes:
       - ./logs/px4-13:/logs
+      - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
 
   px4-14:
@@ -133,6 +136,7 @@ services:
       INSTANCE: "3"
     volumes:
       - ./logs/px4-14:/logs
+      - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
 
   px4-15:
@@ -144,6 +148,7 @@ services:
       INSTANCE: "4"
     volumes:
       - ./logs/px4-15:/logs
+      - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
 
   ap-companion-20:
@@ -168,6 +173,7 @@ services:
       OUT_PORT: "14542"
     volumes:
       - ./logs/px4-companion-21:/logs
+      - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
 
   nodered:
