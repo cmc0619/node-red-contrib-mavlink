@@ -448,6 +448,11 @@ independently; a configured 0 is broadcast and survives; blank means inherit):
    field on Build
 5. 1
 
+`lib/addressing` owns one resolution path (`resolveActionTarget`). Builders take that
+resolved `{sysid, compid}` as-is — no second defaulting helper. Sysid/compid ranges are
+editor-only (`RED.mavlink.validateUint8`). Flow `msg` and deployed config are trusted at
+runtime.
+
 Confirm/complete matching (COMMAND_ACK, param echo) keys on the *same resolved target* — the
 matcher and the sender share one resolution, pinned by test.
 
@@ -1704,3 +1709,12 @@ corrupt integer `PARAM_SET`). ArduPilot often omits the C_CAST bit, so firmware 
 remains required.
 *Check:* `node --test test/param/param.test.js test/param/node.test.js` — look for
 `resolveParamEncoding` / capabilities tests.
+
+**Target resolution is once; builders do not re-default.**
+*Wrong belief:* Move/Param/Payload need local (or shared) `normalizeTarget`, and runtime
+must re-parse sysid/compid with `parseUint8` / `parseTargetUint8` / `parseIdentityUint8`.
+*Fact:* `resolveActionTarget` is the only defaulting path (→ 1). Builders use
+`input.target` directly. Range checks are `RED.mavlink.validateUint8` in the editor.
+Flow `msg` is programmer-trusted.
+*Check:* `node --test test/addressing/resolve.test.js test/move/move.test.js
+test/param/param.test.js`; no `normalizeTarget` / `parseUint8` under `lib/` or `nodes/`.

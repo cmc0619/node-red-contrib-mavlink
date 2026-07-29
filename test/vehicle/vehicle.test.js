@@ -7,7 +7,6 @@
  *  - bundled dialect resolution uses the registry; unknown name fails loud.
  *  - custom dialect without a bundle throws at deploy time.
  *  - firmware / family normalisation rejects unknowns to safe fallbacks.
- *  - parseTargetUint8 allows 0 (broadcast) unlike source ids which disallow it.
  */
 
 const { test } = require('node:test');
@@ -22,7 +21,6 @@ const {
   normalizeFirmware,
   normalizeFamily,
   resolveDialect,
-  parseTargetUint8,
   knownDialects,
 } = require('../../lib/vehicle');
 
@@ -170,46 +168,4 @@ test('resolveDialect dialectRevision seed loads the shipped dialect', () => {
   const bundle = resolveDialect({ dialect: 'icarous', dialectRevision: 'seed' });
   assert.equal(bundle.dialect, 'icarous');
   assert.ok(bundle.messages.ICAROUS_HEARTBEAT);
-});
-
-/* ---------- parseTargetUint8 ---------- */
-
-test('parseTargetUint8: undefined → fallback, no error', () => {
-  const r = parseTargetUint8(undefined, 'Target SysID', 1);
-  assert.equal(r.value, 1);
-  assert.equal(r.error, null);
-});
-
-test('parseTargetUint8: 0 is allowed (broadcast)', () => {
-  const r = parseTargetUint8(0, 'Target SysID', 1);
-  assert.equal(r.value, 0);
-  assert.equal(r.error, null);
-});
-
-test('parseTargetUint8: 255 is allowed', () => {
-  const r = parseTargetUint8(255, 'Target CompID', 1);
-  assert.equal(r.value, 255);
-  assert.equal(r.error, null);
-});
-
-test('parseTargetUint8: 256 → error', () => {
-  const r = parseTargetUint8(256, 'Target SysID', 1);
-  assert.notEqual(r.error, null);
-  assert.equal(r.value, 1);
-});
-
-test('parseTargetUint8: -1 → error', () => {
-  const r = parseTargetUint8(-1, 'Target SysID', 1);
-  assert.notEqual(r.error, null);
-});
-
-test('parseTargetUint8: non-numeric string → error naming the field', () => {
-  const r = parseTargetUint8('abc', 'Target SysID', 1);
-  assert.notEqual(r.error, null);
-  assert.ok(r.error.includes('Target SysID'));
-});
-
-test('parseTargetUint8: float 1.5 → error', () => {
-  const r = parseTargetUint8(1.5, 'Target SysID', 1);
-  assert.notEqual(r.error, null);
 });

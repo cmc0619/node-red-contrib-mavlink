@@ -83,7 +83,6 @@ module.exports = function registerMavlinkVehicle(RED) {
     normalizeFirmware,
     normalizeFamily,
     resolveDialect,
-    parseTargetUint8,
     knownDialects,
   } = vehicleApi;
 
@@ -302,14 +301,11 @@ module.exports = function registerMavlinkVehicle(RED) {
     // Optional firmware/custom parameter-definition URL (PX4 / custom stacks).
     node.paramDefsUrl = typeof config.paramDefsUrl === 'string' ? config.paramDefsUrl.trim() : '';
 
-    const problems = [];
+    // Editor validateUint8(0) owns the range; runtime trusts the form.
+    node.defaultTargetSystem = Number(config.defaultTargetSystem);
+    node.defaultTargetComponent = Number(config.defaultTargetComponent);
 
-    const sysResult = parseTargetUint8(config.defaultTargetSystem, 'Default target system', 1);
-    const cmpResult = parseTargetUint8(config.defaultTargetComponent, 'Default target component', 1);
-    if (sysResult.error) problems.push(sysResult.error);
-    if (cmpResult.error) problems.push(cmpResult.error);
-    node.defaultTargetSystem = sysResult.value;
-    node.defaultTargetComponent = cmpResult.value;
+    const problems = [];
 
     /** @type {import('../lib/metadata').DialectBundle|null} */
     node._bundle = null;
