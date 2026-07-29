@@ -48,6 +48,7 @@ class FakeSelect {
     this.options = [];
     this.selected = value || '';
     this.attrs = {};
+    this.triggered = [];
   }
 
   empty() {
@@ -83,6 +84,11 @@ class FakeSelect {
   }
 
   on() {
+    return this;
+  }
+
+  trigger(eventName) {
+    this.triggered.push(eventName);
     return this;
   }
 
@@ -174,6 +180,20 @@ test('fillEnumSelect writes numeric string values and re-selects saved entries',
     ]
   );
   assert.equal(select.selected, '6');
+  assert.deepEqual(select.triggered, ['change']);
+});
+
+test('fillEnumSelect seeds a saved CompID before dialect labels arrive', () => {
+  const context = loadHelpers();
+  const select = new FakeSelect();
+
+  context.RED.mavlink.fillCompIdSelect(select, [], { saved: 190 });
+
+  assert.equal(select.selected, '190');
+  assert.equal(select.options.length, 1);
+  assert.equal(select.options[0].value, '190');
+  assert.match(select.options[0].label, /not in dialect/);
+  assert.deepEqual(select.triggered, ['change']);
 });
 
 test('fillCompIdSelect allows an empty filter option', () => {
@@ -204,6 +224,17 @@ test('identity oneditprepare loads MAV_TYPE by enum name, not numeric value', ()
   assert.match(html, /saved:\s*\$hbType\.val\(\)\s*\|\|\s*node\.heartbeatType/);
   assert.match(html, /saved:\s*\$hbAp\.val\(\)\s*\|\|\s*node\.heartbeatAutopilot/);
   assert.match(html, /saved:\s*\$compid\.val\(\)\s*\|\|\s*node\.sourceComponentId/);
+});
+
+test('identity oneditprepare seeds CompID before async enum catalog', () => {
+  // Sync seed must appear before loadEnumsCatalog so post-prepare validation
+  // sees the saved numeric CompID while MAV_COMPONENT is still loading.
+  const seedIdx = html.indexOf("fillCompIdSelect($compid, [],");
+  const loadIdx = html.indexOf("loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMPONENT']");
+  assert.ok(seedIdx !== -1, 'sync CompID seed');
+  assert.ok(loadIdx !== -1, 'async enum load');
+  assert.ok(seedIdx < loadIdx, 'seed before async catalog');
+  assert.match(html, /\$select\.trigger\('change'\)/);
 });
 
 test('adminApiUrl respects a non-root httpAdminRoot', () => {

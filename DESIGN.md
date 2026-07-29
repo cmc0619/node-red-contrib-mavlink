@@ -517,7 +517,11 @@ ordinary; five constraints are not, and each is the part a builder skips:
 
 **Saved values survive async metadata loads.** A late-arriving dropdown population merges into
 persisted config; it never overwrites a valid saved selection with empty. Derived UI state —
-validity badges, availability — recomputes on every redeploy, not only first load.
+validity badges, availability — recomputes on every redeploy, not only first load. For
+`<select>` fields filled after `oneditprepare`, that means: (1) seed the saved value into the
+control before the function returns so Node-RED's immediate post-prepare validation sees it,
+and (2) `$select.trigger('change')` after the async fill so a pre-fill `input-error` clears
+through the stock change→validate path (never a parallel validation API).
 
 ## 7. Config nodes
 
@@ -1547,6 +1551,17 @@ returns an empty list for every dialect, so the editor falls back to `#1 (not in
 Bundled reconstruction must re-prefix members with `MAV_COMP_ID_`, not `MAV_COMPONENT_`.
 *Check:* `node -e "const {listEnumsCatalog}=require('./lib/metadata'); console.log(listEnumsCatalog('ardupilotmega',['MAV_COMPONENT']).enums.MAV_COMPONENT.find(e=>e.value===1))"`
 — expect `{ name: 'MAV_COMP_ID_AUTOPILOT1', value: 1, label: 'MAV_COMP_ID_AUTOPILOT1 (1)', … }`.
+
+**Empty CompID `<select>` fails validation before async enum fill — sticky red ring.**
+*Wrong belief:* A red ring on Source CompID means the saved value is wrong, or the truncated
+label `MAV_COMP_ID_MISSIONPLANNER (190)` is a different (invalid) value than numeric `190`.
+*Fact:* The control stores the numeric id; the label is display-only. The template ships an
+empty `<select>`. Node-RED runs property validators immediately after `oneditprepare`, while
+`/mavlink/enums` is still in flight, so `mavIdentityIdValidator` sees blank and returns
+`required for this role` → `input-error`. A later `fillEnumSelect` that sets `.val(190)` without
+`trigger('change')` never clears that class. SysID is a number `<input>` and is unaffected.
+*Check:* Local Identity seeds CompID synchronously, then `fillEnumSelect` ends with
+`trigger('change')`; `node --test test/nodes/local-identity-html.test.js`.
 
 **UDP, TCP, and serial ship on one Connection contract.**
 *Wrong belief:* §12 meant UDP first, with TCP and serial as later follow-ups that can diverge.
