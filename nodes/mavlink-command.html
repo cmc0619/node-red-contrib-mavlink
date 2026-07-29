@@ -810,6 +810,10 @@
           }
           // Join dialect command-param descriptions onto preset fields (§6).
           loadCommandsCatalog(function (cmdCatalog) {
+            // Drop stale callbacks — a newer preset/mode/vehicle refresh may
+            // have already emptied `container` (Greptile #36).
+            if ($('#node-input-mode').val() !== 'preset') return;
+            if ($('#node-input-preset').val() !== presetId) return;
             if (paramSpec.length === 0) {
               container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
               return;

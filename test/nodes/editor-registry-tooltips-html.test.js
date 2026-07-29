@@ -87,3 +87,18 @@ test('shared applyFieldTitle helper lives on RED.mavlink', () => {
   const html = readHtml('mavlink-local-identity');
   assert.match(html, /RED\.mavlink\.applyFieldTitle\s*=\s*function/);
 });
+
+test('Payload catalogQuery unwraps Connection vehicle snapshot id', () => {
+  const html = readHtml('mavlink-payload');
+  assert.match(html, /RED\.mavlink\.vehicleIdFrom/);
+  const shared = readHtml('mavlink-local-identity');
+  assert.match(shared, /RED\.mavlink\.vehicleIdFrom\s*=\s*function/);
+});
+
+test('Command preset tip join ignores stale catalog callbacks', () => {
+  const html = readHtml('mavlink-command');
+  assert.match(
+    html,
+    /loadCommandsCatalog\(function\s*\([^)]*\)\s*\{[\s\S]*?#node-input-preset'\)\.val\(\)\s*!==\s*presetId/
+  );
+});

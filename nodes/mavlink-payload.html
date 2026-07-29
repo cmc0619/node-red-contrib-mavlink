@@ -172,11 +172,11 @@
           var connection = $('#node-input-connection').val() || '';
           if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
             var conn = RED.nodes.node(connection);
-            if (conn && conn.vehicle) {
-              vehicle = conn.vehicle;
-              var profile = RED.nodes.node(conn.vehicle);
-              if (profile && profile.dialect) dialect = profile.dialect;
-            }
+            // Deployed Connection replaces `vehicle` with a frozen snapshot
+            // `{ id, … }`; the admin tips route needs the profile node id.
+            vehicle = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
+            var profile = vehicle && RED.nodes.node(vehicle);
+            if (profile && profile.dialect) dialect = profile.dialect;
           }
         }
         if (vehicle && !dialect && RED.nodes && typeof RED.nodes.node === 'function') {

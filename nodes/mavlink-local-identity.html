@@ -81,6 +81,20 @@
      * what the wire will encode. Dialogs without a delivery field keep the
      * connection-derived behaviour.
      */
+    /**
+     * Config-node id from an editor property or a deployed Connection's frozen
+     * `vehicle` snapshot (`{ id, targetSysid, … }`).
+     *
+     * @param {string|{id?: string}|null|undefined} ref
+     * @returns {string}
+     */
+    RED.mavlink.vehicleIdFrom = function (ref) {
+      if (!ref) return '';
+      if (typeof ref === 'string') return ref;
+      if (typeof ref === 'object' && typeof ref.id === 'string') return ref.id;
+      return '';
+    };
+
     function currentEnumQuery(names) {
       var query = {};
       var buildTier = valueFromSelector('#node-input-delivery') === 'build';
@@ -92,11 +106,9 @@
         var connection = valueFromSelector('#node-input-connection');
         if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
           var conn = RED.nodes.node(connection);
-          if (conn && conn.vehicle) {
-            vehicle = conn.vehicle;
-            var connProfile = RED.nodes.node(conn.vehicle);
-            if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
-          }
+          vehicle = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
+          var connProfile = vehicle ? RED.nodes.node(vehicle) : null;
+          if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
         }
       }
       if (!vehicle) vehicle = valueFromSelector('#node-input-vehicle');
