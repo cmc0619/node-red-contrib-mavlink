@@ -135,6 +135,12 @@ test('normalizeTarget: rejects NaN, fractions, and out-of-range', () => {
   assert.throws(() => normalizeTarget({ sysid: -1 }), /target\.sysid/);
 });
 
+test('normalizeTarget: rejects booleans and arrays (Number coercion traps)', () => {
+  assert.throws(() => normalizeTarget({ sysid: true }), /target\.sysid/);
+  assert.throws(() => normalizeTarget({ sysid: [] }), /target\.sysid/);
+  assert.throws(() => normalizeTarget({ compid: [7] }), /target\.compid/);
+});
+
 test('resolveActionTarget rejects non-uint8 payload targets', () => {
   assert.throws(
     () => resolveActionTarget({ payloadTarget: { sysid: 999 } }),

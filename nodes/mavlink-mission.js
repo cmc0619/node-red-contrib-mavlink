@@ -101,13 +101,33 @@ module.exports = function registerMavlinkMission(RED) {
       // hidden is not honored, §6). Payload override is the only runtime escape.
       const firmware = resolveFirmware(payload.firmware, profile);
 
-      const target = resolveActionTarget({
-        payloadTarget: payload.target,
-        configSysid: config.targetSystem,
-        configCompid: config.targetComponent,
-        identityNode,
-        profile,
-      });
+      let target;
+      try {
+        target = resolveActionTarget({
+          payloadTarget: payload.target,
+          configSysid: config.targetSystem,
+          configCompid: config.targetComponent,
+          identityNode,
+          profile,
+        });
+      } catch (err) {
+        // Malformed msg.payload.target is a runtime boundary — emit the failed
+        // record and done(err) like the other gated validate paths (do not throw
+        // out of the input handler).
+        const raw = payload.target && typeof payload.target === 'object' ? payload.target : {};
+        const rec = record(operation, missionTypeKey, {
+          sysid: raw.sysid,
+          compid: raw.compid,
+        }, {
+          result: 'failed',
+          phase: 'validate',
+          reason: err.message,
+        });
+        applyActionStatus(node, 'error', 'bad target');
+        emit([null, rec]);
+        reportDoneError(node, new Error(`mavlink-mission: ${err.message}`), msg, done);
+        return;
+      }
 
       // Refuse a type the selected stack does not carry over this protocol rather
       // than sending a request it will silently no-op (§9, §11).
