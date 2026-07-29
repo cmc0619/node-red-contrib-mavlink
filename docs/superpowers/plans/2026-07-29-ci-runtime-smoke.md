@@ -70,7 +70,8 @@ Create jobs for:
 - Node.js `18.20.8`, `20.19.0`, and `22.13.0`: install, unit tests, and pack
   dry-run; lint the Node.js 20 and 22 rows because ESLint 10 does not support
   Node.js 18.
-- Node.js `22.13.0`: create and install the tarball with optional dependencies omitted.
+- Node.js `22.13.0`: create and install the tarball with optional dependencies
+  omitted, then deploy that installed artifact through Node-RED.
 - Node.js `18.20.8` + Node-RED `4.1.11`, and Node.js `22.13.0` + Node-RED
   `5.0.1`: install the selected runtime without changing the lockfile and run
   `npm run test:runtime`.

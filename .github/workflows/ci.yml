@@ -69,15 +69,21 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Pack and install without optional native dependencies
+      - name: Pack, install, and deploy without optional native dependencies
         shell: bash
         run: |
           archive="$(npm pack --pack-destination "$RUNNER_TEMP" --silent)"
+          install_root="$RUNNER_TEMP/package-install"
           npm install \
-            --prefix "$RUNNER_TEMP/package-install" \
+            --prefix "$install_root" \
             --omit=dev \
             --omit=optional \
-            "$RUNNER_TEMP/$archive"
+            "$RUNNER_TEMP/$archive" \
+            node-red@4.1.11 \
+            node-red-node-test-helper@0.3.6
+          MAVLINK_PACKAGE_ROOT="$install_root/node_modules/node-red-contrib-mavlink" \
+            NODE_PATH="$install_root/node_modules" \
+            node --test integration/node-red-smoke.test.js
 
   node-red-runtime:
     name: Node-RED ${{ matrix.node_red }} (Node ${{ matrix.node_version }})

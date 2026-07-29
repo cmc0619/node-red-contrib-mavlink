@@ -13,8 +13,8 @@ supported Node-RED runtimes.
   Run lint on Node.js 20 and 22 because ESLint 10 requires Node.js 20.19 or
   newer; Node.js 18 tests the package runtime contract, not the development
   tool's unsupported engine.
-- Pack the publishable tarball and install it without optional native
-  dependencies.
+- Pack the publishable tarball, install it without optional native
+  dependencies, and deploy the installed artifact through Node-RED.
 - Load all 13 registered node modules through the real Node-RED test runtime,
   deploy a representative flow, unload it, and deploy it again.
 - Exercise Node-RED 4 on the minimum Node.js line and Node-RED 5 on its minimum
@@ -38,8 +38,9 @@ One `.github/workflows/ci.yml` workflow has three jobs:
 
 1. `quality` uses a Node.js 18/20/22 matrix and runs `npm ci`, unit tests, and
    `npm pack --dry-run`, with lint enabled on the two ESLint-compatible rows.
-2. `package-install` creates the actual npm tarball and installs it into an
-   empty prefix with optional dependencies omitted.
+2. `package-install` creates the actual npm tarball, installs it into an empty
+   prefix with optional dependencies omitted, and points the runtime smoke at
+   that installed package rather than the checkout.
 3. `node-red-runtime` uses an explicit compatibility matrix for Node-RED 4 and
    5, then runs the runtime smoke test.
 

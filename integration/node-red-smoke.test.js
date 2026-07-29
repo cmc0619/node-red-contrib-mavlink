@@ -5,9 +5,12 @@ const path = require('node:path');
 const test = require('node:test');
 const helper = require('node-red-node-test-helper');
 
-const packageJson = require('../package.json');
+const packageRoot = process.env.MAVLINK_PACKAGE_ROOT
+  ? path.resolve(process.env.MAVLINK_PACKAGE_ROOT)
+  : path.resolve(__dirname, '..');
+const packageJson = require(path.join(packageRoot, 'package.json'));
 const runtimeModules = Object.values(packageJson['node-red'].nodes).map((modulePath) =>
-  require(path.resolve(__dirname, '..', modulePath))
+  require(path.resolve(packageRoot, modulePath))
 );
 
 const nodeIds = [
@@ -47,13 +50,15 @@ function representativeFlow() {
       vehicleFamily: 'generic',
       firmware: 'ardupilot',
       dialect: 'common',
-      dialectSource: 'bundled'
+      dialectSource: 'bundled',
+      dialectRevision: 'seed'
     },
     {
       id: 'connection',
       type: 'mavlink-connection',
       name: 'CI disabled connection',
       disabled: true,
+      mode: 'udp',
       vehicle: 'vehicle',
       localIdentity: 'identity'
     },
