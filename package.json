@@ -13,6 +13,7 @@
   "scripts": {
     "lint": "eslint .",
     "test": "node --test lib/**/test/*.test.js test/**/*.test.js",
+    "test:runtime": "node --test integration/node-red-smoke.test.js",
     "generate-seed": "node scripts/generate-seed.js"
   },
   "files": [
@@ -35,7 +36,9 @@
   },
 
   "devDependencies": {
-    "eslint": "^10.8.0"
+    "eslint": "^10.8.0",
+    "node-red": "^4.1.11",
+    "node-red-node-test-helper": "^0.3.6"
   },
   "keywords": ["node-red", "mavlink", "ardupilot", "px4", "drone"],
   "node-red": {
