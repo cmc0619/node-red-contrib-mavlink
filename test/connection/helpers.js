@@ -85,6 +85,11 @@ function fakeWire() {
       const parsed = JSON.parse(buffer.toString());
       return Array.isArray(parsed) ? parsed : [parsed];
     },
+    evictIdleDecoders() {
+      return 0;
+    },
+    releaseDecoder() {},
+    clearDecoders() {},
   };
 }
 

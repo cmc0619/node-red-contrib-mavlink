@@ -144,6 +144,73 @@ test('a heartbeat tick enqueues on the Liveness band and is transmitted', async 
   connection.close();
 });
 
+test('peer-table sweep idle-evicts decoders only on UDP (not TCP)', async () => {
+  const sweeps = [];
+  function wireWithEvict() {
+    const w = fakeWire();
+    w.evictIdleDecoders = (...args) => {
+      sweeps.push(args);
+      return 0;
+    };
+    return w;
+  }
+
+  const udpIntervals = [];
+  const { connection: udp } = build(
+    { transport: { mode: 'udp', bindAddress: '0.0.0.0', bindPort: 14550 } },
+    {
+      wire: wireWithEvict(),
+      setInterval: (fn, ms) => {
+        udpIntervals.push({ fn, ms });
+        return { unref() {} };
+      },
+      clearInterval() {},
+    }
+  );
+  await udp.start();
+  const sweep = udpIntervals.find((t) => t.ms === 5000);
+  assert.ok(sweep, 'stale/sweep interval should be registered');
+  sweep.fn();
+  assert.equal(sweeps.length, 1, 'UDP sweep must call evictIdleDecoders');
+  assert.equal(sweeps[0][1], 15000, 'idle decoder TTL matches peer-table expire default');
+  udp.close();
+
+  sweeps.length = 0;
+  const tcpIntervals = [];
+  const { connection: tcp } = build(
+    {
+      transport: {
+        mode: 'tcp',
+        bindAddress: '0.0.0.0',
+        bindPort: 5760,
+      },
+    },
+    {
+      wire: wireWithEvict(),
+      // TCP open needs a transport factory — inject a no-op transport.
+      transportFactory: () => {
+        const { EventEmitter } = require('node:events');
+        const t = new EventEmitter();
+        t.open = async () => {};
+        t.close = (cb) => cb && cb();
+        t.send = (_b, _e, cb) => cb && cb();
+        return t;
+      },
+      setInterval: (fn, ms) => {
+        tcpIntervals.push({ fn, ms });
+        return { unref() {} };
+      },
+      clearInterval() {},
+    }
+  );
+  await tcp.start();
+  const tcpSweep = tcpIntervals.find((t) => t.ms === 5000);
+  assert.ok(tcpSweep, 'TCP still runs peer-table sweep');
+  tcpSweep.fn();
+  assert.equal(sweeps.length, 0, 'TCP sweep must not age-evict stream decoders');
+  tcp.close();
+});
+
 test('heartbeat scheduler interval is driven by the bound identity snapshot', async () => {
   const intervals = [];
   const identity = { ...GCS, heartbeatIntervalMs: 250 };

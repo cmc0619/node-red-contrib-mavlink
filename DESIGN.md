@@ -606,6 +606,22 @@ its profile — one dialect, one firmware, no per-packet lookup. There is no rou
 accepted-sysid allowlist, and no policy for unmatched traffic, because none of those questions
 arise.
 
+**One stream decoder per TCP client / UDP endpoint.** MAVLink framing is a byte stream. A
+Connection keeps one *serialize* registry, but each network peer (`address:port`) gets its own
+`MavLinkPacketSplitter` pipeline. Sharing one splitter across peers lets a partial frame from
+vehicle A contaminate the next bytes from vehicle B. TCP peer disconnect releases that
+decoder; idle UDP pipelines are evicted on the peer-table expire interval (TCP/serial do
+**not** age-evict — only `endpoint-gone` / Connection close). A TCP `endpoint-gone` fires
+only while that socket still owns the `address:port` map slot — a delayed close after the
+same tuple reconnects must not wipe the replacement stream's decoder (emit once on
+supersede instead). A hard cap (default **100**)
+evicts under pressure: never-validated junk (empty buffer or no MAVLink STX) first, then
+validated pipelines whose splitter buffer is empty, then Map-order LRU among remaining
+mid-frame entries — including a peer whose *first* frame is still incomplete (not yet
+`validated`). Spoofed UDP source churn cannot grow memory without bound while a live peer
+with a partial frame buffered is preferred. Steady per-drone endpoints reuse the same
+tuple and stay under the cap. Serial is one endpoint and needs only one decoder.
+
 A mixed fleet is expressed as **more connections**, not more configuration inside one. A listener
 on 14550 bound to an ArduPilot profile and another on 14551 bound to a PX4 profile is the whole
 mechanism; the operator points each vehicle at the port that matches it. Two profiles sharing a
@@ -1413,6 +1429,20 @@ include order §4 already assembled), then synthesizes anything else in the bund
 `ardupilotmega` beside it and both registries coexist. A custom dialect with no `<include>`
 does not inherit HEARTBEAT from a hidden preload.
 *Check:* `node --test test/connection/wire-registry.test.js`
+
+**Stream decoders are per endpoint, not per Connection.**
+*Wrong belief:* one `MavLinkPacketSplitter` on the Connection can safely decode every TCP
+client and UDP rinfo because MAVLink carries sysid/compid in each frame.
+*Fact:* framing state is a byte stream before sysid is known. A partial packet from peer A
+left in a shared splitter contaminates peer B. `createWire` keeps one serialize registry and
+a decoder map keyed by `address:port` (capped, default 100; never-validated junk first,
+then empty-buffer validated, then Map-order LRU — mid-frame peers kept, including a
+first frame that has not validated yet). TCP clears via `endpoint-gone`; UDP also
+age-evicts idle pipelines on the peer-table expire interval (TCP/serial do not). Cap
+pressure that must drop a mid-frame buffer is the residual after both preference tiers —
+accepted only when more than `maxDecoders` distinct endpoints each hold incomplete framing
+state; normal fleets stay far under the cap.
+*Check:* `node --test test/connection/wire-decoders.test.js`
 
 **Node exposes no DSCP setter.**
 *Wrong belief:* traffic class is settable on a socket.

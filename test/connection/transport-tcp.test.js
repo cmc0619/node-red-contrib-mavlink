@@ -258,6 +258,93 @@ test('client disconnect emits error so the runtime can leave CONNECTED', async (
   assert.equal(err.code, 'TCP_DISCONNECTED');
 });
 
+test('server peer disconnect emits endpoint-gone for stream-decoder cleanup', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  await transport.open();
+
+  const a = new MockSocket({ address: '10.0.0.1', port: 1 });
+  net.servers[0].accept(a);
+
+  const gone = await new Promise((resolve) => {
+    transport.once('endpoint-gone', resolve);
+    a.emit('close');
+  });
+  assert.deepEqual(gone, { address: '10.0.0.1', port: 1 });
+});
+
+test('client disconnect emits endpoint-gone for stream-decoder cleanup', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport(
+    { remoteAddress: '10.0.0.9', remotePort: 5760 },
+    { net: net.module }
+  );
+  await transport.open();
+
+  const gone = await new Promise((resolve) => {
+    transport.once('endpoint-gone', resolve);
+    // Client close also emits error/close — ignore those for this assertion.
+    transport.on('error', () => {});
+    net.clients[0].emit('close');
+  });
+  assert.deepEqual(gone, { address: '10.0.0.9', port: 5760 });
+});
+
+test('stale server close does not emit endpoint-gone after same address:port reconnect', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  await transport.open();
+
+  const a = new MockSocket({ address: '10.0.0.1', port: 1 });
+  const b = new MockSocket({ address: '10.0.0.1', port: 1 });
+  net.servers[0].accept(a);
+
+  const events = [];
+  transport.on('endpoint-gone', (ep) => events.push(ep));
+
+  // Reconnect reuses the tuple — emit once to clear the superseded decoder.
+  net.servers[0].accept(b);
+  assert.deepEqual(events, [{ address: '10.0.0.1', port: 1 }]);
+
+  // Delayed close of the old socket must not wipe the replacement's decoder.
+  a.emit('close');
+  assert.equal(events.length, 1);
+
+  // Live peer still selectable for send.
+  let sent = false;
+  transport.send(Buffer.from('to-b'), { address: '10.0.0.1', port: 1 }, (err) => {
+    assert.ifError(err);
+    sent = true;
+  });
+  assert.equal(sent, true);
+  assert.equal(b.writes[0].toString(), 'to-b');
+
+  // Real disconnect of the replacement still cleans up.
+  b.emit('close');
+  assert.deepEqual(events[1], { address: '10.0.0.1', port: 1 });
+});
+
+test('superseded server socket data does not emit message after reconnect', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  await transport.open();
+
+  const a = new MockSocket({ address: '10.0.0.1', port: 1 });
+  const b = new MockSocket({ address: '10.0.0.1', port: 1 });
+  net.servers[0].accept(a);
+  net.servers[0].accept(b);
+
+  const messages = [];
+  transport.on('message', (m) => messages.push(m.buffer.toString()));
+
+  // Delayed bytes on the old socket must not enter the replacement decoder.
+  a.receive(Buffer.from('stale'));
+  assert.deepEqual(messages, []);
+
+  b.receive(Buffer.from('fresh'));
+  assert.deepEqual(messages, ['fresh']);
+});
+
 test('server peer error does not emit transport error for remaining clients', async () => {
   const net = mockNet();
   const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
