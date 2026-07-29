@@ -234,6 +234,26 @@
     };
 
     /**
+     * Apply dialect `units` as an inline hint after the input (§6 — units are
+     * not tooltip text). Missing units clear the hint (no baked fallback).
+     *
+     * @param {string} inputId
+     * @param {string} [units]
+     */
+    RED.mavlink.applyFieldUnits = function (inputId, units) {
+      var $input = $('#' + inputId);
+      if (!$input.length) return;
+      var $row = $input.closest('.form-row');
+      var $u = $row.children('.mav-field-units');
+      if (!$u.length) {
+        $u = $('<span class="mav-field-units"></span>');
+        $input.after($u);
+      }
+      var text = units != null ? String(units).trim() : '';
+      $u.text(text ? (' ' + text) : '');
+    };
+
+    /**
      * Fill a MAV_COMPONENT select; filters can opt into an empty "any component"
      * choice through the same options object.
      */

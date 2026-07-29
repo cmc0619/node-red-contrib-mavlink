@@ -2,7 +2,7 @@
 
 const {
   buildPayloadMessage,
-  fieldTipsFromBundle,
+  fieldMetaFromBundle,
 } = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
 const { AckWaiter } = require('../lib/command');
@@ -26,8 +26,8 @@ module.exports = function registerMavlinkPayload(RED) {
 
     /**
      * GET /mavlink/payload/field-tips?topic=&verb=&path=&vehicle=&dialect=
-     * Returns `{ fields: { sequence: "<dialect description>", … } }` joined from
-     * the structural payload bindings + the dialect bundle (DESIGN.md §6).
+     * Returns `{ fields: { sequence: { description, units }, … } }` joined from
+     * PAYLOAD_RECIPES + the dialect bundle (DESIGN.md §6).
      */
     RED.httpAdmin.get(
       FIELD_TIPS_ROUTE,
@@ -82,7 +82,7 @@ module.exports = function registerMavlinkPayload(RED) {
           }
           return res.json({
             dialect,
-            fields: fieldTipsFromBundle(bundle, topic, verb, path),
+            fields: fieldMetaFromBundle(bundle, topic, verb, path),
           });
         } catch (err) {
           // Bundled load errors can include filesystem paths — log server-side

@@ -13,6 +13,7 @@ const {
   recipeFor,
   descriptionForCommandParam,
   fieldTipsFromBundle,
+  fieldMetaFromBundle,
   buildPayloadMessage,
   MAV_CMD,
 } = require('../../lib/payload');
@@ -100,4 +101,12 @@ test('buildPayloadMessage and field tips share the photo recipe param order', ()
     recipe.params.map((s) => s.field),
     ['cameraId', 'interval', 'count', 'sequence']
   );
+});
+
+test('fieldMetaFromBundle surfaces dialect units for Interval (not baked HTML)', () => {
+  const bundle = loadBundled('ardupilotmega');
+  const meta = fieldMetaFromBundle(bundle, 'camera', 'photo', '');
+  assert.ok(meta.interval);
+  assert.equal(meta.interval.units, 's');
+  assert.match(meta.interval.description, /elapsed time|seconds/i);
 });

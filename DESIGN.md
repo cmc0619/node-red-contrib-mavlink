@@ -392,8 +392,9 @@ are limited to units and range. The dialog stays compact. Tooltip *text* always 
 dialect registry / admin catalogs (enum entry, message, command, command-param, param-def, or
 Payload field-tips join) — never from baked protocol copy in editor HTML. Structural joins
 (which UI field maps to which `MAV_CMD` param index) are the shared `PAYLOAD_RECIPES` in
-`lib/payload` — one recipe drives both the wire builder and tip lookup; the hover string is
-still the XML `description`.
+`lib/payload` — one recipe drives the wire builder, tip lookup, and inline units; hover text
+is the XML `description`, and the trailing unit hint is the XML `units` attribute (never baked
+into Payload HTML).
 
 ### Addressing and identity — the role × tier matrix
 

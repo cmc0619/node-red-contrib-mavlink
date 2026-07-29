@@ -73,19 +73,40 @@ test('Payload template has no baked MAVLink description titles', () => {
   }
 });
 
+test('Payload template does not bake protocol unit suffixes on value fields', () => {
+  const html = readHtml('mavlink-payload');
+  const template = html.split('data-template-name="mavlink-payload"')[1] || '';
+  // Dialect units are applied via applyFieldUnits; keep only Node-RED config units
+  // like ACK timeout "ms" if present outside tip fields.
+  assert.ok(
+    !/node-input-interval"[^>]*>\s*s\b/.test(template),
+    'interval must not bake trailing "s"'
+  );
+  assert.ok(
+    !/node-input-distance"[^>]*>\s*m\b/.test(template),
+    'distance must not bake trailing "m"'
+  );
+  assert.ok(
+    !/node-input-pitch"[^>]*>\s*deg\b/.test(template),
+    'pitch must not bake trailing "deg"'
+  );
+});
+
 test('Payload editor loads field tips from /mavlink/payload/field-tips', () => {
   const html = readHtml('mavlink-payload');
   assert.match(html, /\/mavlink\/payload\/field-tips/);
   assert.match(html, /refreshPayloadFieldTips/);
   assert.match(html, /RED\.mavlink\.applyFieldTitle/);
+  assert.match(html, /RED\.mavlink\.applyFieldUnits/);
   // Sequence is a tip target — description comes from the dialect join, not HTML.
   assert.match(html, /['"]sequence['"]/);
   assert.match(html, /node-input-sequence/);
 });
 
-test('shared applyFieldTitle helper lives on RED.mavlink', () => {
+test('shared applyFieldTitle / applyFieldUnits helpers live on RED.mavlink', () => {
   const html = readHtml('mavlink-local-identity');
   assert.match(html, /RED\.mavlink\.applyFieldTitle\s*=\s*function/);
+  assert.match(html, /RED\.mavlink\.applyFieldUnits\s*=\s*function/);
 });
 
 test('Payload catalogQuery reuses shared currentCatalogQuery', () => {
