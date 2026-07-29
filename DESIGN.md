@@ -449,9 +449,9 @@ independently; a configured 0 is broadcast and survives; blank means inherit):
 5. 1
 
 `lib/addressing` owns one resolution path (`resolveActionTarget`) and one builder default
-helper (`normalizeTarget`: missing → 1, explicit `0` kept — the old Move/Param/Payload
-local shape). Flow `msg.payload.target` is not validated at runtime — it is
-programmer-authored, same trust class as editor config.
+helper (`normalizeTarget`: missing → 1, explicit `0` kept). Sysid/compid ranges are
+editor-only (`RED.mavlink.validateUint8`). Flow `msg` and deployed config are trusted at
+runtime — no second uint8 parser.
 
 Confirm/complete matching (COMMAND_ACK, param echo) keys on the *same resolved target* — the
 matcher and the sender share one resolution, pinned by test.
@@ -1710,11 +1710,13 @@ remains required.
 *Check:* `node --test test/param/param.test.js test/param/node.test.js` — look for
 `resolveParamEncoding` / capabilities tests.
 
-**Target defaulting and config-node uint8 parsing live once in `lib/addressing`.**
-*Wrong belief:* Move/Param/Payload each need a local `normalizeTarget`; Vehicle and Local
-Identity each need their own uint8 parser (targets allow 0, sources disallow it).
-*Fact:* One `normalizeTarget` (missing → 1). One `parseUint8` (`[0, 255]`) for config-node
-constructors — source min `1` is an editor rule (`validateUint8(1)`); runtime does not
-re-encode that floor. Flow `msg` is programmer-trusted — no payload guardrails.
+**Target defaulting is one helper; uint8 range stays in the editor.**
+*Wrong belief:* Move/Param/Payload each need a local `normalizeTarget`; runtime must
+re-parse sysid/compid with a shared `parseUint8` / `parseTargetUint8` /
+`parseIdentityUint8` stack.
+*Fact:* One `normalizeTarget` (missing → 1) in `lib/addressing`. Range checks are
+`RED.mavlink.validateUint8` in `.html` defaults — runtime assigns `Number(config…)` and
+does not keep a second parser. Flow `msg` is programmer-trusted.
 *Check:* `node --test test/addressing/resolve.test.js test/move/move.test.js
-test/param/param.test.js test/identity/presets.test.js`.
+test/param/param.test.js`; no `parseUint8` / `parseTargetUint8` / `parseIdentityUint8`
+under `lib/` or `nodes/`.

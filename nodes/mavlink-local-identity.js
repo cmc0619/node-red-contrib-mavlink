@@ -26,7 +26,6 @@ const {
   bindVehicleSysid,
   releaseVehicleSysid,
 } = require('../lib/identity');
-const { parseUint8 } = require('../lib/addressing');
 
 module.exports = function registerMavlinkLocalIdentity(RED) {
   /**
@@ -52,8 +51,6 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
     /** @type {number|null} null until a Connection derives it (companion only) */
     node._vehicleSysid = null;
 
-    const problems = [];
-
     /**
      * Companion role: sysid is derived from the vehicle; compid is pinned to
      * 191 (MAV_COMP_ID_ONBOARD_COMPUTER). Config values saved by a previous
@@ -63,20 +60,9 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
       node.sourceSystemId = null;
       node.sourceComponentId = 191;
     } else {
-      const sysidResult = parseUint8(
-        config.sourceSystemId,
-        'Source SysID',
-        preset.sysid || 255
-      );
-      const compidResult = parseUint8(
-        config.sourceComponentId,
-        'Source CompID',
-        preset.compid || 190
-      );
-      if (sysidResult.error) problems.push(sysidResult.error);
-      if (compidResult.error) problems.push(compidResult.error);
-      node.sourceSystemId = sysidResult.value;
-      node.sourceComponentId = compidResult.value;
+      // Editor validateUint8(1) owns the range; runtime trusts the form.
+      node.sourceSystemId = Number(config.sourceSystemId);
+      node.sourceComponentId = Number(config.sourceComponentId);
     }
 
     node.heartbeatType = config.heartbeatType || preset.heartbeatType;
@@ -89,12 +75,7 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
     );
     node.heartbeatIntervalMs = parseHeartbeatIntervalMs(config.heartbeatIntervalMs);
 
-    if (problems.length) {
-      const text = problems[0].slice(0, 24);
-      node.status({ fill: 'red', shape: 'ring', text });
-    } else {
-      node.status({ fill: 'grey', shape: 'ring', text: 'idle' });
-    }
+    node.status({ fill: 'grey', shape: 'ring', text: 'idle' });
 
     /**
      * Record a vehicle sysid claim from a Connection.
