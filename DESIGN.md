@@ -448,6 +448,12 @@ independently; a configured 0 is broadcast and survives; blank means inherit):
    field on Build
 5. 1
 
+Every resolved id is a MAVLink uint8 integer in `[0, 255]` — `lib/addressing` owns
+`parseTargetUint8` / `normalizeTarget` / `resolveActionTarget` so the Vehicle Profile editor
+and Move/Param/Payload builders share one rule. Missing → default; explicit `0` kept;
+numeric strings coerced; NaN, fractions, and out-of-range values throw at the runtime message
+boundary (editor validation already rejects bad static config).
+
 Confirm/complete matching (COMMAND_ACK, param echo) keys on the *same resolved target* — the
 matcher and the sender share one resolution, pinned by test.
 
@@ -1704,3 +1710,12 @@ corrupt integer `PARAM_SET`). ArduPilot often omits the C_CAST bit, so firmware 
 remains required.
 *Check:* `node --test test/param/param.test.js test/param/node.test.js` — look for
 `resolveParamEncoding` / capabilities tests.
+
+**Target sysid/compid normalization is one helper in `lib/addressing`, not per-module copies.**
+*Wrong belief:* Move/Param/Payload each need a local `normalizeTarget`, and `resolveActionTarget`
+can finish with bare `Number(...)` because editor config is already valid.
+*Fact:* Local copies drifted (finite-only vs NaN-emitting) and bare `Number` accepted
+non-uint8 payload overrides. Editor + runtime share `parseTargetUint8`; builders call
+`normalizeTarget`; resolution coerces through the same rule. Invalid dynamic targets throw.
+*Check:* `node --test test/addressing/resolve.test.js test/vehicle/vehicle.test.js
+test/move/move.test.js test/param/param.test.js`.

@@ -7,6 +7,8 @@ const {
   resolveActionTarget,
   resolveFirmware,
   profileFromVehicleNode,
+  normalizeTarget,
+  parseTargetUint8,
 } = require('../../lib/addressing');
 
 const PROFILE = { targetSysid: 42, targetCompid: 191, firmware: 'px4' };
@@ -117,4 +119,35 @@ test('profileFromVehicleNode maps defaults and firmware, null-safe', () => {
     profileFromVehicleNode({ defaultTargetSystem: 3, defaultTargetComponent: 4, firmware: 'px4' }),
     { targetSysid: 3, targetCompid: 4, firmware: 'px4' }
   );
+});
+
+test('normalizeTarget: missing → 1; explicit 0 kept; numeric strings coerced', () => {
+  assert.deepEqual(normalizeTarget(undefined), { sysid: 1, compid: 1 });
+  assert.deepEqual(normalizeTarget({}), { sysid: 1, compid: 1 });
+  assert.deepEqual(normalizeTarget({ sysid: 0, compid: 0 }), { sysid: 0, compid: 0 });
+  assert.deepEqual(normalizeTarget({ sysid: '7', compid: '191' }), { sysid: 7, compid: 191 });
+});
+
+test('normalizeTarget: rejects NaN, fractions, and out-of-range', () => {
+  assert.throws(() => normalizeTarget({ sysid: 'abc' }), /target\.sysid/);
+  assert.throws(() => normalizeTarget({ sysid: 1.5 }), /target\.sysid/);
+  assert.throws(() => normalizeTarget({ compid: 256 }), /target\.compid/);
+  assert.throws(() => normalizeTarget({ sysid: -1 }), /target\.sysid/);
+});
+
+test('resolveActionTarget rejects non-uint8 payload targets', () => {
+  assert.throws(
+    () => resolveActionTarget({ payloadTarget: { sysid: 999 } }),
+    /target\.sysid/
+  );
+  assert.throws(
+    () => resolveActionTarget({ payloadTarget: { compid: 'nope' } }),
+    /target\.compid/
+  );
+});
+
+test('parseTargetUint8 is the shared editor/runtime rule (exported from addressing)', () => {
+  assert.equal(parseTargetUint8(undefined, 'Target SysID', 1).value, 1);
+  assert.equal(parseTargetUint8(0, 'Target SysID', 1).value, 0);
+  assert.match(parseTargetUint8(256, 'Target SysID', 1).error, /\[0, 255\]/);
 });
