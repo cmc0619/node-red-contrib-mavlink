@@ -25,3 +25,18 @@ test('empty or missing is false', () => {
   assert.equal(isFalseTrueEnum([]), false);
   assert.equal(isFalseTrueEnum(null), false);
 });
+
+test('three-entry TRUE/FALSE tables are not boolean controls', () => {
+  assert.equal(isFalseTrueEnum([
+    { name: 'GIMBAL_AXIS_CALIBRATION_REQUIRED_UNKNOWN', value: 0 },
+    { name: 'GIMBAL_AXIS_CALIBRATION_REQUIRED_TRUE', value: 1 },
+    { name: 'GIMBAL_AXIS_CALIBRATION_REQUIRED_FALSE', value: 2 },
+  ]), false);
+});
+
+test('FALSE/TRUE with non-0/1 values are not boolean controls', () => {
+  assert.equal(isFalseTrueEnum([
+    { name: 'FLAG_FALSE', value: 2 },
+    { name: 'FLAG_TRUE', value: 1 },
+  ]), false);
+});

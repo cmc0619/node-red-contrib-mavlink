@@ -151,7 +151,7 @@
       });
       if (RED.mavlink && RED.mavlink.populateDialectSelect) {
         RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
-          saved: node.dialect || '',
+          saved: (RED.mavlink.migrateBuildDialect ? RED.mavlink.migrateBuildDialect(node) : (node.dialect || '')),
           includeVehicleEscape: true
         });
       }

@@ -72,21 +72,54 @@
     /**
      * Editor-side copy of lib/metadata/naming.js isFalseTrueEnum. Client HTML
      * cannot require() the Node module, so keep this rule mirrored here.
+     * Exactly two entries: *_FALSE=0 and *_TRUE=1 (not mixed tables).
      *
      * @param {Array<{name: string, value: number|string}|string>|null|undefined} entries
      * @returns {boolean}
      */
     RED.mavlink.isFalseTrueEnum = function (entries) {
-      if (!Array.isArray(entries) || entries.length === 0) return false;
-      var hasFalse = false;
-      var hasTrue = false;
-      entries.forEach(function (entry) {
+      if (!Array.isArray(entries) || entries.length !== 2) return false;
+      var falseOk = false;
+      var trueOk = false;
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i];
         var name = typeof entry === 'string' ? entry : entry && entry.name;
-        if (typeof name !== 'string') return;
-        if (name === 'FALSE' || name.slice(-6) === '_FALSE') hasFalse = true;
-        if (name === 'TRUE' || name.slice(-5) === '_TRUE') hasTrue = true;
-      });
-      return hasFalse && hasTrue;
+        if (typeof name !== 'string') return false;
+        var isFalse = name === 'FALSE' || name.slice(-6) === '_FALSE';
+        var isTrue = name === 'TRUE' || name.slice(-5) === '_TRUE';
+        if (!isFalse && !isTrue) return false;
+        var value = typeof entry === 'string'
+          ? (isFalse ? 0 : 1)
+          : Number(entry.value);
+        if (!Number.isInteger(value)) return false;
+        if (isFalse) {
+          if (value !== 0 || falseOk) return false;
+          falseOk = true;
+        } else {
+          if (value !== 1 || trueOk) return false;
+          trueOk = true;
+        }
+      }
+      return falseOk && trueOk;
+    };
+
+    /**
+     * Legacy Build flows stored Vehicle Profile without a Dialect field.
+     * Map that shape to `from Vehicle Profile…` once at edit-prepare (§14).
+     *
+     * @param {object} node  Node-RED editor node config
+     * @returns {string} dialect to show (may be '')
+     */
+    RED.mavlink.migrateBuildDialect = function (node) {
+      if (!node) return '';
+      if (node.dialect !== undefined && node.dialect !== null && node.dialect !== '') {
+        return String(node.dialect);
+      }
+      if (node.vehicle) {
+        node.dialect = '__vehicle';
+        return '__vehicle';
+      }
+      return '';
     };
 
     function valueFromSelector(selector) {

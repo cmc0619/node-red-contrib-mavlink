@@ -33,6 +33,9 @@ when Build is not using a Vehicle Profile.
   (Deploy/save blocked). Cancel is fine.
 - Fresh nodes start with empty dialect (invalid) until the user picks a real bundled dialect or
   `from Vehicle Profile…` with a real profile.
+- **Legacy migration (one boundary):** Build nodes saved before the Dialect field existed stored
+  only `vehicle`. At edit-prepare and runtime, empty dialect + present vehicle maps to
+  `__vehicle`. Fresh empty (no vehicle) stays invalid.
 - **`from Vehicle Profile…`:** Vehicle may be left empty; that state stays errored until a
   profile is selected. No auto-default to the “first” profile.
 - Concrete dialect selected → Vehicle Profile is hidden and ignored at runtime (hidden is not
@@ -65,12 +68,13 @@ Firmware (Param / Mission Build):
 
 ## Boolean vs bitmask controls
 
-When an enum has members named `*_FALSE` and `*_TRUE` (e.g. `MAV_BOOL`), every builder that
-renders that enum uses a **true/false** control (or two-option select), not the bitmask
-multi-select.
+When an enum is an **exact binary** false/true pair — exactly two members, `*_FALSE`/`FALSE`
+value `0` and `*_TRUE`/`TRUE` value `1` (e.g. `MAV_BOOL`) — every builder uses a **true/false**
+control, not the bitmask multi-select.
 
-- Wire value remains `0` / `1`.
-- Applies to Build message fields, Command advanced/preset params, and any shared enum renderer.
+- Wire values come from the enum entries (`0` / `1`).
+- Tables with extra members or non-0/1 FALSE/TRUE (e.g. `GIMBAL_AXIS_CALIBRATION_REQUIRED`)
+  stay ordinary selects / bitmask multi-select as otherwise marked.
 - Other bitmask-marked enums stay multi-select. Upstream `bitmask` / value-shape heuristics do
   not reliably distinguish additive masks from exclusive or mixed enums — caveat emptor.
 

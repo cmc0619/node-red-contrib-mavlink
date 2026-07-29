@@ -499,7 +499,7 @@
         refreshEnumControls();
       });
       RED.mavlink.populateDialectSelect($dialect, {
-        saved: node.dialect || '',
+        saved: (RED.mavlink.migrateBuildDialect ? RED.mavlink.migrateBuildDialect(node) : (node.dialect || '')),
         includeVehicleEscape: true
       });
       refreshVerbOptions(true);

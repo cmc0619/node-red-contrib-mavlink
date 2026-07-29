@@ -464,10 +464,12 @@ Confirm/complete matching (COMMAND_ACK, param echo) keys on the *same resolved t
 matcher and the sender share one resolution, pinned by test.
 
 **Enum controls in builders.** Bitmask-marked enums use the native multi-select (ctrl-click)
-unless the enum has members named `*_FALSE` and `*_TRUE` (e.g. `MAV_BOOL`) — those render as
-true/false (wire values `0`/`1`). Upstream `bitmask` marks and value-shape heuristics do not
-reliably tell additive masks from exclusive or mixed enums; keep multi-select and caveat emptor
-outside the false/true exception.
+unless the enum is an exact binary false/true pair — exactly two members, `*_FALSE` (or
+`FALSE`) with value `0` and `*_TRUE` (or `TRUE`) with value `1` (e.g. `MAV_BOOL`). Those render
+as true/false using the declared wire values. Mixed tables such as
+`GIMBAL_AXIS_CALIBRATION_REQUIRED` (UNKNOWN / TRUE / FALSE=2) stay ordinary selects. Upstream
+`bitmask` marks and value-shape heuristics do not reliably tell additive masks from exclusive
+or mixed enums; keep multi-select and caveat emptor outside that binary exception.
 
 **Exceptions, deliberate:**
 
@@ -1734,10 +1736,11 @@ firmware is also absent the encoder may assume ArduPilot/C-cast.
 `…_PARAM_ENCODE_C_CAST` (131072). Resolution is explicit `msg.payload.paramEncoding` → those
 capability bits → named firmware (PX4 → bytewise, else C-cast). A present-but-invalid override
 rejects rather than falling through. An empty ladder throws. Firmware for Param/Mission is
-`firstDefined(payload.firmware, profile.firmware, config.firmware-on-Build-dialect-path)` —
-wire tiers and Build-via-Vehicle-Profile use the profile; Build with a concrete dialect uses the
-node's Firmware field. Do not invent `'ardupilot'`. ArduPilot often omits the C_CAST bit, so the
-named-firmware step remains required when capabilities are absent.
+path-split, not a single `firstDefined` that can prefer a hidden profile: wire tiers and
+Build-via-`__vehicle` use `firstDefined(payload.firmware, profile.firmware)`; Build with a
+concrete dialect uses `firstDefined(payload.firmware, config.firmware)` and must not read
+`profile.firmware` (hidden is not honored). Do not invent `'ardupilot'`. ArduPilot often omits
+the C_CAST bit, so the named-firmware step remains required when capabilities are absent.
 *Check:* `node --test test/param/param.test.js test/addressing/resolve.test.js` — look for
 `resolveParamEncoding` / unresolved / firstDefined firmware tests.
 

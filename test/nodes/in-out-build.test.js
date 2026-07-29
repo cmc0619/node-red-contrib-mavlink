@@ -907,7 +907,22 @@ test('mavlink-build Build tier: plain dialect config loads bundled dialect witho
   assert.equal(out1.result, 'built');
 });
 
-test('mavlink-build: empty Build dialect does not fall back to the Vehicle Profile', () => {
+test('mavlink-build: empty Build dialect with no vehicle stays invalid', () => {
+  const RED = makeRED();
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({});
+  Constructor.call(node, {
+    messageName: 'HEARTBEAT',
+    tier: 'build',
+    fields: JSON.stringify({ type: 6, autopilot: 3 }),
+  });
+
+  assert.equal(node._status && node._status.fill, 'red');
+  assert.equal(node._status && node._status.text, 'invalid config');
+});
+
+test('mavlink-build: legacy vehicle-only Build migrates to __vehicle', () => {
   const RED = makeRED();
   let getDialectCalls = 0;
   RED.nodes._register('v1', {
@@ -922,14 +937,14 @@ test('mavlink-build: empty Build dialect does not fall back to the Vehicle Profi
   const node = makeNodeInstance({ vehicle: 'v1' });
   Constructor.call(node, {
     vehicle: 'v1',
+    // no dialect — pre-Dialect-field flow shape
     messageName: 'HEARTBEAT',
     tier: 'build',
     fields: JSON.stringify({ type: 6, autopilot: 3 }),
   });
 
-  assert.equal(getDialectCalls, 0);
-  assert.equal(node._status && node._status.fill, 'red');
-  assert.equal(node._status && node._status.text, 'invalid config');
+  assert.equal(getDialectCalls, 1, 'legacy vehicle-only Build uses the profile dialect');
+  assert.notEqual(node._status && node._status.fill, 'red');
 });
 
 test('mavlink-build wire tier: custom-dialect connection profile resolves via getDialect(), not the bundled registry', () => {

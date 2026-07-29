@@ -35,6 +35,7 @@ const {
   resolveActionTarget,
   profileFromVehicleNode,
   firstDefined,
+  resolveBuildDialect,
 } = require('../lib/addressing');
 
 /** Default param transaction timeout (ms). */
@@ -158,7 +159,7 @@ module.exports = function registerMavlinkParam(RED) {
         // Concrete Build dialects carry firmware directly from the editor.
         // Wire tiers: profile from the Connection's bound Vehicle, identity from config/payload.
         const connNode = delivery !== 'build' ? RED.nodes.getNode(config.connection) : null;
-        const useVehicle = delivery === 'build' && config.dialect === '__vehicle';
+        const useVehicle = delivery === 'build' && resolveBuildDialect(config) === '__vehicle';
         const profile = delivery === 'build'
           ? (useVehicle
             ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
