@@ -32,14 +32,16 @@ test('mavlink-mission calls fillIdentitySelect on connection change', () => {
   assert.match(html, /node-input-identity/, 'identity select element exists');
 });
 
-test('mavlink-mission firmware select is gone (§6 hidden is not honored)', () => {
-  assert.ok(
-    !html.includes('node-input-firmware'),
-    'firmware input must not exist in mission editor'
+test('mavlink-mission Build dialect default is empty and validates a selected dialect', () => {
+  assert.match(
+    html,
+    /dialect:\s*\{\s*value:\s*''/,
+    'defaults.dialect.value must be empty'
   );
-  assert.ok(
-    !/firmware:\s*\{\s*value:/.test(html),
-    'firmware default must be removed from mission defaults'
+  assert.match(
+    html,
+    /if \(delivery === ['"]build['"]\) return !!v/,
+    'Build delivery must require a dialect selection'
   );
 });
 
@@ -53,21 +55,55 @@ test('mavlink-mission has refreshVisibility and companion row hiding', () => {
   assert.match(html, /row-identity/, 'row-identity present for wire tiers');
 });
 
-test('mavlink-mission firmware type list derived from profile, not firmware select', () => {
-  // The type list repopulates using getEffectiveFirmware() which reads from the
-  // connection or vehicle node, never from a firmware <select>.
+test('mavlink-mission Build dialect select uses shared helper with Vehicle Profile escape', () => {
+  assert.match(html, /id="row-mission-dialect"/, 'template must have a dialect row');
+  assert.match(html, /id="node-input-dialect"/, 'template must have a dialect select');
+  assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
+  assert.match(html, /includeVehicleEscape:\s*true/, 'dialect helper must include Vehicle Profile escape');
+  assert.match(html, /__vehicle/, 'visibility/runtime contract must reference __vehicle');
+  assert.match(html, /from Vehicle Profile/, 'help text must name the Vehicle Profile escape');
+});
+
+test('mavlink-mission Build visibility is Vehicle Profile XOR dialect plus Firmware', () => {
+  assert.match(html, /dialect:\s*isBuild/, 'dialect row shown only for build tier');
+  assert.match(
+    html,
+    /vehicle:\s*isBuild\s*&&\s*dialect\s*===\s*'__vehicle'/,
+    'vehicle row shown only for Build Vehicle Profile escape'
+  );
+  assert.match(
+    html,
+    /firmware:\s*isBuild\s*&&\s*!!dialect\s*&&\s*dialect\s*!==\s*'__vehicle'/,
+    'firmware row shown only for Build concrete dialect'
+  );
+  assert.match(html, /id="row-mission-firmware"/, 'template must have a firmware row');
+  assert.match(html, /id="node-input-firmware"/, 'template must have the firmware select');
+});
+
+test('mavlink-mission firmware type list follows dialect, vehicle, or connection', () => {
+  // The type list repopulates using effectiveFirmware() which reads from the
+  // Build firmware select, Build Vehicle Profile escape, or wire Connection profile.
   assert.match(html, /function getEffectiveFirmware/, 'getEffectiveFirmware function present');
   assert.match(html, /function repopulateTypes/, 'repopulateTypes function present');
   assert.match(html, /getEffectiveFirmware\(\)/, 'repopulateTypes calls getEffectiveFirmware');
 });
 
 test('mavlink-mission getEffectiveFirmware is tier-aware', () => {
-  // Build tier reads from vehicle field; wire tier from connection's vehicle node.
+  // Build tier reads firmware directly unless dialect is __vehicle; wire tier
+  // reads from the connection's vehicle node.
   assert.match(html, /delivery.*===.*'build'|'build'.*===.*delivery/,
     'firmware derivation branches on delivery tier');
+  assert.match(html, /dialect\s*===\s*'__vehicle'/, 'Vehicle Profile escape gates profile firmware');
+  assert.match(html, /node-input-firmware.*\.val\(\)|\.val\(\).*node-input-firmware/s,
+    'firmware field consulted on concrete Build dialect');
   assert.match(html, /node-input-vehicle.*\.val\(\)|\.val\(\).*node-input-vehicle/s,
-    'vehicle field consulted on build tier');
+    'vehicle field consulted for __vehicle build tier');
   assert.match(html, /conn\.vehicle/, 'connection vehicle consulted on wire tier');
+  assert.doesNotMatch(
+    /function getEffectiveFirmware\(\)\s*\{[\s\S]*?\n\s*\}/.exec(html)?.[0] || '',
+    /return\s+['"]ardupilot['"]/,
+    'effectiveFirmware must not invent ardupilot when no source is selected'
+  );
 });
 
 test('mavlink-mission target sysid/compid default to empty (inherit profile)', () => {
