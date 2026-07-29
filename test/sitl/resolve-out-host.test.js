@@ -20,3 +20,11 @@ function resolve(host) {
 test('unresolved custom OUT_HOST returns empty (no gateway invent)', () => {
   assert.equal(resolve('definitely-not-a-real-host.invalid'), '');
 });
+
+test('host.docker.internal resolves to an IPv4 address when a default route exists', () => {
+  const ip = resolve('host.docker.internal');
+  // In CI/containers without a usable route this may be empty; when present it
+  // must look like dotted-quad (compose bridge gateway or host-gateway).
+  if (ip === '') return;
+  assert.match(ip, /^\d{1,3}(?:\.\d{1,3}){3}$/);
+});

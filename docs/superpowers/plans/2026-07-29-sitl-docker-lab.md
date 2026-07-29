@@ -438,10 +438,12 @@ With host Node-RED or the `nodered` profile, import `examples/sitl/10-dual-stack
 
 - [ ] **Step 3: Arm one AP + check logs**
 
-Arm `ap-1` via example flow; run:
+Touch the arm marker, arm `ap-1` via example flow, then prove a fresh log:
 
 ```bash
-./sitl/check-logs.sh --logs-root sitl/logs --expect-armed ap-1
+touch sitl/logs/ap-1/.arm-marker
+# …arm ap-1…
+./sitl/check-logs.sh --logs-root sitl/logs --expect-armed ap-1 --newer-than-marker
 ```
 
 Expected: exit 0; `docker compose logs ap-1` shows arm

@@ -52,12 +52,20 @@ fi
 sed -i -E \
   "s|mavlink start -x -u \\\$udp_gcs_port_local -r 4000000 -f.*|mavlink start -x -u \$udp_gcs_port_local -r 4000000 -f -t ${DOCKER_HOST_IP} -o ${OUT_PORT}|" \
   "${MAVLINK_RC}"
+if ! grep -qE "mavlink start -x -u \\\$udp_gcs_port_local -r 4000000 -f -t ${DOCKER_HOST_IP} -o ${OUT_PORT}" "${MAVLINK_RC}"; then
+  echo "entrypoint-px4: FATAL - GCS mavlink rewrite failed (vendor px4-rc.mavlink changed?)" >&2
+  exit 1
+fi
 # Companion / offboard remote stays on 14540+instance by default; for companion
 # containers OUT_PORT is already 14542 and we also retarget the onboard link.
 if [[ "${OUT_PORT}" == "14542" || "${OUT_PORT}" == "14540" ]]; then
   sed -i -E \
     "s|mavlink start -x -u \\\$udp_offboard_port_local -r 4000000 -f -m onboard -o \\\$udp_offboard_port_remote.*|mavlink start -x -u \$udp_offboard_port_local -r 4000000 -f -m onboard -o ${OUT_PORT} -t ${DOCKER_HOST_IP}|" \
     "${MAVLINK_RC}"
+  if ! grep -qE "mavlink start -x -u \\\$udp_offboard_port_local -r 4000000 -f -m onboard -o ${OUT_PORT} -t ${DOCKER_HOST_IP}" "${MAVLINK_RC}"; then
+    echo "entrypoint-px4: FATAL - onboard mavlink rewrite failed (vendor px4-rc.mavlink changed?)" >&2
+    exit 1
+  fi
 fi
 
 # MAVLink reads MAV_SYS_ID when `. px4-rc.mavlink` runs — set it immediately before.
@@ -74,6 +82,10 @@ if ! grep -q 'nrc_lab_params_pre_mavlink' "${RCS}"; then
     { print }
   ' "${RCS}" > "${tmp}"
   mv "${tmp}" "${RCS}"
+fi
+if ! grep -q 'nrc_lab_params_pre_mavlink' "${RCS}"; then
+  echo "entrypoint-px4: FATAL - could not insert pre-mavlink MAV_SYS_ID into rcS" >&2
+  exit 1
 fi
 
 export PX4_SIM_MODEL="${PX4_SIM_MODEL:-sihsim_quadx}"

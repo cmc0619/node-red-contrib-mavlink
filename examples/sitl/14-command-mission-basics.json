@@ -12,7 +12,7 @@
         "type": "comment",
         "z": "ex09-tab",
         "name": "Command presets + advanced + mission upload\u2215download",
-        "info": "Nodes on this tab:\n\n1. Arm sysid 1 \u2014 preset arm, delivery=confirm.\n2. SET_MESSAGE_INTERVAL \u2014 advanced COMMAND_LONG (MAV_CMD 511) to request\n   GLOBAL_POSITION_INT (msg id 33) at 4 Hz on sysid 1.\n3. Mission upload \u2014 three-item home+WP1+WP2 mission to sysid 2.\n4. Mission download \u2014 read back the mission from sysid 2.\n\nBoth sysids share the same UDP connection. The Connection routes sends by\ntarget_system so commands to sysid 1 and sysid 2 are independent.\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. Start two SITL\ninstances:\n  sim_vehicle.py -v ArduCopter -I 0 --sysid 1 --out udp:127.0.0.1:14551 &\n  sim_vehicle.py -v ArduCopter -I 1 --sysid 2 --out udp:127.0.0.1:14551 &",
+        "info": "Nodes on this tab:\n\n1. Arm sysid 1 \u2014 preset arm, delivery=confirm.\n2. SET_MESSAGE_INTERVAL \u2014 advanced COMMAND_LONG (MAV_CMD 511) to request\n   GLOBAL_POSITION_INT (msg id 33) at 4 Hz on sysid 1.\n3. Mission upload \u2014 three-item home+WP1+WP2 mission to sysid 2.\n4. Mission download \u2014 read back the mission from sysid 2.\n\nBoth sysids share the same UDP connection. The Connection routes sends by\ntarget_system so commands to sysid 1 and sysid 2 are independent.\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. Start two SITL\ninstances:\n  sim_vehicle.py -v ArduCopter -I 0 --sysid 1 --out udp:127.0.0.1:14550 &\n  sim_vehicle.py -v ArduCopter -I 1 --sysid 2 --out udp:127.0.0.1:14550 &",
         "x": 250,
         "y": 40,
         "wires": []
