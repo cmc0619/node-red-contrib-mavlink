@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality (Node ${{ matrix.node_version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node_version: 18.20.8
+            lint: false
+          - node_version: 20.19.0
+            lint: true
+          - node_version: 22.13.0
+            lint: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node_version }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # ESLint 10 requires Node >=20.19. Node 18 remains in the matrix to
+      # enforce the package's declared runtime floor with the full unit suite.
+      - name: Lint
+        if: matrix.lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Package contents
+        run: npm pack --dry-run
+
+  package-install:
+    name: Package and install
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.13.0
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Pack and install without optional native dependencies
+        shell: bash
+        run: |
+          archive="$(npm pack --pack-destination "$RUNNER_TEMP" --silent)"
+          npm install \
+            --prefix "$RUNNER_TEMP/package-install" \
+            --omit=dev \
+            --omit=optional \
+            "$RUNNER_TEMP/$archive"
+
+  node-red-runtime:
+    name: Node-RED ${{ matrix.node_red }} (Node ${{ matrix.node_version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node_version: 18.20.8
+            node_red: 4.1.11
+          - node_version: 22.13.0
+            node_red: 5.0.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node_version }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Select Node-RED runtime
+        env:
+          NODE_RED_VERSION: ${{ matrix.node_red }}
+        run: npm install --no-save --package-lock=false "node-red@$NODE_RED_VERSION"
+
+      - name: Verify selected runtime
+        env:
+          NODE_RED_VERSION: ${{ matrix.node_red }}
+        run: |
+          node -e 'const actual=require("node-red/package.json").version; if (actual !== process.env.NODE_RED_VERSION) throw new Error("expected Node-RED " + process.env.NODE_RED_VERSION + ", got " + actual)'
+
+      - name: Deploy and redeploy smoke
+        run: npm run test:runtime
