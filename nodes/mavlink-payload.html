@@ -173,13 +173,9 @@
       }
 
       function clearPayloadFieldTips() {
-        if (!(RED.mavlink && typeof RED.mavlink.applyFieldTitle === 'function')) return;
+        if (!(RED.mavlink && typeof RED.mavlink.applyFieldMeta === 'function')) return;
         for (var i = 0; i < TIP_FIELDS.length; i++) {
-          var id = 'node-input-' + TIP_FIELDS[i];
-          RED.mavlink.applyFieldTitle(id, '');
-          if (typeof RED.mavlink.applyFieldUnits === 'function') {
-            RED.mavlink.applyFieldUnits(id, '');
-          }
+          RED.mavlink.applyFieldMeta('node-input-' + TIP_FIELDS[i], null);
         }
       }
 
@@ -189,7 +185,7 @@
        */
       function refreshPayloadFieldTips() {
         if (!(RED.mavlink && typeof RED.mavlink.adminApiUrl === 'function')) return;
-        if (typeof RED.mavlink.applyFieldTitle !== 'function') return;
+        if (typeof RED.mavlink.applyFieldMeta !== 'function') return;
         var topic = $('#node-input-topic').val() || 'camera';
         var verb = $('#node-input-verb').val() || '';
         var path = $('#node-input-path').val() || 'legacy';
@@ -209,14 +205,7 @@
           for (var i = 0; i < TIP_FIELDS.length; i++) {
             var name = TIP_FIELDS[i];
             var meta = fields[name];
-            if (!meta) continue;
-            // Backward-compatible: string = description only; object = {description, units}.
-            var tip = typeof meta === 'string' ? meta : (meta.description || '');
-            var units = typeof meta === 'string' ? '' : (meta.units || '');
-            if (tip) RED.mavlink.applyFieldTitle('node-input-' + name, tip);
-            if (typeof RED.mavlink.applyFieldUnits === 'function') {
-              RED.mavlink.applyFieldUnits('node-input-' + name, units);
-            }
+            if (meta) RED.mavlink.applyFieldMeta('node-input-' + name, meta);
           }
         }).fail(function () {
           if (seq !== tipRequestSeq) return;

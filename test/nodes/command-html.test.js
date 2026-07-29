@@ -63,7 +63,13 @@ test('advanced mode enumerates params from dialect metadata, not Param 1–7 (§
 
 test('advanced catalog load ignores stale responses and keeps the in-progress selection', () => {
   assert.match(html, /_catalogRequestSeq/, 'request sequence token exists');
-  assert.match(html, /seq !== _catalogRequestSeq/, 'stale responses are dropped');
+  assert.match(html, /_catalogInflight/, 'same-key loads coalesce waiters');
+  // Drop the result when the editor target moved while the request was in flight.
+  assert.match(
+    html,
+    /resolveCatalogTarget\(\)\.key !== requestedKey/,
+    'stale target results are dropped'
+  );
   assert.match(html, /const current = sel\.val\(\)/, 'in-progress select value is read');
   assert.match(html, /const prefer = current \|\| saved/, 'current selection wins over saved');
   assert.match(

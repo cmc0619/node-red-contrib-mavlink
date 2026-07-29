@@ -54,11 +54,41 @@ test('fieldTipsFromBundle returns empty object for unknown verb', () => {
   assert.deepEqual(fieldTipsFromBundle(bundle, 'camera', 'nope', ''), {});
 });
 
+test('buildPayloadMessage rejects an unknown verb', () => {
+  assert.throws(
+    () => buildPayloadMessage({
+      topic: 'camera',
+      verb: 'nope',
+      target: { sysid: 1, compid: 1 },
+      values: {},
+    }),
+    /unknown payload verb/
+  );
+});
+
+test('buildPayloadMessage unknown-verb error includes path when present', () => {
+  assert.throws(
+    () => buildPayloadMessage({
+      topic: 'gimbal',
+      verb: 'aim',
+      path: 'not-a-real-path',
+      target: { sysid: 1, compid: 1 },
+      values: {},
+    }),
+    /gimbal\/aim\/not-a-real-path/
+  );
+});
+
+test('recipeFor gimbal aim defaults to the legacy path', () => {
+  assert.deepEqual(recipeFor('gimbal', 'aim'), recipeFor('gimbal', 'aim', 'legacy'));
+});
+
 test('fieldTipsFromBundle omits Empty / Reserved param descriptions', () => {
   const recipe = recipeFor('camera', 'photo', '');
   assert.ok(recipe && recipe.command);
   const params = recipe.params.map((slot, i) => {
     const index = i + 1;
+    if (!slot) return { index, description: 'Empty', reserved: true };
     if (slot.field === 'sequence') {
       return { index, description: 'Capture sequence number', reserved: false };
     }

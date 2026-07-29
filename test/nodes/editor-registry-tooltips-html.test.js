@@ -96,17 +96,17 @@ test('Payload editor loads field tips from /mavlink/payload/field-tips', () => {
   const html = readHtml('mavlink-payload');
   assert.match(html, /\/mavlink\/payload\/field-tips/);
   assert.match(html, /refreshPayloadFieldTips/);
-  assert.match(html, /RED\.mavlink\.applyFieldTitle/);
-  assert.match(html, /RED\.mavlink\.applyFieldUnits/);
+  assert.match(html, /RED\.mavlink\.applyFieldMeta/);
   // Sequence is a tip target — description comes from the dialect join, not HTML.
   assert.match(html, /['"]sequence['"]/);
   assert.match(html, /node-input-sequence/);
 });
 
-test('shared applyFieldTitle / applyFieldUnits helpers live on RED.mavlink', () => {
+test('shared applyFieldTitle / applyFieldUnits / applyFieldMeta helpers live on RED.mavlink', () => {
   const html = readHtml('mavlink-local-identity');
   assert.match(html, /RED\.mavlink\.applyFieldTitle\s*=\s*function/);
   assert.match(html, /RED\.mavlink\.applyFieldUnits\s*=\s*function/);
+  assert.match(html, /RED\.mavlink\.applyFieldMeta\s*=\s*function/);
 });
 
 test('Payload catalogQuery reuses shared currentCatalogQuery', () => {

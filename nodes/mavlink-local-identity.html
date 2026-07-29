@@ -254,6 +254,26 @@
     };
 
     /**
+     * Apply dialect tip meta in one call — description → title, units → inline
+     * hint. Accepts a string (description only) or `{ description, units }`.
+     *
+     * @param {string} inputId
+     * @param {string|{description?: string, units?: string}|null|undefined} meta
+     */
+    RED.mavlink.applyFieldMeta = function (inputId, meta) {
+      var tip = '';
+      var units = '';
+      if (typeof meta === 'string') {
+        tip = meta;
+      } else if (meta && typeof meta === 'object') {
+        tip = meta.description || '';
+        units = meta.units || '';
+      }
+      RED.mavlink.applyFieldTitle(inputId, tip);
+      RED.mavlink.applyFieldUnits(inputId, units);
+    };
+
+    /**
      * Fill a MAV_COMPONENT select; filters can opt into an empty "any component"
      * choice through the same options object.
      */
