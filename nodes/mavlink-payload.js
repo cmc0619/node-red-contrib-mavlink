@@ -1,11 +1,15 @@
 'use strict';
 
-const { buildPayloadMessage } = require('../lib/payload');
+const {
+  buildPayloadMessage,
+  fieldMetaFromBundle,
+} = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
 const { AckWaiter } = require('../lib/command');
 const { resolveActionTarget, profileFromVehicleNode } = require('../lib/addressing/resolve');
 
 const BADGE_MAX = 24;
+const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';
 
 module.exports = function registerMavlinkPayload(RED) {
   function MavlinkPayloadNode(config) {
@@ -141,6 +145,96 @@ module.exports = function registerMavlinkPayload(RED) {
       cancelWaiter();
       if (done) done();
     });
+  }
+
+  if (!MavlinkPayloadNode._fieldTipsRouteRegistered && RED.httpAdmin && RED.auth) {
+    let metadataApi = null;
+    try {
+      metadataApi = require('../lib/metadata');
+    } catch {
+      metadataApi = null;
+    }
+
+    /**
+     * GET /mavlink/payload/field-tips?topic=&verb=&path=&vehicle=&dialect=
+     * Returns `{ fields: { sequence: { description, units }, … } }` joined from
+     * PAYLOAD_RECIPES + the dialect bundle (DESIGN.md §6).
+     */
+    RED.httpAdmin.get(
+      FIELD_TIPS_ROUTE,
+      RED.auth.needsPermission('mavlink.read'),
+      (req, res) => {
+        const topic = typeof req.query.topic === 'string' ? req.query.topic.trim() : '';
+        const verb = typeof req.query.verb === 'string' ? req.query.verb.trim() : '';
+        const path = typeof req.query.path === 'string' ? req.query.path.trim() : '';
+        if (!topic || !verb) {
+          return res.json({ fields: {}, dialect: '' });
+        }
+        if (!metadataApi) {
+          return res.status(503).json({ fields: {}, error: 'metadata unavailable' });
+        }
+        try {
+          const vehicleId = typeof req.query.vehicle === 'string'
+            ? req.query.vehicle.trim()
+            : '';
+          let bundle = null;
+          let dialect = '';
+          const requested = typeof req.query.dialect === 'string'
+            ? req.query.dialect.trim()
+            : '';
+          if (vehicleId) {
+            const vehicleNode = RED.nodes.getNode(vehicleId);
+            if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
+              bundle = vehicleNode.getDialect();
+              dialect = vehicleNode.dialect || (bundle && bundle.dialect) || 'custom';
+            } else if (!requested || requested === 'custom') {
+              // Custom / undeployed profile — do not invent ardupilotmega tips
+              // (Codex #36). Same posture as command/message catalog routes.
+              return res.json({
+                dialect: requested || '',
+                fields: {},
+                notice: 'Vehicle Profile not deployed — deploy the flow first',
+              });
+            }
+            // Pre-deploy bundled Vehicle Profile: editor sends vehicle=id plus
+            // an allow-listed dialect; load that seed until Deploy creates the
+            // runtime node (mirrors mavlink-command.js catalog fallback).
+          }
+          if (!bundle) {
+            const known = metadataApi.knownDialects();
+            if (!requested || !known.includes(requested)) {
+              return res.json({
+                dialect: requested || '',
+                fields: {},
+                notice: requested
+                  ? `unknown dialect ${JSON.stringify(requested)}`
+                  : 'no dialect supplied',
+              });
+            }
+            bundle = metadataApi.loadBundled(requested);
+            dialect = requested;
+          }
+          return res.json({
+            dialect,
+            fields: fieldMetaFromBundle(bundle, topic, verb, path),
+          });
+        } catch (err) {
+          // Bundled load errors can include filesystem paths — log server-side
+          // and keep the client response generic (CodeRabbit #36).
+          if (RED.log && typeof RED.log.error === 'function') {
+            RED.log.error(
+              `[mavlink-payload] field-tips unavailable: ${err && err.message ? err.message : String(err)}`
+            );
+          }
+          return res.status(400).json({
+            fields: {},
+            error: 'field tips unavailable',
+          });
+        }
+      }
+    );
+
+    MavlinkPayloadNode._fieldTipsRouteRegistered = true;
   }
 
   RED.nodes.registerType('mavlink-payload', MavlinkPayloadNode);

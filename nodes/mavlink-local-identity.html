@@ -81,6 +81,27 @@
      * what the wire will encode. Dialogs without a delivery field keep the
      * connection-derived behaviour.
      */
+    /**
+     * Config-node id from an editor property or a deployed Connection's frozen
+     * `vehicle` snapshot (`{ id, targetSysid, … }`).
+     *
+     * @param {string|{id?: string}|null|undefined} ref
+     * @returns {string}
+     */
+    RED.mavlink.vehicleIdFrom = function (ref) {
+      if (!ref) return '';
+      if (typeof ref === 'string') return ref;
+      if (typeof ref === 'object' && typeof ref.id === 'string') return ref.id;
+      return '';
+    };
+
+    /**
+     * Vehicle / dialect query for admin catalog routes (enums, field-tips, …).
+     * Shared so palette nodes do not re-derive Connection snapshot unwrap.
+     *
+     * @param {string[]|string} [names]  optional enum table filter for /mavlink/enums
+     * @returns {Object<string, string>}
+     */
     function currentEnumQuery(names) {
       var query = {};
       var buildTier = valueFromSelector('#node-input-delivery') === 'build';
@@ -92,11 +113,9 @@
         var connection = valueFromSelector('#node-input-connection');
         if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
           var conn = RED.nodes.node(connection);
-          if (conn && conn.vehicle) {
-            vehicle = conn.vehicle;
-            var connProfile = RED.nodes.node(conn.vehicle);
-            if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
-          }
+          vehicle = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
+          var connProfile = vehicle ? RED.nodes.node(vehicle) : null;
+          if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
         }
       }
       if (!vehicle) vehicle = valueFromSelector('#node-input-vehicle');
@@ -114,6 +133,7 @@
       }
       return query;
     }
+    RED.mavlink.currentCatalogQuery = currentEnumQuery;
 
     /**
      * Build an admin API URL under Node-RED's configured httpAdminRoot.
@@ -171,8 +191,17 @@
       (entries || []).forEach(function (entry) {
         var value = String(entry[valueKey]);
         var label = entry.label || RED.mavlink.enumOptionLabel(entry);
-        $select.append($('<option></option>').val(value).text(label));
+        var $opt = $('<option></option>').val(value).text(label);
+        if (entry.description) $opt.attr('title', entry.description);
+        $select.append($opt);
       });
+      // Select tooltip follows the selected entry's dialect description (§6).
+      function syncEnumSelectTitle() {
+        var tip = $select.find('option:selected').attr('title') || '';
+        if (tip) $select.attr('title', tip);
+        else $select.removeAttr('title');
+      }
+      $select.off('change.mavEnumTip').on('change.mavEnumTip', syncEnumSelectTitle);
       if (saved && !$select.find('option[value="' + saved + '"]').length) {
         $select.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
       }
@@ -181,6 +210,67 @@
       } else if (entries && entries.length) {
         $select.val(String(entries[0][valueKey]));
       }
+      syncEnumSelectTitle();
+    };
+
+    /**
+     * Apply a dialect-sourced description as `title` on an input and its label.
+     * Empty/missing text clears any previous tip (no baked fallback).
+     *
+     * @param {string} inputId  e.g. `node-input-sequence`
+     * @param {string} [text]
+     */
+    RED.mavlink.applyFieldTitle = function (inputId, text) {
+      var $input = $('#' + inputId);
+      if (!$input.length) return;
+      var tip = text != null ? String(text).trim() : '';
+      if (tip) $input.attr('title', tip);
+      else $input.removeAttr('title');
+      var $label = $input.closest('.form-row').find('label').first();
+      if ($label.length) {
+        if (tip) $label.attr('title', tip);
+        else $label.removeAttr('title');
+      }
+    };
+
+    /**
+     * Apply dialect `units` as an inline hint after the input (§6 — units are
+     * not tooltip text). Missing units clear the hint (no baked fallback).
+     *
+     * @param {string} inputId
+     * @param {string} [units]
+     */
+    RED.mavlink.applyFieldUnits = function (inputId, units) {
+      var $input = $('#' + inputId);
+      if (!$input.length) return;
+      var $row = $input.closest('.form-row');
+      var $u = $row.children('.mav-field-units');
+      if (!$u.length) {
+        $u = $('<span class="mav-field-units"></span>');
+        $input.after($u);
+      }
+      var text = units != null ? String(units).trim() : '';
+      $u.text(text ? (' ' + text) : '');
+    };
+
+    /**
+     * Apply dialect tip meta in one call — description → title, units → inline
+     * hint. Accepts a string (description only) or `{ description, units }`.
+     *
+     * @param {string} inputId
+     * @param {string|{description?: string, units?: string}|null|undefined} meta
+     */
+    RED.mavlink.applyFieldMeta = function (inputId, meta) {
+      var tip = '';
+      var units = '';
+      if (typeof meta === 'string') {
+        tip = meta;
+      } else if (meta && typeof meta === 'object') {
+        tip = meta.description || '';
+        units = meta.units || '';
+      }
+      RED.mavlink.applyFieldTitle(inputId, tip);
+      RED.mavlink.applyFieldUnits(inputId, units);
     };
 
     /**

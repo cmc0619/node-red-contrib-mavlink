@@ -20,7 +20,9 @@
    */
   function formRow(label, input) {
     const row = $('<div class="form-row"></div>');
+    const tip = (input && input.attr) ? (input.attr('title') || '') : '';
     const lbl = $('<label></label>').css({ width: '120px', display: 'inline-block' }).text(label);
+    if (tip) lbl.attr('title', tip);
     row.append(lbl).append(input);
     return row;
   }
@@ -47,7 +49,9 @@
   let _presetGroups = null;
   /** @type {Object<string, {commands:Array, enums:Object, dialect:string}>} */
   const _catalogByKey = {};
-  /** Monotonic token so a stale dialect response cannot overwrite a newer one. */
+  /** In-flight waiters per catalog key (coalesce concurrent loads). */
+  const _catalogInflight = {};
+  /** Monotonic token bumped on every load (callers / tests observe churn). */
   let _catalogRequestSeq = 0;
   /** Cache key for the catalog currently shown in the Advanced dropdown. */
   let _activeCatalogKey = '';
@@ -120,34 +124,51 @@
   }
 
   /**
-   * Load the Advanced catalog (commands + enums). Ignores stale responses when
-   * the Connection (and therefore the target) changed mid-flight.
+   * Load the Advanced catalog (commands + enums). Concurrent callers for the
+   * same target share one in-flight request (Greptile #36 — preset change must
+   * not cancel a pending Connection/Vehicle tip repaint). Responses for a key
+   * the editor no longer targets are dropped.
    *
    * @param {function({commands:Array, enums:Object, dialect:string}|null, Error=):void} cb
    */
   function loadCommandsCatalog(cb) {
     const target = resolveCatalogTarget();
-    if (_catalogByKey[target.key]) {
-      _activeCatalogKey = target.key;
-      cb(_catalogByKey[target.key]);
+    const requestedKey = target.key;
+    ++_catalogRequestSeq;
+    if (_catalogByKey[requestedKey]) {
+      _activeCatalogKey = requestedKey;
+      cb(_catalogByKey[requestedKey]);
       return;
     }
-    const seq = ++_catalogRequestSeq;
-    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
-      if (seq !== _catalogRequestSeq) return; // stale — a newer request is in flight
-      const catalog = {
-        commands: data.commands || [],
-        enums: data.enums || {},
-        dialect: data.dialect || target.dialect,
-      };
-      _catalogByKey[target.key] = catalog;
-      _activeCatalogKey = target.key;
-      cb(catalog);
-    }).fail(function (_xhr, _status, err) {
-      if (seq !== _catalogRequestSeq) return;
-      _activeCatalogKey = target.key;
-      cb({ commands: [], enums: {}, dialect: target.dialect, error: String(err || 'load failed') });
-    });
+    if (!_catalogInflight[requestedKey]) {
+      _catalogInflight[requestedKey] = [];
+      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
+        const waiters = _catalogInflight[requestedKey] || [];
+        delete _catalogInflight[requestedKey];
+        const catalog = {
+          commands: data.commands || [],
+          enums: data.enums || {},
+          dialect: data.dialect || target.dialect,
+        };
+        _catalogByKey[requestedKey] = catalog;
+        if (resolveCatalogTarget().key !== requestedKey) return;
+        _activeCatalogKey = requestedKey;
+        for (let i = 0; i < waiters.length; i++) waiters[i](catalog);
+      }).fail(function (_xhr, _status, err) {
+        const waiters = _catalogInflight[requestedKey] || [];
+        delete _catalogInflight[requestedKey];
+        if (resolveCatalogTarget().key !== requestedKey) return;
+        _activeCatalogKey = requestedKey;
+        const empty = {
+          commands: [],
+          enums: {},
+          dialect: target.dialect,
+          error: String(err || 'load failed'),
+        };
+        for (let i = 0; i < waiters.length; i++) waiters[i](empty);
+      });
+    }
+    _catalogInflight[requestedKey].push(cb);
   }
 
   function loadMessagesCatalog(cb) {
@@ -378,7 +399,66 @@
         // callback runs after the initial applyMode() left the dialog empty —
         // without this the exposed params stay stale until the user re-picks.
         sel.val(node.preset || 'arm');
+        applyPresetOptionTips(sel);
         sel.trigger('change');
+      }
+
+      /**
+       * Dialect-sourced titles on preset <option>s and the select.
+       *
+       * @param {JQuery} [$sel]
+       * @param {{commands?: Array}|null} [catalog]  when provided, paint only
+       *   (no second loadCommandsCatalog — avoids racing refreshParamFields).
+       */
+      function applyPresetOptionTips($sel, catalog) {
+        const sel = $sel && $sel.length ? $sel : $('#node-input-preset');
+        if (!sel.length) return;
+        function paint(cat) {
+          if (!cat) return;
+          const byId = {};
+          (cat.commands || []).forEach(function (c) {
+            byId[String(c.value)] = c.description || '';
+          });
+          sel.find('option').each(function () {
+            const pid = $(this).val();
+            const cid = presetCommandId(pid);
+            const tip = cid != null ? byId[String(cid)] : '';
+            if (tip) $(this).attr('title', tip);
+            else $(this).removeAttr('title');
+          });
+          function syncPresetTitle() {
+            const tip = sel.find('option:selected').attr('title') || '';
+            if (tip) sel.attr('title', tip);
+            else sel.removeAttr('title');
+          }
+          syncPresetTitle();
+          sel.off('change.mavPresetTip').on('change.mavPresetTip', syncPresetTitle);
+        }
+        if (catalog) {
+          paint(catalog);
+          return;
+        }
+        // Tip titles from cache when possible; otherwise one catalog load that
+        // does not gate control rendering (Codex #36).
+        const target = resolveCatalogTarget();
+        if (_catalogByKey[target.key]) {
+          paint(_catalogByKey[target.key]);
+          return;
+        }
+        loadCommandsCatalog(paint);
+      }
+
+      /**
+       * One catalog fetch for both preset-option titles and param field tips
+       * when Connection / Vehicle / delivery changes (Greptile #36). Painting
+       * then refreshParamFields (cache hit) avoids last-request-wins cancel.
+       */
+      function refreshPresetTipsAndParams() {
+        loadCommandsCatalog(function (catalog) {
+          if ($('#node-input-mode').val() !== 'preset') return;
+          applyPresetOptionTips(null, catalog);
+          refreshParamFields();
+        });
       }
 
       loadPresets(buildPresetDropdown);
@@ -404,12 +484,21 @@
         sel.empty();
         sel.append($('<option></option>').val('').text('\u2014 select MAV_CMD \u2014'));
         for (const c of commands) {
-          sel.append($('<option></option>').val(String(c.value)).text(c.label));
+          const $opt = $('<option></option>').val(String(c.value)).text(c.label);
+          if (c.description) $opt.attr('title', c.description);
+          sel.append($opt);
         }
         if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
           sel.append($('<option></option>').val(prefer).text('#' + prefer + ' (not in dialect)'));
         }
         if (prefer) sel.val(prefer);
+        function syncAdvancedTitle() {
+          const tip = sel.find('option:selected').attr('title') || '';
+          if (tip) sel.attr('title', tip);
+          else sel.removeAttr('title');
+        }
+        syncAdvancedTitle();
+        sel.off('change.mavCmdTip').on('change.mavCmdTip', syncAdvancedTitle);
         sel.trigger('change');
       }
 
@@ -459,7 +548,7 @@
         refreshIdentitySelect();
         refreshVisibility();
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
-        if ($('#node-input-mode').val() === 'preset') refreshParamFields();
+        if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });
 
       $('#node-input-vehicle').on('change', function () {
@@ -471,7 +560,7 @@
           presetMessagesCatalog = null;
           presetMessagesKey = '';
           if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
-          if ($('#node-input-mode').val() === 'preset') refreshParamFields();
+          if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
         }
       });
 
@@ -486,7 +575,7 @@
         presetMessagesCatalog = null;
         presetMessagesKey = '';
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
-        if ($('#node-input-mode').val() === 'preset') refreshParamFields();
+        if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });
 
       function refreshCompletionRow() {
@@ -562,7 +651,9 @@
         for (const entry of entries || []) {
           const value = String(entry.value);
           const label = entry.label || (entry.name + ' (' + entry.value + ')');
-          $select.append($('<option></option>').val(value).text(label));
+          const $opt = $('<option></option>').val(value).text(label);
+          if (entry.description) $opt.attr('title', entry.description);
+          $select.append($opt);
         }
         if (saved && !$select.find('option[value="' + saved + '"]').length) {
           $select.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
@@ -576,6 +667,7 @@
             name: msg.name,
             value: msg.id,
             label: msg.label || (msg.name + ' (' + msg.id + ')'),
+            description: msg.description || null,
           };
         });
       }
@@ -584,6 +676,29 @@
         return $('<input type="number" class="param-input">')
           .attr('data-idx', spec.index)
           .val(savedParams[spec.index] !== undefined ? savedParams[spec.index] : '');
+      }
+
+      /** Look up a preset's numeric MAV_CMD id from the loaded presets API. */
+      function presetCommandId(presetId) {
+        const groups = _presetGroups || [];
+        for (let g = 0; g < groups.length; g++) {
+          const presets = groups[g].presets || [];
+          for (let i = 0; i < presets.length; i++) {
+            if (presets[i].id === presetId) return presets[i].commandId;
+          }
+        }
+        return null;
+      }
+
+      function catalogParamByIndex(catalog, commandId, index) {
+        if (!catalog || commandId == null) return null;
+        const cmd = (catalog.commands || []).find(function (c) {
+          return String(c.value) === String(commandId);
+        });
+        if (!cmd) return null;
+        return (cmd.params || []).find(function (p) {
+          return Number(p.index) === Number(index);
+        }) || null;
       }
 
       /**
@@ -647,7 +762,9 @@
             sel.append($('<option></option>').val('').text('\u2014'));
           }
           for (const entry of enums[spec.enum]) {
-            sel.append($('<option></option>').val(String(entry.value)).text(entry.label));
+            const $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
+            if (entry.description) $opt.attr('title', entry.description);
+            sel.append($opt);
           }
           if (isBitmask) {
             sel.val(selectedBitmaskValues(saved, enums[spec.enum]));
@@ -687,8 +804,7 @@
             const isBitmask = !!spec.bitmask;
             const sel = $('<select class="param-input"></select>')
               .attr('data-idx', spec.index)
-              .attr('data-kind', isBitmask ? 'bitmask' : 'enum')
-              .attr('title', isBitmask ? bitmaskTitle(spec.label) : '');
+              .attr('data-kind', isBitmask ? 'bitmask' : 'enum');
             if (isBitmask) {
               sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
             }
@@ -750,16 +866,38 @@
             loadPresetMessages(refreshParamFields);
             return;
           }
+          // Render controls immediately so a slow tip-catalog fetch cannot
+          // leave the form empty at Done (Codex #36). Titles attach when ready.
           if (paramSpec.length === 0) {
             container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
+            return;
           }
+          const commandId = presetCommandId(presetId);
+          const rows = [];
           for (const spec of paramSpec) {
             const label = spec.units
               ? `${spec.label} (${spec.units})`
               : spec.label;
             const input = presetParamInput(spec);
-            container.append(formRow(label, input));
+            rows.push({ spec, input, row: formRow(label, input) });
+            container.append(rows[rows.length - 1].row);
           }
+          loadCommandsCatalog(function (cmdCatalog) {
+            if ($('#node-input-mode').val() !== 'preset') return;
+            if ($('#node-input-preset').val() !== presetId) return;
+            for (const row of rows) {
+              if (!row.input.closest('body').length) return; // row was replaced
+              const catParam = catalogParamByIndex(cmdCatalog, commandId, row.spec.index);
+              if (catParam && catParam.description) {
+                const tip = row.spec.bitmask
+                  ? bitmaskTitle(catParam.description)
+                  : catParam.description;
+                row.input.attr('title', tip);
+                const lbl = row.input.closest('.form-row').find('label').first();
+                if (lbl.length) lbl.attr('title', tip);
+              }
+            }
+          });
         }
       }
 

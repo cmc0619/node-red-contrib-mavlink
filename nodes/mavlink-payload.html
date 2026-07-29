@@ -145,8 +145,73 @@
       var enumCatalog = { enums: {} };
       var enumCatalogLoaded = false;
       var enumRequestSeq = 0;
+      var tipRequestSeq = 0;
       var paintedModeEnum = null;
       var paintedReleaseEnum = null;
+      /**
+       * Numeric / text payload fields that take command/message param tips.
+       * Enum <select>s (modeValue, actionValue) keep fillEnumSelect titles —
+       * do not clear/overwrite them here (CodeRabbit #36).
+       */
+      var TIP_FIELDS = [
+        'cameraId', 'count', 'interval', 'sequence',
+        'streamId', 'statusFrequency',
+        'distance', 'shutter', 'trigger',
+        'pitch', 'roll', 'yaw', 'pitchRate', 'yawRate',
+        'flags', 'gimbalDeviceId',
+        'stabilizeRoll', 'stabilizePitch', 'stabilizeYaw',
+        'lat', 'lon', 'alt',
+        'servo', 'pwm', 'period',
+        'instance', 'length', 'rate'
+      ];
+
+      function catalogQuery() {
+        if (RED.mavlink && typeof RED.mavlink.currentCatalogQuery === 'function') {
+          return RED.mavlink.currentCatalogQuery();
+        }
+        return {};
+      }
+
+      function clearPayloadFieldTips() {
+        if (!(RED.mavlink && typeof RED.mavlink.applyFieldMeta === 'function')) return;
+        for (var i = 0; i < TIP_FIELDS.length; i++) {
+          RED.mavlink.applyFieldMeta('node-input-' + TIP_FIELDS[i], null);
+        }
+      }
+
+      /**
+       * Join PAYLOAD_RECIPES to dialect description + units via
+       * /mavlink/payload/field-tips — never bake protocol copy into HTML (§6).
+       */
+      function refreshPayloadFieldTips() {
+        if (!(RED.mavlink && typeof RED.mavlink.adminApiUrl === 'function')) return;
+        if (typeof RED.mavlink.applyFieldMeta !== 'function') return;
+        var topic = $('#node-input-topic').val() || 'camera';
+        var verb = $('#node-input-verb').val() || '';
+        var path = $('#node-input-path').val() || 'legacy';
+        if (!verb) {
+          clearPayloadFieldTips();
+          return;
+        }
+        var query = catalogQuery();
+        query.topic = topic;
+        query.verb = verb;
+        query.path = path;
+        var seq = ++tipRequestSeq;
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, function (data) {
+          if (seq !== tipRequestSeq) return;
+          clearPayloadFieldTips();
+          var fields = (data && data.fields) || {};
+          for (var i = 0; i < TIP_FIELDS.length; i++) {
+            var name = TIP_FIELDS[i];
+            var meta = fields[name];
+            if (meta) RED.mavlink.applyFieldMeta('node-input-' + name, meta);
+          }
+        }).fail(function () {
+          if (seq !== tipRequestSeq) return;
+          clearPayloadFieldTips();
+        });
+      }
 
       function loadPayloadEnums(cb) {
         if (enumCatalogLoaded) {
@@ -293,6 +358,7 @@
         $('#row-payload-action').toggle(!!show.action);
         $('#row-payload-length').toggle(!!show.length);
         $('#row-payload-rate').toggle(!!show.rate);
+        refreshPayloadFieldTips();
       }
 
       function savedForEnum(painted, enumName, currentVal, nodeVal) {
@@ -374,6 +440,7 @@
         }
         refreshEnumControls();
       });
+      $('#node-input-vehicle').on('change', refreshPayloadFieldTips);
       refreshVerbOptions(true);
       refreshEnumControls();
 
@@ -406,43 +473,43 @@
   <!-- camera photo -->
   <div class="form-row" id="row-payload-cameraId"><label for="node-input-cameraId">Camera ID</label><input type="number" id="node-input-cameraId" step="1" style="width:80px"></div>
   <div class="form-row" id="row-payload-count"><label for="node-input-count">Count</label><input type="number" id="node-input-count" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-interval"><label for="node-input-interval">Interval</label><input type="number" id="node-input-interval" step="any" style="width:80px"> s</div>
+  <div class="form-row" id="row-payload-interval"><label for="node-input-interval">Interval</label><input type="number" id="node-input-interval" step="any" style="width:80px"></div>
   <div class="form-row" id="row-payload-sequence"><label for="node-input-sequence">Sequence</label><input type="number" id="node-input-sequence" step="1" style="width:80px"></div>
   <!-- camera start/stop video -->
   <div class="form-row" id="row-payload-streamId"><label for="node-input-streamId">Stream ID</label><input type="number" id="node-input-streamId" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-statusFrequency"><label for="node-input-statusFrequency">Status Hz</label><input type="number" id="node-input-statusFrequency" step="any" style="width:80px"> Hz</div>
+  <div class="form-row" id="row-payload-statusFrequency"><label for="node-input-statusFrequency">Status Hz</label><input type="number" id="node-input-statusFrequency" step="any" style="width:80px"></div>
   <!-- camera trigger-distance -->
-  <div class="form-row" id="row-payload-distance"><label for="node-input-distance">Distance</label><input type="number" id="node-input-distance" step="any" style="width:80px"> m</div>
-  <div class="form-row" id="row-payload-shutter"><label for="node-input-shutter">Shutter</label><input type="number" id="node-input-shutter" step="1" style="width:80px"> ms</div>
-  <div class="form-row" id="row-payload-trigger"><label for="node-input-trigger">Trigger</label><input type="number" id="node-input-trigger" step="1" style="width:80px" title="1=start triggering, 0=stop"></div>
+  <div class="form-row" id="row-payload-distance"><label for="node-input-distance">Distance</label><input type="number" id="node-input-distance" step="any" style="width:80px"></div>
+  <div class="form-row" id="row-payload-shutter"><label for="node-input-shutter">Shutter</label><input type="number" id="node-input-shutter" step="1" style="width:80px"></div>
+  <div class="form-row" id="row-payload-trigger"><label for="node-input-trigger">Trigger</label><input type="number" id="node-input-trigger" step="1" style="width:80px"></div>
   <!-- camera/gimbal set-mode -->
   <div class="form-row" id="row-payload-mode"><label for="node-input-modeValue">Mode</label><select id="node-input-modeValue" style="width:70%"></select></div>
   <!-- gimbal set-mode stabilize -->
-  <div class="form-row" id="row-payload-stabilizeRoll"><label for="node-input-stabilizeRoll">Stabilize roll</label><input type="number" id="node-input-stabilizeRoll" step="1" style="width:80px" title="0=disabled 1=enabled"></div>
-  <div class="form-row" id="row-payload-stabilizePitch"><label for="node-input-stabilizePitch">Stabilize pitch</label><input type="number" id="node-input-stabilizePitch" step="1" style="width:80px" title="0=disabled 1=enabled"></div>
-  <div class="form-row" id="row-payload-stabilizeYaw"><label for="node-input-stabilizeYaw">Stabilize yaw</label><input type="number" id="node-input-stabilizeYaw" step="1" style="width:80px" title="0=disabled 1=enabled"></div>
+  <div class="form-row" id="row-payload-stabilizeRoll"><label for="node-input-stabilizeRoll">Stabilize roll</label><input type="number" id="node-input-stabilizeRoll" step="1" style="width:80px"></div>
+  <div class="form-row" id="row-payload-stabilizePitch"><label for="node-input-stabilizePitch">Stabilize pitch</label><input type="number" id="node-input-stabilizePitch" step="1" style="width:80px"></div>
+  <div class="form-row" id="row-payload-stabilizeYaw"><label for="node-input-stabilizeYaw">Stabilize yaw</label><input type="number" id="node-input-stabilizeYaw" step="1" style="width:80px"></div>
   <!-- gimbal roi-set -->
-  <div class="form-row" id="row-payload-lat"><label for="node-input-lat">Latitude</label><input type="number" id="node-input-lat" step="any" style="width:120px"> deg</div>
-  <div class="form-row" id="row-payload-lon"><label for="node-input-lon">Longitude</label><input type="number" id="node-input-lon" step="any" style="width:120px"> deg</div>
-  <div class="form-row" id="row-payload-alt"><label for="node-input-alt">Altitude</label><input type="number" id="node-input-alt" step="any" style="width:80px"> m</div>
+  <div class="form-row" id="row-payload-lat"><label for="node-input-lat">Latitude</label><input type="number" id="node-input-lat" step="any" style="width:120px"></div>
+  <div class="form-row" id="row-payload-lon"><label for="node-input-lon">Longitude</label><input type="number" id="node-input-lon" step="any" style="width:120px"></div>
+  <div class="form-row" id="row-payload-alt"><label for="node-input-alt">Altitude</label><input type="number" id="node-input-alt" step="any" style="width:80px"></div>
   <!-- gimbal aim (both paths) -->
-  <div class="form-row" id="row-payload-pitch"><label for="node-input-pitch">Pitch</label><input type="number" id="node-input-pitch" step="any" style="width:80px"> deg</div>
-  <div class="form-row" id="row-payload-roll"><label for="node-input-roll">Roll</label><input type="number" id="node-input-roll" step="any" style="width:80px"> deg</div>
-  <div class="form-row" id="row-payload-yaw"><label for="node-input-yaw">Yaw</label><input type="number" id="node-input-yaw" step="any" style="width:80px"> deg</div>
-  <div class="form-row" id="row-payload-pitchRate"><label for="node-input-pitchRate">Pitch rate</label><input type="number" id="node-input-pitchRate" step="any" style="width:80px"> deg/s</div>
-  <div class="form-row" id="row-payload-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="number" id="node-input-yawRate" step="any" style="width:80px"> deg/s</div>
+  <div class="form-row" id="row-payload-pitch"><label for="node-input-pitch">Pitch</label><input type="number" id="node-input-pitch" step="any" style="width:80px"></div>
+  <div class="form-row" id="row-payload-roll"><label for="node-input-roll">Roll</label><input type="number" id="node-input-roll" step="any" style="width:80px"></div>
+  <div class="form-row" id="row-payload-yaw"><label for="node-input-yaw">Yaw</label><input type="number" id="node-input-yaw" step="any" style="width:80px"></div>
+  <div class="form-row" id="row-payload-pitchRate"><label for="node-input-pitchRate">Pitch rate</label><input type="number" id="node-input-pitchRate" step="any" style="width:80px"></div>
+  <div class="form-row" id="row-payload-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="number" id="node-input-yawRate" step="any" style="width:80px"></div>
   <!-- gimbal manager aim extras -->
   <div class="form-row" id="row-payload-flags"><label for="node-input-flags">Flags</label><input type="number" id="node-input-flags" step="1" style="width:80px"></div>
   <div class="form-row" id="row-payload-gimbalDeviceId"><label for="node-input-gimbalDeviceId">Gimbal device</label><input type="number" id="node-input-gimbalDeviceId" step="1" style="width:80px"></div>
   <!-- servo -->
   <div class="form-row" id="row-payload-servo"><label for="node-input-servo">Servo</label><input type="number" id="node-input-servo" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-pwm"><label for="node-input-pwm">PWM</label><input type="number" id="node-input-pwm" step="1" style="width:80px"> us</div>
-  <div class="form-row" id="row-payload-period"><label for="node-input-period">Period</label><input type="number" id="node-input-period" step="any" style="width:80px"> ms</div>
+  <div class="form-row" id="row-payload-pwm"><label for="node-input-pwm">PWM</label><input type="number" id="node-input-pwm" step="1" style="width:80px"></div>
+  <div class="form-row" id="row-payload-period"><label for="node-input-period">Period</label><input type="number" id="node-input-period" step="any" style="width:80px"></div>
   <!-- release -->
   <div class="form-row" id="row-payload-instance"><label for="node-input-instance">Instance</label><input type="number" id="node-input-instance" step="1" style="width:80px"></div>
   <div class="form-row" id="row-payload-action"><label for="node-input-actionValue">Action</label><select id="node-input-actionValue" style="width:70%"></select></div>
-  <div class="form-row" id="row-payload-length"><label for="node-input-length">Length</label><input type="number" id="node-input-length" step="any" style="width:80px"> m</div>
-  <div class="form-row" id="row-payload-rate"><label for="node-input-rate">Rate</label><input type="number" id="node-input-rate" step="any" style="width:80px"> m/s</div>
+  <div class="form-row" id="row-payload-length"><label for="node-input-length">Length</label><input type="number" id="node-input-length" step="any" style="width:80px"></div>
+  <div class="form-row" id="row-payload-rate"><label for="node-input-rate">Rate</label><input type="number" id="node-input-rate" step="any" style="width:80px"></div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-payload">
