@@ -448,7 +448,7 @@ matcher and the sender share one resolution, pinned by test.
 **Exceptions, deliberate:**
 
 - **Build node** — raw builds for the whole dialect. Its build tier takes a plain dialect
-  picker (bundled list, with a "from Vehicle Profile…" escape for custom XML) and needs no
+  picker (seed dialect list, with a "from Vehicle Profile…" escape) and needs no
   connection, identity, or vehicle. On wire tiers the connection's profile governs the catalogs,
   because that dialect is what the wire will encode.
 - **Swarm** — gcs-paradigm by nature. Its send-as dropdown offers only gcs-enabled identities
