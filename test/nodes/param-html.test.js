@@ -56,14 +56,22 @@ test('mavlink-param calls fillIdentitySelect on connection change', () => {
   assert.match(html, /node-input-identity/, 'identity select element exists');
 });
 
-test('mavlink-param firmware select is gone (§6 hidden is not honored)', () => {
-  assert.ok(
-    !html.includes('node-input-firmware'),
-    'firmware input must not exist in param editor'
-  );
-  assert.ok(
-    !/firmware:\s*\{\s*value:/.test(html),
-    'firmware default must be removed from param defaults'
+test('mavlink-param defaults include dialect and firmware as empty strings', () => {
+  assert.match(html, /dialect:\s*\{\s*value:\s*''/, 'dialect default is empty');
+  assert.match(html, /firmware:\s*\{\s*value:\s*''/, 'firmware default is empty');
+});
+
+test('mavlink-param Build shows Dialect and concrete dialects require Firmware', () => {
+  assert.match(html, /node-input-dialect/, 'dialect select element exists');
+  assert.match(html, /row-firmware/, 'firmware row exists');
+  assert.match(html, /node-input-firmware/, 'firmware select element exists');
+  assert.match(html, /value="ardupilot"/, 'ArduPilot firmware option exists');
+  assert.match(html, /value="px4"/, 'PX4 firmware option exists');
+  assert.match(html, /value="custom"/, 'custom firmware option exists');
+  assert.match(
+    html,
+    /dialect\s*!==\s*'__vehicle'.*dialect\s*!==\s*''/s,
+    'firmware validation is required only for concrete non-empty dialects'
   );
 });
 
@@ -75,12 +83,28 @@ test('mavlink-param has refreshVisibility and companion row hiding', () => {
   assert.match(html, /row-vehicle/, 'row-vehicle present for build tier');
   assert.match(html, /row-connection/, 'row-connection present for wire tiers');
   assert.match(html, /row-identity/, 'row-identity present for wire tiers');
+  assert.match(html, /row-dialect/, 'row-dialect present for build tier');
+  assert.match(html, /row-firmware/, 'row-firmware present for concrete build dialects');
+  assert.match(
+    html,
+    /row-vehicle['"]\)\.toggle\(isBuild\s*&&\s*dialect\s*===\s*'__vehicle'\)/,
+    'vehicle row is shown only for the Vehicle Profile dialect escape'
+  );
+  assert.match(
+    html,
+    /row-firmware['"]\)\.toggle\(isBuild\s*&&\s*dialect\s*!==\s*'__vehicle'\s*&&\s*dialect\s*!==\s*''\)/,
+    'firmware row is shown only for concrete build dialects'
+  );
 });
 
-test('mavlink-param loadParamDefs is tier-aware (build uses vehicle, wire uses connection)', () => {
-  // Build tier: reads vehicleId from #node-input-vehicle
-  assert.match(html, /node-input-vehicle.*\.val\(\)|\.val\(\).*node-input-vehicle/s,
-    'vehicle field used in defs load');
+test('mavlink-param loadParamDefs is tier-aware (build uses dialect or vehicle, wire uses connection)', () => {
+  assert.match(html, /node-input-dialect.*\.val\(\)|\.val\(\).*node-input-dialect/s,
+    'dialect field used in defs load');
+  assert.match(html, /dialect\s*===\s*'__vehicle'/,
+    'build defs load supports the Vehicle Profile dialect escape');
+  assert.match(html, /query\s*=\s*\{\s*dialect:\s*dialect\s*\}/,
+    'concrete build dialect loads defs by dialect');
+  assert.doesNotMatch(html, /ardupilotmega/, 'defs load must not invent ardupilotmega');
   // Wire tier: reads vehicleId through connection node
   assert.match(html, /connectionNode\.vehicle/, 'defs load reads vehicle through connection node');
   // Delivery-driven branch
@@ -94,4 +118,9 @@ test('mavlink-param ensureConfigNodePicker called for vehicle', () => {
     /ensureConfigNodePicker\(node,\s*'vehicle',\s*'mavlink-vehicle'/,
     'ensureConfigNodePicker invoked for vehicle field'
   );
+});
+
+test('mavlink-param populates Dialect select with Vehicle Profile escape', () => {
+  assert.match(html, /populateDialectSelect/, 'Dialect helper is called');
+  assert.match(html, /includeVehicleEscape:\s*true/, 'Vehicle Profile escape is included');
 });
