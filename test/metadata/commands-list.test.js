@@ -64,6 +64,18 @@ test('listCommandsCatalog includes params and referenced enums for Advanced UI',
   }
 });
 
+test('seed carries common.xml command-param enum= links (no hints.js overlay)', () => {
+  const bundle = loadBundled('common');
+  const arm = bundle.commands.MAV_CMD_COMPONENT_ARM_DISARM;
+  assert.ok(arm, 'ARM command present in common seed');
+  const armParam = arm.params.find((p) => Number(p.index) === 1);
+  assert.equal(armParam && armParam.enum, 'MAV_BOOL', 'Arm param enum comes from seed XML');
+
+  const changeSpeed = bundle.commands.MAV_CMD_DO_CHANGE_SPEED;
+  const speedType = changeSpeed.params.find((p) => Number(p.index) === 1);
+  assert.equal(speedType && speedType.enum, 'SPEED_TYPE');
+});
+
 test('listCommandsForDialect returns the commands array from the catalog', () => {
   const list = listCommandsForDialect('ardupilotmega');
   assert.ok(list.length > 50);
