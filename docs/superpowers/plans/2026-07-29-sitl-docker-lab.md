@@ -28,7 +28,7 @@
 | `sitl/scripts/entrypoint-ap.sh` | Launch one AP instance with sysid, `-I`, `--out`, logging parms |
 | `sitl/scripts/entrypoint-px4.sh` | Launch one PX4 instance with `MAV_SYS_ID`, GCS UDP to host |
 | `sitl/params/ap-logging.parm` | `LOG_DISARMED 0` (+ minimal copter defaults if required) |
-| `sitl/params/px4-airframe.env` | Env/exports for SDLOG-on-arm (document exact param in README if airframe-specific) |
+| `sitl/params/px4-logging.env` | Env/exports for SDLOG-on-arm (document exact param in README if airframe-specific) |
 | `sitl/check-logs.sh` | Best-effort arm-only log proof |
 | `sitl/README.md` | Operator guide |
 | `sitl/.gitignore` | Ignore `logs/` |

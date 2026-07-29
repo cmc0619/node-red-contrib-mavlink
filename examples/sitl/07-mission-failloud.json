@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl07-tab",
     "name": "Good upload → verify → bad upload → verify unchanged",
-    "info": "1. Upload a valid two-waypoint mission.\n2. Download to confirm.\n3. Upload a bad plan with NAV_FENCE_POLYGON_VERTEX (5001) smuggled into a mission — validator rejects before/during transfer.\n4. Download again — item count and commands must match step 2.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14551\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551.",
+    "info": "1. Upload a valid two-waypoint mission.\n2. Download to confirm.\n3. Upload a bad plan with NAV_FENCE_POLYGON_VERTEX (5001) smuggled into a mission — validator rejects before/during transfer.\n4. Download again — item count and commands must match step 2.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551.",
     "x": 280,
     "y": 40,
     "wires": []

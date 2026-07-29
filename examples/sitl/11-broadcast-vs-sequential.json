@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl11-tab",
     "name": "Sequential confirm vs broadcast — ack storm vs peer-table armed check",
-    "info": "Sequential: paced 200 ms, delivery=confirm, per-vehicle acks on status port.\nBroadcast: single target_system=0 frame; confirm waits on resolved set armed state (peer table), not ack count — inbound ack burst can congest the link.\n\nLaunch five ArduCopter instances:\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14551 &\n  done\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551. Use Snapshot inject after each run to read armed state.",
+    "info": "Sequential: paced 200 ms, delivery=confirm, per-vehicle acks on status port.\nBroadcast: single target_system=0 frame; confirm waits on resolved set armed state (peer table), not ack count — inbound ack burst can congest the link.\n\nLaunch five ArduCopter instances:\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nConnection: bind 127.0.0.1:14550, remote 127.0.0.1:14551. Use Snapshot inject after each run to read armed state.",
     "x": 310,
     "y": 40,
     "wires": []

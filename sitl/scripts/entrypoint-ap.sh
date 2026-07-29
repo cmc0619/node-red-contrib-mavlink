@@ -17,7 +17,10 @@ LON="$(awk -v b="$HOME_LON" -v i="$INSTANCE" 'BEGIN { printf "%.8f", b + (i * 0.
 mkdir -p /logs
 cd /home/sitl/ardupilot
 
-# DataFlash often lands under the vehicle dir; symlink a stable /logs view when possible.
+# Persist DataFlash into the Compose bind mount. sim_vehicle / SITL write under
+# ./logs relative to the tree (and sometimes under the aircraft dir after -w).
+rm -rf /home/sitl/ardupilot/logs
+ln -sfn /logs /home/sitl/ardupilot/logs
 export HOME="/home/sitl"
 
 echo "entrypoint-ap: sysid=${SYSID} instance=${INSTANCE} out=udp:${OUT_HOST}:${OUT_PORT} home=${LAT},${LON},${HOME_ALT}"
