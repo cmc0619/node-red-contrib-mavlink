@@ -44,9 +44,10 @@ class FakeOption {
 }
 
 class FakeSelect {
-  constructor(value) {
+  constructor(value, enforceOptions = false) {
     this.options = [];
     this.selected = value || '';
+    this.enforceOptions = enforceOptions;
     this.attrs = {};
     this.triggered = [];
   }
@@ -64,7 +65,12 @@ class FakeSelect {
 
   val(value) {
     if (value === undefined) return this.selected;
-    this.selected = String(value);
+    const next = String(value);
+    if (this.enforceOptions && !this.options.some((option) => option.value === next)) {
+      this.selected = null;
+    } else {
+      this.selected = next;
+    }
     return this;
   }
 
@@ -105,12 +111,26 @@ class FakeSelect {
   }
 }
 
-function loadHelpers() {
+function loadHelpers(initialValues = {}) {
+  const elements = new Map();
+  let identityDefinition = null;
+
   function $(selector) {
     if (selector === '<option></option>' || selector === '<option>') {
       return new FakeOption();
     }
-    return new FakeSelect();
+    if (!elements.has(selector)) {
+      const enforceOptions = selector === '#node-config-input-sourceComponentId';
+      const element = new FakeSelect(undefined, enforceOptions);
+      if (initialValues[selector] !== undefined) {
+        if (enforceOptions) {
+          element.append(new FakeOption().val(initialValues[selector]));
+        }
+        element.val(initialValues[selector]);
+      }
+      elements.set(selector, element);
+    }
+    return elements.get(selector);
   }
   $.getJSON = function (url, query, cb) {
     $.lastRequest = { url, query };
@@ -122,11 +142,18 @@ function loadHelpers() {
     RED: {
       settings: { httpAdminRoot: '/' },
       mavlink: {},
-      nodes: { registerType() {} },
+      nodes: {
+        registerType(type, definition) {
+          if (type === 'mavlink-local-identity') {
+            identityDefinition = definition;
+          }
+        },
+      },
     },
     $,
   };
   vm.runInNewContext(script, context);
+  context.identityDefinition = identityDefinition;
   return context;
 }
 
@@ -251,4 +278,31 @@ test('loadEnumsCatalog ignores responses after the dialog token is cancelled', (
     calls += 1;
   }, token);
   assert.equal(calls, 0);
+});
+
+test('Companion save clears hidden source IDs before Node-RED copies editor inputs', () => {
+  const context = loadHelpers({
+    '#node-config-input-role': 'companion',
+    '#node-config-input-sourceSystemId': '255',
+    '#node-config-input-sourceComponentId': '190',
+  });
+  const node = {
+    role: 'gcs',
+    sourceSystemId: 255,
+    sourceComponentId: 190,
+  };
+
+  context.identityDefinition.oneditsave.call(node);
+
+  // Node-RED copies editor values to the node after oneditsave returns.
+  node.role = context.$('#node-config-input-role').val();
+  node.sourceSystemId = context.$('#node-config-input-sourceSystemId').val();
+  const sourceComponentId = context.$('#node-config-input-sourceComponentId').val();
+  if (sourceComponentId != null) {
+    node.sourceComponentId = sourceComponentId;
+  }
+
+  assert.equal(node.role, 'companion');
+  assert.equal(node.sourceSystemId, '');
+  assert.equal(node.sourceComponentId, '');
 });

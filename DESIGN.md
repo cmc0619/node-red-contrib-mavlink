@@ -117,7 +117,7 @@ ground truth, drift asserts — never as defensive branches in the shipping code
 | Job | The platform mechanism — and nothing else |
 |---|---|
 | "this field must be set / valid" | `required` / `validate` on the property definition. The editor reds the field and puts the missing-config marker on the node. No bespoke pending states, placeholder options, or hint rows for unconfigured fields |
-| dialog fields load and save | `node-input-<prop>` / `node-config-input-<prop>` ids auto-populate and auto-save. `oneditprepare`/`oneditsave` exist only for what that cannot do: dynamically built selects, TypedInput, reshaping |
+| dialog fields load and save | `node-input-<prop>` / `node-config-input-<prop>` ids auto-populate and auto-save. `oneditprepare`/`oneditsave` exist only for what that cannot do: dynamically built selects, TypedInput, reshaping. `oneditsave` runs before Node-RED copies those form values onto the node, so reshaping must update the editor fields rather than only mutating `this.<prop>` |
 | dialog layout and widgets | `form-row` rows, `red-ui-button`, `TypedInput`, `RED.editor.createEditor` — no custom widget where a stock one exists |
 | runtime state in the editor | `node.status({fill, shape, text})` — text under 20 characters, `{}` clears |
 | errors while handling a message | **one** Catch path: `done(err)` when `done` is present; `node.error(err, msg)` only if there is no `done`. Never `node.error` then bare `done()` — that is the wrong pairing (Catch via error, message finished as success). Do not leave throws uncaught from the handler; catch and call `done(err)`. (§2 notes that a slipped throw is contained by Node-RED — that is a safety net, not the preferred path.) |
@@ -1381,6 +1381,18 @@ validator's arity is 2 — `function (v, opt)`. A one-argument validator coerces
 every custom validator that returns a reason string must declare `(v, opt)`. (Measured on the
 editor-client in Node-RED 4/5; same rule since 3.x.)
 *Check:* `rg -n "validateUint8|function \(v, _?opt\)" nodes/mavlink-local-identity.html`
+
+**`oneditsave` runs before Node-RED's generic form-to-node copy.**
+*Wrong belief:* assigning `this.someProperty` inside `oneditsave` overrides the value in its
+`node-config-input-someProperty` editor control.
+*Fact:* Node-RED invokes the node definition's `oneditsave`, then copies each editor control
+onto the node. A stale hidden control therefore overwrites an object-only assignment. When a
+role reshapes saved configuration, clear or rewrite the actual editor control in `oneditsave`;
+the normal copy then persists that value. A single-select also needs an explicit empty option:
+setting a value with no matching option makes jQuery return `null`, which Node-RED skips rather
+than saving.
+*Check:* `node --test test/nodes/local-identity-html.test.js` — the Companion save regression
+executes the hook followed by Node-RED's form-copy order.
 
 **`Buffer` already range-checks integers.**
 *Wrong belief:* an out-of-range integer silently wraps — 300 into a `uint8` becomes 44.
