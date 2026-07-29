@@ -172,6 +172,7 @@ test('peer-table sweep idle-evicts decoders only on UDP (not TCP)', async () => 
   assert.ok(sweep, 'stale/sweep interval should be registered');
   sweep.fn();
   assert.equal(sweeps.length, 1, 'UDP sweep must call evictIdleDecoders');
+  assert.equal(sweeps[0][1], 15000, 'idle decoder TTL matches peer-table expire default');
   udp.close();
 
   sweeps.length = 0;

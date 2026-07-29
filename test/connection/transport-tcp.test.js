@@ -324,6 +324,27 @@ test('stale server close does not emit endpoint-gone after same address:port rec
   assert.deepEqual(events[1], { address: '10.0.0.1', port: 1 });
 });
 
+test('superseded server socket data does not emit message after reconnect', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  await transport.open();
+
+  const a = new MockSocket({ address: '10.0.0.1', port: 1 });
+  const b = new MockSocket({ address: '10.0.0.1', port: 1 });
+  net.servers[0].accept(a);
+  net.servers[0].accept(b);
+
+  const messages = [];
+  transport.on('message', (m) => messages.push(m.buffer.toString()));
+
+  // Delayed bytes on the old socket must not enter the replacement decoder.
+  a.receive(Buffer.from('stale'));
+  assert.deepEqual(messages, []);
+
+  b.receive(Buffer.from('fresh'));
+  assert.deepEqual(messages, ['fresh']);
+});
+
 test('server peer error does not emit transport error for remaining clients', async () => {
   const net = mockNet();
   const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
