@@ -612,9 +612,10 @@ Connection keeps one *serialize* registry, but each network peer (`address:port`
 vehicle A contaminate the next bytes from vehicle B. TCP peer disconnect releases that
 decoder; idle UDP pipelines are evicted on the peer-table expire interval (TCP/serial do
 **not** age-evict — only `endpoint-gone` / Connection close). A hard cap (default **100**)
-evicts under pressure: never-validated (no decoded frame yet) first, then validated
-pipelines whose splitter buffer is empty, then Map-order LRU among remaining mid-frame
-entries — so spoofed UDP source churn cannot grow memory without bound while a live peer
+evicts under pressure: never-validated junk (empty buffer or no MAVLink STX) first, then
+validated pipelines whose splitter buffer is empty, then Map-order LRU among remaining
+mid-frame entries — including a peer whose *first* frame is still incomplete (not yet
+`validated`). Spoofed UDP source churn cannot grow memory without bound while a live peer
 with a partial frame buffered is preferred. Steady per-drone endpoints reuse the same
 tuple and stay under the cap. Serial is one endpoint and needs only one decoder.
 
@@ -1435,8 +1436,9 @@ does not inherit HEARTBEAT from a hidden preload.
 client and UDP rinfo because MAVLink carries sysid/compid in each frame.
 *Fact:* framing state is a byte stream before sysid is known. A partial packet from peer A
 left in a shared splitter contaminates peer B. `createWire` keeps one serialize registry and
-a decoder map keyed by `address:port` (capped, default 100; never-validated first, then
-empty-buffer validated, then Map-order LRU). TCP clears via `endpoint-gone`; UDP also
+a decoder map keyed by `address:port` (capped, default 100; never-validated junk first,
+then empty-buffer validated, then Map-order LRU — mid-frame peers kept, including a
+first frame that has not validated yet). TCP clears via `endpoint-gone`; UDP also
 age-evicts idle pipelines on the peer-table expire interval (TCP/serial do not). Cap
 pressure that must drop a mid-frame buffer is the residual after both preference tiers —
 accepted only when more than `maxDecoders` distinct endpoints each hold incomplete framing

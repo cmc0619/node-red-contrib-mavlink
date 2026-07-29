@@ -172,3 +172,23 @@ test('cap pressure prefers empty-buffer validated over a mid-frame peer', () => 
   // ep(2) was evicted — a fresh full frame still decodes alone.
   assert.equal(wire.decode(full, ep(2), t + 5).length, 1);
 });
+
+test('cap pressure keeps a never-validated first-frame partial over junk', () => {
+  const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
+  const full = heartbeatFrame(wire);
+  const ep = (n) => ({ address: '10.0.0.' + n, port: 14550 });
+  const t = 4_000_000;
+  const junk = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]);
+
+  // New peer: first bytes of first frame — not validated yet, but STX-buffered.
+  assert.equal(wire.decode(full.subarray(0, 6), ep(1), t).length, 0);
+  assert.equal(wire.decode(junk, ep(2), t + 1).length, 0);
+  assert.equal(wire.decoderCount(), 2);
+
+  // More junk must drop the non-STX spoof, not the first-frame partial
+  // (Greptile #33: never-validated tier must not wipe a started MAVLink frame).
+  assert.equal(wire.decode(junk, ep(3), t + 2).length, 0);
+  assert.equal(wire.decoderCount(), 2);
+
+  assert.equal(wire.decode(full.subarray(6), ep(1), t + 3).length, 1);
+});
