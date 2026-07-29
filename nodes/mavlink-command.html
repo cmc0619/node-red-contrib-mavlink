@@ -129,12 +129,14 @@
    */
   function loadCommandsCatalog(cb) {
     const target = resolveCatalogTarget();
+    // Always advance the seq — including cache hits — so an in-flight request
+    // for a previous target cannot append after this callback (Greptile #36).
+    const seq = ++_catalogRequestSeq;
     if (_catalogByKey[target.key]) {
       _activeCatalogKey = target.key;
       cb(_catalogByKey[target.key]);
       return;
     }
-    const seq = ++_catalogRequestSeq;
     $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
       if (seq !== _catalogRequestSeq) return; // stale — a newer request is in flight
       const catalog = {
@@ -380,26 +382,37 @@
         // callback runs after the initial applyMode() left the dialog empty —
         // without this the exposed params stay stale until the user re-picks.
         sel.val(node.preset || 'arm');
-        // Dialect command descriptions ride as option/select tooltips (§6).
-        loadCommandsCatalog(function (catalog) {
-          const byId = {};
-          (catalog.commands || []).forEach(function (c) {
-            byId[String(c.value)] = c.description || '';
-          });
-          sel.find('option').each(function () {
-            const pid = $(this).val();
-            const cid = presetCommandId(pid);
-            const tip = cid != null ? byId[String(cid)] : '';
-            if (tip) $(this).attr('title', tip);
-          });
-          function syncPresetTitle() {
-            const tip = sel.find('option:selected').attr('title') || '';
-            if (tip) sel.attr('title', tip);
-            else sel.removeAttr('title');
+        // Tip titles from cache when possible; otherwise one catalog load that
+        // does not gate control rendering (Codex #36).
+        (function applyPresetOptionTips($sel) {
+          function paint(catalog) {
+            if (!catalog) return;
+            const byId = {};
+            (catalog.commands || []).forEach(function (c) {
+              byId[String(c.value)] = c.description || '';
+            });
+            $sel.find('option').each(function () {
+              const pid = $(this).val();
+              const cid = presetCommandId(pid);
+              const tip = cid != null ? byId[String(cid)] : '';
+              if (tip) $(this).attr('title', tip);
+              else $(this).removeAttr('title');
+            });
+            function syncPresetTitle() {
+              const tip = $sel.find('option:selected').attr('title') || '';
+              if (tip) $sel.attr('title', tip);
+              else $sel.removeAttr('title');
+            }
+            syncPresetTitle();
+            $sel.off('change.mavPresetTip').on('change.mavPresetTip', syncPresetTitle);
           }
-          syncPresetTitle();
-          sel.off('change.mavPresetTip').on('change.mavPresetTip', syncPresetTitle);
-        });
+          const target = resolveCatalogTarget();
+          if (_catalogByKey[target.key]) {
+            paint(_catalogByKey[target.key]);
+            return;
+          }
+          loadCommandsCatalog(paint);
+        })(sel);
         sel.trigger('change');
       }
 
@@ -808,30 +821,36 @@
             loadPresetMessages(refreshParamFields);
             return;
           }
-          // Join dialect command-param descriptions onto preset fields (§6).
+          // Render controls immediately so a slow tip-catalog fetch cannot
+          // leave the form empty at Done (Codex #36). Titles attach when ready.
+          if (paramSpec.length === 0) {
+            container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
+            return;
+          }
+          const commandId = presetCommandId(presetId);
+          const rows = [];
+          for (const spec of paramSpec) {
+            const label = spec.units
+              ? `${spec.label} (${spec.units})`
+              : spec.label;
+            const input = presetParamInput(spec);
+            rows.push({ spec, input, row: formRow(label, input) });
+            container.append(rows[rows.length - 1].row);
+          }
           loadCommandsCatalog(function (cmdCatalog) {
-            // Drop stale callbacks — a newer preset/mode/vehicle refresh may
-            // have already emptied `container` (Greptile #36).
             if ($('#node-input-mode').val() !== 'preset') return;
             if ($('#node-input-preset').val() !== presetId) return;
-            if (paramSpec.length === 0) {
-              container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
-              return;
-            }
-            const commandId = presetCommandId(presetId);
-            for (const spec of paramSpec) {
-              const label = spec.units
-                ? `${spec.label} (${spec.units})`
-                : spec.label;
-              const input = presetParamInput(spec);
-              const catParam = catalogParamByIndex(cmdCatalog, commandId, spec.index);
+            for (const row of rows) {
+              if (!row.input.closest('body').length) return; // row was replaced
+              const catParam = catalogParamByIndex(cmdCatalog, commandId, row.spec.index);
               if (catParam && catParam.description) {
-                const tip = spec.bitmask
+                const tip = row.spec.bitmask
                   ? bitmaskTitle(catParam.description)
                   : catParam.description;
-                input.attr('title', tip);
+                row.input.attr('title', tip);
+                const lbl = row.input.closest('.form-row').find('label').first();
+                if (lbl.length) lbl.attr('title', tip);
               }
-              container.append(formRow(label, input));
             }
           });
         }

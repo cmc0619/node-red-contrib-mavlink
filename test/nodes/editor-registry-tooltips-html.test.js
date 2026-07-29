@@ -95,10 +95,12 @@ test('Payload catalogQuery unwraps Connection vehicle snapshot id', () => {
   assert.match(shared, /RED\.mavlink\.vehicleIdFrom\s*=\s*function/);
 });
 
-test('Command preset tip join ignores stale catalog callbacks', () => {
+test('Command preset controls render before tip catalog arrives', () => {
   const html = readHtml('mavlink-command');
+  // Controls append before loadCommandsCatalog; tips attach afterward.
   assert.match(
     html,
-    /loadCommandsCatalog\(function\s*\([^)]*\)\s*\{[\s\S]*?#node-input-preset'\)\.val\(\)\s*!==\s*presetId/
+    /container\.append\(rows\[rows\.length - 1\]\.row\);[\s\S]*loadCommandsCatalog\(function/
   );
+  assert.match(html, /const seq = \+\+_catalogRequestSeq;/);
 });

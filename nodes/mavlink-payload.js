@@ -48,21 +48,37 @@ module.exports = function registerMavlinkPayload(RED) {
             : '';
           let bundle = null;
           let dialect = '';
+          const requested = typeof req.query.dialect === 'string'
+            ? req.query.dialect.trim()
+            : '';
           if (vehicleId) {
             const vehicleNode = RED.nodes.getNode(vehicleId);
             if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
               bundle = vehicleNode.getDialect();
               dialect = vehicleNode.dialect || (bundle && bundle.dialect) || 'custom';
+            } else {
+              // Custom / undeployed profile — do not invent ardupilotmega tips
+              // (Codex #36). Same posture as command/message catalog routes.
+              return res.json({
+                dialect: requested || '',
+                fields: {},
+                notice: 'Vehicle Profile not deployed — deploy the flow first',
+              });
             }
           }
           if (!bundle) {
-            const requested = typeof req.query.dialect === 'string'
-              ? req.query.dialect.trim()
-              : '';
             const known = metadataApi.knownDialects();
-            const name = requested && known.includes(requested) ? requested : 'ardupilotmega';
-            bundle = metadataApi.loadBundled(name);
-            dialect = name;
+            if (!requested || !known.includes(requested)) {
+              return res.json({
+                dialect: requested || '',
+                fields: {},
+                notice: requested
+                  ? `unknown dialect ${JSON.stringify(requested)}`
+                  : 'no dialect supplied',
+              });
+            }
+            bundle = metadataApi.loadBundled(requested);
+            dialect = requested;
           }
           return res.json({
             dialect,
