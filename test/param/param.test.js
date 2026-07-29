@@ -139,6 +139,38 @@ test('resolveParamEncoding: firmware fallback when capabilities absent', () => {
   assert.equal(resolveParamEncoding({}), PARAM_ENCODING.C_CAST);
 });
 
+test('resolveParamEncoding: present-but-invalid override rejects (no silent fallthrough)', () => {
+  assert.throws(
+    () => resolveParamEncoding({
+      encoding: 'bitwise',
+      capabilities: CAP_PARAM_ENCODE_BYTEWISE,
+      firmware: 'px4',
+    }),
+    /unsupported param encoding/
+  );
+  assert.throws(
+    () => buildParamMessage({
+      action: 'set',
+      target: { sysid: 1, compid: 1 },
+      paramId: 'FOO',
+      value: 1,
+      paramType: 'MAV_PARAM_TYPE_INT32',
+      encoding: 'nope',
+      firmware: 'ardupilot',
+    }),
+    /unsupported param encoding/
+  );
+  // Absent / empty override still falls through.
+  assert.equal(
+    resolveParamEncoding({ encoding: '', firmware: 'px4' }),
+    PARAM_ENCODING.BYTEWISE
+  );
+  assert.equal(
+    resolveParamEncoding({ encoding: null, firmware: 'ardupilot' }),
+    PARAM_ENCODING.C_CAST
+  );
+});
+
 test('PARAM_SET uses capability bitwise encoding even when firmware says ardupilot', () => {
   const message = buildParamMessage({
     action: 'set',

@@ -1172,8 +1172,9 @@ Vehicle Profile carries the firmware field: PX4, ArduPilot, or custom. It affect
 - **Parameter encoding** — `PARAM_SET` / `PARAM_VALUE` carry typed values in a float slot.
   Encoding is resolved as: explicit `msg.payload.paramEncoding` (`bytewise` | `c-cast`) →
   peer `AUTOPILOT_VERSION.capabilities` (`PARAM_ENCODE_BYTEWISE` / `PARAM_ENCODE_C_CAST`) →
-  firmware fallback (PX4 → bytewise bit-cast; otherwise C-cast). Do not invent encoding from
-  firmware alone when the peer has advertised a capability bit.
+  firmware fallback (PX4 → bytewise bit-cast; otherwise C-cast). A present override outside
+  those two values is rejected (dynamic `msg` input); only an absent override falls through.
+  Do not invent encoding from firmware alone when the peer has advertised a capability bit.
 - **Command support** — not every `MAV_CMD` is implemented by both stacks.
 
 Custom means: use the compiled dialect, offer no firmware-specific behavior, and do not pretend
@@ -1658,7 +1659,9 @@ and `done(err)`.
 peer `AUTOPILOT_VERSION.capabilities` is stored for display and unused at send time.
 *Fact:* Spec bits are `MAV_PROTOCOL_CAPABILITY_PARAM_ENCODE_BYTEWISE` (16) and
 `…_PARAM_ENCODE_C_CAST` (131072). Resolution is explicit `msg.payload.paramEncoding` → those
-capability bits from the peer table → firmware fallback (PX4 → bytewise, else C-cast). ArduPilot
-often omits the C_CAST bit, so firmware fallback remains required.
+capability bits from the peer table → firmware fallback (PX4 → bytewise, else C-cast). A
+present-but-invalid override rejects rather than falling through (silent wrong encoding would
+corrupt integer `PARAM_SET`). ArduPilot often omits the C_CAST bit, so firmware fallback
+remains required.
 *Check:* `node --test test/param/param.test.js test/param/node.test.js` — look for
 `resolveParamEncoding` / capabilities tests.
