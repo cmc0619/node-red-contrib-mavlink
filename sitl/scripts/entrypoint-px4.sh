@@ -79,14 +79,14 @@ fi
 export PX4_SIM_MODEL="${PX4_SIM_MODEL:-sihsim_quadx}"
 export HEADLESS="${HEADLESS:-1}"
 
-# Stop boot-time file logging if the logger still opened one (SDLOG_MODE=1 intent).
+# Re-assert identity/logging at end of rcS. Do not `logger stop` — SDLOG_MODE=1
+# needs the logger module alive so arm→disarm recording can start.
 if ! grep -q 'nrc_lab_params_tail' "${RCS}"; then
   cat >> "${RCS}" <<EOF
 
 # nrc_lab_params_tail
 param set MAV_SYS_ID ${SYSID}
 param set SDLOG_MODE ${SDLOG_MODE:-1}
-logger stop || true
 EOF
 fi
 

@@ -21,9 +21,10 @@ x-ap: &ap
     OUT_PORT: "14550"
 
 x-px4: &px4
-  # Official prebuilt SIH image — no local FROM-build (avoids whiteout issues on
-  # some hosts). Lab wiring is the mounted entrypoint.
-  image: px4io/px4-sitl:latest
+  # Official prebuilt SIH image, pinned to the digest validated with this
+  # entrypoint (v1.18.0-beta1 / Hub latest as of 2026-07-08). Lab wiring is the
+  # mounted entrypoint — do not float on :latest.
+  image: px4io/px4-sitl@sha256:bab4270c4849b7027df4bd760c79d743d738c81d7830dde14c4cc5714f781216
   entrypoint: ["/bin/bash", "/usr/local/bin/entrypoint-px4.sh"]
   profiles: ["sitl"]
   restart: unless-stopped
