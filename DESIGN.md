@@ -448,10 +448,10 @@ independently; a configured 0 is broadcast and survives; blank means inherit):
    field on Build
 5. 1
 
-`lib/addressing` owns one resolution path (`resolveActionTarget`) and one builder default
-helper (`normalizeTarget`: missing → 1, explicit `0` kept). Sysid/compid ranges are
+`lib/addressing` owns one resolution path (`resolveActionTarget`). Builders take that
+resolved `{sysid, compid}` as-is — no second defaulting helper. Sysid/compid ranges are
 editor-only (`RED.mavlink.validateUint8`). Flow `msg` and deployed config are trusted at
-runtime — no second uint8 parser.
+runtime.
 
 Confirm/complete matching (COMMAND_ACK, param echo) keys on the *same resolved target* — the
 matcher and the sender share one resolution, pinned by test.
@@ -1710,13 +1710,11 @@ remains required.
 *Check:* `node --test test/param/param.test.js test/param/node.test.js` — look for
 `resolveParamEncoding` / capabilities tests.
 
-**Target defaulting is one helper; uint8 range stays in the editor.**
-*Wrong belief:* Move/Param/Payload each need a local `normalizeTarget`; runtime must
-re-parse sysid/compid with a shared `parseUint8` / `parseTargetUint8` /
-`parseIdentityUint8` stack.
-*Fact:* One `normalizeTarget` (missing → 1) in `lib/addressing`. Range checks are
-`RED.mavlink.validateUint8` in `.html` defaults — runtime assigns `Number(config…)` and
-does not keep a second parser. Flow `msg` is programmer-trusted.
+**Target resolution is once; builders do not re-default.**
+*Wrong belief:* Move/Param/Payload need local (or shared) `normalizeTarget`, and runtime
+must re-parse sysid/compid with `parseUint8` / `parseTargetUint8` / `parseIdentityUint8`.
+*Fact:* `resolveActionTarget` is the only defaulting path (→ 1). Builders use
+`input.target` directly. Range checks are `RED.mavlink.validateUint8` in the editor.
+Flow `msg` is programmer-trusted.
 *Check:* `node --test test/addressing/resolve.test.js test/move/move.test.js
-test/param/param.test.js`; no `parseUint8` / `parseTargetUint8` / `parseIdentityUint8`
-under `lib/` or `nodes/`.
+test/param/param.test.js`; no `normalizeTarget` / `parseUint8` under `lib/` or `nodes/`.

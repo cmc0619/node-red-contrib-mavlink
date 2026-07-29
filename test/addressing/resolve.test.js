@@ -7,7 +7,6 @@ const {
   resolveActionTarget,
   resolveFirmware,
   profileFromVehicleNode,
-  normalizeTarget,
 } = require('../../lib/addressing');
 
 const PROFILE = { targetSysid: 42, targetCompid: 191, firmware: 'px4' };
@@ -118,11 +117,4 @@ test('profileFromVehicleNode maps defaults and firmware, null-safe', () => {
     profileFromVehicleNode({ defaultTargetSystem: 3, defaultTargetComponent: 4, firmware: 'px4' }),
     { targetSysid: 3, targetCompid: 4, firmware: 'px4' }
   );
-});
-
-test('normalizeTarget: missing → 1; explicit 0 kept; numeric strings coerced', () => {
-  assert.deepEqual(normalizeTarget(undefined), { sysid: 1, compid: 1 });
-  assert.deepEqual(normalizeTarget({}), { sysid: 1, compid: 1 });
-  assert.deepEqual(normalizeTarget({ sysid: 0, compid: 0 }), { sysid: 0, compid: 0 });
-  assert.deepEqual(normalizeTarget({ sysid: '7', compid: '191' }), { sysid: 7, compid: 191 });
 });
