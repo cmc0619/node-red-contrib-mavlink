@@ -59,12 +59,34 @@
             $('<option>').val(want).text(want).appendTo($dialect);
           }
           $dialect.val(want);
-          populateRevisions(node.dialectRevision || 'seed');
+          populateRevisions(initialRevisionPrefer());
+        }
+
+        /** Legacy custom-path profiles keep working until the user picks Seed/a date. */
+        function hasLegacyCustomPath() {
+          return node.dialectSource === 'custom' && !!(node.customDialectPath || '').trim();
+        }
+
+        function initialRevisionPrefer() {
+          if (hasLegacyCustomPath()) {
+            const rev = node.dialectRevision;
+            if (!rev || rev === 'seed' || rev === 'bundled' || rev === 'legacy-path') {
+              return 'legacy-path';
+            }
+          }
+          return node.dialectRevision || 'seed';
         }
 
         function populateRevisions(prefer) {
           const row = dialectRow($dialect.val());
-          const versions = (row && row.versions) || [{ id: 'seed', label: 'Seed (shipped)' }];
+          const versions = (row && row.versions) ? row.versions.slice() : [{ id: 'seed', label: 'Seed (shipped)' }];
+          if (hasLegacyCustomPath()) {
+            versions.unshift({
+              id: 'legacy-path',
+              label: 'Custom path (legacy)',
+              kind: 'legacy'
+            });
+          }
           $revision.empty();
           versions.forEach(function (v) {
             $('<option>').val(v.id).text(v.label)
@@ -136,7 +158,7 @@
           const rev = $revision.val();
           const opt = $revision.find('option:selected');
           const entry = opt.attr('data-entry') || (dialect + '.xml');
-          if (!rev || rev === 'seed') {
+          if (!rev || rev === 'seed' || rev === 'legacy-path') {
             $status.text('Pick a downloaded date to compare against the seed.');
             return;
           }
@@ -188,9 +210,15 @@
         }
       },
       oneditsave: function () {
-        /* Dialect + revision is the authority; clear legacy path fields. */
-        this.dialectSource = 'bundled';
-        this.customDialectPath = '';
+        const rev = $('#node-config-input-dialectRevision').val();
+        if (rev === 'legacy-path' && (this.customDialectPath || '').trim()) {
+          /* Keep compiling the existing absolute XML path. */
+          this.dialectSource = 'custom';
+          this.dialectRevision = 'legacy-path';
+        } else {
+          this.dialectSource = 'bundled';
+          this.customDialectPath = '';
+        }
       }
     });
   })();

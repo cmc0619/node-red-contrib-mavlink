@@ -34,6 +34,40 @@ test('there is no custom-path dialect mode in the editor', () => {
   assert.ok(!/\$path\.val\(p\)/.test(html));
 });
 
+test('legacy custom-path profiles are preserved until the user migrates', () => {
+  assert.match(html, /hasLegacyCustomPath/);
+  assert.match(html, /Custom path \(legacy\)/);
+  assert.match(html, /rev === 'legacy-path'/);
+  assert.match(
+    html,
+    /this\.dialectSource = 'custom'/,
+    'oneditsave must keep dialectSource=custom when legacy-path is selected'
+  );
+  const saveHook = html.slice(html.indexOf('oneditsave:'));
+  assert.match(
+    saveHook,
+    /if \(rev === 'legacy-path' && \(this\.customDialectPath \|\| ''\)\.trim\(\)\)/,
+    'oneditsave must branch on legacy-path before clearing the path'
+  );
+  assert.ok(
+    !/oneditsave:\s*function\s*\(\)\s*\{\s*\/\*[\s\S]*?\*\/\s*this\.dialectSource = 'bundled';\s*this\.customDialectPath = '';\s*\}/.test(html),
+    'oneditsave must not unconditionally wipe customDialectPath'
+  );
+});
+
+test('seed refresh workflow passes dispatch ref via env (no shell interpolation)', () => {
+  const yml = fs.readFileSync(
+    path.join(__dirname, '..', '..', '.github', 'workflows', 'refresh-mavlink-seed.yml'),
+    'utf8'
+  );
+  assert.match(yml, /MAVLINK_REF:\s*\$\{\{\s*inputs\.ref/);
+  assert.match(yml, /--ref "\$MAVLINK_REF"/);
+  assert.ok(
+    !/--ref "\$\{\{/.test(yml),
+    'must not interpolate inputs.ref directly into the run script'
+  );
+});
+
 test('paramDefsUrl is persisted and shown as an input', () => {
   assert.match(html, /paramDefsUrl:\s*\{\s*value:\s*''\s*\}/);
   assert.match(html, /<input type="text" id="node-config-input-paramDefsUrl"/);

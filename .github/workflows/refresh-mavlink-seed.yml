@@ -33,7 +33,10 @@ jobs:
         run: npm ci
 
       - name: Generate seed
-        run: node scripts/generate-seed.js --repo mavlink/mavlink --ref "${{ inputs.ref || 'master' }}"
+        env:
+          # Pass dispatch input via env so it is never interpolated into the shell script.
+          MAVLINK_REF: ${{ inputs.ref || 'master' }}
+        run: node scripts/generate-seed.js --repo mavlink/mavlink --ref "$MAVLINK_REF"
 
       - name: Open PR when the seed changed
         uses: peter-evans/create-pull-request@v6
