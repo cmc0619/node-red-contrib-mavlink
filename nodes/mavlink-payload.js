@@ -85,9 +85,16 @@ module.exports = function registerMavlinkPayload(RED) {
             fields: fieldTipsFromBundle(bundle, topic, verb, path),
           });
         } catch (err) {
+          // Bundled load errors can include filesystem paths — log server-side
+          // and keep the client response generic (CodeRabbit #36).
+          if (RED.log && typeof RED.log.error === 'function') {
+            RED.log.error(
+              `[mavlink-payload] field-tips unavailable: ${err && err.message ? err.message : String(err)}`
+            );
+          }
           return res.status(400).json({
             fields: {},
-            error: err && err.message ? err.message : String(err),
+            error: 'field tips unavailable',
           });
         }
       }

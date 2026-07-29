@@ -95,6 +95,13 @@
       return '';
     };
 
+    /**
+     * Vehicle / dialect query for admin catalog routes (enums, field-tips, …).
+     * Shared so palette nodes do not re-derive Connection snapshot unwrap.
+     *
+     * @param {string[]|string} [names]  optional enum table filter for /mavlink/enums
+     * @returns {Object<string, string>}
+     */
     function currentEnumQuery(names) {
       var query = {};
       var buildTier = valueFromSelector('#node-input-delivery') === 'build';
@@ -126,6 +133,7 @@
       }
       return query;
     }
+    RED.mavlink.currentCatalogQuery = currentEnumQuery;
 
     /**
      * Build an admin API URL under Node-RED's configured httpAdminRoot.

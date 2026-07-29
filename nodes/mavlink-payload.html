@@ -148,44 +148,28 @@
       var tipRequestSeq = 0;
       var paintedModeEnum = null;
       var paintedReleaseEnum = null;
-      /** Payload value fields that may receive dialect-sourced titles. */
+      /**
+       * Numeric / text payload fields that take command/message param tips.
+       * Enum <select>s (modeValue, actionValue) keep fillEnumSelect titles —
+       * do not clear/overwrite them here (CodeRabbit #36).
+       */
       var TIP_FIELDS = [
         'cameraId', 'count', 'interval', 'sequence',
         'streamId', 'statusFrequency',
         'distance', 'shutter', 'trigger',
         'pitch', 'roll', 'yaw', 'pitchRate', 'yawRate',
         'flags', 'gimbalDeviceId',
-        'modeValue', 'stabilizeRoll', 'stabilizePitch', 'stabilizeYaw',
+        'stabilizeRoll', 'stabilizePitch', 'stabilizeYaw',
         'lat', 'lon', 'alt',
         'servo', 'pwm', 'period',
-        'instance', 'actionValue', 'length', 'rate'
+        'instance', 'length', 'rate'
       ];
 
       function catalogQuery() {
-        var query = {};
-        var delivery = $('#node-input-delivery').val() || 'build';
-        var vehicle = '';
-        var dialect = '';
-        if (delivery === 'build') {
-          vehicle = $('#node-input-vehicle').val() || '';
-        } else {
-          var connection = $('#node-input-connection').val() || '';
-          if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
-            var conn = RED.nodes.node(connection);
-            // Deployed Connection replaces `vehicle` with a frozen snapshot
-            // `{ id, … }`; the admin tips route needs the profile node id.
-            vehicle = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
-            var profile = vehicle && RED.nodes.node(vehicle);
-            if (profile && profile.dialect) dialect = profile.dialect;
-          }
+        if (RED.mavlink && typeof RED.mavlink.currentCatalogQuery === 'function') {
+          return RED.mavlink.currentCatalogQuery();
         }
-        if (vehicle && !dialect && RED.nodes && typeof RED.nodes.node === 'function') {
-          var own = RED.nodes.node(vehicle);
-          if (own && own.dialect) dialect = own.dialect;
-        }
-        if (vehicle) query.vehicle = vehicle;
-        if (dialect) query.dialect = dialect;
-        return query;
+        return {};
       }
 
       function clearPayloadFieldTips() {
@@ -218,9 +202,12 @@
           if (seq !== tipRequestSeq) return;
           clearPayloadFieldTips();
           var fields = (data && data.fields) || {};
-          Object.keys(fields).forEach(function (name) {
-            RED.mavlink.applyFieldTitle('node-input-' + name, fields[name]);
-          });
+          for (var i = 0; i < TIP_FIELDS.length; i++) {
+            var name = TIP_FIELDS[i];
+            if (fields[name]) {
+              RED.mavlink.applyFieldTitle('node-input-' + name, fields[name]);
+            }
+          }
         }).fail(function () {
           if (seq !== tipRequestSeq) return;
           clearPayloadFieldTips();

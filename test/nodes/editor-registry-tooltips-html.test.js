@@ -88,11 +88,21 @@ test('shared applyFieldTitle helper lives on RED.mavlink', () => {
   assert.match(html, /RED\.mavlink\.applyFieldTitle\s*=\s*function/);
 });
 
-test('Payload catalogQuery unwraps Connection vehicle snapshot id', () => {
+test('Payload catalogQuery reuses shared currentCatalogQuery', () => {
   const html = readHtml('mavlink-payload');
-  assert.match(html, /RED\.mavlink\.vehicleIdFrom/);
+  assert.match(html, /RED\.mavlink\.currentCatalogQuery/);
   const shared = readHtml('mavlink-local-identity');
+  assert.match(shared, /RED\.mavlink\.currentCatalogQuery\s*=\s*currentEnumQuery/);
   assert.match(shared, /RED\.mavlink\.vehicleIdFrom\s*=\s*function/);
+});
+
+test('Payload TIP_FIELDS excludes enum selects driven by fillEnumSelect', () => {
+  const html = readHtml('mavlink-payload');
+  const tipBlock = html.match(/var TIP_FIELDS = \[([\s\S]*?)\];/);
+  assert.ok(tipBlock, 'TIP_FIELDS declaration');
+  assert.ok(!/['"]modeValue['"]/.test(tipBlock[1]), 'modeValue stays on fillEnumSelect');
+  assert.ok(!/['"]actionValue['"]/.test(tipBlock[1]), 'actionValue stays on fillEnumSelect');
+  assert.match(tipBlock[1], /['"]sequence['"]/);
 });
 
 test('Command preset controls render before tip catalog arrives', () => {
@@ -103,4 +113,14 @@ test('Command preset controls render before tip catalog arrives', () => {
     /container\.append\(rows\[rows\.length - 1\]\.row\);[\s\S]*loadCommandsCatalog\(function/
   );
   assert.match(html, /const seq = \+\+_catalogRequestSeq;/);
+});
+
+test('Command reapplies preset option tips when Connection / Vehicle changes', () => {
+  const html = readHtml('mavlink-command');
+  assert.match(html, /function applyPresetOptionTips/);
+  // Connection change path must repaint preset titles for the new dialect.
+  assert.match(
+    html,
+    /#node-input-connection'\)\.on\('change'[\s\S]*applyPresetOptionTips\(\)/
+  );
 });

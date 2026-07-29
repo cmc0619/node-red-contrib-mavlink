@@ -46,3 +46,34 @@ test('fieldTipsFromBundle returns empty object for unknown verb', () => {
   const bundle = loadBundled('ardupilotmega');
   assert.deepEqual(fieldTipsFromBundle(bundle, 'camera', 'nope', ''), {});
 });
+
+test('fieldTipsFromBundle omits Empty / Reserved param descriptions', () => {
+  const bindings = editorFieldBindings();
+  const photo = bindings['camera|photo|'];
+  assert.ok(photo && photo.command);
+  const params = Object.entries(photo.fields).map(([field, index]) => {
+    if (field === 'sequence') {
+      return { index, description: 'Capture sequence number', reserved: false };
+    }
+    if (field === 'cameraId') {
+      return { index, description: 'Empty', reserved: false };
+    }
+    if (field === 'count') {
+      return { index, description: 'Empty.', reserved: false };
+    }
+    if (field === 'interval') {
+      return { index, description: 'Reserved', reserved: false };
+    }
+    return { index, description: 'keep', reserved: false };
+  });
+  const bundle = {
+    commands: {
+      IMAGE_START_CAPTURE: { value: photo.command, params },
+    },
+  };
+  const tips = fieldTipsFromBundle(bundle, 'camera', 'photo', '');
+  assert.equal(tips.sequence, 'Capture sequence number');
+  assert.equal(tips.cameraId, undefined);
+  assert.equal(tips.count, undefined);
+  assert.equal(tips.interval, undefined);
+});

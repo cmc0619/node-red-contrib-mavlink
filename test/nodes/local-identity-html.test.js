@@ -16,6 +16,7 @@ class FakeOption {
   constructor() {
     this.value = '';
     this.label = '';
+    this.attrs = {};
   }
 
   val(value) {
@@ -29,12 +30,24 @@ class FakeOption {
     this.label = String(value);
     return this;
   }
+
+  attr(name, value) {
+    if (value === undefined) return this.attrs[name];
+    this.attrs[name] = String(value);
+    return this;
+  }
+
+  removeAttr(name) {
+    delete this.attrs[name];
+    return this;
+  }
 }
 
 class FakeSelect {
   constructor(value) {
     this.options = [];
     this.selected = value || '';
+    this.attrs = {};
   }
 
   empty() {
@@ -54,7 +67,33 @@ class FakeSelect {
     return this;
   }
 
+  attr(name, value) {
+    if (value === undefined) return this.attrs[name];
+    this.attrs[name] = String(value);
+    return this;
+  }
+
+  removeAttr(name) {
+    delete this.attrs[name];
+    return this;
+  }
+
+  off() {
+    return this;
+  }
+
+  on() {
+    return this;
+  }
+
   find(selector) {
+    if (selector === 'option:selected') {
+      const selected = this.options.find((option) => option.value === this.selected);
+      return selected || {
+        length: 0,
+        attr() { return undefined; },
+      };
+    }
     const value = selector.match(/option\[value="([^"]*)"\]/)[1];
     return { length: this.options.some((option) => option.value === value) ? 1 : 0 };
   }

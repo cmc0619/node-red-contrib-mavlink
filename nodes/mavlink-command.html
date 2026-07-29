@@ -382,38 +382,49 @@
         // callback runs after the initial applyMode() left the dialog empty —
         // without this the exposed params stay stale until the user re-picks.
         sel.val(node.preset || 'arm');
+        applyPresetOptionTips(sel);
+        sel.trigger('change');
+      }
+
+      /**
+       * Dialect-sourced titles on preset <option>s and the select. Re-run when
+       * Connection / Vehicle / delivery changes so tips track the active dialect
+       * (Greptile #36) — not only when the preset list is rebuilt.
+       *
+       * @param {JQuery} [$sel]
+       */
+      function applyPresetOptionTips($sel) {
+        const sel = $sel && $sel.length ? $sel : $('#node-input-preset');
+        if (!sel.length) return;
+        function paint(catalog) {
+          if (!catalog) return;
+          const byId = {};
+          (catalog.commands || []).forEach(function (c) {
+            byId[String(c.value)] = c.description || '';
+          });
+          sel.find('option').each(function () {
+            const pid = $(this).val();
+            const cid = presetCommandId(pid);
+            const tip = cid != null ? byId[String(cid)] : '';
+            if (tip) $(this).attr('title', tip);
+            else $(this).removeAttr('title');
+          });
+          function syncPresetTitle() {
+            const tip = sel.find('option:selected').attr('title') || '';
+            if (tip) sel.attr('title', tip);
+            else sel.removeAttr('title');
+          }
+          syncPresetTitle();
+          sel.off('change.mavPresetTip').on('change.mavPresetTip', syncPresetTitle);
+        }
         // Tip titles from cache when possible; otherwise one catalog load that
         // does not gate control rendering (Codex #36).
-        (function applyPresetOptionTips($sel) {
-          function paint(catalog) {
-            if (!catalog) return;
-            const byId = {};
-            (catalog.commands || []).forEach(function (c) {
-              byId[String(c.value)] = c.description || '';
-            });
-            $sel.find('option').each(function () {
-              const pid = $(this).val();
-              const cid = presetCommandId(pid);
-              const tip = cid != null ? byId[String(cid)] : '';
-              if (tip) $(this).attr('title', tip);
-              else $(this).removeAttr('title');
-            });
-            function syncPresetTitle() {
-              const tip = $sel.find('option:selected').attr('title') || '';
-              if (tip) $sel.attr('title', tip);
-              else $sel.removeAttr('title');
-            }
-            syncPresetTitle();
-            $sel.off('change.mavPresetTip').on('change.mavPresetTip', syncPresetTitle);
-          }
-          const target = resolveCatalogTarget();
-          if (_catalogByKey[target.key]) {
-            paint(_catalogByKey[target.key]);
-            return;
-          }
-          loadCommandsCatalog(paint);
-        })(sel);
-        sel.trigger('change');
+        const target = resolveCatalogTarget();
+        if (_catalogByKey[target.key]) {
+          paint(_catalogByKey[target.key]);
+          return;
+        }
+        loadCommandsCatalog(paint);
       }
 
       loadPresets(buildPresetDropdown);
@@ -503,7 +514,10 @@
         refreshIdentitySelect();
         refreshVisibility();
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
-        if ($('#node-input-mode').val() === 'preset') refreshParamFields();
+        if ($('#node-input-mode').val() === 'preset') {
+          applyPresetOptionTips();
+          refreshParamFields();
+        }
       });
 
       $('#node-input-vehicle').on('change', function () {
@@ -515,7 +529,10 @@
           presetMessagesCatalog = null;
           presetMessagesKey = '';
           if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
-          if ($('#node-input-mode').val() === 'preset') refreshParamFields();
+          if ($('#node-input-mode').val() === 'preset') {
+            applyPresetOptionTips();
+            refreshParamFields();
+          }
         }
       });
 
@@ -530,7 +547,10 @@
         presetMessagesCatalog = null;
         presetMessagesKey = '';
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
-        if ($('#node-input-mode').val() === 'preset') refreshParamFields();
+        if ($('#node-input-mode').val() === 'preset') {
+          applyPresetOptionTips();
+          refreshParamFields();
+        }
       });
 
       function refreshCompletionRow() {
