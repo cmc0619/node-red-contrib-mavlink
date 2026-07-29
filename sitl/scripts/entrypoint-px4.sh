@@ -36,24 +36,34 @@ DOCKER_HOST_IP="$(getent ahostsv4 "${OUT_HOST}" 2>/dev/null | awk '/STREAM/ { pr
 if [[ -z "${DOCKER_HOST_IP}" ]]; then
   DOCKER_HOST_IP="$(getent ahostsv4 host.docker.internal 2>/dev/null | awk '/STREAM/ { print $1; exit }' || true)"
 fi
+if [[ -z "${DOCKER_HOST_IP}" ]]; then
+  echo "entrypoint-px4: FATAL - could not resolve ${OUT_HOST} or host.docker.internal" >&2
+  exit 1
+fi
+if [[ ! -f "${MAVLINK_RC}" ]]; then
+  echo "entrypoint-px4: FATAL - ${MAVLINK_RC} not found; cannot retarget MAVLink" >&2
+  exit 1
+fi
+if [[ ! -f "${RCS}" ]]; then
+  echo "entrypoint-px4: FATAL - ${RCS} not found; cannot set MAV_SYS_ID / SDLOG_MODE" >&2
+  exit 1
+fi
 
-if [[ -n "${DOCKER_HOST_IP}" && -f "${MAVLINK_RC}" ]]; then
-  # Point GCS MAVLink at host:OUT_PORT (lab uses 14560, not the image default 14550).
+# Point GCS MAVLink at host:OUT_PORT (lab uses 14560, not the image default 14550).
+sed -i -E \
+  "s|mavlink start -x -u \\\$udp_gcs_port_local -r 4000000 -f.*|mavlink start -x -u \$udp_gcs_port_local -r 4000000 -f -t ${DOCKER_HOST_IP} -o ${OUT_PORT}|" \
+  "${MAVLINK_RC}"
+# Companion / offboard remote stays on 14540+instance by default; for companion
+# containers OUT_PORT is already 14542 and we also retarget the onboard link.
+if [[ "${OUT_PORT}" == "14542" || "${OUT_PORT}" == "14540" ]]; then
   sed -i -E \
-    "s|mavlink start -x -u \\\$udp_gcs_port_local -r 4000000 -f.*|mavlink start -x -u \$udp_gcs_port_local -r 4000000 -f -t ${DOCKER_HOST_IP} -o ${OUT_PORT}|" \
+    "s|mavlink start -x -u \\\$udp_offboard_port_local -r 4000000 -f -m onboard -o \\\$udp_offboard_port_remote.*|mavlink start -x -u \$udp_offboard_port_local -r 4000000 -f -m onboard -o ${OUT_PORT} -t ${DOCKER_HOST_IP}|" \
     "${MAVLINK_RC}"
-  # Companion / offboard remote stays on 14540+instance by default; for companion
-  # containers OUT_PORT is already 14542 and we also retarget the onboard link.
-  if [[ "${OUT_PORT}" == "14542" || "${OUT_PORT}" == "14540" ]]; then
-    sed -i -E \
-      "s|mavlink start -x -u \\\$udp_offboard_port_local -r 4000000 -f -m onboard -o \\\$udp_offboard_port_remote.*|mavlink start -x -u \$udp_offboard_port_local -r 4000000 -f -m onboard -o ${OUT_PORT} -t ${DOCKER_HOST_IP}|" \
-      "${MAVLINK_RC}"
-  fi
 fi
 
 # MAVLink reads MAV_SYS_ID when `. px4-rc.mavlink` runs — set it immediately before.
 # Airframes also reset it earlier, so an early-only set is not enough.
-if [[ -f "${RCS}" ]] && ! grep -q 'nrc_lab_params_pre_mavlink' "${RCS}"; then
+if ! grep -q 'nrc_lab_params_pre_mavlink' "${RCS}"; then
   tmp="$(mktemp)"
   awk -v sysid="${SYSID}" -v sdlog="${SDLOG_MODE:-1}" '
     /\. px4-rc\.mavlink/ && !done {
@@ -71,7 +81,7 @@ export PX4_SIM_MODEL="${PX4_SIM_MODEL:-sihsim_quadx}"
 export HEADLESS="${HEADLESS:-1}"
 
 # Stop boot-time file logging if the logger still opened one (SDLOG_MODE=1 intent).
-if [[ -f "${RCS}" ]] && ! grep -q 'nrc_lab_params_tail' "${RCS}"; then
+if ! grep -q 'nrc_lab_params_tail' "${RCS}"; then
   cat >> "${RCS}" <<EOF
 
 # nrc_lab_params_tail
