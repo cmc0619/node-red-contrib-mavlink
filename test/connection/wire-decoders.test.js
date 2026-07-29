@@ -151,3 +151,24 @@ test('cap pressure prefers never-validated pipelines over a live peer mid-frame'
   // Completing the legitimate partial still works.
   assert.equal(wire.decode(full.subarray(6), ep(1), t + 4).length, 1);
 });
+
+test('cap pressure prefers empty-buffer validated over a mid-frame peer', () => {
+  const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
+  const full = heartbeatFrame(wire);
+  const ep = (n) => ({ address: '10.0.0.' + n, port: 14550 });
+  const t = 3_000_000;
+
+  // Both peers validate. ep(1) then parks a partial; ep(2) stays buffer-empty.
+  assert.equal(wire.decode(full, ep(1), t).length, 1);
+  assert.equal(wire.decode(full, ep(2), t + 1).length, 1);
+  assert.equal(wire.decode(full.subarray(0, 6), ep(1), t + 2).length, 0);
+
+  // Allocating ep(3) must drop the empty-buffer peer, not the mid-frame one
+  // (Greptile #33 residual once every slot is validated).
+  assert.equal(wire.decode(full, ep(3), t + 3).length, 1);
+  assert.equal(wire.decoderCount(), 2);
+
+  assert.equal(wire.decode(full.subarray(6), ep(1), t + 4).length, 1);
+  // ep(2) was evicted — a fresh full frame still decodes alone.
+  assert.equal(wire.decode(full, ep(2), t + 5).length, 1);
+});
