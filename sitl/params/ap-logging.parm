@@ -1,0 +1,2 @@
+# Flight logging starts when armed (DESIGN / sitl lab).
+LOG_DISARMED 0
