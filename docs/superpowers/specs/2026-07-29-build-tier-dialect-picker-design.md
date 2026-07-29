@@ -32,10 +32,8 @@ when Build is not using a Vehicle Profile.
 - **No silent `ardupilotmega`.** Unresolved dialect/vehicle → empty catalog + editor invalid
   (Deploy/save blocked). Cancel is fine.
 - Fresh nodes start with empty dialect (invalid) until the user picks a real bundled dialect or
-  `from Vehicle Profile…` with a real profile.
-- **Legacy migration (one boundary):** Build nodes saved before the Dialect field existed stored
-  only `vehicle`. At edit-prepare and runtime, empty dialect + present vehicle maps to
-  `__vehicle`. Fresh empty (no vehicle) stays invalid.
+  `from Vehicle Profile…` with a real profile. Empty dialect never invents `__vehicle` from a
+  leftover vehicle id (pre-1.0: no flow migration).
 - **`from Vehicle Profile…`:** Vehicle may be left empty; that state stays errored until a
   profile is selected. No auto-default to the “first” profile.
 - Concrete dialect selected → Vehicle Profile is hidden and ignored at runtime (hidden is not

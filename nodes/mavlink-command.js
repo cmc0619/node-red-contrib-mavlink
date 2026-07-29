@@ -41,7 +41,6 @@ const {
 const {
   resolveActionTarget,
   profileFromVehicleNode,
-  resolveBuildDialect,
 } = require('../lib/addressing');
 
 const {
@@ -192,8 +191,8 @@ module.exports = function registerMavlinkCommand(RED) {
 
       let target;
       if (delivery === 'build') {
-        // Build tier: profile only for `__vehicle` (incl. legacy vehicle-only).
-        const useVehicle = resolveBuildDialect(config) === '__vehicle';
+        // Build tier: profile only for the explicit `__vehicle` dialect escape.
+        const useVehicle = config.dialect === '__vehicle';
         const vehicleNode = useVehicle && config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
         target = resolveActionTarget({
           payloadTarget,

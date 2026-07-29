@@ -642,7 +642,7 @@
         if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });
       RED.mavlink.populateDialectSelect($dialect, {
-        saved: (RED.mavlink.migrateBuildDialect ? RED.mavlink.migrateBuildDialect(node) : (node.dialect || '')),
+        saved: node.dialect || '',
         includeVehicleEscape: true,
       });
 

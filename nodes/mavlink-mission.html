@@ -211,7 +211,7 @@
       $op.on('change', refreshRows);
       if (RED.mavlink && RED.mavlink.populateDialectSelect) {
         RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
-          saved: (RED.mavlink.migrateBuildDialect ? RED.mavlink.migrateBuildDialect(node) : (node.dialect || '')),
+          saved: node.dialect || '',
           includeVehicleEscape: true
         });
       }

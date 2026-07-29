@@ -9,7 +9,6 @@ const { AckWaiter } = require('../lib/command');
 const {
   resolveActionTarget,
   profileFromVehicleNode,
-  resolveBuildDialect,
 } = require('../lib/addressing/resolve');
 const {
   shouldSuppress,
@@ -53,7 +52,7 @@ module.exports = function registerMavlinkPayload(RED) {
         const payload = objectPayload(msg.payload);
 
         const profile = delivery === 'build'
-          ? (resolveBuildDialect(config) === '__vehicle'
+          ? (config.dialect === '__vehicle'
             ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
             : null)
           : (connectionNode && connectionNode.vehicle) || null;

@@ -103,25 +103,6 @@
       return falseOk && trueOk;
     };
 
-    /**
-     * Legacy Build flows stored Vehicle Profile without a Dialect field.
-     * Map that shape to `from Vehicle Profile…` once at edit-prepare (§14).
-     *
-     * @param {object} node  Node-RED editor node config
-     * @returns {string} dialect to show (may be '')
-     */
-    RED.mavlink.migrateBuildDialect = function (node) {
-      if (!node) return '';
-      if (node.dialect !== undefined && node.dialect !== null && node.dialect !== '') {
-        return String(node.dialect);
-      }
-      if (node.vehicle) {
-        node.dialect = '__vehicle';
-        return '__vehicle';
-      }
-      return '';
-    };
-
     function valueFromSelector(selector) {
       var $el = $(selector);
       return $el && $el.length ? String($el.val() || '').trim() : '';

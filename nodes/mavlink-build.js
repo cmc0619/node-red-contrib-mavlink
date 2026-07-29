@@ -95,8 +95,7 @@ module.exports = function registerMavlinkBuild(RED) {
     //   Build + '__vehicle' → vehicle node's bundle.
     //   Wire tier → the connection's bound profile node's bundle (custom-safe).
     if (tier === TIER.BUILD) {
-      const { resolveBuildDialect } = require('../lib/addressing');
-      const dialectName = resolveBuildDialect(config);
+      const dialectName = config.dialect;
       if (!dialectName) {
         node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
         return;

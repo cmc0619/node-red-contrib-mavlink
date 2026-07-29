@@ -47,7 +47,6 @@ const {
   resolveActionTarget,
   profileFromVehicleNode,
   firstDefined,
-  resolveBuildDialect,
 } = require('../lib/addressing');
 
 module.exports = function registerMavlinkMission(RED) {
@@ -93,7 +92,7 @@ module.exports = function registerMavlinkMission(RED) {
       // escape. Concrete Build dialects carry firmware but no profile target rung.
       // Wire tiers: profile from Connection's bound Vehicle, identity from config/payload.
       const isBuild = delivery === 'build';
-      const useVehicleProfile = isBuild && resolveBuildDialect(config) === '__vehicle';
+      const useVehicleProfile = isBuild && config.dialect === '__vehicle';
       const profile = isBuild
         ? (useVehicleProfile ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle)) : null)
         : (connNode && connNode.vehicle) || null;

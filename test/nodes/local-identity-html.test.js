@@ -212,15 +212,6 @@ test('isFalseTrueEnum mirrors metadata false/true enum detection', () => {
   ]), false);
 });
 
-test('migrateBuildDialect maps legacy vehicle-only Build to __vehicle', () => {
-  const context = loadHelpers();
-  const legacy = { vehicle: 'v1', dialect: '' };
-  assert.equal(context.RED.mavlink.migrateBuildDialect(legacy), '__vehicle');
-  assert.equal(legacy.dialect, '__vehicle');
-  assert.equal(context.RED.mavlink.migrateBuildDialect({ dialect: 'common', vehicle: 'v1' }), 'common');
-  assert.equal(context.RED.mavlink.migrateBuildDialect({}), '');
-});
-
 test('populateDialectSelect loads dialects, appends vehicle escape, and keeps empty unsaved selection', () => {
   const context = loadHelpers();
   const select = new FakeSelect();

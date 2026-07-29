@@ -4,7 +4,6 @@ const { buildMoveMessage, createMoveStream } = require('../lib/move');
 const {
   resolveActionTarget,
   profileFromVehicleNode,
-  resolveBuildDialect,
 } = require('../lib/addressing/resolve');
 const {
   shouldSuppress,
@@ -33,7 +32,7 @@ module.exports = function registerMavlinkMove(RED) {
           : null;
         const payload = objectPayload(msg.payload);
 
-        const profile = delivery === 'build' && resolveBuildDialect(config) === '__vehicle'
+        const profile = delivery === 'build' && config.dialect === '__vehicle'
           ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
           : (connectionNode && connectionNode.vehicle) || null;
         const identityNode = delivery === 'build'

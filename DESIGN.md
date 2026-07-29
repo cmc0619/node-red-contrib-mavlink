@@ -1695,10 +1695,11 @@ always inherited.
 *Fact:* §6 Build column is Dialect (bundled list + `from Vehicle Profile…`) for Build, Command,
 Move, Param, Payload, Mission, and Swarm-when-catalog-without-connection. Vehicle Profile is
 visible only for that escape; empty dialect or empty escape-vehicle is editor-invalid — no
-auto-pick, no silent `ardupilotmega`. Param/Mission Build require Firmware when not using a
-profile (Vehicle Profile XOR dialect+firmware). Wire tiers still hide Dialect/Vehicle/Firmware
-and use the Connection's profile. Companion send-as and hidden-is-not-honored are unchanged.
-`*_FALSE`/`*_TRUE` enums render true/false; other bitmasks stay multi-select.
+auto-pick, no silent `ardupilotmega`, and no inventing `__vehicle` from a leftover vehicle id
+(pre-1.0: no flow migration). Param/Mission Build require Firmware when not using a profile
+(Vehicle Profile XOR dialect+firmware). Wire tiers still hide Dialect/Vehicle/Firmware and use
+the Connection's profile. Companion send-as and hidden-is-not-honored are unchanged. Binary
+`FALSE=0`/`TRUE=1` enums render true/false; other bitmasks stay multi-select.
 *Check:* editor HTML suites for dialect/`__vehicle`/firmware visibility and invalid empty;
 `node --test test/addressing/resolve.test.js` plus per-node suites — "companion", "role × tier",
 "build+list", no silent dialect default. Spec record:
