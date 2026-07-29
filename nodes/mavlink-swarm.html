@@ -177,12 +177,21 @@
         sel.append($('<option></option>').val('').text('Any type'));
         for (var i = 0; i < entries.length; i++) {
           var entry = entries[i];
-          sel.append($('<option></option>').val(String(entry.value)).text(entry.label));
+          var $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
+          if (entry.description) $opt.attr('title', entry.description);
+          sel.append($opt);
         }
         if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
           sel.append($('<option></option>').val(prefer).text('#' + prefer + ' (not in dialect)'));
         }
         if (prefer) sel.val(prefer);
+        function syncTypeTitle() {
+          var tip = sel.find('option:selected').attr('title') || '';
+          if (tip) sel.attr('title', tip);
+          else sel.removeAttr('title');
+        }
+        syncTypeTitle();
+        sel.off('change.mavTypeTip').on('change.mavTypeTip', syncTypeTitle);
       }
 
       function loadCommandsCatalog(cb) {
@@ -218,13 +227,22 @@
         sel.empty();
         for (var i = 0; i < (catalog.commands || []).length; i++) {
           var entry = catalog.commands[i];
-          sel.append($('<option></option>').val(String(entry.value)).text(entry.label));
+          var $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
+          if (entry.description) $opt.attr('title', entry.description);
+          sel.append($opt);
         }
         if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
           sel.append($('<option></option>').val(prefer).text('#' + prefer + ' (not in dialect)'));
         }
         if (prefer) sel.val(prefer);
         else if (catalog.commands && catalog.commands.length) sel.val(String(catalog.commands[0].value));
+        function syncCmdTitle() {
+          var tip = sel.find('option:selected').attr('title') || '';
+          if (tip) sel.attr('title', tip);
+          else sel.removeAttr('title');
+        }
+        syncCmdTitle();
+        sel.off('change.mavCmdTip').on('change.mavCmdTip', syncCmdTitle);
       }
 
       function refreshVehicleTypeOptions() {

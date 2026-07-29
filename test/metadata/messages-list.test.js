@@ -135,6 +135,7 @@ test('catalogMessagesFromBundle fixture: messages, fields, and referenced enums'
     name: 'FIXTURE_MODE_AUTO',
     value: 0,
     label: 'FIXTURE_MODE_AUTO (0)',
+    description: 'Automatic mode.',
   });
 });
 

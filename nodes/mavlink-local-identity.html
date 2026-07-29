@@ -171,8 +171,18 @@
       (entries || []).forEach(function (entry) {
         var value = String(entry[valueKey]);
         var label = entry.label || RED.mavlink.enumOptionLabel(entry);
-        $select.append($('<option></option>').val(value).text(label));
+        var $opt = $('<option></option>').val(value).text(label);
+        if (entry.description) $opt.attr('title', entry.description);
+        $select.append($opt);
       });
+      // Select tooltip follows the selected entry's dialect description (§6).
+      function syncEnumSelectTitle() {
+        var tip = $select.find('option:selected').attr('title') || '';
+        if (tip) $select.attr('title', tip);
+        else $select.removeAttr('title');
+      }
+      $select.off('change.mavEnumTip').on('change.mavEnumTip', syncEnumSelectTitle);
+      syncEnumSelectTitle();
       if (saved && !$select.find('option[value="' + saved + '"]').length) {
         $select.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
       }
