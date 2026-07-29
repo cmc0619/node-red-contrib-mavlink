@@ -90,5 +90,4 @@ multi-select.
   from field vs profile
 - Admin catalog routes: dialect-only still serves named bundled dialects; editors must not
   request a default dialect when unset
-- Update DESIGN.md §14 entries that still say “Build shows Vehicle Profile” / “Build node is
-  the exception”
+- `DESIGN.md` §6 / §14 already updated in the same change as this spec
