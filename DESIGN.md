@@ -446,12 +446,13 @@ independently; a configured 0 is broadcast and survives; blank means inherit):
 3. node config target
 4. profile default — the connection's bound profile on wire tiers, the node's Vehicle Profile
    field on Build
-5. 1
+
+There is no fifth “hardcoded 1” rung: blank inherits the profile (whose editor default is
+often `1`). Companion's compid `1` is the derived autopilot address, not a global null-guard.
 
 `lib/addressing` owns one resolution path (`resolveActionTarget`). Builders take that
-resolved `{sysid, compid}` as-is — no second defaulting helper. Sysid/compid ranges are
-editor-only (`RED.mavlink.validateUint8`). Flow `msg` and deployed config are trusted at
-runtime.
+resolved `{sysid, compid}` as-is. Sysid/compid ranges are editor-only
+(`RED.mavlink.validateUint8`). Flow `msg` and deployed config are trusted at runtime.
 
 Confirm/complete matching (COMMAND_ACK, param echo) keys on the *same resolved target* — the
 matcher and the sender share one resolution, pinned by test.
@@ -1177,9 +1178,11 @@ Vehicle Profile carries the firmware field: PX4, ArduPilot, or custom. It affect
 - **Parameter encoding** — `PARAM_SET` / `PARAM_VALUE` carry typed values in a float slot.
   Encoding is resolved as: explicit `msg.payload.paramEncoding` (`bytewise` | `c-cast`) →
   peer `AUTOPILOT_VERSION.capabilities` (`PARAM_ENCODE_BYTEWISE` / `PARAM_ENCODE_C_CAST`) →
-  firmware fallback (PX4 → bytewise bit-cast; otherwise C-cast). A present override outside
-  those two values is rejected (dynamic `msg` input); only an absent override falls through.
-  Do not invent encoding from firmware alone when the peer has advertised a capability bit.
+  known firmware (PX4 → bytewise bit-cast; any other named firmware → C-cast). Missing
+  firmware after those steps fails loud — do not invent ArduPilot/C-cast. A present override
+  outside the two legal values is rejected (dynamic `msg` input); only an absent override
+  falls through. Do not invent encoding from firmware alone when the peer has advertised a
+  capability bit.
 - **Command support** — not every `MAV_CMD` is implemented by both stacks.
 
 Custom means: use the compiled dialect, offer no firmware-specific behavior, and do not pretend
@@ -1651,7 +1654,7 @@ and *sends* commands to `remotePort` (`14551`, MAVProxy's listen). Point `--out`
 *Wrong belief:* setting `defaultTargetSystem = 42` in a Vehicle Profile propagates to every
 palette node that addresses a target; nodes without an explicit config default to 1.
 *Fact:* target resolution follows the §6 role × tier matrix (payload.target → companion
-derivation → node config → profile default → 1), implemented once in `lib/addressing`. The
+derivation → node config → profile default), implemented once in `lib/addressing`. The
 Connection exposes its bound profile as a frozen public `node.vehicle` snapshot. Leaving the
 editor's sysid/compid fields blank means "inherit"; saving an explicit 1 means exactly 1 — no
 migration of existing flows. Command no longer reads `connection._vehicle`.
@@ -1698,23 +1701,38 @@ and `done(err)`.
 *Check:* `node --test test/delivery/catch-path-scan.test.js` (source scan of `nodes/mavlink-*.js`);
 `node --test test/delivery/delivery.test.js test/swarm/node.test.js`.
 
-**Param encoding follows override → capabilities → firmware, not firmware alone.**
+**Param encoding follows override → capabilities → known firmware, not invented ArduPilot.**
 *Wrong belief:* `firmware === 'px4'` is the only signal for bytewise int/float union encoding;
-peer `AUTOPILOT_VERSION.capabilities` is stored for display and unused at send time.
+peer `AUTOPILOT_VERSION.capabilities` is stored for display and unused at send time; and when
+firmware is also absent the encoder may assume ArduPilot/C-cast.
 *Fact:* Spec bits are `MAV_PROTOCOL_CAPABILITY_PARAM_ENCODE_BYTEWISE` (16) and
 `…_PARAM_ENCODE_C_CAST` (131072). Resolution is explicit `msg.payload.paramEncoding` → those
-capability bits from the peer table → firmware fallback (PX4 → bytewise, else C-cast). A
-present-but-invalid override rejects rather than falling through (silent wrong encoding would
-corrupt integer `PARAM_SET`). ArduPilot often omits the C_CAST bit, so firmware fallback
-remains required.
-*Check:* `node --test test/param/param.test.js test/param/node.test.js` — look for
-`resolveParamEncoding` / capabilities tests.
+capability bits → named firmware (PX4 → bytewise, else C-cast). A present-but-invalid override
+rejects rather than falling through. An empty ladder throws. Firmware for Param/Mission is
+`firstDefined(payload.firmware, profile.firmware)` — Vehicle Profile's editor-required field
+covers real paths; do not invent `'ardupilot'`. ArduPilot often omits the C_CAST bit, so the
+named-firmware step remains required when capabilities are absent.
+*Check:* `node --test test/param/param.test.js test/addressing/resolve.test.js` — look for
+`resolveParamEncoding` / unresolved / firstDefined firmware tests.
 
-**Target resolution is once; builders do not re-default.**
-*Wrong belief:* Move/Param/Payload need local (or shared) `normalizeTarget`, and runtime
-must re-parse sysid/compid with `parseUint8` / `parseTargetUint8` / `parseIdentityUint8`.
-*Fact:* `resolveActionTarget` is the only defaulting path (→ 1). Builders use
-`input.target` directly. Range checks are `RED.mavlink.validateUint8` in the editor.
-Flow `msg` is programmer-trusted.
+**Target resolution is once; builders do not re-default; no hardcoded final `1`.**
+*Wrong belief:* Move/Param/Payload need local (or shared) `normalizeTarget`; runtime must
+re-parse uint8 ids; and when every field is blank `resolveActionTarget` invents `{1,1}`.
+*Fact:* Matrix is payload → companion derivation → config → profile. Profile editor
+defaults cover the common `1`. Builders use `input.target` directly. Ranges are
+`RED.mavlink.validateUint8` in the editor. Flow `msg` is programmer-trusted.
 *Check:* `node --test test/addressing/resolve.test.js test/move/move.test.js
 test/param/param.test.js`; no `normalizeTarget` / `parseUint8` under `lib/` or `nodes/`.
+
+**Unresolved target → broken encode beats inventing drone 1.**
+*Wrong belief:* When Build leaves Vehicle Profile and target fields blank, the resolver (or a
+downstream `numberOr(..., 1)`) must invent `{sysid: 1, compid: 1}` so a message always
+"works"; emitting `NaN` (or letting the uint8 codec reject a non-finite id) is a regression.
+*Fact:* Inventing `{1,1}` can arm/move the wrong airframe on a busy link. An empty ladder
+yielding non-finite ids fails at encode (`lib/codec/numeric` rejects non-finite integers) or
+leaves an unusable Build object — safer than a silent command to system 1. Companion
+compid `1` and swarm broadcast `{sysid: 0, compid: 1}` remain matrix/spec addresses, not
+null-guards. Do not reintroduce target→`1` fallbacks in builders or stream-stop helpers.
+*Check:* `rg -n 'numberOr\\([^,]+,\\s*1\\)|firstDefined\\([^)]*,\\s*1\\)' lib nodes` — only
+companion derivation in `lib/addressing/resolve.js` should remain; `node --test
+test/addressing/resolve.test.js test/move/move.test.js`.

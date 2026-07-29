@@ -95,6 +95,7 @@ test('firmware gating: PX4 refuses a fence transfer at the node (§11)', async (
 
 test('clear is refused without confirmation and runs once confirmed', async () => {
   const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSysid: 1, targetCompid: 1 };
   conn.onSend((message, deliver) => {
     if (message.name === 'MISSION_CLEAR_ALL') {
       deliver({ name: 'MISSION_ACK', fields: { type: 0, mission_type: 0 } });
@@ -170,6 +171,7 @@ test('payload.firmware overrides profile firmware', async () => {
 
 test('download end-to-end: progress on output 1, success on both ports', async () => {
   const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSysid: 1, targetCompid: 1 };
   conn.onSend((message, deliver) => {
     if (message.name === 'MISSION_REQUEST_LIST') {
       deliver({ name: 'MISSION_COUNT', fields: { count: 2, mission_type: 0 } });

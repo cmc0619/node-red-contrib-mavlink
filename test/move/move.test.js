@@ -53,6 +53,18 @@ test('global-position Move encodes whole-number degrees as degE7, not as raw wir
   assert.equal(message.fields.lon_int, -1220000000);
 });
 
+test('buildStopMessage copies target ids and does not invent system 1', () => {
+  const { buildStopMessage } = require('../../lib/move');
+  const stop = buildStopMessage({
+    fields: { time_boot_ms: 9, target_system: 4, target_component: 7 },
+  });
+  assert.equal(stop.fields.target_system, 4);
+  assert.equal(stop.fields.target_component, 7);
+  const missing = buildStopMessage({ fields: { time_boot_ms: 0 } });
+  assert.equal(missing.fields.target_system, undefined);
+  assert.equal(missing.fields.target_component, undefined);
+});
+
 test('Move streams on the Streaming band until TTL and emits a zero-velocity stop', () => {
   const sends = [];
   let timer;

@@ -177,28 +177,6 @@ test('resolveTarget: explicit config value wins over Vehicle Profile', async () 
   assert.equal(sent[0].payload.fields.target_component, 100);
 });
 
-test('resolveTarget: no vehicle context falls back to 1', async () => {
-  const conn = connStub(null);
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({
-    mode: 'preset',
-    preset: 'arm',
-    delivery: 'build',
-    connection: 'conn',
-    targetSysid: '',
-    targetCompid: '',
-  });
-
-  let sent;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
-  await tick();
-
-  assert.equal(sent[0].payload.fields.target_system, 1);
-  assert.equal(sent[0].payload.fields.target_component, 1);
-});
-
 test('Send/confirm tier with no connection fails loud instead of silently building', async () => {
   const RED = redStub({});
   require('../../nodes/mavlink-command')(RED);
