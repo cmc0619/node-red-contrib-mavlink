@@ -37,7 +37,7 @@
 
   "devDependencies": {
     "eslint": "^10.8.0",
-    "node-red": "^4.1.11",
+    "node-red": "^5.0.1",
     "node-red-node-test-helper": "^0.3.6"
   },
   "keywords": ["node-red", "mavlink", "ardupilot", "px4", "drone"],
