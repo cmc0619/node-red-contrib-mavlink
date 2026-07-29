@@ -320,7 +320,10 @@
 
         function formRow(label, control) {
           var row = $('<div class="form-row"></div>');
-          row.append($('<label></label>').text(label).css('width', '140px'));
+          var tip = (control && control.attr) ? (control.attr('title') || '') : '';
+          var $lbl = $('<label></label>').text(label).css('width', '140px');
+          if (tip) $lbl.attr('title', tip);
+          row.append($lbl);
           row.append(control);
           return row;
         }
@@ -362,7 +365,9 @@
             if (multi) sel.attr('multiple', 'multiple').attr('size', Math.min(6, enums[spec.enum].length));
             else sel.append($('<option></option>').val('').text('\u2014'));
             enums[spec.enum].forEach(function (entry) {
-              sel.append($('<option></option>').val(entry.name).text(entry.label));
+              var $opt = $('<option></option>').val(entry.name).text(entry.label);
+              if (entry.description) $opt.attr('title', entry.description);
+              sel.append($opt);
             });
             if (multi) {
               var selected = Array.isArray(saved) ? saved.map(String) : (saved !== undefined && saved !== null && saved !== '' ? [String(saved)] : []);
@@ -451,7 +456,9 @@
               sel.append($('<option></option>').val('').text('\u2014'));
             }
             enums[spec.enum].forEach(function (entry) {
-              sel.append($('<option></option>').val(String(entry.value)).text(entry.label));
+              var $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
+              if (entry.description) $opt.attr('title', entry.description);
+              sel.append($opt);
             });
             if (isBitmask) {
               sel.val(selectedBitmaskValues(saved, enums[spec.enum]));
@@ -540,8 +547,19 @@
             container.append(formRow('command (MAV_CMD)', cmdSel));
             container.append($('<div id="mav-command-params"></div>'));
             loadCommandsCatalog(function (cmdCatalog) {
+              function syncCmdTitle() {
+                var v = cmdSel.val();
+                var tip = '';
+                (cmdCatalog.commands || []).forEach(function (c) {
+                  if (String(c.value) === String(v)) tip = c.description || '';
+                });
+                if (tip) cmdSel.attr('title', tip);
+                else cmdSel.removeAttr('title');
+              }
               (cmdCatalog.commands || []).forEach(function (c) {
-                cmdSel.append($('<option></option>').val(String(c.value)).text(c.label));
+                var $opt = $('<option></option>').val(String(c.value)).text(c.label);
+                if (c.description) $opt.attr('title', c.description);
+                cmdSel.append($opt);
               });
               var savedCmd = savedFields.command;
               if (savedCmd !== undefined && savedCmd !== null && savedCmd !== '') {
@@ -552,8 +570,10 @@
                 cmdSel.val(String((arm || cmdCatalog.commands[0]).value));
               }
               cmdSel.off('change.mavcmd').on('change.mavcmd', function () {
+                syncCmdTitle();
                 refreshCommandParams(msg.name, cmdCatalog);
               });
+              syncCmdTitle();
               refreshCommandParams(msg.name, cmdCatalog);
             });
             return;
@@ -580,14 +600,29 @@
           }
           sel.empty();
           (catalog.messages || []).forEach(function (m) {
-            sel.append($('<option></option>').val(m.name).text(m.label));
+            var $opt = $('<option></option>').val(m.name).text(m.label);
+            if (m.description) $opt.attr('title', m.description);
+            sel.append($opt);
           });
           if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
             sel.append($('<option></option>').val(prefer).text(prefer + ' (missing)'));
           }
           if (prefer) sel.val(prefer);
           else if (catalog.messages && catalog.messages.length) sel.val(catalog.messages[0].name);
-          sel.off('change.mavmsg').on('change.mavmsg', refreshFieldForm);
+          function syncMsgTitle() {
+            var name = sel.val();
+            var tip = '';
+            (catalog.messages || []).forEach(function (m) {
+              if (m.name === name) tip = m.description || '';
+            });
+            if (tip) sel.attr('title', tip);
+            else sel.removeAttr('title');
+          }
+          sel.off('change.mavmsg').on('change.mavmsg', function () {
+            syncMsgTitle();
+            refreshFieldForm();
+          });
+          syncMsgTitle();
           refreshFieldForm();
         }
 

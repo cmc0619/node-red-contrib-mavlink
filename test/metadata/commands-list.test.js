@@ -55,7 +55,10 @@ test('listCommandsCatalog includes params and referenced enums for Advanced UI',
   const speedType = changeSpeed.params.find((p) => p.index === 1);
   assert.equal(speedType.enum, 'SPEED_TYPE');
   assert.ok(Array.isArray(catalog.enums.SPEED_TYPE));
-  assert.ok(catalog.enums.SPEED_TYPE.some((e) => e.value === 0 && e.label === 'SPEED_TYPE_AIRSPEED (0)'));
+  const airspeed = catalog.enums.SPEED_TYPE.find((e) => e.value === 0);
+  assert.ok(airspeed && airspeed.label === 'SPEED_TYPE_AIRSPEED (0)');
+  assert.equal(typeof airspeed.description, 'string');
+  assert.ok(airspeed.description.length > 0, 'nested command-catalog enums carry seed descriptions');
 
   // Active params carry labels/descriptions; reserved slots may be blank.
   for (const p of changeSpeed.params) {

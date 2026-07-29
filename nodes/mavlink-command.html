@@ -20,7 +20,9 @@
    */
   function formRow(label, input) {
     const row = $('<div class="form-row"></div>');
+    const tip = (input && input.attr) ? (input.attr('title') || '') : '';
     const lbl = $('<label></label>').css({ width: '120px', display: 'inline-block' }).text(label);
+    if (tip) lbl.attr('title', tip);
     row.append(lbl).append(input);
     return row;
   }
@@ -378,6 +380,26 @@
         // callback runs after the initial applyMode() left the dialog empty —
         // without this the exposed params stay stale until the user re-picks.
         sel.val(node.preset || 'arm');
+        // Dialect command descriptions ride as option/select tooltips (§6).
+        loadCommandsCatalog(function (catalog) {
+          const byId = {};
+          (catalog.commands || []).forEach(function (c) {
+            byId[String(c.value)] = c.description || '';
+          });
+          sel.find('option').each(function () {
+            const pid = $(this).val();
+            const cid = presetCommandId(pid);
+            const tip = cid != null ? byId[String(cid)] : '';
+            if (tip) $(this).attr('title', tip);
+          });
+          function syncPresetTitle() {
+            const tip = sel.find('option:selected').attr('title') || '';
+            if (tip) sel.attr('title', tip);
+            else sel.removeAttr('title');
+          }
+          syncPresetTitle();
+          sel.off('change.mavPresetTip').on('change.mavPresetTip', syncPresetTitle);
+        });
         sel.trigger('change');
       }
 
@@ -404,12 +426,21 @@
         sel.empty();
         sel.append($('<option></option>').val('').text('\u2014 select MAV_CMD \u2014'));
         for (const c of commands) {
-          sel.append($('<option></option>').val(String(c.value)).text(c.label));
+          const $opt = $('<option></option>').val(String(c.value)).text(c.label);
+          if (c.description) $opt.attr('title', c.description);
+          sel.append($opt);
         }
         if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
           sel.append($('<option></option>').val(prefer).text('#' + prefer + ' (not in dialect)'));
         }
         if (prefer) sel.val(prefer);
+        function syncAdvancedTitle() {
+          const tip = sel.find('option:selected').attr('title') || '';
+          if (tip) sel.attr('title', tip);
+          else sel.removeAttr('title');
+        }
+        syncAdvancedTitle();
+        sel.off('change.mavCmdTip').on('change.mavCmdTip', syncAdvancedTitle);
         sel.trigger('change');
       }
 
@@ -562,7 +593,9 @@
         for (const entry of entries || []) {
           const value = String(entry.value);
           const label = entry.label || (entry.name + ' (' + entry.value + ')');
-          $select.append($('<option></option>').val(value).text(label));
+          const $opt = $('<option></option>').val(value).text(label);
+          if (entry.description) $opt.attr('title', entry.description);
+          $select.append($opt);
         }
         if (saved && !$select.find('option[value="' + saved + '"]').length) {
           $select.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
@@ -576,6 +609,7 @@
             name: msg.name,
             value: msg.id,
             label: msg.label || (msg.name + ' (' + msg.id + ')'),
+            description: msg.description || null,
           };
         });
       }
@@ -584,6 +618,29 @@
         return $('<input type="number" class="param-input">')
           .attr('data-idx', spec.index)
           .val(savedParams[spec.index] !== undefined ? savedParams[spec.index] : '');
+      }
+
+      /** Look up a preset's numeric MAV_CMD id from the loaded presets API. */
+      function presetCommandId(presetId) {
+        const groups = _presetGroups || [];
+        for (let g = 0; g < groups.length; g++) {
+          const presets = groups[g].presets || [];
+          for (let i = 0; i < presets.length; i++) {
+            if (presets[i].id === presetId) return presets[i].commandId;
+          }
+        }
+        return null;
+      }
+
+      function catalogParamByIndex(catalog, commandId, index) {
+        if (!catalog || commandId == null) return null;
+        const cmd = (catalog.commands || []).find(function (c) {
+          return String(c.value) === String(commandId);
+        });
+        if (!cmd) return null;
+        return (cmd.params || []).find(function (p) {
+          return Number(p.index) === Number(index);
+        }) || null;
       }
 
       /**
@@ -647,7 +704,9 @@
             sel.append($('<option></option>').val('').text('\u2014'));
           }
           for (const entry of enums[spec.enum]) {
-            sel.append($('<option></option>').val(String(entry.value)).text(entry.label));
+            const $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
+            if (entry.description) $opt.attr('title', entry.description);
+            sel.append($opt);
           }
           if (isBitmask) {
             sel.val(selectedBitmaskValues(saved, enums[spec.enum]));
@@ -687,8 +746,7 @@
             const isBitmask = !!spec.bitmask;
             const sel = $('<select class="param-input"></select>')
               .attr('data-idx', spec.index)
-              .attr('data-kind', isBitmask ? 'bitmask' : 'enum')
-              .attr('title', isBitmask ? bitmaskTitle(spec.label) : '');
+              .attr('data-kind', isBitmask ? 'bitmask' : 'enum');
             if (isBitmask) {
               sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
             }
@@ -750,16 +808,28 @@
             loadPresetMessages(refreshParamFields);
             return;
           }
-          if (paramSpec.length === 0) {
-            container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
-          }
-          for (const spec of paramSpec) {
-            const label = spec.units
-              ? `${spec.label} (${spec.units})`
-              : spec.label;
-            const input = presetParamInput(spec);
-            container.append(formRow(label, input));
-          }
+          // Join dialect command-param descriptions onto preset fields (§6).
+          loadCommandsCatalog(function (cmdCatalog) {
+            if (paramSpec.length === 0) {
+              container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
+              return;
+            }
+            const commandId = presetCommandId(presetId);
+            for (const spec of paramSpec) {
+              const label = spec.units
+                ? `${spec.label} (${spec.units})`
+                : spec.label;
+              const input = presetParamInput(spec);
+              const catParam = catalogParamByIndex(cmdCatalog, commandId, spec.index);
+              if (catParam && catParam.description) {
+                const tip = spec.bitmask
+                  ? bitmaskTitle(catParam.description)
+                  : catParam.description;
+                input.attr('title', tip);
+              }
+              container.append(formRow(label, input));
+            }
+          });
         }
       }
 

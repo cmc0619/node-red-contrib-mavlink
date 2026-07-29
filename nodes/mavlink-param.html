@@ -134,7 +134,9 @@
           var label = def.description
             ? id + ' \u2014 ' + def.description.slice(0, 60)
             : id;
-          $list.append($('<option></option>').val(id).text(label));
+          var $opt = $('<option></option>').val(id).text(label);
+          if (def.description) $opt.attr('title', def.description);
+          $list.append($opt);
         }
         var hasDefs = ids.length > 0;
         $('#node-input-paramId').attr('list', hasDefs ? 'mav-param-id-list' : null);
@@ -147,6 +149,13 @@
       function refreshParamInfo() {
         var id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
         var def = _paramDefs[id];
+        if (def && def.description) {
+          $('#node-input-paramId').attr('title', def.description);
+          $('#node-input-value').attr('title', def.description);
+        } else {
+          $('#node-input-paramId').removeAttr('title');
+          $('#node-input-value').removeAttr('title');
+        }
         if (def && (def.description || def.unit)) {
           var parts = [];
           if (def.description) parts.push(def.description);
@@ -165,9 +174,11 @@
         if (action === 'set' && def && def.values && def.values.length) {
           for (var i = 0; i < def.values.length; i++) {
             var entry = def.values[i];
-            $valueList.append(
-              $('<option></option>').val(String(entry.value)).text(entry.label + ' (' + entry.value + ')')
-            );
+            var $vopt = $('<option></option>')
+              .val(String(entry.value))
+              .text(entry.label + ' (' + entry.value + ')');
+            if (entry.description) $vopt.attr('title', entry.description);
+            $valueList.append($vopt);
           }
           $('#node-input-value').attr('list', 'mav-param-value-list');
         } else {

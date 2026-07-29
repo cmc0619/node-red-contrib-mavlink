@@ -64,12 +64,21 @@
       sel.append($('<option></option>').val('').text('All messages'));
       for (var i = 0; i < (catalog.messages || []).length; i++) {
         var entry = catalog.messages[i];
-        sel.append($('<option></option>').val(entry.name).text(entry.label));
+        var $opt = $('<option></option>').val(entry.name).text(entry.label);
+        if (entry.description) $opt.attr('title', entry.description);
+        sel.append($opt);
       }
       if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
         sel.append($('<option></option>').val(prefer).text(prefer + ' (not in dialect)'));
       }
       if (prefer) sel.val(prefer);
+      function syncMessageTitle() {
+        var tip = sel.find('option:selected').attr('title') || '';
+        if (tip) sel.attr('title', tip);
+        else sel.removeAttr('title');
+      }
+      syncMessageTitle();
+      sel.off('change.mavMsgTip').on('change.mavMsgTip', syncMessageTitle);
     }
 
     function refreshMessageOptions(node) {
