@@ -1723,7 +1723,6 @@ named-firmware step remains required when capabilities are absent.
 *Check:* `node --test test/param/param.test.js test/addressing/resolve.test.js` — look for
 `resolveParamEncoding` / unresolved / firstDefined firmware tests.
 
-<<<<<<< HEAD
 **Target resolution is once; builders do not re-default; no hardcoded final `1`.**
 *Wrong belief:* Move/Param/Payload need local (or shared) `normalizeTarget`; runtime must
 re-parse uint8 ids; and when every field is blank `resolveActionTarget` invents `{1,1}`.
@@ -1745,17 +1744,7 @@ null-guards. Do not reintroduce target→`1` fallbacks in builders or stream-sto
 *Check:* `rg -n 'numberOr\\([^,]+,\\s*1\\)|firstDefined\\([^)]*,\\s*1\\)' lib nodes` — only
 companion derivation in `lib/addressing/resolve.js` should remain; `node --test
 test/addressing/resolve.test.js test/move/move.test.js`.
-=======
-<<<<<<< HEAD
-**Target resolution is once; builders do not re-default.**
-*Wrong belief:* Move/Param/Payload need local (or shared) `normalizeTarget`, and runtime
-must re-parse sysid/compid with `parseUint8` / `parseTargetUint8` / `parseIdentityUint8`.
-*Fact:* `resolveActionTarget` is the only defaulting path (→ 1). Builders use
-`input.target` directly. Range checks are `RED.mavlink.validateUint8` in the editor.
-Flow `msg` is programmer-trusted.
-*Check:* `node --test test/addressing/resolve.test.js test/move/move.test.js
-test/param/param.test.js`; no `normalizeTarget` / `parseUint8` under `lib/` or `nodes/`.
-=======
+
 **PX4 example GCS bind is 14560, not 14555.**
 *Wrong belief:* dual-stack examples used bind `14555` as a neutral gap port between ArduPilot
 instance 0 (`14550/14551`) and instance 1 (`14560`).
@@ -1763,5 +1752,3 @@ instance 0 (`14550/14551`) and instance 1 (`14560`).
 confuses operators. Lab and examples use PX4 GCS **14560→14561**, companions **14540/14542**.
 Operator guide: [`sitl/README.md`](sitl/README.md).
 *Check:* `rg '14555' examples` is empty; `examples/sitl/10-dual-stack-ten.json` bindPort 14560.
->>>>>>> 9749daa (feat(sitl): Docker lab for five+five and companion SITL)
->>>>>>> b12abe3 (feat(sitl): Docker lab for five+five and companion SITL)
