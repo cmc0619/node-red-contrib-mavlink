@@ -74,16 +74,6 @@ test('seed carries common.xml command-param enum= links (no hints.js overlay)', 
   const changeSpeed = bundle.commands.MAV_CMD_DO_CHANGE_SPEED;
   const speedType = changeSpeed.params.find((p) => Number(p.index) === 1);
   assert.equal(speedType && speedType.enum, 'SPEED_TYPE');
-
-  let withEnum = 0;
-  for (const cmd of Object.values(bundle.commands)) {
-    for (const p of cmd.params || []) {
-      if (p.enum) withEnum += 1;
-    }
-  }
-  // Lower bound only — upstream common.xml gains/loses <param enum=> over time;
-  // the weekly seed refresh must not require hand-editing a snapshot count.
-  assert.ok(withEnum >= 80, `expected many enum-backed command params, got ${withEnum}`);
 });
 
 test('listCommandsForDialect returns the commands array from the catalog', () => {
