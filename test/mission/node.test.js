@@ -2,8 +2,8 @@
 
 /**
  * mavlink-mission node tests (DESIGN.md §9 chain model, §6, §13). Exercises the
- * thin wrapper: the suppress/refuse guards, the Build tier plan, the clear
- * confirmation gate, firmware gating at the node, and an end-to-end download
+ * thin wrapper: the suppress guard, the Build tier plan, the clear confirmation
+ * gate, firmware gating at the node, and an end-to-end download
  * whose progress and terminal records land on output 1 while success fires
  * output 0.
  */
@@ -12,7 +12,6 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { makeStatusRecord, isStatusRecord } = require('../../lib/delivery');
 const { StubConnection } = require('./stubs/connection');
 
 /** Load the node type against a fresh RED stub with the given connection node. */
@@ -63,16 +62,6 @@ test('payload === false suppresses: no output, no error', async () => {
   assert.equal(outputs.length, 0);
 });
 
-test('a status record on input is refused, not acted on', async () => {
-  const Node = loadNode(new StubConnection());
-  const node = new Node({ operation: 'download', connection: 'conn', delivery: 'confirm' });
-  const { outputs } = await runInput(node, makeStatusRecord({ result: 'accepted', payload: {} }));
-  assert.equal(outputs.length, 1);
-  assert.equal(outputs[0][0], null, 'continue port stays silent');
-  assert.equal(outputs[0][1].result, 'refused');
-  assert.equal(isStatusRecord(outputs[0][1]), true, 'refusal record carries the marker at root');
-});
-
 test('Build tier emits the protocol plan on output 0 and sends nothing', async () => {
   const conn = new StubConnection();
   const Node = loadNode(conn);
@@ -84,7 +73,7 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
   assert.equal(plan.operation, 'download');
   assert.deepEqual(plan.messages.map((m) => m.name), ['MISSION_REQUEST_LIST']);
   assert.equal(conn.sent.length, 0, 'Build sends nothing');
-  assert.equal(isStatusRecord(outputs[0][1]), true, 'output 1 record carries the marker at root');
+  assert.equal(outputs[0][1].result, 'succeeded');
 });
 
 test('firmware gating: PX4 refuses a fence transfer at the node (§11)', async () => {
@@ -194,8 +183,8 @@ test('download end-to-end: progress on output 1, success on both ports', async (
   const node = new Node({ operation: 'download', connection: 'conn', delivery: 'confirm', missionType: 'mission' });
   const { outputs } = await runInput(node, { payload: {} });
 
-  // Every emitted item is a status record on output 1 (marker at root).
-  for (const out of outputs) assert.equal(isStatusRecord(out[1]), true);
+  // Every emitted item has a status object at output 1 root.
+  for (const out of outputs) assert.ok(out[1] && out[1].result);
 
   // Progress records appeared before the terminal one.
   const progress = outputs.filter((o) => o[1].result === 'progress');

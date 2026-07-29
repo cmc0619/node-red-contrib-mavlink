@@ -2,6 +2,10 @@
 
 const { buildMoveMessage, createMoveStream } = require('../lib/move');
 const { resolveActionTarget, profileFromVehicleNode } = require('../lib/addressing/resolve');
+const {
+  shouldSuppress,
+  reportDoneError,
+} = require('../lib/delivery');
 
 const BADGE_MAX = 24;
 
@@ -14,12 +18,7 @@ module.exports = function registerMavlinkMove(RED) {
     node.on('input', (msg, send, done) => {
       const emit = send || ((messages) => node.send(messages));
       try {
-        if (msg.payload === false) {
-          if (done) done();
-          return;
-        }
-        if (msg.payload && msg.payload._mavlinkStatus) {
-          emit([null, { payload: statusRecord('rejected', 'status input refused') }]);
+        if (shouldSuppress(msg)) {
           if (done) done();
           return;
         }
@@ -88,8 +87,7 @@ module.exports = function registerMavlinkMove(RED) {
         }
         if (done) done();
       } catch (err) {
-        fail(node, emit, err);
-        if (done) done(err);
+        fail(node, emit, err, msg, done);
       }
     });
 
@@ -104,22 +102,22 @@ module.exports = function registerMavlinkMove(RED) {
 
 function completeBuild(node, emit, message) {
   node.status({ fill: 'green', shape: 'dot', text: cap('built move') });
-  emit([{ payload: message }, { payload: statusRecord('succeeded', 'built', { message }) }]);
+  emit([{ payload: message }, statusRecord('succeeded', 'built', { message })]);
 }
 
 function completeResult(node, emit, result, action, message) {
   node.status({ fill: 'green', shape: 'dot', text: cap(action) });
-  emit([{ payload: { result, message } }, { payload: statusRecord(result, action, { message }) }]);
+  emit([{ payload: { result, message } }, statusRecord(result, action, { message })]);
 }
 
-function fail(node, emit, err) {
+function fail(node, emit, err, msg, done) {
   node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
-  node.error(err);
-  emit([null, { payload: statusRecord('failed', err.message) }]);
+  emit([null, statusRecord('failed', err.message)]);
+  reportDoneError(node, err, msg, done);
 }
 
 function statusRecord(result, detail, extra = {}) {
-  return { _mavlinkStatus: true, node: 'mavlink-move', result, detail, ...extra };
+  return { node: 'mavlink-move', result, detail, ...extra };
 }
 
 function positionFrom(config) {

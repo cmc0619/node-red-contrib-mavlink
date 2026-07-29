@@ -19,18 +19,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { isStatusRecord, makeStatusRecord } = require('../../lib/command');
+const { shouldSuppress } = require('../../lib/delivery');
 
 /**
- * Minimal simulation of the node's input-handler suppress/miswire guards.
+ * Minimal simulation of the node's input-handler suppress guard.
  * Returns the action the node would take without constructing Node-RED.
  *
  * @param {object} msg
- * @returns {'suppress'|'miswire'|'proceed'}
+ * @returns {'suppress'|'proceed'}
  */
 function guardAction(msg) {
-  if (msg.payload === false) return 'suppress';
-  if (isStatusRecord(msg)) return 'miswire';
+  if (shouldSuppress(msg)) return 'suppress';
   return 'proceed';
 }
 
@@ -70,19 +69,6 @@ test('object payload is NOT suppressed', () => {
 
 test('string "false" payload is NOT suppressed (strict comparison)', () => {
   assert.equal(guardAction({ payload: 'false' }), 'proceed');
-});
-
-// ── Suppress wins over miswire ─────────────────────────────────────────────
-// A status record with payload===false: suppress is checked first.
-// In practice this cannot happen naturally (status records have _isStatusRecord:true
-// as a top-level marker, not inside payload), but the guard order must be clear.
-
-test('suppress check precedes miswire check in the guard', () => {
-  // Construct a message that triggers both: payload===false AND looks like a record.
-  // The suppress check must win.
-  const trickMsg = makeStatusRecord({ result: 'accepted' });
-  trickMsg.payload = false;                 // now also a suppressor
-  assert.equal(guardAction(trickMsg), 'suppress');
 });
 
 // ── AckWaiter is not started on suppress ──────────────────────────────────

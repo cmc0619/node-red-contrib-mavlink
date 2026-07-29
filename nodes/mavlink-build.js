@@ -26,19 +26,16 @@
  *   output 0  — continue: built message (Build tier) or pass-through (Send)
  *   output 1  — status:   fires on every terminal outcome
  *
- * Suppression and miswire (§9):
+ * Suppression (§9):
  *   `msg.payload === false`   → silent suppress; neither output fires
- *   input is a status record  → refuse; output 1 fires, node.error() is called
  */
 
 const { encodeMessage } = require('../lib/codec');
 const { BAND } = require('../lib/connection');
 const {
   TIER,
-  isStatusRecord,
   makeStatusRecord,
   shouldSuppress,
-  refuseIfStatus,
   applyActionStatus,
   capBadge,
 } = require('../lib/delivery');
@@ -161,7 +158,6 @@ module.exports = function registerMavlinkBuild(RED) {
         triggerMsg &&
         triggerMsg.payload !== null &&
         typeof triggerMsg.payload === 'object' &&
-        !isStatusRecord(triggerMsg) &&
         !Array.isArray(triggerMsg.payload)
           ? triggerMsg.payload
           : {};
@@ -266,13 +262,6 @@ module.exports = function registerMavlinkBuild(RED) {
     // Input handler.
     node.on('input', (msg) => {
       if (shouldSuppress(msg)) return;
-
-      const refusal = refuseIfStatus(msg);
-      if (refusal) {
-        node.error('mavlink-build: status record received as input — check wiring', msg);
-        node.send([null, refusal]);
-        return;
-      }
 
       execute(msg);
     });

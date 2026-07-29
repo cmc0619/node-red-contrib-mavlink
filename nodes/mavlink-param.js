@@ -11,11 +11,6 @@
  *   output 0 — continue: fires only on success (built message / echo / list)
  *   output 1 — status:   a status record on every terminal outcome
  *
- * Status records carry the shared `__mavlinkStatusRecord__` marker from
- * `lib/delivery`, emitted as the top-level message on output 1 — the same shape
- * the sibling action nodes use — so wiring output 1 back into an action node is
- * refused as a miswire rather than executed (§9 "A status record is refused").
- *
  * Single-flight: at most one PARAM_VALUE transaction runs per node. A second
  * input supersedes any in-flight one — the prior subscription and timeout are
  * torn down and a generation token guards against a late echo settling the node
@@ -31,11 +26,10 @@ const {
 } = require('../lib/param');
 const { BAND } = require('../lib/connection/bands');
 const {
-  isStatusRecord,
-  refuseIfStatus,
   makeStatusRecord,
   shouldSuppress,
   applyActionStatus,
+  reportDoneError,
 } = require('../lib/delivery');
 const {
   resolveActionTarget,
@@ -146,14 +140,6 @@ module.exports = function registerMavlinkParam(RED) {
           if (done) done();
           return;
         }
-        if (isStatusRecord(msg)) {
-          const refusal = refuseIfStatus(msg);
-          applyActionStatus(node, 'error', 'status input refused');
-          node.error('mavlink-param: status record received as input — check wiring', msg);
-          emit([null, refusal]);
-          if (done) done();
-          return;
-        }
 
         const payload = objectPayload(msg.payload);
         const delivery = config.delivery || 'build';
@@ -234,8 +220,7 @@ module.exports = function registerMavlinkParam(RED) {
 
         pending = { unsubscribe, timer, done: done || null, gen: myGen };
       } catch (err) {
-        fail(node, emit, err);
-        if (done) done(err);
+        fail(node, emit, err, msg, done);
       }
     });
 
@@ -305,17 +290,17 @@ function timeoutResult(node, emit, detail) {
   emit([null, statusRecord('timed-out', detail)]);
 }
 
-function fail(node, emit, err) {
+function fail(node, emit, err, msg, done) {
   applyActionStatus(node, 'error', err.message);
-  node.error(err);
   emit([null, statusRecord('failed', err.message)]);
+  reportDoneError(node, err, msg, done);
 }
 
 /**
  * @param {string} result
  * @param {string} detail
  * @param {object} [extra]
- * @returns {object} status record carrying the shared delivery marker
+ * @returns {object} status record for output 1
  */
 function statusRecord(result, detail, extra = {}) {
   return makeStatusRecord({ node: 'mavlink-param', result, detail, ...extra });

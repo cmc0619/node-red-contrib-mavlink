@@ -1,6 +1,7 @@
 'use strict';
 
 const { createStateFeed, snapshotPeers } = require('../lib/state');
+const { reportDoneError } = require('../lib/delivery');
 
 const BADGE_MAX = 24;
 
@@ -38,13 +39,15 @@ module.exports = function registerMavlinkState(RED) {
           compid: firstDefined(payload.compid, config.targetComponent),
         });
         node.status({ fill: 'green', shape: 'dot', text: cap(`${peers.length} peer(s)`) });
-        emit([{ payload: peers }]);
+        emit([
+          { payload: peers },
+          statusRecord('succeeded', 'snapshot', { count: peers.length }),
+        ]);
         if (done) done();
       } catch (err) {
         node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
-        node.error(err);
-        emit([null, { payload: statusRecord('failed', err.message) }]);
-        if (done) done(err);
+        emit([null, statusRecord('failed', err.message)]);
+        reportDoneError(node, err, msg, done);
       }
     });
 
@@ -65,8 +68,8 @@ function selectedEvents(config) {
   return undefined;
 }
 
-function statusRecord(result, detail) {
-  return { _mavlinkStatus: true, node: 'mavlink-state', result, detail };
+function statusRecord(result, detail, extra = {}) {
+  return { node: 'mavlink-state', result, detail, ...extra };
 }
 
 function objectPayload(payload) {

@@ -21,15 +21,14 @@
  *
  * Guards (§9 "What triggers an action node"):
  *   msg.payload === false → suppress
- *   a status record on input → refuse (miswire)
  *   clear is destructive → a confirmation gate (config checkbox or msg.confirmed)
  */
 
 const {
   makeStatusRecord,
   shouldSuppress,
-  refuseIfStatus,
   applyActionStatus,
+  reportDoneError,
 } = require('../lib/delivery');
 const { BAND } = require('../lib/connection/bands');
 const {
@@ -77,20 +76,11 @@ module.exports = function registerMavlinkMission(RED) {
 
     node.on('input', (msg, send, done) => {
       const emit = send || ((m) => node.send(m));
-      const finish = (err) => {
-        if (done) done(err);
+      const finish = () => {
+        if (done) done();
       };
 
       if (shouldSuppress(msg)) {
-        finish();
-        return;
-      }
-
-      const refusal = refuseIfStatus(msg);
-      if (refusal) {
-        applyActionStatus(node, 'error', 'miswire');
-        node.error('mavlink-mission: status record received on input (miswire)', msg);
-        emit([null, refusal]);
         finish();
         return;
       }
@@ -256,13 +246,12 @@ module.exports = function registerMavlinkMission(RED) {
           if (activeByKey.get(lockKey) === machine) activeByKey.delete(lockKey);
           release();
           applyActionStatus(node, 'error', `${operation} error`);
-          node.error(`mavlink-mission: ${err.message}`, msg);
           emit([null, record(operation, missionTypeKey, target, {
             result: 'failed',
             phase: 'error',
             reason: err.message,
           })]);
-          finish(err);
+          reportDoneError(node, err, msg, done);
         });
     });
 

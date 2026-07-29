@@ -8,16 +8,16 @@
  * Pain points guarded:
  *   - mavlink-in: subscribe/unsubscribe lifecycle, filter, changed-only,
  *     rate-limit, invalid config guard
- *   - mavlink-out: suppress (payload===false), refuse status record miswire,
- *     resolved message shape, band/target/identity forwarding, invalid config
- *   - mavlink-build: suppress, refuse, Build tier output shape, Send tier
- *     enqueue, invalid config guards (no vehicle, no message, bad messageName)
+ *   - mavlink-out: suppress (payload===false), resolved message shape,
+ *     band/target/identity forwarding, invalid config
+ *   - mavlink-build: suppress, Build tier output shape, Send tier enqueue,
+ *     invalid config guards (no vehicle, no message, bad messageName)
  */
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { isStatusRecord, makeStatusRecord, TIER, shouldSuppress } = require('../../lib/delivery');
+const { TIER, shouldSuppress } = require('../../lib/delivery');
 
 // ---------------------------------------------------------------------------
 // RED stub
@@ -434,33 +434,6 @@ test('mavlink-out: suppresses when msg.payload === false', () => {
   assert.equal(sent.length, 0, 'suppress: nothing sent to connection');
 });
 
-test('mavlink-out: refuses a status record input and emits on output 1', () => {
-  const RED = makeRED();
-  const { stub, sent } = makeConnectionStub();
-  RED.nodes._register('conn-1', stub);
-  require('../../nodes/mavlink-out')(RED);
-  const Constructor = RED._nodeTypes['mavlink-out'];
-  const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1' });
-
-  // When output 1 of a node is wired to an action node's input, the status
-  // record IS the entire msg — the marker is at the top level of msg, not
-  // nested inside msg.payload (§9 "A status record is refused").
-  const sr = makeStatusRecord({ result: 'sent', message: 'HEARTBEAT' });
-  node._input(sr);
-
-  // Connection must not have been called.
-  assert.equal(sent.length, 0);
-  // Should have emitted [null, refusalRecord] on output 1.
-  assert.equal(node._sends.length, 1);
-  const [out0, out1] = node._sends[0];
-  assert.equal(out0, null);
-  assert.ok(isStatusRecord(out1), 'output 1 must be a status record');
-  assert.equal(out1.result, 'refused');
-  // node.error should have been called.
-  assert.equal(node._errors.length, 1);
-});
-
 test('mavlink-out: sends a decoded-shape message and emits on both outputs', () => {
   const RED = makeRED();
   const { stub, sent } = makeConnectionStub();
@@ -482,7 +455,6 @@ test('mavlink-out: sends a decoded-shape message and emits on both outputs', () 
   assert.equal(node._sends.length, 1);
   const [out0, out1] = node._sends[0];
   assert.equal(out0, msg, 'output 0 is the original msg');
-  assert.ok(isStatusRecord(out1), 'output 1 is a status record');
   assert.equal(out1.result, 'sent');
   assert.equal(out1.message, 'HEARTBEAT');
 });
@@ -582,7 +554,6 @@ test('mavlink-out: rejects unrecognised payload and emits error status on output
   assert.equal(node._sends.length, 1);
   const [out0, out1] = node._sends[0];
   assert.equal(out0, null);
-  assert.ok(isStatusRecord(out1));
   assert.equal(out1.result, 'failed');
 });
 
@@ -603,7 +574,6 @@ test('mavlink-out: a connection send throw becomes a failed status record, not a
   assert.equal(node._sends.length, 1);
   const [out0, out1] = node._sends[0];
   assert.equal(out0, null, 'output 0 must not fire when the send fails');
-  assert.ok(isStatusRecord(out1));
   assert.equal(out1.result, 'failed');
   assert.equal(node._errors.length, 1);
 });
@@ -660,26 +630,6 @@ test('mavlink-build: suppresses when msg.payload === false', () => {
   assert.equal(node._sends.length, 0);
 });
 
-test('mavlink-build: refuses a status record input', () => {
-  const RED = makeRED();
-  RED.nodes._register('v1', makeVehicleStub());
-  require('../../nodes/mavlink-build')(RED);
-  const Constructor = RED._nodeTypes['mavlink-build'];
-  const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, { vehicle: 'v1', messageName: 'HEARTBEAT', tier: 'build' });
-
-  // The status record is the entire msg (the marker is at msg level, not msg.payload).
-  const sr = makeStatusRecord({ result: 'sent' });
-  node._input(sr);
-
-  assert.equal(node._sends.length, 1);
-  const [out0, out1] = node._sends[0];
-  assert.equal(out0, null);
-  assert.ok(isStatusRecord(out1));
-  assert.equal(out1.result, 'refused');
-  assert.equal(node._errors.length, 1);
-});
-
 test('mavlink-build Build tier: output 0 carries the built message envelope', () => {
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
@@ -708,7 +658,6 @@ test('mavlink-build Build tier: output 0 carries the built message envelope', ()
   assert.deepEqual(out0.payload.message.fields, { type: 6, autopilot: 3 });
 
   // output 1: status record.
-  assert.ok(isStatusRecord(out1), 'output 1 must be a status record');
   assert.equal(out1.result, 'built');
 });
 
@@ -763,7 +712,6 @@ test('mavlink-build Send tier: enqueues on the connection and emits on both outp
   const [out0, out1] = node._sends[0];
   assert.ok(out0, 'output 0 must fire');
   assert.deepEqual(out0.payload, { marker: 'from-upstream' }, 'Send output 0 passes the trigger through unchanged');
-  assert.ok(isStatusRecord(out1), 'output 1 must be a status record');
   assert.equal(out1.result, 'sent');
 });
 
@@ -791,7 +739,6 @@ test('mavlink-build Send tier: a connection send throw becomes a failed status r
   assert.equal(node._sends.length, 1);
   const [out0, out1] = node._sends[0];
   assert.equal(out0, null, 'output 0 must not fire when the send fails');
-  assert.ok(isStatusRecord(out1));
   assert.equal(out1.result, 'failed');
   assert.equal(node._errors.length, 1);
 });
@@ -831,7 +778,6 @@ test('mavlink-build Send tier: falls back to Build when no connection configured
   assert.equal(node._sends.length, 1);
   const [out0, out1] = node._sends[0];
   assert.ok(out0, 'output 0 must fire');
-  assert.ok(isStatusRecord(out1));
   assert.equal(out1.result, 'built', 'effective tier is Build when no connection');
 });
 
@@ -855,7 +801,6 @@ test('mavlink-build Build tier: codec error emits error status on output 1', () 
   assert.equal(node._sends.length, 1);
   const [out0, out1] = node._sends[0];
   assert.equal(out0, null, 'output 0 must not fire on codec error');
-  assert.ok(isStatusRecord(out1));
   assert.equal(out1.result, 'failed');
   assert.ok(typeof out1.reason === 'string');
 });
@@ -952,7 +897,6 @@ test('mavlink-build Build tier: plain dialect config loads bundled dialect witho
   assert.equal(out0.payload.tier, TIER.BUILD);
   assert.ok(out0.payload.message, 'payload.message must be present');
   assert.equal(out0.payload.message.name, 'HEARTBEAT');
-  assert.ok(isStatusRecord(out1), 'output 1 must be a status record');
   assert.equal(out1.result, 'built');
 });
 
@@ -980,7 +924,6 @@ test('mavlink-build: legacy config with vehicle but no dialect key still works',
   assert.ok(out0);
   assert.equal(out0.payload.messageName, 'HEARTBEAT');
   assert.deepEqual(out0.payload.message.fields, { type: 6, autopilot: 3 });
-  assert.ok(isStatusRecord(out1));
   assert.equal(out1.result, 'built');
 });
 

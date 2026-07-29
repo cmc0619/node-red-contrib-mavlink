@@ -25,33 +25,7 @@ test('mavlink-swarm node emits continue only for all-success aggregate', async (
 
   assert.equal(sent[0].payload.result, 'succeeded');
   assert.equal(sent[1].result, 'succeeded');
-  assert.equal(require('../../lib/delivery').isStatusRecord(sent[1]), true, 'output 1 aggregate carries the marker at root');
   assert.equal(connection.sends.length, 2);
-});
-
-test('mavlink-swarm node refuses status-record input on output 1 only', async () => {
-  const connection = connectionStub([peer(1)]);
-  const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-swarm')(RED);
-  const Node = RED.nodes.types['mavlink-swarm'];
-  const node = new Node({
-    connection: 'conn',
-    actionType: 'command',
-    commandId: 400,
-  });
-  let sent;
-
-  await emitInput(
-    node,
-    require('../../lib/delivery').makeStatusRecord({ result: 'failed' }),
-    (messages) => {
-      sent = messages;
-    }
-  );
-
-  assert.equal(sent[0], null);
-  assert.equal(sent[1].result, 'refused');
-  assert.equal(connection.sends.length, 0);
 });
 
 test('build+list with no connection succeeds — peer table not needed for explicit sysid list (§6)', async () => {

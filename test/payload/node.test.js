@@ -29,7 +29,7 @@ test('mavlink-payload node builds command-backed payload messages', () => {
   assert.equal(sent[0].payload.name, 'COMMAND_LONG');
   assert.equal(sent[0].payload.fields.command, 183);
   assert.equal(sent[0].payload.fields.param2, 1600);
-  assert.equal(sent[1].payload.confirmation, 'command_ack');
+  assert.equal(sent[1].confirmation, 'command_ack');
 });
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -63,8 +63,8 @@ test('mavlink-payload confirm tier waits for COMMAND_ACK and continues only on A
 
   assert.ok(sent, 'outputs fire once the ack arrives');
   assert.equal(sent[0].payload.result, 'succeeded', 'output 0 continues on ACCEPTED');
-  assert.equal(sent[1].payload.result, 'succeeded');
-  assert.equal(sent[1].payload.confirmedBy, 'ack');
+  assert.equal(sent[1].result, 'succeeded');
+  assert.equal(sent[1].confirmedBy, 'ack');
 
   node.emit('close', () => {});
 });
@@ -92,7 +92,7 @@ test('mavlink-payload confirm tier halts the chain on a DENIED ack', async () =>
   await tick();
 
   assert.equal(sent[0], null, 'output 0 must not continue on DENIED');
-  assert.equal(sent[1].payload.result, 'denied');
+  assert.equal(sent[1].result, 'denied');
 
   node.emit('close', () => {});
 });
@@ -171,7 +171,7 @@ test('mavlink-payload gimbal manager setpoint stays unconfirmed even on the conf
   assert.equal(conn.subs.length, 0, 'no COMMAND_ACK subscription for the manager setpoint');
   assert.equal(conn.sent.length, 1);
   assert.equal(conn.sent[0].message.name, 'GIMBAL_MANAGER_SET_PITCHYAW');
-  assert.equal(sent[1].payload.detail, 'sent (unconfirmed)');
+  assert.equal(sent[1].detail, 'sent (unconfirmed)');
 });
 
 test('mavlink-payload companion identity derives sysid; compid stays config-resolved (compidFromConfig)', () => {

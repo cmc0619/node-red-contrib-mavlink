@@ -25,18 +25,16 @@
  *   output 0  — continue: the original msg, fired once the message is accepted
  *                into the queue (fire-and-forget — this is not an ACK)
  *   output 1  — status:   a status record on every terminal outcome including
- *                success; also fires when the input is suppressed or refused
+ *                success
  *
- * Suppression and miswire (§9):
+ * Suppression (§9):
  *   `msg.payload === false`   → silent suppress; neither output fires
- *   input is a status record  → refuse; output 1 fires, node.error() is called
  */
 
 const { BAND } = require('../lib/connection');
 const {
   makeStatusRecord,
   shouldSuppress,
-  refuseIfStatus,
   applyActionStatus,
   capBadge,
 } = require('../lib/delivery');
@@ -65,14 +63,6 @@ module.exports = function registerMavlinkOut(RED) {
     node.on('input', (msg) => {
       // §9 suppress: msg.payload === false → silent no-op.
       if (shouldSuppress(msg)) return;
-
-      // §9 refuse: a status record fed into an action node is a miswire.
-      const refusal = refuseIfStatus(msg);
-      if (refusal) {
-        node.error('mavlink-out: status record received as input — check wiring', msg);
-        node.send([null, refusal]);
-        return;
-      }
 
       const message = resolveMessage(msg);
       if (!message) {
