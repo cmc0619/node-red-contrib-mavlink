@@ -29,5 +29,4 @@ Implemented.
 
 ## Concerns
 
-- The working tree contains unowned command/payload edits from outside Task 5; they were left unstaged and untouched.
-- A first full-suite run was executed concurrently with lint and reported transient failures; a serialized rerun of `npm test` passed 832/832.
+- A first full-suite run was executed concurrently with lint and reported transient failures; the fresh serialized verification `npm test && npm run lint` passed.
