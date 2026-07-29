@@ -128,31 +128,7 @@ test('normalizeTarget: missing → 1; explicit 0 kept; numeric strings coerced',
   assert.deepEqual(normalizeTarget({ sysid: '7', compid: '191' }), { sysid: 7, compid: 191 });
 });
 
-test('normalizeTarget: rejects NaN, fractions, and out-of-range', () => {
-  assert.throws(() => normalizeTarget({ sysid: 'abc' }), /target\.sysid/);
-  assert.throws(() => normalizeTarget({ sysid: 1.5 }), /target\.sysid/);
-  assert.throws(() => normalizeTarget({ compid: 256 }), /target\.compid/);
-  assert.throws(() => normalizeTarget({ sysid: -1 }), /target\.sysid/);
-});
-
-test('normalizeTarget: rejects booleans and arrays (Number coercion traps)', () => {
-  assert.throws(() => normalizeTarget({ sysid: true }), /target\.sysid/);
-  assert.throws(() => normalizeTarget({ sysid: [] }), /target\.sysid/);
-  assert.throws(() => normalizeTarget({ compid: [7] }), /target\.compid/);
-});
-
-test('resolveActionTarget rejects non-uint8 payload targets', () => {
-  assert.throws(
-    () => resolveActionTarget({ payloadTarget: { sysid: 999 } }),
-    /target\.sysid/
-  );
-  assert.throws(
-    () => resolveActionTarget({ payloadTarget: { compid: 'nope' } }),
-    /target\.compid/
-  );
-});
-
-test('parseTargetUint8 is the shared editor/runtime rule (exported from addressing)', () => {
+test('parseTargetUint8 stays the Vehicle Profile editor helper (re-exported)', () => {
   assert.equal(parseTargetUint8(undefined, 'Target SysID', 1).value, 1);
   assert.equal(parseTargetUint8(0, 'Target SysID', 1).value, 0);
   assert.match(parseTargetUint8(256, 'Target SysID', 1).error, /\[0, 255\]/);

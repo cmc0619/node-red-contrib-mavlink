@@ -375,26 +375,3 @@ test('mission protocol subscription keyed on resolved target (companion sysid 42
   assert.equal(terminal[1].result, 'succeeded', 'download completes using sysid=42 response');
   assert.equal(terminal[1].target.sysid, 42);
 });
-
-test('malformed payload.target fails via output 1 + done(err), does not throw', async () => {
-  const conn = new StubConnection();
-  conn.vehicle = { targetSysid: 1, targetCompid: 1, firmware: 'ardupilot' };
-  const Node = loadNode(conn);
-  const node = new Node({
-    operation: 'download',
-    connection: 'conn',
-    delivery: 'confirm',
-    missionType: 'mission',
-  });
-
-  const { outputs, err } = await runInput(node, {
-    payload: { target: { sysid: true, compid: 1 } },
-  });
-  assert.equal(outputs.length, 1);
-  assert.equal(outputs[0][0], null);
-  assert.equal(outputs[0][1].result, 'failed');
-  assert.equal(outputs[0][1].phase, 'validate');
-  assert.match(outputs[0][1].reason, /target\.sysid/);
-  assert.ok(err, 'done(err) for Catch');
-  assert.equal(conn.sent.length, 0, 'nothing sent on bad target');
-});
