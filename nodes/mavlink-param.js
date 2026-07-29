@@ -154,7 +154,11 @@ module.exports = function registerMavlinkParam(RED) {
           ? RED.nodes.getNode(payload.identityId || config.identity)
           : null;
 
-        const request = requestFrom(config, payload, { identityNode, profile });
+        const request = requestFrom(config, payload, {
+          identityNode,
+          profile,
+          connectionNode: connNode,
+        });
         const message = buildParamMessage(request);
 
         if (delivery === 'build') {
@@ -245,12 +249,15 @@ module.exports = function registerMavlinkParam(RED) {
  * Firmware: payload override → profile → 'ardupilot'. Stored config.firmware
  * is not consulted (hidden is not honored, §6).
  *
+ * Param encoding (§11): explicit `msg.payload.paramEncoding` → peer
+ * AUTOPILOT_VERSION.capabilities → firmware fallback (px4 → bytewise).
+ *
  * @param {object} config
  * @param {object} payload
- * @param {{identityNode: object|null, profile: object|null}} ctx
+ * @param {{identityNode: object|null, profile: object|null, connectionNode?: object|null}} ctx
  * @returns {object} normalized param request
  */
-function requestFrom(config, payload, { identityNode, profile }) {
+function requestFrom(config, payload, { identityNode, profile, connectionNode }) {
   const target = resolveActionTarget({
     payloadTarget: payload.target,
     configSysid: config.targetSystem,
@@ -258,6 +265,9 @@ function requestFrom(config, payload, { identityNode, profile }) {
     identityNode,
     profile,
   });
+  const firmware = resolveFirmware(payload.firmware, profile);
+  const encoding = firstDefined(payload.paramEncoding, payload.encoding);
+  const capabilities = capabilitiesFromPeer(connectionNode, target);
   return {
     action: payload.action || config.action || 'read',
     target,
@@ -267,8 +277,30 @@ function requestFrom(config, payload, { identityNode, profile }) {
     paramIndex: firstDefined(payload.paramIndex, config.paramIndex),
     value: payload.value !== undefined ? payload.value : config.value,
     paramType: payload.paramType || config.paramType || 'MAV_PARAM_TYPE_REAL32',
-    firmware: resolveFirmware(payload.firmware, profile),
+    firmware,
+    encoding,
+    capabilities,
   };
+}
+
+/**
+ * Read AUTOPILOT_VERSION.capabilities for the addressed component, when known.
+ *
+ * @param {object|null|undefined} connectionNode
+ * @param {{sysid: number, compid: number}} target
+ * @returns {number|null}
+ */
+function capabilitiesFromPeer(connectionNode, target) {
+  // Supported absence: connection not ready / peer table not attached yet.
+  // Missing component or capabilities → fall through to firmware (null).
+  const table = connectionNode && connectionNode.peerTable;
+  if (!table) return null;
+  const component = table.getComponent(Number(target.sysid), Number(target.compid));
+  if (!component || component.capabilities == null || component.capabilities === '') {
+    return null;
+  }
+  const caps = Number(component.capabilities);
+  return Number.isFinite(caps) ? caps : null;
 }
 
 function requireConnection(RED, id) {
