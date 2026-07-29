@@ -8,7 +8,7 @@ test('mavlink-move node builds a local-position message and emits status on outp
   const RED = redStub({});
   require('../../nodes/mavlink-move')(RED);
   const Node = RED.nodes.types['mavlink-move'];
-  const node = new Node({ delivery: 'build', mode: 'local-position', targetSystem: 5, targetComponent: 1 });
+  const node = new Node({ delivery: 'build', dialect: 'common', mode: 'local-position', targetSystem: 5, targetComponent: 1 });
   let sent;
 
   node.emit(
@@ -25,13 +25,14 @@ test('mavlink-move node builds a local-position message and emits status on outp
   assert.equal(sent[1].result, 'succeeded');
 });
 
-test('mavlink-move inherits Vehicle Profile target when config is empty', () => {
+test('mavlink-move inherits Vehicle Profile target when Build dialect uses Vehicle Profile escape', () => {
   const veh = { defaultTargetSystem: 42, defaultTargetComponent: 191 };
   const RED = redStub({ veh });
   require('../../nodes/mavlink-move')(RED);
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'build',
+    dialect: '__vehicle',
     mode: 'local-position',
     targetSystem: '',
     targetComponent: '',
@@ -57,6 +58,7 @@ test('mavlink-move explicit config value wins over Vehicle Profile', () => {
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'build',
+    dialect: '__vehicle',
     mode: 'local-position',
     targetSystem: 7,
     targetComponent: 100,
@@ -82,6 +84,7 @@ test('mavlink-move config 0 (broadcast) wins over Vehicle Profile', () => {
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'build',
+    dialect: '__vehicle',
     mode: 'local-position',
     targetSystem: 0,
     targetComponent: 0,
@@ -162,13 +165,14 @@ test('mavlink-move payload.target beats companion derivation', () => {
   assert.equal(sends[0].opts.target.compid, 50, 'payload.target.compid beats companion pin');
 });
 
-test('mavlink-move build tier inherits from config.vehicle stub', () => {
+test('mavlink-move build tier inherits from config.vehicle stub only with Vehicle Profile escape', () => {
   const veh1 = { defaultTargetSystem: 77, defaultTargetComponent: 78 };
   const RED = redStub({ veh1 });
   require('../../nodes/mavlink-move')(RED);
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'build',
+    dialect: '__vehicle',
     mode: 'local-position',
     vehicle: 'veh1',
     targetSystem: '',
@@ -195,6 +199,7 @@ test('mavlink-move build tier ignores connection vehicle when vehicle field is s
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'build',
+    dialect: '__vehicle',
     mode: 'local-position',
     vehicle: 'veh1',
     connection: 'conn',
@@ -212,6 +217,32 @@ test('mavlink-move build tier ignores connection vehicle when vehicle field is s
 
   assert.equal(sent[0].payload.fields.target_system, 77, 'vehicle profile used, not connection profile');
   assert.equal(sent[0].payload.fields.target_component, 78, 'vehicle profile used, not connection profile');
+});
+
+test('mavlink-move concrete Build dialect does not inherit stale Vehicle Profile target', () => {
+  const veh1 = { defaultTargetSystem: 77, defaultTargetComponent: 78 };
+  const RED = redStub({ veh1 });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'build',
+    dialect: 'common',
+    mode: 'local-position',
+    vehicle: 'veh1',
+    targetSystem: '',
+    targetComponent: '',
+  });
+  let sent;
+
+  node.emit(
+    'input',
+    { payload: {} },
+    (messages) => { sent = messages; },
+    () => {}
+  );
+
+  assert.ok(Number.isNaN(sent[0].payload.fields.target_system), 'concrete Build dialect has no profile inheritance rung');
+  assert.ok(Number.isNaN(sent[0].payload.fields.target_component), 'concrete Build dialect has no profile inheritance rung');
 });
 
 function redStub(nodesById) {

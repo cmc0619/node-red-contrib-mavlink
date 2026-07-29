@@ -29,7 +29,7 @@ module.exports = function registerMavlinkMove(RED) {
           : null;
         const payload = objectPayload(msg.payload);
 
-        const profile = delivery === 'build'
+        const profile = delivery === 'build' && config.dialect === '__vehicle'
           ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
           : (connectionNode && connectionNode.vehicle) || null;
         const identityNode = delivery === 'build'
