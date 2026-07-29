@@ -68,6 +68,19 @@ test('seed refresh workflow passes dispatch ref via env (no shell interpolation)
   );
 });
 
+test('seed refresh workflow pins third-party actions by commit SHA', () => {
+  const yml = fs.readFileSync(
+    path.join(__dirname, '..', '..', '.github', 'workflows', 'refresh-mavlink-seed.yml'),
+    'utf8'
+  );
+  assert.match(yml, /uses:\s*actions\/checkout@[0-9a-f]{40}/);
+  assert.match(yml, /uses:\s*actions\/setup-node@[0-9a-f]{40}/);
+  assert.match(yml, /uses:\s*peter-evans\/create-pull-request@[0-9a-f]{40}/);
+  assert.ok(!/uses:\s*actions\/checkout@v\d/.test(yml));
+  assert.ok(!/uses:\s*actions\/setup-node@v\d/.test(yml));
+  assert.ok(!/uses:\s*peter-evans\/create-pull-request@v\d/.test(yml));
+});
+
 test('paramDefsUrl is persisted and shown as an input', () => {
   assert.match(html, /paramDefsUrl:\s*\{\s*value:\s*''\s*\}/);
   assert.match(html, /<input type="text" id="node-config-input-paramDefsUrl"/);
