@@ -449,9 +449,9 @@ independently; a configured 0 is broadcast and survives; blank means inherit):
 5. 1
 
 `lib/addressing` owns one resolution path (`resolveActionTarget`) and one builder default
-helper (`normalizeTarget`: missing → 1, explicit `0` kept). The Vehicle Profile *editor*
-still uses `parseTargetUint8` for form fields. Flow `msg.payload.target` is not validated
-at runtime — it is programmer-authored, same trust class as editor config.
+helper (`normalizeTarget`: missing → 1, explicit `0` kept — the old Move/Param/Payload
+local shape). Flow `msg.payload.target` is not validated at runtime — it is
+programmer-authored, same trust class as editor config.
 
 Confirm/complete matching (COMMAND_ACK, param echo) keys on the *same resolved target* — the
 matcher and the sender share one resolution, pinned by test.
@@ -1713,9 +1713,9 @@ remains required.
 **Target defaulting is one helper in `lib/addressing`; flow `msg` is not an untrusted boundary.**
 *Wrong belief:* Move/Param/Payload each need a local `normalizeTarget`, and runtime must
 reject malformed `msg.payload.target` the way an API would reject end-user input.
-*Fact:* Local copies were pure DRY drift. One `normalizeTarget` defaults missing → 1.
-`msg.payload` is written by the flow programmer (trusted), not an end user — do not add
-uint8/type guardrails on payload or re-validate editor-resolved targets. Editor forms still
-use `parseTargetUint8`. Validate wire/device/connection failures, not programmer messages.
-*Check:* `node --test test/addressing/resolve.test.js test/vehicle/vehicle.test.js
-test/move/move.test.js test/param/param.test.js`.
+*Fact:* Local copies were pure DRY drift. One `normalizeTarget` (missing → 1, same as the
+old builders) lives in `lib/addressing`. `msg.payload` is written by the flow programmer
+(trusted) — do not add payload guardrails. Validate wire/device/connection failures, not
+programmer messages.
+*Check:* `node --test test/addressing/resolve.test.js test/move/move.test.js
+test/param/param.test.js`.

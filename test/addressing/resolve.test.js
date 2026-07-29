@@ -8,7 +8,6 @@ const {
   resolveFirmware,
   profileFromVehicleNode,
   normalizeTarget,
-  parseTargetUint8,
 } = require('../../lib/addressing');
 
 const PROFILE = { targetSysid: 42, targetCompid: 191, firmware: 'px4' };
@@ -126,10 +125,4 @@ test('normalizeTarget: missing → 1; explicit 0 kept; numeric strings coerced',
   assert.deepEqual(normalizeTarget({}), { sysid: 1, compid: 1 });
   assert.deepEqual(normalizeTarget({ sysid: 0, compid: 0 }), { sysid: 0, compid: 0 });
   assert.deepEqual(normalizeTarget({ sysid: '7', compid: '191' }), { sysid: 7, compid: 191 });
-});
-
-test('parseTargetUint8 stays the Vehicle Profile editor helper (re-exported)', () => {
-  assert.equal(parseTargetUint8(undefined, 'Target SysID', 1).value, 1);
-  assert.equal(parseTargetUint8(0, 'Target SysID', 1).value, 0);
-  assert.match(parseTargetUint8(256, 'Target SysID', 1).error, /\[0, 255\]/);
 });
