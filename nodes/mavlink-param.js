@@ -245,7 +245,7 @@ module.exports = function registerMavlinkParam(RED) {
  * and profile (per the role × tier matrix, DESIGN.md §6).
  *
  * Resolution order per field (sysid/compid): msg.payload.target →
- * companion derivation → config → profile default → 1.
+ * companion derivation → config → profile default.
  * Firmware: payload override → profile → 'ardupilot'. Stored config.firmware
  * is not consulted (hidden is not honored, §6).
  *

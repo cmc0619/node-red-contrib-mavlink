@@ -446,12 +446,13 @@ independently; a configured 0 is broadcast and survives; blank means inherit):
 3. node config target
 4. profile default — the connection's bound profile on wire tiers, the node's Vehicle Profile
    field on Build
-5. 1
+
+There is no fifth “hardcoded 1” rung: blank inherits the profile (whose editor default is
+often `1`). Companion's compid `1` is the derived autopilot address, not a global null-guard.
 
 `lib/addressing` owns one resolution path (`resolveActionTarget`). Builders take that
-resolved `{sysid, compid}` as-is — no second defaulting helper. Sysid/compid ranges are
-editor-only (`RED.mavlink.validateUint8`). Flow `msg` and deployed config are trusted at
-runtime.
+resolved `{sysid, compid}` as-is. Sysid/compid ranges are editor-only
+(`RED.mavlink.validateUint8`). Flow `msg` and deployed config are trusted at runtime.
 
 Confirm/complete matching (COMMAND_ACK, param echo) keys on the *same resolved target* — the
 matcher and the sender share one resolution, pinned by test.
@@ -1651,7 +1652,7 @@ and *sends* commands to `remotePort` (`14551`, MAVProxy's listen). Point `--out`
 *Wrong belief:* setting `defaultTargetSystem = 42` in a Vehicle Profile propagates to every
 palette node that addresses a target; nodes without an explicit config default to 1.
 *Fact:* target resolution follows the §6 role × tier matrix (payload.target → companion
-derivation → node config → profile default → 1), implemented once in `lib/addressing`. The
+derivation → node config → profile default), implemented once in `lib/addressing`. The
 Connection exposes its bound profile as a frozen public `node.vehicle` snapshot. Leaving the
 editor's sysid/compid fields blank means "inherit"; saving an explicit 1 means exactly 1 — no
 migration of existing flows. Command no longer reads `connection._vehicle`.
@@ -1710,11 +1711,11 @@ remains required.
 *Check:* `node --test test/param/param.test.js test/param/node.test.js` — look for
 `resolveParamEncoding` / capabilities tests.
 
-**Target resolution is once; builders do not re-default.**
-*Wrong belief:* Move/Param/Payload need local (or shared) `normalizeTarget`, and runtime
-must re-parse sysid/compid with `parseUint8` / `parseTargetUint8` / `parseIdentityUint8`.
-*Fact:* `resolveActionTarget` is the only defaulting path (→ 1). Builders use
-`input.target` directly. Range checks are `RED.mavlink.validateUint8` in the editor.
-Flow `msg` is programmer-trusted.
+**Target resolution is once; builders do not re-default; no hardcoded final `1`.**
+*Wrong belief:* Move/Param/Payload need local (or shared) `normalizeTarget`; runtime must
+re-parse uint8 ids; and when every field is blank `resolveActionTarget` invents `{1,1}`.
+*Fact:* Matrix is payload → companion derivation → config → profile. Profile editor
+defaults cover the common `1`. Builders use `input.target` directly. Ranges are
+`RED.mavlink.validateUint8` in the editor. Flow `msg` is programmer-trusted.
 *Check:* `node --test test/addressing/resolve.test.js test/move/move.test.js
 test/param/param.test.js`; no `normalizeTarget` / `parseUint8` under `lib/` or `nodes/`.

@@ -93,10 +93,6 @@ test('configured 0 is broadcast and survives the chain', () => {
   assert.deepEqual(t, { sysid: 0, compid: 0 });
 });
 
-test('no identity, no profile: hardcoded 1', () => {
-  assert.deepEqual(resolveActionTarget({}), { sysid: 1, compid: 1 });
-});
-
 test('unbound companion throws loud (broken deploy, not a mystery)', () => {
   const unbound = {
     derivesSysidFromVehicle: true,
