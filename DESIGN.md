@@ -1316,9 +1316,9 @@ that pipeline is still required.
 *Wrong belief:* a hand-maintained `lib/metadata/hints.js` table is still required to recover
 `<param enum=`> links the registry dropped, or the editor must offer a custom XML upload.
 *Fact:* the XML compiler writes those links into `commands[*].params[*].enum` at seed
-generate / catalog compile time (85 in `common.xml`). A missing `enum=` still renders a
-number field — fix the seed/XML, do not resurrect a parallel hint table.
-*Check:* `node --test test/metadata/commands-list.test.js` (seed Arm → `MAV_BOOL`, 85 enums).
+generate / catalog compile time. A missing `enum=` still renders a number field — fix the
+seed/XML, do not resurrect a parallel hint table.
+*Check:* `node --test test/metadata/commands-list.test.js` (seed Arm → `MAV_BOOL`).
 
 **Seed bundles already carry the include chain.**
 *Wrong belief:* runtime must merge `mavlink-mappings` modules (`minimal` → `standard` →
