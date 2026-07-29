@@ -81,7 +81,9 @@ test('seed carries common.xml command-param enum= links (no hints.js overlay)', 
       if (p.enum) withEnum += 1;
     }
   }
-  assert.equal(withEnum, 85, 'all common.xml <param enum=> links survive seed compile');
+  // Lower bound only — upstream common.xml gains/loses <param enum=> over time;
+  // the weekly seed refresh must not require hand-editing a snapshot count.
+  assert.ok(withEnum >= 80, `expected many enum-backed command params, got ${withEnum}`);
 });
 
 test('listCommandsForDialect returns the commands array from the catalog', () => {
