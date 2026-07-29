@@ -291,8 +291,10 @@ function requestFrom(config, payload, { identityNode, profile, connectionNode })
  * @returns {number|null}
  */
 function capabilitiesFromPeer(connectionNode, target) {
+  // Supported absence: connection not ready / peer table not attached yet.
+  // Missing component or capabilities → fall through to firmware (null).
   const table = connectionNode && connectionNode.peerTable;
-  if (!table || typeof table.getComponent !== 'function' || !target) return null;
+  if (!table) return null;
   const component = table.getComponent(Number(target.sysid), Number(target.compid));
   if (!component || component.capabilities == null || component.capabilities === '') {
     return null;
