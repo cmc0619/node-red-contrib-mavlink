@@ -1180,7 +1180,7 @@ by silence. Update this list when an item lands.
 | **Command node `COMMAND_INT`** | **done** | Confirm path starts LONG; on `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns, converts once (param5–7 ↔ x/y/z, global frames ×1e7), resends; second wrong-carrier fails loud. |
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
 | **Param definition catalog** | **done** | `lib/param/defs.js` fetches ArduPilot `apm.pdef.json` by family or Vehicle `paramDefsUrl` (PX4/custom); cache; Param editor datalist + units/enums. |
-| **Full command-param `enum=` recovery** | **done** | All 85 common.xml `<param enum=`> links in `lib/metadata/hints.js` (e.g. Arm → `MAV_BOOL`). |
+| **Full command-param `enum=` recovery** | **done** | Seed compile carries all 85 common.xml `<param enum=`> links into the bundle (e.g. Arm → `MAV_BOOL`). The old `hints.js` overlay is gone. |
 | **Move editor §6 reshape** | **done** | Per-field rows + mode/delivery visibility in the Move dialog. |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
 | **`httpAdminRoot` on non-enum admin routes** | **done** | Command/Build/In/Swarm/Param/Vehicle editor catalogs use `RED.mavlink.adminApiUrl('/mavlink/…')`. |
@@ -1294,11 +1294,6 @@ next agent reads only this file.
 **Pull requests stay at or under 50 files.** Larger layers split by module boundary into
 sequential PRs. Count: `git diff --name-only <base>...HEAD | wc -l`.
 
-**Command-param enum hints stay a small table for UI gaps only.** Most `<param enum=`>
-links arrive via the seed/catalog compile. Omitting a remaining hint still renders a number
-field (wrong for that param) — prefer adding the one you need over inventing a second
-metadata pipeline or restoring path upload.
-
 ---
 
 **Dialect authority is the seed blob, not `mavlink-mappings` and not a path upload.**
@@ -1317,12 +1312,13 @@ that pipeline is still required.
 *Fact:* the seed (and catalog compiles) carry `enum=` from upstream XML into
 {@link DialectBundle}. No `.d.ts` scrape for the dialect library.
 
-**Command-param `enum=` is in the XML (and the seed); hints fill gaps the UI still needs.**
-*Wrong belief:* either every command-param dropdown must be hand-maintained, or the editor
-must offer a custom XML upload to recover them.
-*Fact:* `<param enum="…">` exists in the XML (85 in `common.xml`) and is compiled into the
-bundle. A small explicit control-hint table remains only where the UI needs a label the
-bundle does not yet surface cleanly — not a reason to restore path upload.
+**Command-param `enum=` is in the seed — no `hints.js` overlay.**
+*Wrong belief:* a hand-maintained `lib/metadata/hints.js` table is still required to recover
+`<param enum=`> links the registry dropped, or the editor must offer a custom XML upload.
+*Fact:* the XML compiler writes those links into `commands[*].params[*].enum` at seed
+generate / catalog compile time (85 in `common.xml`). A missing `enum=` still renders a
+number field — fix the seed/XML, do not resurrect a parallel hint table.
+*Check:* `node --test test/metadata/commands-list.test.js` (seed Arm → `MAV_BOOL`, 85 enums).
 
 **Seed bundles already carry the include chain.**
 *Wrong belief:* runtime must merge `mavlink-mappings` modules (`minimal` → `standard` →
