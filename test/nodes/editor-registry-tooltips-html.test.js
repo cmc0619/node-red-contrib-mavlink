@@ -118,9 +118,14 @@ test('Command preset controls render before tip catalog arrives', () => {
 test('Command reapplies preset option tips when Connection / Vehicle changes', () => {
   const html = readHtml('mavlink-command');
   assert.match(html, /function applyPresetOptionTips/);
-  // Connection change path must repaint preset titles for the new dialect.
+  assert.match(html, /function refreshPresetTipsAndParams/);
+  // One catalog load paints tips then refreshParamFields (cache hit) — no race.
   assert.match(
     html,
-    /#node-input-connection'\)\.on\('change'[\s\S]*applyPresetOptionTips\(\)/
+    /loadCommandsCatalog\(function \(catalog\) \{[\s\S]*applyPresetOptionTips\(null, catalog\);[\s\S]*refreshParamFields\(\);/
+  );
+  assert.match(
+    html,
+    /#node-input-connection'\)\.on\('change'[\s\S]*refreshPresetTipsAndParams\(\)/
   );
 });

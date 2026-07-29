@@ -387,19 +387,19 @@
       }
 
       /**
-       * Dialect-sourced titles on preset <option>s and the select. Re-run when
-       * Connection / Vehicle / delivery changes so tips track the active dialect
-       * (Greptile #36) — not only when the preset list is rebuilt.
+       * Dialect-sourced titles on preset <option>s and the select.
        *
        * @param {JQuery} [$sel]
+       * @param {{commands?: Array}|null} [catalog]  when provided, paint only
+       *   (no second loadCommandsCatalog — avoids racing refreshParamFields).
        */
-      function applyPresetOptionTips($sel) {
+      function applyPresetOptionTips($sel, catalog) {
         const sel = $sel && $sel.length ? $sel : $('#node-input-preset');
         if (!sel.length) return;
-        function paint(catalog) {
-          if (!catalog) return;
+        function paint(cat) {
+          if (!cat) return;
           const byId = {};
-          (catalog.commands || []).forEach(function (c) {
+          (cat.commands || []).forEach(function (c) {
             byId[String(c.value)] = c.description || '';
           });
           sel.find('option').each(function () {
@@ -417,6 +417,10 @@
           syncPresetTitle();
           sel.off('change.mavPresetTip').on('change.mavPresetTip', syncPresetTitle);
         }
+        if (catalog) {
+          paint(catalog);
+          return;
+        }
         // Tip titles from cache when possible; otherwise one catalog load that
         // does not gate control rendering (Codex #36).
         const target = resolveCatalogTarget();
@@ -425,6 +429,19 @@
           return;
         }
         loadCommandsCatalog(paint);
+      }
+
+      /**
+       * One catalog fetch for both preset-option titles and param field tips
+       * when Connection / Vehicle / delivery changes (Greptile #36). Painting
+       * then refreshParamFields (cache hit) avoids last-request-wins cancel.
+       */
+      function refreshPresetTipsAndParams() {
+        loadCommandsCatalog(function (catalog) {
+          if ($('#node-input-mode').val() !== 'preset') return;
+          applyPresetOptionTips(null, catalog);
+          refreshParamFields();
+        });
       }
 
       loadPresets(buildPresetDropdown);
@@ -514,10 +531,7 @@
         refreshIdentitySelect();
         refreshVisibility();
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
-        if ($('#node-input-mode').val() === 'preset') {
-          applyPresetOptionTips();
-          refreshParamFields();
-        }
+        if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });
 
       $('#node-input-vehicle').on('change', function () {
@@ -529,10 +543,7 @@
           presetMessagesCatalog = null;
           presetMessagesKey = '';
           if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
-          if ($('#node-input-mode').val() === 'preset') {
-            applyPresetOptionTips();
-            refreshParamFields();
-          }
+          if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
         }
       });
 
@@ -547,10 +558,7 @@
         presetMessagesCatalog = null;
         presetMessagesKey = '';
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
-        if ($('#node-input-mode').val() === 'preset') {
-          applyPresetOptionTips();
-          refreshParamFields();
-        }
+        if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });
 
       function refreshCompletionRow() {
