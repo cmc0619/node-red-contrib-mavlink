@@ -3,6 +3,9 @@
 # Required: SYSID. Optional: INSTANCE, OUT_HOST, OUT_PORT.
 set -euo pipefail
 
+# shellcheck source=resolve-out-host.sh
+. "$(dirname "$0")/resolve-out-host.sh"
+
 : "${SYSID:?SYSID is required}"
 INSTANCE="${INSTANCE:-0}"
 OUT_HOST="${OUT_HOST:-host.docker.internal}"
@@ -31,13 +34,9 @@ ln -sfn /logs "${PX4_PREFIX}/log"
 MAVLINK_RC="${PX4_PREFIX}/etc/init.d-posix/px4-rc.mavlink"
 RCS="${PX4_PREFIX}/etc/init.d-posix/rcS"
 
-# Resolve Docker host for MAVLink (IPv4 only — same approach as upstream entrypoint).
-DOCKER_HOST_IP="$(getent ahostsv4 "${OUT_HOST}" 2>/dev/null | awk '/STREAM/ { print $1; exit }' || true)"
+DOCKER_HOST_IP="$(resolve_out_host_ip "${OUT_HOST}")"
 if [[ -z "${DOCKER_HOST_IP}" ]]; then
-  DOCKER_HOST_IP="$(getent ahostsv4 host.docker.internal 2>/dev/null | awk '/STREAM/ { print $1; exit }' || true)"
-fi
-if [[ -z "${DOCKER_HOST_IP}" ]]; then
-  echo "entrypoint-px4: FATAL - could not resolve ${OUT_HOST} or host.docker.internal" >&2
+  echo "entrypoint-px4: FATAL - could not resolve ${OUT_HOST} to an IPv4 address" >&2
   exit 1
 fi
 if [[ ! -f "${MAVLINK_RC}" ]]; then

@@ -54,8 +54,10 @@ Twelve containers (Compose profile `sitl`):
 - `px4-11` … `px4-15` — PX4 SIH quad, sysid 11–15  
 - `ap-companion-20`, `px4-companion-21` — dedicated companion-test vehicles  
 
-Each vehicle has `extra_hosts: host.docker.internal:host-gateway` so UDP reaches Node-RED
-on the host. Flight logs mount under `sitl/logs/<service>/`.
+Each vehicle has `extra_hosts: host.docker.internal:host-gateway`. Entrypoints resolve that
+name to an IPv4 address and, when Compose maps it to idle `docker0` while the container sits
+on a user-defined bridge, fall back to the container default gateway so UDP still reaches
+Node-RED on the host. Flight logs mount under `sitl/logs/<service>/`.
 
 ## Example flows
 
@@ -111,12 +113,17 @@ The `nodered` profile uses `network_mode: host` so flows that bind `127.0.0.1:14
 | Symptom | What to try |
 |---------|-------------|
 | Port already in use | `ss -ulpn \| grep -E '14550\|14560\|14540'` — stop QGC/other SITL |
-| No peers in State/In | `docker compose … logs ap-1` — confirm `out=udp:host.docker.internal:…` |
+| No peers in State/In | `docker compose … logs ap-1` — confirm `out=udp:<host-ip>:…` (gateway, not silent) |
 | Only sysid 1 answers commands | Wait for HEARTBEATs so the peer table learns each UDP source port |
 | PX4 silent | Confirm image tag still provides SIH (`PX4_SIM_MODEL=sihsim_quadx`); check entrypoint logs |
 | `check-logs` fails after arm | List `sitl/logs/<service>`; firmware may write under a nested folder (checker searches recursively) |
 
-## Measured bring-up (PX4)
+## Measured bring-up
+
+**ArduPilot:** with the gateway fallback, HEARTBEAT sysid **1** arrives on host UDP **14550**
+(`OUT_HOST=host.docker.internal` → container default gateway when `host-gateway`≠bridge GW).
+
+**PX4:**
 
 On a host with working Docker, `docker compose --profile sitl up -d` for the PX4
 services was verified to emit HEARTBEATs with sysids **11–15** on UDP **14560** and

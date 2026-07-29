@@ -1764,3 +1764,14 @@ instance 0 (`14550/14551`) and instance 1 (`14560`).
 confuses operators. Lab and examples use PX4 GCS **14560→14561**, companions **14540/14542**.
 Operator guide: [`sitl/README.md`](sitl/README.md).
 *Check:* `rg '14555' examples` is empty; `examples/sitl/10-dual-stack-ten.json` bindPort 14560.
+
+**Compose `host-gateway` is not always the bridge the container uses.**
+*Wrong belief:* `extra_hosts: host.docker.internal:host-gateway` always yields an address that
+reaches host UDP listeners from a Compose service.
+*Fact:* On nested/Docker-Desktop-like hosts, `host-gateway` can resolve to idle `docker0`
+(`172.17.0.1`) while the service attaches to `sitl_default` (`172.18.0.1`). Vehicles then send
+telemetry into a black hole. Lab entrypoints resolve `OUT_HOST` and, for
+`host.docker.internal`, prefer the container default gateway from `/proc/net/route` when it
+differs from `getent`.
+*Check:* `sitl/scripts/resolve-out-host.sh`; `docker compose … up -d ap-1` then HEARTBEAT on
+host UDP 14550.

@@ -3,6 +3,9 @@
 # Required: SYSID. Optional: INSTANCE, OUT_HOST, OUT_PORT, HOME_*.
 set -euo pipefail
 
+# shellcheck source=resolve-out-host.sh
+. "$(dirname "$0")/resolve-out-host.sh"
+
 : "${SYSID:?SYSID is required}"
 INSTANCE="${INSTANCE:-0}"
 OUT_HOST="${OUT_HOST:-host.docker.internal}"
@@ -14,6 +17,12 @@ HOME_ALT="${HOME_ALT:-584}"
 LAT="$(awk -v b="$HOME_LAT" -v i="$INSTANCE" 'BEGIN { printf "%.8f", b + (i * 0.0001) }')"
 LON="$(awk -v b="$HOME_LON" -v i="$INSTANCE" 'BEGIN { printf "%.8f", b + (i * 0.0001) }')"
 
+OUT_IP="$(resolve_out_host_ip "${OUT_HOST}")"
+if [[ -z "${OUT_IP}" ]]; then
+  echo "entrypoint-ap: FATAL - could not resolve ${OUT_HOST} to an IPv4 address" >&2
+  exit 1
+fi
+
 mkdir -p /logs
 cd /home/sitl/ardupilot
 
@@ -23,13 +32,13 @@ rm -rf /home/sitl/ardupilot/logs
 ln -sfn /logs /home/sitl/ardupilot/logs
 export HOME="/home/sitl"
 
-echo "entrypoint-ap: sysid=${SYSID} instance=${INSTANCE} out=udp:${OUT_HOST}:${OUT_PORT} home=${LAT},${LON},${HOME_ALT}"
+echo "entrypoint-ap: sysid=${SYSID} instance=${INSTANCE} out=udp:${OUT_IP}:${OUT_PORT} (from ${OUT_HOST}) home=${LAT},${LON},${HOME_ALT}"
 
 exec sim_vehicle.py -v ArduCopter \
   -I "${INSTANCE}" \
   --sysid "${SYSID}" \
   --custom-location="${LAT},${LON},${HOME_ALT},270" \
   --add-param-file=/params/ap-logging.parm \
-  --out="udp:${OUT_HOST}:${OUT_PORT}" \
+  --out="udp:${OUT_IP}:${OUT_PORT}" \
   --no-rebuild \
   -w

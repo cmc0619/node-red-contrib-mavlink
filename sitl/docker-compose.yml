@@ -46,6 +46,8 @@ services:
     volumes:
       - ./logs/ap-1:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 
   ap-2:
     <<: *ap
@@ -57,6 +59,8 @@ services:
     volumes:
       - ./logs/ap-2:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 
   ap-3:
     <<: *ap
@@ -68,6 +72,8 @@ services:
     volumes:
       - ./logs/ap-3:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 
   ap-4:
     <<: *ap
@@ -79,6 +85,8 @@ services:
     volumes:
       - ./logs/ap-4:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 
   ap-5:
     <<: *ap
@@ -90,6 +98,8 @@ services:
     volumes:
       - ./logs/ap-5:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 
   px4-11:
     <<: *px4
@@ -101,6 +111,7 @@ services:
     volumes:
       - ./logs/px4-11:/logs
       - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
 
   px4-12:
@@ -113,6 +124,7 @@ services:
     volumes:
       - ./logs/px4-12:/logs
       - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
 
   px4-13:
@@ -125,6 +137,7 @@ services:
     volumes:
       - ./logs/px4-13:/logs
       - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
 
   px4-14:
@@ -137,6 +150,7 @@ services:
     volumes:
       - ./logs/px4-14:/logs
       - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
 
   px4-15:
@@ -149,6 +163,7 @@ services:
     volumes:
       - ./logs/px4-15:/logs
       - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
 
   ap-companion-20:
@@ -162,6 +177,8 @@ services:
     volumes:
       - ./logs/ap-companion-20:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 
   px4-companion-21:
     <<: *px4
@@ -174,6 +191,7 @@ services:
     volumes:
       - ./logs/px4-companion-21:/logs
       - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
 
   nodered:
