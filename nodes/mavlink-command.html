@@ -49,7 +49,9 @@
   let _presetGroups = null;
   /** @type {Object<string, {commands:Array, enums:Object, dialect:string}>} */
   const _catalogByKey = {};
-  /** Monotonic token so a stale dialect response cannot overwrite a newer one. */
+  /** In-flight waiters per catalog key (coalesce concurrent loads). */
+  const _catalogInflight = {};
+  /** Monotonic token bumped on every load (callers / tests observe churn). */
   let _catalogRequestSeq = 0;
   /** Cache key for the catalog currently shown in the Advanced dropdown. */
   let _activeCatalogKey = '';
@@ -122,36 +124,51 @@
   }
 
   /**
-   * Load the Advanced catalog (commands + enums). Ignores stale responses when
-   * the Connection (and therefore the target) changed mid-flight.
+   * Load the Advanced catalog (commands + enums). Concurrent callers for the
+   * same target share one in-flight request (Greptile #36 — preset change must
+   * not cancel a pending Connection/Vehicle tip repaint). Responses for a key
+   * the editor no longer targets are dropped.
    *
    * @param {function({commands:Array, enums:Object, dialect:string}|null, Error=):void} cb
    */
   function loadCommandsCatalog(cb) {
     const target = resolveCatalogTarget();
-    // Always advance the seq — including cache hits — so an in-flight request
-    // for a previous target cannot append after this callback (Greptile #36).
-    const seq = ++_catalogRequestSeq;
-    if (_catalogByKey[target.key]) {
-      _activeCatalogKey = target.key;
-      cb(_catalogByKey[target.key]);
+    const requestedKey = target.key;
+    ++_catalogRequestSeq;
+    if (_catalogByKey[requestedKey]) {
+      _activeCatalogKey = requestedKey;
+      cb(_catalogByKey[requestedKey]);
       return;
     }
-    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
-      if (seq !== _catalogRequestSeq) return; // stale — a newer request is in flight
-      const catalog = {
-        commands: data.commands || [],
-        enums: data.enums || {},
-        dialect: data.dialect || target.dialect,
-      };
-      _catalogByKey[target.key] = catalog;
-      _activeCatalogKey = target.key;
-      cb(catalog);
-    }).fail(function (_xhr, _status, err) {
-      if (seq !== _catalogRequestSeq) return;
-      _activeCatalogKey = target.key;
-      cb({ commands: [], enums: {}, dialect: target.dialect, error: String(err || 'load failed') });
-    });
+    if (!_catalogInflight[requestedKey]) {
+      _catalogInflight[requestedKey] = [];
+      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
+        const waiters = _catalogInflight[requestedKey] || [];
+        delete _catalogInflight[requestedKey];
+        const catalog = {
+          commands: data.commands || [],
+          enums: data.enums || {},
+          dialect: data.dialect || target.dialect,
+        };
+        _catalogByKey[requestedKey] = catalog;
+        if (resolveCatalogTarget().key !== requestedKey) return;
+        _activeCatalogKey = requestedKey;
+        for (let i = 0; i < waiters.length; i++) waiters[i](catalog);
+      }).fail(function (_xhr, _status, err) {
+        const waiters = _catalogInflight[requestedKey] || [];
+        delete _catalogInflight[requestedKey];
+        if (resolveCatalogTarget().key !== requestedKey) return;
+        _activeCatalogKey = requestedKey;
+        const empty = {
+          commands: [],
+          enums: {},
+          dialect: target.dialect,
+          error: String(err || 'load failed'),
+        };
+        for (let i = 0; i < waiters.length; i++) waiters[i](empty);
+      });
+    }
+    _catalogInflight[requestedKey].push(cb);
   }
 
   function loadMessagesCatalog(cb) {

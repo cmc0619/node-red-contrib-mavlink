@@ -112,7 +112,14 @@ test('Command preset controls render before tip catalog arrives', () => {
     html,
     /container\.append\(rows\[rows\.length - 1\]\.row\);[\s\S]*loadCommandsCatalog\(function/
   );
-  assert.match(html, /const seq = \+\+_catalogRequestSeq;/);
+  assert.match(html, /\+\+_catalogRequestSeq;/);
+});
+
+test('Command catalog loads coalesce waiters per target key', () => {
+  const html = readHtml('mavlink-command');
+  assert.match(html, /_catalogInflight/);
+  assert.match(html, /_catalogInflight\[requestedKey\]\.push\(cb\)/);
+  assert.match(html, /resolveCatalogTarget\(\)\.key !== requestedKey/);
 });
 
 test('Command reapplies preset option tips when Connection / Vehicle changes', () => {
