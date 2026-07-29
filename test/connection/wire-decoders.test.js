@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { loadBundled } = require('../../lib/metadata');
-const { createWire } = require('../../lib/connection/wire');
+const { createWire, DEFAULT_MAX_DECODERS } = require('../../lib/connection/wire');
 
 const EP_A = { address: '10.0.0.1', port: 14550 };
 const EP_B = { address: '10.0.0.2', port: 14551 };
@@ -94,4 +94,34 @@ test('omit endpoint still decodes (serial / single-stream fallback)', () => {
   const frames = wire.decode(full);
   assert.equal(frames.length, 1);
   assert.equal(wire.decoderCount(), 1);
+});
+
+test('default max decoder cap is 100', () => {
+  const wire = createWire({ bundle: loadBundled('minimal') });
+  assert.equal(DEFAULT_MAX_DECODERS, 100);
+  assert.equal(wire.maxDecoderCount(), 100);
+});
+
+test('decoder map LRU-evicts when over maxDecoders (UDP churn bound)', () => {
+  const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
+  const full = heartbeatFrame(wire);
+  const ep = (n) => ({ address: '10.0.0.' + n, port: 14550 });
+
+  wire.decode(full, ep(1));
+  wire.decode(full, ep(2));
+  assert.equal(wire.decoderCount(), 2);
+
+  // Touch ep(1) so it is warmer than ep(2); allocating ep(3) should drop ep(2).
+  wire.decode(full, ep(1));
+  wire.decode(full, ep(3));
+  assert.equal(wire.decoderCount(), 2);
+
+  // ep(1) still warm — completing a partial there must not need a fresh sync hunt
+  // from a wiped pipeline. ep(2) was evicted.
+  const partial = full.subarray(0, 6);
+  assert.equal(wire.decode(partial, ep(1)).length, 0);
+  assert.equal(wire.decode(full.subarray(6), ep(1)).length, 1);
+
+  // Fresh ep(2) after eviction starts clean (full frame decodes alone).
+  assert.equal(wire.decode(full, ep(2)).length, 1);
 });

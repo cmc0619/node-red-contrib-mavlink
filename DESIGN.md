@@ -610,8 +610,10 @@ arise.
 Connection keeps one *serialize* registry, but each network peer (`address:port`) gets its own
 `MavLinkPacketSplitter` pipeline. Sharing one splitter across peers lets a partial frame from
 vehicle A contaminate the next bytes from vehicle B. TCP peer disconnect releases that
-decoder; idle UDP pipelines are evicted on the peer-table expire interval. Serial is one
-endpoint and needs only one decoder.
+decoder; idle UDP pipelines are evicted on the peer-table expire interval. A hard cap
+(default **100**) LRU-evicts the coldest pipeline so spoofed UDP source churn cannot grow
+memory without bound — steady per-drone endpoints reuse the same tuple and stay under the
+cap. Serial is one endpoint and needs only one decoder.
 
 A mixed fleet is expressed as **more connections**, not more configuration inside one. A listener
 on 14550 bound to an ArduPilot profile and another on 14551 bound to a PX4 profile is the whole
@@ -1430,7 +1432,8 @@ does not inherit HEARTBEAT from a hidden preload.
 client and UDP rinfo because MAVLink carries sysid/compid in each frame.
 *Fact:* framing state is a byte stream before sysid is known. A partial packet from peer A
 left in a shared splitter contaminates peer B. `createWire` keeps one serialize registry and
-a decoder map keyed by `address:port`; TCP `endpoint-gone` and idle eviction clear entries.
+a decoder map keyed by `address:port` (capped, default 100, LRU); TCP `endpoint-gone` and
+idle eviction clear entries.
 *Check:* `node --test test/connection/wire-decoders.test.js`
 
 **Node exposes no DSCP setter.**
