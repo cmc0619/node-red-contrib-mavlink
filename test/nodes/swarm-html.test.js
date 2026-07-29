@@ -74,6 +74,53 @@ test('commandId loads MAV_CMD entries from command/commands catalog', () => {
   assert.match(html, /_cmdRequestSeq/, 'stale command catalog responses are ignored');
 });
 
+test('build+list catalog path has an explicit Dialect picker with Vehicle Profile escape', () => {
+  assert.match(html, /dialect:\s*\{\s*value:\s*''/, 'dialect defaults empty until the user chooses one');
+  assert.match(html, /vehicle:\s*\{[\s\S]*type:\s*['"]mavlink-vehicle['"]/, 'Vehicle Profile escape is a vehicle config-node reference');
+  assert.match(html, /id="row-swarm-dialect"/, 'template must have a dialect row');
+  assert.match(html, /id="node-input-dialect"/, 'template must have the dialect select');
+  assert.match(html, /id="row-swarm-vehicle"/, 'template must have a Vehicle Profile row');
+  assert.match(html, /id="node-input-vehicle"/, 'template must have the Vehicle Profile picker');
+  assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'shared dialect selector helper is used');
+  assert.match(html, /includeVehicleEscape:\s*true/, 'Dialect picker includes the from Vehicle Profile escape');
+  assert.match(html, /__vehicle/, 'Vehicle Profile escape value is recognized');
+});
+
+test('swarm catalog target uses Build+list dialect selection without inventing ardupilotmega', () => {
+  const resolver = html.slice(
+    html.indexOf('function resolveCatalogTarget'),
+    html.indexOf('function loadMessagesCatalog')
+  );
+  const messagesLoader = html.slice(
+    html.indexOf('function loadMessagesCatalog'),
+    html.indexOf('function buildVehicleTypeDropdown')
+  );
+  const commandsLoader = html.slice(
+    html.indexOf('function loadCommandsCatalog'),
+    html.indexOf('function buildCommandDropdown')
+  );
+
+  assert.match(resolver, /isBuildList/, 'Build+list branch determines when no connection governs catalogs');
+  assert.match(resolver, /if \(!dialectVal\) return emptyCatalogTarget\(\)/, 'empty Build+list dialect must produce no catalog target');
+  assert.match(resolver, /dialectVal !== ['"]__vehicle['"]/, 'concrete dialects use the selected dialect directly');
+  assert.match(resolver, /query:\s*\{\s*vehicle:\s*vehicleId,\s*dialect:\s*vehicleDialect\s*\}/, 'Vehicle Profile escape queries by profile id and dialect');
+  assert.doesNotMatch(resolver, /ardupilotmega/, 'swarm catalog target resolution must not hardcode ardupilotmega');
+  assert.match(messagesLoader, /if \(!target\.query\)/, 'message catalog loader must not fetch an invented dialect for empty targets');
+  assert.match(commandsLoader, /if \(!target\.query\)/, 'command catalog loader must not fetch an invented dialect for empty targets');
+});
+
+test('swarm connection-governed catalogs keep using the connection profile', () => {
+  const resolver = html.slice(
+    html.indexOf('function resolveCatalogTarget'),
+    html.indexOf('function loadMessagesCatalog')
+  );
+
+  assert.match(resolver, /#node-input-connection/, 'connection-governed branch reads the connection picker');
+  assert.match(resolver, /connNode\.vehicle/, 'connection-governed branch follows the selected connection profile');
+  assert.match(resolver, /key:\s*'vehicle:' \+ connNode\.vehicle/, 'catalog cache is keyed by connection profile id');
+  assert.match(resolver, /query:\s*\{\s*vehicle:\s*connNode\.vehicle,\s*dialect:\s*connDialect\s*\}/, 'catalog query carries the connection profile id for custom dialects');
+});
+
 test('commandId preserves the saved numeric value after async catalog load', () => {
   assert.match(html, /node\.commandId/, 'saved commandId is re-applied');
   assert.match(html, /not in dialect/, 'unknown saved values remain selectable');
