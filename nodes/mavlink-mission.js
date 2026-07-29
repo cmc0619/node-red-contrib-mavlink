@@ -322,7 +322,7 @@ function resolveItems(config, payload) {
     try {
       parsed = JSON.parse(config.items);
     } catch (err) {
-      throw new Error(`mission items config is not valid JSON: ${err.message}`);
+      throw new Error(`mission items config is not valid JSON: ${err.message}`, { cause: err });
     }
     if (!Array.isArray(parsed)) throw new Error('mission items config must be a JSON array');
     return parsed;

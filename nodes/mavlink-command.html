@@ -4,15 +4,6 @@
   'use strict';
 
   /**
-   * Cap text at 24 characters with single-glyph ellipsis (§6).
-   * @param {string} t
-   * @returns {string}
-   */
-  function badge24(t) {
-    return t.length <= 24 ? t : t.slice(0, 23) + '\u2026';
-  }
-
-  /**
    * Helper: create a labelled form row.
    * @param {string} label
    * @param {HTMLElement} input
