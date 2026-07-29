@@ -57,6 +57,13 @@ Operators may run Node-RED on the host against published localhost ports (normal
 
 `sim_vehicle.py` typically starts **MAVProxy** in front of ArduPilot SITL: telemetry is forwarded to the GCS (`--out` → Node-RED bind **14550**), and commands return to MAVProxy’s listen port (**14551** for instance 0). PX4 SITL has no MAVProxy; it uses its own MAVLink UDP pair (**14560/14561** in this lab).
 
+### Docker ↔ Node-RED networking
+
+- Vehicle containers send UDP to the **host** where Node-RED binds (`host.docker.internal` via Compose `extra_hosts: host.docker.internal:host-gateway` on Linux).
+- Published ports are for documentation/symmetry; the important direction for GCS demos is **container → host bind**.
+- Outbound commands from this package resolve `peerTable.endpointFor(sysid, compid)` (the peer’s UDP source address/port) when a target is set; configured `remoteHost`/`remotePort` is the fallback before peers exist. Lab entrypoints must therefore give each vehicle a **stable, unique UDP source identity** (normal for `-I` / per-container MAVProxy) so sysids 2–5 are reachable, not only instance 0’s `14551`.
+- The optional `nodered` service joins the Compose network; prefer publishing the same host ports so flows keep `127.0.0.1` binds, or document a one-line bindHost override if host networking is used instead.
+
 ### Node-RED identities
 
 - **GCS flows:** Local Identity `role: gcs` on the AP Connection (`14550/14551`) and PX4 Connection (`14560/14561`). Two Connections, two Vehicle profiles (ArduPilot / PX4) — DESIGN mixed-fleet rule.
