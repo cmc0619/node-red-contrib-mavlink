@@ -191,9 +191,10 @@ module.exports = function registerMavlinkCommand(RED) {
 
       let target;
       if (delivery === 'build') {
-        // Build tier: profile comes from the node's own Vehicle Profile field.
-        // Connection and identity are ignored — hidden is not honored (§6).
-        const vehicleNode = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
+        // Build tier: profile comes from Vehicle Profile only when the editor's
+        // dialect picker saved the explicit __vehicle escape (§6).
+        const useVehicle = config.dialect === '__vehicle';
+        const vehicleNode = useVehicle && config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
         target = resolveActionTarget({
           payloadTarget,
           configSysid: config.targetSysid,

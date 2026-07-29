@@ -50,6 +50,10 @@
   const _messageCatalogByKey = {};
   let _messageRequestSeq = 0;
 
+  function emptyCatalogTarget() {
+    return { key: 'empty', query: null, dialect: '', vehicleId: '' };
+  }
+
   function loadPresets(cb) {
     if (_presetGroups) { cb(_presetGroups); return; }
     $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/presets'), function (data) {
@@ -72,46 +76,52 @@
   function resolveCatalogTarget() {
     const tier = $('#node-input-delivery').val() || 'confirm';
     const isBuild = tier === 'build';
-    let vehicleId = '';
-    let dialect = 'ardupilotmega';
 
     if (isBuild) {
-      // Build tier: catalog source is the node's own Vehicle Profile picker.
-      vehicleId = $('#node-input-vehicle').val() || '';
-      if (vehicleId && typeof RED !== 'undefined' && RED.nodes && RED.nodes.node) {
+      // Build tier: use the dialect picker unless the Vehicle Profile escape is selected.
+      const dialectVal = $('#node-input-dialect').val() || '';
+      if (!dialectVal) return emptyCatalogTarget();
+      if (dialectVal !== '__vehicle') {
+        return {
+          key: 'dialect:' + dialectVal,
+          query: { dialect: dialectVal },
+          dialect: dialectVal,
+          vehicleId: '',
+        };
+      }
+      const vehicleId = $('#node-input-vehicle').val() || '';
+      let vehicleDialect = '';
+      if (vehicleId && RED.nodes && RED.nodes.node) {
         const vehicle = RED.nodes.node(vehicleId);
-        if (vehicle && vehicle.dialect) dialect = vehicle.dialect;
+        if (vehicle && vehicle.dialect) vehicleDialect = vehicle.dialect;
       }
-    } else {
-      // Wire tiers: catalog source is the connection's bound vehicle profile.
-      const connId = $('#node-input-connection').val();
-      if (connId && typeof RED !== 'undefined' && RED.nodes && RED.nodes.node) {
-        const conn = RED.nodes.node(connId);
-        if (conn && conn.vehicle) {
-          vehicleId = conn.vehicle;
-          const vehicle = RED.nodes.node(conn.vehicle);
-          if (vehicle && vehicle.dialect) dialect = vehicle.dialect;
-        }
+      if (vehicleId) {
+        return {
+          key: 'vehicle:' + vehicleId,
+          query: { vehicle: vehicleId, dialect: vehicleDialect },
+          dialect: vehicleDialect,
+          vehicleId: vehicleId,
+        };
       }
+      return emptyCatalogTarget();
     }
 
-    // Prefer vehicle id so a deployed custom profile serves its own bundle.
-    // Include dialect so an undeployed bundled profile can still serve a
-    // catalog; custom without a live node gets a 404 (never a silent default).
-    if (vehicleId) {
-      return {
-        key: 'vehicle:' + vehicleId,
-        query: { vehicle: vehicleId, dialect: dialect },
-        dialect: dialect,
-        vehicleId: vehicleId,
-      };
+    // Wire tiers: catalog source is the connection's bound vehicle profile.
+    const connId = $('#node-input-connection').val();
+    if (connId && RED.nodes && RED.nodes.node) {
+      const conn = RED.nodes.node(connId);
+      if (conn && conn.vehicle) {
+        const vehicle = RED.nodes.node(conn.vehicle);
+        const dialect = vehicle && vehicle.dialect ? vehicle.dialect : '';
+        return {
+          key: 'vehicle:' + conn.vehicle,
+          query: { vehicle: conn.vehicle, dialect: dialect },
+          dialect: dialect,
+          vehicleId: conn.vehicle,
+        };
+      }
     }
-    return {
-      key: 'dialect:' + dialect,
-      query: { dialect: dialect },
-      dialect: dialect,
-      vehicleId: '',
-    };
+    return emptyCatalogTarget();
   }
 
   /**
@@ -129,6 +139,13 @@
     if (_catalogByKey[requestedKey]) {
       _activeCatalogKey = requestedKey;
       cb(_catalogByKey[requestedKey]);
+      return;
+    }
+    if (!target.query) {
+      const emptyCatalog = { commands: [], enums: {}, dialect: '' };
+      _catalogByKey[requestedKey] = emptyCatalog;
+      _activeCatalogKey = requestedKey;
+      cb(emptyCatalog);
       return;
     }
     if (!_catalogInflight[requestedKey]) {
@@ -166,6 +183,12 @@
     const target = resolveCatalogTarget();
     if (_messageCatalogByKey[target.key]) {
       cb(_messageCatalogByKey[target.key]);
+      return;
+    }
+    if (!target.query) {
+      const emptyCatalog = { messages: [], enums: {}, dialect: '' };
+      _messageCatalogByKey[target.key] = emptyCatalog;
+      cb(emptyCatalog);
       return;
     }
     const seq = ++_messageRequestSeq;
@@ -269,7 +292,28 @@
       preset:            { value: 'arm' },
       advancedCommand:   { value: '' },
       delivery:          { value: 'confirm' },
-      vehicle:           { value: '', type: 'mavlink-vehicle', required: false },
+      dialect:           {
+        value: '',
+        validate: function (v) {
+          const $d = $('#node-input-delivery');
+          const tier = ($d && $d.length) ? $d.val() : (this.delivery || 'confirm');
+          if (tier === 'build') return !!v;
+          return true;
+        },
+      },
+      vehicle:           {
+        value: '',
+        type: 'mavlink-vehicle',
+        required: false,
+        validate: function (v) {
+          const $d = $('#node-input-delivery');
+          const tier = ($d && $d.length) ? $d.val() : (this.delivery || 'confirm');
+          const $dialect = $('#node-input-dialect');
+          const dialect = ($dialect && $dialect.length && $dialect.val()) ? $dialect.val() : (this.dialect || '');
+          if (tier === 'build' && dialect === '__vehicle') return !!v;
+          return true;
+        },
+      },
       connection:        { value: '', type: 'mavlink-connection', required: false },
       identity:          { value: '' },
       targetSysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
@@ -314,9 +358,11 @@
       function refreshVisibility() {
         const tier = $('#node-input-delivery').val() || 'confirm';
         const isBuild = tier === 'build';
+        const dialectVal = $('#node-input-dialect').val() || node.dialect || '';
 
-        // Build tier: show vehicle row; hide wire-tier rows.
-        $('#row-cmd-vehicle')[isBuild ? 'show' : 'hide']();
+        // Build tier: show dialect row; Vehicle Profile appears only for __vehicle.
+        $('#row-cmd-dialect')[isBuild ? 'show' : 'hide']();
+        $('#row-cmd-vehicle')[isBuild && dialectVal === '__vehicle' ? 'show' : 'hide']();
         $('#row-cmd-connection')[isBuild ? 'hide' : 'show']();
         $('#row-cmd-identity')[isBuild ? 'hide' : 'show']();
         $('#row-cmd-timeout')[isBuild ? 'hide' : 'show']();
@@ -583,6 +629,22 @@
       let presetMessagesCatalog = null;
       let presetMessagesKey = '';
 
+      const $dialect = $('#node-input-dialect');
+      $dialect.on('change', function () {
+        presetEnumsCatalog = { enums: {} };
+        presetEnumsLoaded = false;
+        presetEnumRequestSeq += 1;
+        presetMessagesCatalog = null;
+        presetMessagesKey = '';
+        refreshVisibility();
+        if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
+        if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
+      });
+      RED.mavlink.populateDialectSelect($dialect, {
+        saved: node.dialect || '',
+        includeVehicleEscape: true,
+      });
+
       function loadPresetEnums(cb) {
         if (presetEnumsLoaded) {
           cb();
@@ -709,6 +771,13 @@
         return base + ' (Ctrl/Cmd-click to select multiple flags.)';
       }
 
+      function booleanEntryLabel(entry) {
+        const name = entry && entry.name ? entry.name : '';
+        if (name === 'FALSE' || name.slice(-6) === '_FALSE') return 'false';
+        if (name === 'TRUE' || name.slice(-5) === '_TRUE') return 'true';
+        return entry.label || name;
+      }
+
       function selectedBitmaskValues(saved, entries) {
         if (saved === undefined || saved === null || saved === '') return [];
         let mask;
@@ -742,23 +811,25 @@
       function advancedParamInput(spec, enums) {
         const saved = savedParams[spec.index];
         if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
-          const isBitmask = !!spec.bitmask;
+          const entries = enums[spec.enum];
+          const falseTrue = RED.mavlink.isFalseTrueEnum(entries);
+          const isBitmask = !!spec.bitmask && !falseTrue;
           const sel = $('<select class="param-input"></select>')
             .attr('data-idx', spec.index)
-            .attr('data-kind', isBitmask ? 'bitmask' : 'enum')
+            .attr('data-kind', falseTrue ? 'enum' : (isBitmask ? 'bitmask' : 'enum'))
             .attr('title', isBitmask ? bitmaskTitle(spec.description) : (spec.description || ''));
           if (isBitmask) {
-            sel.attr('multiple', 'multiple').attr('size', Math.min(6, enums[spec.enum].length));
+            sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
           } else {
             sel.append($('<option></option>').val('').text('\u2014'));
           }
-          for (const entry of enums[spec.enum]) {
-            const $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
+          for (const entry of entries) {
+            const $opt = $('<option></option>').val(String(entry.value)).text(falseTrue ? booleanEntryLabel(entry) : entry.label);
             if (entry.description) $opt.attr('title', entry.description);
             sel.append($opt);
           }
           if (isBitmask) {
-            sel.val(selectedBitmaskValues(saved, enums[spec.enum]));
+            sel.val(selectedBitmaskValues(saved, entries));
           } else if (saved !== undefined && saved !== null && saved !== '') {
             sel.val(String(saved));
           }
@@ -792,14 +863,25 @@
           let entries = enums[spec.enumName] || [];
           if (!entries.length && spec.fallbackOptions) entries = spec.fallbackOptions;
           if (entries.length) {
-            const isBitmask = !!spec.bitmask;
+            const falseTrue = RED.mavlink.isFalseTrueEnum(entries);
+            const isBitmask = !!spec.bitmask && !falseTrue;
             const sel = $('<select class="param-input"></select>')
               .attr('data-idx', spec.index)
-              .attr('data-kind', isBitmask ? 'bitmask' : 'enum');
+              .attr('data-kind', falseTrue ? 'enum' : (isBitmask ? 'bitmask' : 'enum'));
             if (isBitmask) {
               sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
             }
-            fillSelect(sel, entries, { allowEmpty: !isBitmask, saved: saved });
+            if (falseTrue) {
+              sel.append($('<option></option>').val('').text('\u2014'));
+              for (const entry of entries) {
+                const $opt = $('<option></option>').val(String(entry.value)).text(booleanEntryLabel(entry));
+                if (entry.description) $opt.attr('title', entry.description);
+                sel.append($opt);
+              }
+              if (saved !== undefined && saved !== null && saved !== '') sel.val(String(saved));
+            } else {
+              fillSelect(sel, entries, { allowEmpty: !isBitmask, saved: saved });
+            }
             if (isBitmask) sel.val(selectedBitmaskValues(saved, entries));
             return sel;
           }
@@ -981,6 +1063,11 @@
 
   <hr style="margin:8px 0">
 
+  <div class="form-row" id="row-cmd-dialect">
+    <label for="node-input-dialect" style="width:120px">Dialect</label>
+    <select id="node-input-dialect" style="width:240px"></select>
+  </div>
+
   <div class="form-row" id="row-cmd-vehicle">
     <label for="node-input-vehicle" style="width:120px">Vehicle Profile</label>
     <input type="text" id="node-input-vehicle" style="width:240px">
@@ -1094,9 +1181,9 @@
 
   <h3>Delivery tiers</h3>
   <ul>
-    <li><b>Build</b> — construct the COMMAND_LONG and emit on output 0; no send. Uses the
-        <em>Vehicle Profile</em> field for the dialect and default target; identity and
-        connection are not used.</li>
+    <li><b>Build</b> — construct the COMMAND_LONG and emit on output 0; no send. Pick a bundled
+        <em>Dialect</em>, or choose <em>from Vehicle Profile…</em> to use a custom XML dialect
+        and that profile's default target. Identity and connection are not used.</li>
     <li><b>Send</b> — fire-and-forget; no acknowledgement waiting.</li>
     <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; retry on TEMPORARILY_REJECTED.</li>
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
@@ -1109,8 +1196,9 @@
     At runtime only <code>msg.payload</code> can override values; hidden fields are not honored.
   </p>
   <ul>
-    <li><b>Build tier</b>: Vehicle Profile row shown; Connection, identity, timeout, and retry
-        rows hidden. Target sysid/compid inherit from the Vehicle Profile's defaults.</li>
+    <li><b>Build tier</b>: Dialect row shown; Vehicle Profile row shown only when Dialect is
+        <em>from Vehicle Profile…</em>. Connection, identity, timeout, and retry rows hidden.
+        Target sysid/compid inherit from the Vehicle Profile only in that mode.</li>
     <li><b>Wire tiers</b> (Send / confirm / complete): Connection shown (required); identity
         (send-as) shown. Target rows follow the identity role:</li>
     <li><b>gcs / custom identity</b>: target sysid and compid shown; blank inherits the
@@ -1123,7 +1211,7 @@
   <p>
     <b>Preset</b> — hand-curated commands with pinned params and friendly names.
     <b>Advanced</b> — every <code>MAV_CMD</code> in the dialect as a dropdown; all
-    params exposed. Build tier uses the Vehicle Profile field; wire tiers use the
+    params exposed. Build tier uses the Dialect picker; wire tiers use the
     bound connection's profile. Bitmask params render as multi-selects;
     Ctrl/Cmd-click multiple flags and the editor stores their numeric mask.
   </p>
