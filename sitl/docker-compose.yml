@@ -1,0 +1,191 @@
+# Five ArduPilot + five PX4 + two companion SITL instances.
+# Usage:
+#   docker compose --profile sitl up -d --build
+#   docker compose --profile sitl --profile nodered up -d --build
+#
+# Node-RED on the host should bind:
+#   AP GCS 14550→14551 | PX4 GCS 14560→14561
+#   AP companion 14540→14541 | PX4 companion 14542→14543
+
+x-ap: &ap
+  build:
+    context: .
+    dockerfile: Dockerfile.ardupilot
+  image: nrc-mavlink-ap-sitl:local
+  profiles: ["sitl"]
+  restart: unless-stopped
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  environment: &ap-env
+    OUT_HOST: host.docker.internal
+    OUT_PORT: "14550"
+
+x-px4: &px4
+  build:
+    context: .
+    dockerfile: Dockerfile.px4
+  image: nrc-mavlink-px4-sitl:local
+  profiles: ["sitl"]
+  restart: unless-stopped
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  environment: &px4-env
+    OUT_HOST: host.docker.internal
+    OUT_PORT: "14560"
+    PX4_SIM_MODEL: sihsim_quadx
+    HEADLESS: "1"
+
+services:
+  ap-1:
+    <<: *ap
+    container_name: nrc-ap-1
+    environment:
+      <<: *ap-env
+      SYSID: "1"
+      INSTANCE: "0"
+    volumes:
+      - ./logs/ap-1:/logs
+      - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+
+  ap-2:
+    <<: *ap
+    container_name: nrc-ap-2
+    environment:
+      <<: *ap-env
+      SYSID: "2"
+      INSTANCE: "1"
+    volumes:
+      - ./logs/ap-2:/logs
+      - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+
+  ap-3:
+    <<: *ap
+    container_name: nrc-ap-3
+    environment:
+      <<: *ap-env
+      SYSID: "3"
+      INSTANCE: "2"
+    volumes:
+      - ./logs/ap-3:/logs
+      - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+
+  ap-4:
+    <<: *ap
+    container_name: nrc-ap-4
+    environment:
+      <<: *ap-env
+      SYSID: "4"
+      INSTANCE: "3"
+    volumes:
+      - ./logs/ap-4:/logs
+      - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+
+  ap-5:
+    <<: *ap
+    container_name: nrc-ap-5
+    environment:
+      <<: *ap-env
+      SYSID: "5"
+      INSTANCE: "4"
+    volumes:
+      - ./logs/ap-5:/logs
+      - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+
+  px4-11:
+    <<: *px4
+    container_name: nrc-px4-11
+    environment:
+      <<: *px4-env
+      SYSID: "11"
+      INSTANCE: "0"
+    volumes:
+      - ./logs/px4-11:/logs
+      - ./params/px4-logging.env:/params/px4-logging.env:ro
+
+  px4-12:
+    <<: *px4
+    container_name: nrc-px4-12
+    environment:
+      <<: *px4-env
+      SYSID: "12"
+      INSTANCE: "1"
+    volumes:
+      - ./logs/px4-12:/logs
+      - ./params/px4-logging.env:/params/px4-logging.env:ro
+
+  px4-13:
+    <<: *px4
+    container_name: nrc-px4-13
+    environment:
+      <<: *px4-env
+      SYSID: "13"
+      INSTANCE: "2"
+    volumes:
+      - ./logs/px4-13:/logs
+      - ./params/px4-logging.env:/params/px4-logging.env:ro
+
+  px4-14:
+    <<: *px4
+    container_name: nrc-px4-14
+    environment:
+      <<: *px4-env
+      SYSID: "14"
+      INSTANCE: "3"
+    volumes:
+      - ./logs/px4-14:/logs
+      - ./params/px4-logging.env:/params/px4-logging.env:ro
+
+  px4-15:
+    <<: *px4
+    container_name: nrc-px4-15
+    environment:
+      <<: *px4-env
+      SYSID: "15"
+      INSTANCE: "4"
+    volumes:
+      - ./logs/px4-15:/logs
+      - ./params/px4-logging.env:/params/px4-logging.env:ro
+
+  ap-companion-20:
+    <<: *ap
+    container_name: nrc-ap-companion-20
+    environment:
+      <<: *ap-env
+      SYSID: "20"
+      INSTANCE: "10"
+      OUT_PORT: "14540"
+    volumes:
+      - ./logs/ap-companion-20:/logs
+      - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+
+  px4-companion-21:
+    <<: *px4
+    container_name: nrc-px4-companion-21
+    environment:
+      <<: *px4-env
+      SYSID: "21"
+      INSTANCE: "10"
+      OUT_PORT: "14542"
+    volumes:
+      - ./logs/px4-companion-21:/logs
+      - ./params/px4-logging.env:/params/px4-logging.env:ro
+
+  nodered:
+    profiles: ["nodered"]
+    image: nodered/node-red:4.0
+    container_name: nrc-nodered
+    restart: unless-stopped
+    ports:
+      - "1880:1880"
+    environment:
+      TZ: UTC
+    volumes:
+      - nodered-data:/data
+      - ../:/opt/node-red-contrib-mavlink:ro
+      - ./nodered/install-and-start.sh:/install-and-start.sh:ro
+    entrypoint: ["/bin/bash", "/install-and-start.sh"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  nodered-data:

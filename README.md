@@ -68,11 +68,17 @@ the user directory with `--install-links` or a tarball (above) so the palette lo
 | `mavlink-mission` | Upload, download, or clear mission/fence/rally |
 | `mavlink-swarm` | Fan-out one action across selected vehicles |
 
+## SITL lab
+
+A Docker Compose harness (5× ArduPilot + 5× PX4 + companion sysids 20/21) lives in
+[`sitl/`](sitl/README.md). That short guide is the operator entry point for ports, `compose up`,
+and log checks.
+
 ## Examples
 
 Importable flows live in [`examples/`](examples/). Firmware pain-tests that need a live
-SITL rig are in [`examples/sitl/`](examples/sitl/) — see that folder's README for the
-five+five launch loop.
+SITL rig are in [`examples/sitl/`](examples/sitl/) — see that folder's README and the
+[`sitl/`](sitl/README.md) Docker lab.
 
 In the Node-RED editor: **Import → Examples → node-red-contrib-mavlink** (nested `sitl/`
 entries appear under the package examples folder).
@@ -89,9 +95,9 @@ entries appear under the package examples folder).
 | `sitl/13-param-defs-live.json` | Param read, set, and list — with live definition catalog |
 | `sitl/14-command-mission-basics.json` | Command presets, advanced `SET_MESSAGE_INTERVAL`, mission upload/download |
 
-The `sitl/` folder contains fourteen flows (01–14) covering completion timing, mode tables,
-PX4 param union, mission/fence/rally gating, swarm pacing, signing, and more. See
-[`examples/sitl/README.md`](examples/sitl/README.md) for the full index and launch commands.
+The `examples/sitl/` folder contains flows covering completion timing, mode tables,
+PX4 param union, mission/fence/rally gating, swarm pacing, signing, and companion mode.
+See [`examples/sitl/README.md`](examples/sitl/README.md) for the full index.
 
 Before deploying against a vehicle or SITL, set each example's **Connection** endpoints (`bind` is where traffic arrives — typically `127.0.0.1:14550`; `remote` is the vehicle/SITL input — often `14551`) and match the **Vehicle** dialect and default target system id to your link.
 

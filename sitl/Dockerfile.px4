@@ -1,0 +1,19 @@
+# Thin wrapper around the official PX4 SITL prebuilt image.
+# Build: docker build -f sitl/Dockerfile.px4 -t nrc-mavlink-px4-sitl sitl/
+# Override PX4_SITL_IMAGE if you need a different tag.
+
+ARG PX4_SITL_IMAGE=px4io/px4-sitl:latest
+FROM ${PX4_SITL_IMAGE}
+
+USER root
+COPY scripts/entrypoint-px4.sh /usr/local/bin/entrypoint-px4.sh
+COPY params/px4-logging.env /params/px4-logging.env
+RUN chmod +x /usr/local/bin/entrypoint-px4.sh \
+ && mkdir -p /logs \
+ && chmod 777 /logs
+
+ENV PX4_SIM_MODEL=sihsim_quadx \
+    HEADLESS=1
+
+VOLUME ["/logs"]
+ENTRYPOINT ["/usr/local/bin/entrypoint-px4.sh"]

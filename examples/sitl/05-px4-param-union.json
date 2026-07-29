@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 05 PX4 param union",
     "disabled": false,
-    "info": "Set an integer PX4 parameter and read it back to verify the int/float union survives — observable only against real PX4 firmware.",
+    "info": "Set an integer PX4 parameter and read it back to verify the int/float union survives \u2014 observable only against real PX4 firmware.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl05-tab",
     "name": "PX4 INT32 param set then read (union, not float cast)",
-    "info": "Sets COM_RC_IN_MODE as MAV_PARAM_TYPE_INT32 then reads it back. The echo integer must match exactly — a float-cast neighbour value means the union was mishandled.\n\nLaunch PX4 SITL (sysid 11; ports version-specific):\n  make px4_sitl gazebo\n  # export MAV_SYS_ID=11; point Connection remote at your PX4 GCS port\n\nConnection: bind 127.0.0.1:14555, remote per your PX4 build (verify — do not assume ArduPilot's 14551).",
+    "info": "Sets COM_RC_IN_MODE as MAV_PARAM_TYPE_INT32 then reads it back. The echo integer must match exactly \u2014 a float-cast neighbour value means the union was mishandled.\n\nLaunch PX4 SITL (sysid 11; ports version-specific):\n  make px4_sitl gazebo\n  # export MAV_SYS_ID=11; point Connection remote at your PX4 GCS port\n\nConnection: bind 127.0.0.1:14560, remote 127.0.0.1:14561.",
     "x": 260,
     "y": 40,
     "wires": []
@@ -45,9 +45,9 @@
     "name": "UDP PX4 SITL",
     "mode": "udp",
     "bindHost": "127.0.0.1",
-    "bindPort": 14555,
+    "bindPort": 14560,
     "remoteHost": "127.0.0.1",
-    "remotePort": 14550,
+    "remotePort": 14561,
     "broadcast": false,
     "vehicle": "sitl05-vehicle",
     "localIdentity": "sitl05-identity",
