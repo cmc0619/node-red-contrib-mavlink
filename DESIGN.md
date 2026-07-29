@@ -388,7 +388,11 @@ enum reference. A param without `enum=` is a scalar — latitude, yaw, altitude,
 and a dropdown there would be wrong.
 
 **Help lives in hover text and the help panel.** Descriptions ride as tooltips. Inline hints
-are limited to units and range. The dialog stays compact.
+are limited to units and range. The dialog stays compact. Tooltip *text* always comes from the
+dialect registry / admin catalogs (enum entry, message, command, command-param, param-def, or
+Payload field-tips join) — never from baked protocol copy in editor HTML. Structural joins
+(which UI field maps to which `MAV_CMD` param index) live next to the wire builder in
+`lib/payload`; the hover string is still the XML description.
 
 ### Addressing and identity — the role × tier matrix
 

@@ -72,3 +72,18 @@ test('Payload template has no baked MAVLink description titles', () => {
     );
   }
 });
+
+test('Payload editor loads field tips from /mavlink/payload/field-tips', () => {
+  const html = readHtml('mavlink-payload');
+  assert.match(html, /\/mavlink\/payload\/field-tips/);
+  assert.match(html, /refreshPayloadFieldTips/);
+  assert.match(html, /RED\.mavlink\.applyFieldTitle/);
+  // Sequence is a tip target — description comes from the dialect join, not HTML.
+  assert.match(html, /['"]sequence['"]/);
+  assert.match(html, /node-input-sequence/);
+});
+
+test('shared applyFieldTitle helper lives on RED.mavlink', () => {
+  const html = readHtml('mavlink-local-identity');
+  assert.match(html, /RED\.mavlink\.applyFieldTitle\s*=\s*function/);
+});

@@ -1,13 +1,83 @@
 'use strict';
 
-const { buildPayloadMessage } = require('../lib/payload');
+const {
+  buildPayloadMessage,
+  fieldTipsFromBundle,
+} = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
 const { AckWaiter } = require('../lib/command');
 const { resolveActionTarget, profileFromVehicleNode } = require('../lib/addressing/resolve');
 
 const BADGE_MAX = 24;
+const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';
+
+/** Guard against double-registering the admin route (one per process). */
+let _fieldTipsRouteRegistered = false;
 
 module.exports = function registerMavlinkPayload(RED) {
+  if (!_fieldTipsRouteRegistered && RED.httpAdmin && RED.auth) {
+    _fieldTipsRouteRegistered = true;
+    let metadataApi = null;
+    try {
+      metadataApi = require('../lib/metadata');
+    } catch {
+      metadataApi = null;
+    }
+
+    /**
+     * GET /mavlink/payload/field-tips?topic=&verb=&path=&vehicle=&dialect=
+     * Returns `{ fields: { sequence: "<dialect description>", … } }` joined from
+     * the structural payload bindings + the dialect bundle (DESIGN.md §6).
+     */
+    RED.httpAdmin.get(
+      FIELD_TIPS_ROUTE,
+      RED.auth.needsPermission('mavlink.read'),
+      (req, res) => {
+        const topic = typeof req.query.topic === 'string' ? req.query.topic.trim() : '';
+        const verb = typeof req.query.verb === 'string' ? req.query.verb.trim() : '';
+        const path = typeof req.query.path === 'string' ? req.query.path.trim() : '';
+        if (!topic || !verb) {
+          return res.json({ fields: {}, dialect: '' });
+        }
+        if (!metadataApi) {
+          return res.status(503).json({ fields: {}, error: 'metadata unavailable' });
+        }
+        try {
+          const vehicleId = typeof req.query.vehicle === 'string'
+            ? req.query.vehicle.trim()
+            : '';
+          let bundle = null;
+          let dialect = '';
+          if (vehicleId) {
+            const vehicleNode = RED.nodes.getNode(vehicleId);
+            if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
+              bundle = vehicleNode.getDialect();
+              dialect = vehicleNode.dialect || (bundle && bundle.dialect) || 'custom';
+            }
+          }
+          if (!bundle) {
+            const requested = typeof req.query.dialect === 'string'
+              ? req.query.dialect.trim()
+              : '';
+            const known = metadataApi.knownDialects();
+            const name = requested && known.includes(requested) ? requested : 'ardupilotmega';
+            bundle = metadataApi.loadBundled(name);
+            dialect = name;
+          }
+          return res.json({
+            dialect,
+            fields: fieldTipsFromBundle(bundle, topic, verb, path),
+          });
+        } catch (err) {
+          return res.status(400).json({
+            fields: {},
+            error: err && err.message ? err.message : String(err),
+          });
+        }
+      }
+    );
+  }
+
   function MavlinkPayloadNode(config) {
     RED.nodes.createNode(this, config);
     const node = this;

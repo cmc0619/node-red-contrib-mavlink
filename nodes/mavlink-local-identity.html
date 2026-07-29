@@ -182,7 +182,6 @@
         else $select.removeAttr('title');
       }
       $select.off('change.mavEnumTip').on('change.mavEnumTip', syncEnumSelectTitle);
-      syncEnumSelectTitle();
       if (saved && !$select.find('option[value="' + saved + '"]').length) {
         $select.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
       }
@@ -190,6 +189,27 @@
         $select.val(saved);
       } else if (entries && entries.length) {
         $select.val(String(entries[0][valueKey]));
+      }
+      syncEnumSelectTitle();
+    };
+
+    /**
+     * Apply a dialect-sourced description as `title` on an input and its label.
+     * Empty/missing text clears any previous tip (no baked fallback).
+     *
+     * @param {string} inputId  e.g. `node-input-sequence`
+     * @param {string} [text]
+     */
+    RED.mavlink.applyFieldTitle = function (inputId, text) {
+      var $input = $('#' + inputId);
+      if (!$input.length) return;
+      var tip = text != null ? String(text).trim() : '';
+      if (tip) $input.attr('title', tip);
+      else $input.removeAttr('title');
+      var $label = $input.closest('.form-row').find('label').first();
+      if ($label.length) {
+        if (tip) $label.attr('title', tip);
+        else $label.removeAttr('title');
       }
     };
 

@@ -145,8 +145,87 @@
       var enumCatalog = { enums: {} };
       var enumCatalogLoaded = false;
       var enumRequestSeq = 0;
+      var tipRequestSeq = 0;
       var paintedModeEnum = null;
       var paintedReleaseEnum = null;
+      /** Payload value fields that may receive dialect-sourced titles. */
+      var TIP_FIELDS = [
+        'cameraId', 'count', 'interval', 'sequence',
+        'streamId', 'statusFrequency',
+        'distance', 'shutter', 'trigger',
+        'pitch', 'roll', 'yaw', 'pitchRate', 'yawRate',
+        'flags', 'gimbalDeviceId',
+        'modeValue', 'stabilizeRoll', 'stabilizePitch', 'stabilizeYaw',
+        'lat', 'lon', 'alt',
+        'servo', 'pwm', 'period',
+        'instance', 'actionValue', 'length', 'rate'
+      ];
+
+      function catalogQuery() {
+        var query = {};
+        var delivery = $('#node-input-delivery').val() || 'build';
+        var vehicle = '';
+        var dialect = '';
+        if (delivery === 'build') {
+          vehicle = $('#node-input-vehicle').val() || '';
+        } else {
+          var connection = $('#node-input-connection').val() || '';
+          if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
+            var conn = RED.nodes.node(connection);
+            if (conn && conn.vehicle) {
+              vehicle = conn.vehicle;
+              var profile = RED.nodes.node(conn.vehicle);
+              if (profile && profile.dialect) dialect = profile.dialect;
+            }
+          }
+        }
+        if (vehicle && !dialect && RED.nodes && typeof RED.nodes.node === 'function') {
+          var own = RED.nodes.node(vehicle);
+          if (own && own.dialect) dialect = own.dialect;
+        }
+        if (vehicle) query.vehicle = vehicle;
+        if (dialect) query.dialect = dialect;
+        return query;
+      }
+
+      function clearPayloadFieldTips() {
+        if (!(RED.mavlink && typeof RED.mavlink.applyFieldTitle === 'function')) return;
+        for (var i = 0; i < TIP_FIELDS.length; i++) {
+          RED.mavlink.applyFieldTitle('node-input-' + TIP_FIELDS[i], '');
+        }
+      }
+
+      /**
+       * Join structural payload bindings to dialect command/message descriptions
+       * via /mavlink/payload/field-tips — never bake protocol copy into HTML (§6).
+       */
+      function refreshPayloadFieldTips() {
+        if (!(RED.mavlink && typeof RED.mavlink.adminApiUrl === 'function')) return;
+        if (typeof RED.mavlink.applyFieldTitle !== 'function') return;
+        var topic = $('#node-input-topic').val() || 'camera';
+        var verb = $('#node-input-verb').val() || '';
+        var path = $('#node-input-path').val() || 'legacy';
+        if (!verb) {
+          clearPayloadFieldTips();
+          return;
+        }
+        var query = catalogQuery();
+        query.topic = topic;
+        query.verb = verb;
+        query.path = path;
+        var seq = ++tipRequestSeq;
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, function (data) {
+          if (seq !== tipRequestSeq) return;
+          clearPayloadFieldTips();
+          var fields = (data && data.fields) || {};
+          Object.keys(fields).forEach(function (name) {
+            RED.mavlink.applyFieldTitle('node-input-' + name, fields[name]);
+          });
+        }).fail(function () {
+          if (seq !== tipRequestSeq) return;
+          clearPayloadFieldTips();
+        });
+      }
 
       function loadPayloadEnums(cb) {
         if (enumCatalogLoaded) {
@@ -293,6 +372,7 @@
         $('#row-payload-action').toggle(!!show.action);
         $('#row-payload-length').toggle(!!show.length);
         $('#row-payload-rate').toggle(!!show.rate);
+        refreshPayloadFieldTips();
       }
 
       function savedForEnum(painted, enumName, currentVal, nodeVal) {
@@ -374,6 +454,7 @@
         }
         refreshEnumControls();
       });
+      $('#node-input-vehicle').on('change', refreshPayloadFieldTips);
       refreshVerbOptions(true);
       refreshEnumControls();
 
