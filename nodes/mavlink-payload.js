@@ -116,10 +116,10 @@ module.exports = function registerMavlinkPayload(RED) {
               if (activeWaiter === waiter) activeWaiter = null;
               if (outcome.result === 'accepted') {
                 completeAck(node, emit, built, outcome);
+                if (done) done();
               } else {
-                failAck(node, emit, built, outcome);
+                failAck(node, emit, built, outcome, msg, done);
               }
-              if (done) done();
             })
             .catch((err) => {
               if (activeWaiter === waiter) activeWaiter = null;
@@ -251,9 +251,8 @@ function completeAck(node, emit, built, outcome) {
   ]);
 }
 
-function failAck(node, emit, built, outcome) {
+function failAck(node, emit, built, outcome, msg, done) {
   node.status({ fill: 'red', shape: 'ring', text: cap(`${built.message.name} ${outcome.result}`) });
-  node.error(`mavlink-payload: ${built.message.name} ${outcome.result}`);
   emit([
     null,
     statusRecord(outcome.result, outcome.detail || 'command not accepted', {
@@ -264,6 +263,7 @@ function failAck(node, emit, built, outcome) {
       elapsed: outcome.elapsed,
     }),
   ]);
+  reportDoneError(node, new Error(`mavlink-payload: ${built.message.name} ${outcome.result}`), msg, done);
 }
 
 function valuesFrom(config) {

@@ -52,6 +52,7 @@
       },
       inputs: 1,
       outputs: 2,
+      outputLabels: ['continue', 'status'],
       icon: 'font-awesome/fa-table',
       label: function () { return this.name || 'mavlink state'; },
       oneditprepare: function () {
@@ -100,4 +101,9 @@
 
 <script type="text/html" data-help-name="mavlink-state">
   <p>Reads the Connection-owned peer table. Snapshot mode emits the current peer-table view on input; feed mode emits selected transition and STATUSTEXT records as they arrive.</p>
+  <h3>Outputs</h3>
+  <ol class="node-ports">
+    <li>Continue — snapshot peers (on input) or feed records as they arrive.</li>
+    <li>Status — terminal status on every snapshot outcome (success or failure). Feed mode uses output 0 only for the event stream.</li>
+  </ol>
 </script>

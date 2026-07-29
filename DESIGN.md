@@ -120,7 +120,7 @@ ground truth, drift asserts — never as defensive branches in the shipping code
 | dialog fields load and save | `node-input-<prop>` / `node-config-input-<prop>` ids auto-populate and auto-save. `oneditprepare`/`oneditsave` exist only for what that cannot do: dynamically built selects, TypedInput, reshaping |
 | dialog layout and widgets | `form-row` rows, `red-ui-button`, `TypedInput`, `RED.editor.createEditor` — no custom widget where a stock one exists |
 | runtime state in the editor | `node.status({fill, shape, text})` — text under 20 characters, `{}` clears |
-| errors while handling a message | report through **one** Catch path: `done(err)` when the done callback is present, otherwise `node.error(err, msg)`. Never both with an Error — that double-fires Catch. Input handlers take `(msg, send, done)` and never throw uncaught |
+| errors while handling a message | **one** Catch path: `done(err)` when `done` is present; `node.error(err, msg)` only if there is no `done`. Never `node.error` then bare `done()` — that is the wrong pairing (Catch via error, message finished as success). Do not leave throws uncaught from the handler; catch and call `done(err)`. (§2 notes that a slipped throw is contained by Node-RED — that is a safety net, not the preferred path.) |
 | replying in a flow | reuse the received `msg` object; send via the listener-provided `send` |
 | cleanup on redeploy | the `close` handler (accepting `done` when async) |
 | help text | `data-help-name` with `<h3>` sections and `message-properties` definition lists |
@@ -817,8 +817,9 @@ target, elapsed time, retry count. This is the Debug wire, and it is always the 
 regardless of what happened. Branching on failure is a `switch` on the result, which is cheaper
 than the alternative of teeing successes out of port 0 to see them.
 
-Failures report through one Catch path (`done(err)` or else `node.error(err, msg)` — never both
-with an Error). That is independent of the ports.
+Failures report through **`done(err)`** when the input handler has a `done` callback
+(`node.error(err, msg)` only if `done` is absent). Never `node.error` then bare `done()`.
+That is independent of the ports.
 
 Mission and Param conform: their progress updates are status records, not a separate port.
 Status records are plain objects on output 1 (typically at message root: `msg.result`, …) —
@@ -1632,8 +1633,19 @@ look identical, so engineer against the mistake."
 *Fact:* Silence on output 0 already stops the chain on failure. A stamp/refusal path is
 guardrail for bad wiring, not protocol. Status records are plain objects on output 1 (root
 fields such as `result` / `detail`). The only suppress sentinel is `msg.payload === false`.
-Catch uses one path (`done(err)` **or** `node.error(err, msg)`, never both with an Error).
+Catch uses `done(err)` when available — not `node.error` then bare `done()`.
 Palette category is lowercase `'mavlink'` for every palette node; State declares `outputs: 2`.
 *Check:* `rg -n '__mavlinkStatusRecord__|_mavlinkStatus|refuseIfStatus|isStatusRecord' lib nodes`
 returns nothing; `node --test test/delivery/delivery.test.js test/command/node.test.js
 test/move/node.test.js test/payload/node.test.js test/state/node.test.js`.
+
+**Input-handler Catch is `done(err)`, not `node.error` + bare `done()`.**
+*Wrong belief:* Calling `node.error(err, msg)` then `done()` (no argument) is the safe way to
+both notify Catch and finish the message.
+*Fact:* With a `done` callback, `done(err)` is the single Catch path. `node.error` then bare
+`done()` pairs an error report with a successful finish. Use `reportDoneError` from
+`lib/delivery` (it calls `done(err)`, or `node.error` only when `done` is missing). A throw
+that escapes the handler is contained by Node-RED (§2) but is not the preferred path — catch
+and `done(err)`.
+*Check:* `rg -n 'node\\.error\\([^)]*\\)[\\s\\S]{0,40}done\\(\\)' nodes/mavlink-*.js` finds no
+input-handler pairs; `node --test test/delivery/delivery.test.js test/swarm/node.test.js`.

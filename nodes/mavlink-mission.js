@@ -119,9 +119,8 @@ module.exports = function registerMavlinkMission(RED) {
           reason: `${firmware} does not support ${missionTypeKey} over the mission protocol`,
         });
         applyActionStatus(node, 'error', `no ${missionTypeKey} on ${firmware}`);
-        node.error(`mavlink-mission: ${rec.reason}`, msg);
         emit([null, rec]);
-        finish();
+        reportDoneError(node, new Error(`mavlink-mission: ${rec.reason}`), msg, done);
         return;
       }
       const missionType = missionTypeValue(missionTypeKey);
@@ -139,9 +138,8 @@ module.exports = function registerMavlinkMission(RED) {
             seq: check.seq,
           });
           applyActionStatus(node, 'error', `invalid ${missionTypeKey} item`);
-          node.error(`mavlink-mission: ${check.reason}`, msg);
           emit([null, rec]);
-          finish();
+          reportDoneError(node, new Error(`mavlink-mission: ${check.reason}`), msg, done);
           return;
         }
       }
@@ -158,9 +156,8 @@ module.exports = function registerMavlinkMission(RED) {
           reason: 'clear is destructive — enable confirmation or set msg.confirmed = true',
         });
         applyActionStatus(node, 'error', `confirm clear ${missionTypeKey}`);
-        node.error(`mavlink-mission: ${rec.reason}`, msg);
         emit([null, rec]);
-        finish();
+        reportDoneError(node, new Error(`mavlink-mission: ${rec.reason}`), msg, done);
         return;
       }
 
@@ -189,9 +186,8 @@ module.exports = function registerMavlinkMission(RED) {
           reason: `a ${missionTypeKey} transfer is already in progress for this target`,
         });
         applyActionStatus(node, 'error', `${missionTypeKey} busy`);
-        node.error(`mavlink-mission: ${rec.reason}`, msg);
         emit([null, rec]);
-        finish();
+        reportDoneError(node, new Error(`mavlink-mission: ${rec.reason}`), msg, done);
         return;
       }
 
@@ -233,14 +229,17 @@ module.exports = function registerMavlinkMission(RED) {
           if (outcome.result === 'succeeded') {
             applyActionStatus(node, 'ok', successBadge(operation, missionTypeKey, outcome));
             emit([{ payload: rec }, rec]);
+            finish();
+          } else if (outcome.result === 'cancelled') {
+            applyActionStatus(node, 'error', `${operation} ${outcome.result}`);
+            emit([null, rec]);
+            finish();
           } else {
             applyActionStatus(node, 'error', `${operation} ${outcome.result}`);
-            if (outcome.result !== 'cancelled') {
-              node.error(`mavlink-mission: ${operation} ${outcome.result}: ${outcome.reason || ''}`, msg);
-            }
             emit([null, rec]);
+            const detail = `${operation} ${outcome.result}${outcome.reason ? `: ${outcome.reason}` : ''}`;
+            reportDoneError(node, new Error(`mavlink-mission: ${detail}`), msg, done);
           }
-          finish();
         })
         .catch((err) => {
           if (activeByKey.get(lockKey) === machine) activeByKey.delete(lockKey);

@@ -170,7 +170,13 @@ test('mavlink-swarm node gates a safety preset on msg.confirmed / node confirm (
   // No confirmation anywhere → refused, nothing sent.
   const gated = new Node({ connection: 'conn', actionType: 'command', preset: 'flight_termination', delivery: 'send' });
   let sent;
-  await emitInput(gated, { payload: { 1: 1 } }, (m) => { sent = m; });
+  const err = await emitInput(gated, { payload: { 1: 1 } }, (m) => { sent = m; }).then(
+    () => null,
+    (e) => e
+  );
+  assert.ok(err, 'refused safety preset is passed to done(err)');
+  assert.match(err.message, /mavlink-swarm: refused/);
+  assert.ok(sent, 'status output is emitted before done(err)');
   assert.equal(sent[0], null);
   assert.equal(sent[1].result, 'refused');
   assert.match(sent[1].detail, /confirm/i);

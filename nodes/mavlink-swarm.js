@@ -66,16 +66,17 @@ module.exports = function registerMavlinkSwarm(RED) {
         });
 
         applyAggregateStatus(node, aggregate);
-        if (!aggregate.success && aggregate.result !== 'dry_run') {
-          node.error(`mavlink-swarm: ${aggregate.result}`, msg);
-        }
         // Output 1 carries the aggregate status record at the message root.
         // Output 0 (continue) wraps the aggregate under msg.payload as a normal
         // trigger (§9).
         emit(aggregate.continue
           ? [{ payload: aggregate }, aggregate]
           : [null, aggregate]);
-        if (done) done();
+        if (!aggregate.success && aggregate.result !== 'dry_run') {
+          reportDoneError(node, new Error(`mavlink-swarm: ${aggregate.result}`), msg, done);
+        } else if (done) {
+          done();
+        }
       } catch (err) {
         const record = delivery.makeStatusRecord({
           node: 'mavlink-swarm',

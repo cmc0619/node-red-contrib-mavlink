@@ -1127,8 +1127,9 @@
 
   <h3>Details</h3>
   <p>
-    Wiring output 1 (status) directly into this node's input is detected and reported
-    as a miswire — the chain would otherwise advance on failure.
+    Output 0 (continue) fires only on success — that is what stops a chain on failure.
+    Wiring output 1 (status) into another action is not refused; suppress with
+    <code>msg.payload === false</code> when you need an explicit hold.
   </p>
   <p>
     On ACK timeout the node checks the peer table. If the completion condition is

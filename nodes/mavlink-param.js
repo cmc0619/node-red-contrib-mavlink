@@ -194,8 +194,7 @@ module.exports = function registerMavlinkParam(RED) {
           if (!pending || pending.gen !== myGen) return;
           const finishDone = pending.done;
           clearPending(false);
-          fn();
-          if (finishDone) finishDone();
+          fn(finishDone);
         }
 
         const collector = isCollectList ? createParamListCollector() : null;
@@ -203,19 +202,23 @@ module.exports = function registerMavlinkParam(RED) {
           if (!pending || pending.gen !== myGen) return;
           if (isConfirmSet) {
             if (!matchesParamEcho(request, decoded)) return;
-            settle(() =>
-              completeResult(node, emit, 'succeeded', 'echo-confirmed', decoded));
+            settle((finishDone) => {
+              completeResult(node, emit, 'succeeded', 'echo-confirmed', decoded);
+              if (finishDone) finishDone();
+            });
           } else {
             const params = collector.accept(decoded);
             if (!params) return;
-            settle(() =>
-              completeResult(node, emit, 'succeeded', 'list-complete', params));
+            settle((finishDone) => {
+              completeResult(node, emit, 'succeeded', 'list-complete', params);
+              if (finishDone) finishDone();
+            });
           }
         });
 
         const timer = setTimeout(() => {
-          settle(() =>
-            timeoutResult(node, emit, isConfirmSet ? 'echo timeout' : 'list timeout'));
+          settle((finishDone) =>
+            timeoutResult(node, emit, isConfirmSet ? 'echo timeout' : 'list timeout', msg, finishDone));
         }, timeoutMs);
 
         pending = { unsubscribe, timer, done: done || null, gen: myGen };
@@ -284,10 +287,10 @@ function completeResult(node, emit, result, detail, payload) {
   emit([{ payload }, statusRecord(result, detail, { payload })]);
 }
 
-function timeoutResult(node, emit, detail) {
+function timeoutResult(node, emit, detail, msg, done) {
   applyActionStatus(node, 'error', detail);
-  node.error(`mavlink-param: ${detail}`);
   emit([null, statusRecord('timed-out', detail)]);
+  reportDoneError(node, new Error(`mavlink-param: ${detail}`), msg, done);
 }
 
 function fail(node, emit, err, msg, done) {
