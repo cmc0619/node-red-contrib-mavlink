@@ -118,7 +118,13 @@ test('Command preset controls render before tip catalog arrives', () => {
 test('Command catalog loads coalesce waiters per target key', () => {
   const html = readHtml('mavlink-command');
   assert.match(html, /_catalogInflight/);
+  // Second consumer for the same key joins the in-flight queue (no second HTTP).
   assert.match(html, /_catalogInflight\[requestedKey\]\.push\(cb\)/);
+  // Both waiters receive the resolved catalog (CodeRabbit #36 concurrent consumers).
+  assert.match(
+    html,
+    /for \(let i = 0; i < waiters\.length; i\+\+\) waiters\[i\]\(catalog\)/
+  );
   assert.match(html, /resolveCatalogTarget\(\)\.key !== requestedKey/);
 });
 
