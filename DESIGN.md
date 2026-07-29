@@ -1178,9 +1178,11 @@ Vehicle Profile carries the firmware field: PX4, ArduPilot, or custom. It affect
 - **Parameter encoding** — `PARAM_SET` / `PARAM_VALUE` carry typed values in a float slot.
   Encoding is resolved as: explicit `msg.payload.paramEncoding` (`bytewise` | `c-cast`) →
   peer `AUTOPILOT_VERSION.capabilities` (`PARAM_ENCODE_BYTEWISE` / `PARAM_ENCODE_C_CAST`) →
-  firmware fallback (PX4 → bytewise bit-cast; otherwise C-cast). A present override outside
-  those two values is rejected (dynamic `msg` input); only an absent override falls through.
-  Do not invent encoding from firmware alone when the peer has advertised a capability bit.
+  known firmware (PX4 → bytewise bit-cast; any other named firmware → C-cast). Missing
+  firmware after those steps fails loud — do not invent ArduPilot/C-cast. A present override
+  outside the two legal values is rejected (dynamic `msg` input); only an absent override
+  falls through. Do not invent encoding from firmware alone when the peer has advertised a
+  capability bit.
 - **Command support** — not every `MAV_CMD` is implemented by both stacks.
 
 Custom means: use the compiled dialect, offer no firmware-specific behavior, and do not pretend
@@ -1699,17 +1701,19 @@ and `done(err)`.
 *Check:* `node --test test/delivery/catch-path-scan.test.js` (source scan of `nodes/mavlink-*.js`);
 `node --test test/delivery/delivery.test.js test/swarm/node.test.js`.
 
-**Param encoding follows override → capabilities → firmware, not firmware alone.**
+**Param encoding follows override → capabilities → known firmware, not invented ArduPilot.**
 *Wrong belief:* `firmware === 'px4'` is the only signal for bytewise int/float union encoding;
-peer `AUTOPILOT_VERSION.capabilities` is stored for display and unused at send time.
+peer `AUTOPILOT_VERSION.capabilities` is stored for display and unused at send time; and when
+firmware is also absent the encoder may assume ArduPilot/C-cast.
 *Fact:* Spec bits are `MAV_PROTOCOL_CAPABILITY_PARAM_ENCODE_BYTEWISE` (16) and
 `…_PARAM_ENCODE_C_CAST` (131072). Resolution is explicit `msg.payload.paramEncoding` → those
-capability bits from the peer table → firmware fallback (PX4 → bytewise, else C-cast). A
-present-but-invalid override rejects rather than falling through (silent wrong encoding would
-corrupt integer `PARAM_SET`). ArduPilot often omits the C_CAST bit, so firmware fallback
-remains required.
-*Check:* `node --test test/param/param.test.js test/param/node.test.js` — look for
-`resolveParamEncoding` / capabilities tests.
+capability bits → named firmware (PX4 → bytewise, else C-cast). A present-but-invalid override
+rejects rather than falling through. An empty ladder throws. Firmware for Param/Mission is
+`firstDefined(payload.firmware, profile.firmware)` — Vehicle Profile's editor-required field
+covers real paths; do not invent `'ardupilot'`. ArduPilot often omits the C_CAST bit, so the
+named-firmware step remains required when capabilities are absent.
+*Check:* `node --test test/param/param.test.js test/addressing/resolve.test.js` — look for
+`resolveParamEncoding` / unresolved / firstDefined firmware tests.
 
 **Target resolution is once; builders do not re-default; no hardcoded final `1`.**
 *Wrong belief:* Move/Param/Payload need local (or shared) `normalizeTarget`; runtime must

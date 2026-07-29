@@ -133,10 +133,10 @@ test('resolveParamEncoding: capabilities beat firmware when no explicit override
   );
 });
 
-test('resolveParamEncoding: firmware fallback when capabilities absent', () => {
+test('resolveParamEncoding: known firmware when capabilities absent; missing fails loud', () => {
   assert.equal(resolveParamEncoding({ firmware: 'px4' }), PARAM_ENCODING.BYTEWISE);
   assert.equal(resolveParamEncoding({ firmware: 'ardupilot' }), PARAM_ENCODING.C_CAST);
-  assert.equal(resolveParamEncoding({}), PARAM_ENCODING.C_CAST);
+  assert.throws(() => resolveParamEncoding({}), /param encoding unresolved/);
 });
 
 test('resolveParamEncoding: present-but-invalid override rejects (no silent fallthrough)', () => {

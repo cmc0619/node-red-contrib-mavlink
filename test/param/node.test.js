@@ -18,7 +18,14 @@ test('mavlink-param node builds PARAM_SET from msg payload values', () => {
 
   node.emit(
     'input',
-    { payload: { paramId: 'FOO', value: 12, paramType: 'MAV_PARAM_TYPE_REAL32' } },
+    {
+      payload: {
+        paramId: 'FOO',
+        value: 12,
+        paramType: 'MAV_PARAM_TYPE_REAL32',
+        firmware: 'ardupilot',
+      },
+    },
     (messages) => {
       sent = messages;
     },
@@ -155,7 +162,9 @@ test('mavlink-param cancels a prior in-flight subscription when a second op star
 
 test('mavlink-param companion identity derives sysid; echo from sysid 42 confirms, sysid 1 ignored', () => {
   // Companion identity: sysid derived from airframe (42), compid pinned to 1.
-  const conn = connStubFull({ vehicle: { targetSysid: 1, targetCompid: 1 } });
+  const conn = connStubFull({
+    vehicle: { targetSysid: 1, targetCompid: 1, firmware: 'ardupilot' },
+  });
   const identityNode = { derivesSysidFromVehicle: true, getIdentity: () => ({ sysid: 42, compid: 191 }) };
   const RED = redStub({ conn, identity: identityNode });
   require('../../nodes/mavlink-param')(RED);
@@ -188,7 +197,9 @@ test('mavlink-param companion identity derives sysid; echo from sysid 42 confirm
 });
 
 test('mavlink-param payload.target overrides companion derivation', () => {
-  const conn = connStubFull({ vehicle: { targetSysid: 1, targetCompid: 1 } });
+  const conn = connStubFull({
+    vehicle: { targetSysid: 1, targetCompid: 1, firmware: 'ardupilot' },
+  });
   const identityNode = { derivesSysidFromVehicle: true, getIdentity: () => ({ sysid: 42, compid: 191 }) };
   const RED = redStub({ conn, identity: identityNode });
   require('../../nodes/mavlink-param')(RED);
@@ -355,7 +366,9 @@ test('mavlink-param firmware follows profile not stale config (profile px4 → f
 });
 
 test('mavlink-param wire tier inherits from connection vehicle profile', () => {
-  const conn = connStubFull({ vehicle: { targetSysid: 55, targetCompid: 200 } });
+  const conn = connStubFull({
+    vehicle: { targetSysid: 55, targetCompid: 200, firmware: 'ardupilot' },
+  });
   const RED = redStub({ conn });
   require('../../nodes/mavlink-param')(RED);
   const Node = RED.nodes.types['mavlink-param'];
@@ -376,10 +389,13 @@ test('mavlink-param wire tier inherits from connection vehicle profile', () => {
 /**
  * Connection stub that records subscription filters and unsubscribe calls.
  */
-function connStub() {
+function connStub(opts) {
+  opts = opts || {};
   const subs = [];
   return {
     subs,
+    // Wire-tier profile must carry firmware — runtime no longer invents ardupilot.
+    vehicle: opts.vehicle || { targetSysid: 1, targetCompid: 1, firmware: 'ardupilot' },
     send() {},
     subscribe(filter, handler) {
       const entry = { filter, handler, active: true };
@@ -405,7 +421,7 @@ function connStubFull(opts) {
   const stub = {
     subs,
     sent,
-    vehicle: opts.vehicle || null,
+    vehicle: opts.vehicle || { targetSysid: 1, targetCompid: 1, firmware: 'ardupilot' },
     peerTable: opts.peerTable || null,
     send(message, options) {
       sent.push({ message, options });

@@ -5,8 +5,8 @@ const assert = require('node:assert/strict');
 
 const {
   resolveActionTarget,
-  resolveFirmware,
   profileFromVehicleNode,
+  firstDefined,
 } = require('../../lib/addressing');
 
 const PROFILE = { targetSysid: 42, targetCompid: 191, firmware: 'px4' };
@@ -101,10 +101,10 @@ test('unbound companion throws loud (broken deploy, not a mystery)', () => {
   assert.throws(() => resolveActionTarget({ identityNode: unbound }), /not bound/);
 });
 
-test('resolveFirmware: payload → profile → ardupilot', () => {
-  assert.equal(resolveFirmware('custom', PROFILE), 'custom');
-  assert.equal(resolveFirmware(undefined, PROFILE), 'px4');
-  assert.equal(resolveFirmware('', null), 'ardupilot');
+test('firmware ladder is payload → profile via firstDefined (no invented ardupilot)', () => {
+  assert.equal(firstDefined('custom', PROFILE.firmware), 'custom');
+  assert.equal(firstDefined(undefined, PROFILE.firmware), 'px4');
+  assert.equal(firstDefined(undefined, undefined), undefined);
 });
 
 test('profileFromVehicleNode maps defaults and firmware, null-safe', () => {

@@ -33,7 +33,6 @@ const {
 } = require('../lib/delivery');
 const {
   resolveActionTarget,
-  resolveFirmware,
   profileFromVehicleNode,
   firstDefined,
 } = require('../lib/addressing');
@@ -73,7 +72,7 @@ module.exports = function registerMavlinkParam(RED) {
         }
         const url = defsApi.resolveDefsUrl(
           vehicleNode.vehicleFamily || 'generic',
-          vehicleNode.firmware || 'ardupilot',
+          vehicleNode.firmware,
           vehicleNode.paramDefsUrl || ''
         );
         if (!url) {
@@ -246,11 +245,8 @@ module.exports = function registerMavlinkParam(RED) {
  *
  * Resolution order per field (sysid/compid): msg.payload.target →
  * companion derivation → config → profile default.
- * Firmware: payload override → profile → 'ardupilot'. Stored config.firmware
- * is not consulted (hidden is not honored, §6).
- *
- * Param encoding (§11): explicit `msg.payload.paramEncoding` → peer
- * AUTOPILOT_VERSION.capabilities → firmware fallback (px4 → bytewise).
+ * Firmware: payload → profile (no invented default). Hidden `config.firmware`
+ * is not consulted (§6). Encoding: override → capabilities → named firmware.
  *
  * @param {object} config
  * @param {object} payload
@@ -265,7 +261,7 @@ function requestFrom(config, payload, { identityNode, profile, connectionNode })
     identityNode,
     profile,
   });
-  const firmware = resolveFirmware(payload.firmware, profile);
+  const firmware = firstDefined(payload.firmware, profile && profile.firmware);
   const encoding = firstDefined(payload.paramEncoding, payload.encoding);
   const capabilities = capabilitiesFromPeer(connectionNode, target);
   return {

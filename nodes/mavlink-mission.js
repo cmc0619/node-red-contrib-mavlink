@@ -45,8 +45,8 @@ const {
 } = require('../lib/mission');
 const {
   resolveActionTarget,
-  resolveFirmware,
   profileFromVehicleNode,
+  firstDefined,
 } = require('../lib/addressing');
 
 module.exports = function registerMavlinkMission(RED) {
@@ -97,9 +97,8 @@ module.exports = function registerMavlinkMission(RED) {
         ? RED.nodes.getNode(payload.identityId || config.identity)
         : null;
 
-      // Firmware gate: follows profile (not stored config.firmware which is hidden —
-      // hidden is not honored, §6). Payload override is the only runtime escape.
-      const firmware = resolveFirmware(payload.firmware, profile);
+      // Firmware: payload → profile (hidden config.firmware is not honored, §6).
+      const firmware = firstDefined(payload.firmware, profile && profile.firmware);
 
       const target = resolveActionTarget({
         payloadTarget: payload.target,
