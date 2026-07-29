@@ -1719,3 +1719,16 @@ defaults cover the common `1`. Builders use `input.target` directly. Ranges are
 `RED.mavlink.validateUint8` in the editor. Flow `msg` is programmer-trusted.
 *Check:* `node --test test/addressing/resolve.test.js test/move/move.test.js
 test/param/param.test.js`; no `normalizeTarget` / `parseUint8` under `lib/` or `nodes/`.
+
+**Unresolved target → broken encode beats inventing drone 1.**
+*Wrong belief:* When Build leaves Vehicle Profile and target fields blank, the resolver (or a
+downstream `numberOr(..., 1)`) must invent `{sysid: 1, compid: 1}` so a message always
+"works"; emitting `NaN` (or letting the uint8 codec reject a non-finite id) is a regression.
+*Fact:* Inventing `{1,1}` can arm/move the wrong airframe on a busy link. An empty ladder
+yielding non-finite ids fails at encode (`lib/codec/numeric` rejects non-finite integers) or
+leaves an unusable Build object — safer than a silent command to system 1. Companion
+compid `1` and swarm broadcast `{sysid: 0, compid: 1}` remain matrix/spec addresses, not
+null-guards. Do not reintroduce target→`1` fallbacks in builders or stream-stop helpers.
+*Check:* `rg -n 'numberOr\\([^,]+,\\s*1\\)|firstDefined\\([^)]*,\\s*1\\)' lib nodes` — only
+companion derivation in `lib/addressing/resolve.js` should remain; `node --test
+test/addressing/resolve.test.js test/move/move.test.js`.

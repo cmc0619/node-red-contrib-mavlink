@@ -66,14 +66,11 @@ module.exports = function registerMavlinkVehicle(RED) {
       this.getDialect = () => {
         throw vehicleLoadError || new Error(msg);
       };
-      this.getDefaults = () => ({
-        vehicleFamily: config.vehicleFamily || 'generic',
-        firmware: config.firmware || 'ardupilot',
-        dialect: config.dialect || 'ardupilotmega',
-        dialectSource: config.dialectSource || 'bundled',
-        defaultTargetSystem: 1,
-        defaultTargetComponent: 1,
-      });
+      // Do not invent profile defaults (especially target 1/1) on a broken
+      // load — Connection must fail loud, not bind companions to system 1.
+      this.getDefaults = () => {
+        throw vehicleLoadError || new Error(msg);
+      };
     }
     RED.nodes.registerType('mavlink-vehicle', BrokenVehicleNode);
     return;
