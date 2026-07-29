@@ -258,6 +258,21 @@ test('client disconnect emits error so the runtime can leave CONNECTED', async (
   assert.equal(err.code, 'TCP_DISCONNECTED');
 });
 
+test('server peer disconnect emits endpoint-gone for stream-decoder cleanup', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  await transport.open();
+
+  const a = new MockSocket({ address: '10.0.0.1', port: 1 });
+  net.servers[0].accept(a);
+
+  const gone = await new Promise((resolve) => {
+    transport.once('endpoint-gone', resolve);
+    a.emit('close');
+  });
+  assert.deepEqual(gone, { address: '10.0.0.1', port: 1 });
+});
+
 test('server peer error does not emit transport error for remaining clients', async () => {
   const net = mockNet();
   const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
