@@ -8,6 +8,10 @@ const {
   buildParamMessage,
   matchesParamEcho,
   createParamListCollector,
+  resolveParamEncoding,
+  PARAM_ENCODING,
+  CAP_PARAM_ENCODE_BYTEWISE,
+  CAP_PARAM_ENCODE_C_CAST,
 } = require('../../lib/param');
 
 test('PARAM_SET for PX4 integer params writes the int bits into the float slot', () => {
@@ -91,6 +95,106 @@ test('PARAM_REQUEST_READ and PARAM_REQUEST_LIST build their distinct messages', 
     name: 'PARAM_REQUEST_LIST',
     fields: { target_system: 9, target_component: 1 },
   });
+});
+
+test('resolveParamEncoding: explicit override wins over capabilities and firmware', () => {
+  assert.equal(
+    resolveParamEncoding({
+      encoding: 'c-cast',
+      capabilities: CAP_PARAM_ENCODE_BYTEWISE,
+      firmware: 'px4',
+    }),
+    PARAM_ENCODING.C_CAST
+  );
+  assert.equal(
+    resolveParamEncoding({
+      encoding: 'bytewise',
+      capabilities: CAP_PARAM_ENCODE_C_CAST,
+      firmware: 'ardupilot',
+    }),
+    PARAM_ENCODING.BYTEWISE
+  );
+});
+
+test('resolveParamEncoding: capabilities beat firmware when no explicit override', () => {
+  assert.equal(
+    resolveParamEncoding({
+      capabilities: CAP_PARAM_ENCODE_BYTEWISE,
+      firmware: 'ardupilot',
+    }),
+    PARAM_ENCODING.BYTEWISE
+  );
+  assert.equal(
+    resolveParamEncoding({
+      capabilities: CAP_PARAM_ENCODE_C_CAST,
+      firmware: 'px4',
+    }),
+    PARAM_ENCODING.C_CAST
+  );
+});
+
+test('resolveParamEncoding: firmware fallback when capabilities absent', () => {
+  assert.equal(resolveParamEncoding({ firmware: 'px4' }), PARAM_ENCODING.BYTEWISE);
+  assert.equal(resolveParamEncoding({ firmware: 'ardupilot' }), PARAM_ENCODING.C_CAST);
+  assert.equal(resolveParamEncoding({}), PARAM_ENCODING.C_CAST);
+});
+
+test('resolveParamEncoding: present-but-invalid override rejects (no silent fallthrough)', () => {
+  assert.throws(
+    () => resolveParamEncoding({
+      encoding: 'bitwise',
+      capabilities: CAP_PARAM_ENCODE_BYTEWISE,
+      firmware: 'px4',
+    }),
+    /unsupported param encoding/
+  );
+  assert.throws(
+    () => buildParamMessage({
+      action: 'set',
+      target: { sysid: 1, compid: 1 },
+      paramId: 'FOO',
+      value: 1,
+      paramType: 'MAV_PARAM_TYPE_INT32',
+      encoding: 'nope',
+      firmware: 'ardupilot',
+    }),
+    /unsupported param encoding/
+  );
+  // Absent / empty override still falls through.
+  assert.equal(
+    resolveParamEncoding({ encoding: '', firmware: 'px4' }),
+    PARAM_ENCODING.BYTEWISE
+  );
+  assert.equal(
+    resolveParamEncoding({ encoding: null, firmware: 'ardupilot' }),
+    PARAM_ENCODING.C_CAST
+  );
+});
+
+test('PARAM_SET uses capability bitwise encoding even when firmware says ardupilot', () => {
+  const message = buildParamMessage({
+    action: 'set',
+    target: { sysid: 1, compid: 1 },
+    paramId: 'FOO',
+    value: 42,
+    paramType: 'MAV_PARAM_TYPE_INT32',
+    firmware: 'ardupilot',
+    capabilities: CAP_PARAM_ENCODE_BYTEWISE,
+  });
+  assert.equal(message.fields.param_value, paramValueToWire(42, 'MAV_PARAM_TYPE_INT32'));
+});
+
+test('PARAM_SET explicit c-cast overrides PX4 firmware', () => {
+  const message = buildParamMessage({
+    action: 'set',
+    target: { sysid: 1, compid: 1 },
+    paramId: 'FOO',
+    value: 42,
+    paramType: 'MAV_PARAM_TYPE_INT32',
+    firmware: 'px4',
+    encoding: 'c-cast',
+  });
+  assert.equal(message.fields.param_value, 42);
 });
 
 test('request-list collector emits a complete ordered parameter snapshot', () => {

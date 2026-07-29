@@ -535,11 +535,16 @@
         /**
          * Companion role: clear any values a previous role left behind. The
          * runtime ignores them anyway (derives sysid, pins compid to 191), but
-         * a saved 255 next to a derived 1 looks like a contradiction.
+         * a saved 255 next to a derived 1 looks like a contradiction. Clear
+         * the editor fields because Node-RED copies them onto the node after
+         * oneditsave returns.
          */
         if ($('#node-config-input-role').val() === 'companion') {
-          this.sourceSystemId = '';
-          this.sourceComponentId = '';
+          $('#node-config-input-sourceSystemId').val('');
+          $('#node-config-input-sourceComponentId')
+            .empty()
+            .append($('<option></option>').val(''))
+            .val('');
         }
       },
       oneditcancel: function () {

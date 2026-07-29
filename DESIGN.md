@@ -117,7 +117,7 @@ ground truth, drift asserts — never as defensive branches in the shipping code
 | Job | The platform mechanism — and nothing else |
 |---|---|
 | "this field must be set / valid" | `required` / `validate` on the property definition. The editor reds the field and puts the missing-config marker on the node. No bespoke pending states, placeholder options, or hint rows for unconfigured fields |
-| dialog fields load and save | `node-input-<prop>` / `node-config-input-<prop>` ids auto-populate and auto-save. `oneditprepare`/`oneditsave` exist only for what that cannot do: dynamically built selects, TypedInput, reshaping |
+| dialog fields load and save | `node-input-<prop>` / `node-config-input-<prop>` ids auto-populate and auto-save. `oneditprepare`/`oneditsave` exist only for what that cannot do: dynamically built selects, TypedInput, reshaping. `oneditsave` runs before Node-RED copies those form values onto the node, so reshaping must update the editor fields rather than only mutating `this.<prop>` |
 | dialog layout and widgets | `form-row` rows, `red-ui-button`, `TypedInput`, `RED.editor.createEditor` — no custom widget where a stock one exists |
 | runtime state in the editor | `node.status({fill, shape, text})` — text under 20 characters, `{}` clears |
 | errors while handling a message | **one** Catch path: `done(err)` when `done` is present; `node.error(err, msg)` only if there is no `done`. Never `node.error` then bare `done()` — that is the wrong pairing (Catch via error, message finished as success). Do not leave throws uncaught from the handler; catch and call `done(err)`. (§2 notes that a slipped throw is contained by Node-RED — that is a safety net, not the preferred path.) |
@@ -1169,8 +1169,12 @@ Vehicle Profile carries the firmware field: PX4, ArduPilot, or custom. It affect
 
 - **Flight modes** — entirely different tables, and custom mode is a firmware-specific bitfield.
 - **Mission types** — as above.
-- **Parameter types** — PX4 uses an int/float union in the parameter slot. Reinterpret the bit
-  pattern; do not cast numerically, or the parameter is corrupted on the vehicle.
+- **Parameter encoding** — `PARAM_SET` / `PARAM_VALUE` carry typed values in a float slot.
+  Encoding is resolved as: explicit `msg.payload.paramEncoding` (`bytewise` | `c-cast`) →
+  peer `AUTOPILOT_VERSION.capabilities` (`PARAM_ENCODE_BYTEWISE` / `PARAM_ENCODE_C_CAST`) →
+  firmware fallback (PX4 → bytewise bit-cast; otherwise C-cast). A present override outside
+  those two values is rejected (dynamic `msg` input); only an absent override falls through.
+  Do not invent encoding from firmware alone when the peer has advertised a capability bit.
 - **Command support** — not every `MAV_CMD` is implemented by both stacks.
 
 Custom means: use the compiled dialect, offer no firmware-specific behavior, and do not pretend
@@ -1404,6 +1408,18 @@ validator's arity is 2 — `function (v, opt)`. A one-argument validator coerces
 every custom validator that returns a reason string must declare `(v, opt)`. (Measured on the
 editor-client in Node-RED 4/5; same rule since 3.x.)
 *Check:* `rg -n "validateUint8|function \(v, _?opt\)" nodes/mavlink-local-identity.html`
+
+**`oneditsave` runs before Node-RED's generic form-to-node copy.**
+*Wrong belief:* assigning `this.someProperty` inside `oneditsave` overrides the value in its
+`node-config-input-someProperty` editor control.
+*Fact:* Node-RED invokes the node definition's `oneditsave`, then copies each editor control
+onto the node. A stale hidden control therefore overwrites an object-only assignment. When a
+role reshapes saved configuration, clear or rewrite the actual editor control in `oneditsave`;
+the normal copy then persists that value. A single-select also needs an explicit empty option:
+setting a value with no matching option makes jQuery return `null`, which Node-RED skips rather
+than saving.
+*Check:* `node --test test/nodes/local-identity-html.test.js` — the Companion save regression
+executes the hook followed by Node-RED's form-copy order.
 
 **`Buffer` already range-checks integers.**
 *Wrong belief:* an out-of-range integer silently wraps — 300 into a `uint8` becomes 44.
@@ -1676,3 +1692,15 @@ that escapes the handler is contained by Node-RED (§2) but is not the preferred
 and `done(err)`.
 *Check:* `node --test test/delivery/catch-path-scan.test.js` (source scan of `nodes/mavlink-*.js`);
 `node --test test/delivery/delivery.test.js test/swarm/node.test.js`.
+
+**Param encoding follows override → capabilities → firmware, not firmware alone.**
+*Wrong belief:* `firmware === 'px4'` is the only signal for bytewise int/float union encoding;
+peer `AUTOPILOT_VERSION.capabilities` is stored for display and unused at send time.
+*Fact:* Spec bits are `MAV_PROTOCOL_CAPABILITY_PARAM_ENCODE_BYTEWISE` (16) and
+`…_PARAM_ENCODE_C_CAST` (131072). Resolution is explicit `msg.payload.paramEncoding` → those
+capability bits from the peer table → firmware fallback (PX4 → bytewise, else C-cast). A
+present-but-invalid override rejects rather than falling through (silent wrong encoding would
+corrupt integer `PARAM_SET`). ArduPilot often omits the C_CAST bit, so firmware fallback
+remains required.
+*Check:* `node --test test/param/param.test.js test/param/node.test.js` — look for
+`resolveParamEncoding` / capabilities tests.
