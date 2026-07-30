@@ -5,36 +5,6 @@
     defaults: {
       name: { value: '' },
       connection: { value: '', type: 'mavlink-connection', required: false },
-      dialect: {
-        value: '',
-        validate: function (v) {
-          var $delivery = $('#node-input-delivery');
-          var delivery = ($delivery && $delivery.length) ? $delivery.val() : (this.delivery || 'build');
-          var $selectionMode = $('#node-input-selectionMode');
-          var selectionMode = ($selectionMode && $selectionMode.length)
-            ? $selectionMode.val()
-            : (this.selectionMode || 'all');
-          if (delivery === 'build' && selectionMode === 'list') return !!v;
-          return true;
-        },
-      },
-      vehicle: {
-        value: '',
-        type: 'mavlink-vehicle',
-        required: false,
-        validate: function (v) {
-          var $delivery = $('#node-input-delivery');
-          var delivery = ($delivery && $delivery.length) ? $delivery.val() : (this.delivery || 'build');
-          var $selectionMode = $('#node-input-selectionMode');
-          var selectionMode = ($selectionMode && $selectionMode.length)
-            ? $selectionMode.val()
-            : (this.selectionMode || 'all');
-          var $dialect = $('#node-input-dialect');
-          var dialect = ($dialect && $dialect.length && $dialect.val()) ? $dialect.val() : (this.dialect || '');
-          if (delivery === 'build' && selectionMode === 'list' && dialect === '__vehicle') return !!v;
-          return true;
-        },
-      },
       identity: { value: '' },
       selectionMode: { value: 'all' },
       sysids: {
@@ -89,7 +59,6 @@
       var node = this;
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
 
       RED.mavlink = RED.mavlink || {};
@@ -144,56 +113,30 @@
       var _cmdCatalogByKey = {};
       var _cmdRequestSeq = 0;
 
-      function emptyCatalogTarget() {
-        return { key: 'empty', query: null, dialect: '' };
-      }
-
       function resolveCatalogTarget() {
-        var delivery = $('#node-input-delivery').val() || 'build';
-        var selectionMode = $('#node-input-selectionMode').val() || 'all';
-        var isBuildList = delivery === 'build' && selectionMode === 'list';
-        if (isBuildList) {
-          var dialectVal = $('#node-input-dialect').val() || '';
-          if (!dialectVal) return emptyCatalogTarget();
-          if (dialectVal !== '__vehicle') {
-            return {
-              key: 'dialect:' + dialectVal,
-              query: { dialect: dialectVal },
-              dialect: dialectVal,
-            };
-          }
-          var vehicleId = $('#node-input-vehicle').val() || '';
-          var vehicleDialect = '';
-          if (vehicleId && RED.nodes && RED.nodes.node) {
-            var vehicle = RED.nodes.node(vehicleId);
-            if (vehicle && vehicle.dialect) vehicleDialect = vehicle.dialect;
-          }
-          if (vehicleId) {
-            return {
-              key: 'vehicle:' + vehicleId,
-              query: { vehicle: vehicleId, dialect: vehicleDialect },
-              dialect: vehicleDialect,
-            };
-          }
-          return emptyCatalogTarget();
-        }
-        var connId = $('#node-input-connection').val() || '';
+        var connId = $('#node-input-connection').val();
+        var vehicleId = '';
+        var dialect = 'ardupilotmega';
         if (connId && RED.nodes && RED.nodes.node) {
-          var connNode = RED.nodes.node(connId);
-          var vehicleRef = RED.mavlink.vehicleIdFrom(connNode && connNode.vehicle);
-          if (vehicleRef) {
-            var connVehicle = RED.nodes.node(vehicleRef);
-            if (connVehicle) {
-              var connDialect = connVehicle.dialect || '';
-              return {
-                key: 'vehicle:' + vehicleRef,
-                query: { vehicle: vehicleRef, dialect: connDialect },
-                dialect: connDialect,
-              };
-            }
+          var conn = RED.nodes.node(connId);
+          if (conn && conn.vehicle) {
+            vehicleId = conn.vehicle;
+            var vehicle = RED.nodes.node(vehicleId);
+            if (vehicle && vehicle.dialect) dialect = vehicle.dialect;
           }
         }
-        return emptyCatalogTarget();
+        if (vehicleId) {
+          return {
+            key: 'vehicle:' + vehicleId,
+            query: { vehicle: vehicleId, dialect: dialect },
+            dialect: dialect,
+          };
+        }
+        return {
+          key: 'dialect:' + dialect,
+          query: { dialect: dialect },
+          dialect: dialect,
+        };
       }
 
       function loadMessagesCatalog(cb) {
@@ -203,12 +146,6 @@
         var seq = ++_msgRequestSeq;
         if (_msgCatalogByKey[target.key]) {
           cb(_msgCatalogByKey[target.key]);
-          return;
-        }
-        if (!target.query) {
-          var emptyCatalog = { messages: [], enums: {}, dialect: '' };
-          _msgCatalogByKey[target.key] = emptyCatalog;
-          cb(emptyCatalog);
           return;
         }
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/build/messages'), target.query, function (data) {
@@ -262,12 +199,6 @@
         var seq = ++_cmdRequestSeq;
         if (_cmdCatalogByKey[target.key]) {
           cb(_cmdCatalogByKey[target.key]);
-          return;
-        }
-        if (!target.query) {
-          var emptyCatalog = { commands: [], enums: {}, dialect: '' };
-          _cmdCatalogByKey[target.key] = emptyCatalog;
-          cb(emptyCatalog);
           return;
         }
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
@@ -334,39 +265,18 @@
         var d = $('#node-input-delivery').val() || 'build';
         var sel = $('#node-input-selectionMode').val() || 'all';
         var isBuildList = d === 'build' && sel === 'list';
-        var dialect = $('#node-input-dialect').val() || node.dialect || '';
         $('#row-swarm-connection').toggle(!isBuildList);
-        $('#row-swarm-dialect').toggle(isBuildList);
-        $('#row-swarm-vehicle').toggle(isBuildList && dialect === '__vehicle');
         $('#row-swarm-identity').toggle(d !== 'build');
       }
 
-      function refreshCatalogsAndVisibility() {
-        refreshVehicleTypeOptions();
-        refreshCommandOptions();
-        refreshVisibility();
-      }
-
-      var $dialect = $('#node-input-dialect');
-      $dialect.on('change', refreshCatalogsAndVisibility);
-      if (RED.mavlink && RED.mavlink.populateDialectSelect) {
-        RED.mavlink.populateDialectSelect($dialect, {
-          saved: node.dialect || '',
-          includeVehicleEscape: true
-        });
-      }
-      $('#node-input-vehicle').on('change', function () {
-        refreshVehicleTypeOptions();
-        refreshCommandOptions();
-      });
       $('#node-input-connection').on('change', function () {
         refreshVehicleTypeOptions();
         refreshCommandOptions();
         refreshIdentitySelect();
         refreshVisibility();
       });
-      $('#node-input-delivery').on('change', refreshCatalogsAndVisibility);
-      $('#node-input-selectionMode').on('change', refreshCatalogsAndVisibility);
+      $('#node-input-delivery').on('change', refreshVisibility);
+      $('#node-input-selectionMode').on('change', refreshVisibility);
       refreshVehicleTypeOptions();
       refreshCommandOptions();
       refreshIdentitySelect();
@@ -378,8 +288,6 @@
 <script type="text/html" data-template-name="mavlink-swarm">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row" id="row-swarm-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
-  <div class="form-row" id="row-swarm-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
-  <div class="form-row" id="row-swarm-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
   <div class="form-row" id="row-swarm-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-selectionMode">Selection</label><select id="node-input-selectionMode"><option value="all">All active vehicles</option><option value="list">Explicit sysid list</option><option value="filter">Filter</option></select></div>
   <div class="form-row"><label for="node-input-sysids">Sysids</label><input type="text" id="node-input-sysids" placeholder="1,2,3"></div>

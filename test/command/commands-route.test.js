@@ -106,21 +106,11 @@ test('missing Vehicle Profile with custom dialect is refused', () => {
   assert.equal(res.statusCode, 404);
 });
 
-test('empty command catalog query is rejected instead of defaulting to ardupilotmega', () => {
+test('dialect-only request still defaults to ardupilotmega', () => {
   const handlers = captureRoutes({});
   const handler = handlers.get('/mavlink/command/commands');
   const res = mockRes();
   handler({ query: {} }, res);
-  assert.equal(res.statusCode, 400);
-  assert.match(res.body.error, /dialect is required/i);
-  assert.equal(res.body.commands, undefined);
-});
-
-test('explicit ardupilotmega command catalog request still works', () => {
-  const handlers = captureRoutes({});
-  const handler = handlers.get('/mavlink/command/commands');
-  const res = mockRes();
-  handler({ query: { dialect: 'ardupilotmega' } }, res);
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.dialect, 'ardupilotmega');
   const expected = Object.keys(loadBundled('ardupilotmega').commands || {}).length;

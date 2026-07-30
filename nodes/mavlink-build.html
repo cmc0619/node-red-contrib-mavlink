@@ -23,18 +23,14 @@
     var _cmdCatalogByKey = {};
     var _cmdRequestSeq = 0;
 
-    function emptyCatalogTarget() {
-      return { key: 'empty', query: null, dialect: '' };
-    }
-
-    function resolveCatalogTarget() {
+    function resolveVehicleTarget() {
       var tierVal = $('#node-input-tier').val() || 'send';
       if (tierVal !== 'build') {
         // Wire tier: derive the catalog from the selected connection's vehicle
         // profile. Pass the profile id, not just the dialect name — the admin
         // route serves custom XML bundles only when given ?vehicle=<id>.
-        // With no connection selected yet, required-field validation owns the
-        // editor error; do not fetch an invented dialect catalog.
+        // With no connection selected yet, the required-field validation
+        // already reds the node; the catalog just shows the default dialect.
         var connectionId = $('#node-input-connection').val() || '';
         if (connectionId && RED.nodes && RED.nodes.node) {
           var connNode = RED.nodes.node(connectionId);
@@ -47,11 +43,10 @@
             };
           }
         }
-        return emptyCatalogTarget();
+        return { key: 'dialect:ardupilotmega', query: { dialect: 'ardupilotmega' }, dialect: 'ardupilotmega' };
       }
       // Build tier: use the dialect picker.
-      var dialectVal = $('#node-input-dialect').val() || '';
-      if (!dialectVal) return emptyCatalogTarget();
+      var dialectVal = $('#node-input-dialect').val() || 'ardupilotmega';
       if (dialectVal !== '__vehicle') {
         return {
           key: 'dialect:' + dialectVal,
@@ -61,7 +56,7 @@
       }
       // '__vehicle' escape: derive from the selected Vehicle Profile.
       var vehicleId = $('#node-input-vehicle').val() || '';
-      var vehicleDialect = '';
+      var vehicleDialect = 'ardupilotmega';
       if (vehicleId && RED.nodes && RED.nodes.node) {
         var vehicle = RED.nodes.node(vehicleId);
         if (vehicle && vehicle.dialect) vehicleDialect = vehicle.dialect;
@@ -73,21 +68,18 @@
           dialect: vehicleDialect,
         };
       }
-      return emptyCatalogTarget();
+      return {
+        key: 'dialect:' + vehicleDialect,
+        query: { dialect: vehicleDialect },
+        dialect: vehicleDialect,
+      };
     }
 
     function loadMessagesCatalog(cb) {
-      var target = resolveCatalogTarget();
+      var target = resolveVehicleTarget();
       if (_msgCatalogByKey[target.key]) {
         _msgCatalogKey = target.key;
         cb(_msgCatalogByKey[target.key]);
-        return;
-      }
-      if (!target.query) {
-        var emptyCatalog = { messages: [], enums: {}, dialect: '' };
-        _msgCatalogByKey[target.key] = emptyCatalog;
-        _msgCatalogKey = target.key;
-        cb(emptyCatalog);
         return;
       }
       var seq = ++_msgRequestSeq;
@@ -116,15 +108,9 @@
   }
 
     function loadCommandsCatalog(cb) {
-      var target = resolveCatalogTarget();
+      var target = resolveVehicleTarget();
       if (_cmdCatalogByKey[target.key]) {
         cb(_cmdCatalogByKey[target.key]);
-        return;
-      }
-      if (!target.query) {
-        var emptyCatalog = { commands: [], enums: {}, dialect: '' };
-        _cmdCatalogByKey[target.key] = emptyCatalog;
-        cb(emptyCatalog);
         return;
       }
       var seq = ++_cmdRequestSeq;
@@ -146,13 +132,6 @@
     function bitmaskTitle(description) {
       var base = description || 'Bitmask flags';
       return base + ' (Ctrl/Cmd-click to select multiple flags.)';
-    }
-
-    function booleanEntryLabel(entry) {
-      var name = entry && entry.name ? entry.name : '';
-      if (name === 'FALSE' || name.slice(-6) === '_FALSE') return 'false';
-      if (name === 'TRUE' || name.slice(-5) === '_TRUE') return 'true';
-      return entry.label || name;
     }
 
     function selectedBitmaskValues(saved, entries) {
@@ -232,7 +211,7 @@
       defaults: {
         name:        { value: '' },
         dialect:     {
-          value: '',
+          value: 'ardupilotmega',
           validate: function (v) {
             var $t = $('#node-input-tier');
             var tier = ($t && $t.length) ? $t.val() : (this.tier || 'send');
@@ -248,7 +227,7 @@
             var $t = $('#node-input-tier');
             var tier = ($t && $t.length) ? $t.val() : (this.tier || 'send');
             var $d = $('#node-input-dialect');
-            var dialect = ($d && $d.length && $d.val()) ? $d.val() : (this.dialect || '');
+            var dialect = ($d && $d.length && $d.val()) ? $d.val() : (this.dialect || 'ardupilotmega');
             if (tier === 'build' && dialect === '__vehicle') return !!v;
             return true;
           },
@@ -316,7 +295,7 @@
 
         function updateVisibility() {
           var tierVal = $tier.val();
-          var dialectVal = $('#node-input-dialect').val() || node.dialect || '';
+          var dialectVal = $('#node-input-dialect').val() || node.dialect || 'ardupilotmega';
           if (tierVal === 'build') {
             $('#mav-connection-row').hide();
             $('#mav-dialect-row').show();
@@ -378,18 +357,15 @@
         function fieldInput(spec, enums) {
           var saved = savedFields[spec.name];
           if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
-            var entries = enums[spec.enum];
-            var falseTrue = RED.mavlink.isFalseTrueEnum(entries);
-            var multi = !falseTrue && spec.display === 'bitmask';
+            var multi = spec.display === 'bitmask';
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', spec.name)
-              .attr('data-kind', falseTrue ? 'enum' : (multi ? 'bitmask' : 'enum'))
+              .attr('data-kind', multi ? 'bitmask' : 'enum')
               .attr('title', multi ? bitmaskTitle(spec.description) : (spec.description || ''));
-            if (multi) sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
+            if (multi) sel.attr('multiple', 'multiple').attr('size', Math.min(6, enums[spec.enum].length));
             else sel.append($('<option></option>').val('').text('\u2014'));
-            entries.forEach(function (entry) {
+            enums[spec.enum].forEach(function (entry) {
               var $opt = $('<option></option>').val(entry.name).text(entry.label);
-              if (falseTrue) $opt.val(String(entry.value)).text(booleanEntryLabel(entry));
               if (entry.description) $opt.attr('title', entry.description);
               sel.append($opt);
             });
@@ -398,10 +374,10 @@
               sel.val(selected);
             } else if (saved !== undefined && saved !== null && saved !== '') {
               // Accept saved numeric value or entry name.
-              var match = entries.find(function (e) {
+              var match = enums[spec.enum].find(function (e) {
                 return String(e.value) === String(saved) || e.name === saved;
               });
-              sel.val(match ? (falseTrue ? String(match.value) : match.name) : String(saved));
+              sel.val(match ? match.name : String(saved));
             }
             return sel;
           }
@@ -469,25 +445,23 @@
             saved = savedFields['param' + spec.index];
           }
           if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
-            var entries = enums[spec.enum];
-            var falseTrue = RED.mavlink.isFalseTrueEnum(entries);
-            var isBitmask = !!spec.bitmask && !falseTrue;
+            var isBitmask = !!spec.bitmask;
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', key)
-              .attr('data-kind', falseTrue ? 'enum' : (isBitmask ? 'bitmask-mask' : 'enum'))
+              .attr('data-kind', isBitmask ? 'bitmask-mask' : 'enum')
               .attr('title', isBitmask ? bitmaskTitle(spec.description) : (spec.description || ''));
             if (isBitmask) {
-              sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
+              sel.attr('multiple', 'multiple').attr('size', Math.min(6, enums[spec.enum].length));
             } else {
               sel.append($('<option></option>').val('').text('\u2014'));
             }
-            entries.forEach(function (entry) {
-              var $opt = $('<option></option>').val(String(entry.value)).text(falseTrue ? booleanEntryLabel(entry) : entry.label);
+            enums[spec.enum].forEach(function (entry) {
+              var $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
               if (entry.description) $opt.attr('title', entry.description);
               sel.append($opt);
             });
             if (isBitmask) {
-              sel.val(selectedBitmaskValues(saved, entries));
+              sel.val(selectedBitmaskValues(saved, enums[spec.enum]));
             } else if (saved !== undefined && saved !== null && saved !== '') {
               sel.val(String(saved));
             }
@@ -675,8 +649,8 @@
           }
         });
 
-        // Shared helper keeps an empty unsaved dialect selected until the Build
-        // validator accepts a concrete dialect or the Vehicle Profile escape.
+        // Populate dialect picker from the server's bundled list; reload catalogs
+        // once ready so the message dropdown uses the correct dialect from the start.
         var $dialect = $('#node-input-dialect');
         $dialect.on('change', function () {
           _msgCatalogByKey = {};
@@ -684,10 +658,28 @@
           updateVisibility();
           reloadCatalogs();
         });
-        RED.mavlink.populateDialectSelect($dialect, {
-          saved: node.dialect || '',
-          includeVehicleEscape: true,
-        });
+        (function initDialectPicker() {
+          var savedDialect = node.dialect || 'ardupilotmega';
+          $.getJSON(RED.mavlink.adminApiUrl('/mavlink/dialects'), function (data) {
+            $dialect.empty();
+            (data.dialects || []).forEach(function (d) {
+              $dialect.append($('<option>').val(d).text(d));
+            });
+            $dialect.append($('<option>').val('__vehicle').text('from Vehicle Profile\u2026'));
+            $dialect.val(savedDialect);
+            updateVisibility();
+            reloadCatalogs();
+          }).fail(function () {
+            $dialect.empty();
+            if (savedDialect !== '__vehicle') {
+              $dialect.append($('<option>').val(savedDialect).text(savedDialect));
+            }
+            $dialect.append($('<option>').val('__vehicle').text('from Vehicle Profile\u2026'));
+            $dialect.val(savedDialect);
+            updateVisibility();
+            reloadCatalogs();
+          });
+        }());
       },
       oneditsave: function () {
         var $root = $('#node-input-fields-container');

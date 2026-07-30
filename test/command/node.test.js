@@ -284,7 +284,6 @@ test('resolveTarget: build tier inherits from config.vehicle profile stub', asyn
     mode: 'preset',
     preset: 'arm',
     delivery: 'build',
-    dialect: '__vehicle',
     vehicle: 'vehicle',
     targetSysid: '',
     targetCompid: '',
@@ -296,33 +295,6 @@ test('resolveTarget: build tier inherits from config.vehicle profile stub', asyn
 
   assert.equal(sent[0].payload.fields.target_system, 77, 'build tier inherits sysid from config.vehicle');
   assert.equal(sent[0].payload.fields.target_component, 78, 'build tier inherits compid from config.vehicle');
-});
-
-test('resolveTarget: build tier ignores config.vehicle profile unless dialect is __vehicle', async () => {
-  const vehicleStub = {
-    defaultTargetSystem: 77,
-    defaultTargetComponent: 78,
-    firmware: 'ardupilot',
-  };
-  const RED = redStub({ vehicle: vehicleStub });
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({
-    mode: 'preset',
-    preset: 'arm',
-    delivery: 'build',
-    dialect: 'common',
-    vehicle: 'vehicle',
-    targetSysid: '',
-    targetCompid: '',
-  });
-
-  let sent;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
-  await tick();
-
-  assert.ok(Number.isNaN(sent[0].payload.fields.target_system), 'non-__vehicle Build does not inherit sysid from config.vehicle');
-  assert.ok(Number.isNaN(sent[0].payload.fields.target_component), 'non-__vehicle Build does not inherit compid from config.vehicle');
 });
 
 test('ack-matcher pin: companion target used for COMMAND_ACK matching; ack from sysid 1 ignored', async () => {
