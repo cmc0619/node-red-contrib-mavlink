@@ -344,12 +344,8 @@
         $('#row-swarm-carrier').toggle(usesCarrier);
         $('#row-swarm-frame').toggle(usesCarrier && $('#node-input-carrier').val() === 'int');
       }
-      $('#node-input-carrier').on('change', function () {
-        refreshCarrierRows();
-      });
-      $('#node-input-actionType').on('change', function () {
-        refreshCarrierRows();
-      });
+      $('#node-input-carrier').on('change', refreshCarrierRows);
+      $('#node-input-actionType').on('change', refreshCarrierRows);
       refreshCarrierRows();
       refreshVehicleTypeOptions();
       refreshCommandOptions();

@@ -387,7 +387,11 @@ test('carrier is a required select with no default (§9)', () => {
 test('frame row binds to the frame property and follows the INT carrier', () => {
   assert.match(html, /id="node-input-frame"/, 'frame select must bind to the frame property');
   assert.match(html, /row-cmd-frame/, 'frame row id must exist');
-  assertChangeHandlerContains(html, "$('#node-input-carrier')", 'refreshFrameRow');
+  assert.match(
+    html,
+    /\$\('#node-input-carrier'\)\.on\('change', refreshFrameRow\);/,
+    'carrier change re-evaluates the frame row'
+  );
 });
 
 test('preset positional params are labelled degrees, not degE7 (§9 canonical units)', () => {

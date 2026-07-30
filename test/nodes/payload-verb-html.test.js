@@ -342,5 +342,9 @@ test('payload carrier is a required select with no default (§9)', () => {
 test('payload frame row binds to the frame property and follows the INT carrier (§9)', () => {
   assert.match(payloadHtml, /id="node-input-frame"/, 'frame select must bind to the frame property');
   assert.match(payloadHtml, /row-payload-frame/, 'frame row id must exist');
-  assertChangeHandlerContains(payloadHtml, "$('#node-input-carrier')", 'refreshFrameRow');
+  assert.match(
+    payloadHtml,
+    /\$\('#node-input-carrier'\)\.on\('change', refreshFrameRow\);/,
+    'carrier change re-evaluates the frame row'
+  );
 });

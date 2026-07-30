@@ -514,9 +514,7 @@
         const isInt = $('#node-input-carrier').val() === 'int';
         $('#row-cmd-frame')[isInt ? 'show' : 'hide']();
       }
-      $('#node-input-carrier').on('change', function () {
-        refreshFrameRow();
-      });
+      $('#node-input-carrier').on('change', refreshFrameRow);
       refreshFrameRow();
 
       // ── Param fields ───────────────────────────────────────────────────────

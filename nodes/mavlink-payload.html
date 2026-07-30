@@ -471,9 +471,7 @@
         const isInt = $('#node-input-carrier').val() === 'int';
         $('#row-payload-frame')[isInt ? 'show' : 'hide']();
       }
-      $('#node-input-carrier').on('change', function () {
-        refreshFrameRow();
-      });
+      $('#node-input-carrier').on('change', refreshFrameRow);
       refreshFrameRow();
       function reloadTargetCompId() {
         if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
