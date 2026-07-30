@@ -73,14 +73,6 @@ module.exports = function registerMavlinkMove(RED) {
             identityId,
             intervalMs: Number(config.intervalMs || payload.intervalMs || 100),
             ttlMs: Number(config.ttlMs || payload.ttlMs || 1000),
-            // A tick-time or TTL-stop send throw surfaces here since there is
-            // no input catch above a timer callback. Normalize first: the raw
-            // value from connection.send may not be an Error (a string/null),
-            // and reading .message off that would throw from the reporter.
-            onError: (err) => {
-              const detail = err && err.message ? err.message : String(err);
-              node.error(`mavlink-move: stream send failed — ${detail}`);
-            },
           };
           if (stream) stream.stop();
           if (delivery === 'stream') {
