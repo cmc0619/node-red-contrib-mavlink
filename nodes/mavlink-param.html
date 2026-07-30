@@ -4,39 +4,7 @@
     color: '#e9e4ff',
     defaults: {
       name: { value: '' },
-      dialect: {
-        value: '',
-        validate: function (v) {
-          var $d = $('#node-input-delivery');
-          var delivery = ($d && $d.length) ? $d.val() : (this.delivery || 'build');
-          if (delivery === 'build') return !!v;
-          return true;
-        }
-      },
-      vehicle: {
-        value: '',
-        type: 'mavlink-vehicle',
-        required: false,
-        validate: function (v) {
-          var $d = $('#node-input-delivery');
-          var delivery = ($d && $d.length) ? $d.val() : (this.delivery || 'build');
-          var $dialect = $('#node-input-dialect');
-          var dialect = ($dialect && $dialect.length && $dialect.val()) ? $dialect.val() : (this.dialect || '');
-          if (delivery === 'build' && dialect === '__vehicle') return !!v;
-          return true;
-        }
-      },
-      firmware: {
-        value: '',
-        validate: function (v) {
-          var $d = $('#node-input-delivery');
-          var delivery = ($d && $d.length) ? $d.val() : (this.delivery || 'build');
-          var $dialect = $('#node-input-dialect');
-          var dialect = ($dialect && $dialect.length && $dialect.val()) ? $dialect.val() : (this.dialect || '');
-          if (delivery === 'build' && dialect !== '__vehicle' && dialect !== '') return !!v;
-          return true;
-        }
-      },
+      vehicle: { value: '', type: 'mavlink-vehicle', required: false },
       connection: { value: '', type: 'mavlink-connection' },
       identity: { value: '' },
       delivery: { value: 'build' },
@@ -89,12 +57,9 @@
       function refreshVisibility() {
         var delivery = $('#node-input-delivery').val() || 'build';
         var isBuild = (delivery === 'build');
-        var dialect = $('#node-input-dialect').val() || node.dialect || '';
 
         /* tier-driven rows */
-        $('#row-dialect').toggle(isBuild);
-        $('#row-vehicle').toggle(isBuild && dialect === '__vehicle');
-        $('#row-firmware').toggle(isBuild && dialect !== '__vehicle' && dialect !== '');
+        $('#row-vehicle').toggle(isBuild);
         $('#row-connection').toggle(!isBuild);
         $('#row-identity').toggle(!isBuild);
         $('#row-timeout').toggle(!isBuild);
@@ -128,26 +93,10 @@
       var _defsSeq = 0;
       function loadParamDefs() {
         var delivery = $('#node-input-delivery').val() || 'build';
-        var query;
         var vehicleId;
 
         if (delivery === 'build') {
-          var dialect = $('#node-input-dialect').val() || '';
-          if (!dialect) return;
-          if (dialect === '__vehicle') {
-            vehicleId = $('#node-input-vehicle').val() || '';
-            if (!vehicleId) return;
-            query = { vehicle: vehicleId };
-            if (RED.nodes && typeof RED.nodes.node === 'function') {
-              var vehicleNode = RED.nodes.node(vehicleId);
-              if (vehicleNode && vehicleNode.dialect) query.dialect = vehicleNode.dialect;
-            }
-          } else {
-            query = { dialect: dialect };
-            var firmware = $('#node-input-firmware').val() || '';
-            if (!firmware) return;
-            query.firmware = firmware;
-          }
+          vehicleId = $('#node-input-vehicle').val() || '';
         } else {
           var connectionId = $('#node-input-connection').val() || '';
           if (!connectionId) return;
@@ -155,12 +104,12 @@
             ? RED.nodes.node(connectionId) : null;
           if (!connectionNode) return;
           vehicleId = connectionNode.vehicle || '';
-          if (!vehicleId) return;
-          query = { vehicle: vehicleId };
         }
 
+        if (!vehicleId) return;
+
         var seq = ++_defsSeq;
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), query, function (data) {
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), { vehicle: vehicleId }, function (data) {
           if (seq !== _defsSeq) return;
           _paramDefs = data.defs || {};
           _defsNotice = data.notice || '';
@@ -238,44 +187,26 @@
       }
 
       /* Reload defs when tier-influencing fields change. */
-      function clearParamDefs() {
+      $('#node-input-delivery').on('change', function () {
         _paramDefs = {};
         _defsLoaded = false;
-      }
-
-      $('#node-input-delivery').on('change', function () {
-        clearParamDefs();
         refreshVisibility();
         loadParamDefs();
       });
       $('#node-input-connection').on('change', function () {
-        clearParamDefs();
+        _paramDefs = {};
+        _defsLoaded = false;
         refreshIdentitySelect();
         loadParamDefs();
       });
-      $('#node-input-dialect').on('change', function () {
-        clearParamDefs();
-        refreshVisibility();
-        loadParamDefs();
-      });
       $('#node-input-vehicle').on('change', function () {
-        clearParamDefs();
-        loadParamDefs();
-      });
-      $('#node-input-firmware').on('change', function () {
-        clearParamDefs();
+        _paramDefs = {};
+        _defsLoaded = false;
         loadParamDefs();
       });
       $('#node-input-identity').on('change', function () {
         refreshVisibility();
       });
-
-      if (RED.mavlink && RED.mavlink.populateDialectSelect) {
-        RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
-          saved: node.dialect || '',
-          includeVehicleEscape: true
-        });
-      }
 
       $('#node-input-paramId').on('input change', refreshParamInfo);
       $('#node-input-action').on('change', refreshParamInfo);
@@ -291,9 +222,7 @@
 <script type="text/html" data-template-name="mavlink-param">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and echo-confirm</option><option value="collect">Request list and collect</option></select></div>
-  <div class="form-row" id="row-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
   <div class="form-row" id="row-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
-  <div class="form-row" id="row-firmware"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value=""></option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
   <div class="form-row" id="row-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-identity"><label for="node-input-identity">Send-as</label><select id="node-input-identity"></select></div>
   <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action"><option value="read">Read one</option><option value="set">Set one</option><option value="request-list">Request list</option></select></div>
@@ -324,7 +253,7 @@
 
 <script type="text/html" data-help-name="mavlink-param">
   <p>Reads one parameter, sets one parameter, or requests a full list. Set confirmation is by matching the PARAM_VALUE echo, not COMMAND_ACK.</p>
-  <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — pick a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Send-as</b> identity stamps the source address.</p>
+  <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — firmware and target defaults come from the <b>Vehicle Profile</b> field. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Send-as</b> identity stamps the source address.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). For GCS/custom identities, fill target sysid/compid or leave blank to inherit the profile default.</p>
   <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast.</p>
   <p>When the flow is deployed and the Vehicle Profile has a known family, the <b>Param id</b> field becomes a searchable datalist. ArduPilot definitions are fetched automatically; PX4 or custom firmware requires a <b>Param defs URL</b> in the Vehicle Profile advanced settings.</p>

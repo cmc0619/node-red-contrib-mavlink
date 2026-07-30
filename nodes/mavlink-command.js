@@ -191,9 +191,9 @@ module.exports = function registerMavlinkCommand(RED) {
 
       let target;
       if (delivery === 'build') {
-        // Build tier: profile only for the explicit `__vehicle` dialect escape.
-        const useVehicle = config.dialect === '__vehicle';
-        const vehicleNode = useVehicle && config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
+        // Build tier: profile comes from the node's own Vehicle Profile field.
+        // Connection and identity are ignored — hidden is not honored (§6).
+        const vehicleNode = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
         target = resolveActionTarget({
           payloadTarget,
           configSysid: config.targetSysid,
@@ -667,19 +667,14 @@ module.exports = function registerMavlinkCommand(RED) {
             return res.json(listCommandsCatalog(requested));
           }
 
-          if (!requested) {
-            return res.status(400).json({
-              error: 'dialect is required',
-              dialects: knownDialects(),
-            });
-          }
-          if (requested === 'custom') {
+          const dialect = requested || 'ardupilotmega';
+          if (dialect === 'custom') {
             return res.status(400).json({
               error: 'custom dialect requires a deployed Vehicle Profile (?vehicle=id)',
               dialects: knownDialects(),
             });
           }
-          res.json(listCommandsCatalog(requested));
+          res.json(listCommandsCatalog(dialect));
         } catch (err) {
           res.status(400).json({
             error: err.message,

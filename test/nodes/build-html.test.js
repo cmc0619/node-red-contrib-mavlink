@@ -77,13 +77,9 @@ test('Build message-field bitmasks use multi-select tokens accepted by the codec
   );
 
   assert.match(fieldRenderer, /spec\.display === ['"]bitmask['"]/, 'message field bitmasks follow field metadata');
-  assert.match(fieldRenderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE enums are detected before bitmask rendering');
-  assert.match(fieldRenderer, /falseTrue \? ['"]enum['"] : \(multi \? ['"]bitmask['"] : ['"]enum['"]\)/, 'FALSE/TRUE bitmasks are tagged as enum selects');
   assert.match(fieldRenderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'message field bitmasks use native multi-select');
   assert.match(fieldRenderer, /\.val\(entry\.name\)/, 'message field bitmasks save enum entry names');
-  assert.match(fieldRenderer, /\.val\(String\(entry\.value\)\)/, 'FALSE/TRUE options save numeric 0/1 values');
   assert.match(collector, /fields\[name\]\s*=\s*Array\.isArray\(raw\) \? raw/, 'collector keeps selected token array');
-  assert.match(collector, /kind === ['"]enum['"]/, 'FALSE/TRUE enum select is collected through numeric enum save');
 });
 
 test('Build COMMAND_LONG/INT command params render bitmasks as numeric multi-select masks', () => {
@@ -93,8 +89,7 @@ test('Build COMMAND_LONG/INT command params render bitmasks as numeric multi-sel
   );
 
   assert.match(renderer, /spec\.bitmask/, 'command param bitmask flag drives rendering');
-  assert.match(renderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE command params are detected before bitmask rendering');
-  assert.match(renderer, /data-kind['"],\s*falseTrue \? ['"]enum['"] : \(isBitmask \? ['"]bitmask-mask['"] : ['"]enum['"]\)/, 'FALSE/TRUE command bitmask params are tagged as enum selects');
+  assert.match(renderer, /data-kind['"],\s*isBitmask \? ['"]bitmask-mask['"] : ['"]enum['"]/, 'command bitmask params are tagged for numeric mask save');
   assert.match(renderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'command bitmask params use native multi-select');
   assert.match(renderer, /\.val\(String\(entry\.value\)\)/, 'command bitmask options carry numeric values');
   assert.match(html, /kind === ['"]bitmask-mask['"]/, 'collector stores one numeric mask for command params');
@@ -108,17 +103,15 @@ test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
   );
 });
 
-test('Build dialect default is empty and Build delivery validates it as required', () => {
+test('Build dialect default is ardupilotmega', () => {
   assert.match(
     html,
-    /dialect:\s*\{\s*value:\s*''/,
-    'defaults.dialect.value must be empty'
+    /dialect:\s*\{\s*value:\s*'ardupilotmega'/,
+    'defaults.dialect.value must be ardupilotmega'
   );
-  assert.match(html, /if \(tier === ['"]build['"]\) return !!v/, 'Build delivery must require a dialect selection');
 });
 
-test('Build dialect select uses the shared helper and includes __vehicle escape option', () => {
-  assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
+test('Build dialect select includes __vehicle escape option', () => {
   assert.match(html, /__vehicle/, 'dialect select must have __vehicle option value');
   assert.match(html, /from Vehicle Profile/, 'dialect select must label the escape option');
 });
@@ -149,19 +142,4 @@ test('Build wire-tier catalog query carries the connection profile id (custom di
   // "Not configured yet" is the required-field validation's job (red field +
   // node marker) — no bespoke pending mechanism in the dialog.
   assert.doesNotMatch(html, /pending/, 'no hand-rolled pending state');
-});
-
-test('Build catalog target does not invent ardupilotmega when dialect is empty', () => {
-  const resolver = html.slice(
-    html.indexOf('function resolveCatalogTarget'),
-    html.indexOf('function loadMessagesCatalog')
-  );
-  const loader = html.slice(
-    html.indexOf('function loadMessagesCatalog'),
-    html.indexOf('function loadCommandsCatalog')
-  );
-
-  assert.match(resolver, /if \(!dialectVal\) return emptyCatalogTarget\(\)/, 'empty Build dialect must produce no catalog target');
-  assert.doesNotMatch(resolver, /ardupilotmega/, 'catalog target resolution must not hardcode ardupilotmega');
-  assert.match(loader, /if \(!target\.query\)/, 'empty catalog target must not fetch an invented dialect');
 });

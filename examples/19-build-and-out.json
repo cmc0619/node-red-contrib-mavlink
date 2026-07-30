@@ -90,7 +90,6 @@
     "type": "mavlink-build",
     "z": "ex19-tab",
     "name": "STATUSTEXT (build)",
-    "dialect": "__vehicle",
     "vehicle": "ex19-vehicle",
     "connection": "ex19-connection",
     "messageName": "STATUSTEXT",

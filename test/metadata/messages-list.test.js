@@ -240,11 +240,11 @@ test('build messages route falls back to an allow-listed bundled dialect when na
   assert.ok(res.body.messages.some((m) => m.name === 'HEARTBEAT'));
 });
 
-test('build messages route rejects empty dialect-only requests', () => {
+test('build messages route defaults dialect-only requests to ardupilotmega', () => {
   const handlers = captureBuildRoutes({});
   const res = mockRes();
   handlers.get('/mavlink/build/messages')({ query: {} }, res);
-  assert.equal(res.statusCode, 400);
-  assert.match(res.body.error, /dialect is required/i);
-  assert.equal(res.body.messages, undefined);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.dialect, 'ardupilotmega');
+  assert.ok(res.body.messages.some((m) => m.name === 'HEARTBEAT'));
 });

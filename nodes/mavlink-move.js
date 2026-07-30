@@ -1,10 +1,7 @@
 'use strict';
 
 const { buildMoveMessage, createMoveStream } = require('../lib/move');
-const {
-  resolveActionTarget,
-  profileFromVehicleNode,
-} = require('../lib/addressing/resolve');
+const { resolveActionTarget, profileFromVehicleNode } = require('../lib/addressing/resolve');
 const {
   shouldSuppress,
   reportDoneError,
@@ -32,7 +29,7 @@ module.exports = function registerMavlinkMove(RED) {
           : null;
         const payload = objectPayload(msg.payload);
 
-        const profile = delivery === 'build' && config.dialect === '__vehicle'
+        const profile = delivery === 'build'
           ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
           : (connectionNode && connectionNode.vehicle) || null;
         const identityNode = delivery === 'build'

@@ -10,7 +10,6 @@ test('mavlink-payload node builds command-backed payload messages', () => {
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
     delivery: 'build',
-    dialect: 'common',
     topic: 'servo',
     verb: 'set',
     targetSystem: 7,
@@ -105,7 +104,6 @@ test('mavlink-payload inherits Vehicle Profile target when config is empty', () 
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
     delivery: 'build',
-    dialect: '__vehicle',
     topic: 'servo',
     verb: 'set',
     targetSystem: '',
@@ -132,7 +130,6 @@ test('mavlink-payload explicit config value wins over Vehicle Profile', () => {
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
     delivery: 'build',
-    dialect: 'common',
     topic: 'servo',
     verb: 'set',
     targetSystem: 7,
@@ -282,7 +279,6 @@ test('mavlink-payload build tier inherits from config.vehicle stub', () => {
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
     delivery: 'build',
-    dialect: '__vehicle',
     topic: 'servo',
     verb: 'set',
     vehicle: 'veh1',
@@ -302,33 +298,6 @@ test('mavlink-payload build tier inherits from config.vehicle stub', () => {
   assert.equal(sent[0].payload.fields.target_component, 78);
 });
 
-test('mavlink-payload build tier concrete dialect does not inherit Vehicle Profile target', () => {
-  const veh1 = { defaultTargetSystem: 77, defaultTargetComponent: 78 };
-  const RED = redStub({ veh1 });
-  require('../../nodes/mavlink-payload')(RED);
-  const Node = RED.nodes.types['mavlink-payload'];
-  const node = new Node({
-    delivery: 'build',
-    dialect: 'common',
-    topic: 'servo',
-    verb: 'set',
-    vehicle: 'veh1',
-    targetSystem: '',
-    targetComponent: '',
-  });
-  let sent;
-
-  node.emit(
-    'input',
-    { payload: { values: { servo: 1, pwm: 1500 } } },
-    (messages) => { sent = messages; },
-    () => {}
-  );
-
-  assert.ok(Number.isNaN(sent[0].payload.fields.target_system), 'concrete dialect has no profile sysid rung');
-  assert.ok(Number.isNaN(sent[0].payload.fields.target_component), 'concrete dialect has no profile compid rung');
-});
-
 test('mavlink-payload build tier ignores connection vehicle when vehicle field is set', () => {
   const veh1 = { defaultTargetSystem: 77, defaultTargetComponent: 78 };
   const conn = { vehicle: { targetSysid: 99, targetCompid: 99 }, send() {}, subscribe() { return () => {}; } };
@@ -337,7 +306,6 @@ test('mavlink-payload build tier ignores connection vehicle when vehicle field i
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
     delivery: 'build',
-    dialect: '__vehicle',
     topic: 'servo',
     verb: 'set',
     vehicle: 'veh1',

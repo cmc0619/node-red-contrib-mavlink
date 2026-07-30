@@ -587,7 +587,7 @@ test('mavlink-build: marks invalid config when vehicle is missing', () => {
   require('../../nodes/mavlink-build')(RED);
   const Constructor = RED._nodeTypes['mavlink-build'];
   const node = makeNodeInstance({ vehicle: 'missing' });
-  Constructor.call(node, { vehicle: 'missing', dialect: '__vehicle' });
+  Constructor.call(node, { vehicle: 'missing' });
   assert.equal(node._status && node._status.fill, 'red');
 });
 
@@ -597,7 +597,7 @@ test('mavlink-build: defaults empty messageName to HEARTBEAT', () => {
   require('../../nodes/mavlink-build')(RED);
   const Constructor = RED._nodeTypes['mavlink-build'];
   const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', messageName: '', tier: 'build' });
+  Constructor.call(node, { vehicle: 'v1', messageName: '', tier: 'build' });
 
   node._input({ payload: { type: 6, autopilot: 3 } });
 
@@ -613,7 +613,7 @@ test('mavlink-build: marks invalid config when messageName is not in dialect', (
   require('../../nodes/mavlink-build')(RED);
   const Constructor = RED._nodeTypes['mavlink-build'];
   const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', messageName: 'NONEXISTENT_MSG' });
+  Constructor.call(node, { vehicle: 'v1', messageName: 'NONEXISTENT_MSG' });
   assert.equal(node._status && node._status.fill, 'red');
 });
 
@@ -623,7 +623,7 @@ test('mavlink-build: suppresses when msg.payload === false', () => {
   require('../../nodes/mavlink-build')(RED);
   const Constructor = RED._nodeTypes['mavlink-build'];
   const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', messageName: 'HEARTBEAT', tier: 'build' });
+  Constructor.call(node, { vehicle: 'v1', messageName: 'HEARTBEAT', tier: 'build' });
 
   node._input({ payload: false });
 
@@ -638,7 +638,6 @@ test('mavlink-build Build tier: output 0 carries the built message envelope', ()
   const node = makeNodeInstance({ vehicle: 'v1' });
   Constructor.call(node, {
     vehicle: 'v1',
-    dialect: '__vehicle',
     messageName: 'HEARTBEAT',
     tier: 'build',
     fields: JSON.stringify({ type: 6, autopilot: 3 }),
@@ -670,7 +669,6 @@ test('mavlink-build Build tier: msg.payload overrides config fields', () => {
   const node = makeNodeInstance({ vehicle: 'v1' });
   Constructor.call(node, {
     vehicle: 'v1',
-    dialect: '__vehicle',
     messageName: 'HEARTBEAT',
     tier: 'build',
     fields: JSON.stringify({ type: 6, autopilot: 3 }),
@@ -753,7 +751,6 @@ test('mavlink-build: malformed fields JSON marks invalid config instead of abort
   const node = makeNodeInstance({ vehicle: 'v1' });
   assert.doesNotThrow(() => Constructor.call(node, {
     vehicle: 'v1',
-    dialect: '__vehicle',
     messageName: 'HEARTBEAT',
     tier: 'build',
     fields: '{ not valid json',
@@ -770,7 +767,6 @@ test('mavlink-build Send tier: falls back to Build when no connection configured
   const node = makeNodeInstance({ vehicle: 'v1' });
   Constructor.call(node, {
     vehicle: 'v1',
-    dialect: '__vehicle',
     messageName: 'HEARTBEAT',
     tier: 'send',   // requests Send but no connection
     fields: JSON.stringify({ type: 6, autopilot: 3 }),
@@ -793,7 +789,6 @@ test('mavlink-build Build tier: codec error emits error status on output 1', () 
   const node = makeNodeInstance({ vehicle: 'v1' });
   Constructor.call(node, {
     vehicle: 'v1',
-    dialect: '__vehicle',
     messageName: 'HEARTBEAT',
     tier: 'build',
     // 'type' is uint8_t — passing undefined triggers a FieldCodecError.
@@ -820,7 +815,6 @@ test('mavlink-build: close stops the repeat timer', () => {
   const node = makeNodeInstance({ vehicle: 'v1' });
   Constructor.call(node, {
     vehicle: 'v1',
-    dialect: '__vehicle',
     messageName: 'HEARTBEAT',
     tier: 'build',
     fields: '{}',
@@ -851,7 +845,6 @@ test('integration: Build tier output is forwarded and sent by mavlink-out', () =
   const buildNode = makeNodeInstance({ vehicle: 'v1' });
   BuildConstructor.call(buildNode, {
     vehicle: 'v1',
-    dialect: '__vehicle',
     messageName: 'HEARTBEAT',
     tier: 'build',
     fields: JSON.stringify({ type: 6, autopilot: 3 }),
@@ -904,6 +897,33 @@ test('mavlink-build Build tier: plain dialect config loads bundled dialect witho
   assert.equal(out0.payload.tier, TIER.BUILD);
   assert.ok(out0.payload.message, 'payload.message must be present');
   assert.equal(out0.payload.message.name, 'HEARTBEAT');
+  assert.equal(out1.result, 'built');
+});
+
+test('mavlink-build: legacy config with vehicle but no dialect key still works', () => {
+  const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ vehicle: 'v1' });
+  // No 'dialect' property in config — mimics flows saved before the dialect
+  // picker was added; the vehicle node provides the bundle as before.
+  Constructor.call(node, {
+    vehicle: 'v1',
+    messageName: 'HEARTBEAT',
+    tier: 'build',
+    fields: JSON.stringify({ type: 6, autopilot: 3 }),
+  });
+
+  assert.notEqual(node._status && node._status.fill, 'red');
+
+  node._input({ payload: {} });
+
+  assert.equal(node._sends.length, 1);
+  const [out0, out1] = node._sends[0];
+  assert.ok(out0);
+  assert.equal(out0.payload.messageName, 'HEARTBEAT');
+  assert.deepEqual(out0.payload.message.fields, { type: 6, autopilot: 3 });
   assert.equal(out1.result, 'built');
 });
 
