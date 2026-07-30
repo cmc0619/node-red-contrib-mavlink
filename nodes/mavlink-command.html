@@ -899,12 +899,22 @@
             for (const row of rows) {
               if (!row.input.closest('body').length) return; // row was replaced
               const catParam = catalogParamByIndex(cmdCatalog, commandId, row.spec.index);
-              if (catParam && catParam.description) {
+              if (!catParam) continue;
+              const lbl = row.input.closest('.form-row').find('label').first();
+              // Units come from the dialect XML when it declares them; the
+              // static table is the offline fallback. Lat/lon stay on the
+              // fallback ('deg') because the XML deliberately leaves them
+              // unitless — the wire unit is carrier-dependent, and canonical
+              // operator input is degrees (§9).
+              const units = catParam.units || row.spec.units;
+              if (lbl.length) {
+                lbl.text(units ? row.spec.label + ' (' + units + ')' : row.spec.label);
+              }
+              if (catParam.description) {
                 const tip = row.spec.bitmask
                   ? bitmaskTitle(catParam.description)
                   : catParam.description;
                 row.input.attr('title', tip);
-                const lbl = row.input.closest('.form-row').find('label').first();
                 if (lbl.length) lbl.attr('title', tip);
               }
             }
