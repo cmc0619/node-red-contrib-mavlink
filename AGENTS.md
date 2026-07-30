@@ -556,6 +556,21 @@ When removing a redundant guard, also remove its dedicated:
 - fallback values; and
 - dead branches.
 
+**Re-read what the removal left behind.** A helper whose body *was* the guard does not survive the
+guard. After deleting a branch, look at the remaining function: if the body is a single
+pass-through call — `f(a, b)` whose body is `b(a)` — it is an identity wrapper. Delete it and
+inline the call at every site.
+
+Two rationalisations to refuse by name, because both feel like diligence:
+
+- *"The wrapper still carries the documented contract."* A JSDoc paragraph is not a reason for a
+  function to exist. Move the contract to whatever still enforces it — a lint, a source-scan
+  test, or a comment at the call sites — and delete the function.
+- *"Changing its signature is the tidy fix."* Rewriting an identity wrapper's callers to keep it
+  is strictly more churn than deleting it, and it preserves the indirection the removal was
+  supposed to eliminate. If the callers are being touched anyway, they are being touched to
+  delete it.
+
 Prefer the smallest custom-node implementation that handles:
 
 1. valid editor-produced configuration;
