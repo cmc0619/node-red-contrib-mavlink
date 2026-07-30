@@ -7,7 +7,6 @@ const {
 } = require('../lib/addressing/resolve');
 const {
   shouldSuppress,
-  reportDoneError,
 } = require('../lib/delivery');
 
 const BADGE_MAX = 24;
@@ -116,7 +115,7 @@ function completeResult(node, emit, result, action, message) {
 function fail(node, emit, err, msg, done) {
   node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
   emit([null, statusRecord('failed', err.message)]);
-  reportDoneError(node, err, msg, done);
+  done(err);
 }
 
 function statusRecord(result, detail, extra = {}) {

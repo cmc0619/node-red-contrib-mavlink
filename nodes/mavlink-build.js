@@ -38,7 +38,6 @@ const {
   shouldSuppress,
   applyActionStatus,
   capBadge,
-  reportDoneError,
 } = require('../lib/delivery');
 
 /** Module-scope guard — the constructor is recreated each factory call. */
@@ -182,7 +181,7 @@ module.exports = function registerMavlinkBuild(RED) {
         applyActionStatus(node, 'error', capBadge(err.message));
         node.send([null, sr]);
         if (triggerMsg) {
-          reportDoneError(node, new Error(`mavlink-build encode: ${err.message}`), triggerMsg, done);
+          done(new Error(`mavlink-build encode: ${err.message}`));
         } else {
           node.error(`mavlink-build encode: ${err.message}`, {});
         }
@@ -232,7 +231,7 @@ module.exports = function registerMavlinkBuild(RED) {
         applyActionStatus(node, 'error', capBadge(err.message));
         node.send([null, sr]);
         if (triggerMsg) {
-          reportDoneError(node, new Error(`mavlink-build send: ${err.message}`), triggerMsg, done);
+          done(new Error(`mavlink-build send: ${err.message}`));
         } else {
           node.error(`mavlink-build send: ${err.message}`, {});
         }

@@ -7,7 +7,6 @@
  *   - makeStatusRecord: plain object shape and field preservation
  *   - shouldSuppress: exact `=== false` semantics
  *   - capBadge: length capping, ellipsis, exactly-24 pass-through
- *   - reportDoneError: one Catch path only (`done(err)` or `node.error`)
  *   - TIER constants: values are stable strings
  */
 
@@ -20,7 +19,6 @@ const {
   makeStatusRecord,
   shouldSuppress,
   capBadge,
-  reportDoneError,
 } = require('../../lib/delivery');
 
 // ---------------------------------------------------------------------------
@@ -110,44 +108,6 @@ test('capBadge: the last character of a capped string is the ellipsis glyph', ()
 test('capBadge: coerces non-string input via String()', () => {
   const result = capBadge(12345);
   assert.equal(result, '12345');
-});
-
-// ---------------------------------------------------------------------------
-// reportDoneError
-// ---------------------------------------------------------------------------
-
-test('reportDoneError: uses done(err) without also calling node.error', () => {
-  const err = new Error('boom');
-  const msg = { payload: 1 };
-  let doneArg;
-  let nodeErrorCalled = false;
-  const node = {
-    error() {
-      nodeErrorCalled = true;
-    },
-  };
-
-  reportDoneError(node, err, msg, (received) => {
-    doneArg = received;
-  });
-
-  assert.equal(doneArg, err);
-  assert.equal(nodeErrorCalled, false);
-});
-
-test('reportDoneError: falls back to node.error when done is unavailable', () => {
-  const err = new Error('boom');
-  const msg = { payload: 1 };
-  let nodeErrorArgs;
-  const node = {
-    error(...args) {
-      nodeErrorArgs = args;
-    },
-  };
-
-  reportDoneError(node, err, msg);
-
-  assert.deepEqual(nodeErrorArgs, [err, msg]);
 });
 
 // ---------------------------------------------------------------------------

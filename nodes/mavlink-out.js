@@ -37,7 +37,6 @@ const {
   shouldSuppress,
   applyActionStatus,
   capBadge,
-  reportDoneError,
 } = require('../lib/delivery');
 
 module.exports = function registerMavlinkOut(RED) {
@@ -78,7 +77,7 @@ module.exports = function registerMavlinkOut(RED) {
         });
         applyActionStatus(node, 'error', 'bad payload');
         emit([null, sr]);
-        reportDoneError(node, new Error('mavlink-out: unrecognised payload shape'), msg, done);
+        done(new Error('mavlink-out: unrecognised payload shape'));
         return;
       }
 
@@ -102,7 +101,7 @@ module.exports = function registerMavlinkOut(RED) {
         });
         applyActionStatus(node, 'error', capBadge(err.message));
         emit([null, sr]);
-        reportDoneError(node, new Error(`mavlink-out: ${err.message}`), msg, done);
+        done(new Error(`mavlink-out: ${err.message}`));
         return;
       }
 

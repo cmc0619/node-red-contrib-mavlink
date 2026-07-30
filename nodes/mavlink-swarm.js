@@ -3,8 +3,6 @@
 const delivery = require('../lib/delivery');
 const { executeSwarm, guardSwarmInput } = require('../lib/swarm');
 
-const { reportDoneError } = delivery;
-
 module.exports = function registerMavlinkSwarm(RED) {
   function MavlinkSwarmNode(config) {
     RED.nodes.createNode(this, config);
@@ -72,7 +70,7 @@ module.exports = function registerMavlinkSwarm(RED) {
           ? [{ payload: aggregate }, aggregate]
           : [null, aggregate]);
         if (!aggregate.success && aggregate.result !== 'dry_run') {
-          reportDoneError(node, new Error(`mavlink-swarm: ${aggregate.result}`), msg, done);
+          done(new Error(`mavlink-swarm: ${aggregate.result}`));
         } else if (done) {
           done();
         }
@@ -86,7 +84,7 @@ module.exports = function registerMavlinkSwarm(RED) {
         });
         delivery.applyActionStatus(node, 'error', err.message);
         emit([null, record]);
-        reportDoneError(node, err, msg, done);
+        done(err);
       }
     });
   }

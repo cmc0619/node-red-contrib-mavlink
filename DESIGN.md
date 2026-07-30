@@ -1732,11 +1732,10 @@ test/move/node.test.js test/payload/node.test.js test/state/node.test.js`.
 **Input-handler Catch is `done(err)`, not `node.error` + bare `done()`.**
 *Wrong belief:* Calling `node.error(err, msg)` then `done()` (no argument) is the safe way to
 both notify Catch and finish the message.
-*Fact:* With a `done` callback, `done(err)` is the single Catch path. `node.error` then bare
-`done()` pairs an error report with a successful finish. Use `reportDoneError` from
-`lib/delivery` (it calls `done(err)`, or `node.error` only when `done` is missing). A throw
-that escapes the handler is contained by Node-RED (§2) but is not the preferred path — catch
-and `done(err)`.
+*Fact:* `done(err)` is the single Catch path. `node.error` then bare `done()` pairs an error
+report with a successful finish. Call `done(err)` directly — the runtime always supplies `done`.
+A throw that escapes the handler is contained by Node-RED (§2) but is not the preferred path —
+catch and `done(err)`.
 *Check:* `node --test test/delivery/catch-path-scan.test.js` (source scan of `nodes/mavlink-*.js`);
 `node --test test/delivery/delivery.test.js test/swarm/node.test.js`.
 

@@ -29,7 +29,6 @@ const {
   makeStatusRecord,
   shouldSuppress,
   applyActionStatus,
-  reportDoneError,
 } = require('../lib/delivery');
 const {
   resolveActionTarget,
@@ -337,13 +336,13 @@ function completeResult(node, emit, result, detail, payload) {
 function timeoutResult(node, emit, detail, msg, done) {
   applyActionStatus(node, 'error', detail);
   emit([null, statusRecord('timed-out', detail)]);
-  reportDoneError(node, new Error(`mavlink-param: ${detail}`), msg, done);
+  done(new Error(`mavlink-param: ${detail}`));
 }
 
 function fail(node, emit, err, msg, done) {
   applyActionStatus(node, 'error', err.message);
   emit([null, statusRecord('failed', err.message)]);
-  reportDoneError(node, err, msg, done);
+  done(err);
 }
 
 /**

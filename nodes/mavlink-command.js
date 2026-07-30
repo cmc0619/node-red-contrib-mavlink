@@ -45,7 +45,6 @@ const {
 
 const {
   shouldSuppress,
-  reportDoneError,
 } = require('../lib/delivery');
 
 /** Band constant for outbound commands (CONTROL = 2). */
@@ -224,7 +223,7 @@ module.exports = function registerMavlinkCommand(RED) {
       }
 
       function failDone(detail) {
-        reportDoneError(node, new Error(`mavlink-command: ${detail}`), msg, done);
+        done(new Error(`mavlink-command: ${detail}`));
       }
 
       // ── Safety preset confirmation check ──────────────────────────────────
@@ -574,7 +573,7 @@ module.exports = function registerMavlinkCommand(RED) {
           } catch {
             /* send may be unavailable if the runtime already tore down */
           }
-          reportDoneError(node, err, msg, done);
+          done(err);
         });
     });
 

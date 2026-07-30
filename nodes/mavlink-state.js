@@ -1,7 +1,6 @@
 'use strict';
 
 const { createStateFeed, snapshotPeers } = require('../lib/state');
-const { reportDoneError } = require('../lib/delivery');
 
 const BADGE_MAX = 24;
 
@@ -47,7 +46,7 @@ module.exports = function registerMavlinkState(RED) {
       } catch (err) {
         node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
         emit([null, statusRecord('failed', err.message)]);
-        reportDoneError(node, err, msg, done);
+        done(err);
       }
     });
 

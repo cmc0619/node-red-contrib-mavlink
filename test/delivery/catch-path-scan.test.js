@@ -2,7 +2,7 @@
 
 /**
  * Source scan: input handlers must not pair node.error with bare done()/finish()
- * (DESIGN.md §2 / §9 — Catch via done(err) through reportDoneError).
+ * (DESIGN.md §2 / §9 — Catch observes done(err)).
  */
 
 const fs = require('node:fs');
@@ -26,7 +26,7 @@ function stripComments(src) {
 
 /**
  * node.error(...); then bare done() or finish() within a short window.
- * reportDoneError / done(err) are the allowed paths.
+ * done(err) is the allowed path.
  */
 const FORBIDDEN = /node\.error\s*\([\s\S]{0,200}?\);[\s\S]{0,80}?\b(?:done|finish)\s*\(\s*\)/;
 
@@ -45,6 +45,6 @@ test('action nodes do not pair node.error with bare done()/finish()', () => {
   assert.deepEqual(
     hits,
     [],
-    `use reportDoneError / done(err), not node.error then bare done()/finish(): ${hits.join(', ')}`
+    `use done(err), not node.error then bare done()/finish(): ${hits.join(', ')}`
   );
 });

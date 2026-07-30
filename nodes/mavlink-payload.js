@@ -12,7 +12,6 @@ const {
 } = require('../lib/addressing/resolve');
 const {
   shouldSuppress,
-  reportDoneError,
 } = require('../lib/delivery');
 
 const BADGE_MAX = 24;
@@ -268,7 +267,7 @@ function failAck(node, emit, built, outcome, msg, done) {
       elapsed: outcome.elapsed,
     }),
   ]);
-  reportDoneError(node, new Error(`mavlink-payload: ${built.message.name} ${outcome.result}`), msg, done);
+  done(new Error(`mavlink-payload: ${built.message.name} ${outcome.result}`));
 }
 
 function valuesFrom(config) {
@@ -334,7 +333,7 @@ function completeResult(node, emit, result, detail, built) {
 function fail(node, emit, err, msg, done) {
   node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
   emit([null, statusRecord('failed', err.message)]);
-  reportDoneError(node, err, msg, done);
+  done(err);
 }
 
 function statusRecord(result, detail, extra = {}) {
