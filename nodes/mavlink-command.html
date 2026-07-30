@@ -791,25 +791,36 @@
           // source for labels, units, enums, bitmask-ness, descriptions, and
           // ranges; PRESET_PARAMS only curates exposure and guidance (§6).
           // A cache hit renders synchronously; the first open shows a loading
-          // row and re-renders once, and oneditsave's rendered-guard keeps a
-          // premature Done from scraping the empty form (Codex #36).
-          const catalog = _catalogByKey[_activeCatalogKey];
-          if (!catalog) {
-            container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
-            loadCommandsCatalog(function () {
-              if ($('#node-input-mode').val() !== 'preset') return;
-              if ($('#node-input-preset').val() !== presetId) return;
-              refreshParamFields();
-            });
+          // row and renders once from the delivered catalog — directly, not by
+          // re-entering refreshParamFields, so a persistently failing route
+          // (which is never cached) cannot loop fetches. oneditsave's
+          // rendered-guard keeps a premature Done from scraping the empty
+          // form (Codex #36).
+          const commandId = presetCommandId(presetId);
+          function renderPresetRows(catalog) {
+            for (const spec of paramSpec) {
+              // Curation keys override the catalog spec; omitted keys inherit.
+              const merged = Object.assign({}, catalogParamByIndex(catalog, commandId, spec.index) || {}, spec);
+              container.append(formRow(advancedParamLabel(merged), presetParamInput(merged, catalog.enums || {})));
+            }
+            node._mavParamsRendered = true;
+          }
+          // Resolve the key for THIS node's target — _activeCatalogKey can
+          // still point at a previously edited node's dialect.
+          const cached = _catalogByKey[RED.mavlink.resolveCatalogTarget().key];
+          if (cached) {
+            renderPresetRows(cached);
             return;
           }
-          const commandId = presetCommandId(presetId);
-          for (const spec of paramSpec) {
-            // Curation keys override the catalog spec; omitted keys inherit.
-            const merged = Object.assign({}, catalogParamByIndex(catalog, commandId, spec.index) || {}, spec);
-            container.append(formRow(advancedParamLabel(merged), presetParamInput(merged, catalog.enums || {})));
-          }
-          node._mavParamsRendered = true;
+          container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
+          loadCommandsCatalog(function (cmdCatalog) {
+            if ($('#node-input-mode').val() !== 'preset') return;
+            if ($('#node-input-preset').val() !== presetId) return;
+            container.empty();
+            // An errored catalog renders the curated skeleton (labels and
+            // numeric inputs) rather than an empty form.
+            renderPresetRows(cmdCatalog || { commands: [], enums: {} });
+          });
         }
       }
 
