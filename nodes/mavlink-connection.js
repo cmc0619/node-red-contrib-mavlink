@@ -38,15 +38,35 @@ module.exports = function registerMavlinkConnection(RED) {
     // or timers (§7). Show the grey disabled badge and stop.
     if (node.disabled) {
       node.status({ fill: 'grey', shape: 'ring', text: 'disabled' });
-      node.subscribe = () => () => {};
-      node.send = () => {};
+      installInertHooks(node, 'connection is disabled');
       node.on('close', (done) => done());
       return;
     }
 
+    // A dangling Vehicle Profile reference, or a profile whose getDialect()
+    // throws (broken custom XML, missing deps), must not throw out of the
+    // constructor: that leaves no node at all, so every consumer degrades to
+    // "invalid config" with the real cause shown nowhere. Badge the cause and
+    // stop — no runtime, no dialing, no timers (§6 "misconfigured at deploy").
     const vehicleNode = RED.nodes.getNode(config.vehicle);
-    const bundle = vehicleNode.getDialect();
-    const defaults = vehicleNode.getDefaults();
+    if (!vehicleNode || typeof vehicleNode.getDialect !== 'function') {
+      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+      installInertHooks(node, 'no Vehicle Profile');
+      node.on('close', (done) => done());
+      return;
+    }
+    let bundle;
+    let defaults;
+    try {
+      bundle = vehicleNode.getDialect();
+      defaults = vehicleNode.getDefaults();
+    } catch (err) {
+      node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+      installInertHooks(node, `dialect unavailable — ${err.message}`);
+      node.on('close', (done) => done());
+      node.error(`mavlink-connection: ${err.message}`);
+      return;
+    }
 
     // Public frozen snapshot so palette nodes can inherit target defaults from
     // the Vehicle Profile without reaching into private runtime fields. `id` is
@@ -65,7 +85,11 @@ module.exports = function registerMavlinkConnection(RED) {
     const identityIds = [config.localIdentity, ...(config.additionalIdentities || [])].filter(
       Boolean
     );
-    node._identityNodes = identityIds.map((id) => RED.nodes.getNode(id));
+    // A deleted or undeployed Local Identity resolves to null. Drop it here —
+    // dereferencing it in identitySnapshot would throw out of the constructor —
+    // and derive the bound set from the nodes that actually exist, so a send
+    // naming a missing identity fails loudly in resolveIdentity (§7).
+    node._identityNodes = identityIds.map((id) => RED.nodes.getNode(id)).filter(Boolean);
 
     // Legacy flows stored cadence on the Connection (`heartbeatInterval`). Prefer
     // that when an identity still has the default 1000 ms so upgrades do not
@@ -87,7 +111,7 @@ module.exports = function registerMavlinkConnection(RED) {
       },
       identities,
       defaultIdentityId: config.localIdentity,
-      boundIdentityIds: identityIds,
+      boundIdentityIds: node._identityNodes.map((idNode) => idNode.id),
       signing: buildSigning(config, node.credentials),
       heartbeat: {
         staleMs: config.staleMs ? Number(config.staleMs) : undefined,
@@ -129,6 +153,27 @@ module.exports = function registerMavlinkConnection(RED) {
     credentials: { signingPassphrase: { type: 'password' } },
   });
 };
+
+/**
+ * Install the palette-facing hooks for a Connection that has no runtime — the
+ * disable switch, or a deploy-time failure that stopped the constructor.
+ *
+ * `send` throws synchronously: a sender node must report the failure through the
+ * catch path it already has (mavlink-out, -build, -command, -param, -move,
+ * -payload, -mission and -swarm all route a throwing send to a failed status
+ * record) rather than get a silent no-op and report a phantom success (§2).
+ * `subscribe` stays a no-op — receiving nothing from a link that never opened is
+ * the correct behaviour, and In nodes still unsubscribe on close.
+ *
+ * @param {object} node  the Connection config node
+ * @param {string} reason  why there is no runtime, for the thrown message
+ */
+function installInertHooks(node, reason) {
+  node.subscribe = () => () => {};
+  node.send = () => {
+    throw new Error(`mavlink-connection: ${reason}`);
+  };
+}
 
 /**
  * Build the runtime identity snapshot from a Local Identity config node,

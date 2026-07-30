@@ -111,7 +111,16 @@ module.exports = function registerMavlinkBuild(RED) {
           return;
         }
       } else {
-        bundle = require('../lib/metadata').loadBundled(dialectName);
+        // Same failure as the __vehicle branch above (a dialect that will not
+        // load — unknown name, missing mavlink-mappings): badge the cause
+        // instead of throwing the node out of existence at deploy.
+        try {
+          bundle = require('../lib/metadata').loadBundled(dialectName);
+        } catch (err) {
+          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+          node.error(`mavlink-build: ${err.message}`);
+          return;
+        }
       }
     } else {
       // Wire tier: the connection's bound profile governs — hidden is not

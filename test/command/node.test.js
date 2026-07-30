@@ -365,6 +365,39 @@ test('ack-matcher pin: companion target used for COMMAND_ACK matching; ack from 
   node.emit('close', () => {});
 });
 
+test('close mid-transaction finishes quietly — a cancelled ack is not a command failure (§7)', async () => {
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSysid: '1',
+    targetCompid: '1',
+    timeout: '60000',
+  });
+
+  let sent;
+  let doneErr;
+  let doneCalls = 0;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, (err) => {
+    doneCalls += 1;
+    doneErr = err;
+  });
+  await tick();
+  assert.equal(conn.sent.length, 1, 'the command was sent and the waiter is pending');
+
+  node.emit('close', () => {});
+  await tick();
+
+  assert.equal(sent, undefined, 'no status record is emitted on the closed node');
+  assert.equal(doneErr, undefined, 'a redeploy must not look like a failed command to a Catch node');
+  assert.equal(doneCalls, 1, 'the message is still completed exactly once');
+});
+
 function connStubWithInject(vehicleOverride) {
   const subs = [];
   const sent = [];

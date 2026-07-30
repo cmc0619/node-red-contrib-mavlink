@@ -536,6 +536,16 @@ module.exports = function registerMavlinkCommand(RED) {
         return;
       }
 
+      // Cancelled is not a command failure: AckWaiter.cancel() resolves it when
+      // the close handler tore this node down mid-transaction. The node is
+      // already gone, so a badge/emit/done(err) here would only fire a Catch
+      // wired for "command failed" on a mere redeploy (mirrors Mission's
+      // explicit 'cancelled' branch).
+      if (ackOutcome.result === 'cancelled') {
+        done && done();
+        return;
+      }
+
       // Any other terminal failure.
       const rec = makeRecord({
         result: ackOutcome.result,

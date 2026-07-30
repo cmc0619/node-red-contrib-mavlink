@@ -122,6 +122,12 @@ module.exports = function registerMavlinkPayload(RED) {
               if (outcome.result === 'accepted') {
                 completeAck(node, emit, built, outcome);
                 if (done) done();
+              } else if (outcome.result === 'cancelled') {
+                // The close handler cancelled this waiter — not a command
+                // failure. The node is gone, so finish without a badge, an
+                // output, or a done(err) that a Catch would read as a real
+                // failure on a redeploy (mirrors Mission's 'cancelled' branch).
+                if (done) done();
               } else {
                 failAck(node, emit, built, outcome, msg, done);
               }

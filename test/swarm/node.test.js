@@ -193,6 +193,41 @@ test('mavlink-swarm node gates a safety preset on msg.confirmed / node confirm (
   assert.equal(conn2.sends[0].message.fields.command, 185);
 });
 
+test('close mid-sequential fan-out stops further member sends and is not a failure (§7)', async () => {
+  // Confirm tier against peers that never ack: member 1's AckWaiter is still
+  // pending when the redeploy arrives, so the loop is mid-fan-out.
+  const connection = connectionStub([peer(1), peer(2), peer(3)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-swarm')(RED);
+  const node = new (RED.nodes.types['mavlink-swarm'])({
+    connection: 'conn',
+    actionType: 'command',
+    commandId: 400,
+    executionMode: 'sequential',
+    delivery: 'confirm',
+    intervalMs: 0,
+    timeoutMs: 60000,
+  });
+
+  let sent;
+  let doneErr;
+  const finished = new Promise((resolve) => {
+    node.emit('input', { payload: {} }, (m) => { sent = m; }, (err) => {
+      doneErr = err;
+      resolve();
+    });
+  });
+
+  assert.equal(connection.sends.length, 1, 'only the first member has been commanded');
+
+  await new Promise((resolve) => node.emit('close', resolve));
+  await finished;
+
+  assert.equal(connection.sends.length, 1, 'close must stop the fan-out before the next member');
+  assert.equal(doneErr, undefined, 'a cancelled fan-out is not a command failure');
+  assert.equal(sent, undefined, 'nothing is emitted on the closed node');
+});
+
 function emitInput(node, msg, send) {
   return new Promise((resolve, reject) => {
     node.emit('input', msg, send, (err) => {

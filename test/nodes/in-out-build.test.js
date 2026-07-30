@@ -11,7 +11,11 @@
  *   - mavlink-out: suppress (payload===false), resolved message shape,
  *     band/target/identity forwarding, invalid config
  *   - mavlink-build: suppress, Build tier output shape, Send tier enqueue,
- *     invalid config guards (no vehicle, no message, bad messageName)
+ *     invalid config guards (no vehicle, no message, bad messageName, a dialect
+ *     that will not load)
+ *   - mavlink-connection: a Connection with no runtime (disabled, dangling
+ *     profile, failing dialect) badges the cause and throws on send rather than
+ *     letting a sender node report a phantom success
  */
 
 const test = require('node:test');
@@ -968,6 +972,83 @@ test('mavlink-build wire tier: stale hidden config.vehicle cannot override the c
   node._input({ payload: {} });
   assert.equal(sent.length, 1);
   assert.equal(sent[0].message.name, 'HEARTBEAT');
+});
+
+test('mavlink-build Build tier: a dialect that will not load badges the cause instead of throwing at deploy', () => {
+  const RED = makeRED();
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance();
+  assert.doesNotThrow(() => Constructor.call(node, {
+    dialect: 'no_such_dialect',
+    messageName: 'HEARTBEAT',
+    tier: 'build',
+    fields: '{}',
+  }));
+  assert.equal(node._status && node._status.text, 'dialect unavailable');
+  assert.equal(node._errors.length, 1, 'the real cause is reported once');
+});
+
+// ---------------------------------------------------------------------------
+// mavlink-connection: no runtime (disabled / deploy-time dialect failure)
+// ---------------------------------------------------------------------------
+
+test('mavlink-connection: a disabled connection throws on send — no phantom success downstream', () => {
+  const RED = makeRED();
+  require('../../nodes/mavlink-connection')(RED);
+  const connNode = makeNodeInstance({ id: 'conn-off' });
+  RED._nodeTypes['mavlink-connection'].call(connNode, { id: 'conn-off', disabled: true });
+
+  assert.equal(connNode._status && connNode._status.text, 'disabled');
+  assert.throws(
+    () => connNode.send({ name: 'HEARTBEAT', fields: {} }),
+    /disabled/,
+    'send must fail loudly, not silently drop the message'
+  );
+  assert.equal(typeof connNode.subscribe(), 'function', 'subscribe stays an inert no-op');
+
+  // A sender node must report that through its existing catch path.
+  RED.nodes._register('conn-off', connNode);
+  require('../../nodes/mavlink-out')(RED);
+  const outNode = makeNodeInstance({ connection: 'conn-off' });
+  RED._nodeTypes['mavlink-out'].call(outNode, { connection: 'conn-off' });
+
+  assert.doesNotThrow(() => outNode._input({ payload: { name: 'HEARTBEAT', fields: {} } }));
+  const [out0, out1] = outNode._sends[0];
+  assert.equal(out0, null, 'output 0 must not fire for a disabled connection');
+  assert.equal(out1.result, 'failed', 'a disabled connection must never report "sent"');
+});
+
+test('mavlink-connection: a dangling Vehicle Profile reference badges invalid config, node still exists', () => {
+  const RED = makeRED();
+  require('../../nodes/mavlink-connection')(RED);
+  const connNode = makeNodeInstance({ id: 'conn-1' });
+  assert.doesNotThrow(() => RED._nodeTypes['mavlink-connection'].call(connNode, {
+    id: 'conn-1',
+    vehicle: 'deleted-profile',
+  }));
+  assert.equal(connNode._status && connNode._status.text, 'invalid config');
+  assert.throws(() => connNode.send({ name: 'HEARTBEAT', fields: {} }), /Vehicle Profile/);
+});
+
+test('mavlink-connection: a throwing getDialect() badges the real cause instead of aborting the constructor', () => {
+  const RED = makeRED();
+  RED.nodes._register('v-broken', {
+    id: 'v-broken',
+    getDialect() { throw new Error('custom XML failed to compile'); },
+    getDefaults: () => ({}),
+  });
+  require('../../nodes/mavlink-connection')(RED);
+  const connNode = makeNodeInstance({ id: 'conn-1' });
+  assert.doesNotThrow(() => RED._nodeTypes['mavlink-connection'].call(connNode, {
+    id: 'conn-1',
+    vehicle: 'v-broken',
+  }));
+  assert.equal(connNode._status && connNode._status.text, 'dialect unavailable');
+  assert.ok(
+    connNode._errors.some((m) => /custom XML failed to compile/.test(m)),
+    'the badge is backed by an error naming the cause'
+  );
 });
 
 // ---------------------------------------------------------------------------

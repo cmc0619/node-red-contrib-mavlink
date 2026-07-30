@@ -358,6 +358,39 @@ test('mavlink-payload build tier ignores connection vehicle when vehicle field i
   assert.equal(sent[0].payload.fields.target_component, 78, 'vehicle profile used, not connection profile');
 });
 
+test('mavlink-payload close mid-transaction finishes quietly — cancelled is not a failure (§7)', async () => {
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    delivery: 'confirm',
+    topic: 'servo',
+    verb: 'set',
+    connection: 'conn',
+    targetSystem: 7,
+    targetComponent: 1,
+    timeout: 60000,
+  });
+
+  let sent;
+  let doneErr;
+  let doneCalls = 0;
+  node.emit('input', { payload: { values: { servo: 8, pwm: 1600 } } }, (m) => { sent = m; }, (err) => {
+    doneCalls += 1;
+    doneErr = err;
+  });
+  await tick();
+  assert.equal(conn.sent.length, 1, 'the command was sent and the waiter is pending');
+
+  node.emit('close', () => {});
+  await tick();
+
+  assert.equal(sent, undefined, 'nothing is emitted on the closed node');
+  assert.equal(doneErr, undefined, 'a redeploy must not look like a failed command to a Catch node');
+  assert.equal(doneCalls, 1, 'the message is still completed exactly once');
+});
+
 /**
  * Connection stub with subscribe/send and COMMAND_ACK injection.
  */

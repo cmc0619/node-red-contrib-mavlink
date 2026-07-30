@@ -1,7 +1,7 @@
 'use strict';
 
 const delivery = require('../lib/delivery');
-const { executeSwarm, guardSwarmInput } = require('../lib/swarm');
+const { createSwarmCancel, executeSwarm, guardSwarmInput } = require('../lib/swarm');
 
 const { reportDoneError } = delivery;
 
@@ -21,6 +21,10 @@ module.exports = function registerMavlinkSwarm(RED) {
       delivery.applyActionStatus(node, 'invalid', 'invalid config');
     }
 
+    // Cancellation handles for the fan-outs currently in flight, so close can
+    // stop them (§7 Teardown — mirrors mavlink-mission's active machines).
+    const activeRuns = new Set();
+
     node.on('input', async (msg, send, done) => {
       const emit = send || ((messages) => node.send(messages));
       const guard = guardSwarmInput(msg);
@@ -29,6 +33,8 @@ module.exports = function registerMavlinkSwarm(RED) {
         return;
       }
 
+      const run = createSwarmCancel();
+      activeRuns.add(run);
       try {
         const payload = objectPayload(msg.payload);
         const selection = selectionFrom(config, payload);
@@ -62,7 +68,16 @@ module.exports = function registerMavlinkSwarm(RED) {
           maxRetries: numberOption(payload, config, 'maxRetries', 0),
           identityId: payload.identityId || config.identity,
           confirmed: msg.confirmed === true || config.confirm === true,
+          cancel: run,
         });
+
+        // Cancelled means the node was closed mid-fan-out: finish quietly. The
+        // node is gone, so a badge, an output, or a done(err) would only fire a
+        // Catch wired for a real failure on a redeploy (mirrors Mission).
+        if (aggregate.result === 'cancelled') {
+          if (done) done();
+          return;
+        }
 
         applyAggregateStatus(node, aggregate);
         // Output 1 carries the aggregate status record at the message root.
@@ -87,7 +102,15 @@ module.exports = function registerMavlinkSwarm(RED) {
         delivery.applyActionStatus(node, 'error', err.message);
         emit([null, record]);
         reportDoneError(node, err, msg, done);
+      } finally {
+        activeRuns.delete(run);
       }
+    });
+
+    node.on('close', (done) => {
+      for (const run of activeRuns) run.cancel();
+      activeRuns.clear();
+      done();
     });
   }
 
