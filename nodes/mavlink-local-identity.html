@@ -69,6 +69,43 @@
       return entry.name + ' (' + entry.value + ')';
     };
 
+    /**
+     * Editor-side copy of lib/metadata/naming.js isFalseTrueEnum. Client HTML
+     * cannot require() the Node module, so keep this rule mirrored here.
+     * Exactly two entries: *_FALSE=0 and *_TRUE=1 (not mixed tables).
+     *
+     * @param {Array<{name: string, value: number|string}>|null|undefined} entries
+     * @returns {boolean}
+     */
+    RED.mavlink.isFalseTrueEnum = function (entries) {
+      if (!Array.isArray(entries) || entries.length !== 2) return false;
+      var falseOk = false;
+      var trueOk = false;
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i];
+        // Require valued objects — never synthesize 0/1 for bare name strings.
+        if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string') return false;
+        var name = entry.name;
+        var isFalse = name === 'FALSE' || name.slice(-6) === '_FALSE';
+        var isTrue = name === 'TRUE' || name.slice(-5) === '_TRUE';
+        if (!isFalse && !isTrue) return false;
+        // Reject null/false/'' — Number(null)===0 would falsely match FALSE=0.
+        var rawValue = entry.value;
+        if (typeof rawValue !== 'number' && typeof rawValue !== 'string') return false;
+        if (typeof rawValue === 'string' && rawValue.trim() === '') return false;
+        var value = Number(rawValue);
+        if (!Number.isInteger(value)) return false;
+        if (isFalse) {
+          if (value !== 0 || falseOk) return false;
+          falseOk = true;
+        } else {
+          if (value !== 1 || trueOk) return false;
+          trueOk = true;
+        }
+      }
+      return falseOk && trueOk;
+    };
+
     function valueFromSelector(selector) {
       var $el = $(selector);
       return $el && $el.length ? String($el.val() || '').trim() : '';
@@ -105,33 +142,58 @@
     function currentEnumQuery(names) {
       var query = {};
       var buildTier = valueFromSelector('#node-input-delivery') === 'build';
-      var vehicle = '';
-      var dialect = valueFromSelector('#node-input-dialect') ||
-        valueFromSelector('#node-config-input-dialect');
-
-      if (!buildTier) {
-        var connection = valueFromSelector('#node-input-connection');
-        if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
-          var conn = RED.nodes.node(connection);
-          vehicle = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
-          var connProfile = vehicle ? RED.nodes.node(vehicle) : null;
-          if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
+      if (buildTier) {
+        var buildDialect = valueFromSelector('#node-input-dialect');
+        if (buildDialect && buildDialect !== '__vehicle') {
+          query.dialect = buildDialect;
+        } else if (buildDialect === '__vehicle') {
+          var buildVehicle = valueFromSelector('#node-input-vehicle');
+          if (buildVehicle) {
+            query.vehicle = buildVehicle;
+            if (RED.nodes && typeof RED.nodes.node === 'function') {
+              var buildProfile = RED.nodes.node(buildVehicle);
+              if (buildProfile && buildProfile.dialect) query.dialect = buildProfile.dialect;
+            }
+          }
         }
+        if (!query.dialect && !query.vehicle) return query;
+        addEnumNames(query, names);
+        return query;
       }
-      if (!vehicle) vehicle = valueFromSelector('#node-input-vehicle');
-      if (vehicle && !dialect && RED.nodes && typeof RED.nodes.node === 'function') {
-        var ownProfile = RED.nodes.node(vehicle);
-        if (ownProfile && ownProfile.dialect) dialect = ownProfile.dialect;
+
+      // Config-node dialogs (Vehicle Profile): dialect lives on the config form,
+      // not on a Connection. Must run before the wire-tier connection branch so
+      // /mavlink/enums is not called with {} (400 after empty-query rejection).
+      var configDialect = valueFromSelector('#node-config-input-dialect');
+      if (configDialect && configDialect !== '__vehicle') {
+        query.dialect = configDialect;
+        addEnumNames(query, names);
+        return query;
       }
+
+      var vehicle = '';
+      var dialect = '';
+      var connection = valueFromSelector('#node-input-connection');
+      if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
+        var conn = RED.nodes.node(connection);
+        vehicle = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
+        var connProfile = vehicle ? RED.nodes.node(vehicle) : null;
+        if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
+      }
+      if (!vehicle) return query;
 
       if (vehicle) query.vehicle = vehicle;
       if (dialect) query.dialect = dialect;
+      addEnumNames(query, names);
+      return query;
+    }
+
+    function addEnumNames(query, names) {
       if (Array.isArray(names) && names.length) {
         query.names = names.join(',');
       } else if (typeof names === 'string' && names.trim()) {
         query.names = names.trim();
       }
-      return query;
     }
     RED.mavlink.currentCatalogQuery = currentEnumQuery;
 
@@ -149,6 +211,57 @@
     };
 
     /**
+     * Populate a Build-tier dialect select without inventing a default dialect.
+     * Empty remains selected until the editor's required validator accepts a
+     * concrete dialect or the Vehicle Profile escape (§6).
+     *
+     * @param {object} $select  jQuery select
+     * @param {{saved?: string, includeVehicleEscape?: boolean, onReady?: function}} [opts]
+     */
+    RED.mavlink.populateDialectSelect = function ($select, opts) {
+      opts = opts || {};
+      var saved = opts.saved !== undefined && opts.saved !== null
+        ? String(opts.saved)
+        : String($select.val() || '');
+      var includeVehicleEscape = opts.includeVehicleEscape !== false;
+
+      function appendOption(value, label) {
+        $select.append($('<option></option>').val(value).text(label));
+      }
+
+      function hasOption(value) {
+        return $select.find('option[value="' + value + '"]').length > 0;
+      }
+
+      function finish(dialects) {
+        $select.empty();
+        appendOption('', '\u2014');
+        (dialects || []).forEach(function (dialect) {
+          appendOption(String(dialect), String(dialect));
+        });
+        if (includeVehicleEscape) {
+          appendOption('__vehicle', 'from Vehicle Profile\u2026');
+        }
+        if (saved && !hasOption(saved)) {
+          appendOption(saved, saved);
+        }
+        $select.val(saved || '');
+        if (typeof $select.trigger === 'function') {
+          $select.trigger('change');
+        }
+        if (typeof opts.onReady === 'function') {
+          opts.onReady();
+        }
+      }
+
+      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/dialects'), function (data) {
+        finish((data && data.dialects) || []);
+      }).fail(function () {
+        finish([]);
+      });
+    };
+
+    /**
      * Load a shared dialect enum catalog from the admin endpoint.
      * Callers that open dialogs should pass a `{ cancelled: boolean }` token and
      * set `cancelled` from oneditcancel so a late response cannot fill another dialog.
@@ -156,9 +269,25 @@
      * @param {string[]|string} names  extra enum table names to include
      * @param {function(object):void} cb
      * @param {{cancelled?: boolean}} [token]
+     * @param {{dialect?: string}} [opts]  explicit dialect when the dialog has no
+     *   Connection / Vehicle / Dialect row (Local Identity — uses `common` for
+     *   MAV_TYPE / MAV_COMPONENT / MAV_AUTOPILOT)
      */
-    RED.mavlink.loadEnumsCatalog = function (names, cb, token) {
-      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), currentEnumQuery(names), function (data) {
+    RED.mavlink.loadEnumsCatalog = function (names, cb, token, opts) {
+      opts = opts || {};
+      var query = currentEnumQuery(names);
+      if (!query.dialect && !query.vehicle && opts.dialect) {
+        query.dialect = opts.dialect;
+        addEnumNames(query, names);
+      }
+      // Empty query → 400 on /mavlink/enums; return a local empty catalog instead.
+      if (!query.dialect && !query.vehicle) {
+        if (!token || !token.cancelled) {
+          cb({ dialect: '', enums: {} });
+        }
+        return;
+      }
+      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), query, function (data) {
         if (token && token.cancelled) return;
         cb({
           dialect: data.dialect,
@@ -451,6 +580,8 @@
         }
 
         if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
+          // Local Identity has no Connection/Dialect row — request `common`
+          // explicitly (owns MAV_TYPE / MAV_AUTOPILOT / MAV_COMPONENT).
           RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMPONENT'], function (catalog) {
             var enums = (catalog && catalog.enums) || {};
             // Prefer live dialog values so a role change before the catalog
@@ -467,7 +598,7 @@
             RED.mavlink.fillCompIdSelect($compid, enums.MAV_COMPONENT || [], {
               saved: $compid.val() || node.sourceComponentId
             });
-          }, enumLoadToken);
+          }, enumLoadToken, { dialect: 'common' });
         }
 
         function preset(role) {

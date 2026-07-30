@@ -60,21 +60,35 @@ module.exports = function registerMavlinkParam(RED) {
         }
         const vehicleId = typeof req.query.vehicle === 'string'
           ? req.query.vehicle.trim() : '';
-        if (!vehicleId) {
-          return res.json({ defs: {}, notice: 'no vehicle id supplied' });
-        }
-        const vehicleNode = RED.nodes.getNode(vehicleId);
-        if (!vehicleNode) {
+        const dialect = typeof req.query.dialect === 'string'
+          ? req.query.dialect.trim() : '';
+        let url;
+        if (vehicleId) {
+          const vehicleNode = RED.nodes.getNode(vehicleId);
+          if (!vehicleNode) {
+            return res.json({
+              defs: {},
+              notice: 'Vehicle Profile not deployed — deploy the flow first',
+            });
+          }
+          url = defsApi.resolveDefsUrl(
+            vehicleNode.vehicleFamily || 'generic',
+            vehicleNode.firmware,
+            vehicleNode.paramDefsUrl || ''
+          );
+        } else {
+          if (!dialect) {
+            return res.json({ defs: {}, notice: 'no dialect supplied' });
+          }
+          // ArduPilot pdefs are keyed by vehicle family (DESIGN.md §4), not by
+          // MAVLink dialect. Concrete Build dialect + Firmware has no family —
+          // do not pass dialect into resolveDefsUrl as if it were one.
           return res.json({
             defs: {},
-            notice: 'Vehicle Profile not deployed — deploy the flow first',
+            notice: 'parameter definitions require a Vehicle Profile (vehicle family); '
+              + 'dialect-only Build has no family-keyed defs',
           });
         }
-        const url = defsApi.resolveDefsUrl(
-          vehicleNode.vehicleFamily || 'generic',
-          vehicleNode.firmware,
-          vehicleNode.paramDefsUrl || ''
-        );
         if (!url) {
           return res.json({
             defs: {},
@@ -143,11 +157,15 @@ module.exports = function registerMavlinkParam(RED) {
         const payload = objectPayload(msg.payload);
         const delivery = config.delivery || 'build';
 
-        // Build tier: profile from Vehicle Profile field, no identity.
+        // Build tier: profile only for the Vehicle Profile dialect escape.
+        // Concrete Build dialects carry firmware directly from the editor.
         // Wire tiers: profile from the Connection's bound Vehicle, identity from config/payload.
         const connNode = delivery !== 'build' ? RED.nodes.getNode(config.connection) : null;
+        const useVehicle = delivery === 'build' && config.dialect === '__vehicle';
         const profile = delivery === 'build'
-          ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
+          ? (useVehicle
+            ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
+            : { firmware: config.firmware })
           : (connNode && connNode.vehicle) || null;
         const identityNode = delivery !== 'build'
           ? RED.nodes.getNode(payload.identityId || config.identity)
@@ -245,8 +263,9 @@ module.exports = function registerMavlinkParam(RED) {
  *
  * Resolution order per field (sysid/compid): msg.payload.target →
  * companion derivation → config → profile default.
- * Firmware: payload → profile (no invented default). Hidden `config.firmware`
- * is not consulted (§6). Encoding: override → capabilities → named firmware.
+ * Firmware: payload → active profile. On Build, a concrete dialect supplies
+ * `{ firmware: config.firmware }`; the Vehicle Profile escape supplies the
+ * vehicle profile. Encoding: override → capabilities → named firmware.
  *
  * @param {object} config
  * @param {object} payload

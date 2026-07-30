@@ -45,6 +45,7 @@ class FakeOption {
 
 class FakeSelect {
   constructor(value, enforceOptions = false) {
+    this.length = 1;
     this.options = [];
     this.selected = value || '';
     this.enforceOptions = enforceOptions;
@@ -111,7 +112,7 @@ class FakeSelect {
   }
 }
 
-function loadHelpers(initialValues = {}) {
+function loadHelpers(initialValues = {}, nodeLookup = {}) {
   const elements = new Map();
   let identityDefinition = null;
 
@@ -133,9 +134,23 @@ function loadHelpers(initialValues = {}) {
     return elements.get(selector);
   }
   $.getJSON = function (url, query, cb) {
+    if (typeof query === 'function') {
+      cb = query;
+      query = undefined;
+    }
     $.lastRequest = { url, query };
-    cb({ dialect: 'common', enums: { MAV_TYPE: [] } });
-    return { fail() { return this; } };
+    const data = $.responses[url] || { dialect: 'common', enums: { MAV_TYPE: [] } };
+    if (cb) cb(data);
+    return {
+      fail() { return this; },
+      done(doneCb) {
+        doneCb(data);
+        return this;
+      },
+    };
+  };
+  $.responses = {
+    '/mavlink/dialects': { dialects: ['ardupilotmega', 'common'] },
   };
 
   const context = {
@@ -143,6 +158,9 @@ function loadHelpers(initialValues = {}) {
       settings: { httpAdminRoot: '/' },
       mavlink: {},
       nodes: {
+        node(id) {
+          return nodeLookup[id] || null;
+        },
         registerType(type, definition) {
           if (type === 'mavlink-local-identity') {
             identityDefinition = definition;
@@ -155,6 +173,10 @@ function loadHelpers(initialValues = {}) {
   vm.runInNewContext(script, context);
   context.identityDefinition = identityDefinition;
   return context;
+}
+
+function plain(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 test('enumOptionLabel mirrors the server-side NAME (value) format', () => {
@@ -170,17 +192,195 @@ test('enumOptionLabel mirrors the server-side NAME (value) format', () => {
   );
 });
 
-test('loadEnumsCatalog calls the shared enum route with a comma names list', () => {
+test('isFalseTrueEnum mirrors metadata false/true enum detection', () => {
   const context = loadHelpers();
+
+  assert.equal(context.RED.mavlink.isFalseTrueEnum([
+    { name: 'MAV_BOOL_FALSE', value: 0 },
+    { name: 'MAV_BOOL_TRUE', value: 1 },
+  ]), true);
+  assert.equal(context.RED.mavlink.isFalseTrueEnum([
+    { name: 'MAV_DO_REPOSITION_FLAGS_CHANGE_MODE', value: 1 },
+    { name: 'MAV_DO_REPOSITION_FLAGS_RELATIVE_YAW', value: 2 },
+  ]), false);
+  assert.equal(context.RED.mavlink.isFalseTrueEnum(['FALSE', 'TRUE']), false);
+  assert.equal(context.RED.mavlink.isFalseTrueEnum([]), false);
+  assert.equal(context.RED.mavlink.isFalseTrueEnum([
+    { name: 'GIMBAL_AXIS_CALIBRATION_REQUIRED_UNKNOWN', value: 0 },
+    { name: 'GIMBAL_AXIS_CALIBRATION_REQUIRED_TRUE', value: 1 },
+    { name: 'GIMBAL_AXIS_CALIBRATION_REQUIRED_FALSE', value: 2 },
+  ]), false);
+  assert.equal(context.RED.mavlink.isFalseTrueEnum([
+    { name: 'FALSE', value: null },
+    { name: 'TRUE', value: 1 },
+  ]), false);
+});
+
+test('populateDialectSelect loads dialects, appends vehicle escape, and keeps empty unsaved selection', () => {
+  const context = loadHelpers();
+  const select = new FakeSelect();
+  let ready = 0;
+
+  context.RED.mavlink.populateDialectSelect(select, {
+    includeVehicleEscape: true,
+    onReady() {
+      ready += 1;
+    },
+  });
+
+  assert.deepEqual(plain(context.$.lastRequest), {
+    url: '/mavlink/dialects',
+  });
+  assert.deepEqual(
+    select.options.map((option) => ({ value: option.value, label: option.label })),
+    [
+      { value: '', label: '\u2014' },
+      { value: 'ardupilotmega', label: 'ardupilotmega' },
+      { value: 'common', label: 'common' },
+      { value: '__vehicle', label: 'from Vehicle Profile\u2026' },
+    ]
+  );
+  assert.equal(select.selected, '');
+  assert.deepEqual(select.triggered, ['change']);
+  assert.equal(ready, 1);
+});
+
+test('populateDialectSelect re-selects saved dialect without defaulting unsaved dialogs', () => {
+  const context = loadHelpers();
+  const select = new FakeSelect();
+
+  context.RED.mavlink.populateDialectSelect(select, {
+    saved: 'common',
+    includeVehicleEscape: true,
+  });
+
+  assert.equal(select.selected, 'common');
+  assert.deepEqual(select.triggered, ['change']);
+});
+
+test('loadEnumsCatalog calls the shared enum route with a catalog source and comma names list', () => {
+  const context = loadHelpers({
+    '#node-input-delivery': 'build',
+    '#node-input-dialect': 'common',
+  });
   let payload = null;
 
   context.RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_COMPONENT'], (catalog) => {
     payload = catalog;
   });
 
-  assert.deepEqual(JSON.parse(JSON.stringify(context.$.lastRequest)), {
+  assert.deepEqual(plain(context.$.lastRequest), {
     url: '/mavlink/enums',
-    query: { names: 'MAV_TYPE,MAV_COMPONENT' },
+    query: { dialect: 'common', names: 'MAV_TYPE,MAV_COMPONENT' },
+  });
+  assert.equal(payload.dialect, 'common');
+});
+
+test('currentCatalogQuery on Build uses concrete dialect only and ignores stale vehicle', () => {
+  const context = loadHelpers({
+    '#node-input-delivery': 'build',
+    '#node-input-dialect': 'common',
+    '#node-input-vehicle': 'vehicle-1',
+  }, {
+    'vehicle-1': { dialect: 'ardupilotmega' },
+  });
+
+  assert.deepEqual(plain(context.RED.mavlink.currentCatalogQuery(['MAV_TYPE'])), {
+    dialect: 'common',
+    names: 'MAV_TYPE',
+  });
+});
+
+test('currentCatalogQuery on Build with empty dialect does not invent ardupilotmega', () => {
+  const context = loadHelpers({
+    '#node-input-delivery': 'build',
+    '#node-input-dialect': '',
+    '#node-input-vehicle': 'vehicle-1',
+  }, {
+    'vehicle-1': { dialect: 'ardupilotmega' },
+  });
+
+  assert.deepEqual(plain(context.RED.mavlink.currentCatalogQuery()), {});
+});
+
+test('currentCatalogQuery on Build vehicle escape includes selected vehicle dialect when known', () => {
+  const context = loadHelpers({
+    '#node-input-delivery': 'build',
+    '#node-input-dialect': '__vehicle',
+    '#node-input-vehicle': 'vehicle-1',
+  }, {
+    'vehicle-1': { dialect: 'common' },
+  });
+
+  assert.deepEqual(plain(context.RED.mavlink.currentCatalogQuery()), {
+    vehicle: 'vehicle-1',
+    dialect: 'common',
+  });
+});
+
+test('currentCatalogQuery on Build vehicle escape leaves query empty without a vehicle', () => {
+  const context = loadHelpers({
+    '#node-input-delivery': 'build',
+    '#node-input-dialect': '__vehicle',
+    '#node-input-vehicle': '',
+  });
+
+  assert.deepEqual(plain(context.RED.mavlink.currentCatalogQuery()), {});
+});
+
+test('currentCatalogQuery on wire tiers keeps the connection profile behavior', () => {
+  const context = loadHelpers({
+    '#node-input-delivery': 'send',
+    '#node-input-connection': 'connection-1',
+    '#node-input-dialect': 'development',
+    '#node-input-vehicle': 'stale-vehicle',
+  }, {
+    'connection-1': { vehicle: { id: 'vehicle-1' } },
+    'vehicle-1': { dialect: 'ardupilotmega' },
+    'stale-vehicle': { dialect: 'common' },
+  });
+
+  assert.deepEqual(plain(context.RED.mavlink.currentCatalogQuery()), {
+    vehicle: 'vehicle-1',
+    dialect: 'ardupilotmega',
+  });
+});
+
+test('currentCatalogQuery on wire tiers ignores stale own vehicle and dialect without a connection profile', () => {
+  const context = loadHelpers({
+    '#node-input-delivery': 'send',
+    '#node-input-connection': '',
+    '#node-input-dialect': 'development',
+    '#node-input-vehicle': 'stale-vehicle',
+  }, {
+    'stale-vehicle': { dialect: 'common' },
+  });
+
+  assert.deepEqual(plain(context.RED.mavlink.currentCatalogQuery(['MAV_TYPE'])), {});
+});
+
+test('currentCatalogQuery uses config-node dialect for Vehicle Profile dialogs', () => {
+  const context = loadHelpers({
+    '#node-config-input-dialect': 'ardupilotmega',
+  });
+
+  assert.deepEqual(plain(context.RED.mavlink.currentCatalogQuery(['MAV_COMPONENT'])), {
+    dialect: 'ardupilotmega',
+    names: 'MAV_COMPONENT',
+  });
+});
+
+test('loadEnumsCatalog accepts an explicit dialect override for Local Identity', () => {
+  const context = loadHelpers();
+  let payload = null;
+
+  context.RED.mavlink.loadEnumsCatalog(['MAV_TYPE'], (catalog) => {
+    payload = catalog;
+  }, { cancelled: false }, { dialect: 'common' });
+
+  assert.deepEqual(plain(context.$.lastRequest), {
+    url: '/mavlink/enums',
+    query: { dialect: 'common', names: 'MAV_TYPE' },
   });
   assert.equal(payload.dialect, 'common');
 });
@@ -278,6 +478,16 @@ test('loadEnumsCatalog ignores responses after the dialog token is cancelled', (
     calls += 1;
   }, token);
   assert.equal(calls, 0);
+});
+
+test('loadEnumsCatalog returns empty catalog locally when no dialect or vehicle is available', () => {
+  const context = loadHelpers();
+  let payload = null;
+  context.RED.mavlink.loadEnumsCatalog(['MAV_TYPE'], (catalog) => {
+    payload = catalog;
+  });
+  assert.equal(context.$.lastRequest, undefined, 'must not GET /mavlink/enums with {}');
+  assert.deepEqual(plain(payload), { dialect: '', enums: {} });
 });
 
 test('Companion save clears hidden source IDs before Node-RED copies editor inputs', () => {

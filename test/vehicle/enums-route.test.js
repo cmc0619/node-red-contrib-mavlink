@@ -137,11 +137,22 @@ test('missing Vehicle Profile with bundled dialect serves that dialect', () => {
   assert.ok(res.body.enums.MAV_TYPE.some((entry) => entry.label === 'MAV_TYPE_GCS (6)'));
 });
 
-test('dialect-only request defaults to ardupilotmega', () => {
+test('empty enum catalog query is rejected instead of defaulting to ardupilotmega', () => {
   const { handlers } = captureRoutes({});
   const res = mockRes();
 
   handlers.get('/mavlink/enums').handler({ query: {} }, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body.error, /dialect is required/i);
+  assert.equal(res.body.enums, undefined);
+});
+
+test('explicit ardupilotmega enum catalog request still works', () => {
+  const { handlers } = captureRoutes({});
+  const res = mockRes();
+
+  handlers.get('/mavlink/enums').handler({ query: { dialect: 'ardupilotmega' } }, res);
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.dialect, 'ardupilotmega');

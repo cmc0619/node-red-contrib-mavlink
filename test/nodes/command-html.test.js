@@ -74,7 +74,7 @@ test('advanced catalog load ignores stale responses and keeps the in-progress se
   assert.match(html, /const prefer = current \|\| saved/, 'current selection wins over saved');
   assert.match(
     html,
-    /query:\s*\{\s*vehicle:\s*vehicleId,\s*dialect:\s*dialect\s*\}/,
+    /query:\s*\{\s*vehicle:\s*(?:vehicleId|conn\.vehicle),\s*dialect:\s*(?:vehicleDialect|dialect)\s*\}/,
     'Vehicle id is preferred; dialect accompanies it for undeployed bundled profiles'
   );
 });
@@ -98,8 +98,10 @@ test('advanced bitmask command params render as multi-select controls', () => {
   );
 
   assert.match(renderer, /spec\.bitmask/, 'param-level bitmask flag drives rendering');
-  assert.match(renderer, /data-kind['"],\s*isBitmask \? ['"]bitmask['"] : ['"]enum['"]/, 'bitmask controls are tagged');
+  assert.match(renderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE command params are detected before bitmask rendering');
+  assert.match(renderer, /data-kind['"],\s*falseTrue \? ['"]enum['"] : \(isBitmask \? ['"]bitmask['"] : ['"]enum['"]\)/, 'FALSE/TRUE bitmask params are tagged as enum selects');
   assert.match(renderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'bitmask enum params use native multi-select');
+  assert.match(renderer, /booleanEntryLabel\(entry\)/, 'FALSE/TRUE command param options use boolean labels');
   assert.match(html, /Ctrl\/Cmd-click/, 'multi-select title/help explains how to select multiple flags');
 });
 
@@ -136,6 +138,10 @@ test('preset renderer loads enum and message catalogs for selects', () => {
     html.indexOf("const presetId = $('#node-input-preset')"),
     html.indexOf('// ── Safety preset notice')
   );
+  const renderer = html.slice(
+    html.indexOf('function presetParamInput'),
+    html.indexOf('function refreshParamFields')
+  );
 
   assert.match(html, /RED\.mavlink\.loadEnumsCatalog/, 'preset enums use shared enum helper');
   assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/build\/messages['"]\)/, 'message ids load from the shared messages API');
@@ -143,7 +149,9 @@ test('preset renderer loads enum and message catalogs for selects', () => {
   assert.match(presetBlock, /presetParamInput\(spec\)/, 'preset branch calls the shared input renderer');
   assert.match(html, /spec\.messages/, 'message-backed preset params become selects');
   assert.match(html, /spec\.enumName/, 'enum-backed preset params become selects');
-  assert.match(html, /data-kind['"],\s*isBitmask \? ['"]bitmask['"] : ['"]enum['"]/, 'preset bitmask controls are tagged');
+  assert.match(renderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE preset enums are detected before bitmask rendering');
+  assert.match(renderer, /data-kind['"],\s*falseTrue \? ['"]enum['"] : \(isBitmask \? ['"]bitmask['"] : ['"]enum['"]\)/, 'FALSE/TRUE preset bitmasks are tagged as enum selects');
+  assert.match(renderer, /booleanEntryLabel\(entry\)/, 'FALSE/TRUE preset enum options use boolean labels');
 });
 
 test('Command CompID reloads when Connection changes', () => {
@@ -195,6 +203,51 @@ test('vehicle and identity defaults are declared', () => {
     /identity:\s*\{\s*value:\s*''\s*\}/,
     'identity default must exist'
   );
+});
+
+test('command Build dialect default is empty and Build validates a selected dialect', () => {
+  assert.match(
+    html,
+    /dialect:\s*\{\s*value:\s*''/,
+    'defaults.dialect.value must be empty'
+  );
+  assert.match(html, /if \(tier === ['"]build['"]\) return !!v/, 'Build delivery must require a dialect selection');
+});
+
+test('command Build dialect select uses shared helper and includes __vehicle escape option', () => {
+  assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
+  assert.match(html, /__vehicle/, 'dialect select must have __vehicle option value');
+  assert.match(html, /from Vehicle Profile/, 'dialect select must label the escape option');
+  assert.match(html, /row-cmd-dialect/, 'template must have a dialect row');
+  assert.match(html, /id="node-input-dialect"/, 'template must have the dialect select');
+});
+
+test('command Build visibility shows Vehicle Profile only for __vehicle dialect', () => {
+  const vis = html.slice(
+    html.indexOf('function refreshVisibility'),
+    html.indexOf("$('#node-input-identity').on")
+  );
+
+  assert.match(vis, /#row-cmd-dialect/, 'Build visibility toggles the dialect row');
+  assert.match(vis, /#node-input-dialect/, 'Build visibility reads the dialect select');
+  assert.match(vis, /dialectVal\s*===\s*['"]__vehicle['"]/, 'Vehicle row depends on __vehicle');
+  assert.match(
+    vis,
+    /#row-cmd-vehicle['"]\)\s*\[\s*isBuild\s*&&\s*dialectVal\s*===\s*['"]__vehicle['"]\s*\?\s*['"]show['"]\s*:\s*['"]hide['"]\s*\]/,
+    'Vehicle Profile is visible only for Build + __vehicle'
+  );
+});
+
+test('command catalog target does not invent ardupilotmega when Build dialect is empty', () => {
+  const resolver = html.slice(
+    html.indexOf('function resolveCatalogTarget'),
+    html.indexOf('function loadCommandsCatalog')
+  );
+
+  assert.match(html, /function emptyCatalogTarget/, 'empty target helper exists');
+  assert.match(resolver, /if \(!dialectVal\) return emptyCatalogTarget\(\)/, 'empty Build dialect must produce no catalog target');
+  assert.doesNotMatch(resolver, /ardupilotmega/, 'catalog target resolution must not hardcode ardupilotmega');
+  assert.match(resolver, /dialectVal !== ['"]__vehicle['"]/, 'non-vehicle dialects use the selected dialect directly');
 });
 
 test('fillIdentitySelect is called to populate the identity select', () => {

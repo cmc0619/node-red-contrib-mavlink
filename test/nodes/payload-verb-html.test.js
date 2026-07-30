@@ -246,13 +246,46 @@ test('mavlink-payload companion hides sysid row but NOT compid row (§6 spec exc
 });
 
 test('mavlink-payload build tier shows vehicle, hides connection/identity/timeout/retry (§6)', () => {
-  assert.match(payloadHtml, /vehicle:\s*isBuild/, 'vehicle row shown only for build tier');
+  assert.match(payloadHtml, /dialect:\s*isBuild/, 'dialect row shown only for build tier');
+  assert.match(payloadHtml, /vehicle:\s*isBuild\s*&&\s*dialectVal === '__vehicle'/, 'vehicle row shown only for Build Vehicle Profile escape');
   assert.match(payloadHtml, /connection:\s*isWire/, 'connection row shown only for wire tiers');
   assert.match(payloadHtml, /identity:\s*isWire/, 'identity row shown only for wire tiers');
   assert.match(payloadHtml, /timeout:\s*isWire/, 'timeout row shown only for wire tiers');
   assert.match(payloadHtml, /maxRetries:\s*isWire/, 'maxRetries row shown only for wire tiers');
+  assert.match(payloadHtml, /id="row-payload-dialect"/, 'dialect row has ID for toggling');
   assert.match(payloadHtml, /id="row-payload-timeout"/, 'timeout row has ID for toggling');
   assert.match(payloadHtml, /id="row-payload-maxRetries"/, 'maxRetries row has ID for toggling');
+});
+
+test('mavlink-payload Build dialect picker keeps empty invalid and offers Vehicle Profile escape', () => {
+  assert.match(
+    payloadHtml,
+    /dialect:\s*\{\s*value:\s*''/,
+    'Build dialect default must be empty'
+  );
+  assert.match(
+    payloadHtml,
+    /if \(delivery === ['"]build['"]\) return !!v/,
+    'Build delivery must require a dialect selection'
+  );
+  assert.match(payloadHtml, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
+  assert.match(payloadHtml, /includeVehicleEscape:\s*true/, 'dialect select must include Vehicle Profile escape');
+  assert.match(payloadHtml, /__vehicle/, 'Vehicle Profile escape value must be present');
+  assert.match(payloadHtml, /from Vehicle Profile/, 'Vehicle Profile escape label must be present');
+});
+
+test('mavlink-payload Build catalog calls do not invent a dialect while dialect is empty', () => {
+  assert.match(payloadHtml, /function hasCatalogTarget/, 'catalog target helper must exist');
+  assert.match(
+    payloadHtml,
+    /if \(isBuildDelivery\(\) && !hasCatalogTarget\(query\)\)/,
+    'Build with empty dialect must skip catalog calls'
+  );
+  const catalogBlock = payloadHtml.slice(
+    payloadHtml.indexOf('function catalogQuery'),
+    payloadHtml.indexOf('function loadPayloadEnums')
+  );
+  assert.doesNotMatch(catalogBlock, /ardupilotmega/, 'payload editor must not hardcode an invented dialect');
 });
 
 test('mavlink-payload fills identity select and re-fills on connection change (§6)', () => {

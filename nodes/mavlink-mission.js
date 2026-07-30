@@ -88,17 +88,24 @@ module.exports = function registerMavlinkMission(RED) {
       const payload = objectPayload(msg.payload);
       const missionTypeKey = payload.missionType || config.missionType || 'mission';
 
-      // Build tier: profile from Vehicle Profile field, no identity.
+      // Build tier: Vehicle Profile is used only through the explicit dialect
+      // escape. Concrete Build dialects carry firmware but no profile target rung.
       // Wire tiers: profile from Connection's bound Vehicle, identity from config/payload.
-      const profile = delivery === 'build'
-        ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
+      const isBuild = delivery === 'build';
+      const useVehicleProfile = isBuild && config.dialect === '__vehicle';
+      const profile = isBuild
+        ? (useVehicleProfile ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle)) : null)
         : (connNode && connNode.vehicle) || null;
       const identityNode = delivery !== 'build'
         ? RED.nodes.getNode(payload.identityId || config.identity)
         : null;
 
-      // Firmware: payload → profile (hidden config.firmware is not honored, §6).
-      const firmware = firstDefined(payload.firmware, profile && profile.firmware);
+      // Firmware: dynamic override → selected profile → Build concrete firmware.
+      const firmware = firstDefined(
+        payload.firmware,
+        profile && profile.firmware,
+        isBuild && !useVehicleProfile ? config.firmware : undefined
+      );
 
       const target = resolveActionTarget({
         payloadTarget: payload.target,

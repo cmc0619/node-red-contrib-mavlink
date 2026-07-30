@@ -158,14 +158,19 @@ module.exports = function registerMavlinkVehicle(RED) {
             return res.json(listEnumsCatalog(requested, names));
           }
 
-          const dialect = requested || 'ardupilotmega';
-          if (dialect === 'custom') {
+          if (!requested) {
+            return res.status(400).json({
+              error: 'dialect is required',
+              dialects: knownDialects(),
+            });
+          }
+          if (requested === 'custom') {
             return res.status(400).json({
               error: 'custom dialect requires a deployed Vehicle Profile (?vehicle=id)',
               dialects: knownDialects(),
             });
           }
-          res.json(listEnumsCatalog(dialect, names));
+          res.json(listEnumsCatalog(requested, names));
         } catch (err) {
           res.status(400).json({
             error: err.message,

@@ -140,7 +140,31 @@ test('mavlink-move companion hides both target sysid and compid rows (§6)', () 
 });
 
 test('mavlink-move build tier shows vehicle, hides connection/identity (§6)', () => {
-  assert.match(html, /vehicle:\s*isBuild/, 'vehicle row shown only for build tier');
+  assert.match(html, /dialect:\s*isBuild/, 'dialect row shown only for build tier');
+  assert.match(html, /vehicle:\s*isBuild\s*&&\s*dialect\s*===\s*'__vehicle'/, 'vehicle row shown only for Build Vehicle Profile escape');
   assert.match(html, /connection:\s*isWire/, 'connection row shown only for wire tiers');
   assert.match(html, /identity:\s*isWire/, 'identity row shown only for wire tiers');
+});
+
+test('mavlink-move Build dialect default is empty and Build delivery validates it as required', () => {
+  assert.match(
+    html,
+    /dialect:\s*\{\s*value:\s*''/,
+    'defaults.dialect.value must be empty'
+  );
+  assert.match(html, /if \(delivery === ['"]build['"]\) return !!v/, 'Build delivery must require a dialect selection');
+});
+
+test('mavlink-move Build dialect select uses shared helper with Vehicle Profile escape', () => {
+  assert.match(html, /id="row-move-dialect"/, 'template must have a dialect row');
+  assert.match(html, /id="node-input-dialect"/, 'template must have a dialect select');
+  assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
+  assert.match(html, /includeVehicleEscape:\s*true/, 'dialect helper must include Vehicle Profile escape');
+  assert.match(html, /__vehicle/, 'visibility/runtime contract must reference __vehicle');
+  assert.match(html, /from Vehicle Profile/, 'help text must name the Vehicle Profile escape');
+});
+
+test('mavlink-move has no Firmware row and no silent ardupilotmega default', () => {
+  assert.doesNotMatch(html, /node-input-firmware|row-move-firmware|Firmware/, 'Move must not add a Firmware row');
+  assert.doesNotMatch(html, /ardupilotmega/, 'Move editor must not invent a default dialect');
 });
