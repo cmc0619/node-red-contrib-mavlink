@@ -373,6 +373,34 @@ test('mavlink-in: changed-only tracks independently per (message, sysid, compid)
   assert.equal(node._sends.length, 2);
 });
 
+test('mavlink-in: changed-only survives BigInt 64-bit fields and keeps them in the payload', () => {
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+
+  // time_unix_usec is uint64_t — node-mavlink decodes it as a BigInt, which
+  // JSON.stringify throws a TypeError on unless the replacer handles it.
+  const deliver = (usec) =>
+    stub._deliver({
+      name: 'SYSTEM_TIME',
+      sysid: 1,
+      compid: 1,
+      fields: { time_unix_usec: usec, time_boot_ms: 10 },
+      trusted: true,
+    });
+
+  deliver(1771027200000000n);
+  deliver(1771027200000000n); // identical → suppressed
+  deliver(1771027201000000n); // changed → passes
+
+  assert.equal(node._sends.length, 2);
+  assert.equal(node._sends[0].payload.time_unix_usec, 1771027200000000n);
+});
+
 test('mavlink-in: rate limit drops excess messages within the window', () => {
   const RED = makeRED();
   const { stub } = makeConnectionStub();

@@ -85,6 +85,73 @@ test('start binds the socket and reports connected', async () => {
   connection.close();
 });
 
+test('a message the dialect cannot serialize is dropped and the queue keeps draining', async () => {
+  const errors = [];
+  const wire = fakeWire();
+  const serialize = wire.serialize;
+  // Mirror the real wire: serialize throws for a name absent from the dialect.
+  wire.serialize = (message, ctx) => {
+    if (message.name === 'NOT_IN_DIALECT') {
+      throw new Error(`no wire class for message '${message.name}'`);
+    }
+    return serialize(message, ctx);
+  };
+  const { connection, dg } = build(
+    {},
+    { wire, logger: { error: (m) => errors.push(m), info() {}, warn() {} } }
+  );
+  await connection.start();
+
+  connection.send({ name: 'NOT_IN_DIALECT', fields: {} }, { band: BAND.CONTROL });
+  connection.send({ name: 'PING', fields: {} }, { band: BAND.CONTROL });
+  await delay(30);
+
+  assert.deepEqual(
+    dg.sockets[0].sent.map((s) => JSON.parse(s.buffer.toString()).name),
+    ['PING'],
+    'the bad envelope is dropped and the next one still transmits'
+  );
+  assert.ok(
+    errors.some((m) => /NOT_IN_DIALECT/.test(m)),
+    'the drop is reported, not silent'
+  );
+  assert.equal(connection.getState(), STATE.CONNECTED);
+  connection.close();
+});
+
+test('close while start is still dialing does not resume into a live connection', async () => {
+  const { EventEmitter } = require('node:events');
+  let releaseOpen;
+  const opened = new Promise((resolve) => {
+    releaseOpen = resolve;
+  });
+  let closes = 0;
+  const { connection, timers } = build(
+    {},
+    {
+      transportFactory: () => {
+        const t = new EventEmitter();
+        t.open = () => opened;
+        t.close = (cb) => {
+          closes += 1;
+          if (cb) cb();
+        };
+        t.send = (_b, _e, cb) => cb && cb();
+        return t;
+      },
+    }
+  );
+
+  const starting = connection.start();
+  connection.close(); // a redeploy landing mid-dial
+  releaseOpen();
+  await starting;
+
+  assert.equal(connection.getState(), STATE.CLOSED);
+  assert.equal(timers.active(), 0, 'no heartbeat or sweep timer may outlive the close');
+  assert.equal(closes, 2, 'the transport that finished opening is released again');
+});
+
 test('an inbound datagram enriches the peer table and delivers a copy to subscribers', async () => {
   const { connection, dg } = build();
   await connection.start();

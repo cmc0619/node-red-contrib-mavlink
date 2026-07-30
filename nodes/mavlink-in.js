@@ -36,6 +36,21 @@ const BADGE_MAX = 24;
  */
 const STATUS_MIN_INTERVAL_MS = 250;
 
+/**
+ * `JSON.stringify` replacer for the changed-only comparison. 64-bit MAVLink
+ * fields (SYSTEM_TIME, TIMESYNC, RAW_IMU …) decode as BigInt and
+ * `JSON.stringify` throws a TypeError on one, so the comparison text — and only
+ * the comparison text — renders them as decimal strings. `msg.payload` keeps the
+ * BigInt: the payload shape is this node's published API.
+ *
+ * @param {string} _key
+ * @param {*} value
+ * @returns {*}
+ */
+function bigintSafe(_key, value) {
+  return typeof value === 'bigint' ? value.toString() : value;
+}
+
 module.exports = function registerMavlinkIn(RED) {
   /**
    * @param {object} config  Node-RED node config from the editor
@@ -96,7 +111,7 @@ module.exports = function registerMavlinkIn(RED) {
 
       // Changed-only: drop if the fields are byte-for-byte identical to the last delivery.
       if (changedOnly) {
-        const json = JSON.stringify(decoded.fields);
+        const json = JSON.stringify(decoded.fields, bigintSafe);
         if (lastFieldJson.get(key) === json) return;
         lastFieldJson.set(key, json);
       }

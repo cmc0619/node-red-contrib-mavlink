@@ -74,6 +74,24 @@ test('unsubscribe stops further delivery', () => {
   assert.equal(reg.size(), 0);
 });
 
+test('a throwing subscriber is isolated — later subscribers still get the message', () => {
+  const errors = [];
+  const reg = new SubscriptionRegistry({ onError: (err) => errors.push(err.message) });
+  let reached = false;
+
+  reg.subscribe(null, () => {
+    throw new Error('subscriber blew up');
+  });
+  reg.subscribe(null, () => {
+    reached = true;
+  });
+
+  // dispatch runs on a socket event: an escaping throw would kill the runtime.
+  assert.doesNotThrow(() => reg.dispatch(decoded()));
+  assert.equal(reached, true);
+  assert.deepEqual(errors, ['subscriber blew up']);
+});
+
 test('dispatch reports how many subscribers received the message', () => {
   const reg = new SubscriptionRegistry();
   reg.subscribe({ message: 'HEARTBEAT' }, () => {});

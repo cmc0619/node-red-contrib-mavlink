@@ -209,8 +209,12 @@ function buildTransportConfig(config) {
 /**
  * Assemble the signing config for the runtime. The passphrase lives only in
  * Node-RED encrypted credentials; the key is derived from it via node-mavlink's
- * primitive, and only when signing is actually on (§7). Sign-outbound with no
- * passphrase fails the connection closed in the runtime.
+ * primitive whenever one is present (§7). Key presence only enables *verifying*
+ * signatures — without it every signed inbound frame fails verification and is
+ * silently dropped, so the link looks dead. The two checkboxes keep their own
+ * jobs: `signOutbound` signs what we transmit, `requireSigned` sets the inbound
+ * policy. Sign-outbound with no passphrase fails the connection closed in the
+ * runtime.
  *
  * @param {object} config
  * @param {object} [credentials]
@@ -218,17 +222,15 @@ function buildTransportConfig(config) {
  */
 function buildSigning(config, credentials) {
   const passphrase = credentials && credentials.signingPassphrase;
-  const signOutbound = !!config.signOutbound;
-  const requireSigned = !!config.requireSigned;
   const signing = {
     linkId: config.linkId ? Number(config.linkId) : 0,
-    signOutbound,
-    requireSigned,
+    signOutbound: !!config.signOutbound,
+    requireSigned: !!config.requireSigned,
     acceptInvalid: !!config.acceptInvalid,
     hasKey: !!passphrase,
     key: null,
   };
-  if (passphrase && (signOutbound || requireSigned)) {
+  if (passphrase) {
     const { MavLinkPacketSignature } = require('node-mavlink');
     signing.key = MavLinkPacketSignature.key(passphrase);
   }
