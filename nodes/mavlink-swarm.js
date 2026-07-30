@@ -15,8 +15,7 @@ module.exports = function registerMavlinkSwarm(RED) {
     // sysids are known at deploy time. All other combinations — including
     // build+all and build+filter — still need the live peer table.
     const cfgIsBuildList =
-      (config.delivery || 'build') === 'build' &&
-      (config.selectionMode || 'all') === 'list';
+      config.delivery === 'build' && config.selectionMode === 'list';
 
     if (!cfgIsBuildList && (!connectionNode || !connectionNode.peerTable)) {
       delivery.applyActionStatus(node, 'invalid', 'invalid config');
@@ -33,7 +32,7 @@ module.exports = function registerMavlinkSwarm(RED) {
       try {
         const payload = objectPayload(msg.payload);
         const selection = selectionFrom(config, payload);
-        const effectiveDelivery = payload.delivery || config.delivery || 'build';
+        const effectiveDelivery = payload.delivery || config.delivery;
         const effectiveSelectionMode = selection.mode || 'all';
 
         let effectiveConnection = connectionNode;

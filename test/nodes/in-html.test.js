@@ -34,9 +34,17 @@ test('message filter loads dialect messages from build/messages catalog', () => 
   assert.match(html, /All messages/, 'empty selection means all traffic');
 });
 
-test('message filter resolves dialect from the Connection vehicle graph', () => {
-  assert.match(html, /function resolveCatalogTarget/, 'catalog target follows Connection → Vehicle → dialect');
-  assert.match(html, /conn\.vehicle/, 'Connection vehicle id is read from the editor graph');
+test('message filter resolves dialect from the Connection vehicle graph (wire-only, shared helper)', () => {
+  // mavlink-in has no Build tier: it always resolves through the shared wire
+  // path, and an empty target yields no catalog — never a silent ardupilotmega.
+  assert.match(
+    html,
+    /RED\.mavlink\.resolveCatalogTarget\(\{\s*isBuild:\s*false\s*\}\)/,
+    'catalog target uses the shared wire-tier resolver'
+  );
+  assert.doesNotMatch(html, /function resolveCatalogTarget/, 'no local catalog resolver copy');
+  assert.doesNotMatch(html, /dialect\s*=\s*['"]ardupilotmega['"]/, 'no invented default dialect');
+  assert.match(html, /if \(!target\.query\)/, 'empty target resolves to an empty catalog, not a fetch');
   assert.match(html, /_msgRequestSeq/, 'stale catalog responses are ignored');
 });
 

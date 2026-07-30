@@ -6,7 +6,10 @@ const {
 } = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
 const { AckWaiter } = require('../lib/command');
-const { resolveActionTarget, profileFromVehicleNode } = require('../lib/addressing/resolve');
+const {
+  resolveActionTarget,
+  profileFromVehicleNode,
+} = require('../lib/addressing/resolve');
 const {
   shouldSuppress,
   reportDoneError,
@@ -42,14 +45,16 @@ module.exports = function registerMavlinkPayload(RED) {
           return;
         }
 
-        const delivery = config.delivery || 'build';
+        const delivery = config.delivery;
         const connectionNode = delivery !== 'build'
           ? RED.nodes.getNode(config.connection)
           : null;
         const payload = objectPayload(msg.payload);
 
         const profile = delivery === 'build'
-          ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
+          ? (config.dialect === '__vehicle'
+            ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
+            : null)
           : (connectionNode && connectionNode.vehicle) || null;
         const identityNode = delivery === 'build'
           ? null

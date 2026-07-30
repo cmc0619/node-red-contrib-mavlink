@@ -56,7 +56,7 @@ module.exports = function registerMavlinkMission(RED) {
 
     const operation = config.operation || OPERATION.DOWNLOAD;
     const connNode = config.connection ? RED.nodes.getNode(config.connection) : null;
-    const delivery = config.delivery || (connNode ? 'confirm' : 'build');
+    const delivery = config.delivery;
     const timeoutMs = config.timeout ? Number(config.timeout) : undefined;
     const maxRetries = config.maxRetries !== undefined && config.maxRetries !== ''
       ? Number(config.maxRetries)
@@ -72,7 +72,13 @@ module.exports = function registerMavlinkMission(RED) {
      */
     const activeByKey = new Map();
 
-    node.status({});
+    // Wire-tier confirm needs a Connection. Do not silently degrade into Build
+    // and report a phantom plan (§9) — same rule as mavlink-command.
+    if (delivery !== 'build' && !connNode) {
+      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+    } else {
+      node.status({});
+    }
 
     node.on('input', (msg, send, done) => {
       const emit = send || ((m) => node.send(m));
@@ -88,17 +94,39 @@ module.exports = function registerMavlinkMission(RED) {
       const payload = objectPayload(msg.payload);
       const missionTypeKey = payload.missionType || config.missionType || 'mission';
 
-      // Build tier: profile from Vehicle Profile field, no identity.
+      // ── Missing connection on confirm ─────────────────────────────────────
+      // Do not silently build and pretend success — confirm with no connection
+      // is a misconfiguration (§9). Fail loud on output 1 only (same as Command).
+      if (delivery !== 'build' && !connNode) {
+        const rec = record(operation, missionTypeKey, { sysid: NaN, compid: NaN }, {
+          result: 'failed',
+          phase: 'gated',
+          reason: `no connection configured for ${delivery} delivery`,
+        });
+        applyActionStatus(node, 'error', 'invalid config');
+        emit([null, rec]);
+        reportDoneError(node, new Error(`mavlink-mission: ${rec.reason}`), msg, done);
+        return;
+      }
+
+      // Build tier: Vehicle Profile is used only through the explicit dialect
+      // escape. Concrete Build dialects carry firmware but no profile target rung.
       // Wire tiers: profile from Connection's bound Vehicle, identity from config/payload.
-      const profile = delivery === 'build'
-        ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
+      const isBuild = delivery === 'build';
+      const useVehicleProfile = isBuild && config.dialect === '__vehicle';
+      const profile = isBuild
+        ? (useVehicleProfile ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle)) : null)
         : (connNode && connNode.vehicle) || null;
       const identityNode = delivery !== 'build'
         ? RED.nodes.getNode(payload.identityId || config.identity)
         : null;
 
-      // Firmware: payload → profile (hidden config.firmware is not honored, §6).
-      const firmware = firstDefined(payload.firmware, profile && profile.firmware);
+      // Firmware: dynamic override → selected profile → Build concrete firmware.
+      const firmware = firstDefined(
+        payload.firmware,
+        profile && profile.firmware,
+        isBuild && !useVehicleProfile ? config.firmware : undefined
+      );
 
       const target = resolveActionTarget({
         payloadTarget: payload.target,
@@ -161,7 +189,7 @@ module.exports = function registerMavlinkMission(RED) {
       }
 
       // ── Build tier: emit the protocol plan, send nothing. ─────────────────
-      if (delivery === 'build' || !connNode) {
+      if (delivery === 'build') {
         const plan = buildPlan(operation, missionType, target, uploadItems);
         applyActionStatus(node, 'preview', `plan ${operation} ${missionTypeKey}`);
         emit([

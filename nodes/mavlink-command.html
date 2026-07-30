@@ -62,59 +62,6 @@
   }
 
   /**
-   * Resolve which Vehicle / dialect the Advanced list and enum catalogs should
-   * load, respecting the role × tier matrix (DESIGN.md §6):
-   *   - Build tier: the node's own Vehicle Profile field governs.
-   *   - Wire tiers: the bound Connection's profile governs.
-   *
-   * @returns {{key: string, query: object, dialect: string, vehicleId: string}}
-   */
-  function resolveCatalogTarget() {
-    const tier = $('#node-input-delivery').val() || 'confirm';
-    const isBuild = tier === 'build';
-    let vehicleId = '';
-    let dialect = 'ardupilotmega';
-
-    if (isBuild) {
-      // Build tier: catalog source is the node's own Vehicle Profile picker.
-      vehicleId = $('#node-input-vehicle').val() || '';
-      if (vehicleId && typeof RED !== 'undefined' && RED.nodes && RED.nodes.node) {
-        const vehicle = RED.nodes.node(vehicleId);
-        if (vehicle && vehicle.dialect) dialect = vehicle.dialect;
-      }
-    } else {
-      // Wire tiers: catalog source is the connection's bound vehicle profile.
-      const connId = $('#node-input-connection').val();
-      if (connId && typeof RED !== 'undefined' && RED.nodes && RED.nodes.node) {
-        const conn = RED.nodes.node(connId);
-        if (conn && conn.vehicle) {
-          vehicleId = conn.vehicle;
-          const vehicle = RED.nodes.node(conn.vehicle);
-          if (vehicle && vehicle.dialect) dialect = vehicle.dialect;
-        }
-      }
-    }
-
-    // Prefer vehicle id so a deployed custom profile serves its own bundle.
-    // Include dialect so an undeployed bundled profile can still serve a
-    // catalog; custom without a live node gets a 404 (never a silent default).
-    if (vehicleId) {
-      return {
-        key: 'vehicle:' + vehicleId,
-        query: { vehicle: vehicleId, dialect: dialect },
-        dialect: dialect,
-        vehicleId: vehicleId,
-      };
-    }
-    return {
-      key: 'dialect:' + dialect,
-      query: { dialect: dialect },
-      dialect: dialect,
-      vehicleId: '',
-    };
-  }
-
-  /**
    * Load the Advanced catalog (commands + enums). Concurrent callers for the
    * same target share one in-flight request (Greptile #36 — preset change must
    * not cancel a pending Connection/Vehicle tip repaint). Responses for a key
@@ -123,12 +70,19 @@
    * @param {function({commands:Array, enums:Object, dialect:string}|null, Error=):void} cb
    */
   function loadCommandsCatalog(cb) {
-    const target = resolveCatalogTarget();
+    const target = RED.mavlink.resolveCatalogTarget();
     const requestedKey = target.key;
     ++_catalogRequestSeq;
     if (_catalogByKey[requestedKey]) {
       _activeCatalogKey = requestedKey;
       cb(_catalogByKey[requestedKey]);
+      return;
+    }
+    if (!target.query) {
+      const emptyCatalog = { commands: [], enums: {}, dialect: '' };
+      _catalogByKey[requestedKey] = emptyCatalog;
+      _activeCatalogKey = requestedKey;
+      cb(emptyCatalog);
       return;
     }
     if (!_catalogInflight[requestedKey]) {
@@ -142,13 +96,13 @@
           dialect: data.dialect || target.dialect,
         };
         _catalogByKey[requestedKey] = catalog;
-        if (resolveCatalogTarget().key !== requestedKey) return;
+        if (RED.mavlink.resolveCatalogTarget().key !== requestedKey) return;
         _activeCatalogKey = requestedKey;
         for (let i = 0; i < waiters.length; i++) waiters[i](catalog);
       }).fail(function (_xhr, _status, err) {
         const waiters = _catalogInflight[requestedKey] || [];
         delete _catalogInflight[requestedKey];
-        if (resolveCatalogTarget().key !== requestedKey) return;
+        if (RED.mavlink.resolveCatalogTarget().key !== requestedKey) return;
         _activeCatalogKey = requestedKey;
         const empty = {
           commands: [],
@@ -163,9 +117,15 @@
   }
 
   function loadMessagesCatalog(cb) {
-    const target = resolveCatalogTarget();
+    const target = RED.mavlink.resolveCatalogTarget();
     if (_messageCatalogByKey[target.key]) {
       cb(_messageCatalogByKey[target.key]);
+      return;
+    }
+    if (!target.query) {
+      const emptyCatalog = { messages: [], enums: {}, dialect: '' };
+      _messageCatalogByKey[target.key] = emptyCatalog;
+      cb(emptyCatalog);
       return;
     }
     const seq = ++_messageRequestSeq;
@@ -260,16 +220,15 @@
   // Safety presets that require msg.confirmed.
   const REQUIRES_CONFIRM = new Set(['flight_termination']);
 
-  RED.nodes.registerType('mavlink-command', {
-    category: 'mavlink',
-    color: '#4a90d9',
-    defaults: {
+  // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
+  // Command's mode field is `delivery` and it has no Firmware field.
+  const commandDefaults = Object.assign(
+    {
       name:              { value: '' },
       mode:              { value: 'preset' },
       preset:            { value: 'arm' },
       advancedCommand:   { value: '' },
       delivery:          { value: 'confirm' },
-      vehicle:           { value: '', type: 'mavlink-vehicle', required: false },
       connection:        { value: '', type: 'mavlink-connection', required: false },
       identity:          { value: '' },
       targetSysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
@@ -280,6 +239,13 @@
       completionTimeout: { value: '60000' },
       params:            { value: '{}' },
     },
+    RED.mavlink.buildTierDialectDefaults()
+  );
+
+  RED.nodes.registerType('mavlink-command', {
+    category: 'mavlink',
+    color: '#4a90d9',
+    defaults: commandDefaults,
     inputs:  1,
     outputs: 2,
     outputLabels: ['continue', 'status'],
@@ -314,9 +280,11 @@
       function refreshVisibility() {
         const tier = $('#node-input-delivery').val() || 'confirm';
         const isBuild = tier === 'build';
+        const dialectVal = $('#node-input-dialect').val() || node.dialect || '';
 
-        // Build tier: show vehicle row; hide wire-tier rows.
-        $('#row-cmd-vehicle')[isBuild ? 'show' : 'hide']();
+        // Build tier: show dialect row; Vehicle Profile appears only for __vehicle.
+        $('#row-cmd-dialect')[isBuild ? 'show' : 'hide']();
+        $('#row-cmd-vehicle')[isBuild && dialectVal === '__vehicle' ? 'show' : 'hide']();
         $('#row-cmd-connection')[isBuild ? 'hide' : 'show']();
         $('#row-cmd-identity')[isBuild ? 'hide' : 'show']();
         $('#row-cmd-timeout')[isBuild ? 'hide' : 'show']();
@@ -431,7 +399,7 @@
         }
         // Tip titles from cache when possible; otherwise one catalog load that
         // does not gate control rendering (Codex #36).
-        const target = resolveCatalogTarget();
+        const target = RED.mavlink.resolveCatalogTarget();
         if (_catalogByKey[target.key]) {
           paint(_catalogByKey[target.key]);
           return;
@@ -583,6 +551,22 @@
       let presetMessagesCatalog = null;
       let presetMessagesKey = '';
 
+      const $dialect = $('#node-input-dialect');
+      $dialect.on('change', function () {
+        presetEnumsCatalog = { enums: {} };
+        presetEnumsLoaded = false;
+        presetEnumRequestSeq += 1;
+        presetMessagesCatalog = null;
+        presetMessagesKey = '';
+        refreshVisibility();
+        if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
+        if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
+      });
+      RED.mavlink.populateDialectSelect($dialect, {
+        saved: node.dialect || '',
+        includeVehicleEscape: true,
+      });
+
       function loadPresetEnums(cb) {
         if (presetEnumsLoaded) {
           cb();
@@ -604,9 +588,9 @@
       }
 
       function loadPresetMessages(cb) {
-        const target = resolveCatalogTarget();
+        const target = RED.mavlink.resolveCatalogTarget();
         loadMessagesCatalog(function (catalog) {
-          const currentTarget = resolveCatalogTarget();
+          const currentTarget = RED.mavlink.resolveCatalogTarget();
           if (currentTarget.key !== target.key) return;
           presetMessagesCatalog = catalog || { messages: [] };
           presetMessagesKey = target.key;
@@ -623,7 +607,7 @@
       }
 
       function presetMessagesReady() {
-        return presetMessagesCatalog && presetMessagesKey === resolveCatalogTarget().key;
+        return presetMessagesCatalog && presetMessagesKey === RED.mavlink.resolveCatalogTarget().key;
       }
 
       function fillSelect($select, entries, opts) {
@@ -709,6 +693,13 @@
         return base + ' (Ctrl/Cmd-click to select multiple flags.)';
       }
 
+      function booleanEntryLabel(entry) {
+        const name = entry && entry.name ? entry.name : '';
+        if (name === 'FALSE' || name.slice(-6) === '_FALSE') return 'false';
+        if (name === 'TRUE' || name.slice(-5) === '_TRUE') return 'true';
+        return entry.label || name;
+      }
+
       function selectedBitmaskValues(saved, entries) {
         if (saved === undefined || saved === null || saved === '') return [];
         let mask;
@@ -742,23 +733,25 @@
       function advancedParamInput(spec, enums) {
         const saved = savedParams[spec.index];
         if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
-          const isBitmask = !!spec.bitmask;
+          const entries = enums[spec.enum];
+          const falseTrue = RED.mavlink.isFalseTrueEnum(entries);
+          const isBitmask = !!spec.bitmask && !falseTrue;
           const sel = $('<select class="param-input"></select>')
             .attr('data-idx', spec.index)
-            .attr('data-kind', isBitmask ? 'bitmask' : 'enum')
+            .attr('data-kind', falseTrue ? 'enum' : (isBitmask ? 'bitmask' : 'enum'))
             .attr('title', isBitmask ? bitmaskTitle(spec.description) : (spec.description || ''));
           if (isBitmask) {
-            sel.attr('multiple', 'multiple').attr('size', Math.min(6, enums[spec.enum].length));
+            sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
           } else {
             sel.append($('<option></option>').val('').text('\u2014'));
           }
-          for (const entry of enums[spec.enum]) {
-            const $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
+          for (const entry of entries) {
+            const $opt = $('<option></option>').val(String(entry.value)).text(falseTrue ? booleanEntryLabel(entry) : entry.label);
             if (entry.description) $opt.attr('title', entry.description);
             sel.append($opt);
           }
           if (isBitmask) {
-            sel.val(selectedBitmaskValues(saved, enums[spec.enum]));
+            sel.val(selectedBitmaskValues(saved, entries));
           } else if (saved !== undefined && saved !== null && saved !== '') {
             sel.val(String(saved));
           }
@@ -792,14 +785,25 @@
           let entries = enums[spec.enumName] || [];
           if (!entries.length && spec.fallbackOptions) entries = spec.fallbackOptions;
           if (entries.length) {
-            const isBitmask = !!spec.bitmask;
+            const falseTrue = RED.mavlink.isFalseTrueEnum(entries);
+            const isBitmask = !!spec.bitmask && !falseTrue;
             const sel = $('<select class="param-input"></select>')
               .attr('data-idx', spec.index)
-              .attr('data-kind', isBitmask ? 'bitmask' : 'enum');
+              .attr('data-kind', falseTrue ? 'enum' : (isBitmask ? 'bitmask' : 'enum'));
             if (isBitmask) {
               sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
             }
-            fillSelect(sel, entries, { allowEmpty: !isBitmask, saved: saved });
+            if (falseTrue) {
+              sel.append($('<option></option>').val('').text('\u2014'));
+              for (const entry of entries) {
+                const $opt = $('<option></option>').val(String(entry.value)).text(booleanEntryLabel(entry));
+                if (entry.description) $opt.attr('title', entry.description);
+                sel.append($opt);
+              }
+              if (saved !== undefined && saved !== null && saved !== '') sel.val(String(saved));
+            } else {
+              fillSelect(sel, entries, { allowEmpty: !isBitmask, saved: saved });
+            }
             if (isBitmask) sel.val(selectedBitmaskValues(saved, entries));
             return sel;
           }
@@ -981,6 +985,11 @@
 
   <hr style="margin:8px 0">
 
+  <div class="form-row" id="row-cmd-dialect">
+    <label for="node-input-dialect" style="width:120px">Dialect</label>
+    <select id="node-input-dialect" style="width:240px"></select>
+  </div>
+
   <div class="form-row" id="row-cmd-vehicle">
     <label for="node-input-vehicle" style="width:120px">Vehicle Profile</label>
     <input type="text" id="node-input-vehicle" style="width:240px">
@@ -1094,9 +1103,9 @@
 
   <h3>Delivery tiers</h3>
   <ul>
-    <li><b>Build</b> — construct the COMMAND_LONG and emit on output 0; no send. Uses the
-        <em>Vehicle Profile</em> field for the dialect and default target; identity and
-        connection are not used.</li>
+    <li><b>Build</b> — construct the COMMAND_LONG and emit on output 0; no send. Pick a bundled
+        <em>Dialect</em>, or choose <em>from Vehicle Profile…</em> to use a custom XML dialect
+        and that profile's default target. Identity and connection are not used.</li>
     <li><b>Send</b> — fire-and-forget; no acknowledgement waiting.</li>
     <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; retry on TEMPORARILY_REJECTED.</li>
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
@@ -1109,8 +1118,9 @@
     At runtime only <code>msg.payload</code> can override values; hidden fields are not honored.
   </p>
   <ul>
-    <li><b>Build tier</b>: Vehicle Profile row shown; Connection, identity, timeout, and retry
-        rows hidden. Target sysid/compid inherit from the Vehicle Profile's defaults.</li>
+    <li><b>Build tier</b>: Dialect row shown; Vehicle Profile row shown only when Dialect is
+        <em>from Vehicle Profile…</em>. Connection, identity, timeout, and retry rows hidden.
+        Target sysid/compid inherit from the Vehicle Profile only in that mode.</li>
     <li><b>Wire tiers</b> (Send / confirm / complete): Connection shown (required); identity
         (send-as) shown. Target rows follow the identity role:</li>
     <li><b>gcs / custom identity</b>: target sysid and compid shown; blank inherits the
@@ -1123,7 +1133,7 @@
   <p>
     <b>Preset</b> — hand-curated commands with pinned params and friendly names.
     <b>Advanced</b> — every <code>MAV_CMD</code> in the dialect as a dropdown; all
-    params exposed. Build tier uses the Vehicle Profile field; wire tiers use the
+    params exposed. Build tier uses the Dialect picker; wire tiers use the
     bound connection's profile. Bitmask params render as multi-selects;
     Ctrl/Cmd-click multiple flags and the editor stores their numeric mask.
   </p>

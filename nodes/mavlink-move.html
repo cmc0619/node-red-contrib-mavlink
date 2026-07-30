@@ -1,11 +1,10 @@
 <script type="text/javascript">
-  RED.nodes.registerType('mavlink-move', {
-    category: 'mavlink',
-    color: '#d8ecff',
-    defaults: {
+  // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
+  // Move's mode field is `delivery` and it has no firmware selector.
+  var moveDefaults = Object.assign(
+    {
       name: { value: '' },
       connection: { value: '', type: 'mavlink-connection' },
-      vehicle: { value: '', type: 'mavlink-vehicle', required: false },
       identity: { value: '' },
       delivery: { value: 'build' },
       mode: { value: 'local-position' },
@@ -25,6 +24,13 @@
       intervalMs: { value: 100, validate: RED.validators.number() },
       ttlMs: { value: 1000, validate: RED.validators.number() }
     },
+    RED.mavlink.buildTierDialectDefaults()
+  );
+
+  RED.nodes.registerType('mavlink-move', {
+    category: 'mavlink',
+    color: '#d8ecff',
+    defaults: moveDefaults,
     inputs: 1,
     outputs: 2,
     outputLabels: ['continue', 'status'],
@@ -58,20 +64,22 @@
       /**
        * §6: only the fields for the selected mode, delivery, and identity role
        * exist. Everything else is hidden — not greyed, not left over from another mode.
-       * Build → vehicle shown; connection/identity hidden.
+       * Build → dialect shown; vehicle only for the Vehicle Profile escape.
        * Wire → connection/identity shown; vehicle hidden.
        * Companion (wire) → target sysid AND compid hidden (derived from airframe).
        */
       function refreshVisibility() {
         var mode = $('#node-input-mode').val() || 'local-position';
         var delivery = $('#node-input-delivery').val() || 'build';
+        var dialect = $('#node-input-dialect').val() || node.dialect || '';
         var isBuild = delivery === 'build';
         var isWire = !isBuild;
         var identityId = isWire ? $('#node-input-identity').val() : '';
         var isCompanion = isWire && RED.mavlink.identityRole(identityId) === 'companion';
 
         var show = {
-          vehicle: isBuild,
+          dialect: isBuild,
+          vehicle: isBuild && dialect === '__vehicle',
           connection: isWire,
           identity: isWire,
           targetSystem: isBuild || !isCompanion,
@@ -91,6 +99,7 @@
           ttl: delivery === 'stream'
         };
 
+        $('#row-move-dialect').toggle(!!show.dialect);
         $('#row-move-vehicle').toggle(!!show.vehicle);
         $('#row-move-connection').toggle(!!show.connection);
         $('#row-move-identity').toggle(!!show.identity);
@@ -114,6 +123,7 @@
       $('#node-input-mode').on('change', refreshVisibility);
       $('#node-input-delivery').on('change', refreshVisibility);
       $('#node-input-identity').on('change', refreshVisibility);
+      $('#node-input-dialect').on('change', refreshVisibility);
       $('#node-input-connection').on('change', function () {
         if (RED.mavlink && RED.mavlink.fillIdentitySelect) {
           RED.mavlink.fillIdentitySelect(
@@ -124,6 +134,12 @@
         }
         refreshVisibility();
       });
+      if (RED.mavlink && RED.mavlink.populateDialectSelect) {
+        RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
+          saved: node.dialect || '',
+          includeVehicleEscape: true
+        });
+      }
       refreshVisibility();
     }
   });
@@ -131,6 +147,7 @@
 
 <script type="text/html" data-template-name="mavlink-move">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+  <div class="form-row" id="row-move-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
   <div class="form-row" id="row-move-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-move-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
   <div class="form-row" id="row-move-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
@@ -156,6 +173,6 @@
 <script type="text/html" data-help-name="mavlink-move">
   <p>Builds or sends SET_POSITION_TARGET_* messages. Local altitude and vertical velocity are entered up-positive; the node flips them once to MAVLink NED down-positive values.</p>
   <p>Mode and delivery reshape the form (§6): only the parameters for the selected mode are shown. Stream interval and TTL appear only for Stream delivery.</p>
-  <p>On <b>Build</b> delivery the Vehicle Profile supplies dialect and target defaults. On <b>Send</b> or <b>Stream</b> delivery a Connection is required and the Send-as identity determines addressing: a companion identity derives the target sysid from its airframe and pins compid to 1 (the autopilot).</p>
+  <p>On <b>Build</b> delivery the Dialect dropdown selects the bundled dialect used for catalogs; choose <i>from Vehicle Profile…</i> to inherit dialect and target defaults from a Vehicle Profile. On <b>Send</b> or <b>Stream</b> delivery a Connection is required and the Send-as identity determines addressing: a companion identity derives the target sysid from its airframe and pins compid to 1 (the autopilot).</p>
   <p>Output 0 continues only on success. Output 1 carries the status record for every terminal outcome.</p>
 </script>

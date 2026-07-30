@@ -92,13 +92,12 @@ module.exports = function registerMavlinkBuild(RED) {
 
     // Resolve the dialect bundle per the role × tier matrix (§6).
     //   Build + plain dialect name → load from the bundled registry (no vehicle needed).
-    //   Build + '__vehicle' or legacy (vehicle set, no dialect) → vehicle node's bundle.
+    //   Build + '__vehicle' → vehicle node's bundle.
     //   Wire tier → the connection's bound profile node's bundle (custom-safe).
     if (tier === TIER.BUILD) {
+      // Editor requires dialect on Build (§6) — trust config.dialect.
       const dialectName = config.dialect;
-      if (dialectName && dialectName !== '__vehicle') {
-        bundle = require('../lib/metadata').loadBundled(dialectName);
-      } else {
+      if (dialectName === '__vehicle') {
         const vehicleNode = RED.nodes.getNode(config.vehicle);
         if (!vehicleNode || typeof vehicleNode.getDialect !== 'function') {
           node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
@@ -111,6 +110,8 @@ module.exports = function registerMavlinkBuild(RED) {
           node.error(`mavlink-build: ${err.message}`);
           return;
         }
+      } else {
+        bundle = require('../lib/metadata').loadBundled(dialectName);
       }
     } else {
       // Wire tier: the connection's bound profile governs — hidden is not
@@ -358,14 +359,19 @@ module.exports = function registerMavlinkBuild(RED) {
             return res.json(listMessagesCatalog(requested));
           }
 
-          const dialect = requested || 'ardupilotmega';
-          if (dialect === 'custom') {
+          if (!requested) {
+            return res.status(400).json({
+              error: 'dialect is required',
+              dialects: knownDialects(),
+            });
+          }
+          if (requested === 'custom') {
             return res.status(400).json({
               error: 'custom dialect requires a deployed Vehicle Profile (?vehicle=id)',
               dialects: knownDialects(),
             });
           }
-          res.json(listMessagesCatalog(dialect));
+          res.json(listMessagesCatalog(requested));
         } catch (err) {
           res.status(400).json({
             error: err.message,

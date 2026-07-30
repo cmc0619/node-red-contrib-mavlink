@@ -426,16 +426,21 @@ same rule the identity node already applies to role changes.
 | Target sysid | shown; blank inherits the profile default | hidden — derived from the airframe (identity's own sysid) |
 | Target compid | shown; blank inherits the profile default | hidden, pinned to 1 (the autopilot) — except Payload, whose compid addresses a payload device and stays visible |
 
-**By tier** (same sender nodes):
+**By tier** (same sender nodes — and the Build node shares the Build-column catalog pattern):
 
 | Field | Build | wire tiers (Send / confirm / complete / collect / Stream) |
 |---|---|---|
 | Connection | hidden — nothing is sent; output 0 feeds `mavlink-out` or a Build-node trigger, which brings its own connection | shown, required |
-| Vehicle Profile | shown — supplies the editor catalogs (dialect), firmware, and the target defaults blank fields inherit | hidden — the profile arrives via the connection |
+| Dialect | shown — bundled dialect list plus a `from Vehicle Profile…` escape; required (empty is editor-invalid — no silent `ardupilotmega`) | hidden — the connection's profile dialect governs catalogs |
+| Vehicle Profile | shown **only** when Dialect is `from Vehicle Profile…`; empty stays invalid until a profile is chosen (no auto-pick) | hidden — the profile arrives via the connection |
 | Send-as (identity) | hidden — source ids are stamped at the wire by whichever node eventually sends | per role table |
 | Target sysid/compid | shown — a builder must stamp targets | per role table |
-| Firmware (Param, Mission) | no dropdown — inherited from the Vehicle Profile field | no dropdown — inherited from the connection's profile |
+| Firmware (Param, Mission) | shown and required when Build is **not** using Vehicle Profile; hidden (inherited from the profile) when it is | no dropdown — inherited from the connection's profile |
 | Timeout / retries / band | hidden | shown |
+
+Command, Move, Payload, and the Build node do not show Firmware on Build — they only need the
+dialect for catalogs. Param and Mission need firmware for encoding / defs / mission-type gating,
+so on Build they take **Vehicle Profile** *or* **(Dialect and Firmware)**.
 
 **Runtime target resolution**, one order everywhere, per field (sysid and compid resolve
 independently; a configured 0 is broadcast and survives; blank means inherit):
@@ -444,11 +449,12 @@ independently; a configured 0 is broadcast and survives; blank means inherit):
 2. companion send-as identity → derived `{airframe sysid, 1}` (node config target ignored —
    hidden is not honored; Payload's compid still resolves from its visible field)
 3. node config target
-4. profile default — the connection's bound profile on wire tiers, the node's Vehicle Profile
-   field on Build
+4. profile default — the connection's bound profile on wire tiers; on Build, only when Dialect
+   is `from Vehicle Profile…` (the selected profile's target defaults). A concrete bundled
+   dialect on Build has no profile rung — blank stays unresolved.
 
-There is no fifth “hardcoded 1” rung: blank inherits the profile (whose editor default is
-often `1`). Companion's compid `1` is the derived autopilot address, not a global null-guard.
+There is no fifth “hardcoded 1” rung and no silent dialect default. Companion's compid `1` is
+the derived autopilot address, not a global null-guard.
 
 `lib/addressing` owns one resolution path (`resolveActionTarget`). Builders take that
 resolved `{sysid, compid}` as-is. Sysid/compid ranges are editor-only
@@ -457,16 +463,26 @@ resolved `{sysid, compid}` as-is. Sysid/compid ranges are editor-only
 Confirm/complete matching (COMMAND_ACK, param echo) keys on the *same resolved target* — the
 matcher and the sender share one resolution, pinned by test.
 
+**Enum controls in builders.** Bitmask-marked enums use the native multi-select (ctrl-click)
+unless the enum is an exact binary false/true pair — exactly two members, `*_FALSE` (or
+`FALSE`) with value `0` and `*_TRUE` (or `TRUE`) with value `1` (e.g. `MAV_BOOL`). Those render
+as true/false using the declared wire values. Mixed tables such as
+`GIMBAL_AXIS_CALIBRATION_REQUIRED` (UNKNOWN / TRUE / FALSE=2) stay ordinary selects. Upstream
+`bitmask` marks and value-shape heuristics do not reliably tell additive masks from exclusive
+or mixed enums; keep multi-select and caveat emptor outside that binary exception.
+
 **Exceptions, deliberate:**
 
-- **Build node** — raw builds for the whole dialect. Its build tier takes a plain dialect
-  picker (seed dialect list, with a "from Vehicle Profile…" escape) and needs no
-  connection, identity, or vehicle. On wire tiers the connection's profile governs the catalogs,
-  because that dialect is what the wire will encode.
+- **Build node** — raw builds for the whole dialect. Same Build-column Dialect /
+  `from Vehicle Profile…` pattern as the senders; no connection or identity on Build. On wire
+  tiers the connection's profile governs the catalogs, because that dialect is what the wire
+  will encode.
 - **Swarm** — gcs-paradigm by nature. Its send-as dropdown offers only gcs-enabled identities
   (`gcs` or `custom`, first one preselected); selection modes replace the single-target rows.
   Build tier with `all`/`filter` selection still shows the connection — the live peer table is
-  the only place those selections can resolve. Build + explicit `list` needs no connection.
+  the only place those selections can resolve. Build + explicit `list` needs no connection; when
+  it loads a MAV_CMD/enum catalog without a governing connection profile, it uses the same
+  Dialect / `from Vehicle Profile…` rules (no silent `ardupilotmega`).
 - **In and State** — read side. Their sysid/compid fields are *filters* where blank means
   everything; no target semantics, no reshape.
 - **Out** — fully message-driven; nothing to reshape.
@@ -528,6 +544,14 @@ validity badges, availability — recomputes on every redeploy, not only first l
 control before the function returns so Node-RED's immediate post-prepare validation sees it,
 and (2) `$select.trigger('change')` after the async fill so a pre-fill `input-error` clears
 through the stock change→validate path (never a parallel validation API).
+
+**Editor helpers are shared, not pasted.** The `RED.mavlink.*` browser helpers — config-node
+pickers, enum/dialect catalog fills, `currentCatalogQuery`, `validateUint8`, the catalog source
+matrix `resolveCatalogTarget`, and the Build-tier dialect/vehicle/firmware default descriptors
+`buildTierDialectDefaults` — live once in `resources/mavlink-editor.js`, loaded via the stock
+resource mechanism (a relative `<script src>` in the first-listed node). Node-RED guarantees that
+file runs before any inline `registerType`, so nodes call the shared helpers rather than copying
+them (§14 records the load-order fact and the picker API).
 
 ## 7. Config nodes
 
@@ -1552,12 +1576,14 @@ items. Fence and rally validators stay strict to their families.
 `rg "DO_JUMP|CONDITION_DELAY" ` against a captured mission download.
 
 **Missing Vehicle Profile must not invent a dialect catalog.**
-*Wrong belief:* `GET /mavlink/command/commands?vehicle=<id>` can fall through to
-`ardupilotmega` when `RED.nodes.getNode(id)` misses (editor open before Deploy).
-*Fact:* the editor caches the response under `vehicle:<id>`. A silent default would pin the
-wrong MAV_CMD list to that key. A miss returns 404 unless the request also names an
-allow-listed bundled `?dialect=`; `custom` without a live profile is never served.
-*Check:* `node --test test/command/commands-route.test.js`
+*Wrong belief:* `GET /mavlink/command/commands?vehicle=<id>` (or `/mavlink/enums` with no
+query) can fall through to `ardupilotmega` when `RED.nodes.getNode(id)` misses or the editor
+has not chosen a dialect yet.
+*Fact:* the editor caches under `vehicle:<id>` / `dialect:<name>`. A silent default would pin
+the wrong MAV_CMD/enum list to that key. A missing profile returns 404 unless the request also
+names an allow-listed bundled `?dialect=`; `custom` without a live profile is never served.
+An empty catalog query (no `vehicle`, no `dialect`) returns 400 — not a default dialect.
+*Check:* `node --test test/command/commands-route.test.js test/vehicle/enums-route.test.js`
 
 **Config-node refs use Node-RED's select + edit/add, never free-form ids.**
 *Wrong belief:* a plain `<input>` with `defaults.foo.type = 'mavlink-vehicle'` is enough, or a
@@ -1669,21 +1695,26 @@ migration of existing flows. Command no longer reads `connection._vehicle`.
 *Check:* `node --test test/addressing/resolve.test.js` plus the per-node suites — look for
 "inherits Vehicle Profile target" tests.
 
-**Sender nodes do not own independent firmware dropdowns or unconditional address fields.**
-*Wrong belief:* Param and Mission carry their own firmware selects, every sender always shows
-connection + target fields, and Build (the node) requires a Vehicle Profile.
-*Fact:* the §6 role × tier matrix governs. Build tier shows a Vehicle Profile picker and hides
-connection/identity/timing rows; wire tiers derive firmware and target defaults from the
-connection's profile; a companion send-as identity derives the target ({airframe sysid, 1}) and
-hides the fields (Payload keeps its compid — it addresses a payload device); the Build node
-takes a plain dialect picker (`__vehicle` escape for the connection's Vehicle Profile dialect);
-Swarm offers only gcs/custom identities and needs no connection for build+list. Hidden fields
-are ignored at runtime. Ack,
-param-echo, and mission protocol matching key on the same resolved target as the send.
-*Check:* `node --test test/addressing/resolve.test.js test/command/node.test.js
-test/move/node.test.js test/param/node.test.js test/payload/node.test.js
-test/mission/node.test.js test/swarm/node.test.js test/nodes/in-out-build.test.js` — look for
-"companion", "role × tier", and "build+list" tests.
+**Build catalogs come from an explicit Dialect (or Vehicle Profile escape), not a silent default.**
+*Wrong belief:* Build tier shows only a Vehicle Profile picker; an empty profile (or missing
+catalog target) may fall through to `ardupilotmega`; the Build node is a special-case dialect
+picker while senders always bind a profile; Param/Mission never show Firmware because it is
+always inherited.
+*Fact:* §6 Build column is Dialect (bundled list + `from Vehicle Profile…`) for Build, Command,
+Move, Param, Payload, Mission, and Swarm-when-catalog-without-connection. Vehicle Profile is
+visible only for that escape; empty dialect or empty escape-vehicle is editor-invalid — no
+auto-pick, no silent `ardupilotmega`, and no inventing `__vehicle` from a leftover vehicle id
+(pre-1.0: no flow migration). Param/Mission Build require Firmware when not using a profile
+(Vehicle Profile XOR dialect+firmware). Wire tiers still hide Dialect/Vehicle/Firmware and use
+the Connection's profile. Companion send-as and hidden-is-not-honored are unchanged. Binary
+`FALSE=0`/`TRUE=1` enums render true/false only when both entries carry those wire values
+(bare name strings are not synthesized to 0/1); other bitmasks stay multi-select. ArduPilot
+parameter definition URLs stay family-keyed (Vehicle Profile); dialect-only Param Build does
+not invent a family from a MAVLink dialect name.
+*Check:* editor HTML suites for dialect/`__vehicle`/firmware visibility and invalid empty;
+`node --test test/addressing/resolve.test.js` plus per-node suites — "companion", "role × tier",
+"build+list", no silent dialect default. Spec record:
+`docs/superpowers/specs/2026-07-29-build-tier-dialect-picker-design.md`.
 
 **Status records are not stamped, and action nodes do not refuse them on input.**
 *Wrong belief:* Every output-1 record needs `__mavlinkStatusRecord__` (or `_mavlinkStatus` in
@@ -1717,9 +1748,11 @@ firmware is also absent the encoder may assume ArduPilot/C-cast.
 `…_PARAM_ENCODE_C_CAST` (131072). Resolution is explicit `msg.payload.paramEncoding` → those
 capability bits → named firmware (PX4 → bytewise, else C-cast). A present-but-invalid override
 rejects rather than falling through. An empty ladder throws. Firmware for Param/Mission is
-`firstDefined(payload.firmware, profile.firmware)` — Vehicle Profile's editor-required field
-covers real paths; do not invent `'ardupilot'`. ArduPilot often omits the C_CAST bit, so the
-named-firmware step remains required when capabilities are absent.
+path-split, not a single `firstDefined` that can prefer a hidden profile: wire tiers and
+Build-via-`__vehicle` use `firstDefined(payload.firmware, profile.firmware)`; Build with a
+concrete dialect uses `firstDefined(payload.firmware, config.firmware)` and must not read
+`profile.firmware` (hidden is not honored). Do not invent `'ardupilot'`. ArduPilot often omits
+the C_CAST bit, so the named-firmware step remains required when capabilities are absent.
 *Check:* `node --test test/param/param.test.js test/addressing/resolve.test.js` — look for
 `resolveParamEncoding` / unresolved / firstDefined firmware tests.
 
@@ -1738,9 +1771,11 @@ downstream `numberOr(..., 1)`) must invent `{sysid: 1, compid: 1}` so a message 
 "works"; emitting `NaN` (or letting the uint8 codec reject a non-finite id) is a regression.
 *Fact:* Inventing `{1,1}` can arm/move the wrong airframe on a busy link. An empty ladder
 yielding non-finite ids fails at encode (`lib/codec/numeric` rejects non-finite integers) or
-leaves an unusable Build object — safer than a silent command to system 1. Companion
-compid `1` and swarm broadcast `{sysid: 0, compid: 1}` remain matrix/spec addresses, not
-null-guards. Do not reintroduce target→`1` fallbacks in builders or stream-stop helpers.
+leaves an unusable Build object — safer than a silent command to system 1. On Build with a
+concrete dialect there is no profile inherit rung at all — targets must be stamped or stay
+unresolved. Companion compid `1` and swarm broadcast `{sysid: 0, compid: 1}` remain
+matrix/spec addresses, not null-guards. Do not reintroduce target→`1` fallbacks in builders or
+stream-stop helpers.
 *Check:* `rg -n 'numberOr\\([^,]+,\\s*1\\)|firstDefined\\([^)]*,\\s*1\\)' lib nodes` — only
 companion derivation in `lib/addressing/resolve.js` should remain; `node --test
 test/addressing/resolve.test.js test/move/move.test.js`.
@@ -1752,3 +1787,36 @@ instance 0 (`14550/14551`) and instance 1 (`14560`).
 confuses operators. Lab and examples use PX4 GCS **14560→14561**, companions **14540/14542**.
 Operator guide: [`sitl/README.md`](sitl/README.md).
 *Check:* `rg '14555' examples` is empty; `examples/sitl/10-dual-stack-ten.json` bindPort 14560.
+
+**Shared editor helpers are one resource file, and the Build-tier picker glue is one shared API.**
+*Wrong belief:* every node's `.html` must inline its own copy of `RED.mavlink.*` helpers (enum
+fills, dialect select, `currentCatalogQuery`, `validateUint8`, …) and its own `resolveCatalogTarget`
++ dialect/vehicle/firmware `defaults.validate` blocks, because Node-RED loads external `<script src>`
+asynchronously so helpers might be undefined when a later node's `registerType` parses.
+*Fact:* The helpers live once in [`resources/mavlink-editor.js`](resources/mavlink-editor.js),
+served at `resources/node-red-contrib-mavlink/mavlink-editor.js` and loaded by a relative
+`<script src>` at the top of `mavlink-local-identity.html` (listed first in `package.json`
+`node-red.nodes` so its resource tag leads the module). Node-RED's `appendConfig` defers every inline node
+`<script>` until each module's relative-`src` scripts have fired `onload`, so `RED.mavlink.*` is
+defined before any `registerType` runs — no async race. The catalog source matrix is one function,
+`RED.mavlink.resolveCatalogTarget({ isBuild? })` (Build → Dialect/`__vehicle`; wire → connection
+profile; empty → `{key:'empty', query:null}`, never `ardupilotmega`); the Build-tier default
+descriptors are `RED.mavlink.buildTierDialectDefaults({ modeField, withFirmware })`
+(`modeField:'tier'` for Build, `withFirmware:true` for Param/Mission). Each palette node merges
+that into its `defaults` with `Object.assign` and calls the shared resolver; Swarm passes its
+narrower Build+list case as the `isBuild` override. `resources` is in `package.json` `files`, and
+`resources/**/*.js` lints as a browser script.
+*Check:* `node --test test/nodes/mavlink-editor-resource.test.js`; `rg -n 'function resolveCatalogTarget'
+nodes` returns nothing; `rg -n 'buildTierDialectDefaults' nodes/mavlink-*.html`.
+
+**Mission confirm without a Connection fails loud — it does not invent a Build plan.**
+*Wrong belief:* `delivery === 'build' || !connNode` is a friendly preview when Confirm is
+selected but no Connection is bound; syncing `isBuild` with that soft fallback is enough.
+*Fact:* §9 / Command already treat a chosen wire tier with no Connection as misconfigured
+(`invalid config`, status failed, no output-0 success). Mission matched that. §9's "falling
+back to Build where no connection is set" is the **editor default-tier** preselection, not a
+runtime invent. Restoring `config.delivery || 'build'` on Move (or any sender with an editor
+default) is declined — greenfield, config-trust (AGENTS.md); no published pre-1.0 flow lacks
+the field.
+*Check:* `node --test test/mission/node.test.js`; Command's matching test in
+`test/command/node.test.js`.

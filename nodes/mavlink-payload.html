@@ -1,11 +1,10 @@
 <script type="text/javascript">
-  RED.nodes.registerType('mavlink-payload', {
-    category: 'mavlink',
-    color: '#ffe8d8',
-    defaults: {
+  // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
+  // Payload's mode field is `delivery` and it has no Firmware field.
+  var payloadDefaults = Object.assign(
+    {
       name: { value: '' },
       connection: { value: '', type: 'mavlink-connection' },
-      vehicle: { value: '', type: 'mavlink-vehicle', required: false },
       identity: { value: '' },
       delivery: { value: 'build' },
       timeout: { value: 10000, validate: RED.validators.number(true) },
@@ -54,6 +53,13 @@
       length: { value: 0, validate: RED.validators.number(true) },
       rate: { value: 0, validate: RED.validators.number(true) }
     },
+    RED.mavlink.buildTierDialectDefaults()
+  );
+
+  RED.nodes.registerType('mavlink-payload', {
+    category: 'mavlink',
+    color: '#ffe8d8',
+    defaults: payloadDefaults,
     inputs: 1,
     outputs: 2,
     outputLabels: ['continue', 'status'],
@@ -165,6 +171,14 @@
         'instance', 'length', 'rate'
       ];
 
+      function isBuildDelivery() {
+        return ($('#node-input-delivery').val() || 'build') === 'build';
+      }
+
+      function hasCatalogTarget(query) {
+        return !!(query && (query.dialect || query.vehicle));
+      }
+
       function catalogQuery() {
         if (RED.mavlink && typeof RED.mavlink.currentCatalogQuery === 'function') {
           return RED.mavlink.currentCatalogQuery();
@@ -194,6 +208,10 @@
           return;
         }
         var query = catalogQuery();
+        if (isBuildDelivery() && !hasCatalogTarget(query)) {
+          clearPayloadFieldTips();
+          return;
+        }
         query.topic = topic;
         query.verb = verb;
         query.path = path;
@@ -215,6 +233,12 @@
 
       function loadPayloadEnums(cb) {
         if (enumCatalogLoaded) {
+          cb();
+          return;
+        }
+        if (isBuildDelivery() && !hasCatalogTarget(catalogQuery())) {
+          enumCatalogLoaded = true;
+          enumCatalog = { enums: {} };
           cb();
           return;
         }
@@ -270,12 +294,14 @@
         var delivery = $('#node-input-delivery').val() || 'build';
         var isBuild = delivery === 'build';
         var isWire = !isBuild;
+        var dialectVal = $('#node-input-dialect').val() || '';
         var identityId = isWire ? $('#node-input-identity').val() : '';
         var isCompanion = isWire && RED.mavlink.identityRole(identityId) === 'companion';
         var isManager = topic === 'gimbal' && verb === 'aim' && path === 'manager';
         var show = {
           /* tier-driven rows */
-          vehicle: isBuild,
+          dialect: isBuild,
+          vehicle: isBuild && dialectVal === '__vehicle',
           connection: isWire,
           identity: isWire,
           timeout: isWire,
@@ -320,6 +346,7 @@
           rate:            topic === 'release' && verb === 'winch'
         };
 
+        $('#row-payload-dialect').toggle(!!show.dialect);
         $('#row-payload-vehicle').toggle(!!show.vehicle);
         $('#row-payload-connection').toggle(!!show.connection);
         $('#row-payload-identity').toggle(!!show.identity);
@@ -418,19 +445,26 @@
         $verb.val(valid ? saved : (verbs[0] ? verbs[0].value : ''));
       }
 
+      function resetEnumCatalog() {
+        enumCatalog = { enums: {} };
+        enumCatalogLoaded = false;
+        paintedModeEnum = null;
+        paintedReleaseEnum = null;
+      }
+
       $('#node-input-topic').on('change', function () {
         refreshVerbOptions(false);
         refreshEnumControls();
       });
       $('#node-input-verb').on('change', refreshEnumControls);
       $('#node-input-path').on('change', refreshVisibility);
-      $('#node-input-delivery').on('change', refreshVisibility);
+      $('#node-input-delivery').on('change', function () {
+        resetEnumCatalog();
+        refreshEnumControls();
+      });
       $('#node-input-identity').on('change', refreshVisibility);
       $('#node-input-connection').on('change', function () {
-        enumCatalog = { enums: {} };
-        enumCatalogLoaded = false;
-        paintedModeEnum = null;
-        paintedReleaseEnum = null;
+        resetEnumCatalog();
         if (RED.mavlink && RED.mavlink.fillIdentitySelect) {
           RED.mavlink.fillIdentitySelect(
             $('#node-input-identity'),
@@ -440,7 +474,19 @@
         }
         refreshEnumControls();
       });
-      $('#node-input-vehicle').on('change', refreshPayloadFieldTips);
+      $('#node-input-vehicle').on('change', function () {
+        resetEnumCatalog();
+        refreshEnumControls();
+      });
+      var $dialect = $('#node-input-dialect');
+      $dialect.on('change', function () {
+        resetEnumCatalog();
+        refreshEnumControls();
+      });
+      RED.mavlink.populateDialectSelect($dialect, {
+        saved: node.dialect || '',
+        includeVehicleEscape: true
+      });
       refreshVerbOptions(true);
       refreshEnumControls();
 
@@ -460,6 +506,7 @@
 <script type="text/html" data-template-name="mavlink-payload">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row" id="row-payload-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-payload-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
   <div class="form-row" id="row-payload-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
   <div class="form-row" id="row-payload-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option></select></div>
@@ -515,7 +562,7 @@
 <script type="text/html" data-help-name="mavlink-payload">
   <p>Controls camera, gimbal, servo, and release payload verbs. Command-backed verbs report command acknowledgement as their confirmation mode.</p>
   <p>Topic and verb reshape the form (§6): only the parameters for the selected verb are shown.</p>
-  <p>On <b>Build</b> delivery the Vehicle Profile supplies dialect and target defaults. On <b>Send</b> or <b>Send &amp; confirm</b> delivery a Connection is required. The Send-as identity drives target addressing: a companion identity derives the target sysid from its airframe; the target compid remains visible and config-resolved because it addresses a payload device (camera or gimbal), not the autopilot.</p>
+  <p>On <b>Build</b> delivery the Dialect picker supplies editor catalogs. Choose <i>from Vehicle Profile…</i> to use a profile dialect and target defaults; a concrete dialect has no profile target rung. On <b>Send</b> or <b>Send &amp; confirm</b> delivery a Connection is required. The Send-as identity drives target addressing: a companion identity derives the target sysid from its airframe; the target compid remains visible and config-resolved because it addresses a payload device (camera or gimbal), not the autopilot.</p>
   <p>On the <b>Send &amp; confirm</b> tier a command-backed verb waits for its <code>COMMAND_ACK</code>: output 0 (continue) fires only on <code>ACCEPTED</code>, and a <code>DENIED</code>, <code>TEMPORARILY_REJECTED</code>, or timeout halts the chain and reports on output 1.</p>
   <p>Gimbal manager aiming uses GIMBAL_MANAGER_SET_PITCHYAW and has no MAVLink acknowledgement, so it is always sent unconfirmed.</p>
 </script>
