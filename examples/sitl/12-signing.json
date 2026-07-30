@@ -190,7 +190,8 @@
             [
                 "sitl12-arm-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "sitl12-arm-done",

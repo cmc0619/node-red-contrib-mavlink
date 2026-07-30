@@ -112,7 +112,8 @@
             [
                 "sitl02-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "sitl02-done",

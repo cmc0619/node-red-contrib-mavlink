@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex27-tab",
     "name": "Safety e-stop",
-    "info": "⚠ Force disarm uses COMPONENT_ARM_DISARM param2=21196 (Emergency band, never coalesced). ⚠⚠ Flight termination requires msg.confirmed=true. Bind 14550→14551.",
+    "info": "\u26a0 Force disarm uses COMPONENT_ARM_DISARM param2=21196 (Emergency band, never coalesced). \u26a0\u26a0 Flight termination requires msg.confirmed=true. Bind 14550\u219214551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -64,7 +64,7 @@
     "id": "ex27-inject-force-disarm",
     "type": "inject",
     "z": "ex27-tab",
-    "name": "⚠ Force disarm (21196)",
+    "name": "\u26a0 Force disarm (21196)",
     "props": [
       {
         "p": "payload"
@@ -111,13 +111,14 @@
       [
         "ex27-debug-disarm-status"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex27-inject-flight-term",
     "type": "inject",
     "z": "ex27-tab",
-    "name": "⚠⚠ Flight termination (confirm)",
+    "name": "\u26a0\u26a0 Flight termination (confirm)",
     "props": [
       {
         "p": "payload"
@@ -169,7 +170,8 @@
       [
         "ex27-debug-ft-status"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex27-debug-disarm-status",

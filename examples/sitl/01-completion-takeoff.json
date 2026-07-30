@@ -112,7 +112,8 @@
             [
                 "ex06-arm-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "ex06-takeoff",
@@ -140,7 +141,8 @@
             [
                 "ex06-takeoff-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "ex06-chain-done",

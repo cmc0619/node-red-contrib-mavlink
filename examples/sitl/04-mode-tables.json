@@ -146,7 +146,8 @@
             [
                 "sitl04-ap-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "sitl04-inject-px4",
@@ -199,7 +200,8 @@
             [
                 "sitl04-px4-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "sitl04-state-ap",

@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex22-tab",
     "name": "Go-to tour (NaN yaw)",
-    "info": "DO_REPOSITION with param4=NaN holds current heading. JSON.stringify cannot carry NaN — params use string \"NaN\". Bind 14550→14551.",
+    "info": "DO_REPOSITION with param4=NaN holds current heading. JSON.stringify cannot carry NaN \u2014 params use string \"NaN\". Bind 14550\u219214551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -111,7 +111,8 @@
       [
         "ex22-debug-arm-status"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex22-cmd-guided",
@@ -139,7 +140,8 @@
       [
         "ex22-debug-guided-status"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex22-debug-arm-status",
@@ -243,7 +245,8 @@
       [
         "ex22-debug-a-status"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex22-debug-a-status",
@@ -330,7 +333,8 @@
       [
         "ex22-debug-b-status"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex22-debug-b-status",
@@ -417,7 +421,8 @@
       [
         "ex22-debug-c-status"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex22-debug-c-status",

@@ -117,7 +117,8 @@
             [
                 "ex07-dry-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "ex07-inject-live",
@@ -175,7 +176,8 @@
             [
                 "ex07-live-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "ex07-dry-result",
