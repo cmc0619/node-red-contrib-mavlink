@@ -113,3 +113,68 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
   assert.equal(sends[2].message.fields.vz, 0);
   assert.equal(sends[2].options.band, BAND.STREAMING);
 });
+
+test('a stop-setpoint send that fails on TTL expiry is reported via onError', () => {
+  // The TTL path is the stream's own safety terminator: a swallowed stop there
+  // would leave the vehicle moving with nothing watching. It must surface.
+  let now = 0;
+  let timer;
+  const errors = [];
+  let sends = 0;
+  const stream = createMoveStream({
+    connection: {
+      send() {
+        sends += 1;
+        if (sends >= 2) throw new Error('queue overflow'); // the TTL stop send
+      },
+    },
+    message: buildMoveMessage({
+      mode: 'local-velocity',
+      target: { sysid: 4, compid: 1 },
+      velocity: { north: 1, east: 0, up: 0 },
+      timeBootMs: 0,
+    }),
+    target: { sysid: 4, compid: 1 },
+    identityId: 'gcs',
+    intervalMs: 100,
+    ttlMs: 100,
+    now: () => now,
+    setInterval(fn) { timer = fn; return 'timer'; },
+    clearInterval() {},
+    onError: (err) => errors.push(err),
+  });
+
+  stream.start(); // first send ok
+  now = 150;
+  timer(); // TTL expired → stop() send throws → onError
+
+  assert.equal(stream.active, false);
+  assert.equal(errors.length, 1, 'a failed TTL stop must be reported');
+  assert.match(errors[0].message, /queue overflow/);
+});
+
+test('an initial send that throws resets the stream to stopped and rethrows', () => {
+  // The first send runs before the timer is installed; a throw must not leave
+  // the stream active-but-timerless (a zombie a later stop() would act on).
+  const stream = createMoveStream({
+    connection: {
+      send() { throw new Error('disabled'); },
+    },
+    message: buildMoveMessage({
+      mode: 'local-velocity',
+      target: { sysid: 4, compid: 1 },
+      velocity: { north: 1, east: 0, up: 0 },
+      timeBootMs: 0,
+    }),
+    target: { sysid: 4, compid: 1 },
+    identityId: 'gcs',
+    intervalMs: 100,
+    ttlMs: 1000,
+    now: () => 0,
+    setInterval() { throw new Error('timer must not be installed'); },
+    clearInterval() {},
+  });
+
+  assert.throws(() => stream.start(), /disabled/);
+  assert.equal(stream.active, false, 'a failed initial send must leave the stream stopped');
+});
