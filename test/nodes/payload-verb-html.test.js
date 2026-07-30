@@ -11,6 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { PAYLOAD_VERBS } = require('../../lib/payload');
+const { assertChangeHandlerContains } = require('./html-assert');
 
 const payloadHtml = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-payload.html'),
@@ -301,24 +302,28 @@ test('mavlink-payload fills identity select and re-fills on connection change (Â
 });
 
 test('mavlink-payload CompID reloads when catalog source changes', () => {
-  assert.match(
+  assertChangeHandlerContains(
     payloadHtml,
-    /\$\('#node-input-delivery'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-delivery')",
+    'reloadTargetCompId()',
     'delivery change reloads CompID'
   );
-  assert.match(
+  assertChangeHandlerContains(
     payloadHtml,
-    /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-connection')",
+    'reloadTargetCompId()',
     'connection change reloads CompID'
   );
-  assert.match(
+  assertChangeHandlerContains(
     payloadHtml,
-    /\$\('#node-input-vehicle'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-vehicle')",
+    'reloadTargetCompId()',
     'vehicle change reloads CompID'
   );
-  assert.match(
+  assertChangeHandlerContains(
     payloadHtml,
-    /\$dialect\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    '$dialect',
+    'reloadTargetCompId()',
     'dialect change reloads CompID'
   );
 });

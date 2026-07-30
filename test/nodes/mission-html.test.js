@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { assertChangeHandlerContains } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-mission.html'),
@@ -129,19 +130,22 @@ test('mavlink-mission ensureConfigNodePicker called for vehicle', () => {
 test('mavlink-mission enum catalog loaded via shared reloadCompIdSelect helper', () => {
   assert.match(html, /reloadCompIdSelect/, 'compid catalog loaded via shared helper');
   assert.match(html, /node-input-targetComponent/, 'targetComponent select is filled');
-  assert.match(
+  assertChangeHandlerContains(
     html,
-    /\$\('#node-input-delivery'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-delivery')",
+    'reloadTargetCompId()',
     'delivery change reloads CompID'
   );
-  assert.match(
+  assertChangeHandlerContains(
     html,
-    /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-connection')",
+    'reloadTargetCompId()',
     'connection change reloads CompID'
   );
-  assert.match(
+  assertChangeHandlerContains(
     html,
-    /\$\('#node-input-vehicle'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-vehicle')",
+    'reloadTargetCompId()',
     'vehicle change reloads CompID'
   );
 });

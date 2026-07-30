@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { assertChangeHandlerContains } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-move.html'),
@@ -37,10 +38,11 @@ test('mavlink-move editor reshapes fields by mode and delivery (§6)', () => {
     /\$\('#node-input-mode'\)\.on\('change', refreshVisibility\)/,
     'mode change refreshes visibility'
   );
-  assert.match(
+  assertChangeHandlerContains(
     html,
-    /\$\('#node-input-delivery'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
-    'delivery change refreshes visibility and CompID catalog'
+    "$('#node-input-delivery')",
+    'reloadTargetCompId()',
+    'delivery change refreshes CompID catalog'
   );
   assert.match(html, /refreshVisibility\(\)/, 'visibility is applied on dialog open');
 
@@ -86,14 +88,16 @@ test('mavlink-move keeps target sysid/compid and reloadCompIdSelect catalog', ()
   assert.match(html, /id="node-input-targetComponent"/, 'target compid select remains');
   assert.match(html, /reloadCompIdSelect/, 'compid enum catalog uses shared helper');
   assert.match(html, /ensureConfigNodePicker/, 'connection picker remains');
-  assert.match(
+  assertChangeHandlerContains(
     html,
-    /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-connection')",
+    'reloadTargetCompId()',
     'connection change reloads CompID'
   );
-  assert.match(
+  assertChangeHandlerContains(
     html,
-    /\$\('#node-input-vehicle'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-vehicle')",
+    'reloadTargetCompId()',
     'vehicle change reloads CompID'
   );
 });

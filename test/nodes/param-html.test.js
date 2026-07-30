@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { assertChangeHandlerContains } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-param.html'),
@@ -128,24 +129,28 @@ test('mavlink-param populates Dialect select with Vehicle Profile escape', () =>
 });
 
 test('mavlink-param CompID reloads when catalog source changes', () => {
-  assert.match(
+  assertChangeHandlerContains(
     html,
-    /\$\('#node-input-delivery'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-delivery')",
+    'reloadTargetCompId()',
     'delivery change reloads CompID'
   );
-  assert.match(
+  assertChangeHandlerContains(
     html,
-    /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-connection')",
+    'reloadTargetCompId()',
     'connection change reloads CompID'
   );
-  assert.match(
+  assertChangeHandlerContains(
     html,
-    /\$\('#node-input-vehicle'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-vehicle')",
+    'reloadTargetCompId()',
     'vehicle change reloads CompID'
   );
-  assert.match(
+  assertChangeHandlerContains(
     html,
-    /\$\('#node-input-dialect'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-dialect')",
+    'reloadTargetCompId()',
     'dialect change reloads CompID'
   );
 });
