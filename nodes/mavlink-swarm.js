@@ -26,6 +26,11 @@ module.exports = function registerMavlinkSwarm(RED) {
     // members × (timeoutMs + intervalMs) — long enough to outlive a redeploy
     // — so close() must be able to stop it rather than let it keep sending.
     const activeCancels = new Set();
+    // In-flight executeSwarm promises: close() waits for these to settle after
+    // cancelling, so a redeploy doesn't leave the old node's loop finishing in
+    // the background (bounded by one intervalMs wait / the cancelled member's
+    // immediate settle).
+    const activeRuns = new Set();
 
     node.on('input', async (msg, send, done) => {
       const emit = send || ((messages) => node.send(messages));
@@ -57,7 +62,7 @@ module.exports = function registerMavlinkSwarm(RED) {
         }
 
         let cancel = null;
-        const aggregate = await executeSwarm({
+        const run = executeSwarm({
           connection: effectiveConnection,
           action: actionFrom(config, payload),
           selection,
@@ -74,7 +79,14 @@ module.exports = function registerMavlinkSwarm(RED) {
             activeCancels.add(fn);
           },
         });
-        if (cancel) activeCancels.delete(cancel);
+        activeRuns.add(run);
+        let aggregate;
+        try {
+          aggregate = await run;
+        } finally {
+          activeRuns.delete(run);
+          if (cancel) activeCancels.delete(cancel);
+        }
 
         // Close cancelled the fan-out mid-run: finish quietly, no error emit
         // (mirrors mavlink-mission's 'cancelled' outcome handling) — a
@@ -113,7 +125,10 @@ module.exports = function registerMavlinkSwarm(RED) {
     node.on('close', (done) => {
       for (const cancel of activeCancels) cancel();
       activeCancels.clear();
-      done();
+      // Defer done() until the cancelled runs actually settle — completing
+      // the redeploy while the old loop's timer/promise chain is still live
+      // would let it finish against the torn-down node.
+      Promise.allSettled([...activeRuns]).then(() => done());
     });
   }
 

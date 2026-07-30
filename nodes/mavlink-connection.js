@@ -107,11 +107,22 @@ module.exports = function registerMavlinkConnection(RED) {
       Boolean
     );
     // A dangling identity reference (deleted config node, broken import)
-    // resolves to null/undefined here — drop it rather than dereference it
-    // below (identitySnapshot immediately reads idNode.*). The close handler
-    // already null-guards `_identityNodes`, so nulls surviving to here were
-    // never actually supported.
-    node._identityNodes = identityIds.map((id) => RED.nodes.getNode(id)).filter(Boolean);
+    // resolves to null here. Fail loud at construction rather than filter it
+    // out: the runtime snapshot below and `boundIdentityIds`/`defaultIdentityId`
+    // must describe the same set, or send() with the surviving id crashes
+    // later on an undefined identity — a deploy-time invariant break turned
+    // into a send-time mystery. Same degrade posture as the dialect guard.
+    node._identityNodes = identityIds.map((id) => RED.nodes.getNode(id));
+    if (node._identityNodes.some((idNode) => !idNode)) {
+      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+      node.subscribe = () => () => {};
+      node.send = () => {
+        throw new Error('mavlink-connection: invalid config — a Local Identity reference is missing');
+      };
+      node.on('close', (done) => done());
+      node.error('mavlink-connection: a Local Identity reference resolves to no config node');
+      return;
+    }
 
     // Legacy flows stored cadence on the Connection (`heartbeatInterval`). Prefer
     // that when an identity still has the default 1000 ms so upgrades do not

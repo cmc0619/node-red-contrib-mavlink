@@ -89,7 +89,7 @@ test('a Vehicle Profile whose getDialect() throws degrades to "dialect unavailab
   node.emit('close', () => {});
 });
 
-test('a dangling identity reference is filtered instead of crashing the constructor', async () => {
+test('a dangling identity reference degrades to invalid config instead of crashing the constructor', async () => {
   const vehicleNode = {
     getDialect() {
       return { enums: {}, messages: {} };
@@ -115,10 +115,14 @@ test('a dangling identity reference is filtered instead of crashing the construc
     bindPort: 0, // ephemeral — the OS picks a free port, no fixture collision
   });
 
-  assert.deepEqual(
-    node._identityNodes,
-    [],
-    'a dangling identity reference is dropped, not dereferenced (identitySnapshot would throw on it)'
+  // Silently filtering the reference would leave its id in boundIdentityIds /
+  // defaultIdentityId while the runtime snapshot lacks it — send() with that
+  // id would then crash on an undefined identity. Fail loud at construction:
+  // badge + a throwing send, same posture as the dialect guards.
+  assert.throws(
+    () => node.send({ name: 'HEARTBEAT', fields: {} }),
+    /invalid config/,
+    'a dangling identity must fail at deploy, not become a send-time mystery'
   );
 
   await new Promise((resolve) => node.emit('close', resolve));

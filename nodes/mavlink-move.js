@@ -73,6 +73,9 @@ module.exports = function registerMavlinkMove(RED) {
             identityId,
             intervalMs: Number(config.intervalMs || payload.intervalMs || 100),
             ttlMs: Number(config.ttlMs || payload.ttlMs || 1000),
+            // A tick-time send throw stops the stream (lib/move); surface it
+            // here since there is no input catch above a timer callback.
+            onError: (err) => node.error(`mavlink-move: stream send failed — ${err.message}`),
           };
           if (stream) stream.stop();
           if (delivery === 'stream') {
