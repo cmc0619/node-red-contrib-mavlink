@@ -307,10 +307,15 @@
 
       $('#node-input-identity').on('change', refreshVisibility);
 
+      let compIdRequestSeq = 0;
       function reloadTargetCompId() {
         if (!(RED.mavlink && RED.mavlink.loadEnumsCatalog)) return;
         const seq = ++compIdRequestSeq;
         const saved = $('#node-input-targetCompid').val() || node.targetCompid;
+        const dialectHint = $('#node-input-dialect').val() || node.dialect || '';
+        const opts = (dialectHint && dialectHint !== '__vehicle')
+          ? { dialect: dialectHint }
+          : undefined;
         RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
           if (seq !== compIdRequestSeq) return;
           RED.mavlink.fillCompIdSelect(
@@ -318,10 +323,9 @@
             ((catalog || {}).enums || {}).MAV_COMPONENT || [],
             { allowEmpty: true, emptyLabel: '(profile default)', saved: saved }
           );
-        });
+        }, null, opts);
       }
-      let compIdRequestSeq = 0;
-      reloadTargetCompId();
+      // First fill runs after populateDialectSelect pins the saved dialect below.
 
       // ── Mode toggle ────────────────────────────────────────────────────────
       function applyMode(mode) {
@@ -559,6 +563,7 @@
         presetMessagesCatalog = null;
         presetMessagesKey = '';
         refreshVisibility();
+        reloadTargetCompId();
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
         if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });
@@ -566,6 +571,10 @@
         saved: node.dialect || '',
         includeVehicleEscape: true,
       });
+      // Compid catalog must run after the dialect select is pinned (see
+      // populateDialectSelect); the earlier reloadTargetCompId() at prepare
+      // start raced an empty select on Build.
+      reloadTargetCompId();
 
       function loadPresetEnums(cb) {
         if (presetEnumsLoaded) {

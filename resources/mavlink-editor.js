@@ -352,6 +352,16 @@
       }
     }
 
+    // Pin the saved dialect synchronously before the /mavlink/dialects round-trip.
+    // Build-tier catalog queries (currentCatalogQuery / loadEnumsCatalog) read
+    // #node-input-dialect; if they run while this select is still empty they
+    // see no dialect and return an empty enum catalog ("#190 (not in dialect)").
+    if (saved) {
+      $select.empty();
+      appendOption(saved, saved);
+      $select.val(saved);
+    }
+
     $.getJSON(RED.mavlink.adminApiUrl('/mavlink/dialects'), function (data) {
       finish((data && data.dialects) || []);
     }).fail(function () {

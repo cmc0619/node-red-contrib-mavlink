@@ -255,6 +255,36 @@ test('populateDialectSelect loads dialects, appends vehicle escape, and keeps em
   assert.equal(ready, 1);
 });
 
+test('populateDialectSelect pins saved dialect before the dialects GET returns', () => {
+  const context = loadHelpers();
+  const select = new FakeSelect();
+  let sawPin = false;
+
+  const originalGetJSON = context.$.getJSON;
+  context.$.getJSON = function (url, query, cb) {
+    if (typeof query === 'function') {
+      cb = query;
+      query = undefined;
+    }
+    // Before the async catalog callback, Build-tier enum fetches must already
+    // see the saved dialect on the select (not an empty value).
+    assert.equal(select.val(), 'development', 'saved dialect is pinned before dialects return');
+    assert.equal(select.options.length, 1);
+    sawPin = true;
+    return originalGetJSON.call(this, url, query, cb);
+  };
+
+  context.RED.mavlink.populateDialectSelect(select, {
+    saved: 'development',
+    includeVehicleEscape: true,
+  });
+
+  assert.equal(sawPin, true);
+  assert.equal(select.selected, 'development');
+  assert.ok(select.options.some((option) => option.value === 'ardupilotmega'));
+  assert.ok(select.options.some((option) => option.value === '__vehicle'));
+});
+
 test('populateDialectSelect re-selects saved dialect without defaulting unsaved dialogs', () => {
   const context = loadHelpers();
   const select = new FakeSelect();
