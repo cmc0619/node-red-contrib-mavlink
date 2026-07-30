@@ -42,7 +42,10 @@ test('Command Advanced MAV_CMD select and enum options use catalog descriptions'
   assert.match(html, /function syncAdvancedTitle/);
   assert.match(html, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
   assert.match(html, /catalogParamByIndex/);
-  assert.match(html, /catParam\.description/);
+  // Preset rows merge the whole catalog param spec (description included) and
+  // render through advancedParamInput, which titles inputs from it.
+  assert.match(html, /Object\.assign\(\{\}, catalogParamByIndex/);
+  assert.match(html, /spec\.description \|\| ''/);
 });
 
 test('In / Swarm message and command selects use catalog descriptions', () => {
@@ -129,13 +132,15 @@ test('Payload TIP_FIELDS excludes enum selects driven by fillEnumSelect', () => 
   assert.match(tipBlock[1], /['"]sequence['"]/);
 });
 
-test('Command preset controls render before tip catalog arrives', () => {
+test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
   const html = readHtml('mavlink-command');
-  // Controls append before loadCommandsCatalog; tips attach afterward.
-  assert.match(
-    html,
-    /container\.append\(rows\[rows\.length - 1\]\.row\);[\s\S]*loadCommandsCatalog\(function/
-  );
+  // Catalog-driven rendering: a cache hit renders synchronously; while the
+  // catalog is loading only a placeholder shows, and oneditsave refuses to
+  // scrape a form that never rendered — saved params survive.
+  assert.match(html, /_mavParamsRendered = false/, 'render pass starts unrendered');
+  assert.match(html, /_mavParamsRendered = true/, 'real renders mark the form scrapable');
+  const saver = html.slice(html.indexOf('oneditsave:'), html.indexOf('oneditcancel:'));
+  assert.match(saver, /if \(!this\._mavParamsRendered\) return;/, 'oneditsave keeps saved params when nothing rendered');
   assert.match(html, /\+\+_catalogRequestSeq;/);
 });
 

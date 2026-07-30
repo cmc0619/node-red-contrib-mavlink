@@ -144,76 +144,51 @@
     });
   }
 
-  // Hard-coded preset param shapes for offline rendering.
-  // Keyed by preset id; each entry is an array of { index, label, units, enumName }.
-  // This table covers the presets defined in lib/command/presets.js.
-  const REBOOT_SHUTDOWN_ACTION_OPTIONS = [
-    { name: 'REBOOT_SHUTDOWN_ACTION_NONE', value: 0, label: 'REBOOT_SHUTDOWN_ACTION_NONE (0)' },
-    { name: 'REBOOT_SHUTDOWN_ACTION_REBOOT', value: 1, label: 'REBOOT_SHUTDOWN_ACTION_REBOOT (1)' },
-    { name: 'REBOOT_SHUTDOWN_ACTION_SHUTDOWN', value: 2, label: 'REBOOT_SHUTDOWN_ACTION_SHUTDOWN (2)' },
-    { name: 'REBOOT_SHUTDOWN_ACTION_REBOOT_TO_BOOTLOADER', value: 3, label: 'REBOOT_SHUTDOWN_ACTION_REBOOT_TO_BOOTLOADER (3)' },
-    { name: 'REBOOT_SHUTDOWN_ACTION_POWER_ON', value: 4, label: 'REBOOT_SHUTDOWN_ACTION_POWER_ON (4)' },
-  ];
-
+  // Preset curation only (§6): which param indices each preset exposes, plus
+  // the few overrides the dialect XML cannot know — operator-guidance labels
+  // ('Force (0 or 21196)'), the `messages: true` message-picker flag, and
+  // lat/lon 'deg' (the XML leaves those unitless because the wire unit is
+  // carrier-dependent; canonical operator input is degrees, §9). Everything
+  // else — labels, units, enums, bitmask-ness, descriptions, ranges — renders
+  // from the commands catalog, exactly like Advanced mode.
+  // Keys here OVERRIDE the catalog param spec; omit a key to inherit it.
   const PRESET_PARAMS = {
-    arm:           [{ index: 2, label: 'Force (0 or 21196)', units: '' }],
-    disarm:        [{ index: 2, label: 'Force (0 or 21196)', units: '' }],
-    set_mode:      [{ index: 1, label: 'Mode (base_mode)', units: '', enumName: 'MAV_MODE' },
-                    { index: 2, label: 'Custom mode', units: '' }],
-    takeoff:       [{ index: 1, label: 'Min pitch', units: 'deg' },
-                    { index: 7, label: 'Altitude', units: 'm' }],
-    land:          [{ index: 1, label: 'Abort altitude', units: 'm' },
-                    { index: 5, label: 'Latitude', units: 'deg' },
-                    { index: 6, label: 'Longitude', units: 'deg' },
-                    { index: 7, label: 'Altitude', units: 'm' }],
+    arm:           [{ index: 2, label: 'Force (0 or 21196)' }],
+    disarm:        [{ index: 2, label: 'Force (0 or 21196)' }],
+    set_mode:      [{ index: 1, label: 'Mode (base_mode)' },
+                    { index: 2 }],
+    takeoff:       [{ index: 1 }, { index: 7 }],
+    land:          [{ index: 1 },
+                    { index: 5, units: 'deg' },
+                    { index: 6, units: 'deg' },
+                    { index: 7 }],
     rtl:           [],
-    set_home:      [{ index: 1, label: 'Use current (1 = yes)', units: '' },
-                    { index: 5, label: 'Latitude', units: 'deg' },
-                    { index: 6, label: 'Longitude', units: 'deg' },
-                    { index: 7, label: 'Altitude', units: 'm' }],
-    reposition:    [{ index: 1, label: 'Speed', units: 'm/s' },
-                    { index: 2, label: 'Bitmask / flags', units: '', enumName: 'MAV_DO_REPOSITION_FLAGS', bitmask: true },
-                    { index: 3, label: 'Loiter radius', units: 'm' },
-                    { index: 4, label: 'Yaw', units: 'deg' },
-                    { index: 5, label: 'Latitude', units: 'deg' },
-                    { index: 6, label: 'Longitude', units: 'deg' },
-                    { index: 7, label: 'Altitude', units: 'm' }],
-    change_speed:  [{ index: 1, label: 'Speed type', units: '', enumName: 'SPEED_TYPE' },
-                    { index: 2, label: 'Speed', units: 'm/s' },
-                    { index: 3, label: 'Throttle', units: '%' }],
-    yaw:           [{ index: 1, label: 'Angle', units: 'deg' },
-                    { index: 2, label: 'Angular speed', units: 'deg/s' },
-                    { index: 3, label: 'Direction (-1=CCW 0=CW)', units: '' }],
-    rotate:        [{ index: 1, label: 'Angle', units: 'deg' },
-                    { index: 2, label: 'Angular speed', units: 'deg/s' },
-                    { index: 3, label: 'Direction (-1=CCW 0=CW)', units: '' }],
-    orbit:         [{ index: 1, label: 'Radius', units: 'm' },
-                    { index: 2, label: 'Velocity', units: 'm/s' },
-                    { index: 3, label: 'Yaw behavior', units: '', enumName: 'ORBIT_YAW_BEHAVIOUR' },
-                    { index: 5, label: 'Latitude', units: 'deg' },
-                    { index: 6, label: 'Longitude', units: 'deg' },
-                    { index: 7, label: 'Altitude', units: 'm' }],
-    mission_start: [{ index: 1, label: 'First item', units: '' },
-                    { index: 2, label: 'Last item', units: '' }],
+    set_home:      [{ index: 1, label: 'Use current (1 = yes)' },
+                    { index: 5, units: 'deg' },
+                    { index: 6, units: 'deg' },
+                    { index: 7 }],
+    reposition:    [{ index: 1 }, { index: 2 }, { index: 3 }, { index: 4 },
+                    { index: 5, units: 'deg' },
+                    { index: 6, units: 'deg' },
+                    { index: 7 }],
+    change_speed:  [{ index: 1 }, { index: 2 }, { index: 3 }],
+    yaw:           [{ index: 1 }, { index: 2 },
+                    { index: 3, label: 'Direction (-1=CCW 0=CW)' }],
+    rotate:        [{ index: 1 }, { index: 2 },
+                    { index: 3, label: 'Direction (-1=CCW 0=CW)' }],
+    orbit:         [{ index: 1 }, { index: 2 }, { index: 3 },
+                    { index: 5, units: 'deg' },
+                    { index: 6, units: 'deg' },
+                    { index: 7 }],
+    mission_start: [{ index: 1 }, { index: 2 }],
     pause:         [],
     resume:        [],
-    request_message:    [{ index: 1, label: 'Message ID', units: '', messages: true },
-                         { index: 2, label: 'Response target', units: '' }],
-    set_message_interval: [{ index: 1, label: 'Message ID', units: '', messages: true },
-                            { index: 2, label: 'Interval', units: 'µs' },
-                            { index: 3, label: 'Response target', units: '' }],
-    stop_message_interval: [{ index: 1, label: 'Message ID', units: '', messages: true }],
-    reboot_autopilot: [{ index: 1, label: 'Autopilot action', units: '', enumName: 'REBOOT_SHUTDOWN_ACTION', fallbackOptions: REBOOT_SHUTDOWN_ACTION_OPTIONS },
-                       { index: 2, label: 'Companion action', units: '', enumName: 'REBOOT_SHUTDOWN_ACTION', fallbackOptions: REBOOT_SHUTDOWN_ACTION_OPTIONS }],
-    flight_termination: [{ index: 1, label: 'Terminate (1=yes)', units: '' }],
+    request_message:    [{ index: 1, messages: true }, { index: 2 }],
+    set_message_interval: [{ index: 1, messages: true }, { index: 2 }, { index: 3 }],
+    stop_message_interval: [{ index: 1, messages: true }],
+    reboot_autopilot: [{ index: 1 }, { index: 2 }],
+    flight_termination: [{ index: 1, label: 'Terminate (1=yes)' }],
   };
-
-  const PRESET_ENUM_NAMES = Array.from(new Set(
-    Object.values(PRESET_PARAMS)
-      .flat()
-      .map((spec) => spec.enumName)
-      .filter(Boolean)
-  ));
 
   // Presets with completion conditions — determines if "await completion" is shown.
   const HAS_COMPLETION = new Set(['arm', 'disarm', 'takeoff', 'land', 'rtl', 'set_mode']);
@@ -492,9 +467,6 @@
       }
 
       $('#node-input-connection').on('change', function () {
-        presetEnumsCatalog = { enums: {} };
-        presetEnumsLoaded = false;
-        presetEnumRequestSeq += 1;
         presetMessagesCatalog = null;
         presetMessagesKey = '';
         refreshDelivery();
@@ -510,9 +482,6 @@
       $('#node-input-vehicle').on('change', function () {
         // Vehicle Profile change invalidates build-tier catalogs.
         if ($('#node-input-delivery').val() === 'build') {
-          presetEnumsCatalog = { enums: {} };
-          presetEnumsLoaded = false;
-          presetEnumRequestSeq += 1;
           presetMessagesCatalog = null;
           presetMessagesKey = '';
           reloadTargetCompId();
@@ -526,9 +495,6 @@
         refreshVisibility();
         // Tier switch may change catalog source (build→vehicle, wire→connection).
         // Invalidate all cached dialect data and reload.
-        presetEnumsCatalog = { enums: {} };
-        presetEnumsLoaded = false;
-        presetEnumRequestSeq += 1;
         presetMessagesCatalog = null;
         presetMessagesKey = '';
         reloadTargetCompId();
@@ -556,17 +522,11 @@
       // ── Param fields ───────────────────────────────────────────────────────
       let savedParams = {};
       try { savedParams = JSON.parse(node.params || '{}'); } catch (_e) {}
-      let presetEnumsCatalog = { enums: {} };
-      let presetEnumsLoaded = false;
-      let presetEnumRequestSeq = 0;
       let presetMessagesCatalog = null;
       let presetMessagesKey = '';
 
       const $dialect = $('#node-input-dialect');
       $dialect.on('change', function () {
-        presetEnumsCatalog = { enums: {} };
-        presetEnumsLoaded = false;
-        presetEnumRequestSeq += 1;
         presetMessagesCatalog = null;
         presetMessagesKey = '';
         refreshVisibility();
@@ -583,26 +543,6 @@
       // start raced an empty select on Build.
       reloadTargetCompId();
 
-      function loadPresetEnums(cb) {
-        if (presetEnumsLoaded) {
-          cb();
-          return;
-        }
-        if (!(RED.mavlink && typeof RED.mavlink.loadEnumsCatalog === 'function')) {
-          presetEnumsLoaded = true;
-          presetEnumsCatalog = { enums: {} };
-          cb();
-          return;
-        }
-        const seq = ++presetEnumRequestSeq;
-        RED.mavlink.loadEnumsCatalog(PRESET_ENUM_NAMES, function (catalog) {
-          if (seq !== presetEnumRequestSeq) return;
-          presetEnumsCatalog = catalog || { enums: {} };
-          presetEnumsLoaded = true;
-          cb();
-        });
-      }
-
       function loadPresetMessages(cb) {
         const target = RED.mavlink.resolveCatalogTarget();
         loadMessagesCatalog(function (catalog) {
@@ -612,10 +552,6 @@
           presetMessagesKey = target.key;
           cb();
         });
-      }
-
-      function needsPresetEnums(specs) {
-        return specs.some(function (spec) { return !!spec.enumName; });
       }
 
       function needsPresetMessages(specs) {
@@ -661,12 +597,6 @@
             description: msg.description || null,
           };
         });
-      }
-
-      function numericParamInput(spec) {
-        return $('<input type="number" class="param-input">')
-          .attr('data-idx', spec.index)
-          .val(savedParams[spec.index] !== undefined ? savedParams[spec.index] : '');
       }
 
       /** Look up a preset's numeric MAV_CMD id from the loaded presets API. */
@@ -783,7 +713,12 @@
         return input;
       }
 
-      function presetParamInput(spec) {
+      /**
+       * Preset param input: the message picker is the one preset-only control;
+       * everything else renders through the same catalog-driven builder as
+       * Advanced mode (§6 — one render path, the XML is the source).
+       */
+      function presetParamInput(spec, enums) {
         const saved = savedParams[spec.index];
         if (spec.messages) {
           const entries = messageEntries(presetMessagesCatalog);
@@ -795,41 +730,14 @@
             return sel;
           }
         }
-
-        if (spec.enumName) {
-          const enums = (presetEnumsCatalog && presetEnumsCatalog.enums) || {};
-          let entries = enums[spec.enumName] || [];
-          if (!entries.length && spec.fallbackOptions) entries = spec.fallbackOptions;
-          if (entries.length) {
-            const falseTrue = RED.mavlink.isFalseTrueEnum(entries);
-            const isBitmask = !!spec.bitmask && !falseTrue;
-            const sel = $('<select class="param-input"></select>')
-              .attr('data-idx', spec.index)
-              .attr('data-kind', falseTrue ? 'enum' : (isBitmask ? 'bitmask' : 'enum'));
-            if (isBitmask) {
-              sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
-            }
-            if (falseTrue) {
-              sel.append($('<option></option>').val('').text('\u2014'));
-              for (const entry of entries) {
-                const $opt = $('<option></option>').val(String(entry.value)).text(booleanEntryLabel(entry));
-                if (entry.description) $opt.attr('title', entry.description);
-                sel.append($opt);
-              }
-              if (saved !== undefined && saved !== null && saved !== '') sel.val(String(saved));
-            } else {
-              fillSelect(sel, entries, { allowEmpty: !isBitmask, saved: saved });
-            }
-            if (isBitmask) sel.val(selectedBitmaskValues(saved, entries));
-            return sel;
-          }
-        }
-
-        return numericParamInput(spec);
+        return advancedParamInput(spec, enums || {});
       }
 
       function refreshParamFields() {
         container.empty();
+        // True only when a real form (or a legitimate zero-param form) is on
+        // screen; oneditsave refuses to scrape placeholders (Codex #36).
+        node._mavParamsRendered = false;
 
         const mode = $('#node-input-mode').val();
         if (mode === 'advanced') {
@@ -859,17 +767,19 @@
           const visible = (cmd.params || []).filter(function (p) { return !p.hidden; });
           if (visible.length === 0) {
             container.append($('<div class="form-row"><em>No exposed parameters for this command.</em></div>'));
+            node._mavParamsRendered = true;
             return;
           }
           for (const spec of visible) {
             container.append(formRow(advancedParamLabel(spec), advancedParamInput(spec, catalog.enums || {})));
           }
+          node._mavParamsRendered = true;
         } else {
           const presetId = $('#node-input-preset').val();
           const paramSpec = PRESET_PARAMS[presetId] || [];
-          if (needsPresetEnums(paramSpec) && !presetEnumsLoaded) {
-            container.append($('<div class="form-row"><em>Loading parameter options\u2026</em></div>'));
-            loadPresetEnums(refreshParamFields);
+          if (paramSpec.length === 0) {
+            container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
+            node._mavParamsRendered = true;
             return;
           }
           if (needsPresetMessages(paramSpec) && !presetMessagesReady()) {
@@ -877,48 +787,29 @@
             loadPresetMessages(refreshParamFields);
             return;
           }
-          // Render controls immediately so a slow tip-catalog fetch cannot
-          // leave the form empty at Done (Codex #36). Titles attach when ready.
-          if (paramSpec.length === 0) {
-            container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
+          // Params render from the commands catalog — the dialect XML is the
+          // source for labels, units, enums, bitmask-ness, descriptions, and
+          // ranges; PRESET_PARAMS only curates exposure and guidance (§6).
+          // A cache hit renders synchronously; the first open shows a loading
+          // row and re-renders once, and oneditsave's rendered-guard keeps a
+          // premature Done from scraping the empty form (Codex #36).
+          const catalog = _catalogByKey[_activeCatalogKey];
+          if (!catalog) {
+            container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
+            loadCommandsCatalog(function () {
+              if ($('#node-input-mode').val() !== 'preset') return;
+              if ($('#node-input-preset').val() !== presetId) return;
+              refreshParamFields();
+            });
             return;
           }
           const commandId = presetCommandId(presetId);
-          const rows = [];
           for (const spec of paramSpec) {
-            const label = spec.units
-              ? `${spec.label} (${spec.units})`
-              : spec.label;
-            const input = presetParamInput(spec);
-            rows.push({ spec, input, row: formRow(label, input) });
-            container.append(rows[rows.length - 1].row);
+            // Curation keys override the catalog spec; omitted keys inherit.
+            const merged = Object.assign({}, catalogParamByIndex(catalog, commandId, spec.index) || {}, spec);
+            container.append(formRow(advancedParamLabel(merged), presetParamInput(merged, catalog.enums || {})));
           }
-          loadCommandsCatalog(function (cmdCatalog) {
-            if ($('#node-input-mode').val() !== 'preset') return;
-            if ($('#node-input-preset').val() !== presetId) return;
-            for (const row of rows) {
-              if (!row.input.closest('body').length) return; // row was replaced
-              const catParam = catalogParamByIndex(cmdCatalog, commandId, row.spec.index);
-              if (!catParam) continue;
-              const lbl = row.input.closest('.form-row').find('label').first();
-              // Units come from the dialect XML when it declares them; the
-              // static table is the offline fallback. Lat/lon stay on the
-              // fallback ('deg') because the XML deliberately leaves them
-              // unitless — the wire unit is carrier-dependent, and canonical
-              // operator input is degrees (§9).
-              const units = catParam.units || row.spec.units;
-              if (lbl.length) {
-                lbl.text(units ? row.spec.label + ' (' + units + ')' : row.spec.label);
-              }
-              if (catParam.description) {
-                const tip = row.spec.bitmask
-                  ? bitmaskTitle(catParam.description)
-                  : catParam.description;
-                row.input.attr('title', tip);
-                if (lbl.length) lbl.attr('title', tip);
-              }
-            }
-          });
+          node._mavParamsRendered = true;
         }
       }
 
@@ -941,6 +832,10 @@
     },
 
     oneditsave: function () {
+      // Scrape only a rendered form. If Done lands while the catalog is still
+      // loading (or an error placeholder is showing), the container holds no
+      // inputs — scraping it would silently wipe the saved params (Codex #36).
+      if (!this._mavParamsRendered) return;
       // Collect param values from the dynamic fields.
       const params = {};
       $('.param-input').each(function () {
