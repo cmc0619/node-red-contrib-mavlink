@@ -19,6 +19,12 @@ const identityHtml = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-local-identity.html'),
   'utf8'
 );
+// Shared RED.mavlink.* helpers now live in the stock resource file, loaded by
+// every node dialog (DESIGN.md §6). Assert their source there, not in the LI HTML.
+const resourceScript = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'),
+  'utf8'
+);
 
 test('Vehicle default declares type mavlink-vehicle (config-node picker)', () => {
   assert.match(
@@ -38,12 +44,12 @@ test('Identity default declares type mavlink-local-identity', () => {
 
 test('shared ensureConfigNodePicker uses RED.editor.prepareConfigNodeSelect (edit/add)', () => {
   assert.match(
-    identityHtml,
+    resourceScript,
     /ensureConfigNodePicker/,
-    'helper is defined on the first-loaded identity editor'
+    'helper is defined in the shared editor resource'
   );
   assert.match(
-    identityHtml,
+    resourceScript,
     /prepareConfigNodeSelect/,
     'helper must call Node-RED\'s standard config select builder'
   );

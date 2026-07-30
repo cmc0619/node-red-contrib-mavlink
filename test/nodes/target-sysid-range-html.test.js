@@ -13,14 +13,19 @@ const path = require('node:path');
 const nodesDir = path.join(__dirname, '..', '..', 'nodes');
 
 test('shared validateUint8 helper is two-arg (string return = invalid reason)', () => {
-  const html = fs.readFileSync(path.join(nodesDir, 'mavlink-local-identity.html'), 'utf8');
-  assert.match(html, /RED\.mavlink\.validateUint8\s*=\s*function/);
+  // The helper is defined once in the shared editor resource (DESIGN.md §6);
+  // node HTML only calls RED.mavlink.validateUint8(0).
+  const resource = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'),
+    'utf8'
+  );
+  assert.match(resource, /RED\.mavlink\.validateUint8\s*=\s*function/);
   assert.match(
-    html,
+    resource,
     /validateUint8\s*=\s*function\s*\(\s*min\s*\)\s*\{\s*return\s*function\s*\(\s*v\s*,\s*_?opt/,
     'validator must take (v, opt) so a returned string fails validation'
   );
-  assert.match(html, /n < min \|\| n > 255/);
+  assert.match(resource, /n < min \|\| n > 255/);
 });
 
 const TARGET_FILES = [

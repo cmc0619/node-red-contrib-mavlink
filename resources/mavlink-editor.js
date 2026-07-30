@@ -1,0 +1,695 @@
+/**
+ * Shared MAVLink editor helpers, loaded once for every node dialog.
+ *
+ * Node-RED serves this file at
+ * `resources/node-red-contrib-mavlink/mavlink-editor.js` (DESIGN.md §6,
+ * https://nodered.org/docs/creating-nodes/resources). Each node HTML loads it
+ * with a relative `<script src>`; Node-RED's `appendConfig` defers every inline
+ * node script until this external script's `onload` fires, so `RED.mavlink.*`
+ * is defined before any `registerType` runs.
+ *
+ * This is the browser (editor) half of the toolkit. It owns the config-node
+ * picker, the enum/dialect catalog helpers, the role × tier matrix source
+ * (`resolveCatalogTarget`), and the shared Build-tier dialect/vehicle/firmware
+ * default descriptors + validators (`buildTierDialectDefaults`). Local-Identity
+ * keeps only its role presets and identity-specific validators.
+ */
+(function () {
+  RED.mavlink = RED.mavlink || {};
+
+  /**
+   * Ensure a config-node property uses Node-RED's standard <select> plus
+   * edit (pencil) and add (+) buttons (DESIGN.md §6).
+   *
+   * Node-RED builds this before oneditprepare when defaults[prop].type names
+   * a registered config type. Call from oneditprepare as a safety net when
+   * the field is still free-form or a buttonless <select>.
+   *
+   * @param {object} node
+   * @param {string} property
+   * @param {string} type
+   * @param {string} [prefix]
+   */
+  RED.mavlink.ensureConfigNodePicker = function (node, property, type, prefix) {
+    prefix = prefix || 'node-input';
+    if ($('#' + prefix + '-btn-' + property + '-add').length) {
+      return;
+    }
+
+    var typeDef = RED.nodes.getType(type);
+    var $el = $('#' + prefix + '-' + property);
+    if (!$el.length) return;
+
+    if (!typeDef || typeDef.category !== 'config') {
+      if ($el.is('input[type="text"]') || ($el.is('input') && !$el.attr('type'))) {
+        $el.prop('readonly', true)
+          .attr(
+            'placeholder',
+            type + ' not loaded — check Node-RED log / dependencies'
+          );
+      }
+      return;
+    }
+
+    if ($el.is('select')) {
+      var val = $el.val();
+      var style = $el.attr('style') || 'width:70%';
+      var $input = $('<input type="text">')
+        .attr('id', prefix + '-' + property)
+        .attr('style', style);
+      if (val) node[property] = val;
+      $el.replaceWith($input);
+    } else if ($el.attr('type') === 'hidden') {
+      return;
+    }
+
+    if (typeof RED.editor.prepareConfigNodeSelect === 'function') {
+      RED.editor.prepareConfigNodeSelect(node, property, type, prefix);
+    }
+  };
+
+  /**
+   * Shared enum option label. Server catalogs should already include labels,
+   * but local/generated entries use the same §6 NAME (value) format.
+   *
+   * @param {{name: string, value: number|string}} entry
+   * @returns {string}
+   */
+  RED.mavlink.enumOptionLabel = function (entry) {
+    return entry.name + ' (' + entry.value + ')';
+  };
+
+  /**
+   * Editor-side copy of lib/metadata/naming.js isFalseTrueEnum. Client HTML
+   * cannot require() the Node module, so keep this rule mirrored here.
+   * Exactly two entries: *_FALSE=0 and *_TRUE=1 (not mixed tables).
+   *
+   * @param {Array<{name: string, value: number|string}>|null|undefined} entries
+   * @returns {boolean}
+   */
+  RED.mavlink.isFalseTrueEnum = function (entries) {
+    if (!Array.isArray(entries) || entries.length !== 2) return false;
+    var falseOk = false;
+    var trueOk = false;
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i];
+      // Require valued objects — never synthesize 0/1 for bare name strings.
+      if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string') return false;
+      var name = entry.name;
+      var isFalse = name === 'FALSE' || name.slice(-6) === '_FALSE';
+      var isTrue = name === 'TRUE' || name.slice(-5) === '_TRUE';
+      if (!isFalse && !isTrue) return false;
+      // Reject null/false/'' — Number(null)===0 would falsely match FALSE=0.
+      var rawValue = entry.value;
+      if (typeof rawValue !== 'number' && typeof rawValue !== 'string') return false;
+      if (typeof rawValue === 'string' && rawValue.trim() === '') return false;
+      var value = Number(rawValue);
+      if (!Number.isInteger(value)) return false;
+      if (isFalse) {
+        if (value !== 0 || falseOk) return false;
+        falseOk = true;
+      } else {
+        if (value !== 1 || trueOk) return false;
+        trueOk = true;
+      }
+    }
+    return falseOk && trueOk;
+  };
+
+  function valueFromSelector(selector) {
+    var $el = $(selector);
+    return $el && $el.length ? String($el.val() || '').trim() : '';
+  }
+
+  /**
+   * Config-node id from an editor property or a deployed Connection's frozen
+   * `vehicle` snapshot (`{ id, targetSysid, … }`).
+   *
+   * @param {string|{id?: string}|null|undefined} ref
+   * @returns {string}
+   */
+  RED.mavlink.vehicleIdFrom = function (ref) {
+    if (!ref) return '';
+    if (typeof ref === 'string') return ref;
+    if (typeof ref === 'object' && typeof ref.id === 'string') return ref.id;
+    return '';
+  };
+
+  /**
+   * Vehicle / dialect query for admin catalog routes (enums, field-tips, …).
+   * Catalog source follows the role × tier matrix (DESIGN.md §6): on Build
+   * tier the node's own Vehicle Profile / dialect fields govern; on wire tiers
+   * the connection's bound profile governs, because that dialect is what the
+   * wire will encode. Dialogs without a delivery field keep the
+   * connection-derived behaviour.
+   *
+   * @param {string[]|string} [names]  optional enum table filter for /mavlink/enums
+   * @returns {Object<string, string>}
+   */
+  function currentEnumQuery(names) {
+    var query = {};
+    var buildTier = valueFromSelector('#node-input-delivery') === 'build';
+    if (buildTier) {
+      var buildDialect = valueFromSelector('#node-input-dialect');
+      if (buildDialect && buildDialect !== '__vehicle') {
+        query.dialect = buildDialect;
+      } else if (buildDialect === '__vehicle') {
+        var buildVehicle = valueFromSelector('#node-input-vehicle');
+        if (buildVehicle) {
+          query.vehicle = buildVehicle;
+          if (RED.nodes && typeof RED.nodes.node === 'function') {
+            var buildProfile = RED.nodes.node(buildVehicle);
+            if (buildProfile && buildProfile.dialect) query.dialect = buildProfile.dialect;
+          }
+        }
+      }
+      if (!query.dialect && !query.vehicle) return query;
+      addEnumNames(query, names);
+      return query;
+    }
+
+    // Config-node dialogs (Vehicle Profile): dialect lives on the config form,
+    // not on a Connection. Must run before the wire-tier connection branch so
+    // /mavlink/enums is not called with {} (400 after empty-query rejection).
+    var configDialect = valueFromSelector('#node-config-input-dialect');
+    if (configDialect && configDialect !== '__vehicle') {
+      query.dialect = configDialect;
+      addEnumNames(query, names);
+      return query;
+    }
+
+    var vehicle = '';
+    var dialect = '';
+    var connection = valueFromSelector('#node-input-connection');
+    if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
+      var conn = RED.nodes.node(connection);
+      vehicle = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
+      var connProfile = vehicle ? RED.nodes.node(vehicle) : null;
+      if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
+    }
+    if (!vehicle) return query;
+
+    if (vehicle) query.vehicle = vehicle;
+    if (dialect) query.dialect = dialect;
+    addEnumNames(query, names);
+    return query;
+  }
+
+  function addEnumNames(query, names) {
+    if (Array.isArray(names) && names.length) {
+      query.names = names.join(',');
+    } else if (typeof names === 'string' && names.trim()) {
+      query.names = names.trim();
+    }
+  }
+  RED.mavlink.currentCatalogQuery = currentEnumQuery;
+
+  /**
+   * Resolve which Vehicle / dialect the editor catalogs (messages, commands,
+   * enums) should load, following the role × tier matrix (DESIGN.md §6):
+   *
+   *   - Build tier: the Dialect picker governs. A concrete dialect queries by
+   *     name; the `from Vehicle Profile…` escape (`__vehicle`) queries by the
+   *     selected profile id + its dialect. An empty dialect resolves to no
+   *     catalog target — never an invented `ardupilotmega`.
+   *   - Wire tiers: the bound Connection's Vehicle Profile governs. No
+   *     connection or no bound profile resolves to no catalog target.
+   *
+   * @param {object} [opts]
+   * @param {boolean} [opts.isBuild]  explicit Build-tier override; when omitted
+   *   the delivery/tier selector value === 'build' decides.
+   * @param {string} [opts.deliverySelector='#node-input-delivery']
+   * @param {string} [opts.tierSelector='#node-input-tier']  Build node uses tier
+   * @param {string} [opts.dialectSelector='#node-input-dialect']
+   * @param {string} [opts.vehicleSelector='#node-input-vehicle']
+   * @param {string} [opts.connectionSelector='#node-input-connection']
+   * @returns {{key: string, query: object|null, dialect: string, vehicleId: string}}
+   */
+  RED.mavlink.resolveCatalogTarget = function (opts) {
+    opts = opts || {};
+    var dialectSelector = opts.dialectSelector || '#node-input-dialect';
+    var vehicleSelector = opts.vehicleSelector || '#node-input-vehicle';
+    var connectionSelector = opts.connectionSelector || '#node-input-connection';
+
+    var isBuild;
+    if (typeof opts.isBuild === 'boolean') {
+      isBuild = opts.isBuild;
+    } else {
+      var deliverySelector = opts.deliverySelector || '#node-input-delivery';
+      var tierSelector = opts.tierSelector || '#node-input-tier';
+      var mode = $(deliverySelector).length
+        ? valueFromSelector(deliverySelector)
+        : valueFromSelector(tierSelector);
+      isBuild = mode === 'build';
+    }
+
+    function empty() {
+      return { key: 'empty', query: null, dialect: '', vehicleId: '' };
+    }
+
+    function vehicleDialectOf(vehicleId) {
+      if (vehicleId && RED.nodes && typeof RED.nodes.node === 'function') {
+        var vehicle = RED.nodes.node(vehicleId);
+        if (vehicle && vehicle.dialect) return vehicle.dialect;
+      }
+      return '';
+    }
+
+    if (isBuild) {
+      var dialectVal = valueFromSelector(dialectSelector);
+      if (!dialectVal) return empty();
+      if (dialectVal !== '__vehicle') {
+        return {
+          key: 'dialect:' + dialectVal,
+          query: { dialect: dialectVal },
+          dialect: dialectVal,
+          vehicleId: '',
+        };
+      }
+      var vehicleId = valueFromSelector(vehicleSelector);
+      if (!vehicleId) return empty();
+      var vehicleDialect = vehicleDialectOf(vehicleId);
+      return {
+        key: 'vehicle:' + vehicleId,
+        query: { vehicle: vehicleId, dialect: vehicleDialect },
+        dialect: vehicleDialect,
+        vehicleId: vehicleId,
+      };
+    }
+
+    // Wire tier: the connection's bound Vehicle Profile is the catalog source.
+    var connectionId = valueFromSelector(connectionSelector);
+    if (connectionId && RED.nodes && typeof RED.nodes.node === 'function') {
+      var conn = RED.nodes.node(connectionId);
+      var vehicleRef = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
+      if (vehicleRef) {
+        var connDialect = vehicleDialectOf(vehicleRef);
+        return {
+          key: 'vehicle:' + vehicleRef,
+          query: { vehicle: vehicleRef, dialect: connDialect },
+          dialect: connDialect,
+          vehicleId: vehicleRef,
+        };
+      }
+    }
+    return empty();
+  };
+
+  /**
+   * Build an admin API URL under Node-RED's configured httpAdminRoot.
+   * Absolute `/mavlink/...` paths 404 when the editor is mounted at e.g. `/red`.
+   *
+   * @param {string} path  absolute-looking path, e.g. `/mavlink/enums`
+   * @returns {string}
+   */
+  RED.mavlink.adminApiUrl = function (path) {
+    var root = (RED.settings && RED.settings.httpAdminRoot) || '/';
+    if (root.slice(-1) !== '/') root += '/';
+    return root + String(path || '').replace(/^\//, '');
+  };
+
+  /**
+   * Populate a Build-tier dialect select without inventing a default dialect.
+   * Empty remains selected until the editor's required validator accepts a
+   * concrete dialect or the Vehicle Profile escape (§6).
+   *
+   * @param {object} $select  jQuery select
+   * @param {{saved?: string, includeVehicleEscape?: boolean, onReady?: function}} [opts]
+   */
+  RED.mavlink.populateDialectSelect = function ($select, opts) {
+    opts = opts || {};
+    var saved = opts.saved !== undefined && opts.saved !== null
+      ? String(opts.saved)
+      : String($select.val() || '');
+    var includeVehicleEscape = opts.includeVehicleEscape !== false;
+
+    function appendOption(value, label) {
+      $select.append($('<option></option>').val(value).text(label));
+    }
+
+    function hasOption(value) {
+      return $select.find('option[value="' + value + '"]').length > 0;
+    }
+
+    function finish(dialects) {
+      $select.empty();
+      appendOption('', '\u2014');
+      (dialects || []).forEach(function (dialect) {
+        appendOption(String(dialect), String(dialect));
+      });
+      if (includeVehicleEscape) {
+        appendOption('__vehicle', 'from Vehicle Profile\u2026');
+      }
+      if (saved && !hasOption(saved)) {
+        appendOption(saved, saved);
+      }
+      $select.val(saved || '');
+      if (typeof $select.trigger === 'function') {
+        $select.trigger('change');
+      }
+      if (typeof opts.onReady === 'function') {
+        opts.onReady();
+      }
+    }
+
+    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/dialects'), function (data) {
+      finish((data && data.dialects) || []);
+    }).fail(function () {
+      finish([]);
+    });
+  };
+
+  /**
+   * Load a shared dialect enum catalog from the admin endpoint.
+   * Callers that open dialogs should pass a `{ cancelled: boolean }` token and
+   * set `cancelled` from oneditcancel so a late response cannot fill another dialog.
+   *
+   * @param {string[]|string} names  extra enum table names to include
+   * @param {function(object):void} cb
+   * @param {{cancelled?: boolean}} [token]
+   * @param {{dialect?: string}} [opts]  explicit dialect when the dialog has no
+   *   Connection / Vehicle / Dialect row (Local Identity — uses `common` for
+   *   MAV_TYPE / MAV_COMPONENT / MAV_AUTOPILOT)
+   */
+  RED.mavlink.loadEnumsCatalog = function (names, cb, token, opts) {
+    opts = opts || {};
+    var query = currentEnumQuery(names);
+    if (!query.dialect && !query.vehicle && opts.dialect) {
+      query.dialect = opts.dialect;
+      addEnumNames(query, names);
+    }
+    // Empty query → 400 on /mavlink/enums; return a local empty catalog instead.
+    if (!query.dialect && !query.vehicle) {
+      if (!token || !token.cancelled) {
+        cb({ dialect: '', enums: {} });
+      }
+      return;
+    }
+    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), query, function (data) {
+      if (token && token.cancelled) return;
+      cb({
+        dialect: data.dialect,
+        enums: data.enums || {}
+      });
+    }).fail(function () {
+      if (token && token.cancelled) return;
+      cb({ dialect: '', enums: {} });
+    });
+  };
+
+  /**
+   * Fill a select from enum entries. Option values are numeric strings so
+   * node configs save MAVLink enum ids, not localized labels.
+   *
+   * @param {object} $select  jQuery select
+   * @param {Array<{name:string,value:number|string,label?:string}>} entries
+   * @param {object} opts
+   */
+  RED.mavlink.fillEnumSelect = function ($select, entries, opts) {
+    opts = opts || {};
+    var valueKey = opts.valueKey || 'value';
+    var saved = opts.saved !== undefined && opts.saved !== null
+      ? String(opts.saved)
+      : String($select.val() || '');
+    $select.empty();
+    if (opts.allowEmpty) {
+      $select.append($('<option></option>').val('').text(opts.emptyLabel || '\u2014'));
+    }
+    (entries || []).forEach(function (entry) {
+      var value = String(entry[valueKey]);
+      var label = entry.label || RED.mavlink.enumOptionLabel(entry);
+      var $opt = $('<option></option>').val(value).text(label);
+      if (entry.description) $opt.attr('title', entry.description);
+      $select.append($opt);
+    });
+    // Select tooltip follows the selected entry's dialect description (§6).
+    function syncEnumSelectTitle() {
+      var tip = $select.find('option:selected').attr('title') || '';
+      if (tip) $select.attr('title', tip);
+      else $select.removeAttr('title');
+    }
+    $select.off('change.mavEnumTip').on('change.mavEnumTip', syncEnumSelectTitle);
+    if (saved && !$select.find('option[value="' + saved + '"]').length) {
+      $select.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
+    }
+    if (saved || opts.allowEmpty) {
+      $select.val(saved);
+    } else if (entries && entries.length) {
+      $select.val(String(entries[0][valueKey]));
+    }
+    syncEnumSelectTitle();
+    // Node-RED attaches change→validateNodeEditor before oneditprepare; async
+    // fills must re-fire change or a pre-fill `input-error` sticks (§6).
+    if (typeof $select.trigger === 'function') {
+      $select.trigger('change');
+    }
+  };
+
+  /**
+   * Apply a dialect-sourced description as `title` on an input and its label.
+   * Empty/missing text clears any previous tip (no baked fallback).
+   *
+   * @param {string} inputId  e.g. `node-input-sequence`
+   * @param {string} [text]
+   */
+  RED.mavlink.applyFieldTitle = function (inputId, text) {
+    var $input = $('#' + inputId);
+    if (!$input.length) return;
+    var tip = text != null ? String(text).trim() : '';
+    if (tip) $input.attr('title', tip);
+    else $input.removeAttr('title');
+    var $label = $input.closest('.form-row').find('label').first();
+    if ($label.length) {
+      if (tip) $label.attr('title', tip);
+      else $label.removeAttr('title');
+    }
+  };
+
+  /**
+   * Apply dialect `units` as an inline hint after the input (§6 — units are
+   * not tooltip text). Missing units clear the hint (no baked fallback).
+   *
+   * @param {string} inputId
+   * @param {string} [units]
+   */
+  RED.mavlink.applyFieldUnits = function (inputId, units) {
+    var $input = $('#' + inputId);
+    if (!$input.length) return;
+    var $row = $input.closest('.form-row');
+    var $u = $row.children('.mav-field-units');
+    if (!$u.length) {
+      $u = $('<span class="mav-field-units"></span>');
+      $input.after($u);
+    }
+    var text = units != null ? String(units).trim() : '';
+    $u.text(text ? (' ' + text) : '');
+  };
+
+  /**
+   * Apply dialect tip meta in one call — description → title, units → inline
+   * hint. Accepts a string (description only) or `{ description, units }`.
+   *
+   * @param {string} inputId
+   * @param {string|{description?: string, units?: string}|null|undefined} meta
+   */
+  RED.mavlink.applyFieldMeta = function (inputId, meta) {
+    var tip = '';
+    var units = '';
+    if (typeof meta === 'string') {
+      tip = meta;
+    } else if (meta && typeof meta === 'object') {
+      tip = meta.description || '';
+      units = meta.units || '';
+    }
+    RED.mavlink.applyFieldTitle(inputId, tip);
+    RED.mavlink.applyFieldUnits(inputId, units);
+  };
+
+  /**
+   * Fill a MAV_COMPONENT select; filters can opt into an empty "any component"
+   * choice through the same options object.
+   */
+  RED.mavlink.fillCompIdSelect = function ($select, entries, opts) {
+    RED.mavlink.fillEnumSelect($select, entries, opts || {});
+  };
+
+  /**
+   * Normalized role of a Local Identity config node, editor-side.
+   * Unknown / unset resolves to 'gcs' (show-everything shape).
+   *
+   * @param {string} identityId
+   * @returns {'gcs'|'companion'|'custom'}
+   */
+  RED.mavlink.identityRole = function (identityId) {
+    var idNode = identityId && RED.nodes && typeof RED.nodes.node === 'function'
+      ? RED.nodes.node(identityId)
+      : null;
+    var role = idNode && idNode.role;
+    return role === 'companion' || role === 'custom' ? role : 'gcs';
+  };
+
+  /**
+   * Identities bound to a Connection (default first, then additionals),
+   * optionally filtered by role (§6 matrix: swarm passes ['gcs','custom']).
+   *
+   * @param {string} connectionId
+   * @param {string[]} [rolesAllowed]
+   * @returns {Array<{id: string, role: string, label: string}>}
+   */
+  RED.mavlink.identityOptionsFor = function (connectionId, rolesAllowed) {
+    var out = [];
+    if (!connectionId || !RED.nodes || typeof RED.nodes.node !== 'function') return out;
+    var conn = RED.nodes.node(connectionId);
+    if (!conn) return out;
+    var ids = [conn.localIdentity].concat(conn.additionalIdentities || []);
+    var seen = {};
+    ids.forEach(function (id) {
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      var idNode = RED.nodes.node(id);
+      if (!idNode) return;
+      var role = RED.mavlink.identityRole(id);
+      if (rolesAllowed && rolesAllowed.indexOf(role) === -1) return;
+      out.push({ id: id, role: role, label: (idNode.name || 'identity') + ' (' + role + ')' });
+    });
+    return out;
+  };
+
+  /**
+   * Fill a send-as identity select with the identities bound to the selected
+   * connection. When the saved id is not eligible (or empty), the first
+   * eligible identity is preselected — and thereby written into config on
+   * Done (§6 matrix: prefill is explicit, runtime never infers).
+   *
+   * @param {object} $select  jQuery select
+   * @param {string} connectionId
+   * @param {{rolesAllowed?: string[], saved?: string}} [opts]
+   * @returns {string} the selected identity id ('' when none eligible)
+   */
+  RED.mavlink.fillIdentitySelect = function ($select, connectionId, opts) {
+    opts = opts || {};
+    var options = RED.mavlink.identityOptionsFor(connectionId, opts.rolesAllowed);
+    $select.empty();
+    options.forEach(function (o) {
+      $select.append($('<option></option>').val(o.id).text(o.label));
+    });
+    var eligible = options.some(function (o) { return o.id === opts.saved; });
+    var selected = eligible ? opts.saved : (options.length ? options[0].id : '');
+    $select.val(selected);
+    return selected;
+  };
+
+  /**
+   * Editor-side uint8 range check. Blank is allowed (inherit / optional).
+   * Two-argument form so Node-RED treats a returned string as the invalid
+   * reason (one-arg validators treat any string as truthy/valid).
+   *
+   * @param {number} min  0 for target ids (broadcast), 1 for source ids
+   * @returns {function(*, object=): true|string}
+   */
+  RED.mavlink.validateUint8 = function (min) {
+    return function (v, _opt) {
+      if (v === undefined || v === null || String(v).trim() === '') return true;
+      var n = Number(v);
+      if (!Number.isInteger(n) || n < min || n > 255) {
+        return 'must be an integer between ' + min + ' and 255';
+      }
+      return true;
+    };
+  };
+
+  /**
+   * Shared Build-tier dialect / vehicle / firmware default descriptors and
+   * validators for `registerType({ defaults })`. Every Build-tier builder
+   * gets the same rule: dialect required on Build; the Vehicle Profile is
+   * required only when the dialect is the `__vehicle` escape; and — for
+   * Param / Mission — Firmware is required when a concrete non-empty dialect
+   * is chosen (the Firmware XOR against the Vehicle Profile escape, §6).
+   *
+   * Merge the result into the node's `defaults` object (Object.assign).
+   *
+   * @param {object} [opts]
+   * @param {'delivery'|'tier'} [opts.modeField='delivery']  Build node uses tier
+   * @param {string} [opts.modeSelector]  DOM selector override
+   * @param {string} [opts.dialectSelector='#node-input-dialect']
+   * @param {boolean} [opts.withFirmware]  add the Param/Mission Firmware field
+   * @returns {object} default descriptors to merge into registerType defaults
+   */
+  RED.mavlink.buildTierDialectDefaults = function (opts) {
+    opts = opts || {};
+    var modeField = opts.modeField || 'delivery';
+    var modeSelector = opts.modeSelector || ('#node-input-' + modeField);
+    var dialectSelector = opts.dialectSelector || '#node-input-dialect';
+
+    function currentMode(self) {
+      var $m = $(modeSelector);
+      if ($m && $m.length) return String($m.val() || '');
+      return (self && self[modeField]) || '';
+    }
+    function currentDialect(self) {
+      var $d = $(dialectSelector);
+      if ($d && $d.length && $d.val()) return String($d.val());
+      return (self && self.dialect) || '';
+    }
+
+    var defaults = {
+      dialect: {
+        value: '',
+        validate: function (v) {
+          if (currentMode(this) === 'build') return !!v;
+          return true;
+        },
+      },
+      vehicle: {
+        value: '',
+        type: 'mavlink-vehicle',
+        required: false,
+        validate: function (v) {
+          if (currentMode(this) === 'build' && currentDialect(this) === '__vehicle') return !!v;
+          return true;
+        },
+      },
+    };
+
+    if (opts.withFirmware) {
+      defaults.firmware = {
+        value: '',
+        validate: function (v) {
+          var dialect = currentDialect(this);
+          if (currentMode(this) === 'build' && dialect && dialect !== '__vehicle') return !!v;
+          return true;
+        },
+      };
+    }
+
+    return defaults;
+  };
+
+  /**
+   * Toggle the Build-tier dialect / vehicle / firmware / connection rows from
+   * the current dialect + Build state. Thin helper — each node keeps ownership
+   * of its remaining role/mode rows; this covers only the shared four.
+   *
+   * @param {object} opts
+   * @param {boolean} opts.isBuild
+   * @param {string} [opts.dialect]
+   * @param {string} [opts.dialectRow]      jQuery selector, shown on Build
+   * @param {string} [opts.vehicleRow]      shown on Build + `__vehicle`
+   * @param {string} [opts.firmwareRow]     shown on Build + concrete dialect
+   * @param {string} [opts.connectionRow]   shown on wire tiers
+   */
+  RED.mavlink.applyBuildTierRowVisibility = function (opts) {
+    opts = opts || {};
+    var isBuild = !!opts.isBuild;
+    var dialect = opts.dialect || '';
+    function toggle(selector, shown) {
+      if (!selector) return;
+      var $el = $(selector);
+      if ($el && $el.length) $el.toggle(!!shown);
+    }
+    toggle(opts.dialectRow, isBuild);
+    toggle(opts.vehicleRow, isBuild && dialect === '__vehicle');
+    toggle(opts.firmwareRow, isBuild && !!dialect && dialect !== '__vehicle');
+    toggle(opts.connectionRow, !isBuild);
+  };
+})();

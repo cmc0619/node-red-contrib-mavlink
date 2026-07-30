@@ -14,11 +14,15 @@ const html = fs.readFileSync(
   'utf8'
 );
 
-test('Build vehicle default declares type mavlink-vehicle', () => {
+test('Build dialect + vehicle defaults come from the shared Build-tier helper', () => {
+  // dialect/vehicle default descriptors + validators are the shared §6 rule,
+  // merged in via buildTierDialectDefaults; the Build node keys it off `tier`.
+  // The descriptor shape and validators are proven in
+  // mavlink-editor-resource.test.js — here we only assert the delegation.
   assert.match(
     html,
-    /vehicle:\s*\{\s*value:\s*''\s*,\s*type:\s*'mavlink-vehicle'/,
-    'defaults.vehicle.type must be mavlink-vehicle'
+    /Object\.assign\([\s\S]*RED\.mavlink\.buildTierDialectDefaults\(\{\s*modeField:\s*'tier'\s*\}\)\s*\)/,
+    'Build defaults must merge buildTierDialectDefaults({ modeField: tier })'
   );
 });
 
@@ -77,9 +81,13 @@ test('Build message-field bitmasks use multi-select tokens accepted by the codec
   );
 
   assert.match(fieldRenderer, /spec\.display === ['"]bitmask['"]/, 'message field bitmasks follow field metadata');
+  assert.match(fieldRenderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE enums are detected before bitmask rendering');
+  assert.match(fieldRenderer, /falseTrue \? ['"]enum['"] : \(multi \? ['"]bitmask['"] : ['"]enum['"]\)/, 'FALSE/TRUE bitmasks are tagged as enum selects');
   assert.match(fieldRenderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'message field bitmasks use native multi-select');
   assert.match(fieldRenderer, /\.val\(entry\.name\)/, 'message field bitmasks save enum entry names');
+  assert.match(fieldRenderer, /\.val\(String\(entry\.value\)\)/, 'FALSE/TRUE options save numeric 0/1 values');
   assert.match(collector, /fields\[name\]\s*=\s*Array\.isArray\(raw\) \? raw/, 'collector keeps selected token array');
+  assert.match(collector, /kind === ['"]enum['"]/, 'FALSE/TRUE enum select is collected through numeric enum save');
 });
 
 test('Build COMMAND_LONG/INT command params render bitmasks as numeric multi-select masks', () => {
@@ -89,7 +97,8 @@ test('Build COMMAND_LONG/INT command params render bitmasks as numeric multi-sel
   );
 
   assert.match(renderer, /spec\.bitmask/, 'command param bitmask flag drives rendering');
-  assert.match(renderer, /data-kind['"],\s*isBitmask \? ['"]bitmask-mask['"] : ['"]enum['"]/, 'command bitmask params are tagged for numeric mask save');
+  assert.match(renderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE command params are detected before bitmask rendering');
+  assert.match(renderer, /data-kind['"],\s*falseTrue \? ['"]enum['"] : \(isBitmask \? ['"]bitmask-mask['"] : ['"]enum['"]\)/, 'FALSE/TRUE command bitmask params are tagged as enum selects');
   assert.match(renderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'command bitmask params use native multi-select');
   assert.match(renderer, /\.val\(String\(entry\.value\)\)/, 'command bitmask options carry numeric values');
   assert.match(html, /kind === ['"]bitmask-mask['"]/, 'collector stores one numeric mask for command params');
@@ -103,15 +112,14 @@ test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
   );
 });
 
-test('Build dialect default is ardupilotmega', () => {
-  assert.match(
-    html,
-    /dialect:\s*\{\s*value:\s*'ardupilotmega'/,
-    'defaults.dialect.value must be ardupilotmega'
-  );
+test('Build connection stays required on wire tiers only (local validator)', () => {
+  // Connection is the inverse of the shared dialect rule — required on wire
+  // tiers, hidden on Build — so it keeps its own validator in the node.
+  assert.match(html, /if \(tier !== ['"]build['"]\) return !!v/, 'Connection is required on wire tiers');
 });
 
-test('Build dialect select includes __vehicle escape option', () => {
+test('Build dialect select uses the shared helper and includes __vehicle escape option', () => {
+  assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
   assert.match(html, /__vehicle/, 'dialect select must have __vehicle option value');
   assert.match(html, /from Vehicle Profile/, 'dialect select must label the escape option');
 });
@@ -130,15 +138,25 @@ test('Build visibility logic references the dialect and vehicle rows', () => {
   assert.match(html, /node-input-dialect/, 'visibility logic must reference the dialect select');
 });
 
-test('Build wire-tier catalog query carries the connection profile id (custom dialect support)', () => {
-  // The admin route serves custom XML bundles only when given ?vehicle=<id>;
-  // a bare ?dialect=<custom-name> 400s. The wire branch must therefore pass
-  // the connection profile id, not just the dialect name.
+test('Build catalog targeting delegates to the shared resolver (no local copy)', () => {
+  // The catalog source matrix — including the wire branch that carries the
+  // connection profile id for custom XML dialects — lives in the shared
+  // resource helper (proven in mavlink-editor-resource.test.js). The Build node
+  // must call it, keyed off its `tier` field, not paste its own copy.
   assert.match(
     html,
-    /query:\s*\{\s*vehicle:\s*connNode\.vehicle/,
-    'wire branch must include the connection profile id in the catalog query'
+    /RED\.mavlink\.resolveCatalogTarget\(\{\s*isBuild:\s*buildTierIsBuild\(\)\s*\}\)/,
+    'Build node calls the shared resolver with its tier-derived isBuild flag'
   );
+  assert.match(
+    html,
+    /\$\('#node-input-tier'\)\.val\(\)[^=]*===\s*'build'/,
+    'isBuild is derived from the Build node tier field'
+  );
+  assert.doesNotMatch(html, /function resolveCatalogTarget/, 'no local catalog resolver copy');
+  assert.doesNotMatch(html, /function emptyCatalogTarget/, 'no local empty-target helper copy');
+  assert.doesNotMatch(html, /ardupilotmega/, 'catalog target resolution must not hardcode ardupilotmega');
+  assert.match(html, /if \(!target\.query\)/, 'empty catalog target must not fetch an invented dialect');
   // "Not configured yet" is the required-field validation's job (red field +
   // node marker) — no bespoke pending mechanism in the dialog.
   assert.doesNotMatch(html, /pending/, 'no hand-rolled pending state');

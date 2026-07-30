@@ -4,37 +4,20 @@
     var _msgCatalogByKey = {};
     var _msgRequestSeq = 0;
 
-    function resolveCatalogTarget() {
-      var connId = $('#node-input-connection').val();
-      var vehicleId = '';
-      var dialect = 'ardupilotmega';
-      if (connId && RED.nodes && RED.nodes.node) {
-        var conn = RED.nodes.node(connId);
-        if (conn && conn.vehicle) {
-          vehicleId = conn.vehicle;
-          var vehicle = RED.nodes.node(vehicleId);
-          if (vehicle && vehicle.dialect) dialect = vehicle.dialect;
-        }
-      }
-      if (vehicleId) {
-        return {
-          key: 'vehicle:' + vehicleId,
-          query: { vehicle: vehicleId, dialect: dialect },
-          dialect: dialect,
-        };
-      }
-      return {
-        key: 'dialect:' + dialect,
-        query: { dialect: dialect },
-        dialect: dialect,
-      };
-    }
-
     function loadMessagesCatalog(cb) {
-      var target = resolveCatalogTarget();
+      // mavlink-in is wire-only (no Build tier): the bound Connection's Vehicle
+      // Profile is the sole catalog source (§6). No connection / no profile
+      // resolves to an empty catalog — never a silent `ardupilotmega`.
+      var target = RED.mavlink.resolveCatalogTarget({ isBuild: false });
       var seq = ++_msgRequestSeq;
       if (_msgCatalogByKey[target.key]) {
         cb(_msgCatalogByKey[target.key]);
+        return;
+      }
+      if (!target.query) {
+        var emptyCatalog = { messages: [], enums: {}, dialect: '' };
+        _msgCatalogByKey[target.key] = emptyCatalog;
+        cb(emptyCatalog);
         return;
       }
       $.getJSON(RED.mavlink.adminApiUrl('/mavlink/build/messages'), target.query, function (data) {

@@ -1,10 +1,9 @@
 <script type="text/javascript">
-  RED.nodes.registerType('mavlink-mission', {
-    category: 'mavlink',
-    color: '#e9e4ff',
-    defaults: {
+  // Dialect + Vehicle + Firmware validators are the shared Build-tier rule
+  // (§6 Firmware XOR); Mission's mode field is `delivery` (default confirm).
+  var missionDefaults = Object.assign(
+    {
       name: { value: '' },
-      vehicle: { value: '', type: 'mavlink-vehicle', required: false },
       connection: { value: '', type: 'mavlink-connection' },
       identity: { value: '' },
       delivery: { value: 'confirm' },
@@ -17,6 +16,13 @@
       timeout: { value: '', validate: RED.validators.number(true) },
       maxRetries: { value: '', validate: RED.validators.number(true) }
     },
+    RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
+  );
+
+  RED.nodes.registerType('mavlink-mission', {
+    category: 'mavlink',
+    color: '#e9e4ff',
+    defaults: missionDefaults,
     inputs: 1,
     outputs: 2,
     outputLabels: ['continue', 'status'],
@@ -67,20 +73,22 @@
       var $op   = $('#node-input-operation');
 
       /**
-       * Read the effective firmware from the selected tier's profile. On build
-       * tier the Vehicle Profile field governs; on wire tiers the Connection's
-       * bound profile governs. Falls back to 'ardupilot' when no profile is
-       * available (§6 "hidden is not honored").
+       * Read the effective firmware from the selected tier. Build concrete
+       * dialects use the Firmware field; Build's Vehicle Profile escape and
+       * wire tiers use their bound profile.
        */
       function getEffectiveFirmware() {
         var delivery = $('#node-input-delivery').val() || 'confirm';
         if (delivery === 'build') {
+          var dialect = $('#node-input-dialect').val() || '';
+          if (dialect && dialect !== '__vehicle') return $('#node-input-firmware').val() || '';
+          if (dialect !== '__vehicle') return '';
           var vehicleId = $('#node-input-vehicle').val() || '';
           if (vehicleId && RED.nodes && typeof RED.nodes.node === 'function') {
             var v = RED.nodes.node(vehicleId);
             if (v && v.firmware) return v.firmware;
           }
-          return 'ardupilot';
+          return '';
         }
         var connectionId = $('#node-input-connection').val() || '';
         if (connectionId && RED.nodes && typeof RED.nodes.node === 'function') {
@@ -90,7 +98,7 @@
             if (vNode && vNode.firmware) return vNode.firmware;
           }
         }
-        return 'ardupilot';
+        return '';
       }
 
       function repopulateTypes() {
@@ -119,14 +127,27 @@
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
       function refreshVisibility() {
         var delivery = $('#node-input-delivery').val() || 'confirm';
+        var dialect = $('#node-input-dialect').val() || node.dialect || '';
         var isBuild = (delivery === 'build');
+        var isWire = !isBuild;
+        var show = {
+          dialect: isBuild,
+          vehicle: isBuild && dialect === '__vehicle',
+          firmware: isBuild && !!dialect && dialect !== '__vehicle',
+          connection: isWire,
+          identity: isWire,
+          timeout: isWire,
+          maxRetries: isWire
+        };
 
         /* tier-driven rows */
-        $('#row-vehicle').toggle(isBuild);
-        $('#row-connection').toggle(!isBuild);
-        $('#row-identity').toggle(!isBuild);
-        $('#row-timeout').toggle(!isBuild);
-        $('#row-maxRetries').toggle(!isBuild);
+        $('#row-mission-dialect').toggle(!!show.dialect);
+        $('#row-vehicle').toggle(!!show.vehicle);
+        $('#row-mission-firmware').toggle(!!show.firmware);
+        $('#row-connection').toggle(!!show.connection);
+        $('#row-identity').toggle(!!show.identity);
+        $('#row-timeout').toggle(!!show.timeout);
+        $('#row-maxRetries').toggle(!!show.maxRetries);
 
         /* role-driven rows: companion hides both target rows */
         if (!isBuild) {
@@ -151,15 +172,23 @@
       });
       $('#node-input-connection').on('change', function () {
         refreshIdentitySelect();
-        repopulateTypes();
+        refreshVisibility();
       });
       $('#node-input-vehicle').on('change', function () {
-        repopulateTypes();
+        refreshVisibility();
       });
       $('#node-input-identity').on('change', function () {
         refreshVisibility();
       });
+      $('#node-input-dialect').on('change', refreshVisibility);
+      $('#node-input-firmware').on('change', repopulateTypes);
       $op.on('change', refreshRows);
+      if (RED.mavlink && RED.mavlink.populateDialectSelect) {
+        RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
+          saved: node.dialect || '',
+          includeVehicleEscape: true
+        });
+      }
 
       /* Initial state. */
       refreshIdentitySelect();
@@ -171,7 +200,9 @@
 <script type="text/html" data-template-name="mavlink-mission">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build (plan only)</option><option value="confirm">Send and confirm</option></select></div>
+  <div class="form-row" id="row-mission-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
   <div class="form-row" id="row-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
+  <div class="form-row" id="row-mission-firmware"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value="">(select firmware)</option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
   <div class="form-row" id="row-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-identity"><label for="node-input-identity">Send-as</label><select id="node-input-identity"></select></div>
   <div class="form-row"><label for="node-input-operation">Operation</label><select id="node-input-operation"><option value="download">Download</option><option value="upload">Upload</option><option value="clear">Clear</option></select></div>
@@ -187,8 +218,8 @@
 <script type="text/html" data-help-name="mavlink-mission">
   <p>Downloads, uploads, or clears a mission, fence, or rally plan over the MAVLink mission protocol — the one exchange the vehicle drives.</p>
   <p>Output 0 (continue) fires only on a successful <code>MISSION_ACK</code>. Output 1 (status) carries progress records (phase and item counts) as they happen and the terminal record either way.</p>
-  <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on output 0 without sending — firmware and target defaults come from the <b>Vehicle Profile</b> field. <i>Send and confirm</i> runs the transfer to its acknowledgement over the selected <b>Connection</b>.</p>
-  <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type list is gated by the effective firmware — the Vehicle Profile on Build, the connection's bound profile on wire tiers — because PX4 does not carry fence and rally the same way as ArduPilot.</p>
+  <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on output 0 without sending. Choose a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. <i>Send and confirm</i> runs the transfer to its acknowledgement over the selected <b>Connection</b>.</p>
+  <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type list is gated by the effective firmware — the Build Firmware field, the Build Vehicle Profile escape, or the connection's bound profile on wire tiers — because PX4 does not carry fence and rally the same way as ArduPilot.</p>
   <p><b>Upload</b> answers whatever sequence the vehicle requests. A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>.</p>
   <p><b>Clear</b> is destructive and requires confirmation: tick the box or set <code>msg.confirmed = true</code>.</p>
   <p>Set <code>msg.payload === false</code> to suppress. Status records are plain objects on output 1; they are not refused if wired into another action input — chain control is silence on output 0.</p>

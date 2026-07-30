@@ -21,6 +21,7 @@
   "files": [
     "lib",
     "nodes",
+    "resources",
     "examples",
     "seed",
     "sitl",

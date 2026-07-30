@@ -65,7 +65,7 @@ test('payload === false suppresses: no output, no error', async () => {
 test('Build tier emits the protocol plan on output 0 and sends nothing', async () => {
   const conn = new StubConnection();
   const Node = loadNode(conn);
-  const node = new Node({ operation: 'download', connection: 'conn', delivery: 'build', missionType: 'mission' });
+  const node = new Node({ operation: 'download', connection: 'conn', delivery: 'build', dialect: 'common', firmware: 'custom', missionType: 'mission' });
   const { outputs } = await runInput(node, { payload: {} });
 
   assert.equal(outputs.length, 1);
@@ -74,6 +74,47 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
   assert.deepEqual(plan.messages.map((m) => m.name), ['MISSION_REQUEST_LIST']);
   assert.equal(conn.sent.length, 0, 'Build sends nothing');
   assert.equal(outputs[0][1].result, 'succeeded');
+});
+
+test('confirm tier with no connection fails loud instead of silently building', async () => {
+  const Node = loadNode(new StubConnection());
+  // No connection bound but delivery is confirm — must not degrade to Build (§9).
+  const node = new Node({ operation: 'download', delivery: 'confirm', missionType: 'mission' });
+  const { outputs, err } = await runInput(node, { payload: {} });
+
+  assert.equal(outputs.length, 1);
+  assert.equal(outputs[0][0], null, 'output 0 must not fire');
+  assert.equal(outputs[0][1].result, 'failed');
+  assert.match(outputs[0][1].reason, /no connection/);
+  assert.ok(err, 'done(err) reports the misconfiguration');
+});
+
+test('mission Build concrete dialect uses config firmware and no Vehicle Profile target rung', async () => {
+  const conn = new StubConnection();
+  const vehicleNode = {
+    defaultTargetSystem: 77,
+    defaultTargetComponent: 78,
+    firmware: 'px4',
+  };
+  const Node = loadNode(conn, { veh: vehicleNode });
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'build',
+    dialect: 'common',
+    firmware: 'ardupilot',
+    vehicle: 'veh',
+    missionType: 'fence',
+    targetSystem: '',
+    targetComponent: '',
+  });
+
+  const { outputs } = await runInput(node, { payload: {} });
+  assert.notEqual(outputs[0][0], null, 'concrete Build dialect must build rather than gate on stale profile firmware');
+  const plan = outputs[0][0].payload;
+  assert.equal(plan.missionType, 1, 'ardupilot config firmware permits fence');
+  assert.ok(Number.isNaN(plan.target.sysid), 'concrete Build dialect has no profile sysid rung');
+  assert.ok(Number.isNaN(plan.target.compid), 'concrete Build dialect has no profile compid rung');
 });
 
 test('firmware gating: PX4 refuses a fence transfer at the node (§11)', async () => {
@@ -328,6 +369,7 @@ test('mission build tier inherits from config.vehicle (sysid 77, compid 78)', as
     operation: 'download',
     connection: 'conn',
     delivery: 'build',
+    dialect: '__vehicle',
     vehicle: 'veh',
     missionType: 'mission',
     targetSystem: '',

@@ -121,7 +121,7 @@ module.exports = function registerMavlinkCommand(RED) {
 
     const connNode = config.connection ? RED.nodes.getNode(config.connection) : null;
 
-    const delivery = config.delivery || 'confirm';
+    const delivery = config.delivery;
     const timeoutMs = config.timeout ? Number(config.timeout) : 10000;
     const maxRetries = config.maxRetries !== undefined ? Number(config.maxRetries) : 3;
     const unconfirmedContinue = !!config.unconfirmedContinue;
@@ -191,9 +191,9 @@ module.exports = function registerMavlinkCommand(RED) {
 
       let target;
       if (delivery === 'build') {
-        // Build tier: profile comes from the node's own Vehicle Profile field.
-        // Connection and identity are ignored — hidden is not honored (§6).
-        const vehicleNode = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
+        // Build tier: profile only for the explicit `__vehicle` dialect escape.
+        const useVehicle = config.dialect === '__vehicle';
+        const vehicleNode = useVehicle && config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
         target = resolveActionTarget({
           payloadTarget,
           configSysid: config.targetSysid,
@@ -667,14 +667,19 @@ module.exports = function registerMavlinkCommand(RED) {
             return res.json(listCommandsCatalog(requested));
           }
 
-          const dialect = requested || 'ardupilotmega';
-          if (dialect === 'custom') {
+          if (!requested) {
+            return res.status(400).json({
+              error: 'dialect is required',
+              dialects: knownDialects(),
+            });
+          }
+          if (requested === 'custom') {
             return res.status(400).json({
               error: 'custom dialect requires a deployed Vehicle Profile (?vehicle=id)',
               dialects: knownDialects(),
             });
           }
-          res.json(listCommandsCatalog(dialect));
+          res.json(listCommandsCatalog(requested));
         } catch (err) {
           res.status(400).json({
             error: err.message,

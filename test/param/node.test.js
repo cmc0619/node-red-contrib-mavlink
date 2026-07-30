@@ -95,6 +95,7 @@ test('mavlink-param inherits Vehicle Profile target when config is empty (build 
   const Node = RED.nodes.types['mavlink-param'];
   const node = new Node({
     delivery: 'build',
+    dialect: '__vehicle',
     action: 'read',
     targetSystem: '',
     targetComponent: '',
@@ -225,6 +226,7 @@ test('mavlink-param build tier inherits from config.vehicle (sysid 77, compid 78
   const Node = RED.nodes.types['mavlink-param'];
   const node = new Node({
     delivery: 'build',
+    dialect: '__vehicle',
     action: 'read',
     vehicle: 'veh',
     targetSystem: '',
@@ -235,6 +237,63 @@ test('mavlink-param build tier inherits from config.vehicle (sysid 77, compid 78
 
   assert.equal(sent[0].payload.fields.target_system, 77, 'sysid from vehicle node');
   assert.equal(sent[0].payload.fields.target_component, 78, 'compid from vehicle node');
+});
+
+test('mavlink-param Build concrete dialect uses config firmware', () => {
+  const { paramValueToWire } = require('../../lib/codec');
+  const RED = redStub({});
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'build',
+    dialect: 'common',
+    firmware: 'px4',
+    action: 'set',
+    targetSystem: 1,
+    targetComponent: 1,
+  });
+  let sent;
+
+  node.emit(
+    'input',
+    { payload: { paramId: 'BAT_N_CELLS', value: 3, paramType: 'MAV_PARAM_TYPE_INT32' } },
+    (m) => { sent = m; },
+    () => {}
+  );
+
+  assert.equal(sent[0].payload.name, 'PARAM_SET');
+  assert.equal(sent[0].payload.fields.param_value, paramValueToWire(3, 'MAV_PARAM_TYPE_INT32'));
+});
+
+test('mavlink-param payload firmware overrides Build concrete dialect firmware', () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'build',
+    dialect: 'common',
+    firmware: 'ardupilot',
+    action: 'set',
+    targetSystem: 1,
+    targetComponent: 1,
+  });
+  let sent;
+
+  node.emit(
+    'input',
+    {
+      payload: {
+        paramId: 'BAT_N_CELLS',
+        value: 3,
+        paramType: 'MAV_PARAM_TYPE_INT32',
+        firmware: 'px4',
+      },
+    },
+    (m) => { sent = m; },
+    () => {}
+  );
+
+  assert.notEqual(sent[0].payload.fields.param_value, 3, 'payload firmware wins over config firmware');
 });
 
 test('mavlink-param capabilities beat ardupilot firmware for bytewise encoding', () => {

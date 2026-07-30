@@ -133,6 +133,27 @@ export default [
     rules: correctnessRules,
   },
   {
+    // Shared editor helpers run in the browser like the node HTML scripts.
+    files: ['resources/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'script',
+      globals: {
+        ...globals.browser,
+        RED: 'readonly',
+        $: 'readonly',
+        jQuery: 'readonly',
+      },
+    },
+    plugins: {
+      promise,
+    },
+    linterOptions: {
+      reportUnusedDisableDirectives: 'error',
+    },
+    rules: correctnessRules,
+  },
+  {
     files: ['eslint.config.mjs'],
     languageOptions: {
       ecmaVersion: 2023,

@@ -16,9 +16,14 @@ function readHtml(name) {
   return fs.readFileSync(path.join(ROOT, `${name}.html`), 'utf8');
 }
 
+// Shared RED.mavlink.* helpers now live in the stock resource file (DESIGN.md §6).
+const resourceScript = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'),
+  'utf8'
+);
+
 test('fillEnumSelect applies entry.description as option title', () => {
-  const html = readHtml('mavlink-local-identity');
-  assert.match(html, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
+  assert.match(resourceScript, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
 });
 
 test('Build message and MAV_CMD selects title from catalog descriptions', () => {
@@ -103,18 +108,16 @@ test('Payload editor loads field tips from /mavlink/payload/field-tips', () => {
 });
 
 test('shared applyFieldTitle / applyFieldUnits / applyFieldMeta helpers live on RED.mavlink', () => {
-  const html = readHtml('mavlink-local-identity');
-  assert.match(html, /RED\.mavlink\.applyFieldTitle\s*=\s*function/);
-  assert.match(html, /RED\.mavlink\.applyFieldUnits\s*=\s*function/);
-  assert.match(html, /RED\.mavlink\.applyFieldMeta\s*=\s*function/);
+  assert.match(resourceScript, /RED\.mavlink\.applyFieldTitle\s*=\s*function/);
+  assert.match(resourceScript, /RED\.mavlink\.applyFieldUnits\s*=\s*function/);
+  assert.match(resourceScript, /RED\.mavlink\.applyFieldMeta\s*=\s*function/);
 });
 
 test('Payload catalogQuery reuses shared currentCatalogQuery', () => {
   const html = readHtml('mavlink-payload');
   assert.match(html, /RED\.mavlink\.currentCatalogQuery/);
-  const shared = readHtml('mavlink-local-identity');
-  assert.match(shared, /RED\.mavlink\.currentCatalogQuery\s*=\s*currentEnumQuery/);
-  assert.match(shared, /RED\.mavlink\.vehicleIdFrom\s*=\s*function/);
+  assert.match(resourceScript, /RED\.mavlink\.currentCatalogQuery\s*=\s*currentEnumQuery/);
+  assert.match(resourceScript, /RED\.mavlink\.vehicleIdFrom\s*=\s*function/);
 });
 
 test('Payload TIP_FIELDS excludes enum selects driven by fillEnumSelect', () => {
