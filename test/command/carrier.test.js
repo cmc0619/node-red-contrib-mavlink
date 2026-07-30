@@ -4,10 +4,12 @@
  * COMMAND_LONG ↔ COMMAND_INT carrier conversion tests (DESIGN.md §9 "resend in
  * the other form", "Coordinate frames").
  *
- * Pins the conversion rules the node relies on for an auto-resend:
+ * Pins the conversion rules the node relies on for carrier builds and the
+ * auto-resend:
  *   - param1–4 pass through; param5→x, param6→y, param7→z (float, never scaled)
- *   - global-frame x/y are scaled to the wire degE7 int32 (degrees × 1e7)
- *   - already-scaled values (|v| > 180) are not double-scaled
+ *   - global-frame x/y are scaled to the wire degE7 int32 (degrees × 1e7),
+ *     unconditionally — canonical params are always degrees (§9), so there is
+ *     no "already scaled" guess and no pass-through heuristic
  *   - a non-global frame leaves x/y in metres (rounded to int32)
  *   - the round trip LONG→INT→LONG recovers the original params
  */
@@ -42,11 +44,12 @@ test('longToIntFields maps params, scales global lat/lon to degE7, keeps z float
   assert.equal(int.autocontinue, 0);
 });
 
-test('longToIntFields does not double-scale values that are already degE7', () => {
-  // |471234567| > 180 → treat as an already-scaled wire integer.
-  const int = longToIntFields([0, 0, 0, 0, 471234567, -1225000000, 50]);
-  assert.equal(int.x, 471234567);
-  assert.equal(int.y, -1225000000);
+test('longToIntFields scales every degrees value — no pass-through heuristic', () => {
+  // Whole-degree coordinates are ordinary operator input and must scale like
+  // any other degrees value; the old |v| > 180 pass-through is gone (§9).
+  const int = longToIntFields([0, 0, 0, 0, -35, 149, 50]);
+  assert.equal(int.x, -350000000);
+  assert.equal(int.y, 1490000000);
 });
 
 test('longToIntFields leaves x/y in metres for a non-global frame', () => {
@@ -92,11 +95,14 @@ test('isGlobalFrame classifies the global MAV_FRAME family', () => {
   assert.equal(isGlobalFrame(1), false); // LOCAL_NED
 });
 
-test('scaleLatLon scales degrees and guards the double-scale boundary', () => {
+test('scaleLatLon always scales degrees — whole numbers included', () => {
   assert.equal(scaleLatLon(47), 470000000);
   assert.equal(scaleLatLon(-122.5), -1225000000);
-  assert.equal(scaleLatLon(471234567), 471234567); // already scaled
+  assert.equal(scaleLatLon(47.1234567), 471234567);
   assert.equal(scaleLatLon(180), 1800000000); // boundary: still degrees
+  // Near null island a tiny real coordinate must scale too — the value the
+  // old |v| > 180 heuristic could silently misread.
+  assert.equal(scaleLatLon(0.0000015), 15);
 });
 
 test('buildCommandInt emits a COMMAND_INT envelope with converted fields', () => {

@@ -163,20 +163,20 @@
     takeoff:       [{ index: 1, label: 'Min pitch', units: 'deg' },
                     { index: 7, label: 'Altitude', units: 'm' }],
     land:          [{ index: 1, label: 'Abort altitude', units: 'm' },
-                    { index: 5, label: 'Latitude', units: 'degE7' },
-                    { index: 6, label: 'Longitude', units: 'degE7' },
+                    { index: 5, label: 'Latitude', units: 'deg' },
+                    { index: 6, label: 'Longitude', units: 'deg' },
                     { index: 7, label: 'Altitude', units: 'm' }],
     rtl:           [],
     set_home:      [{ index: 1, label: 'Use current (1 = yes)', units: '' },
-                    { index: 5, label: 'Latitude', units: 'degE7' },
-                    { index: 6, label: 'Longitude', units: 'degE7' },
+                    { index: 5, label: 'Latitude', units: 'deg' },
+                    { index: 6, label: 'Longitude', units: 'deg' },
                     { index: 7, label: 'Altitude', units: 'm' }],
     reposition:    [{ index: 1, label: 'Speed', units: 'm/s' },
                     { index: 2, label: 'Bitmask / flags', units: '', enumName: 'MAV_DO_REPOSITION_FLAGS', bitmask: true },
                     { index: 3, label: 'Loiter radius', units: 'm' },
                     { index: 4, label: 'Yaw', units: 'deg' },
-                    { index: 5, label: 'Latitude', units: 'degE7' },
-                    { index: 6, label: 'Longitude', units: 'degE7' },
+                    { index: 5, label: 'Latitude', units: 'deg' },
+                    { index: 6, label: 'Longitude', units: 'deg' },
                     { index: 7, label: 'Altitude', units: 'm' }],
     change_speed:  [{ index: 1, label: 'Speed type', units: '', enumName: 'SPEED_TYPE' },
                     { index: 2, label: 'Speed', units: 'm/s' },
@@ -190,8 +190,8 @@
     orbit:         [{ index: 1, label: 'Radius', units: 'm' },
                     { index: 2, label: 'Velocity', units: 'm/s' },
                     { index: 3, label: 'Yaw behavior', units: '', enumName: 'ORBIT_YAW_BEHAVIOUR' },
-                    { index: 5, label: 'Latitude', units: 'degE7' },
-                    { index: 6, label: 'Longitude', units: 'degE7' },
+                    { index: 5, label: 'Latitude', units: 'deg' },
+                    { index: 6, label: 'Longitude', units: 'deg' },
                     { index: 7, label: 'Altitude', units: 'm' }],
     mission_start: [{ index: 1, label: 'First item', units: '' },
                     { index: 2, label: 'Last item', units: '' }],
@@ -229,6 +229,11 @@
       preset:            { value: 'arm' },
       advancedCommand:   { value: '' },
       delivery:          { value: 'confirm' },
+      // Required, no default (§9): the operator must state the wire carrier.
+      // Flows saved before this field existed red out until a choice is made.
+      carrier:           { value: '', required: true,
+                           validate: function (v) { return v === 'int' || v === 'long'; } },
+      frame:             { value: '' },
       connection:        { value: '', type: 'mavlink-connection', required: false },
       identity:          { value: '' },
       targetSysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
@@ -535,6 +540,18 @@
         const isComplete = $('#node-input-delivery').val() === 'complete';
         $('#row-completion-timeout')[isComplete ? 'show' : 'hide']();
       }
+
+      // ── Carrier (§9) ───────────────────────────────────────────────────────
+      // Frame only exists on the COMMAND_INT wire message, so its row follows
+      // the carrier choice. An empty carrier keeps the node invalid (required).
+      function refreshFrameRow() {
+        const isInt = $('#node-input-carrier').val() === 'int';
+        $('#row-cmd-frame')[isInt ? 'show' : 'hide']();
+      }
+      $('#node-input-carrier').on('change', function () {
+        refreshFrameRow();
+      });
+      refreshFrameRow();
 
       // ── Param fields ───────────────────────────────────────────────────────
       let savedParams = {};
@@ -1014,6 +1031,25 @@
     </select>
   </div>
 
+  <div class="form-row" id="row-cmd-carrier">
+    <label for="node-input-carrier" style="width:120px">Carrier</label>
+    <select id="node-input-carrier" style="width:280px">
+      <option value="">&mdash; select carrier &mdash;</option>
+      <option value="int">COMMAND_INT (positional; degE7 on the wire)</option>
+      <option value="long">COMMAND_LONG (float params)</option>
+    </select>
+  </div>
+
+  <div class="form-row" id="row-cmd-frame" style="display:none">
+    <label for="node-input-frame" style="width:120px">Frame</label>
+    <select id="node-input-frame" style="width:280px">
+      <option value="">Global, absolute alt (default)</option>
+      <option value="3">Global, relative alt</option>
+      <option value="10">Global, terrain alt</option>
+      <option value="1">Local NED (metres)</option>
+    </select>
+  </div>
+
   <div class="form-row" id="row-completion-timeout" style="display:none">
     <label for="node-input-completionTimeout" style="width:120px">Completion timeout</label>
     <input type="number" id="node-input-completionTimeout" style="width:80px"> ms
@@ -1066,14 +1102,40 @@
     <dd>Runtime override for the send-as Local Identity node id.</dd>
     <dt class="optional">confirmed <span class="property-type">boolean</span></dt>
     <dd>Must be <code>true</code> for Safety presets (e.g. Flight Termination).</dd>
+    <dt class="optional">mavFrame <span class="property-type">number</span></dt>
+    <dd>Per-message MAV_FRAME override for the COMMAND_INT carrier; takes
+        precedence over the configured Frame.</dd>
   </dl>
+
+  <h3>Carrier</h3>
+  <p>
+    The <b>Carrier</b> field is required — pick the wire form before deploy.
+    Positional parameters (latitude / longitude) are always entered in
+    <b>decimal degrees</b>; the choice only changes how they travel:
+  </p>
+  <ul>
+    <li><b>COMMAND_INT</b> — spec-preferred for positional commands: lat/lon are
+        scaled to <code>degE7</code> integers (no float precision loss) and the
+        coordinate <b>Frame</b> is explicit. Use this unless the vehicle only
+        speaks COMMAND_LONG.</li>
+    <li><b>COMMAND_LONG</b> — legacy float params; frame interpretation is
+        implementation-dependent, and lat/lon lose precision (~1&nbsp;m) as
+        float32.</li>
+  </ul>
+  <p>
+    A vehicle that rejects the chosen carrier with
+    <code>COMMAND_INT_ONLY</code> / <code>COMMAND_LONG_ONLY</code> triggers one
+    automatic resend in the other form; the resend is rebuilt from the same
+    degree-valued parameters.
+  </p>
 
   <h3>Outputs</h3>
   <ol class="node-ports">
     <li>Continue
       <dl class="message-properties">
         <dt>payload <span class="property-type">object</span></dt>
-        <dd>The status record on success; the built <code>COMMAND_LONG</code> message in Build mode.</dd>
+        <dd>The status record on success; the built carrier message
+            (<code>COMMAND_INT</code> or <code>COMMAND_LONG</code>) in Build mode.</dd>
       </dl>
     </li>
     <li>Status — plain status object at the message root on every terminal outcome:
@@ -1102,7 +1164,7 @@
 
   <h3>Delivery tiers</h3>
   <ul>
-    <li><b>Build</b> — construct the COMMAND_LONG and emit on output 0; no send. Pick a bundled
+    <li><b>Build</b> — construct the selected carrier message and emit on output 0; no send. Pick a bundled
         <em>Dialect</em>, or choose <em>from Vehicle Profile…</em> to use a custom XML dialect
         and that profile's default target. Identity and connection are not used.</li>
     <li><b>Send</b> — fire-and-forget; no acknowledgement waiting.</li>

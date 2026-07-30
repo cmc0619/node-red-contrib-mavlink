@@ -1242,7 +1242,7 @@ by silence. Update this list when an item lands.
 | Item | Status | Notes |
 |---|---|---|
 | **Custom dialect upload in the Vehicle editor** | deferred | Superseded by the dialect library (Seed + catalog dates). No path/upload UI. Legacy `customDialectPath` still resolves; private-dialect library ingestion is future work. |
-| **Command node `COMMAND_INT`** | **done** | Confirm path starts LONG; on `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns, converts once (param5–7 ↔ x/y/z, global frames ×1e7), resends; second wrong-carrier fails loud. |
+| **Command node `COMMAND_INT`** | **done** | Carrier is a required operator choice (no default; node reds out unset) and every tier — build included — honours it. Positional params are always degrees; the INT carrier scales ×1e7 unconditionally (no `\|v\|>180` pass-through guess). On `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns and rebuilds once from the canonical degree params in the other form; second wrong-carrier fails loud. |
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
 | **Param definition catalog** | **done** | `lib/param/defs.js` fetches ArduPilot `apm.pdef.json` by family or Vehicle `paramDefsUrl` (PX4/custom); cache; Param editor datalist + units/enums. |
 | **Full command-param `enum=` recovery** | **done** | Seed compile carries common.xml `<param enum=`> links into the bundle (e.g. Arm → `MAV_BOOL`). The old `hints.js` overlay is gone. |

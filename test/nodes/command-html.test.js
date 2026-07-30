@@ -362,3 +362,35 @@ test('command help documents status fields at message root, not under payload', 
     'status help must not nest fields under payload'
   );
 });
+
+test('carrier is a required select with no default (§9)', () => {
+  assert.match(html, /id="node-input-carrier"/, 'carrier select must bind to the carrier property');
+  assert.match(
+    html,
+    /carrier:\s*\{ value: '', required: true,/,
+    'carrier default is empty and required — the operator must choose'
+  );
+  assert.match(
+    html,
+    /<option value="int">/,
+    'COMMAND_INT option offered'
+  );
+  assert.match(
+    html,
+    /<option value="long">/,
+    'COMMAND_LONG option offered'
+  );
+});
+
+test('frame row binds to the frame property and follows the INT carrier', () => {
+  assert.match(html, /id="node-input-frame"/, 'frame select must bind to the frame property');
+  assert.match(html, /row-cmd-frame/, 'frame row id must exist');
+  assertChangeHandlerContains(html, "$('#node-input-carrier')", 'refreshFrameRow');
+});
+
+test('preset positional params are labelled degrees, not degE7 (§9 canonical units)', () => {
+  assert.ok(
+    !/units: 'degE7'/.test(html),
+    'no preset param may advertise degE7 — operator input is always degrees'
+  );
+});

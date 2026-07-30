@@ -95,6 +95,7 @@ function deploy(ackResults, config = {}) {
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    carrier: config.carrier || 'long',
     mode: 'preset',
     preset: 'reposition',
     delivery: 'confirm',
@@ -196,6 +197,80 @@ test('contradictory LONG_ONLY on the first LONG send fails loud without swapping
   assert.equal(sent[0], null);
   assert.equal(sent[1].result, 'command_long_only');
   assert.match(sent[1].detail, /already sent/);
+});
+
+test('INT-first: configured carrier int sends COMMAND_INT with degrees scaled to degE7', async () => {
+  const { node, conn, warnings } = deploy([MAV_RESULT.ACCEPTED], { carrier: 'int' });
+
+  let sent;
+  node.emit('input', { payload: { 5: -35, 6: 149, 7: 100 } }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(conn.sent.length, 1, 'a single COMMAND_INT send');
+  assert.equal(conn.sent[0].message.name, 'COMMAND_INT');
+  // Whole-degree operator input scales like any other degrees value (§9) —
+  // the old integer/|v|>180 pass-through guesses are gone.
+  assert.equal(conn.sent[0].message.fields.x, -350000000);
+  assert.equal(conn.sent[0].message.fields.y, 1490000000);
+  assert.equal(conn.sent[0].message.fields.z, 100);
+  assert.equal(warnings.length, 0, 'no warning without a carrier swap');
+  assert.ok(sent[0], 'output 0 fired');
+  assert.equal(sent[1].result, 'accepted');
+  assert.equal(sent[1].detail, null, 'no swap note when the configured carrier was accepted');
+});
+
+test('INT-first LONG_ONLY: swaps back to COMMAND_LONG with unscaled degrees', async () => {
+  const { node, conn, warnings } = deploy(
+    [MAV_RESULT.COMMAND_LONG_ONLY, MAV_RESULT.ACCEPTED],
+    { carrier: 'int' }
+  );
+
+  let sent;
+  node.emit('input', { payload: { 5: 47.1, 6: -122.5, 7: 100 } }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(conn.sent.length, 2, 'exactly two sends: one INT then one LONG');
+  assert.equal(conn.sent[0].message.name, 'COMMAND_INT');
+  assert.equal(conn.sent[1].message.name, 'COMMAND_LONG');
+  // The resend rebuilds from the canonical degree params — float degrees on
+  // the LONG carrier, not a degE7 leak.
+  assert.equal(conn.sent[1].message.fields.param5, 47.1);
+  assert.equal(conn.sent[1].message.fields.param6, -122.5);
+  assert.equal(conn.sent[1].message.fields.param7, 100);
+
+  assert.equal(warnings.length, 1, 'warned once on the carrier swap');
+  assert.match(warnings[0], /resending as COMMAND_LONG/);
+  assert.ok(sent[0], 'output 0 fired');
+  assert.equal(sent[1].result, 'accepted');
+  assert.match(sent[1].detail, /COMMAND_LONG carrier swap/);
+});
+
+test('INT-first contradictory INT_ONLY fails loud without swapping', async () => {
+  const { node, conn, warnings } = deploy(
+    [MAV_RESULT.COMMAND_INT_ONLY],
+    { carrier: 'int' }
+  );
+
+  let sent;
+  node.emit('input', { payload: { 5: 47.1, 6: -122.5, 7: 100 } }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(conn.sent.length, 1, 'no swap: the demanded carrier was already sent');
+  assert.equal(warnings.length, 0);
+  assert.equal(sent[0], null);
+  assert.equal(sent[1].result, 'command_int_only');
+  assert.match(sent[1].detail, /already sent/);
+});
+
+test('missing carrier config: node reds out and inputs do nothing', async () => {
+  const { node, conn } = deploy([MAV_RESULT.ACCEPTED], { carrier: '' });
+
+  let sent;
+  node.emit('input', { payload: { 5: 47.1 } }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(conn.sent.length, 0, 'nothing sent without a carrier choice');
+  assert.equal(sent, undefined, 'no outputs fire from an invalid config');
 });
 
 test('msg.mavFrame selects a non-global frame so INT x/y stay in metres', async () => {
