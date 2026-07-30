@@ -401,6 +401,9 @@ test('mavlink-in: changed-only does not crash on 64-bit BigInt fields (SYSTEM_TI
     trusted: true,
   });
   assert.equal(node._sends.length, 2, 'a changed BigInt field must pass through');
+  // Assert the forwarded frame is the CHANGED one — a count alone would let a
+  // regression that forwards the duplicate and suppresses the change pass.
+  assert.equal(node._sends[1].payload.time_unix_usec, 1700000000001000n);
 });
 
 test('mavlink-in: changed-only tracks independently per (message, sysid, compid)', () => {
