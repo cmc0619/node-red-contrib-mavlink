@@ -165,15 +165,13 @@ test('a premature/stale ACCEPTED before items are delivered is ignored, not a ph
   assert.deepEqual(itemSends(stub).map((s) => s.seq), [0, 1]);
 });
 
-test('a stale rejection ACK before all items is ignored; a real one after delivery fails (§9)', async () => {
+test('a rejection ACK after every item is delivered fails with the vehicle code (§9)', async () => {
   const stub = new StubConnection();
   const items = makeItems(2);
   let sentFinal = false;
 
   stub.onSend((message, deliver) => {
     if (message.name === 'MISSION_COUNT') {
-      // Stale DENIED from a prior transfer — must not abort this upload.
-      deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.INVALID, mission_type: 0 } });
       deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } });
       return;
     }
@@ -183,7 +181,6 @@ test('a stale rejection ACK before all items is ignored; a real one after delive
         deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 1, mission_type: 0 } });
       } else if (!sentFinal) {
         sentFinal = true;
-        // After every item has been answered, a rejection is this transfer's.
         deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.INVALID, mission_type: 0 } });
       }
     }
@@ -194,6 +191,31 @@ test('a stale rejection ACK before all items is ignored; a real one after delive
   assert.equal(outcome.result, 'failed');
   assert.equal(outcome.resultCode, MAV_MISSION_RESULT.INVALID);
   assert.deepEqual(itemSends(stub).map((s) => s.seq), [0, 1]);
+});
+
+test('an early error ACK right after MISSION_COUNT is the vehicle refusing, not a stale ack (§9)', async () => {
+  const stub = new StubConnection();
+  const items = makeItems(2);
+
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_COUNT') {
+      // The protocol lets a vehicle refuse as soon as it hears the count — a
+      // plan too big to store is NO_SPACE before item 0 is ever requested.
+      // Ignoring it would retry the count and end in "stalled at count",
+      // hiding the reason the operator needs.
+      deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.NO_SPACE, mission_type: 0 } });
+    }
+  });
+
+  const outcome = await new MissionUpload(uploadOpts(stub, items, { timeoutMs: 5, maxRetries: 1 })).start();
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.phase, 'ack');
+  assert.equal(outcome.resultCode, MAV_MISSION_RESULT.NO_SPACE);
+  assert.match(outcome.reason, /NO_SPACE/);
+  // Refused once, not retried: exactly one MISSION_COUNT and no items.
+  assert.equal(stub.sent.filter((s) => s.message.name === 'MISSION_COUNT').length, 1);
+  assert.deepEqual(itemSends(stub), []);
 });
 
 test('global-frame item x/y are scaled to degE7 in the INT carrier (§9 coordinate frames)', () => {

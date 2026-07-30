@@ -53,6 +53,29 @@ test('Param set confirms only by matching PARAM_VALUE echo, decoded through the 
   assert.equal(matchesParamEcho(request, { ...echo, fields: { ...echo.fields, param_id: 'OTHER' } }), false);
 });
 
+test('a REAL32 echo quantized to float32 still confirms the set', () => {
+  // The vehicle stores and echoes a REAL32 as a float32, so 47.9 comes back as
+  // 47.900001525878906 — further from the request than the absolute 1e-6
+  // tolerance. Treating that as a mismatch failed sets that actually succeeded.
+  const request = {
+    paramId: 'RTL_ALT',
+    value: 47.9,
+    paramType: 'MAV_PARAM_TYPE_REAL32',
+    firmware: 'ardupilot',
+  };
+  const echo = (value) => ({
+    name: 'PARAM_VALUE',
+    sysid: 1,
+    compid: 1,
+    fields: { param_id: 'RTL_ALT', param_type: 9, param_value: value },
+  });
+
+  assert.equal(matchesParamEcho(request, echo(Math.fround(47.9))), true);
+  assert.equal(matchesParamEcho({ ...request, value: 500.3 }, echo(Math.fround(500.3))), true);
+  // A genuinely different value is still a mismatch.
+  assert.equal(matchesParamEcho(request, echo(Math.fround(47.8))), false);
+});
+
 test('PARAM_VALUE echo from another vehicle does not confirm a scoped set', () => {
   const request = {
     target: { sysid: 6, compid: 1 },

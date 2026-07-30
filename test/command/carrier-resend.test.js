@@ -198,7 +198,7 @@ test('contradictory LONG_ONLY on the first LONG send fails loud without swapping
   assert.match(sent[1].detail, /already sent/);
 });
 
-test('msg.mavFrame selects a non-global frame so INT x/y stay in metres', async () => {
+test('msg.mavFrame selects a non-global frame so INT x/y are metres × 1e4', async () => {
   const { node, conn } = deploy(
     [MAV_RESULT.COMMAND_INT_ONLY, MAV_RESULT.ACCEPTED]
   );
@@ -214,7 +214,8 @@ test('msg.mavFrame selects a non-global frame so INT x/y stay in metres', async 
 
   assert.equal(conn.sent[1].message.name, 'COMMAND_INT');
   assert.equal(conn.sent[1].message.fields.frame, 1);
-  assert.equal(conn.sent[1].message.fields.x, 10, 'metres rounded, not degE7-scaled');
-  assert.equal(conn.sent[1].message.fields.y, -4);
+  // Local x/y are "position in meters * 1e4" (common.xml), not degE7.
+  assert.equal(conn.sent[1].message.fields.x, 104000);
+  assert.equal(conn.sent[1].message.fields.y, -36000);
   assert.equal(sent[1].result, 'accepted');
 });

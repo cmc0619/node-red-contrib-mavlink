@@ -119,6 +119,35 @@ test('a MISSION_ACK arriving mid-download (after the count) is ignored, not an a
   assert.equal(outcome.items.length, 2);
 });
 
+test('a retransmitted MISSION_COUNT mid-walk is ignored, and a smaller one cannot truncate (§9)', async () => {
+  const stub = new StubConnection();
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 3, mission_type: 0 } });
+    } else if (message.name === 'MISSION_REQUEST_INT') {
+      const seq = message.fields.seq;
+      if (seq === 0) {
+        // The vehicle saw our request-list twice and re-sends the count. Acting
+        // on it would restart the walk; a *stale smaller* count would end the
+        // download early and still report success.
+        deliver({ name: 'MISSION_COUNT', fields: { count: 1, mission_type: 0 } });
+      }
+      deliver({
+        name: 'MISSION_ITEM_INT',
+        fields: { seq, command: 16, x: seq, y: seq, z: 10, mission_type: 0 },
+      });
+    }
+  });
+
+  const outcome = await new MissionDownload(machineOpts(stub)).start();
+
+  assert.equal(outcome.result, 'succeeded');
+  assert.equal(outcome.count, 3, 'the retransmitted count did not replace the real one');
+  assert.deepEqual(outcome.items.map((i) => i.seq), [0, 1, 2]);
+  // Item 0 was requested once — the stale count did not restart the walk.
+  assert.equal(stub.sent.filter((s) => s.message.name === 'MISSION_REQUEST_INT').length, 3);
+});
+
 test('an early MISSION_ACK before the count is still an abort (vehicle refuses the request)', async () => {
   const stub = new StubConnection();
   stub.onSend((message, deliver) => {
