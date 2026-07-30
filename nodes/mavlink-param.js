@@ -62,8 +62,6 @@ module.exports = function registerMavlinkParam(RED) {
           ? req.query.vehicle.trim() : '';
         const dialect = typeof req.query.dialect === 'string'
           ? req.query.dialect.trim() : '';
-        const firmware = typeof req.query.firmware === 'string'
-          ? req.query.firmware.trim() : '';
         let url;
         if (vehicleId) {
           const vehicleNode = RED.nodes.getNode(vehicleId);
@@ -82,14 +80,19 @@ module.exports = function registerMavlinkParam(RED) {
           if (!dialect) {
             return res.json({ defs: {}, notice: 'no dialect supplied' });
           }
-          url = defsApi.resolveDefsUrl(dialect, firmware, '');
+          // ArduPilot pdefs are keyed by vehicle family (DESIGN.md §4), not by
+          // MAVLink dialect. Concrete Build dialect + Firmware has no family —
+          // do not pass dialect into resolveDefsUrl as if it were one.
+          return res.json({
+            defs: {},
+            notice: 'parameter definitions require a Vehicle Profile (vehicle family); '
+              + 'dialect-only Build has no family-keyed defs',
+          });
         }
         if (!url) {
           return res.json({
             defs: {},
-            notice: vehicleId
-              ? 'no parameter definitions available for this vehicle family and firmware'
-              : 'no parameter definitions available for this dialect and firmware',
+            notice: 'no parameter definitions available for this vehicle family and firmware',
           });
         }
         const userDir = (RED.settings && RED.settings.userDir) || '';

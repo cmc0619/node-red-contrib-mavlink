@@ -203,7 +203,7 @@ test('isFalseTrueEnum mirrors metadata false/true enum detection', () => {
     { name: 'MAV_DO_REPOSITION_FLAGS_CHANGE_MODE', value: 1 },
     { name: 'MAV_DO_REPOSITION_FLAGS_RELATIVE_YAW', value: 2 },
   ]), false);
-  assert.equal(context.RED.mavlink.isFalseTrueEnum(['FALSE', 'TRUE']), true);
+  assert.equal(context.RED.mavlink.isFalseTrueEnum(['FALSE', 'TRUE']), false);
   assert.equal(context.RED.mavlink.isFalseTrueEnum([]), false);
   assert.equal(context.RED.mavlink.isFalseTrueEnum([
     { name: 'GIMBAL_AXIS_CALIBRATION_REQUIRED_UNKNOWN', value: 0 },
@@ -474,6 +474,16 @@ test('loadEnumsCatalog ignores responses after the dialog token is cancelled', (
     calls += 1;
   }, token);
   assert.equal(calls, 0);
+});
+
+test('loadEnumsCatalog returns empty catalog locally when no dialect or vehicle is available', () => {
+  const context = loadHelpers();
+  let payload = null;
+  context.RED.mavlink.loadEnumsCatalog(['MAV_TYPE'], (catalog) => {
+    payload = catalog;
+  });
+  assert.equal(context.$.lastRequest, undefined, 'must not GET /mavlink/enums with {}');
+  assert.deepEqual(plain(payload), { dialect: '', enums: {} });
 });
 
 test('Companion save clears hidden source IDs before Node-RED copies editor inputs', () => {

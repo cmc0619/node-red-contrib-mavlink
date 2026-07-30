@@ -40,3 +40,8 @@ test('FALSE/TRUE with non-0/1 values are not boolean controls', () => {
     { name: 'FLAG_TRUE', value: 1 },
   ]), false);
 });
+
+test('bare name strings are not boolean controls without explicit values', () => {
+  assert.equal(isFalseTrueEnum(['FALSE', 'TRUE']), false);
+  assert.equal(isFalseTrueEnum(['MAV_BOOL_FALSE', 'MAV_BOOL_TRUE']), false);
+});

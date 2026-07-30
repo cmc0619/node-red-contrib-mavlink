@@ -1699,7 +1699,10 @@ auto-pick, no silent `ardupilotmega`, and no inventing `__vehicle` from a leftov
 (pre-1.0: no flow migration). Param/Mission Build require Firmware when not using a profile
 (Vehicle Profile XOR dialect+firmware). Wire tiers still hide Dialect/Vehicle/Firmware and use
 the Connection's profile. Companion send-as and hidden-is-not-honored are unchanged. Binary
-`FALSE=0`/`TRUE=1` enums render true/false; other bitmasks stay multi-select.
+`FALSE=0`/`TRUE=1` enums render true/false only when both entries carry those wire values
+(bare name strings are not synthesized to 0/1); other bitmasks stay multi-select. ArduPilot
+parameter definition URLs stay family-keyed (Vehicle Profile); dialect-only Param Build does
+not invent a family from a MAVLink dialect name.
 *Check:* editor HTML suites for dialect/`__vehicle`/firmware visibility and invalid empty;
 `node --test test/addressing/resolve.test.js` plus per-node suites — "companion", "role × tier",
 "build+list", no silent dialect default. Spec record:

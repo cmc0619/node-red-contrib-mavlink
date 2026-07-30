@@ -49,8 +49,8 @@
 - Create: `test/metadata/naming-false-true.test.js`
 
 **Interfaces:**
-- Consumes: enum entry arrays shaped `{ name: string, value: number|string }[]` (or plain name strings)
-- Produces: `isFalseTrueEnum(entries) → boolean` — true iff some entry name ends with `_FALSE` (or equals `FALSE`) **and** some ends with `_TRUE` (or equals `TRUE`), case-sensitive MAVLink SCREAMING_SNAKE
+- Consumes: enum entry arrays shaped `{ name: string, value: number|string }[]` (valued objects only — bare name strings are rejected)
+- Produces: `isFalseTrueEnum(entries) → boolean` — true iff exactly two valued entries: one `FALSE`/`*_FALSE` with value `0` and one `TRUE`/`*_TRUE` with value `1`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -94,17 +94,26 @@ In `naming.js`:
 
 ```js
 function isFalseTrueEnum(entries) {
-  if (!Array.isArray(entries) || entries.length === 0) return false;
-  let hasFalse = false;
-  let hasTrue = false;
+  if (!Array.isArray(entries) || entries.length !== 2) return false;
+  let falseOk = false;
+  let trueOk = false;
   for (const entry of entries) {
-    const name = typeof entry === 'string' ? entry : entry && entry.name;
-    if (typeof name !== 'string') continue;
-    if (name === 'FALSE' || name.endsWith('_FALSE')) hasFalse = true;
-    if (name === 'TRUE' || name.endsWith('_TRUE')) hasTrue = true;
-    if (hasFalse && hasTrue) return true;
+    if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string') return false;
+    const name = entry.name;
+    const isFalse = name === 'FALSE' || name.endsWith('_FALSE');
+    const isTrue = name === 'TRUE' || name.endsWith('_TRUE');
+    if (!isFalse && !isTrue) return false;
+    const value = Number(entry.value);
+    if (!Number.isInteger(value)) return false;
+    if (isFalse) {
+      if (value !== 0 || falseOk) return false;
+      falseOk = true;
+    } else {
+      if (value !== 1 || trueOk) return false;
+      trueOk = true;
+    }
   }
-  return false;
+  return falseOk && trueOk;
 }
 ```
 

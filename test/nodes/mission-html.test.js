@@ -99,8 +99,11 @@ test('mavlink-mission getEffectiveFirmware is tier-aware', () => {
   assert.match(html, /node-input-vehicle.*\.val\(\)|\.val\(\).*node-input-vehicle/s,
     'vehicle field consulted for __vehicle build tier');
   assert.match(html, /conn\.vehicle/, 'connection vehicle consulted on wire tier');
+  // Closing brace is indented two spaces (function scope), not nested blocks.
+  const firmwareFn = /function getEffectiveFirmware\(\)\s*\{[\s\S]*?\n {2}\}/.exec(html);
+  assert.ok(firmwareFn, 'getEffectiveFirmware function body must be extractable');
   assert.doesNotMatch(
-    /function getEffectiveFirmware\(\)\s*\{[\s\S]*?\n\s*\}/.exec(html)?.[0] || '',
+    firmwareFn[0],
     /return\s+['"]ardupilot['"]/,
     'effectiveFirmware must not invent ardupilot when no source is selected'
   );

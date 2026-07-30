@@ -74,7 +74,7 @@
      * cannot require() the Node module, so keep this rule mirrored here.
      * Exactly two entries: *_FALSE=0 and *_TRUE=1 (not mixed tables).
      *
-     * @param {Array<{name: string, value: number|string}|string>|null|undefined} entries
+     * @param {Array<{name: string, value: number|string}>|null|undefined} entries
      * @returns {boolean}
      */
     RED.mavlink.isFalseTrueEnum = function (entries) {
@@ -83,14 +83,13 @@
       var trueOk = false;
       for (var i = 0; i < entries.length; i++) {
         var entry = entries[i];
-        var name = typeof entry === 'string' ? entry : entry && entry.name;
-        if (typeof name !== 'string') return false;
+        // Require valued objects — never synthesize 0/1 for bare name strings.
+        if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string') return false;
+        var name = entry.name;
         var isFalse = name === 'FALSE' || name.slice(-6) === '_FALSE';
         var isTrue = name === 'TRUE' || name.slice(-5) === '_TRUE';
         if (!isFalse && !isTrue) return false;
-        var value = typeof entry === 'string'
-          ? (isFalse ? 0 : 1)
-          : Number(entry.value);
+        var value = Number(entry.value);
         if (!Number.isInteger(value)) return false;
         if (isFalse) {
           if (value !== 0 || falseOk) return false;
@@ -276,6 +275,13 @@
       if (!query.dialect && !query.vehicle && opts.dialect) {
         query.dialect = opts.dialect;
         addEnumNames(query, names);
+      }
+      // Empty query → 400 on /mavlink/enums; return a local empty catalog instead.
+      if (!query.dialect && !query.vehicle) {
+        if (!token || !token.cancelled) {
+          cb({ dialect: '', enums: {} });
+        }
+        return;
       }
       $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), query, function (data) {
         if (token && token.cancelled) return;
