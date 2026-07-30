@@ -46,6 +46,48 @@ test('sequential execution paces targeted sends between members', async () => {
   assert.deepEqual(connection.sends.map((s) => s.message.fields.target_system), [1, 2, 3]);
 });
 
+test('registerCancel stops the sequential loop before the next member is sent', async () => {
+  const connection = connectionStub([peer(1), peer(2), peer(3)]);
+  let cancel;
+
+  const result = await executeSwarm({
+    connection,
+    action: commandAction(),
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 25,
+    registerCancel: (fn) => { cancel = fn; },
+    // Cancel during the inter-member pause, as a node close() would.
+    wait: async () => { cancel(); },
+  });
+
+  assert.equal(result.result, 'cancelled');
+  assert.equal(result.success, false);
+  assert.equal(connection.sends.length, 1, 'cancel during the wait stops further member sends');
+});
+
+test('registerCancel cancels the in-flight member AckWaiter instead of waiting out the full timeout', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+  let cancel;
+
+  const promise = executeSwarm({
+    connection,
+    action: commandAction(),
+    mode: 'sequential',
+    delivery: 'confirm',
+    timeoutMs: 999999, // would hang the test if cancel() did not settle it
+    registerCancel: (fn) => { cancel = fn; },
+  });
+
+  // registerCancel runs synchronously before the first await, so `cancel` is
+  // already set by the time executeSwarm() returns control here.
+  cancel();
+
+  const result = await promise;
+  assert.equal(result.result, 'cancelled');
+  assert.equal(connection.sends.length, 1, 'only the first member was ever sent');
+});
+
 test('broadcast sends one autopilot-pinned packet with target_system zero', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 

@@ -21,6 +21,12 @@ module.exports = function registerMavlinkSwarm(RED) {
       delivery.applyActionStatus(node, 'invalid', 'invalid config');
     }
 
+    // Cancel hooks for in-flight sequential fan-outs (§9/§10, mirrors
+    // mavlink-command's `_activeWaiter`). A fan-out can run for
+    // members × (timeoutMs + intervalMs) — long enough to outlive a redeploy
+    // — so close() must be able to stop it rather than let it keep sending.
+    const activeCancels = new Set();
+
     node.on('input', async (msg, send, done) => {
       const emit = send || ((messages) => node.send(messages));
       const guard = guardSwarmInput(msg);
@@ -50,6 +56,7 @@ module.exports = function registerMavlinkSwarm(RED) {
           }
         }
 
+        let cancel = null;
         const aggregate = await executeSwarm({
           connection: effectiveConnection,
           action: actionFrom(config, payload),
@@ -62,7 +69,20 @@ module.exports = function registerMavlinkSwarm(RED) {
           maxRetries: numberOption(payload, config, 'maxRetries', 0),
           identityId: payload.identityId || config.identity,
           confirmed: msg.confirmed === true || config.confirm === true,
+          registerCancel: (fn) => {
+            cancel = fn;
+            activeCancels.add(fn);
+          },
         });
+        if (cancel) activeCancels.delete(cancel);
+
+        // Close cancelled the fan-out mid-run: finish quietly, no error emit
+        // (mirrors mavlink-mission's 'cancelled' outcome handling) — a
+        // redeploy is not a command failure and must not trip a Catch node.
+        if (aggregate.result === 'cancelled') {
+          if (done) done();
+          return;
+        }
 
         applyAggregateStatus(node, aggregate);
         // Output 1 carries the aggregate status record at the message root.
@@ -88,6 +108,12 @@ module.exports = function registerMavlinkSwarm(RED) {
         emit([null, record]);
         reportDoneError(node, err, msg, done);
       }
+    });
+
+    node.on('close', (done) => {
+      for (const cancel of activeCancels) cancel();
+      activeCancels.clear();
+      done();
     });
   }
 

@@ -122,6 +122,11 @@ module.exports = function registerMavlinkPayload(RED) {
               if (outcome.result === 'accepted') {
                 completeAck(node, emit, built, outcome);
                 if (done) done();
+              } else if (outcome.result === 'cancelled') {
+                // Node closed mid-wait (redeploy): not a command failure —
+                // finish quietly, no status/emit/done(err) (§9, mirrors
+                // mavlink-mission's explicit 'cancelled' branch).
+                if (done) done();
               } else {
                 failAck(node, emit, built, outcome, msg, done);
               }

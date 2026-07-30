@@ -132,6 +132,38 @@ test('Async handler contains a throw as a terminal failed status plus done(err)'
   assert.ok(doneErr instanceof Error, 'done(err) was called');
 });
 
+test('node close mid-transaction settles the AckWaiter as cancelled and finishes quietly, not as a command failure', async () => {
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSysid: '1',
+    targetCompid: '1',
+    timeout: '5000',
+  });
+
+  let sent;
+  let doneErr;
+  let doneCalled = false;
+  node.emit('input', { payload: { 1: 1 } }, (m) => { sent = m; }, (err) => {
+    doneCalled = true;
+    doneErr = err;
+  });
+  await tick();
+
+  node.emit('close', () => {});
+  await tick();
+
+  assert.equal(doneCalled, true, 'done() still fires so the message flow completes');
+  assert.equal(doneErr, undefined, 'a redeploy must not be reported as a command failure (Catch node must not fire)');
+  assert.equal(sent, undefined, 'no status record is emitted for a mere redeploy cancellation');
+});
+
 test('resolveTarget: wire tier empty config inherits Vehicle Profile target from connNode.vehicle', async () => {
   const conn = connStub({ targetSysid: 42, targetCompid: 191 });
   const RED = redStub({ conn });

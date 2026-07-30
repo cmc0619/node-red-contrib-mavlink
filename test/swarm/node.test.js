@@ -193,6 +193,43 @@ test('mavlink-swarm node gates a safety preset on msg.confirmed / node confirm (
   assert.equal(conn2.sends[0].message.fields.command, 185);
 });
 
+test('close mid-sequential-fan-out stops further member sends and finishes quietly', async () => {
+  const connection = connectionStub([peer(1), peer(2), peer(3)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-swarm')(RED);
+  const Node = RED.nodes.types['mavlink-swarm'];
+  const node = new Node({
+    connection: 'conn',
+    actionType: 'command',
+    commandId: 400,
+    executionMode: 'sequential',
+    delivery: 'send',
+    intervalMs: 60,
+  });
+
+  let sent;
+  let doneErr;
+  let doneCalled = false;
+  const finished = new Promise((resolve) => {
+    node.emit('input', { payload: {} }, (messages) => { sent = messages; }, (err) => {
+      doneCalled = true;
+      doneErr = err;
+      resolve();
+    });
+  });
+
+  // Let the first member's send land, then close during the inter-member
+  // pause — well before the second member would fire.
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  await new Promise((resolve) => node.emit('close', resolve));
+  await finished;
+
+  assert.equal(connection.sends.length, 1, 'close stops the loop before further members are sent');
+  assert.equal(doneCalled, true, 'done() still fires so the message flow completes');
+  assert.equal(doneErr, undefined, 'a redeploy must not be reported as a command failure');
+  assert.equal(sent, undefined, 'no status record is emitted for a mere redeploy cancellation');
+});
+
 function emitInput(node, msg, send) {
   return new Promise((resolve, reject) => {
     node.emit('input', msg, send, (err) => {

@@ -38,15 +38,56 @@ module.exports = function registerMavlinkConnection(RED) {
     // or timers (§7). Show the grey disabled badge and stop.
     if (node.disabled) {
       node.status({ fill: 'grey', shape: 'ring', text: 'disabled' });
+      // Receiving nothing from a disabled connection is correct — no-op.
+      // Sending must NOT look like it worked: a swallowed send would report
+      // phantom success downstream (mavlink-out et al. never see a failure).
+      // Throw synchronously so every sender node's existing catch path
+      // reports it, the same as any other send-time failure (§9 "never
+      // report phantom success").
       node.subscribe = () => () => {};
-      node.send = () => {};
+      node.send = () => {
+        throw new Error('mavlink-connection: connection disabled');
+      };
       node.on('close', (done) => done());
       return;
     }
 
     const vehicleNode = RED.nodes.getNode(config.vehicle);
-    const bundle = vehicleNode.getDialect();
-    const defaults = vehicleNode.getDefaults();
+    if (!vehicleNode || typeof vehicleNode.getDialect !== 'function') {
+      // A dangling Vehicle Profile reference (deleted config node, broken
+      // import) must not throw in the constructor — the Connection would
+      // never be created and every consumer would degrade to "invalid
+      // config" with no badge naming the cause (§6 "misconfigured at
+      // deploy"). Degrade the same way Disabled does above: badge + a send
+      // stub that throws so callers see a real failure, not phantom success.
+      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+      node.subscribe = () => () => {};
+      node.send = () => {
+        throw new Error('mavlink-connection: invalid config — no Vehicle Profile');
+      };
+      node.on('close', (done) => done());
+      return;
+    }
+
+    /** @type {import('../lib/metadata').DialectBundle} */
+    let bundle;
+    let defaults;
+    try {
+      bundle = vehicleNode.getDialect();
+      defaults = vehicleNode.getDefaults();
+    } catch (err) {
+      // A broken custom profile (bad XML, missing deps) must not take the
+      // whole Connection down with it — same posture as mavlink-build's
+      // __vehicle branch (§6 "dialect unavailable" badge naming the cause).
+      node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+      node.subscribe = () => () => {};
+      node.send = () => {
+        throw new Error(`mavlink-connection: dialect unavailable — ${err.message}`);
+      };
+      node.on('close', (done) => done());
+      node.error(`mavlink-connection: ${err.message}`);
+      return;
+    }
 
     // Public frozen snapshot so palette nodes can inherit target defaults from
     // the Vehicle Profile without reaching into private runtime fields. `id` is
@@ -65,7 +106,12 @@ module.exports = function registerMavlinkConnection(RED) {
     const identityIds = [config.localIdentity, ...(config.additionalIdentities || [])].filter(
       Boolean
     );
-    node._identityNodes = identityIds.map((id) => RED.nodes.getNode(id));
+    // A dangling identity reference (deleted config node, broken import)
+    // resolves to null/undefined here — drop it rather than dereference it
+    // below (identitySnapshot immediately reads idNode.*). The close handler
+    // already null-guards `_identityNodes`, so nulls surviving to here were
+    // never actually supported.
+    node._identityNodes = identityIds.map((id) => RED.nodes.getNode(id)).filter(Boolean);
 
     // Legacy flows stored cadence on the Connection (`heartbeatInterval`). Prefer
     // that when an identity still has the default 1000 ms so upgrades do not

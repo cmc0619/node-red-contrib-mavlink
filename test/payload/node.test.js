@@ -98,6 +98,38 @@ test('mavlink-payload confirm tier halts the chain on a DENIED ack', async () =>
   node.emit('close', () => {});
 });
 
+test('node close mid-wait settles the AckWaiter as cancelled and finishes quietly, not as a command failure', async () => {
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    delivery: 'confirm',
+    topic: 'servo',
+    verb: 'set',
+    connection: 'conn',
+    targetSystem: 7,
+    targetComponent: 1,
+    timeout: 5000,
+  });
+
+  let sent;
+  let doneErr;
+  let doneCalled = false;
+  node.emit('input', { payload: { values: { servo: 8, pwm: 1600 } } }, (m) => { sent = m; }, (err) => {
+    doneCalled = true;
+    doneErr = err;
+  });
+  await tick();
+
+  node.emit('close', () => {});
+  await tick();
+
+  assert.equal(doneCalled, true, 'done() still fires so the message flow completes');
+  assert.equal(doneErr, undefined, 'a redeploy must not be reported as a command failure (Catch node must not fire)');
+  assert.equal(sent, undefined, 'no status record is emitted for a mere redeploy cancellation');
+});
+
 test('mavlink-payload inherits Vehicle Profile target when config is empty', () => {
   const veh = { defaultTargetSystem: 42, defaultTargetComponent: 191 };
   const RED = redStub({ veh });

@@ -111,7 +111,13 @@ module.exports = function registerMavlinkBuild(RED) {
           return;
         }
       } else {
-        bundle = require('../lib/metadata').loadBundled(dialectName);
+        try {
+          bundle = require('../lib/metadata').loadBundled(dialectName);
+        } catch (err) {
+          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+          node.error(`mavlink-build: ${err.message}`);
+          return;
+        }
       }
     } else {
       // Wire tier: the connection's bound profile governs — hidden is not

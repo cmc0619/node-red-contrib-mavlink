@@ -435,6 +435,16 @@ module.exports = function registerMavlinkCommand(RED) {
       // carrier; note a completed swap in the success/failure detail below.
       const carrierSwapped = carrier !== CARRIER.LONG;
 
+      // Node closed mid-transaction (redeploy): AckWaiter.cancel() settles
+      // with result 'cancelled' (lib/command/ack.js). That is not a command
+      // failure — finish quietly, no status/emit/done(err), so a Catch node
+      // wired for "command failed" does not fire on a mere redeploy (mirrors
+      // mavlink-mission's explicit 'cancelled' branch).
+      if (ackOutcome.result === 'cancelled') {
+        done && done();
+        return;
+      }
+
       // Timeout: check peer table for completion condition.
       if (ackOutcome.result === 'timeout') {
         if (completionKey && connNode.peerTable) {

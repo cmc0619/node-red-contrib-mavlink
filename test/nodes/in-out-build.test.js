@@ -907,6 +907,30 @@ test('mavlink-build Build tier: plain dialect config loads bundled dialect witho
   assert.equal(out1.result, 'built');
 });
 
+test('mavlink-build Build tier: an unknown plain dialect name degrades to "dialect unavailable" instead of throwing at deploy', () => {
+  const RED = makeRED();
+  // No vehicle registered — plain-dialect Build resolves via loadBundled(name),
+  // which throws synchronously for a name not in the bundled registry (a
+  // stale/typo'd dialect saved by an older editor). This must not crash the
+  // constructor and take the node out of the flow (§6 "dialect unavailable"
+  // badge, same posture as the __vehicle branch just below).
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance();
+
+  assert.doesNotThrow(() => {
+    Constructor.call(node, {
+      dialect: 'not_a_real_dialect',
+      messageName: 'HEARTBEAT',
+      tier: 'build',
+      fields: '{}',
+    });
+  });
+
+  assert.equal(node._status && node._status.fill, 'red');
+  assert.equal(node._status && node._status.text, 'dialect unavailable');
+});
+
 test('mavlink-build wire tier: custom-dialect connection profile resolves via getDialect(), not the bundled registry', () => {
   const RED = makeRED();
   // A custom XML profile: its dialect *name* is not in the bundled registry,
