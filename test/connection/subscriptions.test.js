@@ -81,3 +81,21 @@ test('dispatch reports how many subscribers received the message', () => {
   assert.equal(reg.dispatch(decoded({ name: 'HEARTBEAT' })), 2);
   assert.equal(reg.dispatch(decoded({ name: 'SYS_STATUS' })), 1);
 });
+
+test('a throwing subscriber does not block delivery to the next one, or escape dispatch', () => {
+  const errors = [];
+  const reg = new SubscriptionRegistry({ logger: { error: (m) => errors.push(m) } });
+  let secondReceived = null;
+
+  reg.subscribe(null, () => {
+    throw new TypeError('Do not know how to serialize a BigInt');
+  });
+  reg.subscribe(null, (msg) => {
+    secondReceived = msg;
+  });
+
+  assert.doesNotThrow(() => reg.dispatch(decoded()));
+  assert.ok(secondReceived, 'second subscriber must still receive the frame');
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /BigInt/);
+});

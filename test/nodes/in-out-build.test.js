@@ -356,6 +356,53 @@ test('mavlink-in: changed-only forwards when fields change', () => {
   assert.equal(node._sends.length, 2);
 });
 
+test('mavlink-in: changed-only does not crash on 64-bit BigInt fields (SYSTEM_TIME-style)', () => {
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+
+  // node-mavlink decodes uint64_t fields as BigInt; JSON.stringify throws on a
+  // bare BigInt with no replacer, and an uncaught throw here would propagate
+  // out of the socket event handler and kill the Node-RED process.
+  assert.doesNotThrow(() => {
+    stub._deliver({
+      name: 'SYSTEM_TIME',
+      sysid: 1,
+      compid: 1,
+      fields: { time_unix_usec: 1700000000000000n, time_boot_ms: 12345 },
+      trusted: true,
+    });
+  });
+  assert.equal(node._sends.length, 1);
+  // msg.payload must carry the original BigInt untouched — the fix only
+  // changes the internal changed-only comparison, not the output shape.
+  assert.equal(node._sends[0].payload.time_unix_usec, 1700000000000000n);
+
+  // A second, identical delivery must still be recognised as unchanged.
+  stub._deliver({
+    name: 'SYSTEM_TIME',
+    sysid: 1,
+    compid: 1,
+    fields: { time_unix_usec: 1700000000000000n, time_boot_ms: 12345 },
+    trusted: true,
+  });
+  assert.equal(node._sends.length, 1, 'identical BigInt fields must be treated as unchanged');
+
+  // A changed BigInt field must still be recognised as changed.
+  stub._deliver({
+    name: 'SYSTEM_TIME',
+    sysid: 1,
+    compid: 1,
+    fields: { time_unix_usec: 1700000000001000n, time_boot_ms: 12346 },
+    trusted: true,
+  });
+  assert.equal(node._sends.length, 2, 'a changed BigInt field must pass through');
+});
+
 test('mavlink-in: changed-only tracks independently per (message, sysid, compid)', () => {
   const RED = makeRED();
   const { stub } = makeConnectionStub();
