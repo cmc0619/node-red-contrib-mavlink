@@ -8,6 +8,7 @@ const {
   TcpTransport,
   TCP_NO_DESTINATION,
   TCP_PEER_GONE,
+  TCP_CLOSED_DURING_OPEN,
 } = require('../../lib/connection/transport/tcp');
 
 /** @returns {Promise<void>} */
@@ -539,4 +540,42 @@ test('client close after disconnect still invokes the close callback', async () 
   });
   assert.equal(closed, true);
   assert.equal(net.clients[0].destroyed, true);
+});
+
+test('close() during a client connect settles the pending open()', async () => {
+  // net.Socket.destroy() during connect emits 'close' but neither 'connect'
+  // nor 'error' — without the reject handle, start()'s await open() would
+  // hang forever and the runtime's post-open close check would be unreachable.
+  const socket = new MockSocket({ address: '127.0.0.1', port: 5760 });
+  const neverConnects = {
+    createConnection(options, listener) {
+      if (listener) socket.once('connect', listener);
+      return socket;
+    },
+  };
+  const transport = new TcpTransport(
+    { remoteAddress: '127.0.0.1', remotePort: 5760 },
+    { net: neverConnects }
+  );
+
+  const opening = transport.open();
+  let closedBack = false;
+  transport.close(() => {
+    closedBack = true;
+  });
+
+  await assert.rejects(opening, (err) => err.code === TCP_CLOSED_DURING_OPEN);
+  assert.equal(closedBack, true, 'close() must still complete its callback');
+  assert.equal(socket.destroyed, true);
+});
+
+test('close() during a server bind settles the pending open()', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+
+  const opening = transport.open(); // MockServer emits 'listening' on a queued timeout
+  transport.close(() => {});
+
+  await assert.rejects(opening, (err) => err.code === TCP_CLOSED_DURING_OPEN);
+  await tick(); // the late 'listening' on the already-settled promise must be harmless
 });

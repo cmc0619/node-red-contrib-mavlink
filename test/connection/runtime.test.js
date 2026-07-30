@@ -419,6 +419,31 @@ test('close() during an in-flight start() must not resume into CONNECTED with li
   assert.equal(dg.sockets[0].closed, true, 'the just-opened transport must still be closed');
 });
 
+test('an open() rejected by a racing close() resolves start() quietly, not as an error', async () => {
+  // TCP-style race: the transport settles its pending open() with a rejection
+  // when close() interrupts it. start() must swallow that — surfacing it would
+  // paint a spurious deploy-time ERROR via the node's start().catch().
+  const { connection } = build();
+  let rejectOpen;
+  connection._transportFactory = () => ({
+    mode: 'tcp',
+    on() {},
+    open: () => new Promise((resolve, reject) => { rejectOpen = reject; }),
+    close: (cb) => {
+      const err = new Error('TCP transport closed during open');
+      err.code = 'TCP_CLOSED_DURING_OPEN';
+      rejectOpen(err);
+      cb();
+    },
+    send() {},
+  });
+
+  const starting = connection.start();
+  connection.close();
+  await starting; // must not reject
+  assert.notEqual(connection.getState(), STATE.CONNECTED);
+});
+
 test('an identity override outside the bound set is rejected, never falling back', async () => {
   const { connection } = build();
   await connection.start();
