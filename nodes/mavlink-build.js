@@ -111,13 +111,10 @@ module.exports = function registerMavlinkBuild(RED) {
           return;
         }
       } else {
-        try {
-          bundle = require('../lib/metadata').loadBundled(dialectName);
-        } catch (err) {
-          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
-          node.error(`mavlink-build: ${err.message}`);
-          return;
-        }
+        // Editor supplies dialect from a required, catalog-backed selector
+        // (§6), so the name is trusted and loadBundled() is an internal call —
+        // a throw here is a broken deploy, left to fail loud at construction.
+        bundle = require('../lib/metadata').loadBundled(dialectName);
       }
     } else {
       // Wire tier: the connection's bound profile governs — hidden is not

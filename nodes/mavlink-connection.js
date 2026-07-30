@@ -52,42 +52,15 @@ module.exports = function registerMavlinkConnection(RED) {
       return;
     }
 
+    // The Vehicle Profile is a required, editor-validated config-node reference
+    // (mavlink-connection.html), so a valid deploy always resolves it and its
+    // getDialect()/getDefaults() are trusted internals. A dangling reference or
+    // a throwing profile is a broken deploy — let it fail loud at construction
+    // (Node-RED logs the load error against this node id) rather than building
+    // a degraded phantom Connection.
     const vehicleNode = RED.nodes.getNode(config.vehicle);
-    if (!vehicleNode || typeof vehicleNode.getDialect !== 'function') {
-      // A dangling Vehicle Profile reference (deleted config node, broken
-      // import) must not throw in the constructor — the Connection would
-      // never be created and every consumer would degrade to "invalid
-      // config" with no badge naming the cause (§6 "misconfigured at
-      // deploy"). Degrade the same way Disabled does above: badge + a send
-      // stub that throws so callers see a real failure, not phantom success.
-      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
-      node.subscribe = () => () => {};
-      node.send = () => {
-        throw new Error('mavlink-connection: invalid config — no Vehicle Profile');
-      };
-      node.on('close', (done) => done());
-      return;
-    }
-
-    /** @type {import('../lib/metadata').DialectBundle} */
-    let bundle;
-    let defaults;
-    try {
-      bundle = vehicleNode.getDialect();
-      defaults = vehicleNode.getDefaults();
-    } catch (err) {
-      // A broken custom profile (bad XML, missing deps) must not take the
-      // whole Connection down with it — same posture as mavlink-build's
-      // __vehicle branch (§6 "dialect unavailable" badge naming the cause).
-      node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
-      node.subscribe = () => () => {};
-      node.send = () => {
-        throw new Error(`mavlink-connection: dialect unavailable — ${err.message}`);
-      };
-      node.on('close', (done) => done());
-      node.error(`mavlink-connection: ${err.message}`);
-      return;
-    }
+    const bundle = vehicleNode.getDialect();
+    const defaults = vehicleNode.getDefaults();
 
     // Public frozen snapshot so palette nodes can inherit target defaults from
     // the Vehicle Profile without reaching into private runtime fields. `id` is
@@ -106,23 +79,10 @@ module.exports = function registerMavlinkConnection(RED) {
     const identityIds = [config.localIdentity, ...(config.additionalIdentities || [])].filter(
       Boolean
     );
-    // A dangling identity reference (deleted config node, broken import)
-    // resolves to null here. Fail loud at construction rather than filter it
-    // out: the runtime snapshot below and `boundIdentityIds`/`defaultIdentityId`
-    // must describe the same set, or send() with the surviving id crashes
-    // later on an undefined identity — a deploy-time invariant break turned
-    // into a send-time mystery. Same degrade posture as the dialect guard.
+    // Identity references are editor-validated config-node references too — a
+    // dangling one is a broken deploy, so trust them and let a missing node
+    // surface as a construction failure rather than a degraded phantom.
     node._identityNodes = identityIds.map((id) => RED.nodes.getNode(id));
-    if (node._identityNodes.some((idNode) => !idNode)) {
-      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
-      node.subscribe = () => () => {};
-      node.send = () => {
-        throw new Error('mavlink-connection: invalid config — a Local Identity reference is missing');
-      };
-      node.on('close', (done) => done());
-      node.error('mavlink-connection: a Local Identity reference resolves to no config node');
-      return;
-    }
 
     // Legacy flows stored cadence on the Connection (`heartbeatInterval`). Prefer
     // that when an identity still has the default 1000 ms so upgrades do not
