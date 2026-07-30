@@ -95,8 +95,11 @@ module.exports = function registerMavlinkIn(RED) {
       }
 
       // Changed-only: drop if the fields are byte-for-byte identical to the last delivery.
+      // 64-bit fields (SYSTEM_TIME.time_unix_usec, TIMESYNC.tc1, any time_usec)
+      // decode as BigInt, which JSON.stringify throws on. This runs inside the
+      // transport's message handler, so the throw would leave the process.
       if (changedOnly) {
-        const json = JSON.stringify(decoded.fields);
+        const json = JSON.stringify(decoded.fields, bigIntSafe);
         if (lastFieldJson.get(key) === json) return;
         lastFieldJson.set(key, json);
       }
@@ -129,3 +132,16 @@ module.exports = function registerMavlinkIn(RED) {
 
   RED.nodes.registerType('mavlink-in', MavlinkInNode);
 };
+
+/**
+ * `JSON.stringify` replacer that renders a BigInt as its decimal digits.
+ * Used only to build the changed-only comparison key; `msg.payload` still
+ * carries the original BigInt.
+ *
+ * @param {string} _key
+ * @param {*} value
+ * @returns {*}
+ */
+function bigIntSafe(_key, value) {
+  return typeof value === 'bigint' ? value.toString() : value;
+}

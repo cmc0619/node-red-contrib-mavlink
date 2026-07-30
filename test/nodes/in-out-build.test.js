@@ -362,6 +362,39 @@ test('mavlink-in: changed-only forwards when fields change', () => {
   assert.equal(node._sends.length, 2);
 });
 
+test('mavlink-in: changed-only survives 64-bit BigInt fields', () => {
+  // 64-bit fields (SYSTEM_TIME.time_unix_usec, TIMESYNC.tc1, any time_usec)
+  // arrive as BigInt. JSON.stringify throws on those, and this runs inside the
+  // transport's message handler — an escaping throw takes the process down on
+  // the first matching frame, not just this node.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+
+  const deliver = (timeUnixUsec) => stub._deliver({
+    name: 'SYSTEM_TIME',
+    sysid: 1,
+    compid: 1,
+    fields: { time_unix_usec: timeUnixUsec, time_boot_ms: 1000 },
+    trusted: true,
+  });
+
+  assert.doesNotThrow(() => deliver(1718000000000000n));
+
+  // Still compares by value: an identical BigInt is unchanged, a different one is not.
+  deliver(1718000000000000n);
+  assert.equal(node._sends.length, 1, 'an identical BigInt must count as unchanged');
+  deliver(1718000000000001n);
+  assert.equal(node._sends.length, 2, 'a different BigInt must count as changed');
+
+  // The payload keeps the original BigInt; only the comparison key is stringified.
+  assert.equal(node._sends[0].payload.time_unix_usec, 1718000000000000n);
+});
+
 test('mavlink-in: changed-only tracks independently per (message, sysid, compid)', () => {
   const RED = makeRED();
   const { stub } = makeConnectionStub();
