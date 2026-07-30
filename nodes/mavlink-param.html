@@ -50,19 +50,10 @@
 
       /* ── Component picker (reload when dialect/connection changes) ─ */
       function reloadTargetCompId() {
-        if (!(RED.mavlink && RED.mavlink.loadEnumsCatalog)) return;
-        var savedComp = $('#node-input-targetComponent').val() || node.targetComponent;
-        var dialectHint = $('#node-input-dialect').val() || node.dialect || '';
-        var opts = (dialectHint && dialectHint !== '__vehicle')
-          ? { dialect: dialectHint }
-          : undefined;
-        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
-          RED.mavlink.fillCompIdSelect(
-            $('#node-input-targetComponent'),
-            (catalog.enums || {}).MAV_COMPONENT || [],
-            { allowEmpty: true, emptyLabel: '(profile default)', saved: savedComp }
-          );
-        }, null, opts);
+        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
+        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
+          initialSaved: node.targetComponent
+        });
       }
 
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */

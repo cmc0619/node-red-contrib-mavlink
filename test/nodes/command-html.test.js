@@ -166,8 +166,8 @@ test('mavlink-command target sysid/compid use "(profile default)" wording', () =
   );
   assert.match(
     html,
-    /emptyLabel:\s*'\(profile default\)'/,
-    'compid empty label says profile default'
+    /reloadCompIdSelect\(/,
+    'compid uses shared reloadCompIdSelect (default emptyLabel is profile default)'
   );
   assert.ok(
     !html.includes('(connection default)'),

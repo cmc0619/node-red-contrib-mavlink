@@ -81,11 +81,10 @@ test('mavlink-move has one labeled row per parameter, not dual local/global rows
   }
 });
 
-test('mavlink-move keeps target sysid/compid and MAV_COMPONENT catalog', () => {
+test('mavlink-move keeps target sysid/compid and reloadCompIdSelect catalog', () => {
   assert.match(html, /id="node-input-targetSystem"/, 'target sysid field remains');
   assert.match(html, /id="node-input-targetComponent"/, 'target compid select remains');
-  assert.match(html, /MAV_COMPONENT/, 'compid enum catalog is loaded');
-  assert.match(html, /fillCompIdSelect/, 'compid select uses shared helper');
+  assert.match(html, /reloadCompIdSelect/, 'compid enum catalog uses shared helper');
   assert.match(html, /ensureConfigNodePicker/, 'connection picker remains');
 });
 
@@ -94,7 +93,7 @@ test('mavlink-move target sysid/compid default to empty (inherit profile) not 1'
   assert.match(html, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(html, /RED\.validators\.number\(true\)/, 'blank-allowed validator is used');
   assert.match(html, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(html, /emptyLabel:\s*'[^']*profile default[^']*'/, 'compid empty label names profile default');
+  assert.match(html, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
 });
 
 test('mavlink-move has vehicle and identity defaults for role × tier matrix (§6)', () => {

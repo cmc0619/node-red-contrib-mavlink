@@ -35,7 +35,7 @@ test('mavlink-param target sysid/compid default to empty (inherit profile) not 1
   assert.match(html, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
   assert.match(html, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(html, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(html, /emptyLabel:\s*'[^']*profile default[^']*'/, 'compid empty label names profile default');
+  assert.match(html, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
 });
 
 test('mavlink-param has identity default (vehicle comes from the shared helper)', () => {

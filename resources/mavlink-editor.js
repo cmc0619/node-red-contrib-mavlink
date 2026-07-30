@@ -524,6 +524,51 @@
   };
 
   /**
+   * Reload a Target-compid select from /mavlink/enums (MAV_COMPONENT).
+   *
+   * Call after `populateDialectSelect` has pinned any saved Build dialect so
+   * `currentCatalogQuery` sees it. On later dialect/connection changes, call
+   * again — overlapping responses are ignored via a per-select sequence.
+   *
+   * Once the select has been filled, an explicit empty selection ("profile
+   * default") is preserved; `initialSaved` is used only on the first fill.
+   *
+   * @param {object} $select  jQuery select
+   * @param {{initialSaved?: string|number, emptyLabel?: string}} [opts]
+   */
+  RED.mavlink.reloadCompIdSelect = function ($select, opts) {
+    opts = opts || {};
+    if (!(RED.mavlink && typeof RED.mavlink.loadEnumsCatalog === 'function')) return;
+    if (!$select || !$select.length) return;
+
+    var seqKey = 'mavCompIdSeq';
+    var seq = (Number($select.data(seqKey)) || 0) + 1;
+    $select.data(seqKey, seq);
+
+    // After the first fill, honour the live value including '' (profile default).
+    // Truthiness fallbacks would resurrect a previously saved nonzero compid.
+    var initialized = $select.find('option').length > 0;
+    var saved = initialized
+      ? $select.val()
+      : (opts.initialSaved !== undefined && opts.initialSaved !== null
+        ? opts.initialSaved
+        : $select.val());
+
+    RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
+      if (Number($select.data(seqKey)) !== seq) return;
+      RED.mavlink.fillCompIdSelect(
+        $select,
+        ((catalog || {}).enums || {}).MAV_COMPONENT || [],
+        {
+          allowEmpty: true,
+          emptyLabel: opts.emptyLabel || '(profile default)',
+          saved: saved,
+        }
+      );
+    });
+  };
+
+  /**
    * Normalized role of a Local Identity config node, editor-side.
    * Unknown / unset resolves to 'gcs' (show-everything shape).
    *

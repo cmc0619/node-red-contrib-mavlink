@@ -307,23 +307,11 @@
 
       $('#node-input-identity').on('change', refreshVisibility);
 
-      let compIdRequestSeq = 0;
       function reloadTargetCompId() {
-        if (!(RED.mavlink && RED.mavlink.loadEnumsCatalog)) return;
-        const seq = ++compIdRequestSeq;
-        const saved = $('#node-input-targetCompid').val() || node.targetCompid;
-        const dialectHint = $('#node-input-dialect').val() || node.dialect || '';
-        const opts = (dialectHint && dialectHint !== '__vehicle')
-          ? { dialect: dialectHint }
-          : undefined;
-        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
-          if (seq !== compIdRequestSeq) return;
-          RED.mavlink.fillCompIdSelect(
-            $('#node-input-targetCompid'),
-            ((catalog || {}).enums || {}).MAV_COMPONENT || [],
-            { allowEmpty: true, emptyLabel: '(profile default)', saved: saved }
-          );
-        }, null, opts);
+        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
+        RED.mavlink.reloadCompIdSelect($('#node-input-targetCompid'), {
+          initialSaved: node.targetCompid
+        });
       }
       // First fill runs after populateDialectSelect pins the saved dialect below.
 

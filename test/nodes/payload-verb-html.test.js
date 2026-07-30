@@ -188,7 +188,7 @@ test('mavlink-payload target sysid/compid default to empty (inherit profile) not
   assert.match(payloadHtml, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
   assert.match(payloadHtml, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(payloadHtml, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(payloadHtml, /emptyLabel:\s*'[^']*profile default[^']*'/, 'compid empty label names profile default');
+  assert.match(payloadHtml, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
 });
 
 test('mavlink-payload fractional params use step=any', () => {

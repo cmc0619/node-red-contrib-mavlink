@@ -58,6 +58,7 @@ class FakeSelect {
     this.selected = value || '';
     this.enforceOptions = enforceOptions;
     this.attrs = {};
+    this.dataStore = {};
     this.triggered = [];
   }
 
@@ -94,6 +95,12 @@ class FakeSelect {
     return this;
   }
 
+  data(name, value) {
+    if (value === undefined) return this.dataStore[name];
+    this.dataStore[name] = value;
+    return this;
+  }
+
   off() {
     return this;
   }
@@ -108,6 +115,9 @@ class FakeSelect {
   }
 
   find(selector) {
+    if (selector === 'option') {
+      return { length: this.options.length };
+    }
     if (selector === 'option:selected') {
       const selected = this.options.find((option) => option.value === this.selected);
       return selected || {
@@ -159,6 +169,15 @@ function loadHelpers(initialValues = {}, nodeLookup = {}) {
   };
   $.responses = {
     '/mavlink/dialects': { dialects: ['ardupilotmega', 'common'] },
+    '/mavlink/enums': {
+      dialect: 'common',
+      enums: {
+        MAV_COMPONENT: [
+          { name: 'MAV_COMP_ID_AUTOPILOT1', value: 1, label: 'AUTOPILOT1 (1)' },
+          { name: 'MAV_COMP_ID_MISSIONPLANNER', value: 190, label: 'MISSIONPLANNER (190)' },
+        ],
+      },
+    },
   };
 
   const context = {
@@ -253,6 +272,64 @@ test('populateDialectSelect loads dialects, appends vehicle escape, and keeps em
   assert.equal(select.selected, '');
   assert.deepEqual(select.triggered, ['change']);
   assert.equal(ready, 1);
+});
+
+test('reloadCompIdSelect uses initialSaved on first fill and preserves blank later', () => {
+  const context = loadHelpers({
+    '#node-input-delivery': 'build',
+    '#node-input-dialect': 'development',
+  });
+  const select = new FakeSelect();
+
+  context.RED.mavlink.reloadCompIdSelect(select, { initialSaved: 190 });
+  assert.equal(select.val(), '190');
+  assert.ok(select.options.some((option) => option.value === '190'));
+
+  // User clears to "(profile default)".
+  select.val('');
+  context.RED.mavlink.reloadCompIdSelect(select, { initialSaved: 190 });
+  assert.equal(select.val(), '', 'blank live selection is not replaced by initialSaved');
+});
+
+test('reloadCompIdSelect ignores stale catalog responses', () => {
+  const context = loadHelpers({
+    '#node-input-delivery': 'build',
+    '#node-input-dialect': 'development',
+  });
+  const select = new FakeSelect();
+  const callbacks = [];
+
+  context.$.getJSON = function (url, query, cb) {
+    if (typeof query === 'function') {
+      cb = query;
+      query = undefined;
+    }
+    callbacks.push({ url, query, cb });
+    return { fail() { return this; } };
+  };
+
+  context.RED.mavlink.reloadCompIdSelect(select, { initialSaved: 1 });
+  context.RED.mavlink.reloadCompIdSelect(select, { initialSaved: 1 });
+  assert.equal(callbacks.length, 2);
+
+  // Older response arrives last — must not overwrite the newer fill.
+  callbacks[1].cb({
+    dialect: 'common',
+    enums: { MAV_COMPONENT: [{ name: 'MAV_COMP_ID_AUTOPILOT1', value: 1, label: 'AUTOPILOT1 (1)' }] },
+  });
+  assert.equal(select.val(), '1');
+  const afterSecond = select.options.length;
+
+  callbacks[0].cb({
+    dialect: 'stale',
+    enums: {
+      MAV_COMPONENT: [
+        { name: 'MAV_COMP_ID_MISSIONPLANNER', value: 190, label: 'MISSIONPLANNER (190)' },
+      ],
+    },
+  });
+  assert.equal(select.options.length, afterSecond, 'stale response did not refill the select');
+  assert.equal(select.val(), '1');
 });
 
 test('populateDialectSelect pins saved dialect before the dialects GET returns', () => {
