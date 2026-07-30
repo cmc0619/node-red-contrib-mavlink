@@ -30,7 +30,7 @@ module.exports = function registerMavlinkState(RED) {
         if (!connectionNode || !connectionNode.peerTable) {
           throw new Error('mavlink-state requires a Connection with a peer table');
         }
-        const payload = objectPayload(msg.payload);
+        const payload = msg.payload ?? {};
         const peers = snapshotPeers(connectionNode.peerTable, {
           // Nullish-preserving: a configured 0 must reach the filter as 0, not
           // be swallowed by `||` and treated as "unset".
@@ -69,10 +69,6 @@ function selectedEvents(config) {
 
 function statusRecord(result, detail, extra = {}) {
   return { node: 'mavlink-state', result, detail, ...extra };
-}
-
-function objectPayload(payload) {
-  return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
 }
 
 function firstDefined(...values) {

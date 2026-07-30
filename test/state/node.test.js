@@ -20,7 +20,7 @@ test('mavlink-state node emits peer table snapshots on demand', () => {
 
   node.emit(
     'input',
-    { payload: true },
+    {}, // no payload — the node runs on its saved config (DESIGN.md §"override of last resort")
     (messages) => {
       sent = messages;
     },
