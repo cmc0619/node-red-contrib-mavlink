@@ -166,13 +166,16 @@
 
       $('#node-input-delivery').on('change', function () {
         refreshVisibility();
+        reloadTargetCompId();
       });
       $('#node-input-connection').on('change', function () {
         refreshIdentitySelect();
         refreshVisibility();
+        reloadTargetCompId();
       });
       $('#node-input-vehicle').on('change', function () {
         refreshVisibility();
+        reloadTargetCompId();
       });
       $('#node-input-identity').on('change', function () {
         refreshVisibility();

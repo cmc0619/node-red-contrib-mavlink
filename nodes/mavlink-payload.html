@@ -458,9 +458,16 @@
       });
       $('#node-input-verb').on('change', refreshEnumControls);
       $('#node-input-path').on('change', refreshVisibility);
+      function reloadTargetCompId() {
+        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
+        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
+          initialSaved: node.targetComponent
+        });
+      }
       $('#node-input-delivery').on('change', function () {
         resetEnumCatalog();
         refreshEnumControls();
+        reloadTargetCompId();
       });
       $('#node-input-identity').on('change', refreshVisibility);
       $('#node-input-connection').on('change', function () {
@@ -473,15 +480,18 @@
           );
         }
         refreshEnumControls();
+        reloadTargetCompId();
       });
       $('#node-input-vehicle').on('change', function () {
         resetEnumCatalog();
         refreshEnumControls();
+        reloadTargetCompId();
       });
       var $dialect = $('#node-input-dialect');
       $dialect.on('change', function () {
         resetEnumCatalog();
         refreshEnumControls();
+        reloadTargetCompId();
       });
       RED.mavlink.populateDialectSelect($dialect, {
         saved: node.dialect || '',
@@ -489,14 +499,6 @@
       });
       refreshVerbOptions(true);
       refreshEnumControls();
-
-      function reloadTargetCompId() {
-        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
-        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
-          initialSaved: node.targetComponent
-        });
-      }
-      $dialect.on('change.mavCompId', reloadTargetCompId);
       reloadTargetCompId();
     }
   });

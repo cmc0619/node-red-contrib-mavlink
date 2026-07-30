@@ -39,8 +39,8 @@ test('mavlink-move editor reshapes fields by mode and delivery (§6)', () => {
   );
   assert.match(
     html,
-    /\$\('#node-input-delivery'\)\.on\('change', refreshVisibility\)/,
-    'delivery change refreshes visibility'
+    /\$\('#node-input-delivery'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'delivery change refreshes visibility and CompID catalog'
   );
   assert.match(html, /refreshVisibility\(\)/, 'visibility is applied on dialog open');
 
@@ -86,6 +86,16 @@ test('mavlink-move keeps target sysid/compid and reloadCompIdSelect catalog', ()
   assert.match(html, /id="node-input-targetComponent"/, 'target compid select remains');
   assert.match(html, /reloadCompIdSelect/, 'compid enum catalog uses shared helper');
   assert.match(html, /ensureConfigNodePicker/, 'connection picker remains');
+  assert.match(
+    html,
+    /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'connection change reloads CompID'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-vehicle'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'vehicle change reloads CompID'
+  );
 });
 
 test('mavlink-move target sysid/compid default to empty (inherit profile) not 1', () => {

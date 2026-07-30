@@ -126,3 +126,26 @@ test('mavlink-param populates Dialect select with Vehicle Profile escape', () =>
   assert.match(html, /populateDialectSelect/, 'Dialect helper is called');
   assert.match(html, /includeVehicleEscape:\s*true/, 'Vehicle Profile escape is included');
 });
+
+test('mavlink-param CompID reloads when catalog source changes', () => {
+  assert.match(
+    html,
+    /\$\('#node-input-delivery'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'delivery change reloads CompID'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'connection change reloads CompID'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-vehicle'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'vehicle change reloads CompID'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-dialect'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'dialect change reloads CompID'
+  );
+});

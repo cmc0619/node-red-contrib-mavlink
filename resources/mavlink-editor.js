@@ -527,8 +527,9 @@
    * Reload a Target-compid select from /mavlink/enums (MAV_COMPONENT).
    *
    * Call after `populateDialectSelect` has pinned any saved Build dialect so
-   * `currentCatalogQuery` sees it. On later dialect/connection changes, call
-   * again — overlapping responses are ignored via a per-select sequence.
+   * `currentCatalogQuery` sees it. On later dialect / delivery / connection /
+   * Build-vehicle changes, call again — overlapping responses are ignored via
+   * a per-select sequence.
    *
    * Once the select has been filled, an explicit empty selection ("profile
    * default") is preserved; `initialSaved` is used only on the first fill.

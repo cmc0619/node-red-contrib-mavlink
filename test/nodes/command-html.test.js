@@ -149,12 +149,27 @@ test('preset renderer loads enum and message catalogs for selects', () => {
   assert.match(renderer, /booleanEntryLabel\(entry\)/, 'FALSE/TRUE preset enum options use boolean labels');
 });
 
-test('Command CompID reloads when Connection changes', () => {
+test('Command CompID reloads when catalog source changes', () => {
   assert.match(html, /function reloadTargetCompId/, 'CompID load is a reusable helper');
   assert.match(
     html,
     /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
     'Connection change refreshes MAV_COMPONENT for the new dialect'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-delivery'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'Delivery tier change refreshes CompID catalog'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-vehicle'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'Build Vehicle Profile change refreshes CompID catalog'
+  );
+  assert.match(
+    html,
+    /\$dialect\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'Dialect change refreshes CompID catalog'
   );
 });
 

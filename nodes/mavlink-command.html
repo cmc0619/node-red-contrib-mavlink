@@ -510,6 +510,7 @@
           presetEnumRequestSeq += 1;
           presetMessagesCatalog = null;
           presetMessagesKey = '';
+          reloadTargetCompId();
           if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
           if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
         }
@@ -525,6 +526,7 @@
         presetEnumRequestSeq += 1;
         presetMessagesCatalog = null;
         presetMessagesKey = '';
+        reloadTargetCompId();
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
         if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });

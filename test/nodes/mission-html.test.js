@@ -129,4 +129,19 @@ test('mavlink-mission ensureConfigNodePicker called for vehicle', () => {
 test('mavlink-mission enum catalog loaded via shared reloadCompIdSelect helper', () => {
   assert.match(html, /reloadCompIdSelect/, 'compid catalog loaded via shared helper');
   assert.match(html, /node-input-targetComponent/, 'targetComponent select is filled');
+  assert.match(
+    html,
+    /\$\('#node-input-delivery'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'delivery change reloads CompID'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'connection change reloads CompID'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-vehicle'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'vehicle change reloads CompID'
+  );
 });

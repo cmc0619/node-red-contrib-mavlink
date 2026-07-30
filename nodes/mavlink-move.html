@@ -118,9 +118,16 @@
       }
 
       $('#node-input-mode').on('change', refreshVisibility);
-      $('#node-input-delivery').on('change', refreshVisibility);
+      $('#node-input-delivery').on('change', function () {
+        refreshVisibility();
+        reloadTargetCompId();
+      });
       $('#node-input-identity').on('change', refreshVisibility);
       $('#node-input-dialect').on('change', function () {
+        refreshVisibility();
+        reloadTargetCompId();
+      });
+      $('#node-input-vehicle').on('change', function () {
         refreshVisibility();
         reloadTargetCompId();
       });

@@ -299,3 +299,26 @@ test('mavlink-payload fills identity select and re-fills on connection change (Â
   );
   assert.match(payloadHtml, /fillIdentitySelect[^)]*\$\('#node-input-identity'\)/, 'identity refilled on connection change');
 });
+
+test('mavlink-payload CompID reloads when catalog source changes', () => {
+  assert.match(
+    payloadHtml,
+    /\$\('#node-input-delivery'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'delivery change reloads CompID'
+  );
+  assert.match(
+    payloadHtml,
+    /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'connection change reloads CompID'
+  );
+  assert.match(
+    payloadHtml,
+    /\$\('#node-input-vehicle'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'vehicle change reloads CompID'
+  );
+  assert.match(
+    payloadHtml,
+    /\$dialect\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    'dialect change reloads CompID'
+  );
+});
