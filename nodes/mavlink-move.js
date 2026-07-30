@@ -116,7 +116,7 @@ function completeResult(node, emit, result, action, message) {
 function fail(node, emit, err, msg, done) {
   node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
   emit([null, statusRecord('failed', err.message)]);
-  reportDoneError(node, err, msg, done);
+  reportDoneError(err, done);
 }
 
 function statusRecord(result, detail, extra = {}) {

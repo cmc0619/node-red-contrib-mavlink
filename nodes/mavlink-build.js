@@ -185,7 +185,7 @@ module.exports = function registerMavlinkBuild(RED) {
         applyActionStatus(node, 'error', capBadge(err.message));
         node.send([null, sr]);
         if (triggerMsg) {
-          reportDoneError(node, new Error(`mavlink-build encode: ${err.message}`), triggerMsg, done);
+          reportDoneError(new Error(`mavlink-build encode: ${err.message}`), done);
         } else {
           node.error(`mavlink-build encode: ${err.message}`, {});
         }
@@ -235,7 +235,7 @@ module.exports = function registerMavlinkBuild(RED) {
         applyActionStatus(node, 'error', capBadge(err.message));
         node.send([null, sr]);
         if (triggerMsg) {
-          reportDoneError(node, new Error(`mavlink-build send: ${err.message}`), triggerMsg, done);
+          reportDoneError(new Error(`mavlink-build send: ${err.message}`), done);
         } else {
           node.error(`mavlink-build send: ${err.message}`, {});
         }

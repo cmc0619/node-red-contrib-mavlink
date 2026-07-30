@@ -7,7 +7,7 @@
  *   - makeStatusRecord: plain object shape and field preservation
  *   - shouldSuppress: exact `=== false` semantics
  *   - capBadge: length capping, ellipsis, exactly-24 pass-through
- *   - reportDoneError: one Catch path only (`done(err)` or `node.error`)
+ *   - reportDoneError: routes the error through done(err)
  *   - TIER constants: values are stable strings
  */
 
@@ -116,38 +116,15 @@ test('capBadge: coerces non-string input via String()', () => {
 // reportDoneError
 // ---------------------------------------------------------------------------
 
-test('reportDoneError: uses done(err) without also calling node.error', () => {
+test('reportDoneError: routes the error through done(err)', () => {
   const err = new Error('boom');
-  const msg = { payload: 1 };
   let doneArg;
-  let nodeErrorCalled = false;
-  const node = {
-    error() {
-      nodeErrorCalled = true;
-    },
-  };
 
-  reportDoneError(node, err, msg, (received) => {
+  reportDoneError(err, (received) => {
     doneArg = received;
   });
 
   assert.equal(doneArg, err);
-  assert.equal(nodeErrorCalled, false);
-});
-
-test('reportDoneError: falls back to node.error when done is unavailable', () => {
-  const err = new Error('boom');
-  const msg = { payload: 1 };
-  let nodeErrorArgs;
-  const node = {
-    error(...args) {
-      nodeErrorArgs = args;
-    },
-  };
-
-  reportDoneError(node, err, msg);
-
-  assert.deepEqual(nodeErrorArgs, [err, msg]);
 });
 
 // ---------------------------------------------------------------------------

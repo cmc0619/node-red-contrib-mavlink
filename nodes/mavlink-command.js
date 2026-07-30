@@ -224,7 +224,7 @@ module.exports = function registerMavlinkCommand(RED) {
       }
 
       function failDone(detail) {
-        reportDoneError(node, new Error(`mavlink-command: ${detail}`), msg, done);
+        reportDoneError(new Error(`mavlink-command: ${detail}`), done);
       }
 
       // ── Safety preset confirmation check ──────────────────────────────────
@@ -584,7 +584,7 @@ module.exports = function registerMavlinkCommand(RED) {
           } catch {
             /* send may be unavailable if the runtime already tore down */
           }
-          reportDoneError(node, err, msg, done);
+          reportDoneError(err, done);
         });
     });
 

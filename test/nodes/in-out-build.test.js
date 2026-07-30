@@ -74,6 +74,7 @@ function makeNodeInstance(config = {}) {
     _status: null,
     _errors: [],
     _sends: [],
+    _doneErrors: [],
     _handlers: {},
     _closed: false,
 
@@ -88,9 +89,14 @@ function makeNodeInstance(config = {}) {
       this._handlers[event].push(fn);
     },
 
-    /** Simulate Node-RED dispatching an inbound msg. */
+    /**
+     * Simulate Node-RED dispatching an inbound msg. The runtime always supplies
+     * a `done` callback (Node-RED >= 1.0), so this passes one too; errors routed
+     * through it land in `_doneErrors`.
+     */
     _input(msg) {
-      for (const fn of (this._handlers.input || [])) fn(msg);
+      const done = (err) => { if (err) this._doneErrors.push(err); };
+      for (const fn of (this._handlers.input || [])) fn(msg, undefined, done);
     },
 
     /** Simulate Node-RED closing the node. */
@@ -575,7 +581,7 @@ test('mavlink-out: a connection send throw becomes a failed status record, not a
   const [out0, out1] = node._sends[0];
   assert.equal(out0, null, 'output 0 must not fire when the send fails');
   assert.equal(out1.result, 'failed');
-  assert.equal(node._errors.length, 1);
+  assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
 });
 
 // ---------------------------------------------------------------------------
@@ -742,7 +748,7 @@ test('mavlink-build Send tier: a connection send throw becomes a failed status r
   const [out0, out1] = node._sends[0];
   assert.equal(out0, null, 'output 0 must not fire when the send fails');
   assert.equal(out1.result, 'failed');
-  assert.equal(node._errors.length, 1);
+  assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
 });
 
 test('mavlink-build: malformed fields JSON marks invalid config instead of aborting deploy', () => {

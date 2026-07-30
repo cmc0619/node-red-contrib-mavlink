@@ -47,7 +47,7 @@ module.exports = function registerMavlinkState(RED) {
       } catch (err) {
         node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
         emit([null, statusRecord('failed', err.message)]);
-        reportDoneError(node, err, msg, done);
+        reportDoneError(err, done);
       }
     });
 

@@ -104,7 +104,7 @@ module.exports = function registerMavlinkSwarm(RED) {
           ? [{ payload: aggregate }, aggregate]
           : [null, aggregate]);
         if (!aggregate.success && aggregate.result !== 'dry_run') {
-          reportDoneError(node, new Error(`mavlink-swarm: ${aggregate.result}`), msg, done);
+          reportDoneError(new Error(`mavlink-swarm: ${aggregate.result}`), done);
         } else if (done) {
           done();
         }
@@ -118,7 +118,7 @@ module.exports = function registerMavlinkSwarm(RED) {
         });
         delivery.applyActionStatus(node, 'error', err.message);
         emit([null, record]);
-        reportDoneError(node, err, msg, done);
+        reportDoneError(err, done);
       }
     });
 

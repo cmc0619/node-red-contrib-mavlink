@@ -273,7 +273,7 @@ function failAck(node, emit, built, outcome, msg, done) {
       elapsed: outcome.elapsed,
     }),
   ]);
-  reportDoneError(node, new Error(`mavlink-payload: ${built.message.name} ${outcome.result}`), msg, done);
+  reportDoneError(new Error(`mavlink-payload: ${built.message.name} ${outcome.result}`), done);
 }
 
 function valuesFrom(config) {
@@ -339,7 +339,7 @@ function completeResult(node, emit, result, detail, built) {
 function fail(node, emit, err, msg, done) {
   node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
   emit([null, statusRecord('failed', err.message)]);
-  reportDoneError(node, err, msg, done);
+  reportDoneError(err, done);
 }
 
 function statusRecord(result, detail, extra = {}) {

@@ -105,7 +105,7 @@ module.exports = function registerMavlinkMission(RED) {
         });
         applyActionStatus(node, 'error', 'invalid config');
         emit([null, rec]);
-        reportDoneError(node, new Error(`mavlink-mission: ${rec.reason}`), msg, done);
+        reportDoneError(new Error(`mavlink-mission: ${rec.reason}`), done);
         return;
       }
 
@@ -147,7 +147,7 @@ module.exports = function registerMavlinkMission(RED) {
         });
         applyActionStatus(node, 'error', `no ${missionTypeKey} on ${firmware}`);
         emit([null, rec]);
-        reportDoneError(node, new Error(`mavlink-mission: ${rec.reason}`), msg, done);
+        reportDoneError(new Error(`mavlink-mission: ${rec.reason}`), done);
         return;
       }
       const missionType = missionTypeValue(missionTypeKey);
@@ -166,7 +166,7 @@ module.exports = function registerMavlinkMission(RED) {
           });
           applyActionStatus(node, 'error', `invalid ${missionTypeKey} item`);
           emit([null, rec]);
-          reportDoneError(node, new Error(`mavlink-mission: ${check.reason}`), msg, done);
+          reportDoneError(new Error(`mavlink-mission: ${check.reason}`), done);
           return;
         }
       }
@@ -184,7 +184,7 @@ module.exports = function registerMavlinkMission(RED) {
         });
         applyActionStatus(node, 'error', `confirm clear ${missionTypeKey}`);
         emit([null, rec]);
-        reportDoneError(node, new Error(`mavlink-mission: ${rec.reason}`), msg, done);
+        reportDoneError(new Error(`mavlink-mission: ${rec.reason}`), done);
         return;
       }
 
@@ -214,7 +214,7 @@ module.exports = function registerMavlinkMission(RED) {
         });
         applyActionStatus(node, 'error', `${missionTypeKey} busy`);
         emit([null, rec]);
-        reportDoneError(node, new Error(`mavlink-mission: ${rec.reason}`), msg, done);
+        reportDoneError(new Error(`mavlink-mission: ${rec.reason}`), done);
         return;
       }
 
@@ -265,7 +265,7 @@ module.exports = function registerMavlinkMission(RED) {
             applyActionStatus(node, 'error', `${operation} ${outcome.result}`);
             emit([null, rec]);
             const detail = `${operation} ${outcome.result}${outcome.reason ? `: ${outcome.reason}` : ''}`;
-            reportDoneError(node, new Error(`mavlink-mission: ${detail}`), msg, done);
+            reportDoneError(new Error(`mavlink-mission: ${detail}`), done);
           }
         })
         .catch((err) => {
@@ -277,7 +277,7 @@ module.exports = function registerMavlinkMission(RED) {
             phase: 'error',
             reason: err.message,
           })]);
-          reportDoneError(node, err, msg, done);
+          reportDoneError(err, done);
         });
     });
 
