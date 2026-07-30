@@ -48,14 +48,11 @@
         );
       }
 
-      /* ── Component picker ─────────────────────────────────────── */
-      if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
-        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
-          RED.mavlink.fillCompIdSelect(
-            $('#node-input-targetComponent'),
-            (catalog.enums || {}).MAV_COMPONENT || [],
-            { allowEmpty: true, emptyLabel: '(profile default)', saved: node.targetComponent }
-          );
+      /* ── Component picker (reload when dialect/connection changes) ─ */
+      function reloadTargetCompId() {
+        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
+        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
+          initialSaved: node.targetComponent
         });
       }
 
@@ -221,20 +218,24 @@
         clearParamDefs();
         refreshVisibility();
         loadParamDefs();
+        reloadTargetCompId();
       });
       $('#node-input-connection').on('change', function () {
         clearParamDefs();
         refreshIdentitySelect();
         loadParamDefs();
+        reloadTargetCompId();
       });
       $('#node-input-dialect').on('change', function () {
         clearParamDefs();
         refreshVisibility();
         loadParamDefs();
+        reloadTargetCompId();
       });
       $('#node-input-vehicle').on('change', function () {
         clearParamDefs();
         loadParamDefs();
+        reloadTargetCompId();
       });
       $('#node-input-firmware').on('change', function () {
         clearParamDefs();
@@ -244,12 +245,15 @@
         refreshVisibility();
       });
 
+      // Pin/populate dialect BEFORE the first enum catalog fetch so Build-tier
+      // currentCatalogQuery sees the saved dialect (not an empty select).
       if (RED.mavlink && RED.mavlink.populateDialectSelect) {
         RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
           saved: node.dialect || '',
           includeVehicleEscape: true
         });
       }
+      reloadTargetCompId();
 
       $('#node-input-paramId').on('input change', refreshParamInfo);
       $('#node-input-action').on('change', refreshParamInfo);

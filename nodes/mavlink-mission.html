@@ -50,14 +50,11 @@
         );
       }
 
-      /* ── Target compid enum ───────────────────────────────────── */
-      if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
-        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
-          RED.mavlink.fillCompIdSelect(
-            $('#node-input-targetComponent'),
-            (catalog.enums || {}).MAV_COMPONENT || [],
-            { allowEmpty: true, emptyLabel: '(profile default)', saved: node.targetComponent }
-          );
+      /* ── Target compid enum (after dialect is pinned/populated) ─ */
+      function reloadTargetCompId() {
+        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
+        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
+          initialSaved: node.targetComponent
         });
       }
 
@@ -169,18 +166,24 @@
 
       $('#node-input-delivery').on('change', function () {
         refreshVisibility();
+        reloadTargetCompId();
       });
       $('#node-input-connection').on('change', function () {
         refreshIdentitySelect();
         refreshVisibility();
+        reloadTargetCompId();
       });
       $('#node-input-vehicle').on('change', function () {
         refreshVisibility();
+        reloadTargetCompId();
       });
       $('#node-input-identity').on('change', function () {
         refreshVisibility();
       });
-      $('#node-input-dialect').on('change', refreshVisibility);
+      $('#node-input-dialect').on('change', function () {
+        refreshVisibility();
+        reloadTargetCompId();
+      });
       $('#node-input-firmware').on('change', repopulateTypes);
       $op.on('change', refreshRows);
       if (RED.mavlink && RED.mavlink.populateDialectSelect) {
@@ -189,6 +192,7 @@
           includeVehicleEscape: true
         });
       }
+      reloadTargetCompId();
 
       /* Initial state. */
       refreshIdentitySelect();

@@ -1809,6 +1809,23 @@ narrower Build+list case as the `isBuild` override. `resources` is in `package.j
 *Check:* `node --test test/nodes/mavlink-editor-resource.test.js`; `rg -n 'function resolveCatalogTarget'
 nodes` returns nothing; `rg -n 'buildTierDialectDefaults' nodes/mavlink-*.html`.
 
+**Build-tier enum catalogs must see the saved dialect before `/mavlink/dialects` returns.**
+*Wrong belief:* calling `loadEnumsCatalog` at the start of `oneditprepare` is fine because the
+node already has `node.dialect` (e.g. PX4's `development`); the select will catch up.
+*Fact:* `currentCatalogQuery` / `resolveCatalogTarget` read `#node-input-dialect`'s live value.
+An empty select on Build yields `{ }` → local empty enums → Target compid shows
+`#190 (not in dialect)` even though the dialect exists in the seed. `populateDialectSelect`
+pins the saved dialect onto the select **synchronously** before the dialects GET; builders
+call `RED.mavlink.reloadCompIdSelect` after that pin and whenever the catalog source moves
+(dialect, delivery tier, connection, or Build `__vehicle` profile). That helper sequences
+overlapping `/mavlink/enums` responses and preserves an explicit blank ("(profile default)")
+instead of resurrecting `node.targetComponent` via `||`. Do not pass a leftover Build
+`node.dialect` as `opts.dialect` on wire tiers — that invents a catalog source the Connection
+profile did not supply. `development` is the real PX4 dialect name (`FIRMWARE_DIALECT.px4`),
+not a load failure.
+*Check:* `node --test test/nodes/local-identity-html.test.js` (pin + reloadCompIdSelect);
+open Param Build with dialect `development` — compid list includes `MAV_COMP_ID_MISSIONPLANNER`.
+
 **Mission confirm without a Connection fails loud — it does not invent a Build plan.**
 *Wrong belief:* `delivery === 'build' || !connNode` is a friendly preview when Confirm is
 selected but no Connection is bound; syncing `isBuild` with that soft fallback is enough.

@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { assertChangeHandlerContains } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-param.html'),
@@ -35,7 +36,7 @@ test('mavlink-param target sysid/compid default to empty (inherit profile) not 1
   assert.match(html, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
   assert.match(html, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(html, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(html, /emptyLabel:\s*'[^']*profile default[^']*'/, 'compid empty label names profile default');
+  assert.match(html, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
 });
 
 test('mavlink-param has identity default (vehicle comes from the shared helper)', () => {
@@ -125,4 +126,31 @@ test('mavlink-param ensureConfigNodePicker called for vehicle', () => {
 test('mavlink-param populates Dialect select with Vehicle Profile escape', () => {
   assert.match(html, /populateDialectSelect/, 'Dialect helper is called');
   assert.match(html, /includeVehicleEscape:\s*true/, 'Vehicle Profile escape is included');
+});
+
+test('mavlink-param CompID reloads when catalog source changes', () => {
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-delivery')",
+    'reloadTargetCompId()',
+    'delivery change reloads CompID'
+  );
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-connection')",
+    'reloadTargetCompId()',
+    'connection change reloads CompID'
+  );
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-vehicle')",
+    'reloadTargetCompId()',
+    'vehicle change reloads CompID'
+  );
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-dialect')",
+    'reloadTargetCompId()',
+    'dialect change reloads CompID'
+  );
 });

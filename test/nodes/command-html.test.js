@@ -12,6 +12,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { assertChangeHandlerContains } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-command.html'),
@@ -149,12 +150,31 @@ test('preset renderer loads enum and message catalogs for selects', () => {
   assert.match(renderer, /booleanEntryLabel\(entry\)/, 'FALSE/TRUE preset enum options use boolean labels');
 });
 
-test('Command CompID reloads when Connection changes', () => {
+test('Command CompID reloads when catalog source changes', () => {
   assert.match(html, /function reloadTargetCompId/, 'CompID load is a reusable helper');
-  assert.match(
+  assertChangeHandlerContains(
     html,
-    /\$\('#node-input-connection'\)\.on\('change'[\s\S]*reloadTargetCompId\(\)/,
+    "$('#node-input-connection')",
+    'reloadTargetCompId()',
     'Connection change refreshes MAV_COMPONENT for the new dialect'
+  );
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-delivery')",
+    'reloadTargetCompId()',
+    'Delivery tier change refreshes CompID catalog'
+  );
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-vehicle')",
+    'reloadTargetCompId()',
+    'Build Vehicle Profile change refreshes CompID catalog'
+  );
+  assertChangeHandlerContains(
+    html,
+    '$dialect',
+    'reloadTargetCompId()',
+    'Dialect change refreshes CompID catalog'
   );
 });
 
@@ -166,8 +186,8 @@ test('mavlink-command target sysid/compid use "(profile default)" wording', () =
   );
   assert.match(
     html,
-    /emptyLabel:\s*'\(profile default\)'/,
-    'compid empty label says profile default'
+    /reloadCompIdSelect\(/,
+    'compid uses shared reloadCompIdSelect (default emptyLabel is profile default)'
   );
   assert.ok(
     !html.includes('(connection default)'),

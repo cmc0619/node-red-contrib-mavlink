@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { assertChangeHandlerContains } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-move.html'),
@@ -37,10 +38,11 @@ test('mavlink-move editor reshapes fields by mode and delivery (§6)', () => {
     /\$\('#node-input-mode'\)\.on\('change', refreshVisibility\)/,
     'mode change refreshes visibility'
   );
-  assert.match(
+  assertChangeHandlerContains(
     html,
-    /\$\('#node-input-delivery'\)\.on\('change', refreshVisibility\)/,
-    'delivery change refreshes visibility'
+    "$('#node-input-delivery')",
+    'reloadTargetCompId()',
+    'delivery change refreshes CompID catalog'
   );
   assert.match(html, /refreshVisibility\(\)/, 'visibility is applied on dialog open');
 
@@ -81,12 +83,23 @@ test('mavlink-move has one labeled row per parameter, not dual local/global rows
   }
 });
 
-test('mavlink-move keeps target sysid/compid and MAV_COMPONENT catalog', () => {
+test('mavlink-move keeps target sysid/compid and reloadCompIdSelect catalog', () => {
   assert.match(html, /id="node-input-targetSystem"/, 'target sysid field remains');
   assert.match(html, /id="node-input-targetComponent"/, 'target compid select remains');
-  assert.match(html, /MAV_COMPONENT/, 'compid enum catalog is loaded');
-  assert.match(html, /fillCompIdSelect/, 'compid select uses shared helper');
+  assert.match(html, /reloadCompIdSelect/, 'compid enum catalog uses shared helper');
   assert.match(html, /ensureConfigNodePicker/, 'connection picker remains');
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-connection')",
+    'reloadTargetCompId()',
+    'connection change reloads CompID'
+  );
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-vehicle')",
+    'reloadTargetCompId()',
+    'vehicle change reloads CompID'
+  );
 });
 
 test('mavlink-move target sysid/compid default to empty (inherit profile) not 1', () => {
@@ -94,7 +107,7 @@ test('mavlink-move target sysid/compid default to empty (inherit profile) not 1'
   assert.match(html, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(html, /RED\.validators\.number\(true\)/, 'blank-allowed validator is used');
   assert.match(html, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(html, /emptyLabel:\s*'[^']*profile default[^']*'/, 'compid empty label names profile default');
+  assert.match(html, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
 });
 
 test('mavlink-move has vehicle and identity defaults for role × tier matrix (§6)', () => {

@@ -51,13 +51,10 @@
         );
       }
 
-      if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
-        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
-          RED.mavlink.fillCompIdSelect(
-            $('#node-input-targetComponent'),
-            (catalog.enums || {}).MAV_COMPONENT || [],
-            { allowEmpty: true, emptyLabel: '(profile default)', saved: node.targetComponent }
-          );
+      function reloadTargetCompId() {
+        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
+        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
+          initialSaved: node.targetComponent
         });
       }
 
@@ -121,9 +118,19 @@
       }
 
       $('#node-input-mode').on('change', refreshVisibility);
-      $('#node-input-delivery').on('change', refreshVisibility);
+      $('#node-input-delivery').on('change', function () {
+        refreshVisibility();
+        reloadTargetCompId();
+      });
       $('#node-input-identity').on('change', refreshVisibility);
-      $('#node-input-dialect').on('change', refreshVisibility);
+      $('#node-input-dialect').on('change', function () {
+        refreshVisibility();
+        reloadTargetCompId();
+      });
+      $('#node-input-vehicle').on('change', function () {
+        refreshVisibility();
+        reloadTargetCompId();
+      });
       $('#node-input-connection').on('change', function () {
         if (RED.mavlink && RED.mavlink.fillIdentitySelect) {
           RED.mavlink.fillIdentitySelect(
@@ -133,6 +140,7 @@
           );
         }
         refreshVisibility();
+        reloadTargetCompId();
       });
       if (RED.mavlink && RED.mavlink.populateDialectSelect) {
         RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
@@ -140,6 +148,7 @@
           includeVehicleEscape: true
         });
       }
+      reloadTargetCompId();
       refreshVisibility();
     }
   });

@@ -11,6 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { PAYLOAD_VERBS } = require('../../lib/payload');
+const { assertChangeHandlerContains } = require('./html-assert');
 
 const payloadHtml = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-payload.html'),
@@ -188,7 +189,7 @@ test('mavlink-payload target sysid/compid default to empty (inherit profile) not
   assert.match(payloadHtml, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
   assert.match(payloadHtml, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(payloadHtml, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(payloadHtml, /emptyLabel:\s*'[^']*profile default[^']*'/, 'compid empty label names profile default');
+  assert.match(payloadHtml, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
 });
 
 test('mavlink-payload fractional params use step=any', () => {
@@ -298,4 +299,31 @@ test('mavlink-payload fills identity select and re-fills on connection change (Â
     'connection change handler exists'
   );
   assert.match(payloadHtml, /fillIdentitySelect[^)]*\$\('#node-input-identity'\)/, 'identity refilled on connection change');
+});
+
+test('mavlink-payload CompID reloads when catalog source changes', () => {
+  assertChangeHandlerContains(
+    payloadHtml,
+    "$('#node-input-delivery')",
+    'reloadTargetCompId()',
+    'delivery change reloads CompID'
+  );
+  assertChangeHandlerContains(
+    payloadHtml,
+    "$('#node-input-connection')",
+    'reloadTargetCompId()',
+    'connection change reloads CompID'
+  );
+  assertChangeHandlerContains(
+    payloadHtml,
+    "$('#node-input-vehicle')",
+    'reloadTargetCompId()',
+    'vehicle change reloads CompID'
+  );
+  assertChangeHandlerContains(
+    payloadHtml,
+    '$dialect',
+    'reloadTargetCompId()',
+    'dialect change reloads CompID'
+  );
 });

@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { assertChangeHandlerContains } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-mission.html'),
@@ -107,7 +108,7 @@ test('mavlink-mission target sysid/compid default to empty (inherit profile)', (
   assert.match(html, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
   assert.match(html, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(html, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(html, /emptyLabel:\s*'[^']*profile default[^']*'/, 'compid empty label names profile default');
+  assert.match(html, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
 });
 
 test('mavlink-mission confirmClear stays visible for clear on every tier', () => {
@@ -126,11 +127,25 @@ test('mavlink-mission ensureConfigNodePicker called for vehicle', () => {
   );
 });
 
-test('mavlink-mission enum catalog loaded via shared loadEnumsCatalog helper', () => {
-  // Mission node delegates catalog fetching to the shared loadEnumsCatalog helper
-  // (which internally uses adminApiUrl). Verify that the MAV_COMPONENT catalog
-  // is loaded and fillCompIdSelect is called.
-  assert.match(html, /loadEnumsCatalog/, 'enum catalog loaded via shared helper');
-  assert.match(html, /MAV_COMPONENT/, 'MAV_COMPONENT enum catalog requested');
-  assert.match(html, /fillCompIdSelect/, 'compid select filled from catalog');
+test('mavlink-mission enum catalog loaded via shared reloadCompIdSelect helper', () => {
+  assert.match(html, /reloadCompIdSelect/, 'compid catalog loaded via shared helper');
+  assert.match(html, /node-input-targetComponent/, 'targetComponent select is filled');
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-delivery')",
+    'reloadTargetCompId()',
+    'delivery change reloads CompID'
+  );
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-connection')",
+    'reloadTargetCompId()',
+    'connection change reloads CompID'
+  );
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-vehicle')",
+    'reloadTargetCompId()',
+    'vehicle change reloads CompID'
+  );
 });
