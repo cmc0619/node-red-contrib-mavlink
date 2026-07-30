@@ -29,7 +29,7 @@ module.exports = function registerMavlinkMove(RED) {
         const connectionNode = delivery !== 'build'
           ? RED.nodes.getNode(config.connection)
           : null;
-        const payload = objectPayload(msg.payload);
+        const payload = msg.payload ?? {};
 
         const profile = delivery === 'build' && config.dialect === '__vehicle'
           ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
@@ -140,10 +140,6 @@ function velocityFrom(config) {
 function valueFrom(payload, config, key) {
   if (payload[key] !== undefined) return payload[key];
   return config[key] === '' ? undefined : config[key];
-}
-
-function objectPayload(payload) {
-  return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
 }
 
 function cap(text) {

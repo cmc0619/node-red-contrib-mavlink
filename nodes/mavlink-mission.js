@@ -90,7 +90,7 @@ module.exports = function registerMavlinkMission(RED) {
         return;
       }
 
-      const payload = objectPayload(msg.payload);
+      const payload = msg.payload ?? {};
       const missionTypeKey = payload.missionType || config.missionType || 'mission';
 
       // ── Missing connection on confirm ─────────────────────────────────────
@@ -368,12 +368,4 @@ function successBadge(operation, missionTypeKey, outcome) {
   if (operation === OPERATION.DOWNLOAD) return `${missionTypeKey} \u2193 ${outcome.count} items`;
   if (operation === OPERATION.UPLOAD) return `${missionTypeKey} \u2191 ${outcome.count} items`;
   return `${missionTypeKey} cleared`;
-}
-
-/**
- * @param {*} payload
- * @returns {object}
- */
-function objectPayload(payload) {
-  return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
 }

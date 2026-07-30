@@ -28,7 +28,7 @@ module.exports = function registerMavlinkSwarm(RED) {
       }
 
       try {
-        const payload = objectPayload(msg.payload);
+        const payload = msg.payload ?? {};
         const selection = selectionFrom(config, payload);
         const effectiveDelivery = payload.delivery || config.delivery;
         const effectiveSelectionMode = selection.mode || 'all';
@@ -221,10 +221,6 @@ function numberOption(payload, config, key, fallback) {
   if (payload[key] !== undefined) return payload[key];
   if (config[key] !== undefined && config[key] !== '') return config[key];
   return fallback;
-}
-
-function objectPayload(payload) {
-  return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
 }
 
 /**

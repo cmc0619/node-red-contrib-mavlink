@@ -153,7 +153,7 @@ module.exports = function registerMavlinkParam(RED) {
           return;
         }
 
-        const payload = objectPayload(msg.payload);
+        const payload = msg.payload ?? {};
         const delivery = config.delivery;
 
         // Build tier: profile only for the Vehicle Profile dialect escape.
@@ -353,8 +353,4 @@ function fail(node, emit, err, msg, done) {
  */
 function statusRecord(result, detail, extra = {}) {
   return makeStatusRecord({ node: 'mavlink-param', result, detail, ...extra });
-}
-
-function objectPayload(payload) {
-  return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
 }
