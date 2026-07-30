@@ -45,3 +45,22 @@ test('bare name strings are not boolean controls without explicit values', () =>
   assert.equal(isFalseTrueEnum(['FALSE', 'TRUE']), false);
   assert.equal(isFalseTrueEnum(['MAV_BOOL_FALSE', 'MAV_BOOL_TRUE']), false);
 });
+
+test('null/false/empty values are not coerced to FALSE=0', () => {
+  assert.equal(isFalseTrueEnum([
+    { name: 'FALSE', value: null },
+    { name: 'TRUE', value: 1 },
+  ]), false);
+  assert.equal(isFalseTrueEnum([
+    { name: 'FALSE', value: false },
+    { name: 'TRUE', value: 1 },
+  ]), false);
+  assert.equal(isFalseTrueEnum([
+    { name: 'FALSE', value: '' },
+    { name: 'TRUE', value: 1 },
+  ]), false);
+  assert.equal(isFalseTrueEnum([
+    { name: 'FALSE', value: '0' },
+    { name: 'TRUE', value: '1' },
+  ]), true);
+});

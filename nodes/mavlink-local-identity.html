@@ -89,7 +89,11 @@
         var isFalse = name === 'FALSE' || name.slice(-6) === '_FALSE';
         var isTrue = name === 'TRUE' || name.slice(-5) === '_TRUE';
         if (!isFalse && !isTrue) return false;
-        var value = Number(entry.value);
+        // Reject null/false/'' — Number(null)===0 would falsely match FALSE=0.
+        var rawValue = entry.value;
+        if (typeof rawValue !== 'number' && typeof rawValue !== 'string') return false;
+        if (typeof rawValue === 'string' && rawValue.trim() === '') return false;
+        var value = Number(rawValue);
         if (!Number.isInteger(value)) return false;
         if (isFalse) {
           if (value !== 0 || falseOk) return false;

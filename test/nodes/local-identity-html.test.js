@@ -210,6 +210,10 @@ test('isFalseTrueEnum mirrors metadata false/true enum detection', () => {
     { name: 'GIMBAL_AXIS_CALIBRATION_REQUIRED_TRUE', value: 1 },
     { name: 'GIMBAL_AXIS_CALIBRATION_REQUIRED_FALSE', value: 2 },
   ]), false);
+  assert.equal(context.RED.mavlink.isFalseTrueEnum([
+    { name: 'FALSE', value: null },
+    { name: 'TRUE', value: 1 },
+  ]), false);
 });
 
 test('populateDialectSelect loads dialects, appends vehicle escape, and keeps empty unsaved selection', () => {

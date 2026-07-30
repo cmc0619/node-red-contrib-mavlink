@@ -111,14 +111,15 @@
     const connId = $('#node-input-connection').val();
     if (connId && RED.nodes && RED.nodes.node) {
       const conn = RED.nodes.node(connId);
-      if (conn && conn.vehicle) {
-        const vehicle = RED.nodes.node(conn.vehicle);
+      const vehicleRef = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
+      if (vehicleRef) {
+        const vehicle = RED.nodes.node(vehicleRef);
         const dialect = vehicle && vehicle.dialect ? vehicle.dialect : '';
         return {
-          key: 'vehicle:' + conn.vehicle,
-          query: { vehicle: conn.vehicle, dialect: dialect },
+          key: 'vehicle:' + vehicleRef,
+          query: { vehicle: vehicleRef, dialect: dialect },
           dialect: dialect,
-          vehicleId: conn.vehicle,
+          vehicleId: vehicleRef,
         };
       }
     }

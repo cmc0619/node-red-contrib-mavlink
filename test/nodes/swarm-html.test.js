@@ -116,9 +116,11 @@ test('swarm connection-governed catalogs keep using the connection profile', () 
   );
 
   assert.match(resolver, /#node-input-connection/, 'connection-governed branch reads the connection picker');
-  assert.match(resolver, /connNode\.vehicle/, 'connection-governed branch follows the selected connection profile');
-  assert.match(resolver, /key:\s*'vehicle:' \+ connNode\.vehicle/, 'catalog cache is keyed by connection profile id');
-  assert.match(resolver, /query:\s*\{\s*vehicle:\s*connNode\.vehicle,\s*dialect:\s*connDialect\s*\}/, 'catalog query carries the connection profile id for custom dialects');
+  assert.match(resolver, /vehicleIdFrom\(connNode && connNode\.vehicle\)/,
+    'connection-governed branch unwraps string or frozen vehicle snapshot');
+  assert.match(resolver, /key:\s*'vehicle:' \+ vehicleRef/, 'catalog cache is keyed by connection profile id');
+  assert.match(resolver, /query:\s*\{\s*vehicle:\s*vehicleRef,\s*dialect:\s*connDialect\s*\}/,
+    'catalog query carries the connection profile id for custom dialects');
 });
 
 test('commandId preserves the saved numeric value after async catalog load', () => {
@@ -220,8 +222,12 @@ test('delivery and selectionMode changes reload catalogs and refresh visibility'
   const selectionHandler = html.match(
     /#node-input-selectionMode['"]\)\.on\(['"]change['"],\s*refreshCatalogsAndVisibility\)/
   );
+  const dialectHandler = html.match(
+    /\$dialect\.on\(['"]change['"],\s*refreshCatalogsAndVisibility\)/
+  );
   assert.ok(deliveryHandler, 'delivery change reloads catalogs');
   assert.ok(selectionHandler, 'selectionMode change reloads catalogs');
+  assert.ok(dialectHandler, 'dialect change reuses refreshCatalogsAndVisibility');
   const helperStart = html.indexOf('function refreshCatalogsAndVisibility');
   const helper = html.slice(
     helperStart,

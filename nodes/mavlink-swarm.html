@@ -180,13 +180,14 @@
         var connId = $('#node-input-connection').val() || '';
         if (connId && RED.nodes && RED.nodes.node) {
           var connNode = RED.nodes.node(connId);
-          if (connNode && connNode.vehicle) {
-            var connVehicle = RED.nodes.node(connNode.vehicle);
+          var vehicleRef = RED.mavlink.vehicleIdFrom(connNode && connNode.vehicle);
+          if (vehicleRef) {
+            var connVehicle = RED.nodes.node(vehicleRef);
             if (connVehicle) {
               var connDialect = connVehicle.dialect || '';
               return {
-                key: 'vehicle:' + connNode.vehicle,
-                query: { vehicle: connNode.vehicle, dialect: connDialect },
+                key: 'vehicle:' + vehicleRef,
+                query: { vehicle: vehicleRef, dialect: connDialect },
                 dialect: connDialect,
               };
             }
@@ -347,11 +348,7 @@
       }
 
       var $dialect = $('#node-input-dialect');
-      $dialect.on('change', function () {
-        refreshVehicleTypeOptions();
-        refreshCommandOptions();
-        refreshVisibility();
-      });
+      $dialect.on('change', refreshCatalogsAndVisibility);
       if (RED.mavlink && RED.mavlink.populateDialectSelect) {
         RED.mavlink.populateDialectSelect($dialect, {
           saved: node.dialect || '',
