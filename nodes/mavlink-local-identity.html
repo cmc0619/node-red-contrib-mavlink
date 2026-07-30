@@ -158,6 +158,16 @@
         return query;
       }
 
+      // Config-node dialogs (Vehicle Profile): dialect lives on the config form,
+      // not on a Connection. Must run before the wire-tier connection branch so
+      // /mavlink/enums is not called with {} (400 after empty-query rejection).
+      var configDialect = valueFromSelector('#node-config-input-dialect');
+      if (configDialect && configDialect !== '__vehicle') {
+        query.dialect = configDialect;
+        addEnumNames(query, names);
+        return query;
+      }
+
       var vehicle = '';
       var dialect = '';
       var connection = valueFromSelector('#node-input-connection');
@@ -256,9 +266,18 @@
      * @param {string[]|string} names  extra enum table names to include
      * @param {function(object):void} cb
      * @param {{cancelled?: boolean}} [token]
+     * @param {{dialect?: string}} [opts]  explicit dialect when the dialog has no
+     *   Connection / Vehicle / Dialect row (Local Identity — uses `common` for
+     *   MAV_TYPE / MAV_COMPONENT / MAV_AUTOPILOT)
      */
-    RED.mavlink.loadEnumsCatalog = function (names, cb, token) {
-      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), currentEnumQuery(names), function (data) {
+    RED.mavlink.loadEnumsCatalog = function (names, cb, token, opts) {
+      opts = opts || {};
+      var query = currentEnumQuery(names);
+      if (!query.dialect && !query.vehicle && opts.dialect) {
+        query.dialect = opts.dialect;
+        addEnumNames(query, names);
+      }
+      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), query, function (data) {
         if (token && token.cancelled) return;
         cb({
           dialect: data.dialect,
@@ -551,6 +570,8 @@
         }
 
         if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
+          // Local Identity has no Connection/Dialect row — request `common`
+          // explicitly (owns MAV_TYPE / MAV_AUTOPILOT / MAV_COMPONENT).
           RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMPONENT'], function (catalog) {
             var enums = (catalog && catalog.enums) || {};
             // Prefer live dialog values so a role change before the catalog
@@ -567,7 +588,7 @@
             RED.mavlink.fillCompIdSelect($compid, enums.MAV_COMPONENT || [], {
               saved: $compid.val() || node.sourceComponentId
             });
-          }, enumLoadToken);
+          }, enumLoadToken, { dialect: 'common' });
         }
 
         function preset(role) {

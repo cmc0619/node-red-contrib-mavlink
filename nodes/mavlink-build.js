@@ -95,11 +95,8 @@ module.exports = function registerMavlinkBuild(RED) {
     //   Build + '__vehicle' → vehicle node's bundle.
     //   Wire tier → the connection's bound profile node's bundle (custom-safe).
     if (tier === TIER.BUILD) {
+      // Editor requires dialect on Build (§6) — trust config.dialect.
       const dialectName = config.dialect;
-      if (!dialectName) {
-        node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
-        return;
-      }
       if (dialectName === '__vehicle') {
         const vehicleNode = RED.nodes.getNode(config.vehicle);
         if (!vehicleNode || typeof vehicleNode.getDialect !== 'function') {

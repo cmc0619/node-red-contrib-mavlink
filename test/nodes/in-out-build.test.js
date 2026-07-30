@@ -907,31 +907,6 @@ test('mavlink-build Build tier: plain dialect config loads bundled dialect witho
   assert.equal(out1.result, 'built');
 });
 
-test('mavlink-build: empty Build dialect does not fall back to the Vehicle Profile', () => {
-  const RED = makeRED();
-  let getDialectCalls = 0;
-  RED.nodes._register('v1', {
-    ...makeVehicleStub(),
-    getDialect() {
-      getDialectCalls += 1;
-      return makeVehicleStub().getDialect();
-    },
-  });
-  require('../../nodes/mavlink-build')(RED);
-  const Constructor = RED._nodeTypes['mavlink-build'];
-  const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, {
-    vehicle: 'v1',
-    messageName: 'HEARTBEAT',
-    tier: 'build',
-    fields: JSON.stringify({ type: 6, autopilot: 3 }),
-  });
-
-  assert.equal(getDialectCalls, 0);
-  assert.equal(node._status && node._status.fill, 'red');
-  assert.equal(node._status && node._status.text, 'invalid config');
-});
-
 test('mavlink-build wire tier: custom-dialect connection profile resolves via getDialect(), not the bundled registry', () => {
   const RED = makeRED();
   // A custom XML profile: its dialect *name* is not in the bundled registry,

@@ -355,6 +355,32 @@ test('currentCatalogQuery on wire tiers ignores stale own vehicle and dialect wi
   assert.deepEqual(plain(context.RED.mavlink.currentCatalogQuery(['MAV_TYPE'])), {});
 });
 
+test('currentCatalogQuery uses config-node dialect for Vehicle Profile dialogs', () => {
+  const context = loadHelpers({
+    '#node-config-input-dialect': 'ardupilotmega',
+  });
+
+  assert.deepEqual(plain(context.RED.mavlink.currentCatalogQuery(['MAV_COMPONENT'])), {
+    dialect: 'ardupilotmega',
+    names: 'MAV_COMPONENT',
+  });
+});
+
+test('loadEnumsCatalog accepts an explicit dialect override for Local Identity', () => {
+  const context = loadHelpers();
+  let payload = null;
+
+  context.RED.mavlink.loadEnumsCatalog(['MAV_TYPE'], (catalog) => {
+    payload = catalog;
+  }, { cancelled: false }, { dialect: 'common' });
+
+  assert.deepEqual(plain(context.$.lastRequest), {
+    url: '/mavlink/enums',
+    query: { dialect: 'common', names: 'MAV_TYPE' },
+  });
+  assert.equal(payload.dialect, 'common');
+});
+
 test('fillEnumSelect writes numeric string values and re-selects saved entries', () => {
   const context = loadHelpers();
   const select = new FakeSelect();
