@@ -327,3 +327,20 @@ test('mavlink-payload CompID reloads when catalog source changes', () => {
     'dialect change reloads CompID'
   );
 });
+
+test('payload carrier is a required select with no default (§9)', () => {
+  assert.match(payloadHtml, /id="node-input-carrier"/, 'carrier select must bind to the carrier property');
+  assert.match(
+    payloadHtml,
+    /carrier:\s*\{ value: '', required: true,/,
+    'carrier default is empty and required — the operator must choose'
+  );
+  assert.match(payloadHtml, /<option value="int">/, 'COMMAND_INT option offered');
+  assert.match(payloadHtml, /<option value="long">/, 'COMMAND_LONG option offered');
+});
+
+test('payload frame row binds to the frame property and follows the INT carrier (§9)', () => {
+  assert.match(payloadHtml, /id="node-input-frame"/, 'frame select must bind to the frame property');
+  assert.match(payloadHtml, /row-payload-frame/, 'frame row id must exist');
+  assertChangeHandlerContains(payloadHtml, "$('#node-input-carrier')", 'refreshFrameRow');
+});

@@ -12,6 +12,7 @@ test('mavlink-swarm node emits continue only for all-success aggregate', async (
   const node = new Node({
     connection: 'conn',
     actionType: 'command',
+    carrier: 'long',
     commandId: 400,
     executionMode: 'sequential',
     delivery: 'send',
@@ -35,6 +36,7 @@ test('build+list with no connection succeeds — peer table not needed for expli
   const node = new Node({
     connection: '',
     actionType: 'command',
+    carrier: 'long',
     commandId: 400,
     delivery: 'build',
     selectionMode: 'list',
@@ -58,6 +60,7 @@ test('sysid list rejects values outside 1..255 (config and payload)', async () =
   const fromConfig = new Node({
     connection: '',
     actionType: 'command',
+    carrier: 'long',
     commandId: 400,
     delivery: 'build',
     selectionMode: 'list',
@@ -77,6 +80,7 @@ test('sysid list rejects values outside 1..255 (config and payload)', async () =
   const fromPayload = new Node({
     connection: '',
     actionType: 'command',
+    carrier: 'long',
     commandId: 400,
     delivery: 'build',
     selectionMode: 'list',
@@ -104,6 +108,7 @@ test('build+all without connection fails loudly naming the rule (§6)', async ()
   const node = new Node({
     connection: '',
     actionType: 'command',
+    carrier: 'long',
     commandId: 400,
     delivery: 'build',
     selectionMode: 'all',
@@ -131,6 +136,7 @@ test('identityId from payload is passed through to connection.send options', asy
   const node = new Node({
     connection: 'conn',
     actionType: 'command',
+    carrier: 'long',
     commandId: 400,
     delivery: 'send',
     intervalMs: 0,
@@ -150,6 +156,7 @@ test('config.identity is used as identityId when payload does not override', asy
   const node = new Node({
     connection: 'conn',
     actionType: 'command',
+    carrier: 'long',
     commandId: 400,
     delivery: 'send',
     identity: 'cfg-identity-id',
@@ -168,7 +175,8 @@ test('mavlink-swarm node gates a safety preset on msg.confirmed / node confirm (
   const Node = RED.nodes.types['mavlink-swarm'];
 
   // No confirmation anywhere → refused, nothing sent.
-  const gated = new Node({ connection: 'conn', actionType: 'command', preset: 'flight_termination', delivery: 'send' });
+  const gated = new Node({ connection: 'conn', carrier: 'long', actionType: 'command',
+    preset: 'flight_termination', delivery: 'send' });
   let sent;
   const err = await emitInput(gated, { payload: { 1: 1 } }, (m) => { sent = m; }).then(
     () => null,
@@ -186,7 +194,8 @@ test('mavlink-swarm node gates a safety preset on msg.confirmed / node confirm (
   const RED2 = redStub({ conn: conn2 });
   require('../../nodes/mavlink-swarm')(RED2);
   const okNode = new (RED2.nodes.types['mavlink-swarm'])({
-    connection: 'conn', actionType: 'command', preset: 'flight_termination', delivery: 'send',
+    connection: 'conn', actionType: 'command',
+    carrier: 'long', preset: 'flight_termination', delivery: 'send',
   });
   await emitInput(okNode, { payload: { 1: 1 }, confirmed: true }, () => {});
   assert.equal(conn2.sends.length, 1);

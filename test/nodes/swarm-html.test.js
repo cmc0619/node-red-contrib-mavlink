@@ -228,3 +228,22 @@ test('delivery and selectionMode changes reload catalogs and refresh visibility'
   assert.match(helper, /refreshCommandOptions\(\)/, 'MAV_CMD catalog is reloaded');
   assert.match(helper, /refreshVisibility\(\)/, 'visibility is still refreshed');
 });
+
+test('carrier select exists with a conditional required validate (§9)', () => {
+  assert.match(html, /id="node-input-carrier"/, 'carrier select must bind to the carrier property');
+  assert.match(html, /<option value="int">/, 'COMMAND_INT option offered');
+  assert.match(html, /<option value="long">/, 'COMMAND_LONG option offered');
+  // Required only for actions that ride a MAV_CMD — the validate consults
+  // actionType rather than a blanket required flag.
+  assert.match(
+    html,
+    /carrier:\s*\{ value: '', validate: function/,
+    'carrier validate is conditional on the action type'
+  );
+});
+
+test('frame row binds to the frame property and follows the INT carrier (§9)', () => {
+  assert.match(html, /id="node-input-frame"/, 'frame select must bind to the frame property');
+  assert.match(html, /row-swarm-frame/, 'frame row id must exist');
+  assert.match(html, /refreshCarrierRows/, 'carrier/frame visibility is wired');
+});

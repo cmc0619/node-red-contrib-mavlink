@@ -77,6 +77,14 @@ module.exports = function registerMavlinkPayload(RED) {
           path: payload.path || config.path || 'legacy',
           target,
           values: payload.values || valuesFrom(config),
+          // Required for command-backed verbs (§9): the builder throws when a
+          // MAV_CMD verb arrives without a carrier choice.
+          carrier: payload.carrier || config.carrier,
+          frame: payload.mavFrame !== undefined && payload.mavFrame !== null && payload.mavFrame !== ''
+            ? Number(payload.mavFrame)
+            : config.frame !== undefined && config.frame !== null && config.frame !== ''
+              ? Number(config.frame)
+              : undefined,
         });
 
         if (delivery === 'build') {
@@ -102,8 +110,13 @@ module.exports = function registerMavlinkPayload(RED) {
           const waiter = new AckWaiter({
             subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
             sendFn: (confirmation) => {
+              // Only the LONG carrier has a confirmation byte; COMMAND_INT
+              // must not grow one on retries (§9).
+              const fields = built.message.name === 'COMMAND_LONG'
+                ? { ...built.message.fields, confirmation }
+                : built.message.fields;
               connectionNode.send(
-                { name: built.message.name, fields: { ...built.message.fields, confirmation } },
+                { name: built.message.name, fields },
                 { band: BAND.CONTROL, target, identityId }
               );
             },

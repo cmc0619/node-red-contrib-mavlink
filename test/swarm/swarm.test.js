@@ -251,7 +251,7 @@ test('command without preset or numeric commandId is refused', async () => {
   const connection = connectionStub([peer(1)]);
   const result = await executeSwarm({
     connection,
-    action: { type: 'command', params: { 1: 1 } },
+    action: { type: 'command', carrier: 'long', params: { 1: 1 } },
     mode: 'sequential',
     delivery: 'send',
   });
@@ -276,7 +276,7 @@ test('global move with blank lat/lon is refused (must not become 0,0)', async ()
 });
 
 test('a safety preset (Flight Termination) is refused without confirmation and runs with it (§10)', async () => {
-  const action = { type: 'command', preset: 'flight_termination', params: { 1: 1 } };
+  const action = { type: 'command', carrier: 'long', preset: 'flight_termination', params: { 1: 1 } };
 
   const refused = await executeSwarm({
     connection: connectionStub([peer(1)]),
@@ -302,7 +302,7 @@ test('a safety preset (Flight Termination) is refused without confirmation and r
 test('a raw DO_FLIGHTTERMINATION command id is gated the same as the preset (§10)', async () => {
   const refused = await executeSwarm({
     connection: connectionStub([peer(1)]),
-    action: { type: 'command', commandId: 185, params: { 1: 1 } },
+    action: { type: 'command', carrier: 'long', commandId: 185, params: { 1: 1 } },
     mode: 'broadcast',
     delivery: 'send',
   });
@@ -316,7 +316,7 @@ test('a preset resolves its own command id, ignoring a leftover default (§9/§1
   const result = await executeSwarm({
     connection,
     // Editor left commandId at its 400 default while a preset was selected.
-    action: { type: 'command', preset: 'takeoff', commandId: 400, params: {} },
+    action: { type: 'command', carrier: 'long', preset: 'takeoff', commandId: 400, params: {} },
     mode: 'sequential',
     delivery: 'send',
   });
@@ -330,7 +330,7 @@ test('advanced command params preserve NaN instead of coercing it to 0 (§9)', a
 
   const result = await executeSwarm({
     connection,
-    action: { type: 'command', commandId: 115, params: { 1: 90, 4: NaN } },
+    action: { type: 'command', carrier: 'long', commandId: 115, params: { 1: 90, 4: NaN } },
     mode: 'sequential',
     delivery: 'send',
   });
@@ -339,6 +339,43 @@ test('advanced command params preserve NaN instead of coercing it to 0 (§9)', a
   const fields = connection.sends[0].message.fields;
   assert.equal(fields.param1, 90);
   assert.ok(Number.isNaN(fields.param4), 'a NaN "keep current" param survives to the wire');
+});
+
+test('command action with carrier int builds COMMAND_INT with degE7 coords and frame (§9)', async () => {
+  const connection = connectionStub([peer(1)]);
+
+  const result = await executeSwarm({
+    connection,
+    // DO_REPOSITION with whole-degree lat/lon — canonical degrees, scaled by
+    // the shared INT builder, not passed through.
+    action: { type: 'command', carrier: 'int', frame: 3, commandId: 192, params: { 5: -35, 6: 149, 7: 50 } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  assert.equal(result.success, true);
+  const message = connection.sends[0].message;
+  assert.equal(message.name, 'COMMAND_INT');
+  assert.equal(message.fields.frame, 3);
+  assert.equal(message.fields.x, -350000000);
+  assert.equal(message.fields.y, 1490000000);
+  assert.equal(message.fields.z, 50);
+  assert.equal('confirmation' in message.fields, false, 'COMMAND_INT has no confirmation byte');
+});
+
+test('command action without a carrier is refused — no default wire form (§9)', async () => {
+  const connection = connectionStub([peer(1)]);
+
+  const result = await executeSwarm({
+    connection,
+    action: { type: 'command', commandId: 400, params: {} },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  assert.equal(result.success, false);
+  assert.match(result.detail || result.result, /carrier/);
+  assert.equal(connection.sends.length, 0, 'nothing is sent without a carrier choice');
 });
 
 test('broadcast confirm matches COMMAND_ACK on sysid AND component (§10)', async () => {
@@ -378,7 +415,7 @@ test('broadcast confirm matches COMMAND_ACK on sysid AND component (§10)', asyn
 });
 
 function commandAction(overrides = {}) {
-  return { type: 'command', commandId: 400, params: {}, ...overrides };
+  return { type: 'command', carrier: 'long', commandId: 400, params: {}, ...overrides };
 }
 
 function peer(sysid, fields = {}) {

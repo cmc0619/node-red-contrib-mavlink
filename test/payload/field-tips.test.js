@@ -57,6 +57,7 @@ test('fieldTipsFromBundle returns empty object for unknown verb', () => {
 test('buildPayloadMessage rejects an unknown verb', () => {
   assert.throws(
     () => buildPayloadMessage({
+    carrier: 'long',
       topic: 'camera',
       verb: 'nope',
       target: { sysid: 1, compid: 1 },
@@ -69,6 +70,7 @@ test('buildPayloadMessage rejects an unknown verb', () => {
 test('buildPayloadMessage unknown-verb error includes path when present', () => {
   assert.throws(
     () => buildPayloadMessage({
+    carrier: 'long',
       topic: 'gimbal',
       verb: 'aim',
       path: 'not-a-real-path',
@@ -117,6 +119,7 @@ test('fieldTipsFromBundle omits Empty / Reserved param descriptions', () => {
 
 test('buildPayloadMessage and field tips share the photo recipe param order', () => {
   const built = buildPayloadMessage({
+    carrier: 'long',
     topic: 'camera',
     verb: 'photo',
     target: { sysid: 1, compid: 1 },

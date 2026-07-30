@@ -100,6 +100,8 @@ function actionFrom(config, payload) {
       commandId: payload.commandId || config.commandId || config.advancedCommand,
       preset: payload.preset || config.preset,
       params: { ...parseJson(config.params), ...numericPayloadParams(payload), ...(payload.params || {}) },
+      carrier: payload.carrier || config.carrier,
+      frame: frameFrom(payload, config),
     };
   }
   if (type === 'move') {
@@ -120,6 +122,8 @@ function actionFrom(config, payload) {
       verb: payload.verb || config.verb || 'photo',
       path: payload.path || config.path || 'legacy',
       values: payload.values || valuesFrom(config),
+      carrier: payload.carrier || config.carrier,
+      frame: frameFrom(payload, config),
     };
   }
   if (type === 'param') {
@@ -215,6 +219,17 @@ function valuesFrom(config) {
 function valueFrom(payload, config, key) {
   if (payload[key] !== undefined) return payload[key];
   return config[key] === '' ? undefined : config[key];
+}
+
+/** MAV_FRAME for the INT carrier: msg.payload.mavFrame beats node config (§9). */
+function frameFrom(payload, config) {
+  if (payload.mavFrame !== undefined && payload.mavFrame !== null && payload.mavFrame !== '') {
+    return Number(payload.mavFrame);
+  }
+  if (config.frame !== undefined && config.frame !== null && config.frame !== '') {
+    return Number(config.frame);
+  }
+  return undefined;
 }
 
 function numberOption(payload, config, key, fallback) {
