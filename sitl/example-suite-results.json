@@ -1,6 +1,6 @@
 {
-  "started": "2026-07-31T03:28:56.504Z",
-  "finished": "2026-07-31T03:39:48.053Z",
+  "started": "2026-07-31T04:34:48.378Z",
+  "finished": "2026-07-31T04:45:34.151Z",
   "host": "127.0.0.1:1880",
   "results": [
     {
@@ -8,8 +8,8 @@
       "tab": "SITL 01 Completion takeoff",
       "expect": "takeoff complete / altitude reached",
       "notes": null,
-      "status": "PASS",
-      "reason": "results: accepted",
+      "status": "PARTIAL",
+      "reason": "good=accepted; bad=failed; errors=1",
       "injects": [
         {
           "id": "ex06-inject",
@@ -24,24 +24,19 @@
           "result": "accepted",
           "command": "MAV_CMD_COMPONENT_ARM_DISARM",
           "detail": "null",
-          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 7,\n  retries: 0,\n  command: 'MAV_CMD_COMPONENT_ARM_DISARM',\n  commandId: 400,\n  detail: null,\n  _msgid: 'b482a0574185e47c'\n}"
-        },
-        {
-          "tag": "debug:airborne",
-          "result": "accepted",
-          "command": "MAV_CMD_NAV_TAKEOFF",
-          "detail": "alt 9.5 m",
-          "excerpt": "{\n  payload: {\n    result: 'accepted',\n    resultCode: 0,\n    confirmedBy: 'state',\n    target: { sysid: 1, compid: 1 },\n    elapsed: 9006,\n    retries: 0,\n    command: 'MAV_CMD_NAV_TAKEOFF',\n    commandId: 22,\n    detail: 'alt 9.5 m',\n    _msgid: '8008b884bd8f5424'\n  },\n  _msgid: '8008b884bd8f5424'\n}"
+          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 5,\n  retries: 0,\n  command: 'MAV_CMD_COMPONENT_ARM_DISARM',\n  commandId: 400,\n  detail: null,\n  _msgid: '4a915b7171fcb8ba'\n}"
         },
         {
           "tag": "debug:takeoff status",
-          "result": "accepted",
+          "result": "failed",
           "command": "MAV_CMD_NAV_TAKEOFF",
-          "detail": "alt 9.5 m",
-          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'state',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 9006,\n  retries: 0,\n  command: 'MAV_CMD_NAV_TAKEOFF',\n  commandId: 22,\n  detail: 'alt 9.5 m',\n  _msgid: '8008b884bd8f5424'\n}"
+          "detail": "null",
+          "excerpt": "{\n  result: 'failed',\n  resultCode: 4,\n  confirmedBy: 'ack',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 5,\n  retries: 0,\n  command: 'MAV_CMD_NAV_TAKEOFF',\n  commandId: 22,\n  detail: null,\n  _msgid: 'e9aaa3c5c5955f8a'\n}"
         }
       ],
-      "errors": []
+      "errors": [
+        "[mavlink-command:Takeoff 10 m (completion)] Error: mavlink-command: Takeoff failed"
+      ]
     },
     {
       "file": "02-completion-timeout.json",
@@ -64,7 +59,7 @@
           "result": "failed",
           "command": "MAV_CMD_NAV_TAKEOFF",
           "detail": "null",
-          "excerpt": "{\n  result: 'failed',\n  resultCode: 4,\n  confirmedBy: 'ack',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 3,\n  retries: 0,\n  command: 'MAV_CMD_NAV_TAKEOFF',\n  commandId: 22,\n  detail: null,\n  _msgid: '86b3f314fe633146'\n}"
+          "excerpt": "{\n  result: 'failed',\n  resultCode: 4,\n  confirmedBy: 'ack',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 2,\n  retries: 0,\n  command: 'MAV_CMD_NAV_TAKEOFF',\n  commandId: 22,\n  detail: null,\n  _msgid: '1c1fb8bc528d94e2'\n}"
         }
       ],
       "errors": [
@@ -91,14 +86,14 @@
           "result": "accepted",
           "command": "MAV_CMD_COMPONENT_ARM_DISARM",
           "detail": "null",
-          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 5,\n  retries: 0,\n  command: 'MAV_CMD_COMPONENT_ARM_DISARM',\n  commandId: 400,\n  detail: null,\n  _msgid: '5ccd215126982ccc'\n}"
+          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 7,\n  retries: 0,\n  command: 'MAV_CMD_COMPONENT_ARM_DISARM',\n  commandId: 400,\n  detail: null,\n  _msgid: '49558e04213b2893'\n}"
         },
         {
           "tag": "debug:takeoff status",
           "result": "failed",
           "command": "MAV_CMD_NAV_TAKEOFF",
           "detail": "null",
-          "excerpt": "{\n  result: 'failed',\n  resultCode: 4,\n  confirmedBy: 'ack',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 6,\n  retries: 0,\n  command: 'MAV_CMD_NAV_TAKEOFF',\n  commandId: 22,\n  detail: null,\n  _msgid: '6045ddecb425ae3c'\n}"
+          "excerpt": "{\n  result: 'failed',\n  resultCode: 4,\n  confirmedBy: 'ack',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 6,\n  retries: 0,\n  command: 'MAV_CMD_NAV_TAKEOFF',\n  commandId: 22,\n  detail: null,\n  _msgid: 'b1745cff3c5b0781'\n}"
         }
       ],
       "errors": [
@@ -132,210 +127,210 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468648399,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468648483,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468648515,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546864"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546864"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546864"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472600687,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468648584,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472600726,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546864"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472600899,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468648621,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472600788,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546864"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 81,\n    armed: false,\n    flightMode: 0,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472600842,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468649397,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468649487,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468649512,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546864"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546864"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546864"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472601691,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468649581,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472601724,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468649618,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472601897,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546864"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472601785,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546864"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 81,\n    armed: false,\n    flightMode: 0,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472601838,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468650401,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468650484,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468650515,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546865"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546865"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547260"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468650585,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472602688,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546865"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472602726,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468650622,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472602900,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546865"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472602788,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546865"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 81,\n    armed: false,\n    flightMode: 0,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472602842,\n    "
         }
       ],
       "errors": [
@@ -363,210 +358,98 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 81,\n    armed: false,\n    flightMode: 0,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472620839,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472621688,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547262"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547262"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468667402,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547262"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468667486,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472621725,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468667519,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472621900,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468667584,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547262"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468667624,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547262"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472621788,\n    "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 81,\n    armed: false,\n    flightMode: 0,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472621842,\n    "
         },
         {
-          "tag": "debug:state events",
+          "tag": "debug:set status",
+          "result": "succeeded",
+          "command": null,
+          "detail": "echo-confirmed",
+          "excerpt": "{\n  node: 'mavlink-param',\n  result: 'succeeded',\n  detail: 'echo-confirmed',\n  payload: {\n    name: 'PARAM_VALUE',\n    sysid: 11,\n    compid: 1,\n    fields: {\n      param_id: 'COM_RC_IN_MODE',\n      param_value: 5.605193857299268e-45,\n      param_type: 6,\n      param_count: 961,\n      param_index: 297\n    },\n    trusted: false\n  },\n  _msgid: 'c228c1faa898aeb1'\n}"
+        },
+        {
+          "tag": "debug:read value",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
+          "excerpt": "{\n  name: 'PARAM_REQUEST_READ',\n  fields: {\n    target_system: 11,\n    target_component: 1,\n    param_id: 'COM_RC_IN_MODE',\n    param_index: -1\n  }\n}"
         },
         {
-          "tag": "debug:state events",
-          "result": null,
+          "tag": "debug:read status",
+          "result": "succeeded",
           "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468668399,\n    "
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468668489,\n    "
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468668516,\n    "
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468668581,\n    "
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468668621,\n    "
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546866"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468669402,\n    "
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468669486,\n    "
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468669518,\n    "
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468669584,\n    "
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468669624,\n    "
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546867"
+          "detail": "sent",
+          "excerpt": "{\n  node: 'mavlink-param',\n  result: 'succeeded',\n  detail: 'sent',\n  payload: {\n    name: 'PARAM_REQUEST_READ',\n    fields: {\n      target_system: 11,\n      target_component: 1,\n      param_id: 'COM_RC_IN_MODE',\n      param_index: -1\n    }\n  },\n  _msgid: '2e1cfceb4dcb1ab0'\n}"
         }
       ],
       "errors": []
@@ -610,70 +493,70 @@
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: 'fd0d6888cfe7b872'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: 'f790f768d05ba7d8'\n}"
         },
         {
           "tag": "debug:mission ok",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    node: 'mavlink-mission',\n    operation: 'upload',\n    missionType: 0,\n    target: { sysid: 1, compid: 1 },\n    elapsed: 4,\n    result: 'succeeded',\n    phase: 'done',\n    count: 0,\n    _msgid: 'f5e38ec2c4e870cf'\n  },\n  _msgid: 'f5e38ec2c4e870cf'\n}"
+          "excerpt": "{\n  payload: {\n    node: 'mavlink-mission',\n    operation: 'upload',\n    missionType: 0,\n    target: { sysid: 1, compid: 1 },\n    elapsed: 2,\n    result: 'succeeded',\n    phase: 'done',\n    count: 0,\n    _msgid: '0b42ab2c7a821ab0'\n  },\n  _msgid: '0b42ab2c7a821ab0'\n}"
         },
         {
           "tag": "debug:mission status",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 4,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  _msgid: 'f5e38ec2c4e870cf'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 2,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  _msgid: '0b42ab2c7a821ab0'\n}"
         },
         {
           "tag": "debug:fence status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 1,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: 'ceac1906e3438908'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 1,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: '1402251844d36d19'\n}"
         },
         {
           "tag": "debug:fence ok",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    node: 'mavlink-mission',\n    operation: 'upload',\n    missionType: 1,\n    target: { sysid: 1, compid: 1 },\n    elapsed: 5,\n    result: 'succeeded',\n    phase: 'done',\n    count: 0,\n    _msgid: '246cf851291314e0'\n  },\n  _msgid: '246cf851291314e0'\n}"
+          "excerpt": "{\n  payload: {\n    node: 'mavlink-mission',\n    operation: 'upload',\n    missionType: 1,\n    target: { sysid: 1, compid: 1 },\n    elapsed: 4,\n    result: 'succeeded',\n    phase: 'done',\n    count: 0,\n    _msgid: 'b7f4b33796a0c1b4'\n  },\n  _msgid: 'b7f4b33796a0c1b4'\n}"
         },
         {
           "tag": "debug:fence status",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 1,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 5,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  _msgid: '246cf851291314e0'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 1,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 4,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  _msgid: 'b7f4b33796a0c1b4'\n}"
         },
         {
           "tag": "debug:rally status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 2,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: '6207d84a99df0236'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 2,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: '7fcd34420093869a'\n}"
         },
         {
           "tag": "debug:rally ok",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    node: 'mavlink-mission',\n    operation: 'upload',\n    missionType: 2,\n    target: { sysid: 1, compid: 1 },\n    elapsed: 3,\n    result: 'succeeded',\n    phase: 'done',\n    count: 0,\n    _msgid: 'e44411a3e4c05929'\n  },\n  _msgid: 'e44411a3e4c05929'\n}"
+          "excerpt": "{\n  payload: {\n    node: 'mavlink-mission',\n    operation: 'upload',\n    missionType: 2,\n    target: { sysid: 1, compid: 1 },\n    elapsed: 5,\n    result: 'succeeded',\n    phase: 'done',\n    count: 0,\n    _msgid: '79de807ce34eea5a'\n  },\n  _msgid: '79de807ce34eea5a'\n}"
         },
         {
           "tag": "debug:rally status",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 2,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 3,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  _msgid: 'e44411a3e4c05929'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 2,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 5,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  _msgid: '79de807ce34eea5a'\n}"
         },
         {
           "tag": "debug:px4 fence status",
           "result": "failed",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 'fence',\n  target: { sysid: 11, compid: 1 },\n  result: 'failed',\n  phase: 'gated',\n  reason: 'px4 does not support fence over the mission protocol',\n  _msgid: '60163c06d5379d49'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 'fence',\n  target: { sysid: 11, compid: 1 },\n  result: 'failed',\n  phase: 'gated',\n  reason: 'px4 does not support fence over the mission protocol',\n  _msgid: '3909b768647dbbb0'\n}"
         }
       ],
       "errors": [
@@ -713,28 +596,28 @@
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: 'cf2db674953d759a'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: '77ad99716f8ef80f'\n}"
         },
         {
           "tag": "debug:good upload status",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 4,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  _msgid: '066747c5c58d3340'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 4,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  _msgid: '9e27d18151f9370c'\n}"
         },
         {
           "tag": "debug:first dl status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'request-list',\n  _msgid: '5df6a0e56d7b654e'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'request-list',\n  _msgid: 'c8145628ff265aad'\n}"
         },
         {
           "tag": "debug:first dl status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: 'eddd9db4f243fd16'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: '94c7fe6125c25971'\n}"
         },
         {
           "tag": "debug:first download items",
@@ -748,42 +631,42 @@
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 6,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  items: [],\n  _msgid: '19cf7a5528f9181b'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 5,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  items: [],\n  _msgid: '0aead16d65acab6a'\n}"
         },
         {
           "tag": "debug:bad upload status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: 'd8f55f4554788eec'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: '69c6c3c1b3fa1def'\n}"
         },
         {
           "tag": "debug:bad upload (unexpected ok)",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    node: 'mavlink-mission',\n    operation: 'upload',\n    missionType: 0,\n    target: { sysid: 1, compid: 1 },\n    elapsed: 4,\n    result: 'succeeded',\n    phase: 'done',\n    count: 0,\n    _msgid: '98d4bb818448530a'\n  },\n  _msgid: '98d4bb818448530a'\n}"
+          "excerpt": "{\n  payload: {\n    node: 'mavlink-mission',\n    operation: 'upload',\n    missionType: 0,\n    target: { sysid: 1, compid: 1 },\n    elapsed: 6,\n    result: 'succeeded',\n    phase: 'done',\n    count: 0,\n    _msgid: '932fe0125d5d628c'\n  },\n  _msgid: '932fe0125d5d628c'\n}"
         },
         {
           "tag": "debug:bad upload status",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 4,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  _msgid: '98d4bb818448530a'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'upload',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 6,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  _msgid: '932fe0125d5d628c'\n}"
         },
         {
           "tag": "debug:second dl status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'request-list',\n  _msgid: '5fd4d664f3536f13'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'request-list',\n  _msgid: '9a60b8932401d33a'\n}"
         },
         {
           "tag": "debug:second dl status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: 'b3f7c2141afcf7cc'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 0,\n  _msgid: '518c3e2ce43eba93'\n}"
         },
         {
           "tag": "debug:second download items",
@@ -797,7 +680,7 @@
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 6,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  items: [],\n  _msgid: '975dcd1167b7e55c'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 1, compid: 1 },\n  elapsed: 3,\n  result: 'succeeded',\n  phase: 'done',\n  count: 0,\n  items: [],\n  _msgid: '21471ea47634b45e'\n}"
         }
       ],
       "errors": []
@@ -860,8 +743,8 @@
       "tab": "SITL 09 Swarm member expires",
       "expect": "aggregate reports one failed after mid-run kill",
       "notes": null,
-      "status": "UNKNOWN",
-      "reason": "no debug/error payloads captured",
+      "status": "PASS",
+      "reason": "failed/expired member observed",
       "injects": [
         {
           "id": "sitl09-inject",
@@ -870,16 +753,61 @@
           "body": "OK"
         }
       ],
-      "debug": [],
-      "errors": []
+      "debug": [
+        {
+          "tag": "debug:expired events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 1,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472787915\n}"
+        },
+        {
+          "tag": "debug:expired events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 5,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472787927\n}"
+        },
+        {
+          "tag": "debug:expired events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 4,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472787954\n}"
+        },
+        {
+          "tag": "debug:expired events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 2,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472787988\n}"
+        },
+        {
+          "tag": "debug:expired events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 3,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472788039\n}"
+        },
+        {
+          "tag": "debug:swarm status",
+          "result": "failed",
+          "command": null,
+          "detail": "no COMMAND_ACK received within timeout",
+          "excerpt": "{\n  node: 'mavlink-swarm',\n  result: 'failed',\n  success: false,\n  continue: false,\n  mode: 'sequential',\n  action: 'command',\n  count: 5,\n  members: [\n    {\n      sysid: 1,\n      compid: 1,\n      result: 'accepted',\n      success: true,\n      message: {\n        name: 'COMMAND_LONG',\n        fields: {\n          target_system: 1,\n          target_component: 1,\n          command: 400,\n          conf"
+        }
+      ],
+      "errors": [
+        "[mavlink-swarm:Arm sequential (confirm)] Error: mavlink-swarm: failed"
+      ]
     },
     {
       "file": "10-dual-stack-ten.json",
       "tab": "SITL 10 Dual-stack ×10",
       "expect": "broadcast arm AP 1–5 and PX4 11–15",
       "notes": null,
-      "status": "FAIL",
-      "reason": "[mavlink-swarm:Arm broadcast (AP)] Error: mavlink-swarm: refused",
+      "status": "PASS",
+      "reason": "results: succeeded",
       "injects": [
         {
           "id": "sitl10-inject-ap",
@@ -900,216 +828,213 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 11,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785468883775\n}"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 12,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472829327\n}"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 13,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785468883776\n}"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 14,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472829328\n}"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 12,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785468883776\n}"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 11,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472829328\n}"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 14,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785468883778\n}"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 15,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472829335\n}"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 15,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785468883784\n}"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 13,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472829336\n}"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 5,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785468883787\n}"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 1,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472829419\n}"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 1,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785468883800\n}"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 4,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472829459\n}"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: { heartbeat: { lastSeen: 1785468883800 } },\n    endpoints"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 5,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472829497\n}"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 2,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785468883827\n}"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 2,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472829554\n}"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: { heartbeat: { lastSeen: 1785468883827 } },\n    endpoints"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547282"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 4,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785468884007\n}"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547282"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546888"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547282"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546888"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547282"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546888"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547282"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546888"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472829711,\n    "
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546888"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 3,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785472829918\n}"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'peer-new',\n  sysid: 3,\n  compid: undefined,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: undefined,\n  at: 1785468884528\n}"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472829749,\n    "
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468884509,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472829921,\n    "
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468884540,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472829806,\n    "
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 81,\n    armed: false,\n    flightMode: 0,\n    state: 'active',\n    mismatch: false,\n    sections: { heartbeat: { lastSeen: 1785468884767 } },\n    endpoints"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 81,\n    armed: false,\n    flightMode: 0,\n    state: 'active',\n    mismatch: false,\n    sections: { heartbeat: { lastSeen: 1785472830157 } },\n    endpoints"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      heartbeat: { lastSeen: 1785468884803 },\n      pos"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547283"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      heartbeat: { lastSeen: 1785468884824 },\n      pos"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547283"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546888"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547283"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546888"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547283"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546888"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472830708,\n    "
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546888"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547283"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546888"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472830747,\n    "
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468885506,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472830918,\n    "
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785468885537,\n    "
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472830809,\n    "
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 81,\n    armed: false,\n    flightMode: 0,\n    state: 'active',\n    mismatch: false,\n    sections: { heartbeat: { lastSeen: 1785468885765 } },\n    endpoints"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 81,\n    armed: false,\n    flightMode: 0,\n    state: 'active',\n    mismatch: false,\n    sections: { heartbeat: { lastSeen: 1785472831154 } },\n    endpoints"
         }
       ],
-      "errors": [
-        "[mavlink-swarm:Arm broadcast (AP)] Error: mavlink-swarm: refused",
-        "[mavlink-swarm:Arm broadcast (PX4)] Error: mavlink-swarm: refused"
-      ]
+      "errors": []
     },
     {
       "file": "11-broadcast-vs-sequential.json",
@@ -1117,7 +1042,7 @@
       "expect": "sequential + broadcast arm confirmed",
       "notes": null,
       "status": "PARTIAL",
-      "reason": "good=succeeded; bad=none; errors=1",
+      "reason": "good=succeeded; bad=failed; errors=1",
       "injects": [
         {
           "id": "sitl11-inject-seq",
@@ -1144,35 +1069,98 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546891"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 81,\n    armed: false,\n    flightMode: 0,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      heartbeat: { lastSeen: 1785472861160 },\n      pos"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546891"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547286"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546891"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547286"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546891"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547286"
         },
         {
           "tag": "debug:peer events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178546891"
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 11,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 11,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547286"
+        },
+        {
+          "tag": "debug:peer events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 13,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 13,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547286"
+        },
+        {
+          "tag": "debug:peer events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 4,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 4,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472861713,\n    "
+        },
+        {
+          "tag": "debug:peer events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 5,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 5,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472861751,\n    "
+        },
+        {
+          "tag": "debug:peer events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 1,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 1,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 4,\n    baseMode: 217,\n    armed: true,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472861926,\n    "
+        },
+        {
+          "tag": "debug:peer events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 2,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 2,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 89,\n    armed: false,\n    flightMode: 4,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 1785472861811,\n    "
+        },
+        {
+          "tag": "debug:peer events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 3,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 3,\n    compid: 1,\n    type: 2,\n    autopilot: 3,\n    systemStatus: 3,\n    baseMode: 81,\n    armed: false,\n    flightMode: 0,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      heartbeat: { lastSeen: 1785472862159 },\n      pos"
+        },
+        {
+          "tag": "debug:peer events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 14,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 14,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547286"
+        },
+        {
+          "tag": "debug:peer events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 12,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 12,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547286"
+        },
+        {
+          "tag": "debug:peer events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  kind: 'transition',\n  event: 'heartbeat',\n  sysid: 15,\n  compid: 1,\n  text: undefined,\n  severity: undefined,\n  endpoint: undefined,\n  component: {\n    sysid: 15,\n    compid: 1,\n    type: 2,\n    autopilot: 12,\n    systemStatus: 3,\n    baseMode: 29,\n    armed: false,\n    flightMode: 50593792,\n    state: 'active',\n    mismatch: false,\n    sections: {\n      position: {\n        lastSeen: 178547286"
         },
         {
           "tag": "debug:sequential aggregate",
@@ -1189,22 +1177,22 @@
           "excerpt": "{\n  node: 'mavlink-swarm',\n  result: 'succeeded',\n  success: true,\n  continue: true,\n  mode: 'sequential',\n  action: 'command',\n  count: 5,\n  members: [\n    {\n      sysid: 1,\n      compid: 1,\n      result: 'accepted',\n      success: true,\n      message: {\n        name: 'COMMAND_LONG',\n        fields: {\n          target_system: 1,\n          target_component: 1,\n          command: 400,\n          con"
         },
         {
-          "tag": "debug:broadcast status",
-          "result": "refused",
-          "command": null,
-          "detail": "broadcast reaches every vehicle on the link (target_system 0) and cannot honour a \"list\" selection — use sequential fan-out to command a subset",
-          "excerpt": "{\n  node: 'mavlink-swarm',\n  result: 'refused',\n  success: false,\n  continue: false,\n  mode: 'broadcast',\n  action: 'command',\n  count: 0,\n  members: [],\n  warnings: [],\n  message: null,\n  detail: 'broadcast reaches every vehicle on the link (target_system 0) and cannot honour a \"list\" selection — use sequential fan-out to command a subset',\n  elapsed: 0,\n  _msgid: '3966f822ced82342'\n}"
-        },
-        {
           "tag": "debug:armed snapshot",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "[\n  {\n    sysid: 4,\n    components: [\n      {\n        compid: 1,\n        type: 2,\n        autopilot: 3,\n        systemStatus: 3,\n        armed: true,\n        flightMode: 4,\n        state: 'active',\n        mismatch: false,\n        sections: { position: 173, battery: 170, gps: 171, heartbeat: 495 },\n        endpoints: [\n          {\n            address: '172.18.0.8',\n            port: 59084,\n       "
+          "excerpt": "[\n  {\n    sysid: 4,\n    components: [\n      {\n        compid: 1,\n        type: 2,\n        autopilot: 3,\n        systemStatus: 3,\n        armed: true,\n        flightMode: 4,\n        state: 'active',\n        mismatch: false,\n        sections: { heartbeat: 933, position: 110, battery: 106, gps: 107 },\n        endpoints: [\n          {\n            address: '172.18.0.8',\n            port: 59084,\n       "
+        },
+        {
+          "tag": "debug:broadcast status",
+          "result": "failed",
+          "command": null,
+          "detail": "no COMMAND_ACK received within timeout",
+          "excerpt": "{\n  node: 'mavlink-swarm',\n  result: 'failed',\n  success: false,\n  continue: false,\n  mode: 'broadcast',\n  action: 'command',\n  count: 5,\n  members: [\n    {\n      sysid: 1,\n      compid: 1,\n      result: 'unconfirmed',\n      success: false,\n      message: {\n        name: 'COMMAND_LONG',\n        fields: {\n          target_system: 0,\n          target_component: 1,\n          command: 400,\n          c"
         }
       ],
       "errors": [
-        "[mavlink-swarm:Arm broadcast (confirm)] Error: mavlink-swarm: refused"
+        "[mavlink-swarm:Arm broadcast (confirm)] Error: mavlink-swarm: failed"
       ]
     },
     {
@@ -1228,12 +1216,12 @@
           "result": "failed",
           "command": "MAV_CMD_COMPONENT_ARM_DISARM",
           "detail": "\"command handler error: Cannot read properties of null (reading 'subscribe')\"",
-          "excerpt": "{\n  result: 'failed',\n  resultCode: null,\n  confirmedBy: 'none',\n  target: null,\n  elapsed: 0,\n  retries: 0,\n  command: 'MAV_CMD_COMPONENT_ARM_DISARM',\n  commandId: 400,\n  detail: \"command handler error: Cannot read properties of null (reading 'subscribe')\",\n  _msgid: 'a9ffd408f9257a93'\n}"
+          "excerpt": "{\n  result: 'failed',\n  resultCode: null,\n  confirmedBy: 'none',\n  target: null,\n  elapsed: 0,\n  retries: 0,\n  command: 'MAV_CMD_COMPONENT_ARM_DISARM',\n  commandId: 400,\n  detail: \"command handler error: Cannot read properties of null (reading 'subscribe')\",\n  _msgid: '24651d52ab332319'\n}"
         }
       ],
       "errors": [
         "[mavlink-connection:UDP signed (primary)] sign-outbound is enabled but no signing passphrase is set",
-        "[mavlink-in:sitl12-in-hearbeat] TypeError: Cannot read properties of null (reading 'subscribe')\n31 Jul 03:35:59 - [info] Started flows",
+        "[mavlink-in:sitl12-in-hearbeat] TypeError: Cannot read properties of null (reading 'subscribe')\n31 Jul 04:41:44 - [info] Started flows",
         "[mavlink-command:Arm (confirm)] TypeError: Cannot read properties of null (reading 'subscribe')"
       ]
     },
@@ -1270,14 +1258,14 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    name: 'PARAM_REQUEST_READ',\n    fields: {\n      target_system: 1,\n      target_component: 1,\n      param_id: 'ARMING_CHECK',\n      param_index: -1\n    }\n  },\n  _msgid: '75846baacc69835f'\n}"
+          "excerpt": "{\n  payload: {\n    name: 'PARAM_REQUEST_READ',\n    fields: {\n      target_system: 1,\n      target_component: 1,\n      param_id: 'ARMING_CHECK',\n      param_index: -1\n    }\n  },\n  _msgid: '12979b9c9b6fb67b'\n}"
         },
         {
           "tag": "debug:read status",
           "result": "succeeded",
           "command": null,
           "detail": "sent",
-          "excerpt": "{\n  node: 'mavlink-param',\n  result: 'succeeded',\n  detail: 'sent',\n  payload: {\n    name: 'PARAM_REQUEST_READ',\n    fields: {\n      target_system: 1,\n      target_component: 1,\n      param_id: 'ARMING_CHECK',\n      param_index: -1\n    }\n  },\n  _msgid: '75846baacc69835f'\n}"
+          "excerpt": "{\n  node: 'mavlink-param',\n  result: 'succeeded',\n  detail: 'sent',\n  payload: {\n    name: 'PARAM_REQUEST_READ',\n    fields: {\n      target_system: 1,\n      target_component: 1,\n      param_id: 'ARMING_CHECK',\n      param_index: -1\n    }\n  },\n  _msgid: '12979b9c9b6fb67b'\n}"
         },
         {
           "tag": "debug:param list",
@@ -1298,7 +1286,7 @@
           "result": "timed-out",
           "command": null,
           "detail": "echo timeout",
-          "excerpt": "{\n  node: 'mavlink-param',\n  result: 'timed-out',\n  detail: 'echo timeout',\n  _msgid: '387a766dade486df'\n}"
+          "excerpt": "{\n  node: 'mavlink-param',\n  result: 'timed-out',\n  detail: 'echo timeout',\n  _msgid: 'c195d854fe5b9f01'\n}"
         }
       ],
       "errors": [
@@ -1311,7 +1299,7 @@
       "expect": "arm sysid1; mission up/down sysid2",
       "notes": null,
       "status": "PASS",
-      "reason": "results: accepted, succeeded",
+      "reason": "results: accepted, sent, succeeded",
       "injects": [
         {
           "id": "ex09-inject-arm",
@@ -1344,98 +1332,98 @@
           "result": "accepted",
           "command": "MAV_CMD_COMPONENT_ARM_DISARM",
           "detail": "null",
-          "excerpt": "{\n  payload: {\n    result: 'accepted',\n    resultCode: 0,\n    confirmedBy: 'ack',\n    target: { sysid: 1, compid: 1 },\n    elapsed: 7,\n    retries: 0,\n    command: 'MAV_CMD_COMPONENT_ARM_DISARM',\n    commandId: 400,\n    detail: null,\n    _msgid: 'b67fe78789a07fcf'\n  },\n  _msgid: 'b67fe78789a07fcf'\n}"
+          "excerpt": "{\n  payload: {\n    result: 'accepted',\n    resultCode: 0,\n    confirmedBy: 'ack',\n    target: { sysid: 1, compid: 1 },\n    elapsed: 5,\n    retries: 0,\n    command: 'MAV_CMD_COMPONENT_ARM_DISARM',\n    commandId: 400,\n    detail: null,\n    _msgid: '22b812a48c95b03d'\n  },\n  _msgid: '22b812a48c95b03d'\n}"
         },
         {
           "tag": "debug:arm status",
           "result": "accepted",
           "command": "MAV_CMD_COMPONENT_ARM_DISARM",
           "detail": "null",
-          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 7,\n  retries: 0,\n  command: 'MAV_CMD_COMPONENT_ARM_DISARM',\n  commandId: 400,\n  detail: null,\n  _msgid: 'b67fe78789a07fcf'\n}"
+          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 5,\n  retries: 0,\n  command: 'MAV_CMD_COMPONENT_ARM_DISARM',\n  commandId: 400,\n  detail: null,\n  _msgid: '22b812a48c95b03d'\n}"
         },
         {
           "tag": "debug:msgint sent",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    name: 'COMMAND_LONG',\n    fields: {\n      target_system: 1,\n      target_component: 1,\n      command: 511,\n      confirmation: 0,\n      param1: 33,\n      param2: 250000,\n      param3: 0,\n      param4: 0,\n      param5: 0,\n      param6: 0,\n      param7: 0\n    }\n  },\n  _msgid: 'b01e3819289f5287'\n}"
+          "excerpt": "{\n  payload: {\n    name: 'COMMAND_LONG',\n    fields: {\n      target_system: 1,\n      target_component: 1,\n      command: 511,\n      confirmation: 0,\n      param1: 33,\n      param2: 250000,\n      param3: 0,\n      param4: 0,\n      param5: 0,\n      param6: 0,\n      param7: 0\n    }\n  },\n  _msgid: '64f395917a8a9377'\n}"
         },
         {
           "tag": "debug:msgint status",
           "result": "sent",
           "command": "MAV_CMD(511)",
           "detail": "null",
-          "excerpt": "{\n  result: 'sent',\n  resultCode: null,\n  confirmedBy: 'none',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 0,\n  retries: 0,\n  command: 'MAV_CMD(511)',\n  commandId: 511,\n  detail: null,\n  _msgid: 'b01e3819289f5287'\n}"
+          "excerpt": "{\n  result: 'sent',\n  resultCode: null,\n  confirmedBy: 'none',\n  target: { sysid: 1, compid: 1 },\n  elapsed: 0,\n  retries: 0,\n  command: 'MAV_CMD(511)',\n  commandId: 511,\n  detail: null,\n  _msgid: '64f395917a8a9377'\n}"
         },
         {
           "tag": "debug:upload status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  result: 'progress',\n  phase: 'request-list',\n  _msgid: '1c84d52a4455ac13'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  result: 'progress',\n  phase: 'request-list',\n  _msgid: 'de8f8adf87a2efc5'\n}"
         },
         {
           "tag": "debug:upload status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 1,\n  _msgid: 'e4c57361e6e5a369'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 1,\n  _msgid: '546aee0b33c8c553'\n}"
         },
         {
           "tag": "debug:upload status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  result: 'progress',\n  phase: 'item',\n  seq: 0,\n  count: 1,\n  _msgid: '16db3e9c38e161c4'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  result: 'progress',\n  phase: 'item',\n  seq: 0,\n  count: 1,\n  _msgid: '96b00565f7d6cba1'\n}"
         },
         {
           "tag": "debug:upload done",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    node: 'mavlink-mission',\n    operation: 'download',\n    missionType: 0,\n    target: { sysid: 2, compid: 1 },\n    elapsed: 9,\n    result: 'succeeded',\n    phase: 'done',\n    count: 1,\n    items: [\n      {\n        target_system: 255,\n        target_component: 190,\n        seq: 0,\n        frame: 0,\n        command: 16,\n        current: 0,\n        autocontinue: 1,\n        param1: 0,"
+          "excerpt": "{\n  payload: {\n    node: 'mavlink-mission',\n    operation: 'download',\n    missionType: 0,\n    target: { sysid: 2, compid: 1 },\n    elapsed: 12,\n    result: 'succeeded',\n    phase: 'done',\n    count: 1,\n    items: [\n      {\n        target_system: 255,\n        target_component: 190,\n        seq: 0,\n        frame: 0,\n        command: 16,\n        current: 0,\n        autocontinue: 1,\n        param1: 0"
         },
         {
           "tag": "debug:upload status",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  elapsed: 9,\n  result: 'succeeded',\n  phase: 'done',\n  count: 1,\n  items: [\n    {\n      target_system: 255,\n      target_component: 190,\n      seq: 0,\n      frame: 0,\n      command: 16,\n      current: 0,\n      autocontinue: 1,\n      param1: 0,\n      param2: 0,\n      param3: 0,\n      param4: "
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  elapsed: 12,\n  result: 'succeeded',\n  phase: 'done',\n  count: 1,\n  items: [\n    {\n      target_system: 255,\n      target_component: 190,\n      seq: 0,\n      frame: 0,\n      command: 16,\n      current: 0,\n      autocontinue: 1,\n      param1: 0,\n      param2: 0,\n      param3: 0,\n      param4:"
         },
         {
           "tag": "debug:download status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  result: 'progress',\n  phase: 'request-list',\n  _msgid: '0980cc0c8173555d'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  result: 'progress',\n  phase: 'request-list',\n  _msgid: 'bfd245291bc5fcbf'\n}"
         },
         {
           "tag": "debug:download status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 1,\n  _msgid: '920b80fc2be587ed'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  result: 'progress',\n  phase: 'count',\n  count: 1,\n  _msgid: '48aa28700c65602e'\n}"
         },
         {
           "tag": "debug:download status",
           "result": "progress",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  result: 'progress',\n  phase: 'item',\n  seq: 0,\n  count: 1,\n  _msgid: '9328827a87a7bc20'\n}"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  result: 'progress',\n  phase: 'item',\n  seq: 0,\n  count: 1,\n  _msgid: '10e611cb1831d5d4'\n}"
         },
         {
           "tag": "debug:mission items",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    node: 'mavlink-mission',\n    operation: 'download',\n    missionType: 0,\n    target: { sysid: 2, compid: 1 },\n    elapsed: 12,\n    result: 'succeeded',\n    phase: 'done',\n    count: 1,\n    items: [\n      {\n        target_system: 255,\n        target_component: 190,\n        seq: 0,\n        frame: 0,\n        command: 16,\n        current: 0,\n        autocontinue: 1,\n        param1: 0"
+          "excerpt": "{\n  payload: {\n    node: 'mavlink-mission',\n    operation: 'download',\n    missionType: 0,\n    target: { sysid: 2, compid: 1 },\n    elapsed: 9,\n    result: 'succeeded',\n    phase: 'done',\n    count: 1,\n    items: [\n      {\n        target_system: 255,\n        target_component: 190,\n        seq: 0,\n        frame: 0,\n        command: 16,\n        current: 0,\n        autocontinue: 1,\n        param1: 0,"
         },
         {
           "tag": "debug:download status",
           "result": "succeeded",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  elapsed: 12,\n  result: 'succeeded',\n  phase: 'done',\n  count: 1,\n  items: [\n    {\n      target_system: 255,\n      target_component: 190,\n      seq: 0,\n      frame: 0,\n      command: 16,\n      current: 0,\n      autocontinue: 1,\n      param1: 0,\n      param2: 0,\n      param3: 0,\n      param4:"
+          "excerpt": "{\n  node: 'mavlink-mission',\n  operation: 'download',\n  missionType: 0,\n  target: { sysid: 2, compid: 1 },\n  elapsed: 9,\n  result: 'succeeded',\n  phase: 'done',\n  count: 1,\n  items: [\n    {\n      target_system: 255,\n      target_component: 190,\n      seq: 0,\n      frame: 0,\n      command: 16,\n      current: 0,\n      autocontinue: 1,\n      param1: 0,\n      param2: 0,\n      param3: 0,\n      param4: "
         }
       ],
       "errors": []
@@ -1445,8 +1433,8 @@
       "tab": "SITL 15 Companion AP",
       "expect": "NVF sent on companion 20",
       "notes": null,
-      "status": "UNKNOWN",
-      "reason": "results=sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent",
+      "status": "PASS",
+      "reason": "NVF sent",
       "injects": [
         {
           "id": "sitl15-inject-nvf",
@@ -1461,21 +1449,49 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'peer-new',\n    sysid: 20,\n    compid: undefined,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: undefined,\n    at: 1785469089178\n  },\n  _msgid: '9ad353452d208182'\n}"
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'peer-new',\n    sysid: 20,\n    compid: undefined,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: undefined,\n    at: 1785473035037\n  },\n  _msgid: '361d0cb3a4bf5a93'\n}"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'component-new',\n    sysid: 20,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 20,\n      compid: 1,\n      type: null,\n      autopilot: null,\n      systemStatus: null,\n      baseMode: null,\n      armed: null,\n      flightMode: null,\n      state: 'active',\n      mismatch: false,\n   "
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'component-new',\n    sysid: 20,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 20,\n      compid: 1,\n      type: 2,\n      autopilot: 3,\n      systemStatus: 3,\n      baseMode: 81,\n      armed: false,\n      flightMode: 0,\n      state: 'active',\n      mismatch: false,\n      sections: "
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'endpoint-added',\n    sysid: 20,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: { address: '172.18.0.11', port: 56353 },\n    component: undefined,\n    at: 1785469089178\n  },\n  _msgid: '3f827d87c8bb0ed1'\n}"
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'endpoint-added',\n    sysid: 20,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: { address: '172.18.0.11', port: 56353 },\n    component: undefined,\n    at: 1785473035037\n  },\n  _msgid: 'afbd7c78d40d82c8'\n}"
+        },
+        {
+          "tag": "debug:state events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 20,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 20,\n      compid: 1,\n      type: 2,\n      autopilot: 3,\n      systemStatus: 3,\n      baseMode: 81,\n      armed: false,\n      flightMode: 0,\n      state: 'active',\n      mismatch: false,\n      sections: { he"
+        },
+        {
+          "tag": "debug:heartbeat",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: '708983962a4063f6'\n}"
+        },
+        {
+          "tag": "debug:nvf sent",
+          "result": "sent",
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '94ef0a3a53f39568'\n}"
+        },
+        {
+          "tag": "debug:nvf status",
+          "result": "sent",
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785473035949,\n  _msgid: '94ef0a3a53f39568'\n}"
         },
         {
           "tag": "debug:state events",
@@ -1489,21 +1505,21 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: '5f818fd9d7c7c981'\n}"
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: 'e87a6e3621522e3d'\n}"
         },
         {
           "tag": "debug:nvf sent",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '1687c7aa4410c01b'\n}"
+          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '91fc0968d9cb1b11'\n}"
         },
         {
           "tag": "debug:nvf status",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469090037,\n  _msgid: '1687c7aa4410c01b'\n}"
+          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785473036950,\n  _msgid: '91fc0968d9cb1b11'\n}"
         },
         {
           "tag": "debug:state events",
@@ -1517,21 +1533,21 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: 'ef0e98ade5f11d85'\n}"
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: '808d7caa8f29ce00'\n}"
         },
         {
           "tag": "debug:nvf sent",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '8ba10b54310e25ff'\n}"
+          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '6e1ee0a876390cc5'\n}"
         },
         {
           "tag": "debug:nvf status",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469091037,\n  _msgid: '8ba10b54310e25ff'\n}"
+          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785473037949,\n  _msgid: '6e1ee0a876390cc5'\n}"
         },
         {
           "tag": "debug:state events",
@@ -1545,21 +1561,35 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: 'e4cf300636ab7cf7'\n}"
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: 'fdc00b79314c7e9e'\n}"
         },
         {
           "tag": "debug:nvf sent",
-          "result": "sent",
+          "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: 'a047ee13bc586bdb'\n}"
+          "excerpt": "{ _msgid: '3b3ce65ab2651506', payload: 1785473038944 }"
         },
         {
           "tag": "debug:nvf status",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469092036,\n  _msgid: 'a047ee13bc586bdb'\n}"
+          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785473038945,\n  _msgid: '3b3ce65ab2651506'\n}"
+        },
+        {
+          "tag": "debug:nvf sent",
+          "result": "sent",
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: 'a9c40a9d87a1e988'\n}"
+        },
+        {
+          "tag": "debug:nvf status",
+          "result": "sent",
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785473038949,\n  _msgid: 'a9c40a9d87a1e988'\n}"
         },
         {
           "tag": "debug:state events",
@@ -1573,35 +1603,21 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: '05ac9eb7e220152d'\n}"
-        },
-        {
-          "tag": "debug:nvf sent",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{ _msgid: 'adca585e6e241f0f', payload: 1785469093032 }"
-        },
-        {
-          "tag": "debug:nvf status",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469093033,\n  _msgid: 'adca585e6e241f0f'\n}"
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: 'bbac1598f8b13322'\n}"
         },
         {
           "tag": "debug:nvf sent",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '005232c3f4021003'\n}"
+          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '289bea42e93c7838'\n}"
         },
         {
           "tag": "debug:nvf status",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469093037,\n  _msgid: '005232c3f4021003'\n}"
+          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785473039949,\n  _msgid: '289bea42e93c7838'\n}"
         },
         {
           "tag": "debug:state events",
@@ -1615,49 +1631,21 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: 'fe79f6466a8d697a'\n}"
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: 'bdca0f2efb7df65d'\n}"
         },
         {
           "tag": "debug:nvf sent",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '7d92b7bce925a243'\n}"
+          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: 'efe99bd443609f9a'\n}"
         },
         {
           "tag": "debug:nvf status",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469094037,\n  _msgid: '7d92b7bce925a243'\n}"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 20,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 20,\n      compid: 1,\n      type: 2,\n      autopilot: 3,\n      systemStatus: 3,\n      baseMode: 81,\n      armed: false,\n      flightMode: 0,\n      state: 'active',\n      mismatch: false,\n      sections: {\n  "
-        },
-        {
-          "tag": "debug:heartbeat",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: 'd41f5ed5b2c6ee85'\n}"
-        },
-        {
-          "tag": "debug:nvf sent",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '989a462c1e9eb530'\n}"
-        },
-        {
-          "tag": "debug:nvf status",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469095037,\n  _msgid: '989a462c1e9eb530'\n}"
+          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785473040949,\n  _msgid: 'efe99bd443609f9a'\n}"
         },
         {
           "tag": "debug:state events",
@@ -1674,8 +1662,8 @@
       "tab": "SITL 16 Companion PX4",
       "expect": "NVF sent on companion 21",
       "notes": null,
-      "status": "UNKNOWN",
-      "reason": "results=sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent,sent",
+      "status": "PASS",
+      "reason": "NVF sent",
       "injects": [
         {
           "id": "sitl16-inject-nvf",
@@ -1686,18 +1674,32 @@
       ],
       "debug": [
         {
+          "tag": "debug:state events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 20,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 20,\n      compid: 1,\n      type: 2,\n      autopilot: 3,\n      systemStatus: 3,\n      baseMode: 81,\n      armed: false,\n      flightMode: 0,\n      state: 'active',\n      mismatch: false,\n      sections: {\n  "
+        },
+        {
+          "tag": "debug:heartbeat",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: '0404ce7bb9f13d35'\n}"
+        },
+        {
           "tag": "debug:nvf sent",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: 'ce2c6e2a882c56c6'\n}"
+          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '9677f3ef7d7b7ffd'\n}"
         },
         {
           "tag": "debug:nvf status",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469101037,\n  _msgid: 'ce2c6e2a882c56c6'\n}"
+          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785473049949,\n  _msgid: '9677f3ef7d7b7ffd'\n}"
         },
         {
           "tag": "debug:state events",
@@ -1711,84 +1713,14 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: '95814661f482a863'\n}"
-        },
-        {
-          "tag": "debug:nvf sent",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '52277f20e69a7583'\n}"
-        },
-        {
-          "tag": "debug:nvf status",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469102038,\n  _msgid: '52277f20e69a7583'\n}"
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: '9c098f75dffbba4d'\n}"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 20,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 20,\n      compid: 1,\n      type: 2,\n      autopilot: 3,\n      systemStatus: 3,\n      baseMode: 81,\n      armed: false,\n      flightMode: 0,\n      state: 'active',\n      mismatch: false,\n      sections: {\n  "
-        },
-        {
-          "tag": "debug:heartbeat",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: 'c24792b1ec98cc12'\n}"
-        },
-        {
-          "tag": "debug:nvf sent",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: 'b7ff3086fe2518fe'\n}"
-        },
-        {
-          "tag": "debug:nvf status",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469103037,\n  _msgid: 'b7ff3086fe2518fe'\n}"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 20,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 20,\n      compid: 1,\n      type: 2,\n      autopilot: 3,\n      systemStatus: 3,\n      baseMode: 81,\n      armed: false,\n      flightMode: 0,\n      state: 'active',\n      mismatch: false,\n      sections: {\n  "
-        },
-        {
-          "tag": "debug:heartbeat",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 3,\n    base_mode: 81,\n    custom_mode: 0,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 20,\n  compid: 1,\n  trusted: false,\n  _msgid: '2b8145c99d6ecec2'\n}"
-        },
-        {
-          "tag": "debug:nvf sent",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '94980d9f01d71f1d'\n}"
-        },
-        {
-          "tag": "debug:nvf status",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469104038,\n  _msgid: '94980d9f01d71f1d'\n}"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'peer-new',\n    sysid: 21,\n    compid: undefined,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: undefined,\n    at: 1785469106327\n  },\n  _msgid: 'd7a6d74004538d1e'\n}"
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'peer-new',\n    sysid: 21,\n    compid: undefined,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: undefined,\n    at: 1785473052300\n  },\n  _msgid: '1759dd058795296d'\n}"
         },
         {
           "tag": "debug:state events",
@@ -1802,35 +1734,21 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'endpoint-added',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: { address: '172.18.0.4', port: 18580 },\n    component: undefined,\n    at: 1785469106327\n  },\n  _msgid: 'f5f911f436fb6b3c'\n}"
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'endpoint-added',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: { address: '172.18.0.4', port: 14590 },\n    component: undefined,\n    at: 1785473052300\n  },\n  _msgid: 'acddcbac605841ec'\n}"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'endpoint-added',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: { address: '172.18.0.4', port: 14590 },\n    component: undefined,\n    at: 1785469106327\n  },\n  _msgid: 'b3d1c29c62d42bf8'\n}"
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'endpoint-added',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: { address: '172.18.0.4', port: 18580 },\n    component: undefined,\n    at: 1785473052301\n  },\n  _msgid: '5daa58b2ee7e8604'\n}"
         },
         {
           "tag": "debug:state events",
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'multi-endpoint',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: undefined,\n    at: 1785469106327\n  },\n  _msgid: 'cba88c9c687d2255'\n}"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 21,\n      compid: 1,\n      type: 2,\n      autopilot: 12,\n      systemStatus: 3,\n      baseMode: 29,\n      armed: false,\n      flightMode: 50593792,\n      state: 'active',\n      mismatch: false,\n      sectio"
-        },
-        {
-          "tag": "debug:heartbeat",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: '52fa23f131b6556f'\n}"
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'multi-endpoint',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: undefined,\n    at: 1785473052301\n  },\n  _msgid: '9a08b5b9493706fd'\n}"
         },
         {
           "tag": "debug:state events",
@@ -1844,21 +1762,35 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: '0c6ef5849225d054'\n}"
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: '4e06dcf70982bb6a'\n}"
+        },
+        {
+          "tag": "debug:state events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 21,\n      compid: 1,\n      type: 2,\n      autopilot: 12,\n      systemStatus: 3,\n      baseMode: 29,\n      armed: false,\n      flightMode: 50593792,\n      state: 'active',\n      mismatch: false,\n      sectio"
+        },
+        {
+          "tag": "debug:heartbeat",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: 'bda067faac896970'\n}"
         },
         {
           "tag": "debug:nvf sent",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: 'd4a9e740d8993ab1'\n}"
+          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '1fc3c32e3303109d'\n}"
         },
         {
           "tag": "debug:nvf status",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469107326,\n  _msgid: 'd4a9e740d8993ab1'\n}"
+          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785473053297,\n  _msgid: '1fc3c32e3303109d'\n}"
         },
         {
           "tag": "debug:state events",
@@ -1872,21 +1804,77 @@
           "result": null,
           "command": null,
           "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: '5b589df5f583b880'\n}"
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: 'aeb8c53b719cb612'\n}"
         },
         {
           "tag": "debug:nvf sent",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '180c7c57718d988e'\n}"
+          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '81a156345685ab39'\n}"
         },
         {
           "tag": "debug:nvf status",
           "result": "sent",
           "command": null,
           "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469108326,\n  _msgid: '180c7c57718d988e'\n}"
+          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785473054297,\n  _msgid: '81a156345685ab39'\n}"
+        },
+        {
+          "tag": "debug:state events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 21,\n      compid: 1,\n      type: 2,\n      autopilot: 12,\n      systemStatus: 3,\n      baseMode: 29,\n      armed: false,\n      flightMode: 50593792,\n      state: 'active',\n      mismatch: false,\n      sectio"
+        },
+        {
+          "tag": "debug:heartbeat",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: '01900c142e174d3d'\n}"
+        },
+        {
+          "tag": "debug:state events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 21,\n      compid: 1,\n      type: 2,\n      autopilot: 12,\n      systemStatus: 3,\n      baseMode: 29,\n      armed: false,\n      flightMode: 50593792,\n      state: 'active',\n      mismatch: false,\n      sectio"
+        },
+        {
+          "tag": "debug:heartbeat",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: 'de1dddb71355c263'\n}"
+        },
+        {
+          "tag": "debug:nvf sent",
+          "result": "sent",
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '98abb4e84cb3de7a'\n}"
+        },
+        {
+          "tag": "debug:nvf status",
+          "result": "sent",
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785473055297,\n  _msgid: '98abb4e84cb3de7a'\n}"
+        },
+        {
+          "tag": "debug:state events",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 21,\n      compid: 1,\n      type: 2,\n      autopilot: 12,\n      systemStatus: 3,\n      baseMode: 29,\n      armed: false,\n      flightMode: 50593792,\n      state: 'active',\n      mismatch: false,\n      sectio"
+        },
+        {
+          "tag": "debug:heartbeat",
+          "result": null,
+          "command": null,
+          "detail": null,
+          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: 'cf5d3a2bcea83d91'\n}"
         },
         {
           "tag": "debug:state events",
@@ -1915,116 +1903,32 @@
       ],
       "debug": [
         {
-          "tag": "debug:nvf sent",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '43378958796bd63c'\n}"
-        },
-        {
-          "tag": "debug:nvf status",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469120326,\n  _msgid: '43378958796bd63c'\n}"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 21,\n      compid: 1,\n      type: 2,\n      autopilot: 12,\n      systemStatus: 3,\n      baseMode: 29,\n      armed: false,\n      flightMode: 50593792,\n      state: 'active',\n      mismatch: false,\n      sectio"
-        },
-        {
-          "tag": "debug:heartbeat",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: '8e28e71bc82aa923'\n}"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 21,\n      compid: 1,\n      type: 2,\n      autopilot: 12,\n      systemStatus: 3,\n      baseMode: 29,\n      armed: false,\n      flightMode: 50593792,\n      state: 'active',\n      mismatch: false,\n      sectio"
-        },
-        {
-          "tag": "debug:heartbeat",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: 'c7d1e15488f1e5a5'\n}"
-        },
-        {
-          "tag": "debug:nvf sent",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: { result: 'sent', messageName: 'NAMED_VALUE_FLOAT', tier: 'send' },\n  _msgid: '6181030447982b99'\n}"
-        },
-        {
-          "tag": "debug:nvf status",
-          "result": "sent",
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  result: 'sent',\n  message: 'NAMED_VALUE_FLOAT',\n  tier: 'send',\n  band: 2,\n  timestamp: 1785469121327,\n  _msgid: '6181030447982b99'\n}"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 21,\n      compid: 1,\n      type: 2,\n      autopilot: 12,\n      systemStatus: 3,\n      baseMode: 29,\n      armed: false,\n      flightMode: 50593792,\n      state: 'active',\n      mismatch: false,\n      sectio"
-        },
-        {
-          "tag": "debug:heartbeat",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: '867d36376b7d8c9f'\n}"
-        },
-        {
-          "tag": "debug:state events",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  payload: {\n    kind: 'transition',\n    event: 'heartbeat',\n    sysid: 21,\n    compid: 1,\n    text: undefined,\n    severity: undefined,\n    endpoint: undefined,\n    component: {\n      sysid: 21,\n      compid: 1,\n      type: 2,\n      autopilot: 12,\n      systemStatus: 3,\n      baseMode: 29,\n      armed: false,\n      flightMode: 50593792,\n      state: 'active',\n      mismatch: false,\n      sectio"
-        },
-        {
-          "tag": "debug:heartbeat",
-          "result": null,
-          "command": null,
-          "detail": null,
-          "excerpt": "{\n  topic: 'HEARTBEAT',\n  payload: {\n    type: 2,\n    autopilot: 12,\n    base_mode: 29,\n    custom_mode: 50593792,\n    system_status: 3,\n    mavlink_version: 3\n  },\n  sysid: 21,\n  compid: 1,\n  trusted: false,\n  _msgid: '3f60469a531dc0d2'\n}"
-        },
-        {
           "tag": "debug:arm status",
           "result": "accepted",
           "command": "MAV_CMD_COMPONENT_ARM_DISARM",
           "detail": "null",
-          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 11, compid: 1 },\n  elapsed: 10,\n  retries: 0,\n  command: 'MAV_CMD_COMPONENT_ARM_DISARM',\n  commandId: 400,\n  detail: null,\n  _msgid: '691f8024cb984e3d'\n}"
+          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 11, compid: 1 },\n  elapsed: 15,\n  retries: 0,\n  command: 'MAV_CMD_COMPONENT_ARM_DISARM',\n  commandId: 400,\n  detail: null,\n  _msgid: '472b787a2f64aba1'\n}"
         },
         {
           "tag": "debug:takeoff status",
           "result": "accepted",
           "command": "MAV_CMD_NAV_TAKEOFF",
           "detail": "null",
-          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 11, compid: 1 },\n  elapsed: 11,\n  retries: 0,\n  command: 'MAV_CMD_NAV_TAKEOFF',\n  commandId: 22,\n  detail: null,\n  _msgid: 'd4820f939e2e3def'\n}"
+          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 11, compid: 1 },\n  elapsed: 11,\n  retries: 0,\n  command: 'MAV_CMD_NAV_TAKEOFF',\n  commandId: 22,\n  detail: null,\n  _msgid: '2d456c7c57889cd5'\n}"
         },
         {
           "tag": "debug:INT goto accepted",
           "result": "accepted",
           "command": "MAV_CMD_DO_REPOSITION",
           "detail": "null",
-          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 11, compid: 1 },\n  elapsed: 7,\n  retries: 0,\n  command: 'MAV_CMD_DO_REPOSITION',\n  commandId: 192,\n  detail: null,\n  _msgid: 'c6fec35c2047b7d0'\n}"
+          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 11, compid: 1 },\n  elapsed: 14,\n  retries: 0,\n  command: 'MAV_CMD_DO_REPOSITION',\n  commandId: 192,\n  detail: null,\n  _msgid: 'fb888ae554a15bd2'\n}"
         },
         {
           "tag": "debug:goto status",
           "result": "accepted",
           "command": "MAV_CMD_DO_REPOSITION",
           "detail": "null",
-          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 11, compid: 1 },\n  elapsed: 7,\n  retries: 0,\n  command: 'MAV_CMD_DO_REPOSITION',\n  commandId: 192,\n  detail: null,\n  _msgid: 'c6fec35c2047b7d0'\n}"
+          "excerpt": "{\n  result: 'accepted',\n  resultCode: 0,\n  confirmedBy: 'ack',\n  target: { sysid: 11, compid: 1 },\n  elapsed: 14,\n  retries: 0,\n  command: 'MAV_CMD_DO_REPOSITION',\n  commandId: 192,\n  detail: null,\n  _msgid: 'fb888ae554a15bd2'\n}"
         }
       ],
       "errors": []

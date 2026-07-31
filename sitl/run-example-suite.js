@@ -69,7 +69,7 @@ const PROFILE = {
     expect: 'dry-run then live sequential arm ×5',
   },
   '09-swarm-member-expires': {
-    waitMs: 20000,
+    waitMs: 25000,
     expect: 'aggregate reports one failed after mid-run kill',
     prep: 'kill-ap-3-mid',
   },
@@ -176,18 +176,25 @@ function extractDebugBlocks(log) {
   const lines = log.split('\n');
   const blocks = [];
   let cur = null;
+  let depth = 0;
   for (const line of lines) {
     const m = line.match(/\[(debug:[^\]]+|error)\]\s*(.*)$/);
     if (m && (m[1].startsWith('debug:') || m[1] === 'error')) {
       if (cur) blocks.push(cur);
       cur = { tag: m[1], head: m[2] || '', body: [] };
+      depth = 0;
       continue;
     }
     if (cur) {
       cur.body.push(line);
-      if (line === '}') {
+      for (const ch of line) {
+        if (ch === '{') depth += 1;
+        else if (ch === '}') depth -= 1;
+      }
+      if (depth <= 0 && cur.body.some((l) => l.includes('}'))) {
         blocks.push(cur);
         cur = null;
+        depth = 0;
       }
     }
   }
@@ -251,12 +258,15 @@ function verdictFrom(profile, summary, log) {
   if (/one failed|member expires/i.test(expect)) {
     if (/failed|expired/i.test(log)) return { status: 'PASS', reason: 'failed/expired member observed' };
   }
+  if (/NVF sent|companion/i.test(expect)) {
+    if (results.includes('sent')) return { status: 'PASS', reason: 'NVF sent' };
+  }
 
   const bad = results.filter((r) =>
-    /fail|timed-out|unconfirmed|error|denied/i.test(r)
+    /fail|timed-out|unconfirmed|error|denied|refused/i.test(r)
   );
   const good = results.filter((r) =>
-    /accepted|succeeded|success|dry_run|ok/i.test(r)
+    /accepted|succeeded|success|dry_run|ok|sent/i.test(r)
   );
 
   if (good.length && !bad.length && !summary.errors.length) {
@@ -322,9 +332,10 @@ async function prep(kind) {
 
 async function afterInjectHook(fileBase, startedAt) {
   if (fileBase === '09-swarm-member-expires') {
-    await sleep(2500);
+    // Example paces at 500 ms; stop sysid 3 before its turn (~1–1.5 s).
+    await sleep(800);
     console.log('  killing nrc-ap-3 mid-run…');
-    sh('docker stop nrc-ap-3 >/dev/null');
+    sh('docker stop -t 0 nrc-ap-3 >/dev/null');
   }
 }
 
@@ -362,7 +373,6 @@ async function runOne(file) {
   console.log(`\n=== ${file} (${tab}) ===`);
   if (profile.prep) await prep(profile.prep);
 
-  const mark = Math.floor(Date.now() / 1000);
   const deploy = await req('POST', '/flows', { flows }, { 'Node-RED-Deployment-Type': 'full' });
   if (deploy.status >= 300) {
     return {
@@ -376,8 +386,10 @@ async function runOne(file) {
 
   // Let connections bind + learn peers
   await sleep(4000);
+  const t0 = Date.now();
 
   const injectResults = [];
+  let firstInjectDone = false;
   for (const inj of injects) {
     if (inj.once) {
       injectResults.push({ id: inj.id, name: inj.name, skipped: 'once (deploy)' });
@@ -386,14 +398,18 @@ async function runOne(file) {
     const r = await req('POST', `/inject/${inj.id}`);
     injectResults.push({ id: inj.id, name: inj.name, http: r.status, body: r.body.slice(0, 80) });
     console.log(`  inject ${inj.name || inj.id} → ${r.status}`);
-    await afterInjectHook(fileBase, mark);
+    if (!firstInjectDone) {
+      firstInjectDone = true;
+      await afterInjectHook(fileBase, t0);
+    }
     // small gap between multi-inject flows
     await sleep(1500);
   }
 
   await sleep(profile.waitMs);
 
-  const log = nrLogSince(Math.max(5, Math.ceil(profile.waitMs / 1000) + 10));
+  const elapsedSec = Math.max(8, Math.ceil((Date.now() - t0) / 1000) + 6);
+  const log = nrLogSince(elapsedSec);
   const blocks = extractDebugBlocks(log);
   const summary = summarizeBlocks(blocks);
   const verdict = verdictFrom(profile, summary, log);
