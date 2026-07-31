@@ -1927,15 +1927,42 @@ lossy links, non-terminal on the vehicle side; QGC carries the same exemption), 
 never a success, never ignored.
 *Check:* `node --test test/mission/upload.test.js`
 
-**COMMAND_INT x/y has no working keep-current sentinel, and local-frame ×1e4 is dead spec text.**
+**COMMAND_INT x/y has no working keep-current sentinel.**
 *Wrong belief:* per common.xml, NaN lat/lon should encode as `INT32_MAX` ("keep current") in
-COMMAND_INT, and local-frame x/y should scale metres × 1e4.
+COMMAND_INT.
 *Fact:* ArduPilot's `location_from_command_t` runs `check_latlng` with no sentinel branch —
 `INT32_MAX` reads as 214.7°, out of range, command NAK'd; MAVSDK cannot even express unset x/y
 (bare `int32_t`, defaults 0) and QGC's equivalent path is latent UB (`NaN * 1e7 → int32`). The
 deployed way to say "keep current position" is COMMAND_LONG with NaN param5/6 — which is what the
-build-time rejection tells the operator. Nobody implements the ×1e4: ArduPilot passes
-non-location x/y raw and refuses local frames for location commands, QGC would over-scale local
-frames by 1e7, MAVSDK refuses to build them; emitting it would make this library the only sender
-applying the scale. Raw-metres passthrough matches the decode authority.
+build-time rejection tells the operator.
 *Check:* `node --test test/command/carrier.test.js test/command/carrier-resend.test.js`
+
+**Local-frame COMMAND_INT x/y really is metres × 1e4 — PX4 implements it; ArduPilot refuses the
+frame rather than reading it raw.**
+*Wrong belief:* the common.xml `×1e4` local rule is dead documentation that nothing decodes, so
+raw rounded metres is the interoperable choice. (Asserted here from source archaeology across
+pymavlink/MAVSDK/QGC/ArduPilot — a survey that never covered PX4's decoder, which was the
+deciding case. Recorded as a caution: absence of evidence in four codebases was treated as
+evidence of absence, and one measurement overturned it.)
+*Fact:* measured against both autopilots with one `COMMAND_INT`, identical `x`/`y`, only the
+frame varied. **PX4** (`px4io/px4-sitl`, the digest pinned in `sitl/docker-compose.yml`) applies
+the frame-dependent divisor exactly as specified — `MAV_FRAME_LOCAL_NED` `x=1234567` decodes to
+`param5 = 123.4567` (÷1e4) while `MAV_FRAME_GLOBAL_INT` decodes the same input to `0.123457`
+(÷1e7), both ACCEPTED, read back from PX4's own `vehicle_command` uORB topic. **ArduPilot
+4.7.0** (official prebuilt `firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu`)
+does not scale local frames at all — it **denies** them for location-bearing commands, because
+`mavlink_coordinate_frame_to_location_alt_frame` maps only the GLOBAL variants so
+`location_from_command_t` returns false: `DO_SET_HOME` with `GLOBAL_INT` is ACCEPTED and sets
+`HOME_POSITION` to the verbatim degE7 value, while the identical command with `LOCAL_NED` returns
+`MAV_RESULT_DENIED` and leaves home unchanged.
+Therefore scaling ×1e4 is strictly correct, not a trade-off: it fixes a real 1e4 error on PX4
+(a local reposition to `x = 50` m currently arrives as 5 mm) and cannot regress ArduPilot, which
+rejects the frame regardless of the value. There is no raw-metres consumer to preserve
+compatibility with.
+*Check (PX4):* `cd sitl && docker compose --profile sitl up -d px4-11`, send a local-frame
+COMMAND_INT, then `docker exec nrc-px4-11 sh -lc 'cd /opt/px4 && ./bin/px4-listener
+vehicle_command 1'`. Send **before** reading — `px4-listener` prints uORB's retained value on
+start, so a listener launched first reports the previous command.
+*Check (ArduPilot):* run the prebuilt SITL binary with
+`--serial0 udpclient:127.0.0.1:14550`, send `DO_SET_HOME` as COMMAND_INT under each frame, and
+read `HOME_POSITION` back.
