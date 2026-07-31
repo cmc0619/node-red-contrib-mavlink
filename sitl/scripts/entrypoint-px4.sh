@@ -68,6 +68,37 @@ if [[ "${OUT_PORT}" == "14542" || "${OUT_PORT}" == "14540" ]]; then
   fi
 fi
 
+# Commander caches vehicle_status.system_id when it starts. Vendor rcS sets
+# MAV_SYS_ID to (px4_instance+1) before `commander start`, so a lab sysid of
+# 11–15 applied only later then leaves HEARTBEATs advertising 11 while
+# commander still accepts target_system 0/1 only — COMMAND_* to 11 are ignored.
+# Rewrite that early assignment, then re-assert immediately before commander
+# and again immediately before mavlink (airframes may reset the param).
+sed -i -E \
+  "s|^param set MAV_SYS_ID \\\$\\(\\(\\s*px4_instance\\s*\\+\\s*1\\s*\\)\\)|param set MAV_SYS_ID ${SYSID}|" \
+  "${RCS}"
+if ! grep -qE "^param set MAV_SYS_ID ${SYSID}$" "${RCS}"; then
+  echo "entrypoint-px4: FATAL - early MAV_SYS_ID rewrite failed (vendor rcS changed?)" >&2
+  exit 1
+fi
+
+if ! grep -q 'nrc_lab_params_pre_commander' "${RCS}"; then
+  tmp="$(mktemp)"
+  awk -v sysid="${SYSID}" '
+    /commander start/ && !done {
+      print "# nrc_lab_params_pre_commander — commander caches system_id at start"
+      print "param set MAV_SYS_ID " sysid
+      done=1
+    }
+    { print }
+  ' "${RCS}" > "${tmp}"
+  mv "${tmp}" "${RCS}"
+fi
+if ! grep -q 'nrc_lab_params_pre_commander' "${RCS}"; then
+  echo "entrypoint-px4: FATAL - could not insert pre-commander MAV_SYS_ID into rcS" >&2
+  exit 1
+fi
+
 # MAVLink reads MAV_SYS_ID when `. px4-rc.mavlink` runs — set it immediately before.
 # Airframes also reset it earlier, so an early-only set is not enough.
 if ! grep -q 'nrc_lab_params_pre_mavlink' "${RCS}"; then

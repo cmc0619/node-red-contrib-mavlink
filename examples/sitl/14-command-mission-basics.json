@@ -112,7 +112,8 @@
             [
                 "ex09-arm-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "ex09-inject-msgint",
@@ -165,7 +166,8 @@
             [
                 "ex09-msgint-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "ex09-inject-upload",

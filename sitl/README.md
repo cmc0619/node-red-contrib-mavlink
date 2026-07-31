@@ -119,7 +119,8 @@ The `nodered` profile uses `network_mode: host` so flows that bind `0.0.0.0:1455
 |---------|-------------|
 | Port already in use | `ss -ulpn \| grep -E '14550\|14560\|14540'` — stop QGC/other SITL |
 | No peers in State/In | `docker compose … logs ap-1` — confirm `out=udp:<host-ip>:…` (gateway, not silent) |
-| Only sysid 1 answers commands | Wait for HEARTBEATs so the peer table learns each UDP source port |
+| PX4 ignores COMMAND_* to sysid 11–15 (broadcast/`target_system=0` still works) | `commander` cached `system_id=1` because `MAV_SYS_ID` was rewritten after `commander start`. Restart PX4 containers on an entrypoint that sets `MAV_SYS_ID` before commander; confirm with `px4-listener vehicle_status` → `system_id` matches the lab sysid |
+| Only one vehicle answers commands | Wait for HEARTBEATs so the peer table learns each UDP source port |
 | PX4 silent | Confirm image tag still provides SIH (`PX4_SIM_MODEL=sihsim_quadx`); check entrypoint logs |
 | `check-logs` fails after arm | List `sitl/logs/<service>`; firmware may write under a nested folder (checker searches recursively) |
 
@@ -131,9 +132,11 @@ Entrypoints log `out=udp:<gateway-ip>:…` when `host-gateway` would otherwise p
 **PX4:** `docker compose --profile sitl up -d` emits HEARTBEATs with sysids **11–15** on UDP
 **14560** and sysid **21** on **14542** (re-checked after the gateway fallback).
 
-**ArduPilot:** image builds locally (`nrc-mavlink-ap-sitl:local`). Telemetry path matches PX4
-once SITL past “Waiting for internal clock bits”; first `sim_vehicle` bring-up can stall there
-on nested Docker — restart the service or check `/tmp/ArduCopter.log` inside the container.
+**ArduPilot:** image builds locally (`nrc-mavlink-ap-sitl:local`). The entrypoint passes
+`--mavproxy-args=--daemon` so MAVProxy runs headless under Compose (interactive MAVProxy
+with no TTY stops reading TCP 5760 and the container restart-loops). A log line
+“Waiting for internal clock bits” is the LP5562 LED sim, not a boot gate — ignore it.
+Check `/tmp/ArduCopter.log` inside the container if telemetry still never reaches the host.
 
 ## CI note
 

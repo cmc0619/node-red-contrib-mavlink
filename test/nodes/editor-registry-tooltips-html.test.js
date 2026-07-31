@@ -42,7 +42,10 @@ test('Command Advanced MAV_CMD select and enum options use catalog descriptions'
   assert.match(html, /function syncAdvancedTitle/);
   assert.match(html, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
   assert.match(html, /catalogParamByIndex/);
-  assert.match(html, /catParam\.description/);
+  // Preset rows merge the whole catalog param spec (description included) and
+  // render through advancedParamInput, which titles inputs from it.
+  assert.match(html, /Object\.assign\(\{\}, catalogParamByIndex/);
+  assert.match(html, /spec\.description \|\| ''/);
 });
 
 test('In / Swarm message and command selects use catalog descriptions', () => {
@@ -129,14 +132,42 @@ test('Payload TIP_FIELDS excludes enum selects driven by fillEnumSelect', () => 
   assert.match(tipBlock[1], /['"]sequence['"]/);
 });
 
-test('Command preset controls render before tip catalog arrives', () => {
+test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
   const html = readHtml('mavlink-command');
-  // Controls append before loadCommandsCatalog; tips attach afterward.
-  assert.match(
-    html,
-    /container\.append\(rows\[rows\.length - 1\]\.row\);[\s\S]*loadCommandsCatalog\(function/
-  );
+  // Catalog-driven rendering: a cache hit renders synchronously; while the
+  // catalog is loading only a placeholder shows, and oneditsave refuses to
+  // scrape a form that never rendered — saved params survive.
+  assert.match(html, /_mavParamsRendered = false/, 'render pass starts unrendered');
+  assert.match(html, /_mavParamsRendered = true/, 'real renders mark the form scrapable');
   assert.match(html, /\+\+_catalogRequestSeq;/);
+
+  // Execute the actual oneditsave body, not just its source text: extract it
+  // from the registration and run it against a node object (widget
+  // persistence, per guidelines).
+  const start = html.indexOf('oneditsave: function () {');
+  assert.ok(start > 0, 'oneditsave handler exists');
+  let i = html.indexOf('{', start);
+  const bodyStart = i + 1;
+  let depth = 1;
+  while (i < html.length && depth > 0) {
+    const c = html[++i];
+    if (c === '{') depth += 1;
+    else if (c === '}') depth -= 1;
+  }
+  const body = html.slice(bodyStart, i);
+  // jQuery stub: no rendered inputs on the (placeholder) form.
+  const $stub = () => ({ each() {} });
+  const save = new Function('$', body);
+
+  // Premature Done: the form never rendered → the saved params must survive.
+  const unrendered = { _mavParamsRendered: false, params: '{"5":47.1,"6":-122.5}' };
+  save.call(unrendered, $stub);
+  assert.equal(unrendered.params, '{"5":47.1,"6":-122.5}', 'premature save keeps stored params');
+
+  // A rendered zero-param form legitimately saves {}.
+  const rendered = { _mavParamsRendered: true, params: '{"5":47.1}' };
+  save.call(rendered, $stub);
+  assert.equal(rendered.params, '{}', 'a rendered empty form saves {}');
 });
 
 test('Command catalog loads coalesce waiters per target key', () => {

@@ -60,6 +60,29 @@
       confirm: { value: false },
       delivery: { value: 'build' },
       actionType: { value: 'command' },
+      // Required for command actions and command-backed payload verbs (§9):
+      // no default wire form. Move and Param actions carry no MAV_CMD, and
+      // message-kind payload verbs (gimbal manager aiming) never consult the
+      // carrier, so a blank carrier is fine for those (Codex review on #61).
+      carrier: { value: '', validate: function (v) {
+        // Live selectors first, saved values as fallback (house pattern, see
+        // the dialect validator above): this.* is stale during in-dialog
+        // validation.
+        var $type = $('#node-input-actionType');
+        var t = ($type && $type.length) ? $type.val() : (this.actionType || 'command');
+        if (t !== 'command' && t !== 'payload') return true;
+        if (t === 'payload') {
+          var $topic = $('#node-input-topic');
+          var topic = ($topic && $topic.length) ? $topic.val() : (this.topic || 'camera');
+          var $verb = $('#node-input-verb');
+          var verb = ($verb && $verb.length) ? $verb.val() : (this.verb || '');
+          var $path = $('#node-input-path');
+          var path = ($path && $path.length) ? $path.val() : (this.path || 'legacy');
+          if (RED.mavlink.payloadVerbIgnoresCarrier(topic, verb, path)) return true;
+        }
+        return v === 'int' || v === 'long';
+      } },
+      frame: { value: '' },
       commandId: { value: 400, validate: RED.validators.number() },
       preset: { value: '' },
       params: { value: '{}' },
@@ -136,7 +159,10 @@
 
       $('#node-input-topic').on('change', function () {
         refreshVerbOptions(false);
+        refreshCarrierRows();
       });
+      $('#node-input-verb').on('change', refreshCarrierRows);
+      $('#node-input-path').on('change', refreshCarrierRows);
       refreshVerbOptions(true);
 
       var _msgCatalogByKey = {};
@@ -326,6 +352,25 @@
       });
       $('#node-input-delivery').on('change', refreshCatalogsAndVisibility);
       $('#node-input-selectionMode').on('change', refreshCatalogsAndVisibility);
+
+      // ── Carrier (§9) ───────────────────────────────────────────────────────
+      // Carrier applies to anything riding a MAV_CMD: command actions and
+      // command-backed payload verbs. Message-kind payload verbs (gimbal
+      // manager aiming) ignore it. Frame only exists on COMMAND_INT.
+      function refreshCarrierRows() {
+        var t = $('#node-input-actionType').val() || 'command';
+        var usesCarrier = t === 'command' ||
+          (t === 'payload' && !RED.mavlink.payloadVerbIgnoresCarrier(
+            $('#node-input-topic').val() || 'camera',
+            $('#node-input-verb').val() || '',
+            $('#node-input-path').val() || 'legacy'
+          ));
+        $('#row-swarm-carrier').toggle(usesCarrier);
+        $('#row-swarm-frame').toggle(usesCarrier && $('#node-input-carrier').val() === 'int');
+      }
+      $('#node-input-carrier').on('change', refreshCarrierRows);
+      $('#node-input-actionType').on('change', refreshCarrierRows);
+      refreshCarrierRows();
       refreshVehicleTypeOptions();
       refreshCommandOptions();
       refreshIdentitySelect();
@@ -353,6 +398,8 @@
   <div class="form-row"><label for="node-input-actionType">Action</label><select id="node-input-actionType"><option value="command">Command</option><option value="move">Move</option><option value="payload">Payload</option><option value="param">Param set</option><option value="mission">Mission (refused)</option></select></div>
   <div class="form-row"><label for="node-input-commandId">Command</label><select id="node-input-commandId" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-params">Params JSON</label><input type="text" id="node-input-params" placeholder='{"1":1}'></div>
+  <div class="form-row" id="row-swarm-carrier"><label for="node-input-carrier">Carrier</label><select id="node-input-carrier" style="width:70%"><option value="">&mdash; select carrier &mdash;</option><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
+  <div class="form-row" id="row-swarm-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="">Global, absolute alt (default)</option><option value="3">Global, relative alt</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
   <div class="form-row"><label for="node-input-moveMode">Move mode</label><select id="node-input-moveMode"><option value="local-position">Local position</option><option value="local-velocity">Local velocity</option><option value="global-position">Global position</option></select></div>
   <div class="form-row"><label for="node-input-north">North</label><input type="number" id="node-input-north"></div>
   <div class="form-row"><label for="node-input-east">East</label><input type="number" id="node-input-east"></div>
@@ -373,6 +420,13 @@
   <p>Fans one single-message MAVLink action out across the active vehicles selected from a Connection peer table.</p>
   <p>Sequential mode sends one targeted message per member at the configured interval. Broadcast mode sends one packet with target_system 0 and target_component 1.</p>
   <p>Output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail. Mission actions and parameter list requests are refused.</p>
+  <p>The <b>Carrier</b> field is required for Command actions and command-backed
+  Payload verbs (§9) — message-kind payload verbs (gimbal manager aiming) ignore it:
+  <code>COMMAND_INT</code> scales positional params from decimal degrees to
+  <code>degE7</code> integers with an explicit <b>Frame</b>;
+  <code>COMMAND_LONG</code> sends float params. Positional values are always
+  entered in decimal degrees. <code>msg.payload.carrier</code> and
+  <code>msg.payload.mavFrame</code> override per message.</p>
   <p><b>Send as</b> — selects the GCS or custom identity that stamps source SysID/CompID on outbound frames. Only identities with a <code>gcs</code> or <code>custom</code> role are offered. Hidden on Build delivery (source ids are stamped at the wire by the sending node).</p>
   <p>The Connection is not required when Delivery is <b>Build</b> and Selection is <b>Explicit sysid list</b> — the list resolves without a live peer table. All other combinations (all/filter even in Build) still require a Connection because the peer table is the only place those selections resolve.</p>
   <p>Broadcast requires the <i>All active vehicles</i> selection: a broadcast packet reaches every vehicle on the link, so it cannot honour a filtered or explicit-list subset. Use sequential fan-out for a subset.</p>

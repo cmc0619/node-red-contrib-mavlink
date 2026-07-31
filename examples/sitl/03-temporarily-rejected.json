@@ -112,7 +112,8 @@
             [
                 "sitl03-arm-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "sitl03-takeoff",
@@ -140,7 +141,8 @@
             [
                 "sitl03-takeoff-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "sitl03-done",

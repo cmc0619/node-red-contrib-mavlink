@@ -135,7 +135,8 @@
             [
                 "sitl09-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "sitl09-done",

@@ -47,6 +47,7 @@ test('every catalog verb builds without error', () => {
         verb,
         target: { sysid: 1, compid: 1 },
         values: {},
+        carrier: 'long',
       };
       if (topic === 'gimbal' && verb === 'aim') {
         input.path = 'legacy';

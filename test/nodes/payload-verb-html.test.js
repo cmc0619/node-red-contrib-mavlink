@@ -327,3 +327,39 @@ test('mavlink-payload CompID reloads when catalog source changes', () => {
     'dialect change reloads CompID'
   );
 });
+
+test('payload carrier is required for command verbs, exempt for message-kind (§9)', () => {
+  assert.match(payloadHtml, /id="node-input-carrier"/, 'carrier select must bind to the carrier property');
+  assert.match(
+    payloadHtml,
+    /carrier:\s*\{ value: '', validate: function/,
+    'carrier default is empty with a conditional validate — no blanket required flag'
+  );
+  assert.match(
+    payloadHtml,
+    /payloadVerbIgnoresCarrier\(topic, verb, path\)/,
+    'the validate exempts message-kind verbs via the shared predicate'
+  );
+  assert.match(
+    payloadHtml,
+    /\$topic && \$topic\.length\) \? \$topic\.val\(\) : \(this\.topic/,
+    'the validate reads live selectors first, saved values as fallback (house pattern)'
+  );
+  assert.match(payloadHtml, /<option value="int">/, 'COMMAND_INT option offered');
+  assert.match(payloadHtml, /<option value="long">/, 'COMMAND_LONG option offered');
+});
+
+test('payload frame row binds to the frame property and follows the INT carrier (§9)', () => {
+  assert.match(payloadHtml, /id="node-input-frame"/, 'frame select must bind to the frame property');
+  assert.match(
+    payloadHtml,
+    /frame:\s*\{ value: '' \}/,
+    'frame is declared in defaults (blank = builder default GLOBAL) so the selection persists'
+  );
+  assert.match(payloadHtml, /row-payload-frame/, 'frame row id must exist');
+  assert.match(
+    payloadHtml,
+    /\$\('#node-input-carrier'\)\.on\('change', refreshFrameRow\);/,
+    'carrier change re-evaluates the frame row'
+  );
+});

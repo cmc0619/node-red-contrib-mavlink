@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex12-tab",
     "name": "Ebony & Ivory dual stack",
-    "info": "ArduPilot: bind 127.0.0.1:14550 → remote 14551 (sysid 1). PX4: bind 14560 → remote 14561 (sysid 11) — PX4 SITL ports are version-specific; verify against your build (commonly 14550/14570/14580). Do NOT reuse ArduPilot custom_mode numbers on PX4; Ivory uses takeoff without hardcoded GUIDED. Launch: sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14551 and PX4 SITL with MAV_SYS_ID=11.",
+    "info": "ArduPilot: bind 127.0.0.1:14550 \u2192 remote 14551 (sysid 1). PX4: bind 14560 \u2192 remote 14561 (sysid 11) \u2014 PX4 SITL ports are version-specific; verify against your build (commonly 14550/14570/14580). Do NOT reuse ArduPilot custom_mode numbers on PX4; Ivory uses takeoff without hardcoded GUIDED. Launch: sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14551 and PX4 SITL with MAV_SYS_ID=11.",
     "x": 200,
     "y": 40,
     "wires": []
@@ -119,7 +119,8 @@
       [
         "ex12-dbg-ap-arm"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex12-cmd-ap-guided",
@@ -147,7 +148,8 @@
       [
         "ex12-dbg-ap-guided"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex12-cmd-ap-takeoff",
@@ -175,7 +177,8 @@
       [
         "ex12-dbg-ap-takeoff-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex12-cmd-px4-arm",
@@ -203,7 +206,8 @@
       [
         "ex12-dbg-px4-arm"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex12-cmd-px4-takeoff",
@@ -231,7 +235,8 @@
       [
         "ex12-dbg-px4-takeoff-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex12-cmd-ap-rtl",
@@ -259,7 +264,8 @@
       [
         "ex12-dbg-ap-rtl-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex12-cmd-px4-rtl",
@@ -287,7 +293,8 @@
       [
         "ex12-dbg-px4-rtl-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex12-state-feed-ap",
@@ -329,7 +336,7 @@
     "id": "ex12-inject-both-up",
     "type": "inject",
     "z": "ex12-tab",
-    "name": "▶ Both up",
+    "name": "\u25b6 Both up",
     "props": [
       {
         "p": "payload"

@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex11-tab",
     "name": "Streamed circle via Move",
-    "info": "No arc primitive — Function computes lat/lon ring points (§ coordinate frames). Move delivery stream @ 5 Hz, TTL 1500 ms. Stop inject sends payload:false; letting injects stop also lets TTL expire. SITL bind 14550 → 14551.",
+    "info": "No arc primitive \u2014 Function computes lat/lon ring points (\u00a7 coordinate frames). Move delivery stream @ 5 Hz, TTL 1500 ms. Stop inject sends payload:false; letting injects stop also lets TTL expire. SITL bind 14550 \u2192 14551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -86,7 +86,8 @@
       [
         "ex11-dbg-arm"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex11-cmd-guided",
@@ -114,7 +115,8 @@
       [
         "ex11-dbg-guided"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex11-cmd-takeoff",
@@ -142,7 +144,8 @@
       [
         "ex11-dbg-takeoff-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex11-cmd-land",
@@ -170,14 +173,15 @@
       [
         "ex11-dbg-land-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex11-fn-ring",
     "type": "function",
     "z": "ex11-tab",
     "name": "Ring points",
-    "func": "// Ring setpoint generator — no arc primitive; the ring is flow-author maths.\nconst R = 100;\nconst alt = 20;\nconst c_lat = -35.363261;\nconst c_lon = 149.165230;\nlet theta = context.get('theta') || 0;\ntheta += Math.PI / 18;\ncontext.set('theta', theta);\nconst lat = c_lat + (R * Math.sin(theta)) / 111320;\nconst lon = c_lon + (R * Math.cos(theta)) / (111320 * Math.cos(c_lat * Math.PI / 180));\nmsg.payload = {\n    mode: 'global-position',\n    position: { lat, lon, alt }\n};\nreturn msg;",
+    "func": "// Ring setpoint generator \u2014 no arc primitive; the ring is flow-author maths.\nconst R = 100;\nconst alt = 20;\nconst c_lat = -35.363261;\nconst c_lon = 149.165230;\nlet theta = context.get('theta') || 0;\ntheta += Math.PI / 18;\ncontext.set('theta', theta);\nconst lat = c_lat + (R * Math.sin(theta)) / 111320;\nconst lon = c_lon + (R * Math.cos(theta)) / (111320 * Math.cos(c_lat * Math.PI / 180));\nmsg.payload = {\n    mode: 'global-position',\n    position: { lat, lon, alt }\n};\nreturn msg;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -255,7 +259,7 @@
     "id": "ex11-inject-circle",
     "type": "inject",
     "z": "ex11-tab",
-    "name": "◯ Fly circle",
+    "name": "\u25ef Fly circle",
     "props": [
       {
         "p": "payload"
@@ -280,7 +284,7 @@
     "id": "ex11-inject-stop",
     "type": "inject",
     "z": "ex11-tab",
-    "name": "■ Stop circle",
+    "name": "\u25a0 Stop circle",
     "props": [
       {
         "p": "payload",

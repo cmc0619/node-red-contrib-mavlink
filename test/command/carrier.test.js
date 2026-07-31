@@ -4,10 +4,12 @@
  * COMMAND_LONG ↔ COMMAND_INT carrier conversion tests (DESIGN.md §9 "resend in
  * the other form", "Coordinate frames").
  *
- * Pins the conversion rules the node relies on for an auto-resend:
+ * Pins the conversion rules the node relies on for carrier builds and the
+ * auto-resend:
  *   - param1–4 pass through; param5→x, param6→y, param7→z (float, never scaled)
- *   - global-frame x/y are scaled to the wire degE7 int32 (degrees × 1e7)
- *   - already-scaled values (|v| > 180) are not double-scaled
+ *   - global-frame x/y are scaled to the wire degE7 int32 (degrees × 1e7),
+ *     unconditionally — canonical params are always degrees (§9), so there is
+ *     no "already scaled" guess and no pass-through heuristic
  *   - a non-global frame leaves x/y in metres (rounded to int32)
  *   - the round trip LONG→INT→LONG recovers the original params
  */
@@ -42,11 +44,12 @@ test('longToIntFields maps params, scales global lat/lon to degE7, keeps z float
   assert.equal(int.autocontinue, 0);
 });
 
-test('longToIntFields does not double-scale values that are already degE7', () => {
-  // |471234567| > 180 → treat as an already-scaled wire integer.
-  const int = longToIntFields([0, 0, 0, 0, 471234567, -1225000000, 50]);
-  assert.equal(int.x, 471234567);
-  assert.equal(int.y, -1225000000);
+test('longToIntFields scales every degrees value — no pass-through heuristic', () => {
+  // Whole-degree coordinates are ordinary operator input and must scale like
+  // any other degrees value; the old |v| > 180 pass-through is gone (§9).
+  const int = longToIntFields([0, 0, 0, 0, -35, 149, 50]);
+  assert.equal(int.x, -350000000);
+  assert.equal(int.y, 1490000000);
 });
 
 test('longToIntFields leaves x/y in metres for a non-global frame', () => {
@@ -92,11 +95,14 @@ test('isGlobalFrame classifies the global MAV_FRAME family', () => {
   assert.equal(isGlobalFrame(1), false); // LOCAL_NED
 });
 
-test('scaleLatLon scales degrees and guards the double-scale boundary', () => {
+test('scaleLatLon always scales degrees — whole numbers included', () => {
   assert.equal(scaleLatLon(47), 470000000);
   assert.equal(scaleLatLon(-122.5), -1225000000);
-  assert.equal(scaleLatLon(471234567), 471234567); // already scaled
+  assert.equal(scaleLatLon(47.1234567), 471234567);
   assert.equal(scaleLatLon(180), 1800000000); // boundary: still degrees
+  // Near null island a tiny real coordinate must scale too — the value the
+  // old |v| > 180 heuristic could silently misread.
+  assert.equal(scaleLatLon(0.0000015), 15);
 });
 
 test('buildCommandInt emits a COMMAND_INT envelope with converted fields', () => {
@@ -125,4 +131,51 @@ test('buildCommandLong emits a COMMAND_LONG envelope with the confirmation byte'
   assert.equal(msg.fields.confirmation, 3);
   assert.equal(msg.fields.param1, 1);
   assert.equal(msg.fields.param7, 0);
+});
+
+// ── Ask-the-XML coordinate kinds (§9) ────────────────────────────────────────
+
+const { intCoordKinds } = require('../../lib/command');
+const { loadBundled } = require('../../lib/metadata');
+
+test('intCoordKinds classifies param5/6 from the dialect XML', () => {
+  const bundle = loadBundled('common');
+  // Real lat/lon: hasLocation, no degE7 units → scale.
+  assert.deepEqual(intCoordKinds(bundle, 192), { 5: 'latlon', 6: 'latlon' }); // DO_REPOSITION
+  // Not a location: gimbal manager flags ride param5 → never scale.
+  assert.deepEqual(intCoordKinds(bundle, 1000), { 5: 'raw', 6: 'raw' }); // DO_GIMBAL_MANAGER_PITCHYAW
+  // Natively degE7 in the XML → the entered value IS the wire value.
+  assert.deepEqual(intCoordKinds(bundle, 30001), { 5: 'dege7', 6: 'dege7' }); // PAYLOAD_PREPARE_DEPLOY
+  // Unknown command / missing bundle → null (historical scaling).
+  assert.equal(intCoordKinds(bundle, 999999), null);
+  assert.equal(intCoordKinds(null, 192), null);
+});
+
+test('coordKinds raw/dege7 params are never ×1e7-scaled on a global frame', () => {
+  // Gimbal manager flags = 8 must reach the wire as 8, not 80000000.
+  const raw = longToIntFields([0, 0, 0, 0, 8, 0, 0], { coordKinds: { 5: 'raw', 6: 'raw' } });
+  assert.equal(raw.x, 8);
+  // A natively degE7 value passes through unscaled.
+  const native = longToIntFields([0, 0, 0, 0, 471234567, -1225000000, 0], {
+    coordKinds: { 5: 'dege7', 6: 'dege7' },
+  });
+  assert.equal(native.x, 471234567);
+  assert.equal(native.y, -1225000000);
+});
+
+test('NaN in param5/6 refuses the INT build — no silent null island (§9)', () => {
+  // LONG's NaN means "leave unchanged"; int32 cannot express it, and coercing
+  // to 0 would aim a global-frame command at 0,0. The spec routes such
+  // commands to COMMAND_LONG, so the INT build fails loud.
+  assert.throws(() => longToIntFields([0, 0, 0, 0, NaN, 149, 50]), /must be finite/);
+  assert.throws(() => longToIntFields([0, 0, 0, 0, -35, NaN, 50]), /must be finite/);
+  // The reject is kind-independent: NaN flags are equally meaningless.
+  assert.throws(
+    () => longToIntFields([0, 0, 0, 0, NaN, 0, 0], { coordKinds: { 5: 'raw', 6: 'raw' } }),
+    /must be finite/
+  );
+  // NaN stays legal where the wire is float: param1–4 and z.
+  const ok = longToIntFields([NaN, 0, 0, 0, -35, 149, NaN]);
+  assert.ok(Number.isNaN(ok.param1));
+  assert.ok(Number.isNaN(ok.z));
 });
