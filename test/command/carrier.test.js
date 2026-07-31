@@ -111,6 +111,27 @@ test('local-frame LONG→INT→LONG is lossless', () => {
   assert.equal(back[6], 8);
 });
 
+test('MAV_FRAME_MISSION is not a local frame — x/y stay unscaled', () => {
+  // MAV_FRAME_MISSION (2) means "these params are not a position", so it is
+  // neither global nor local. Deriving the local rule as "not global" would
+  // scale it ×1e4; PX4 in fact decodes frame 2 with the degE7 divisor, and QGC
+  // passes it through raw. Unscaled preserves the pre-local-rule behaviour
+  // rather than inventing a third interpretation (§14).
+  const int = longToIntFields([0, 0, 0, 0, 10.4, -3.6, 12], { frame: 2 });
+  assert.equal(int.x, 10);
+  assert.equal(int.y, -4);
+  assert.deepEqual(intFieldsToLong(int).slice(4, 6), [10, -4]);
+});
+
+test('every measured local frame scales by 1e4, not just LOCAL_NED', () => {
+  // Measured on PX4: LOCAL_NED (1), BODY_NED (8) and LOCAL_FRD (20) all decode
+  // x=1234567 as 123.4567 m.
+  for (const frame of [1, 8, 20]) {
+    const int = longToIntFields([0, 0, 0, 0, 123.4567, 0, 0], { frame });
+    assert.equal(int.x, 1234567, `frame ${frame} should scale ×1e4`);
+  }
+});
+
 test('non-coordinate param5/6 stay unscaled in a local frame', () => {
   // Gimbal-manager flags and similar non-location params carry what the
   // operator entered, in either frame — the ×1e4 applies to coordinates only.

@@ -1932,6 +1932,13 @@ deploys. The one code worth exempting is `INVALID_SEQUENCE` (ArduPilot mid-trans
 lossy links, non-terminal on the vehicle side; QGC carries the same exemption), and a premature
 `ACCEPTED` is a protocol *failure* everywhere (MAVSDK `ProtocolError`, QGC `VehicleAckError`) —
 never a success, never ignored.
+*Measured, not only read:* against ArduPilot 4.7.0 SITL, a `MISSION_COUNT` of 60000 was answered
+with `MISSION_ACK type=4` (`NO_SPACE`) in **7 ms**, before a single `MISSION_REQUEST`. The control
+— a valid count of 2 — produced `MISSION_REQUEST seq=0` in 2 ms, resent at ~1 s intervals, and
+after 8 s of silence from the GCS the vehicle abandoned the transfer with `type=15`
+(`OPERATION_CANCELLED`), matching `upload_timeout_ms = 8000`. Under the old phase gate the
+`NO_SPACE` was dropped and the transfer stalled through the full count-retry ceiling before
+failing with the vehicle's reason discarded.
 *Check:* `node --test test/mission/upload.test.js`
 
 **COMMAND_INT x/y has no working keep-current sentinel.**
