@@ -299,6 +299,15 @@ out means duplicating a little knowledge of what the serializers expect; going i
 reusable library to one consumer's dependency and drag framing into its tests. The trade is worth
 it only because the output shapes are stable and few.
 
+**Decimal strings are this codec's boundary contract, not a palette-wide type guarantee.**
+Inbound traffic never passes through the field codec: the connection's wire layer copies fields
+straight off the `node-mavlink` instance, so 64-bit values reach subscription handlers — and
+leave `mavlink-in` in `msg.payload` — as native `BigInt` (the connection's deep copy preserves
+them deliberately). Anything that serializes inbound fields must be BigInt-safe: a bare
+`JSON.stringify` throws on BigInt, and from a subscription handler that throw escapes through
+the socket event and takes the whole process down (§14). The changed-only comparison key in
+`mavlink-in` uses a BigInt-aware replacer for exactly this reason.
+
 **Rules.**
 
 - **Never coerce a missing or non-numeric value.** `undefined`, `null`, `''` and non-numeric
@@ -1836,3 +1845,18 @@ default) is declined — greenfield, config-trust (AGENTS.md); no published pre-
 the field.
 *Check:* `node --test test/mission/node.test.js`; Command's matching test in
 `test/command/node.test.js`.
+
+**Inbound 64-bit fields are `BigInt` at every consumer — §5's decimal-string rendering does not
+happen on the receive path.**
+*Wrong belief:* "64-bit integers as decimal strings" (§5) describes the whole palette, so decoded
+fields are always JSON-serializable and `JSON.stringify(decoded.fields)` is safe in a node.
+*Fact:* `lib/connection/wire.js` `extractFields()` copies values off the `node-mavlink` instance
+with no codec decode — 64-bit kinds are `bigint` (`wire-classes.js`) — and `lib/connection/clone.js`
+`deepCopy` is deliberately BigInt-safe, so `SYSTEM_TIME.time_unix_usec`, `TIMESYNC.tc1`/`ts1`, and
+every `time_usec` arrive in handlers and `msg.payload` as `BigInt`. A bare `JSON.stringify` over
+such fields throws, and from a subscription handler the throw escapes `SubscriptionRegistry.dispatch`
+into the transport's socket event: uncaught exception, process exit. `mavlink-in`'s changed-only
+comparison key therefore stringifies through a BigInt-aware replacer while `msg.payload` keeps the
+original `BigInt`.
+*Check:* `node --test test/nodes/in-out-build.test.js` (changed-only survives a BigInt-bearing
+SYSTEM_TIME frame; identical BigInt drops, different BigInt delivers, payload type preserved).
