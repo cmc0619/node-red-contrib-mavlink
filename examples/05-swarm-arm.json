@@ -129,7 +129,8 @@
       [
         "ex05-dry-status"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex05-inject-live",
@@ -206,7 +207,8 @@
         "ex05-live-status"
       ]
     ],
-    "confirm": true
+    "confirm": true,
+    "carrier": "long"
   },
   {
     "id": "ex05-dry-status",

@@ -251,7 +251,7 @@ test('command without preset or numeric commandId is refused', async () => {
   const connection = connectionStub([peer(1)]);
   const result = await executeSwarm({
     connection,
-    action: { type: 'command', params: { 1: 1 } },
+    action: { type: 'command', carrier: 'long', params: { 1: 1 } },
     mode: 'sequential',
     delivery: 'send',
   });
@@ -276,7 +276,7 @@ test('global move with blank lat/lon is refused (must not become 0,0)', async ()
 });
 
 test('a safety preset (Flight Termination) is refused without confirmation and runs with it (§10)', async () => {
-  const action = { type: 'command', preset: 'flight_termination', params: { 1: 1 } };
+  const action = { type: 'command', carrier: 'long', preset: 'flight_termination', params: { 1: 1 } };
 
   const refused = await executeSwarm({
     connection: connectionStub([peer(1)]),
@@ -302,7 +302,7 @@ test('a safety preset (Flight Termination) is refused without confirmation and r
 test('a raw DO_FLIGHTTERMINATION command id is gated the same as the preset (§10)', async () => {
   const refused = await executeSwarm({
     connection: connectionStub([peer(1)]),
-    action: { type: 'command', commandId: 185, params: { 1: 1 } },
+    action: { type: 'command', carrier: 'long', commandId: 185, params: { 1: 1 } },
     mode: 'broadcast',
     delivery: 'send',
   });
@@ -316,7 +316,7 @@ test('a preset resolves its own command id, ignoring a leftover default (§9/§1
   const result = await executeSwarm({
     connection,
     // Editor left commandId at its 400 default while a preset was selected.
-    action: { type: 'command', preset: 'takeoff', commandId: 400, params: {} },
+    action: { type: 'command', carrier: 'long', preset: 'takeoff', commandId: 400, params: {} },
     mode: 'sequential',
     delivery: 'send',
   });
@@ -330,7 +330,7 @@ test('advanced command params preserve NaN instead of coercing it to 0 (§9)', a
 
   const result = await executeSwarm({
     connection,
-    action: { type: 'command', commandId: 115, params: { 1: 90, 4: NaN } },
+    action: { type: 'command', carrier: 'long', commandId: 115, params: { 1: 90, 4: NaN } },
     mode: 'sequential',
     delivery: 'send',
   });
@@ -339,6 +339,43 @@ test('advanced command params preserve NaN instead of coercing it to 0 (§9)', a
   const fields = connection.sends[0].message.fields;
   assert.equal(fields.param1, 90);
   assert.ok(Number.isNaN(fields.param4), 'a NaN "keep current" param survives to the wire');
+});
+
+test('command action with carrier int builds COMMAND_INT with degE7 coords and frame (§9)', async () => {
+  const connection = connectionStub([peer(1)]);
+
+  const result = await executeSwarm({
+    connection,
+    // DO_REPOSITION with whole-degree lat/lon — canonical degrees, scaled by
+    // the shared INT builder, not passed through.
+    action: { type: 'command', carrier: 'int', frame: 3, commandId: 192, params: { 5: -35, 6: 149, 7: 50 } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  assert.equal(result.success, true);
+  const message = connection.sends[0].message;
+  assert.equal(message.name, 'COMMAND_INT');
+  assert.equal(message.fields.frame, 3);
+  assert.equal(message.fields.x, -350000000);
+  assert.equal(message.fields.y, 1490000000);
+  assert.equal(message.fields.z, 50);
+  assert.equal('confirmation' in message.fields, false, 'COMMAND_INT has no confirmation byte');
+});
+
+test('command action without a carrier is refused — no default wire form (§9)', async () => {
+  const connection = connectionStub([peer(1)]);
+
+  const result = await executeSwarm({
+    connection,
+    action: { type: 'command', commandId: 400, params: {} },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  assert.equal(result.success, false);
+  assert.match(result.detail || result.result, /carrier/);
+  assert.equal(connection.sends.length, 0, 'nothing is sent without a carrier choice');
 });
 
 test('broadcast confirm matches COMMAND_ACK on sysid AND component (§10)', async () => {
@@ -378,7 +415,7 @@ test('broadcast confirm matches COMMAND_ACK on sysid AND component (§10)', asyn
 });
 
 function commandAction(overrides = {}) {
-  return { type: 'command', commandId: 400, params: {}, ...overrides };
+  return { type: 'command', carrier: 'long', commandId: 400, params: {}, ...overrides };
 }
 
 function peer(sysid, fields = {}) {
@@ -427,3 +464,68 @@ function connectionStub(rows, options = {}) {
     },
   };
 }
+
+// ── Ask-the-XML kinds and the NaN refusal through the swarm path (§9) ────────
+
+const { loadBundled } = require('../../lib/metadata');
+
+test('swarm INT command asks the XML: gimbal flags stay raw on the wire', async () => {
+  const connection = connectionStub([peer(1)]);
+
+  // The bundle arrives as an explicit option — the swarm node resolves it
+  // from the Vehicle Profile (the connection snapshot carries none, Codex #61).
+  const result = await executeSwarm({
+    connection,
+    vehicleBundle: loadBundled('common'),
+    action: { type: 'command', carrier: 'int', commandId: 1000, params: { 1: -15, 2: 90, 5: 8 } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  assert.equal(result.success, true);
+  const message = connection.sends[0].message;
+  assert.equal(message.name, 'COMMAND_INT');
+  assert.equal(message.fields.x, 8, 'gimbal manager flags must not be ×1e7-scaled');
+});
+
+test('swarm INT command with NaN lat/lon fails loud — nothing sent', async () => {
+  const connection = connectionStub([peer(1)]);
+
+  // NaN means "leave unchanged" on the LONG carrier; on INT it must refuse,
+  // not silently become 0,0 (§9/§10 "blank coordinates must not become 0,0").
+  await assert.rejects(
+    executeSwarm({
+      connection,
+      vehicleBundle: loadBundled('common'),
+      action: { type: 'command', carrier: 'int', commandId: 192, params: { 5: NaN, 6: 149, 7: 50 } },
+      mode: 'sequential',
+      delivery: 'send',
+    }),
+    /must be finite/
+  );
+  assert.equal(connection.sends.length, 0, 'the null-island command must never be sent');
+});
+
+test('message-kind payload actions need no carrier; command-backed ones still do (§9)', async () => {
+  // Gimbal manager aiming is a plain message — the carrier is meaningless and
+  // must not be demanded (Codex #61).
+  const managerAim = await executeSwarm({
+    connection: connectionStub([peer(1)]),
+    action: { type: 'payload', topic: 'gimbal', verb: 'aim', path: 'manager', values: { pitch: -10, yaw: 45 } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+  assert.equal(managerAim.success, true);
+
+  // A command-backed verb without a carrier is still refused with nothing sent.
+  const conn2 = connectionStub([peer(1)]);
+  const photo = await executeSwarm({
+    connection: conn2,
+    action: { type: 'payload', topic: 'camera', verb: 'photo', path: 'legacy', values: {} },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+  assert.equal(photo.result, 'refused');
+  assert.match(photo.detail, /carrier/);
+  assert.equal(conn2.sends.length, 0);
+});

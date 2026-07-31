@@ -12,8 +12,15 @@
  *              friendly name; the form reshapes for the chosen preset.
  *   advanced — pick any MAV_CMD from the loaded dialect; all params exposed.
  *
+ * Carrier (§9 "Coordinate frames"): the operator must pick COMMAND_INT or
+ * COMMAND_LONG in the node config — a required field, no default. Positional
+ * params are always entered in decimal degrees; the INT carrier scales them to
+ * degE7 on the wire. A wrong-carrier ack still triggers the one-shot auto
+ * resend in the other form (§9 "resend in the other form").
+ *
  * Delivery tiers (§9 "Delivery tiers"):
- *   build    — construct COMMAND_LONG and emit on output 0; no send.
+ *   build    — construct the selected carrier message and emit on output 0;
+ *              no send.
  *   send     — fire-and-forget; no acknowledgement waiting.
  *   confirm  — wait for COMMAND_ACK, handle retry/backoff for
  *              TEMPORARILY_REJECTED; timeout triggers peer-table check.
@@ -36,7 +43,27 @@ const {
   waitForCompletion,
   buildCommandLong,
   buildCommandInt,
+  CARRIER,
+  intCoordKinds,
+  resolveFrame,
 } = require('../lib/command');
+
+/**
+ * Lazy, failure-tolerant metadata access (§6): the palette must register even
+ * when `mavlink-mappings` is missing, so the bundled-dialect lookup for
+ * coordKinds degrades to null (historical scaling) instead of throwing.
+ * @returns {object|false}
+ */
+let _metadataApi = null;
+function metadataApi() {
+  if (_metadataApi !== null) return _metadataApi;
+  try {
+    _metadataApi = require('../lib/metadata');
+  } catch {
+    _metadataApi = false;
+  }
+  return _metadataApi;
+}
 
 const {
   resolveActionTarget,
@@ -72,10 +99,18 @@ function resolveCommandId(config) {
 }
 
 /**
- * Carrier forms a command may be sent in (§9 "resend in the other form").
- * @enum {string}
+ * Resolve the operator's required carrier choice from config, or null when it
+ * is missing/invalid (§9). No default: a flow that never picked a carrier is
+ * misconfigured and must red out at deploy, not silently pick a wire format.
+ *
+ * @param {object} config  node config from editor
+ * @returns {'long'|'int'|null}
  */
-const CARRIER = { LONG: 'long', INT: 'int' };
+function resolveCarrier(config) {
+  if (config.carrier === CARRIER.INT) return CARRIER.INT;
+  if (config.carrier === CARRIER.LONG) return CARRIER.LONG;
+  return null;
+}
 
 /**
  * Given a wrong-carrier MAV_RESULT, return the carrier the vehicle is asking
@@ -100,7 +135,11 @@ module.exports = function registerMavlinkCommand(RED) {
 
     /** Validate configuration at deploy time. */
     const commandId = resolveCommandId(config);
-    if (commandId === null) {
+    // Carrier is a required choice (§9): no default, so a node deployed
+    // without one — including flows saved before the field existed — reds out
+    // exactly like a missing command.
+    const configuredCarrier = resolveCarrier(config);
+    if (commandId === null || configuredCarrier === null) {
       node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
       node.on('input', (_msg, _send, done) => {
         done && done();
@@ -121,6 +160,47 @@ module.exports = function registerMavlinkCommand(RED) {
     const connNode = config.connection ? RED.nodes.getNode(config.connection) : null;
 
     const delivery = config.delivery;
+
+    /**
+     * How this command's param5/6 ride the INT carrier, per the dialect XML
+     * (§9 "ask the XML"): scaled lat/lon, natively degE7, or raw non-location
+     * values. Resolved lazily — the wire tier's vehicle bundle attaches at
+     * connection start — and null (historical scaling) when no bundle exists.
+     * @returns {{5: string, 6: string}|null}
+     */
+    let _coordKinds;
+    let _coordKindsResolved = false;
+    function coordKinds() {
+      if (_coordKindsResolved) return _coordKinds;
+      _coordKindsResolved = true;
+      let bundle = null;
+      if (delivery === 'build') {
+        if (config.dialect === '__vehicle') {
+          const vehicleNode = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
+          if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
+            try { bundle = vehicleNode.getDialect(); } catch { bundle = null; }
+          }
+        } else if (config.dialect) {
+          const api = metadataApi();
+          if (api) {
+            try { bundle = api.loadBundled(config.dialect); } catch { bundle = null; }
+          }
+        }
+      } else if (connNode && connNode.vehicle) {
+        // The connection's public vehicle snapshot deliberately carries no
+        // compiled bundle — only the profile node id. Per the snapshot's own
+        // contract (nodes/mavlink-connection.js): resolve the profile node
+        // and call getDialect(); never loadBundled, which would break custom
+        // XML profiles. (Codex review on #61 — the .bundle read was dead.)
+        const profileNode = connNode.vehicle.id ? RED.nodes.getNode(connNode.vehicle.id) : null;
+        if (profileNode && typeof profileNode.getDialect === 'function') {
+          try { bundle = profileNode.getDialect(); } catch { bundle = null; }
+        }
+      }
+      _coordKinds = bundle ? intCoordKinds(bundle, commandId) : null;
+      return _coordKinds;
+    }
+
     const timeoutMs = config.timeout ? Number(config.timeout) : 10000;
     const maxRetries = config.maxRetries !== undefined ? Number(config.maxRetries) : 3;
     const unconfirmedContinue = !!config.unconfirmedContinue;
@@ -262,15 +342,35 @@ module.exports = function registerMavlinkCommand(RED) {
         return;
       }
 
+      // Frame for the COMMAND_INT carrier (§9 "Coordinate frames"): shared
+      // precedence chain — msg.mavFrame beats node config, blank falls to the
+      // carrier module's documented default (GLOBAL). Resolved here so every
+      // delivery tier — build included — honours it.
+      const frame = resolveFrame(msg.mavFrame, config.frame);
+
+      /**
+       * Build the wire message for a carrier at a given confirmation counter.
+       * COMMAND_INT has no confirmation byte, so it is ignored there; the
+       * canonical params are always degrees, scaled per carrier by the
+       * carrier module (§9).
+       *
+       * @param {'long'|'int'} carrier
+       * @param {number} confirmation
+       * @returns {{name: string, fields: object}}
+       */
+      function buildCarrierMessage(carrier, confirmation) {
+        if (carrier === CARRIER.INT) {
+          return buildCommandInt(commandId, target.sysid, target.compid, paramArray, {
+            frame,
+            coordKinds: coordKinds() || undefined,
+          });
+        }
+        return buildCommandLong(commandId, target.sysid, target.compid, paramArray, confirmation);
+      }
+
       // ── Delivery: Build ───────────────────────────────────────────────────
       if (delivery === 'build') {
-        const message = buildCommandLong(
-          commandId,
-          target.sysid,
-          target.compid,
-          paramArray,
-          0
-        );
+        const message = buildCarrierMessage(configuredCarrier, 0);
         node.status({ fill: 'yellow', shape: 'dot', text: badge24(`build ${displayName}`) });
         // Output 1 reports every terminal outcome, success included (§9); a
         // successful build emits a 'built' status record for status/debug
@@ -289,13 +389,7 @@ module.exports = function registerMavlinkCommand(RED) {
 
       // ── Delivery: Send (fire-and-forget) ──────────────────────────────────
       if (delivery === 'send') {
-        const message = buildCommandLong(
-          commandId,
-          target.sysid,
-          target.compid,
-          paramArray,
-          0
-        );
+        const message = buildCarrierMessage(configuredCarrier, 0);
         node.status({ fill: 'blue', shape: 'dot', text: badge24(`sending ${displayName}\u2026`) });
         connNode.send(message, { band: BAND_CONTROL, target, identityId });
         const rec = makeRecord({ result: 'sent', confirmedBy: 'none', elapsed: 0 });
@@ -313,32 +407,6 @@ module.exports = function registerMavlinkCommand(RED) {
       }
 
       node.status({ fill: 'blue', shape: 'dot', text: badge24(`${displayName}\u2026`) });
-
-      // Frame for a COMMAND_INT resend (§9 "Coordinate frames"). The vehicle
-      // needs the right MAV_FRAME to read x/y/z; prefer a per-message override,
-      // then node config, else the carrier module's documented default (GLOBAL).
-      const frame =
-        msg.mavFrame !== undefined && msg.mavFrame !== null && msg.mavFrame !== ''
-          ? Number(msg.mavFrame)
-          : config.frame !== undefined && config.frame !== null && config.frame !== ''
-            ? Number(config.frame)
-            : undefined;
-
-      /**
-       * Build the wire message for a carrier at a given confirmation counter.
-       * COMMAND_INT has no confirmation byte, so it is ignored there; the
-       * params are converted from the LONG form by the carrier module (§9).
-       *
-       * @param {'long'|'int'} carrier
-       * @param {number} confirmation
-       * @returns {{name: string, fields: object}}
-       */
-      function buildCarrierMessage(carrier, confirmation) {
-        if (carrier === CARRIER.INT) {
-          return buildCommandInt(commandId, target.sysid, target.compid, paramArray, { frame });
-        }
-        return buildCommandLong(commandId, target.sysid, target.compid, paramArray, confirmation);
-      }
 
       /**
        * Run one AckWaiter transaction in the given carrier and resolve with its
@@ -368,8 +436,9 @@ module.exports = function registerMavlinkCommand(RED) {
         }
       }
 
-      // First attempt is always COMMAND_LONG (§9 default carrier).
-      let carrier = CARRIER.LONG;
+      // First attempt is the operator's configured carrier (§9): a required
+      // choice, so the wire format is stated intent — never a guess.
+      let carrier = configuredCarrier;
       let ackOutcome = await runWaiter(carrier);
 
       // ── Carrier auto-resend (§9 "resend in the other form") ───────────────
@@ -430,9 +499,10 @@ module.exports = function registerMavlinkCommand(RED) {
         return;
       }
 
-      // From here the outcome may be from either the original or swapped
+      // From here the outcome may be from either the configured or swapped
       // carrier; note a completed swap in the success/failure detail below.
-      const carrierSwapped = carrier !== CARRIER.LONG;
+      const carrierSwapped = carrier !== configuredCarrier;
+      const carrierLabel = `COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'}`;
 
       // Timeout: check peer table for completion condition.
       if (ackOutcome.result === 'timeout') {
@@ -527,7 +597,7 @@ module.exports = function registerMavlinkCommand(RED) {
           confirmedBy: 'ack',
           retries: ackOutcome.retries,
           elapsed: Date.now() - startMs,
-          detail: carrierSwapped ? 'accepted after COMMAND_INT carrier swap (§9)' : null,
+          detail: carrierSwapped ? `accepted after ${carrierLabel} carrier swap (§9)` : null,
         });
         node.status({ fill: 'green', shape: 'dot', text: badge24(`${displayName} accepted`) });
         emitStatus(rec, send, true, rec);
@@ -543,7 +613,7 @@ module.exports = function registerMavlinkCommand(RED) {
         retries: ackOutcome.retries,
         elapsed: Date.now() - startMs,
         detail: carrierSwapped
-          ? `${ackOutcome.detail || RESULT_NAME[ackOutcome.resultCode] || 'failed'} (after COMMAND_INT carrier swap, §9)`
+          ? `${ackOutcome.detail || RESULT_NAME[ackOutcome.resultCode] || 'failed'} (after ${carrierLabel} carrier swap, §9)`
           : ackOutcome.detail,
       });
       node.status({ fill: 'red', shape: 'ring', text: badge24(`${displayName} ${ackOutcome.result}`) });

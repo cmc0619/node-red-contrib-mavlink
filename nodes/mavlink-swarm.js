@@ -2,6 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { executeSwarm, guardSwarmInput } = require('../lib/swarm');
+const { resolveFrame } = require('../lib/command');
 
 module.exports = function registerMavlinkSwarm(RED) {
   function MavlinkSwarmNode(config) {
@@ -50,6 +51,7 @@ module.exports = function registerMavlinkSwarm(RED) {
 
         const aggregate = await executeSwarm({
           connection: effectiveConnection,
+          vehicleBundle: vehicleBundleFrom(RED, effectiveConnection),
           action: actionFrom(config, payload),
           selection,
           mode: payload.executionMode || config.executionMode || 'sequential',
@@ -100,6 +102,8 @@ function actionFrom(config, payload) {
       commandId: payload.commandId || config.commandId || config.advancedCommand,
       preset: payload.preset || config.preset,
       params: { ...parseJson(config.params), ...numericPayloadParams(payload), ...(payload.params || {}) },
+      carrier: payload.carrier || config.carrier,
+      frame: resolveFrame(payload.mavFrame, config.frame),
     };
   }
   if (type === 'move') {
@@ -120,6 +124,8 @@ function actionFrom(config, payload) {
       verb: payload.verb || config.verb || 'photo',
       path: payload.path || config.path || 'legacy',
       values: payload.values || valuesFrom(config),
+      carrier: payload.carrier || config.carrier,
+      frame: resolveFrame(payload.mavFrame, config.frame),
     };
   }
   if (type === 'param') {
@@ -215,6 +221,27 @@ function valuesFrom(config) {
 function valueFrom(payload, config, key) {
   if (payload[key] !== undefined) return payload[key];
   return config[key] === '' ? undefined : config[key];
+}
+
+/**
+ * Compiled dialect bundle for §9 "ask the XML" coordinate kinds. The
+ * connection's public vehicle snapshot deliberately carries no bundle — per
+ * its own contract, resolve the Vehicle Profile node and call getDialect().
+ * Null (no profile, build+list stub, or a throwing profile) keeps the
+ * historical treat-as-latlon scaling.
+ *
+ * @param {object} RED
+ * @param {object} connectionNode
+ * @returns {object|null}
+ */
+function vehicleBundleFrom(RED, connectionNode) {
+  const vehicle = connectionNode && connectionNode.vehicle;
+  if (!vehicle || !vehicle.id) return null;
+  const profileNode = RED.nodes.getNode(vehicle.id);
+  if (profileNode && typeof profileNode.getDialect === 'function') {
+    try { return profileNode.getDialect(); } catch { return null; }
+  }
+  return null;
 }
 
 function numberOption(payload, config, key, fallback) {

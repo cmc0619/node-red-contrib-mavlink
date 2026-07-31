@@ -113,23 +113,27 @@ test('advanced bitmask command params save one numeric mask value', () => {
   assert.match(saver, /params\[idx\]\s*=\s*mask/, 'params JSON stores a number, not an array');
 });
 
-test('preset params declare enum-backed and message-backed selects', () => {
+test('PRESET_PARAMS is curation-only — the dialect catalog is the data source', () => {
   const table = html.slice(
     html.indexOf('const PRESET_PARAMS = {'),
     html.indexOf('const HAS_COMPLETION')
   );
 
-  assert.match(table, /set_mode:[\s\S]*enumName:\s*'MAV_MODE'/, 'set_mode base_mode uses MAV_MODE');
-  assert.match(table, /change_speed:[\s\S]*enumName:\s*'SPEED_TYPE'/, 'change_speed param1 uses SPEED_TYPE');
-  assert.match(table, /orbit:[\s\S]*enumName:\s*'ORBIT_YAW_BEHAVIOUR'/, 'orbit yaw behavior uses enum when present');
-  assert.match(table, /reposition:[\s\S]*enumName:\s*'MAV_DO_REPOSITION_FLAGS'[\s\S]*bitmask:\s*true/, 'reposition flags use bitmask enum');
-  assert.match(table, /request_message:[\s\S]*messages:\s*true/, 'request_message message id uses message catalog');
-  assert.match(table, /set_message_interval:[\s\S]*messages:\s*true/, 'set_message_interval message id uses message catalog');
-  assert.match(table, /stop_message_interval:[\s\S]*messages:\s*true/, 'stop_message_interval message id uses message catalog');
-  assert.match(table, /reboot_autopilot:[\s\S]*enumName:\s*'REBOOT_SHUTDOWN_ACTION'/, 'reboot actions use reboot enum');
+  // The XML declares enums, units, bitmask-ness, and descriptions; the static
+  // table must not duplicate them (they drift — it once said MAV_MODE where
+  // the XML says MAV_MODE_FLAG).
+  assert.ok(!/enumName:/.test(table), 'no static enum pointers — catalog param.enum drives selects');
+  assert.ok(!/fallbackOptions/.test(table), 'no hardcoded enum entry tables');
+  assert.ok(!/bitmask:\s*true/.test(table), 'bitmask-ness comes from the XML enum, not curation');
+  const units = [...table.matchAll(/units:\s*'([^']*)'/g)].map((m) => m[1]);
+  assert.ok(units.length > 0 && units.every((u) => u === 'deg'),
+    'the only curated units are lat/lon deg — the XML leaves those unitless (carrier-dependent)');
+  // Curation that XML cannot know stays.
+  assert.match(table, /request_message:[\s\S]*messages:\s*true/, 'message-picker flags are curation');
+  assert.match(table, /label:\s*'Force \(0 or 21196\)'/, 'operator-guidance labels are curation');
 });
 
-test('preset renderer loads enum and message catalogs for selects', () => {
+test('preset rows render through the Advanced catalog path', () => {
   const presetBlock = html.slice(
     html.indexOf("const presetId = $('#node-input-preset')"),
     html.indexOf('// ── Safety preset notice')
@@ -139,15 +143,13 @@ test('preset renderer loads enum and message catalogs for selects', () => {
     html.indexOf('function refreshParamFields')
   );
 
-  assert.match(html, /RED\.mavlink\.loadEnumsCatalog/, 'preset enums use shared enum helper');
+  assert.ok(!/loadEnumsCatalog/.test(html), 'no separate preset enum fetch — enums ride the commands catalog');
   assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/build\/messages['"]\)/, 'message ids load from the shared messages API');
-  assert.match(html, /function presetParamInput/, 'preset branch has a shared input renderer');
-  assert.match(presetBlock, /presetParamInput\(spec\)/, 'preset branch calls the shared input renderer');
-  assert.match(html, /spec\.messages/, 'message-backed preset params become selects');
-  assert.match(html, /spec\.enumName/, 'enum-backed preset params become selects');
-  assert.match(renderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE preset enums are detected before bitmask rendering');
-  assert.match(renderer, /data-kind['"],\s*falseTrue \? ['"]enum['"] : \(isBitmask \? ['"]bitmask['"] : ['"]enum['"]\)/, 'FALSE/TRUE preset bitmasks are tagged as enum selects');
-  assert.match(renderer, /booleanEntryLabel\(entry\)/, 'FALSE/TRUE preset enum options use boolean labels');
+  assert.match(presetBlock, /catalogParamByIndex\(catalog, commandId, spec\.index\)/, 'each row merges the catalog param spec');
+  assert.match(presetBlock, /Object\.assign\(\{\}, catalogParamByIndex/, 'curation keys override, omitted keys inherit');
+  assert.match(presetBlock, /presetParamInput\(merged, catalog\.enums \|\| \{\}\)/, 'rows render with catalog enums');
+  assert.match(renderer, /return advancedParamInput\(spec, enums \|\| \{\}\);/, 'one input builder for preset and Advanced');
+  assert.match(renderer, /spec\.messages/, 'message-backed preset params keep their picker');
 });
 
 test('Command CompID reloads when catalog source changes', () => {
@@ -360,5 +362,41 @@ test('command help documents status fields at message root, not under payload', 
   assert.ok(
     !/<dt>payload\b/.test(statusBlock),
     'status help must not nest fields under payload'
+  );
+});
+
+test('carrier is a required select with no default (§9)', () => {
+  assert.match(html, /id="node-input-carrier"/, 'carrier select must bind to the carrier property');
+  assert.match(
+    html,
+    /carrier:\s*\{ value: '', required: true,/,
+    'carrier default is empty and required — the operator must choose'
+  );
+  assert.match(
+    html,
+    /<option value="int">/,
+    'COMMAND_INT option offered'
+  );
+  assert.match(
+    html,
+    /<option value="long">/,
+    'COMMAND_LONG option offered'
+  );
+});
+
+test('frame row binds to the frame property and follows the INT carrier', () => {
+  assert.match(html, /id="node-input-frame"/, 'frame select must bind to the frame property');
+  assert.match(html, /row-cmd-frame/, 'frame row id must exist');
+  assert.match(
+    html,
+    /\$\('#node-input-carrier'\)\.on\('change', refreshFrameRow\);/,
+    'carrier change re-evaluates the frame row'
+  );
+});
+
+test('preset positional params are labelled degrees, not degE7 (§9 canonical units)', () => {
+  assert.ok(
+    !/units: 'degE7'/.test(html),
+    'no preset param may advertise degE7 — operator input is always degrees'
   );
 });

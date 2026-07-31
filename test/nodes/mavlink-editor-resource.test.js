@@ -190,3 +190,21 @@ test('buildTierDialectDefaults honours modeField:tier for the Build node', () =>
   assert.equal(dialect.validate.call({ tier: 'build' }, ''), false);
   assert.equal(dialect.validate.call({ tier: 'send' }, ''), true);
 });
+
+// ── payloadVerbIgnoresCarrier — drift pin against lib/payload (§9) ───────────
+
+test('payloadVerbIgnoresCarrier mirrors the lib recipe table exactly', () => {
+  const { RED } = loadResource({});
+  const { PAYLOAD_RECIPES } = require('../../lib/payload');
+  // The editor-side predicate cannot require() the lib, so it hardcodes the
+  // message-kind set. This pin fails the moment a recipe is added or changed
+  // in lib/payload without updating the mirror (Codex #61 review).
+  for (const [key, recipe] of Object.entries(PAYLOAD_RECIPES)) {
+    const [topic, verb, path] = key.split('|');
+    assert.equal(
+      RED.mavlink.payloadVerbIgnoresCarrier(topic, verb, path || 'legacy'),
+      recipe.kind === 'message',
+      `${key}: editor predicate must match lib kind '${recipe.kind}'`
+    );
+  }
+});

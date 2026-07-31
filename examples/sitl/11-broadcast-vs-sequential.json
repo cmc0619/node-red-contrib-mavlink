@@ -117,7 +117,8 @@
             [
                 "sitl11-seq-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "sitl11-inject-bcast",
@@ -175,7 +176,8 @@
             [
                 "sitl11-bcast-status"
             ]
-        ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "sitl11-inject-snap",

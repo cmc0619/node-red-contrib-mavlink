@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex15-tab",
     "name": "Telemetry rates",
-    "info": "REQUEST_MESSAGE (ATTITUDE once), SET_MESSAGE_INTERVAL (GLOBAL_POSITION_INT 5 Hz), stop interval. In node proves rate change. Params: msg 33 @ 200000 µs = 5 Hz. SITL bind 14550 → 14551.",
+    "info": "REQUEST_MESSAGE (ATTITUDE once), SET_MESSAGE_INTERVAL (GLOBAL_POSITION_INT 5 Hz), stop interval. In node proves rate change. Params: msg 33 @ 200000 \u00b5s = 5 Hz. SITL bind 14550 \u2192 14551.",
     "x": 200,
     "y": 40,
     "wires": []
@@ -86,7 +86,8 @@
       [
         "ex15-dbg-req-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex15-cmd-set-pos",
@@ -114,7 +115,8 @@
       [
         "ex15-dbg-set-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex15-cmd-stop-pos",
@@ -142,7 +144,8 @@
       [
         "ex15-dbg-stop-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex15-in-pos",

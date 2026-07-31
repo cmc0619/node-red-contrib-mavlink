@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex23-tab",
     "name": "Velocity joystick",
-    "info": "Move local-velocity stream. Up is up-positive in the UI, flipped once to NED at encode. Stop inject sends payload:false. Bind 14550→14551.",
+    "info": "Move local-velocity stream. Up is up-positive in the UI, flipped once to NED at encode. Stop inject sends payload:false. Bind 14550\u219214551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -111,7 +111,8 @@
       [
         "ex23-debug-arm-status"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex23-cmd-guided",
@@ -139,7 +140,8 @@
       [
         "ex23-debug-guided-status"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex23-move",
@@ -179,7 +181,7 @@
     "id": "ex23-inject-stop",
     "type": "inject",
     "z": "ex23-tab",
-    "name": "■ Stop",
+    "name": "\u25a0 Stop",
     "props": [
       {
         "p": "payload"

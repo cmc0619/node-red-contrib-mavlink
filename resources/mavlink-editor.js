@@ -80,6 +80,23 @@
   };
 
   /**
+   * Editor-side copy of lib/payload payloadVerbNeedsCarrier, inverted: true
+   * when the selected payload verb is message-kind (never rides a MAV_CMD),
+   * so the carrier choice is meaningless and the editor must not demand one
+   * (§9; Codex review on #61). Client HTML cannot require() the Node module,
+   * so this mirrors PAYLOAD_RECIPES kind === 'message' — pinned against the
+   * lib table by test so it cannot drift.
+   *
+   * @param {string} topic
+   * @param {string} verb
+   * @param {string} [path]
+   * @returns {boolean}
+   */
+  RED.mavlink.payloadVerbIgnoresCarrier = function (topic, verb, path) {
+    return topic === 'gimbal' && verb === 'aim' && (path || 'legacy') === 'manager';
+  };
+
+  /**
    * Editor-side copy of lib/metadata/naming.js isFalseTrueEnum. Client HTML
    * cannot require() the Node module, so keep this rule mirrored here.
    * Exactly two entries: *_FALSE=0 and *_TRUE=1 (not mixed tables).

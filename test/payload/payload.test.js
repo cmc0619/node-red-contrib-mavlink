@@ -7,6 +7,7 @@ const { buildPayloadMessage } = require('../../lib/payload');
 
 test('camera photo builds a command-backed IMAGE_START_CAPTURE payload action', () => {
   const built = buildPayloadMessage({
+    carrier: 'long',
     topic: 'camera',
     verb: 'photo',
     target: { sysid: 2, compid: 100 },
@@ -27,6 +28,7 @@ test('camera photo builds a command-backed IMAGE_START_CAPTURE payload action', 
 
 test('camera photo defaults camera id and sequence to 0 and count to 1', () => {
   const built = buildPayloadMessage({
+    carrier: 'long',
     topic: 'camera',
     verb: 'photo',
     target: { sysid: 1, compid: 1 },
@@ -40,6 +42,7 @@ test('camera photo defaults camera id and sequence to 0 and count to 1', () => {
 
 test('gimbal manager aim uses the message path and declares no confirmation', () => {
   const built = buildPayloadMessage({
+    carrier: 'long',
     topic: 'gimbal',
     verb: 'aim',
     path: 'manager',
@@ -65,12 +68,14 @@ test('gimbal manager aim uses the message path and declares no confirmation', ()
 
 test('servo repeat and release verbs map to their MAV_CMD command values', () => {
   const servo = buildPayloadMessage({
+    carrier: 'long',
     topic: 'servo',
     verb: 'repeat',
     target: { sysid: 1, compid: 1 },
     values: { servo: 9, pwm: 1700, count: 4, period: 750 },
   });
   const gripper = buildPayloadMessage({
+    carrier: 'long',
     topic: 'release',
     verb: 'gripper',
     target: { sysid: 1, compid: 1 },
@@ -83,4 +88,52 @@ test('servo repeat and release verbs map to their MAV_CMD command values', () =>
   assert.equal(gripper.message.fields.command, 211);
   assert.equal(gripper.message.fields.param1, 2);
   assert.equal(gripper.message.fields.param2, 1);
+});
+
+test('gimbal roi-set with carrier int builds COMMAND_INT with degE7 lat/lon (§9)', () => {
+  const built = buildPayloadMessage({
+    carrier: 'int',
+    frame: 3,
+    topic: 'gimbal',
+    verb: 'roi-set',
+    target: { sysid: 1, compid: 154 },
+    // Whole-degree coordinates — canonical degrees, scaled by the shared INT
+    // builder, never passed through.
+    values: { lat: -35, lon: 149, alt: 50 },
+  });
+
+  assert.equal(built.confirmation, 'command_ack');
+  assert.equal(built.message.name, 'COMMAND_INT');
+  assert.equal(built.message.fields.command, 195); // DO_SET_ROI_LOCATION
+  assert.equal(built.message.fields.frame, 3);
+  assert.equal(built.message.fields.x, -350000000);
+  assert.equal(built.message.fields.y, 1490000000);
+  assert.equal(built.message.fields.z, 50);
+  assert.equal('confirmation' in built.message.fields, false, 'COMMAND_INT has no confirmation byte');
+});
+
+test('a command-backed verb without a carrier throws — no default wire form (§9)', () => {
+  assert.throws(
+    () => buildPayloadMessage({
+      topic: 'servo',
+      verb: 'set',
+      target: { sysid: 1, compid: 1 },
+      values: { servo: 8, pwm: 1600 },
+    }),
+    /carrier 'int' or 'long'/
+  );
+});
+
+test('message-kind verbs ignore the carrier entirely', () => {
+  // Gimbal manager aiming is a plain message, not a MAV_CMD — it must build
+  // with no carrier at all.
+  const built = buildPayloadMessage({
+    topic: 'gimbal',
+    verb: 'aim',
+    path: 'manager',
+    target: { sysid: 1, compid: 154 },
+    values: { pitch: -10, yaw: 45 },
+  });
+  assert.equal(built.confirmation, 'none');
+  assert.equal(built.message.name, 'GIMBAL_MANAGER_SET_PITCHYAW');
 });

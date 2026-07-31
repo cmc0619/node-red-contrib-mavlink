@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex17-tab",
     "name": "Camera & gimbal",
-    "info": "Photo/video, gimbal aim (legacy DO_MOUNT_CONTROL with ack vs manager setpoint fire-and-forget), ROI set/clear. Manager aim has no ack — delivery send only. SITL bind 14550 → 14551.",
+    "info": "Photo/video, gimbal aim (legacy DO_MOUNT_CONTROL with ack vs manager setpoint fire-and-forget), ROI set/clear. Manager aim has no ack \u2014 delivery send only. SITL bind 14550 \u2192 14551.",
     "x": 200,
     "y": 40,
     "wires": []
@@ -113,7 +113,8 @@
       [
         "ex17-dbg-photo-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex17-payload-vid-start",
@@ -168,7 +169,8 @@
       [
         "ex17-dbg-vstart-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex17-payload-vid-stop",
@@ -223,7 +225,8 @@
       [
         "ex17-dbg-vstop-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex17-payload-aim-legacy",
@@ -278,7 +281,8 @@
       [
         "ex17-dbg-legacy-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex17-payload-aim-mgr",
@@ -333,7 +337,8 @@
       [
         "ex17-dbg-mgr-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex17-payload-roi-set",
@@ -388,7 +393,8 @@
       [
         "ex17-dbg-roi-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex17-payload-roi-clear",
@@ -443,7 +449,8 @@
       [
         "ex17-dbg-roic-st"
       ]
-    ]
+    ],
+    "carrier": "long"
   },
   {
     "id": "ex17-inject-photo",
@@ -524,7 +531,7 @@
     "id": "ex17-inject-legacy",
     "type": "inject",
     "z": "ex17-tab",
-    "name": "Aim −45°/90° (legacy)",
+    "name": "Aim \u221245\u00b0/90\u00b0 (legacy)",
     "props": [
       {
         "p": "payload"
