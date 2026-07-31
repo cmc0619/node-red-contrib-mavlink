@@ -2,6 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { executeSwarm, guardSwarmInput } = require('../lib/swarm');
+const { resolveFrame } = require('../lib/command');
 
 module.exports = function registerMavlinkSwarm(RED) {
   function MavlinkSwarmNode(config) {
@@ -102,7 +103,7 @@ function actionFrom(config, payload) {
       preset: payload.preset || config.preset,
       params: { ...parseJson(config.params), ...numericPayloadParams(payload), ...(payload.params || {}) },
       carrier: payload.carrier || config.carrier,
-      frame: frameFrom(payload, config),
+      frame: resolveFrame(payload.mavFrame, config.frame),
     };
   }
   if (type === 'move') {
@@ -124,7 +125,7 @@ function actionFrom(config, payload) {
       path: payload.path || config.path || 'legacy',
       values: payload.values || valuesFrom(config),
       carrier: payload.carrier || config.carrier,
-      frame: frameFrom(payload, config),
+      frame: resolveFrame(payload.mavFrame, config.frame),
     };
   }
   if (type === 'param') {
@@ -241,17 +242,6 @@ function vehicleBundleFrom(RED, connectionNode) {
     try { return profileNode.getDialect(); } catch { return null; }
   }
   return null;
-}
-
-/** MAV_FRAME for the INT carrier: msg.payload.mavFrame beats node config (§9). */
-function frameFrom(payload, config) {
-  if (payload.mavFrame !== undefined && payload.mavFrame !== null && payload.mavFrame !== '') {
-    return Number(payload.mavFrame);
-  }
-  if (config.frame !== undefined && config.frame !== null && config.frame !== '') {
-    return Number(config.frame);
-  }
-  return undefined;
 }
 
 function numberOption(payload, config, key, fallback) {

@@ -45,6 +45,7 @@ const {
   buildCommandInt,
   CARRIER,
   intCoordKinds,
+  resolveFrame,
 } = require('../lib/command');
 
 /**
@@ -341,17 +342,11 @@ module.exports = function registerMavlinkCommand(RED) {
         return;
       }
 
-      // Frame for the COMMAND_INT carrier (§9 "Coordinate frames"). The
-      // vehicle needs the right MAV_FRAME to read x/y/z; prefer a per-message
-      // override, then node config, else the carrier module's documented
-      // default (GLOBAL). Resolved here so every delivery tier — build
-      // included — honours it.
-      const frame =
-        msg.mavFrame !== undefined && msg.mavFrame !== null && msg.mavFrame !== ''
-          ? Number(msg.mavFrame)
-          : config.frame !== undefined && config.frame !== null && config.frame !== ''
-            ? Number(config.frame)
-            : undefined;
+      // Frame for the COMMAND_INT carrier (§9 "Coordinate frames"): shared
+      // precedence chain — msg.mavFrame beats node config, blank falls to the
+      // carrier module's documented default (GLOBAL). Resolved here so every
+      // delivery tier — build included — honours it.
+      const frame = resolveFrame(msg.mavFrame, config.frame);
 
       /**
        * Build the wire message for a carrier at a given confirmation counter.

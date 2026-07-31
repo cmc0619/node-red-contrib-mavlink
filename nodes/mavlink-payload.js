@@ -5,7 +5,7 @@ const {
   fieldMetaFromBundle,
 } = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
-const { AckWaiter } = require('../lib/command');
+const { AckWaiter, resolveFrame } = require('../lib/command');
 const {
   resolveActionTarget,
   profileFromVehicleNode,
@@ -80,11 +80,7 @@ module.exports = function registerMavlinkPayload(RED) {
           // Required for command-backed verbs (§9): the builder throws when a
           // MAV_CMD verb arrives without a carrier choice.
           carrier: payload.carrier || config.carrier,
-          frame: payload.mavFrame !== undefined && payload.mavFrame !== null && payload.mavFrame !== ''
-            ? Number(payload.mavFrame)
-            : config.frame !== undefined && config.frame !== null && config.frame !== ''
-              ? Number(config.frame)
-              : undefined,
+          frame: resolveFrame(payload.mavFrame, config.frame),
         });
 
         if (delivery === 'build') {

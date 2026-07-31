@@ -242,8 +242,57 @@ test('carrier select exists with a conditional required validate (§9)', () => {
   );
 });
 
+test('carrier validate outcomes: MAV_CMD actions refuse blank, others pass (§9)', () => {
+  // Execute the actual validator, not just its source text (conditional
+  // validation, per guidelines). Extract the function body from defaults.
+  const start = html.indexOf("carrier: { value: '', validate: function (v) {");
+  assert.ok(start > 0, 'carrier validator exists');
+  let i = html.indexOf('{', html.indexOf('function (v)', start));
+  const bodyStart = i + 1;
+  let depth = 1;
+  while (i < html.length && depth > 0) {
+    const c = html[++i];
+    if (c === '{') depth += 1;
+    else if (c === '}') depth -= 1;
+  }
+  const body = html.slice(bodyStart, i);
+  const validate = new Function('v', 'RED', body);
+  const RED = {
+    mavlink: {
+      // The real predicate from resources/mavlink-editor.js is drift-pinned
+      // against lib/payload in mavlink-editor-resource.test.js.
+      payloadVerbIgnoresCarrier: (topic, verb, path) =>
+        topic === 'gimbal' && verb === 'aim' && (path || 'legacy') === 'manager',
+    },
+  };
+  const run = (thisObj, v) => validate.call(thisObj, v, RED);
+
+  // MAV_CMD actions: blank refuses, int/long pass.
+  assert.equal(run({ actionType: 'command' }, ''), false, 'command action refuses blank carrier');
+  assert.equal(run({ actionType: 'command' }, 'int'), true);
+  assert.equal(run({ actionType: 'command' }, 'long'), true);
+  assert.equal(
+    run({ actionType: 'payload', topic: 'camera', verb: 'photo', path: 'legacy' }, ''),
+    false,
+    'command-backed payload verb refuses blank carrier'
+  );
+  // No MAV_CMD involved: blank is fine.
+  assert.equal(run({ actionType: 'move' }, ''), true, 'move action needs no carrier');
+  assert.equal(run({ actionType: 'param' }, ''), true, 'param action needs no carrier');
+  assert.equal(
+    run({ actionType: 'payload', topic: 'gimbal', verb: 'aim', path: 'manager' }, ''),
+    true,
+    'message-kind payload verb needs no carrier'
+  );
+});
+
 test('frame row binds to the frame property and follows the INT carrier (§9)', () => {
   assert.match(html, /id="node-input-frame"/, 'frame select must bind to the frame property');
+  assert.match(
+    html,
+    /frame:\s*\{ value: '' \}/,
+    'frame is declared in defaults (blank = builder default GLOBAL) so the selection persists'
+  );
   assert.match(html, /row-swarm-frame/, 'frame row id must exist');
   assert.match(html, /refreshCarrierRows/, 'carrier/frame visibility is wired');
 });

@@ -346,6 +346,11 @@ test('payload carrier is required for command verbs, exempt for message-kind (§
 
 test('payload frame row binds to the frame property and follows the INT carrier (§9)', () => {
   assert.match(payloadHtml, /id="node-input-frame"/, 'frame select must bind to the frame property');
+  assert.match(
+    payloadHtml,
+    /frame:\s*\{ value: '' \}/,
+    'frame is declared in defaults (blank = builder default GLOBAL) so the selection persists'
+  );
   assert.match(payloadHtml, /row-payload-frame/, 'frame row id must exist');
   assert.match(
     payloadHtml,
