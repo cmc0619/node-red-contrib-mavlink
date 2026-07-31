@@ -1028,6 +1028,13 @@ Three rules, each of which encodes a wrong message if missed:
   declares `invalid="INT32_MAX"` maps `null` ↔ sentinel losslessly in both directions; in-range
   markers (`invalid="0"`, SIM_STATE) get no mapping — 0° is a legal coordinate and nulling it
   loses data.
+- **A COMMAND_INT coordinate scales by frame.** Global frames take degrees × 10⁷; local frames
+  take **metres × 10⁴** — the divisor is frame-dependent per common.xml, and both halves are
+  measured (§14), not inferred. This applies to real coordinate params only: a natively-degE7
+  param and a non-location `param5`/`param6` (gimbal flags and the like) carry what the operator
+  entered in either frame. `MISSION_ITEM_INT` declares the same field semantics but its decode
+  path is separate firmware code and **has not been measured** — do not assume it follows until
+  it has been.
 - **NED is down-positive.** Every UI and every operator says altitude up-positive, so the sign
   flips exactly once, at encode, in Move — never in the UI and never twice.
 - **A metre offset scales longitude by latitude.** North is metres ÷ 111,320 in degrees;

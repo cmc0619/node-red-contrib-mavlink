@@ -52,11 +52,15 @@ test('longToIntFields scales every degrees value — no pass-through heuristic',
   assert.equal(int.y, 1490000000);
 });
 
-test('longToIntFields leaves x/y in metres for a non-global frame', () => {
+test('longToIntFields scales x/y to metres × 1e4 for a non-global frame', () => {
+  // Was pinned the other way (raw rounded metres) until measured: PX4 decodes
+  // a LOCAL_NED x of 1234567 as 123.4567 m, so metres × 1e4 is what the wire
+  // carries (common.xml; DESIGN.md §14). ArduPilot denies the frame outright
+  // for location commands, so nothing regresses there.
   const int = longToIntFields([0, 0, 0, 0, 10.4, -3.6, 12], { frame: 1 }); // LOCAL_NED
-  assert.equal(int.x, 10); // Math.round, not scaled
-  assert.equal(int.y, -4);
-  assert.equal(int.z, 12);
+  assert.equal(int.x, 104000);
+  assert.equal(int.y, -36000);
+  assert.equal(int.z, 12); // z is a float altitude — never scaled
   assert.equal(int.frame, 1);
 });
 
@@ -80,12 +84,43 @@ test('intFieldsToLong is the inverse of longToIntFields for a global frame', () 
   assert.equal(back[6], 100);
 });
 
-test('intFieldsToLong passes metres through for a non-global frame', () => {
-  const back = intFieldsToLong({ frame: 1, param1: 5, x: 10, y: -4, z: 12 });
+test('intFieldsToLong un-scales local-frame x/y from metres × 1e4', () => {
+  // The wire carries metres × 1e4 for a local frame (common.xml; measured
+  // against PX4 SITL, DESIGN.md §14) — so 100000 on the wire is 10 metres.
+  const back = intFieldsToLong({ frame: 1, param1: 5, x: 100000, y: -40000, z: 12 });
   assert.equal(back[0], 5);
   assert.equal(back[4], 10);
   assert.equal(back[5], -4);
   assert.equal(back[6], 12);
+});
+
+test('the exact value measured against PX4 SITL round-trips (§14)', () => {
+  // PX4 decoded a LOCAL_NED x of 1234567 as 123.4567 m, so entering 123.4567 m
+  // must put exactly 1234567 on the wire. Before this, 50 m was sent as `50`
+  // and arrived as 5 mm.
+  const int = longToIntFields([0, 0, 0, 0, 123.4567, -50, 12], { frame: 1 });
+  assert.equal(int.x, 1234567);
+  assert.equal(int.y, -500000);
+});
+
+test('local-frame LONG→INT→LONG is lossless', () => {
+  const params = [1, 2, 3, 4, 37.5, -12.25, 8];
+  const back = intFieldsToLong(longToIntFields(params, { frame: 1 }), {});
+  assert.ok(Math.abs(back[4] - 37.5) < 1e-6);
+  assert.ok(Math.abs(back[5] - -12.25) < 1e-6);
+  assert.equal(back[6], 8);
+});
+
+test('non-coordinate param5/6 stay unscaled in a local frame', () => {
+  // Gimbal-manager flags and similar non-location params carry what the
+  // operator entered, in either frame — the ×1e4 applies to coordinates only.
+  const kinds = { 5: 'raw', 6: 'raw' };
+  const int = longToIntFields([0, 0, 0, 0, 7, 9, 0], { frame: 1, coordKinds: kinds });
+  assert.equal(int.x, 7);
+  assert.equal(int.y, 9);
+  const back = intFieldsToLong(int, { coordKinds: kinds });
+  assert.equal(back[4], 7);
+  assert.equal(back[5], 9);
 });
 
 test('isGlobalFrame classifies the global MAV_FRAME family', () => {
