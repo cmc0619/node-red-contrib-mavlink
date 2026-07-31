@@ -5,135 +5,113 @@ Live runs of every flow under `examples/sitl/` against the Docker lab
 
 | | |
 |---|---|
-| **Latest run** | 2026-07-31 04:34–04:45 UTC (retest) |
-| **Prior run** | 2026-07-31 ~03:28–03:40 UTC |
+| **Latest run** | 2026-07-31 **05:01–05:12 UTC** (run 3) |
+| **Prior runs** | 04:34–04:45 UTC (run 2); ~03:28–03:40 UTC (run 1) |
 | **Host** | Cloud agent VM, Node-RED `http://127.0.0.1:1880` |
-| **Repo** | `main` @ `2eca0a6` (+ harness tweaks on this branch) |
+| **Repo** | `main` @ `2eca0a6` + harness on this branch |
 | **Fleet** | AP 1–5 (`14550`), PX4 11–15 (`14560`), companions 20 / 21 |
 | **Harness** | `node sitl/run-example-suite.js` → `sitl/example-suite-results.json` |
+| **Prep (run 3)** | Disarm/GUIDED on AP 1–5 via Connection; PX4 `COM_RCL_EXCEPT=7`, `COM_ARM_MAG_STR=0`, `MAV_0_BROADCAST=1` |
 
 **Verdict key:** **PASS** = story observed · **PARTIAL** = useful progress but story incomplete · **FAIL** = blocked or wrong outcome · **SKIP** = needs setup the API deploy cannot provide
 
-## Summary (retest 04:34 UTC)
+## Summary (run 3)
 
-| # | File | Verdict | Δ vs first run | Notes |
-|---|------|---------|----------------|-------|
-| 01 | `01-completion-takeoff.json` | **PARTIAL** | was PASS | Arm accepted; takeoff **DENIED** (`resultCode: 4`) — vehicle not in GUIDED this pass |
-| 02 | `02-completion-timeout.json` | **FAIL** | was mis-labelled PASS | Immediate DENIED (3 ms), not accept→completion-timeout |
-| 03 | `03-temporarily-rejected.json` | **PARTIAL** | same | Arm accepted (no TEMPORARILY_REJECTED — not a fresh boot). Takeoff DENIED |
-| 04 | `04-mode-tables.json` | **PARTIAL** | same | AP GUIDED ok; PX4 POSCTL **temporarily_rejected** |
-| 05 | `05-px4-param-union.json` | **PASS** | same | Set→read echo succeeded |
-| 06 | `06-mission-fence-rally.json` | **PASS** | same | AP mission/fence/rally ok; PX4 fence fail-loud as designed |
-| 07 | `07-mission-failloud.json` | **PARTIAL** | was mis-labelled PASS | Good up/down ok; “bad” upload still **succeeded** (`unexpected ok`) |
-| 08 | `08-swarm-sequential-five.json` | **PASS** | same | Dry-run + live sequential arm ×5 succeeded |
-| 09 | `09-swarm-member-expires.json` | **PASS** | was PARTIAL | Kill `nrc-ap-3` mid-fan-out: members **1,2,4,5 accepted**, **3 timeout**; aggregate `failed` |
-| 10 | `10-dual-stack-ten.json` | **PASS** | was FAIL | After `selectionMode: all` fix: AP + PX4 **broadcast succeeded** (5+5) |
-| 11 | `11-broadcast-vs-sequential.json` | **PARTIAL** | same tier | Sequential ×5 succeeded; broadcast+**confirm** timed out waiting for ACKs (not refused) |
-| 12 | `12-signing.json` | **SKIP** | was FAIL | No signing passphrase via Admin API deploy — editor credentials required |
-| 13 | `13-param-defs-live.json` | **PARTIAL** | same | Read + list succeeded; set echo-confirm timed out |
-| 14 | `14-command-mission-basics.json` | **PASS** | same | Arm, message-interval, mission up/down ok |
-| 15 | `15-companion-ap.json` | **PASS** | was UNKNOWN | NVF `sent` on `14540` |
-| 16 | `16-companion-px4.json` | **PASS** | was UNKNOWN | NVF `sent` on `14542` |
-| 17 | `17-int-carrier-goto.json` | **PASS** | same | Arm + takeoff + COMMAND_INT goto all **accepted** |
+| # | File | Verdict | Notes |
+|---|------|---------|-------|
+| 01 | `01-completion-takeoff.json` | **PASS** | Arm ack → takeoff complete **alt 9.5 m** (`confirmedBy: state`, ~9.0 s) |
+| 02 | `02-completion-timeout.json` | **FAIL** | Immediate DENIED (`resultCode: 4`, 4 ms) — not accept→completion-timeout |
+| 03 | `03-temporarily-rejected.json` | **PARTIAL** | Arm accepted (no TEMPORARILY_REJECTED — not fresh boot). Takeoff DENIED |
+| 04 | `04-mode-tables.json` | **PARTIAL** | AP GUIDED ok; PX4 POSCTL **temporarily_rejected** |
+| 05 | `05-px4-param-union.json` | **PASS** | Set→read echo succeeded |
+| 06 | `06-mission-fence-rally.json` | **PASS** | AP mission/fence/rally ok; PX4 fence fail-loud |
+| 07 | `07-mission-failloud.json` | **PARTIAL** | Good up/down ok; bad upload still **succeeded** (`unexpected ok`) |
+| 08 | `08-swarm-sequential-five.json` | **PASS** | Dry-run + live sequential arm ×5 succeeded |
+| 09 | `09-swarm-member-expires.json` | **PASS** | Kill ap-3 mid-run: **1,2,4,5 accepted**, **3 timeout**; aggregate failed |
+| 10 | `10-dual-stack-ten.json` | **PASS** | AP + PX4 broadcast **succeeded** (selectionMode all) |
+| 11 | `11-broadcast-vs-sequential.json` | **PARTIAL** | Sequential succeeded; broadcast+confirm timed out on ACKs |
+| 12 | `12-signing.json` | **SKIP** | No signing passphrase via Admin API deploy |
+| 13 | `13-param-defs-live.json` | **PARTIAL** | Read + list ok; set echo-confirm timed out |
+| 14 | `14-command-mission-basics.json` | **PASS** | Arm, message-interval, mission up/down ok |
+| 15 | `15-companion-ap.json` | **PASS** | NVF `sent` on `14540` |
+| 16 | `16-companion-px4.json` | **PASS** | NVF `sent` on `14542` |
+| 17 | `17-int-carrier-goto.json` | **PASS** | Arm + takeoff + COMMAND_INT goto all accepted |
 
-**Totals (human-curated, retest):** PASS **9** · PARTIAL **6** · FAIL **1** · SKIP **1**
+**Totals (run 3, curated):** PASS **10** · PARTIAL **5** · FAIL **1** · SKIP **1**
 
-First-run totals for comparison: PASS 8 · PARTIAL 6 · FAIL 2 · SKIP 1  
-(Biggest wins: **09** member-timeout story, **10** broadcast after example fix.)
+### Trend
+
+| Run | PASS | PARTIAL | FAIL | SKIP |
+|-----|------|---------|------|------|
+| 1 (~03:28) | 8 | 6 | 2 | 1 |
+| 2 (04:34) | 9 | 6 | 1 | 1 |
+| **3 (05:01)** | **10** | **5** | **1** | **1** |
+
+Run 3 regained **01** (GUIDED prep). Stable PASS: 05, 06, 08–10, 14–17. Persistent gaps: **02** (wrong failure mode), **07** (bad upload not rejected), **12** (credentials), **04** PX4 mode reject, **11** broadcast+confirm, **13** param echo.
 
 ## Environment notes
 
-- PX4: `MAV_SYS_ID` before `commander start` (lab entrypoint). Live params used: `COM_RCL_EXCEPT=7`, `COM_ARM_MAG_STR=0`, `MAV_0_BROADCAST=1`.
-- Example 10/11 broadcast nodes now use `selectionMode: "all"` (PR #76 / `a639779`) — required; `list` + `broadcast` is refused by design.
-- Example 17 goto z must be NaN (or real AMSL); relative finite z is treated as AMSL by PX4.
-- One flow at a time (shared UDP binds). Harness clears to an idle tab between examples.
+- PX4 lab: `MAV_SYS_ID` before `commander start`.
+- Broadcast swarm nodes need `selectionMode: "all"` (not `list`) — fixed in examples on main.
+- Example 17 goto z = NaN (or real AMSL).
+- Deploy one flow at a time (UDP bind exclusivity).
 
-## Per-example detail (retest)
+## Per-example detail (run 3)
 
-### 01 — Completion takeoff — PARTIAL
+### 01 — PASS
+Arm `accepted`; takeoff `accepted`, `confirmedBy: state`, detail `alt 9.5 m`, elapsed 9007 ms.
 
-- Arm `accepted` (ack)
-- Takeoff `failed` / `resultCode: 4` (DENIED) — completion-at-altitude path not reached
-- Prior run the same day: takeoff `accepted`, `confirmedBy: state`, `alt 9.5 m`
+### 02 — FAIL (vs story)
+Takeoff `failed` / `resultCode: 4` in 4 ms. Story wants completion-timeout after accept.
 
-### 02 — Completion timeout — FAIL (vs story)
+### 03 — PARTIAL
+Arm `accepted` retries 0; takeoff DENIED. Needs fresh-boot race for TEMPORARILY_REJECTED.
 
-- Takeoff DENIED in ~2 ms — never enters the completion-timeout wait
-- Story wants: accepted command that never climbs → named timeout
+### 04 — PARTIAL
+PX4 POSCTL → `temporarily_rejected`.
 
-### 03 — Temporarily rejected — PARTIAL
+### 05 — PASS
+Param set→read **succeeded**.
 
-- `once` inject at deploy; fleet already GPS-locked → no TEMPORARILY_REJECTED
-- Arm accepted; takeoff DENIED
+### 06 — PASS
+AP uploads ok; PX4 fence: `px4 does not support fence over the mission protocol`.
 
-### 04 — Mode tables — PARTIAL
+### 07 — PARTIAL
+`debug:bad upload (unexpected ok)` still **succeeded**.
 
-- PX4 POSCTL → `temporarily_rejected`
-- Dual binds `14550` + `14560` ok
+### 08 — PASS
+Dry-run + live sequential arm ×5.
 
-### 05 — PX4 param union — PASS
+### 09 — PASS
+Aggregate `failed`, count 5: sysids 1,2,4,5 `accepted`; **3 `timeout`** (`no COMMAND_ACK`). Detail: `one or more swarm members failed`.
 
-- Set then read **succeeded**
+### 10 — PASS
+AP broadcast `succeeded` (5× `sent`); PX4 broadcast `succeeded`.
 
-### 06 — Mission / fence / rally — PASS
+### 11 — PARTIAL
+Sequential confirm succeeded; broadcast confirm failed (ACK timeout). Example 10’s `send` tier broadcast works.
 
-- AP uploads succeeded
-- PX4 fence: `px4 does not support fence over the mission protocol`
+### 12 — SKIP
+`sign-outbound` without passphrase credential on API deploy.
 
-### 07 — Mission fail-loud — PARTIAL
+### 13 — PARTIAL
+Read/list succeeded; set `ARMING_CHECK` echo timeout.
 
-- Good upload/download succeeded
-- Bad upload still reported **succeeded** (`debug:bad upload (unexpected ok)`)
+### 14 — PASS
+Arm sysid 1; rate request; mission up/down sysid 2.
 
-### 08 — Swarm sequential ×5 — PASS
+### 15 / 16 — PASS
+Companion NVF `sent`.
 
-- Dry-run `dry_run`; live `succeeded`
-
-### 09 — Swarm member expires — PASS
-
-- Stopped `nrc-ap-3` ~800 ms after inject (500 ms pacing)
-- Aggregate `failed`, `count: 5`, members: 1/2/4/5 `accepted`, **3 `timeout`** (`no COMMAND_ACK`)
-- State node emitted expired peer events while ap-3 was down; container restarted after
-
-### 10 — Dual-stack ×10 — PASS
-
-- AP broadcast `succeeded` (sysids 1–5 `sent`, `target_system: 0`)
-- PX4 broadcast `succeeded` (11–15)
-- Warning noted: `mixed flight modes in broadcast selection` (harmless for arm)
-
-### 11 — Broadcast vs sequential — PARTIAL
-
-- Sequential confirm: **succeeded** (5/5)
-- Broadcast confirm: **failed** — `no COMMAND_ACK received within timeout` (delivery `confirm` on broadcast is ack-noisy / unreliable here; `send` tier on 10 worked)
-
-### 12 — Signing — SKIP
-
-- `sign-outbound is enabled but no signing passphrase is set`
-- Needs editor `flows_cred`; not exercisable via JSON-only Admin API deploy
-
-### 13 — Param defs live — PARTIAL
-
-- Read + full list succeeded; set `ARMING_CHECK` echo timeout
-
-### 14 — Command & mission basics — PASS
-
-- Arm sysid 1; GLOBAL_POSITION_INT rate request; mission up/down sysid 2
-
-### 15 / 16 — Companions — PASS
-
-- `NAMED_VALUE_FLOAT` send tier `sent`
-
-### 17 — INT carrier goto — PASS
-
-- Arm + takeoff + INT `DO_REPOSITION` all `accepted`
-- Flight-validated earlier same day (z=`NaN`): arrived at configured lat/lon sub-metre
+### 17 — PASS
+Arm + takeoff + INT `DO_REPOSITION` all `accepted` (ack).
 
 ## Re-run
 
 ```bash
 cd sitl && docker compose --profile sitl --profile nodered up -d
+# optional: set AP 1–5 to GUIDED and PX4 COM_RCL_EXCEPT / COM_ARM_MAG_STR / MAV_0_BROADCAST
 node sitl/run-example-suite.js --out sitl/example-suite-results.json
-node sitl/run-example-suite.js --only 05,10,17   # subset
 ```
 
 Update this file when re-running; keep `sitl/example-suite-results.json` as the machine-readable log.
