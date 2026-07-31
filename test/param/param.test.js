@@ -216,3 +216,87 @@ test('request-list collector emits a complete ordered parameter snapshot', () =>
     ['A', 'B']
   );
 });
+
+test('echo decodes by the vehicle-declared param_type, not the request type', () => {
+  // Reproduces SITL 13 (live ArduPilot): the example sets ARMING_CHECK — an
+  // integer parameter on the vehicle — through a node configured REAL32. The
+  // vehicle applies the set and echoes bytewise with its own type (INT16), so
+  // decoding by the request's REAL32 reads the int bits as a denormal float and
+  // the confirm tier reported "echo timeout" for a set that had succeeded.
+  const request = {
+    target: { sysid: 1, compid: 1 },
+    paramId: 'ARMING_CHECK',
+    value: 1,
+    paramType: 'MAV_PARAM_TYPE_REAL32',
+    firmware: 'ardupilot',
+    capabilities: CAP_PARAM_ENCODE_BYTEWISE,
+  };
+  const echo = {
+    name: 'PARAM_VALUE',
+    sysid: 1,
+    compid: 1,
+    fields: {
+      param_id: 'ARMING_CHECK',
+      param_type: 4, // MAV_PARAM_TYPE_INT16 — what the vehicle actually reports
+      param_value: paramValueToWire(1, 'MAV_PARAM_TYPE_INT16'),
+    },
+  };
+
+  assert.equal(matchesParamEcho(request, echo), true);
+
+  // Still discriminating: a different value must not confirm.
+  assert.equal(
+    matchesParamEcho(request, {
+      ...echo,
+      fields: { ...echo.fields, param_value: paramValueToWire(2, 'MAV_PARAM_TYPE_INT16') },
+    }),
+    false
+  );
+
+  // A frame carrying no usable type falls back to the request's type.
+  assert.equal(
+    matchesParamEcho(
+      { ...request, paramType: 'MAV_PARAM_TYPE_INT16' },
+      { ...echo, fields: { ...echo.fields, param_type: 0 } }
+    ),
+    true
+  );
+});
+
+test('REAL32 echo confirms at float32 precision, not absolute 1e-6', () => {
+  // The vehicle stores a REAL32 param as float32, so the echo is the float32
+  // quantization of what was sent: 47.9 returns as 47.900001525878906, 1.5e-6
+  // away. An absolute 1e-6 tolerance called that a mismatch and timed out a set
+  // that had succeeded.
+  const request = {
+    target: { sysid: 1, compid: 1 },
+    paramId: 'WPNAV_SPEED',
+    value: 47.9,
+    paramType: 'MAV_PARAM_TYPE_REAL32',
+    firmware: 'ardupilot',
+  };
+  const quantized = Math.fround(47.9);
+  assert.notEqual(quantized, 47.9, 'guard: 47.9 must not be exact in float32');
+  assert.ok(Math.abs(quantized - 47.9) > 1e-6, 'guard: the gap must exceed the old tolerance');
+
+  assert.equal(
+    matchesParamEcho(request, {
+      name: 'PARAM_VALUE',
+      sysid: 1,
+      compid: 1,
+      fields: { param_id: 'WPNAV_SPEED', param_type: 9, param_value: quantized },
+    }),
+    true
+  );
+
+  // A genuinely different value is still rejected.
+  assert.equal(
+    matchesParamEcho(request, {
+      name: 'PARAM_VALUE',
+      sysid: 1,
+      compid: 1,
+      fields: { param_id: 'WPNAV_SPEED', param_type: 9, param_value: Math.fround(48.1) },
+    }),
+    false
+  );
+});
