@@ -921,10 +921,18 @@ applied reports `echo timeout` (§14).
 **Echo comparison tolerance follows the wire, not the type alone.** A value that passed through
 a float32 — any `REAL32` parameter, or anything sent c-cast — comes back quantized, so `47.9`
 echoes as `47.900001525878906` and an absolute epsilon rejects it; compare at float32 precision.
-A bytewise *integer* echo carries the vehicle's exact bits, so it must compare exactly: above
-2^24 consecutive integers collide under float32, and granting tolerance there would confirm a
-stored value the operator never asked for. False success is the one outcome echo-confirm exists
+A bytewise *integer* echo carries the vehicle's exact bits, so it compares exactly — no epsilon,
+no float32 rounding: above 2^24 consecutive integers collide under float32, and granting
+tolerance there would confirm a stored value the operator never asked for. Both sides are
+integers on that path (the codec rejects a non-integer value for an integer type at encode time,
+so a set that reached the wire had one), and false success is the one outcome echo-confirm exists
 to prevent.
+
+**An echo whose type is unusable does not match.** If the frame's `param_type` is not a known
+type and the request never named one, the bytes cannot be decoded and there is nothing to compare
+— decline the match. Guessing `REAL32` would confirm a set from a frame whose type cannot be
+trusted; a confirm that never fires is reported honestly as an echo timeout. A real vehicle
+always populates `param_type`, so this is the malformed-frame path.
 
 **`COMMAND_ACK` can arrive twice.** A takeoff commonly acks `IN_PROGRESS`, then `ACCEPTED`
 seconds later. Treating the first as final reports success early or times out on a command that

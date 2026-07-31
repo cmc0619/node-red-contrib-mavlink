@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { paramValueToWire } = require('../../lib/codec');
+const { paramValueToWire, paramValueFromWire } = require('../../lib/codec');
 const {
   buildParamMessage,
   matchesParamEcho,
@@ -356,4 +356,78 @@ test('REAL32 echo keeps float32 tolerance even on a bytewise vehicle', () => {
     }),
     true
   );
+});
+
+test('exact-wire comparison is strict — a near-integer request does not confirm an integer echo', () => {
+  // CodeRabbit's case: with the tolerance ordered ahead of the exact-wire guard,
+  // an echo of 1 confirmed a request of 1.0000005. Unreachable through the send
+  // path (the codec rejects a non-integer for an integer type at encode time,
+  // below) but the matcher must not depend on that to be correct.
+  assert.throws(
+    () =>
+      buildParamMessage({
+        action: 'set',
+        paramId: 'X',
+        value: 1.0000005,
+        paramType: 'MAV_PARAM_TYPE_UINT32',
+        capabilities: CAP_PARAM_ENCODE_BYTEWISE,
+        target: { sysid: 1, compid: 1 },
+      }),
+    /non-integer value/
+  );
+
+  assert.equal(
+    matchesParamEcho(
+      {
+        target: { sysid: 1, compid: 1 },
+        paramId: 'X',
+        value: 1.0000005,
+        paramType: 'MAV_PARAM_TYPE_UINT32',
+        capabilities: CAP_PARAM_ENCODE_BYTEWISE,
+      },
+      {
+        name: 'PARAM_VALUE',
+        sysid: 1,
+        compid: 1,
+        fields: {
+          param_id: 'X',
+          param_type: 5,
+          param_value: paramValueToWire(1, 'MAV_PARAM_TYPE_UINT32'),
+        },
+      }
+    ),
+    false
+  );
+});
+
+test('an echo with no usable type declines the match instead of guessing REAL32', () => {
+  // The distinguishing case: the frame's param_type is unusable, but its bytes
+  // *would* decode as a matching REAL32. Guessing the type confirms a set from a
+  // frame whose type cannot be trusted; declining reports an honest echo
+  // timeout. Both sides silent on the type means there is nothing to compare.
+  const echo = {
+    name: 'PARAM_VALUE',
+    sysid: 1,
+    compid: 1,
+    fields: {
+      param_id: 'X',
+      param_type: 999, // not a known MAV_PARAM_TYPE
+      param_value: paramValueToWire(1, 'MAV_PARAM_TYPE_REAL32'),
+    },
+  };
+  const request = {
+    target: { sysid: 1, compid: 1 },
+    paramId: 'X',
+    value: 1,
+    capabilities: CAP_PARAM_ENCODE_BYTEWISE,
+  };
+
+  // Guard: under a guessed REAL32 these bytes decode to exactly the expected 1,
+  // so a match here could only come from the guess.
+  assert.equal(paramValueFromWire(echo.fields.param_value, 'MAV_PARAM_TYPE_REAL32'), 1);
+
+  assert.equal(matchesParamEcho(request, echo), false);
+
+  // A request that does name its type still decodes and confirms.
+  assert.equal(matchesParamEcho({ ...request, paramType: 'MAV_PARAM_TYPE_REAL32' }, echo), true);
 });
