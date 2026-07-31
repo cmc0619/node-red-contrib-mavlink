@@ -44,7 +44,25 @@ const {
   buildCommandLong,
   buildCommandInt,
   CARRIER,
+  intCoordKinds,
 } = require('../lib/command');
+
+/**
+ * Lazy, failure-tolerant metadata access (§6): the palette must register even
+ * when `mavlink-mappings` is missing, so the bundled-dialect lookup for
+ * coordKinds degrades to null (historical scaling) instead of throwing.
+ * @returns {object|false}
+ */
+let _metadataApi = null;
+function metadataApi() {
+  if (_metadataApi !== null) return _metadataApi;
+  try {
+    _metadataApi = require('../lib/metadata');
+  } catch {
+    _metadataApi = false;
+  }
+  return _metadataApi;
+}
 
 const {
   resolveActionTarget,
@@ -141,6 +159,39 @@ module.exports = function registerMavlinkCommand(RED) {
     const connNode = config.connection ? RED.nodes.getNode(config.connection) : null;
 
     const delivery = config.delivery;
+
+    /**
+     * How this command's param5/6 ride the INT carrier, per the dialect XML
+     * (§9 "ask the XML"): scaled lat/lon, natively degE7, or raw non-location
+     * values. Resolved lazily — the wire tier's vehicle bundle attaches at
+     * connection start — and null (historical scaling) when no bundle exists.
+     * @returns {{5: string, 6: string}|null}
+     */
+    let _coordKinds;
+    let _coordKindsResolved = false;
+    function coordKinds() {
+      if (_coordKindsResolved) return _coordKinds;
+      _coordKindsResolved = true;
+      let bundle = null;
+      if (delivery === 'build') {
+        if (config.dialect === '__vehicle') {
+          const vehicleNode = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
+          if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
+            try { bundle = vehicleNode.getDialect(); } catch { bundle = null; }
+          }
+        } else if (config.dialect) {
+          const api = metadataApi();
+          if (api) {
+            try { bundle = api.loadBundled(config.dialect); } catch { bundle = null; }
+          }
+        }
+      } else if (connNode && connNode.vehicle) {
+        bundle = connNode.vehicle.bundle || null;
+      }
+      _coordKinds = bundle ? intCoordKinds(bundle, commandId) : null;
+      return _coordKinds;
+    }
+
     const timeoutMs = config.timeout ? Number(config.timeout) : 10000;
     const maxRetries = config.maxRetries !== undefined ? Number(config.maxRetries) : 3;
     const unconfirmedContinue = !!config.unconfirmedContinue;
@@ -306,7 +357,10 @@ module.exports = function registerMavlinkCommand(RED) {
        */
       function buildCarrierMessage(carrier, confirmation) {
         if (carrier === CARRIER.INT) {
-          return buildCommandInt(commandId, target.sysid, target.compid, paramArray, { frame });
+          return buildCommandInt(commandId, target.sysid, target.compid, paramArray, {
+            frame,
+            coordKinds: coordKinds() || undefined,
+          });
         }
         return buildCommandLong(commandId, target.sysid, target.compid, paramArray, confirmation);
       }

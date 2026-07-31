@@ -464,3 +464,42 @@ function connectionStub(rows, options = {}) {
     },
   };
 }
+
+// ── Ask-the-XML kinds and the NaN refusal through the swarm path (§9) ────────
+
+const { loadBundled } = require('../../lib/metadata');
+
+test('swarm INT command asks the XML: gimbal flags stay raw on the wire', async () => {
+  const connection = connectionStub([peer(1)]);
+  connection.vehicle = { bundle: loadBundled('common') };
+
+  const result = await executeSwarm({
+    connection,
+    action: { type: 'command', carrier: 'int', commandId: 1000, params: { 1: -15, 2: 90, 5: 8 } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  assert.equal(result.success, true);
+  const message = connection.sends[0].message;
+  assert.equal(message.name, 'COMMAND_INT');
+  assert.equal(message.fields.x, 8, 'gimbal manager flags must not be ×1e7-scaled');
+});
+
+test('swarm INT command with NaN lat/lon fails loud — nothing sent', async () => {
+  const connection = connectionStub([peer(1)]);
+  connection.vehicle = { bundle: loadBundled('common') };
+
+  // NaN means "leave unchanged" on the LONG carrier; on INT it must refuse,
+  // not silently become 0,0 (§9/§10 "blank coordinates must not become 0,0").
+  await assert.rejects(
+    executeSwarm({
+      connection,
+      action: { type: 'command', carrier: 'int', commandId: 192, params: { 5: NaN, 6: 149, 7: 50 } },
+      mode: 'sequential',
+      delivery: 'send',
+    }),
+    /must be finite/
+  );
+  assert.equal(connection.sends.length, 0, 'the null-island command must never be sent');
+});

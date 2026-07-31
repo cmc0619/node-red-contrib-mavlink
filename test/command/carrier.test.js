@@ -132,3 +132,50 @@ test('buildCommandLong emits a COMMAND_LONG envelope with the confirmation byte'
   assert.equal(msg.fields.param1, 1);
   assert.equal(msg.fields.param7, 0);
 });
+
+// ── Ask-the-XML coordinate kinds (§9) ────────────────────────────────────────
+
+const { intCoordKinds } = require('../../lib/command');
+const { loadBundled } = require('../../lib/metadata');
+
+test('intCoordKinds classifies param5/6 from the dialect XML', () => {
+  const bundle = loadBundled('common');
+  // Real lat/lon: hasLocation, no degE7 units → scale.
+  assert.deepEqual(intCoordKinds(bundle, 192), { 5: 'latlon', 6: 'latlon' }); // DO_REPOSITION
+  // Not a location: gimbal manager flags ride param5 → never scale.
+  assert.deepEqual(intCoordKinds(bundle, 1000), { 5: 'raw', 6: 'raw' }); // DO_GIMBAL_MANAGER_PITCHYAW
+  // Natively degE7 in the XML → the entered value IS the wire value.
+  assert.deepEqual(intCoordKinds(bundle, 30001), { 5: 'dege7', 6: 'dege7' }); // PAYLOAD_PREPARE_DEPLOY
+  // Unknown command / missing bundle → null (historical scaling).
+  assert.equal(intCoordKinds(bundle, 999999), null);
+  assert.equal(intCoordKinds(null, 192), null);
+});
+
+test('coordKinds raw/dege7 params are never ×1e7-scaled on a global frame', () => {
+  // Gimbal manager flags = 8 must reach the wire as 8, not 80000000.
+  const raw = longToIntFields([0, 0, 0, 0, 8, 0, 0], { coordKinds: { 5: 'raw', 6: 'raw' } });
+  assert.equal(raw.x, 8);
+  // A natively degE7 value passes through unscaled.
+  const native = longToIntFields([0, 0, 0, 0, 471234567, -1225000000, 0], {
+    coordKinds: { 5: 'dege7', 6: 'dege7' },
+  });
+  assert.equal(native.x, 471234567);
+  assert.equal(native.y, -1225000000);
+});
+
+test('NaN in param5/6 refuses the INT build — no silent null island (§9)', () => {
+  // LONG's NaN means "leave unchanged"; int32 cannot express it, and coercing
+  // to 0 would aim a global-frame command at 0,0. The spec routes such
+  // commands to COMMAND_LONG, so the INT build fails loud.
+  assert.throws(() => longToIntFields([0, 0, 0, 0, NaN, 149, 50]), /must be finite/);
+  assert.throws(() => longToIntFields([0, 0, 0, 0, -35, NaN, 50]), /must be finite/);
+  // The reject is kind-independent: NaN flags are equally meaningless.
+  assert.throws(
+    () => longToIntFields([0, 0, 0, 0, NaN, 0, 0], { coordKinds: { 5: 'raw', 6: 'raw' } }),
+    /must be finite/
+  );
+  // NaN stays legal where the wire is float: param1–4 and z.
+  const ok = longToIntFields([NaN, 0, 0, 0, -35, 149, NaN]);
+  assert.ok(Number.isNaN(ok.param1));
+  assert.ok(Number.isNaN(ok.z));
+});

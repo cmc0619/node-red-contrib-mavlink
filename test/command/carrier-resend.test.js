@@ -293,3 +293,44 @@ test('msg.mavFrame selects a non-global frame so INT x/y stay in metres', async 
   assert.equal(conn.sent[1].message.fields.y, -4);
   assert.equal(sent[1].result, 'accepted');
 });
+
+// ── Ask-the-XML kinds and the NaN refusal at node level (§9) ─────────────────
+
+const { loadBundled } = require('../../lib/metadata');
+
+test('INT + non-location command: XML kinds keep param5 raw on the wire', async () => {
+  const { node, conn } = deploy([MAV_RESULT.ACCEPTED], {
+    carrier: 'int',
+    mode: 'advanced',
+    advancedCommand: '1000', // DO_GIMBAL_MANAGER_PITCHYAW — param5 is flags
+  });
+  conn.vehicle = { bundle: loadBundled('common') };
+
+  let sent;
+  node.emit('input', { payload: { 1: -15, 2: 90, 5: 8 } }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(conn.sent[0].message.name, 'COMMAND_INT');
+  assert.equal(conn.sent[0].message.fields.x, 8, 'gimbal flags must not be ×1e7-scaled');
+  assert.equal(sent[1].result, 'accepted');
+});
+
+test('INT + NaN lat/lon refuses loud — nothing reaches the wire', async () => {
+  const { node, conn } = deploy([MAV_RESULT.ACCEPTED], {
+    carrier: 'int',
+    mode: 'advanced',
+    advancedCommand: '192', // DO_REPOSITION
+  });
+  conn.vehicle = { bundle: loadBundled('common') };
+
+  let sent;
+  let doneErr;
+  node.emit('input', { payload: { 5: NaN, 6: 149, 7: 50 } }, (m) => { sent = m; }, (e) => { doneErr = e; });
+  await tick();
+
+  assert.equal(conn.sent.length, 0, 'the null-island command must never be sent');
+  assert.equal(sent[0], null, 'output 0 must not continue');
+  assert.equal(sent[1].result, 'failed');
+  assert.match(sent[1].detail, /must be finite/);
+  assert.ok(doneErr instanceof Error, 'done(err) fired for Catch nodes');
+});
