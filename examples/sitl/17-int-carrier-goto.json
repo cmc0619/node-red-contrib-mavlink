@@ -1,0 +1,291 @@
+[
+  {
+    "id": "sitl17-tab",
+    "type": "tab",
+    "label": "SITL 17 INT carrier goto",
+    "disabled": false,
+    "info": "First live COMMAND_INT flight: Arm → Takeoff (LONG, PX4 default altitude) → DO_REPOSITION on the INT carrier against PX4 SITL sysid 11.\n\nThe proof: the goto node is configured in decimal degrees (47.3991, 8.5456 — about 150 m north of the PX4 SITL default home). On the wire those must become degE7 int32s (x=473991000, y=85456000) with an explicit frame. If the scaling were wrong the vehicle would reject the frame or aim at null island; repositioning to the correct nearby point is the proof.\n\nPrerequisites: the Docker lab's PX4 stack (bind 14560 → remote 14561, sysid 11), vehicle disarmed on the ground.\n\nTroubleshooting:\n- Arm DENIED → the rig's RC-loss config (the Docker entrypoint sets this; for a hand-built PX4, set COM_RCL_EXCEPT to allow offboard/hold without RC).\n- COMMAND_UNSUPPORTED_MAV_FRAME on the goto → switch the node's Frame to Global absolute and use an AMSL altitude (~508 m at the Zurich home).\n- A COMMAND_LONG_ONLY ack would trigger the one-shot carrier swap back to LONG — also a valid observation, but PX4 speaks INT natively so it should not occur."
+  },
+  {
+    "id": "sitl17-comment",
+    "type": "comment",
+    "z": "sitl17-tab",
+    "name": "INT carrier goto (PX4 SITL sysid 11)",
+    "info": "Arm and Takeoff ride COMMAND_LONG (the migrated example convention; both are non-positional). The goto is the test subject: carrier = COMMAND_INT, frame = Global relative alt, coordinates entered in decimal degrees per the canonical-degrees doctrine.\n\nTakeoff altitude is passed as NaN via a function node — JSON config cannot express NaN, but the runtime payload can, and NaN in param7 on the LONG carrier means \"use the firmware default\" (PX4 MIS_TAKEOFF_ALT). Takeoff uses the confirm tier, not complete: the completion condition compares altitude against param7, which NaN would break. An 8 s delay stands in for the climb.",
+    "x": 210,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl17-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl17-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "PX4 sysid 11",
+    "vehicleFamily": "copter",
+    "firmware": "px4",
+    "dialect": "common",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 11,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl17-connection",
+    "type": "mavlink-connection",
+    "name": "UDP PX4 SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14560,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14561,
+    "broadcast": false,
+    "vehicle": "sitl17-vehicle",
+    "localIdentity": "sitl17-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl17-inject",
+    "type": "inject",
+    "z": "sitl17-tab",
+    "name": "Arm + takeoff + INT goto",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 160,
+    "wires": [
+      [
+        "sitl17-arm"
+      ]
+    ]
+  },
+  {
+    "id": "sitl17-arm",
+    "type": "mavlink-command",
+    "z": "sitl17-tab",
+    "name": "Arm (confirm ACK)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl17-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "carrier": "long",
+    "frame": "",
+    "x": 350,
+    "y": 160,
+    "wires": [
+      [
+        "sitl17-takeoff-params"
+      ],
+      [
+        "sitl17-arm-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl17-takeoff-params",
+    "type": "function",
+    "z": "sitl17-tab",
+    "name": "takeoff alt = NaN (PX4 default)",
+    "func": "// PX4 NAV_TAKEOFF climbs to MIS_TAKEOFF_ALT when the altitude param is\n// NaN. JSON config cannot express NaN; the runtime payload can, and the\n// LONG carrier carries it (\"leave unchanged\" convention).\nmsg.payload = { 7: NaN };\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 570,
+    "y": 160,
+    "wires": [
+      [
+        "sitl17-takeoff"
+      ]
+    ]
+  },
+  {
+    "id": "sitl17-takeoff",
+    "type": "mavlink-command",
+    "z": "sitl17-tab",
+    "name": "Takeoff (confirm ACK)",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl17-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "carrier": "long",
+    "frame": "",
+    "x": 790,
+    "y": 160,
+    "wires": [
+      [
+        "sitl17-climb"
+      ],
+      [
+        "sitl17-takeoff-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl17-climb",
+    "type": "delay",
+    "z": "sitl17-tab",
+    "name": "let the climb finish",
+    "pauseType": "delay",
+    "timeout": "8",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 990,
+    "y": 160,
+    "wires": [
+      [
+        "sitl17-goto"
+      ]
+    ]
+  },
+  {
+    "id": "sitl17-goto",
+    "type": "mavlink-command",
+    "z": "sitl17-tab",
+    "name": "Goto via COMMAND_INT",
+    "mode": "preset",
+    "preset": "reposition",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl17-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\": -1, \"2\": 1, \"5\": 47.3991, \"6\": 8.5456, \"7\": 20}",
+    "carrier": "int",
+    "frame": "3",
+    "x": 1200,
+    "y": 160,
+    "wires": [
+      [
+        "sitl17-success"
+      ],
+      [
+        "sitl17-goto-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl17-arm-status",
+    "type": "debug",
+    "z": "sitl17-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 350,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl17-takeoff-status",
+    "type": "debug",
+    "z": "sitl17-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 800,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl17-goto-status",
+    "type": "debug",
+    "z": "sitl17-tab",
+    "name": "goto status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1200,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl17-success",
+    "type": "debug",
+    "z": "sitl17-tab",
+    "name": "INT goto accepted",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1420,
+    "y": 160,
+    "wires": []
+  }
+]
