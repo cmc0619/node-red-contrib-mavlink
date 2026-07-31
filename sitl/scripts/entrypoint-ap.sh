@@ -37,6 +37,10 @@ export HOME="/home/sitl"
 
 echo "entrypoint-ap: sysid=${SYSID} instance=${INSTANCE} out=udp:${OUT_IP}:${OUT_PORT} (from ${OUT_HOST}) home=${LAT},${LON},${HOME_ALT} aircraft=${AIRCRAFT}"
 
+# Compose has no TTY. Interactive MAVProxy then stops reading TCP SERIAL0
+# (kernel rx queue grows, no HEARTBEAT seen), exits after --retries, and
+# sim_vehicle tears the stack down — host UDP stays silent. --daemon skips
+# the interactive stdin loop.
 exec sim_vehicle.py -v ArduCopter \
   -I "${INSTANCE}" \
   --sysid "${SYSID}" \
@@ -44,5 +48,6 @@ exec sim_vehicle.py -v ArduCopter \
   --custom-location="${LAT},${LON},${HOME_ALT},270" \
   --add-param-file=/params/ap-logging.parm \
   --out="udp:${OUT_IP}:${OUT_PORT}" \
+  --mavproxy-args="--daemon" \
   --no-rebuild \
   -w

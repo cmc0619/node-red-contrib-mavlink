@@ -131,9 +131,11 @@ Entrypoints log `out=udp:<gateway-ip>:…` when `host-gateway` would otherwise p
 **PX4:** `docker compose --profile sitl up -d` emits HEARTBEATs with sysids **11–15** on UDP
 **14560** and sysid **21** on **14542** (re-checked after the gateway fallback).
 
-**ArduPilot:** image builds locally (`nrc-mavlink-ap-sitl:local`). Telemetry path matches PX4
-once SITL past “Waiting for internal clock bits”; first `sim_vehicle` bring-up can stall there
-on nested Docker — restart the service or check `/tmp/ArduCopter.log` inside the container.
+**ArduPilot:** image builds locally (`nrc-mavlink-ap-sitl:local`). The entrypoint passes
+`--mavproxy-args=--daemon` so MAVProxy runs headless under Compose (interactive MAVProxy
+with no TTY stops reading TCP 5760 and the container restart-loops). A log line
+“Waiting for internal clock bits” is the LP5562 LED sim, not a boot gate — ignore it.
+Check `/tmp/ArduCopter.log` inside the container if telemetry still never reaches the host.
 
 ## CI note
 
