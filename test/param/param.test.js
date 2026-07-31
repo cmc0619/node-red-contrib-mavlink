@@ -300,3 +300,60 @@ test('REAL32 echo confirms at float32 precision, not absolute 1e-6', () => {
     false
   );
 });
+
+test('bytewise integer echo compares exactly — float32 tolerance must not confirm a different value', () => {
+  // Above 2^24 consecutive integers collide under Math.fround, so a float32
+  // comparison would confirm a stored value the operator did not ask for. A
+  // bytewise integer echo carries the vehicle's exact bits, so nothing was
+  // quantized in transit and there is no tolerance to grant.
+  const request = {
+    target: { sysid: 1, compid: 1 },
+    paramId: 'BIG_MASK',
+    value: 16777217,
+    paramType: 'MAV_PARAM_TYPE_UINT32',
+    capabilities: CAP_PARAM_ENCODE_BYTEWISE,
+  };
+  const echoOf = (stored) => ({
+    name: 'PARAM_VALUE',
+    sysid: 1,
+    compid: 1,
+    fields: {
+      param_id: 'BIG_MASK',
+      param_type: 5, // MAV_PARAM_TYPE_UINT32
+      param_value: paramValueToWire(stored, 'MAV_PARAM_TYPE_UINT32'),
+    },
+  });
+
+  assert.equal(Math.fround(16777217), Math.fround(16777216), 'guard: these collide in float32');
+
+  // The vehicle stored a different value — must NOT confirm.
+  assert.equal(matchesParamEcho(request, echoOf(16777216)), false);
+  // The vehicle stored what was asked — must confirm.
+  assert.equal(matchesParamEcho(request, echoOf(16777217)), true);
+});
+
+test('REAL32 echo keeps float32 tolerance even on a bytewise vehicle', () => {
+  // The exact-wire rule is scoped to integer types: a REAL32 parameter is a
+  // float32 on the vehicle whatever the encoding, so its echo is still
+  // quantized and still needs the tolerance.
+  const request = {
+    target: { sysid: 1, compid: 1 },
+    paramId: 'MPC_XY_P',
+    value: 47.9,
+    paramType: 'MAV_PARAM_TYPE_REAL32',
+    capabilities: CAP_PARAM_ENCODE_BYTEWISE,
+  };
+  assert.equal(
+    matchesParamEcho(request, {
+      name: 'PARAM_VALUE',
+      sysid: 1,
+      compid: 1,
+      fields: {
+        param_id: 'MPC_XY_P',
+        param_type: 9,
+        param_value: paramValueToWire(Math.fround(47.9), 'MAV_PARAM_TYPE_REAL32'),
+      },
+    }),
+    true
+  );
+});
