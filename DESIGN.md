@@ -910,6 +910,30 @@ Not every message can be acknowledged, and the node must offer the right one:
 Param is echo-confirm, not ack. Different mechanism, different failure mode, and it must not be
 presented as the same checkbox.
 
+**The echo is decoded by the vehicle's `param_type`, not the request's.** `PARAM_VALUE` carries
+its own type, and `param_value` was encoded per *that* type — so it is the only type the reply
+can be read with. The type the operator configured governs how the outbound `PARAM_SET` is
+encoded and nothing more; a node set to `REAL32` against a vehicle whose parameter is an integer
+still has to read the integer echo the vehicle sends. Preferring the request's type misreads the
+bytes: bytewise, an integer `1` arrives as `1.4e-45` and never matches, so a set the vehicle
+applied reports `echo timeout` (§14).
+
+**Echo comparison tolerance follows the wire, not the type alone.** A value that passed through
+a float32 — any `REAL32` parameter, or anything sent c-cast — comes back quantized, so `47.9`
+echoes as `47.900001525878906` and an absolute epsilon rejects it; compare at float32 precision.
+A bytewise *integer* echo carries the vehicle's exact bits, so it compares exactly — no epsilon,
+no float32 rounding: above 2^24 consecutive integers collide under float32, and granting
+tolerance there would confirm a stored value the operator never asked for. Both sides are
+integers on that path (the codec rejects a non-integer value for an integer type at encode time,
+so a set that reached the wire had one), and false success is the one outcome echo-confirm exists
+to prevent.
+
+**An echo whose type is unusable does not match.** If the frame's `param_type` is not a known
+type and the request never named one, the bytes cannot be decoded and there is nothing to compare
+— decline the match. Guessing `REAL32` would confirm a set from a frame whose type cannot be
+trusted; a confirm that never fires is reported honestly as an echo timeout. A real vehicle
+always populates `param_type`, so this is the malformed-frame path.
+
 **`COMMAND_ACK` can arrive twice.** A takeoff commonly acks `IN_PROGRESS`, then `ACCEPTED`
 seconds later. Treating the first as final reports success early or times out on a command that
 was working. Wait for a terminal result.
@@ -1836,3 +1860,19 @@ default) is declined — greenfield, config-trust (AGENTS.md); no published pre-
 the field.
 *Check:* `node --test test/mission/node.test.js`; Command's matching test in
 `test/command/node.test.js`.
+
+**A `PARAM_VALUE` echo is decoded by the vehicle's own `param_type` — the request's type only
+encodes the outbound set.**
+*Wrong belief:* the node knows the parameter's type because the operator configured it, so
+`request.paramType || fields.param_type` is a sensible precedence for reading the echo.
+*Fact:* `param_value` is encoded per the `param_type` carried in the same frame, so that field is
+the only correct decode key. Measured live against ArduPilot (SITL example 13): a flow configured
+`MAV_PARAM_TYPE_REAL32` set `ARMING_CHECK`, an integer parameter. The vehicle applied the set and
+echoed bytewise with its own type (`INT16`); decoding those bits as `REAL32` yields the denormal
+`1.401298464324817e-45` against an expected `1`, and the confirm tier reported `echo timeout` for
+a set that had succeeded. Any integer parameter set through a `REAL32`-configured node on a
+bytewise vehicle failed the same way. Tolerance follows the wire too: a float32-quantized echo
+(`REAL32`, or anything c-cast) needs float32-precision comparison, while a bytewise integer echo
+must compare exactly — past 2^24 consecutive integers collide under `Math.fround`, and a
+tolerance there confirms a value the vehicle never stored.
+*Check:* `node --test test/param/param.test.js`
