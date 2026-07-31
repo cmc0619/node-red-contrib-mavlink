@@ -95,6 +95,43 @@ test('download ignores replies whose mission_type mismatches', async () => {
   assert.equal(outcome.items.length, 1);
 });
 
+test('a duplicate MISSION_COUNT mid-walk is ignored — no restart, no truncation (§9)', async () => {
+  const stub = new StubConnection();
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 3, mission_type: 0 } });
+      return;
+    }
+    if (message.name === 'MISSION_REQUEST_INT') {
+      const seq = message.fields.seq;
+      if (seq === 1) {
+        // Retransmitted count mid-walk (the vehicle resends it for every
+        // duplicated MISSION_REQUEST_LIST). Restarting from it would discard
+        // progress and reset the retry ceiling; a smaller stale count would
+        // truncate the mission while reporting success.
+        deliver({ name: 'MISSION_COUNT', fields: { count: 2, mission_type: 0 } });
+      }
+      deliver({
+        name: 'MISSION_ITEM_INT',
+        fields: { seq, command: 16, x: seq, y: seq, z: 10, mission_type: 0 },
+      });
+    }
+  });
+
+  const outcome = await new MissionDownload(machineOpts(stub)).start();
+
+  assert.equal(outcome.result, 'succeeded');
+  // The original count (3) governed the walk; the stale count (2) changed nothing.
+  assert.equal(outcome.count, 3);
+  assert.equal(outcome.items.length, 3);
+  assert.deepEqual(outcome.items.map((i) => i.seq), [0, 1, 2]);
+  // Each sequence was requested exactly once — no restart from zero.
+  const requested = stub.sent
+    .filter((s) => s.message.name === 'MISSION_REQUEST_INT')
+    .map((s) => s.message.fields.seq);
+  assert.deepEqual(requested, [0, 1, 2]);
+});
+
 test('a MISSION_ACK arriving mid-download (after the count) is ignored, not an abort (§9)', async () => {
   const stub = new StubConnection();
   const count = 2;

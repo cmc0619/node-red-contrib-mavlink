@@ -132,26 +132,73 @@ test('a rejected upload fails and never sends MISSION_CLEAR_ALL', async () => {
   assert.equal(stub.sentNames().includes('MISSION_CLEAR_ALL'), false);
 });
 
-test('a premature/stale ACCEPTED before items are delivered is ignored, not a phantom success (§9)', async () => {
+test('a premature ACCEPTED before items are delivered fails as a protocol error, never a phantom success (§9)', async () => {
   const stub = new StubConnection();
   const items = makeItems(2);
-  let sentAck = false;
 
   stub.onSend((message, deliver) => {
     if (message.name === 'MISSION_COUNT') {
-      // A stale ACCEPTED (e.g. left over from a prior transfer) arrives before
-      // the vehicle has requested a single item — it must not complete the
-      // upload that never actually happened.
+      // ACCEPTED before the vehicle requested a single item: the vehicle
+      // cannot be holding the mission it just "accepted". MAVSDK settles
+      // ProtocolError, QGC VehicleAckError — a failure either way, and
+      // never a silent ignore (an ignored ack would stall into the retry
+      // ceiling with the real signal discarded).
       deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: 0 } });
+    }
+  });
+
+  const outcome = await new MissionUpload(uploadOpts(stub, items)).start();
+
+  assert.equal(outcome.result, 'failed');
+  assert.match(outcome.reason, /protocol error/);
+  assert.match(outcome.reason, /0 of 2/);
+  // No item was ever delivered, and the failure must not degrade into a clear.
+  assert.deepEqual(itemSends(stub), []);
+  assert.equal(stub.sentNames().includes('MISSION_CLEAR_ALL'), false);
+});
+
+test('an early error ACK right after MISSION_COUNT fails immediately with the vehicle\'s code (§9)', async () => {
+  const stub = new StubConnection();
+  const items = makeItems(2);
+
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_COUNT') {
+      // ArduPilot's MissionItemProtocol answers an oversized count with
+      // NO_SPACE before requesting any item — this is the vehicle's only
+      // channel for that rejection, not a stale leftover. It must surface
+      // now, with the code, instead of stalling through count retries.
+      deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.NO_SPACE, mission_type: 0 } });
+    }
+  });
+
+  const outcome = await new MissionUpload(uploadOpts(stub, items)).start();
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.resultCode, MAV_MISSION_RESULT.NO_SPACE);
+  assert.match(outcome.reason, /NO_SPACE/);
+  // Exactly one count was sent — no retry burn against a vehicle that said no.
+  assert.equal(stub.sentNames().filter((n) => n === 'MISSION_COUNT').length, 1);
+  assert.deepEqual(itemSends(stub), []);
+  assert.equal(stub.sentNames().includes('MISSION_CLEAR_ALL'), false);
+});
+
+test('a mid-transfer INVALID_SEQUENCE ack is dropped and the upload completes (ArduPilot lossy-link noise, §9)', async () => {
+  const stub = new StubConnection();
+  const items = makeItems(2);
+
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_COUNT') {
       deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } });
       return;
     }
     if (message.name === 'MISSION_ITEM_INT') {
       const seq = message.fields.seq;
       if (seq === 0) {
+        // ArduPilot acks a duplicated/reordered item with INVALID_SEQUENCE
+        // while keeping the transfer alive and re-requesting — non-terminal.
+        deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.INVALID_SEQUENCE, mission_type: 0 } });
         deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 1, mission_type: 0 } });
-      } else if (!sentAck) {
-        sentAck = true;
+      } else {
         deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: 0 } });
       }
     }
@@ -161,38 +208,6 @@ test('a premature/stale ACCEPTED before items are delivered is ignored, not a ph
 
   assert.equal(outcome.result, 'succeeded');
   assert.equal(outcome.count, 2);
-  // Both items were actually delivered before the real completion.
-  assert.deepEqual(itemSends(stub).map((s) => s.seq), [0, 1]);
-});
-
-test('a stale rejection ACK before all items is ignored; a real one after delivery fails (§9)', async () => {
-  const stub = new StubConnection();
-  const items = makeItems(2);
-  let sentFinal = false;
-
-  stub.onSend((message, deliver) => {
-    if (message.name === 'MISSION_COUNT') {
-      // Stale DENIED from a prior transfer — must not abort this upload.
-      deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.INVALID, mission_type: 0 } });
-      deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } });
-      return;
-    }
-    if (message.name === 'MISSION_ITEM_INT') {
-      const seq = message.fields.seq;
-      if (seq === 0) {
-        deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 1, mission_type: 0 } });
-      } else if (!sentFinal) {
-        sentFinal = true;
-        // After every item has been answered, a rejection is this transfer's.
-        deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.INVALID, mission_type: 0 } });
-      }
-    }
-  });
-
-  const outcome = await new MissionUpload(uploadOpts(stub, items)).start();
-
-  assert.equal(outcome.result, 'failed');
-  assert.equal(outcome.resultCode, MAV_MISSION_RESULT.INVALID);
   assert.deepEqual(itemSends(stub).map((s) => s.seq), [0, 1]);
 });
 
