@@ -27,16 +27,18 @@ Live run of every flow under `examples/sitl/` against the Docker lab
 | 07 | `07-mission-failloud.json` | **PARTIAL** | Good upload/download succeeded, but “bad” upload also reported **succeeded** with `count: 0` — fail-loud story not proven |
 | 08 | `08-swarm-sequential-five.json` | **PASS** | Dry-run then live sequential arm ×5 **succeeded** |
 | 09 | `09-swarm-member-expires.json` | **PARTIAL** | Sequential arm ×5 all **accepted** (incl. sysid 3). Killing `nrc-ap-3` mid-run was too late / still acked — no failed member in aggregate |
-| 10 | `10-dual-stack-ten.json` | **FAIL** | Both broadcast arms **refused**: `selectionMode: list` + `executionMode: broadcast` is illegal (use sequential, or broadcast with selection that is not a subset list) |
-| 11 | `11-broadcast-vs-sequential.json` | **PARTIAL** | Sequential arm ×5 **succeeded**; broadcast arm **refused** (same list+broadcast rule) |
+| 10 | `10-dual-stack-ten.json` | **FIXED, RE-RUN PENDING** | Was FAIL: both broadcast arms **refused** — `selectionMode: list` + `executionMode: broadcast` is illegal. Example bug, not a library bug; broadcast nodes now use selection `all`. Not yet re-run on the lab |
+| 11 | `11-broadcast-vs-sequential.json` | **PARTIAL → FIXED, RE-RUN PENDING** | Sequential arm ×5 **succeeded**; broadcast arm **refused** (same list+broadcast rule). Broadcast node now uses selection `all`; sequential keeps its list. Not yet re-run on the lab |
 | 12 | `12-signing.json` | **SKIP** | `sign-outbound` enabled but Admin API deploy has **no signing passphrase** credential → connection errors. Editor credential setup required |
 | 13 | `13-param-defs-live.json` | **PARTIAL** | Read + full list **succeeded**; set `ARMING_CHECK` **echo timeout** |
 | 14 | `14-command-mission-basics.json` | **PASS** | Arm sysid 1 accepted; mission upload/download sysid 2 succeeded; message-interval sent |
 | 15 | `15-companion-ap.json` | **PASS** | `NAMED_VALUE_FLOAT` **sent** on companion bind `14540` (sysid 20) |
 | 16 | `16-companion-px4.json` | **PASS** | `NAMED_VALUE_FLOAT` **sent** on companion bind `14542` (sysid 21) |
-| 17 | `17-int-carrier-goto.json` | **PASS** | Arm + takeoff + **COMMAND_INT** `DO_REPOSITION` accepted. Prior run with z=`"NaN"` reached configured lat/lon (~150 m-class north of home); this suite pass confirms ACKs again |
+| 17 | `17-int-carrier-goto.json` | **PASS** | Arm + takeoff + **COMMAND_INT** `DO_REPOSITION` accepted. Prior run with z=`"NaN"` reached configured lat/lon (~135 m north of that flight's home); this suite pass confirms ACKs again |
 
-**Totals (human-curated):** PASS 8 · PARTIAL 6 · FAIL 2 · SKIP 1
+**Totals (human-curated, as run):** PASS 8 · PARTIAL 6 · FAIL 2 · SKIP 1
+
+Since the run, the 10/11 broadcast-selection defect has been fixed in the example flows (see below). Those two rows are **not** re-verified — re-run the suite to confirm.
 
 ## Environment notes
 
@@ -94,15 +96,28 @@ Live run of every flow under `examples/sitl/` against the Docker lab
 - `docker stop nrc-ap-3` ~2.5 s after inject did not produce a failed/expired member in the aggregate (arms completed too fast / kill timing)
 - Expired-state debug lines did fire from the State node while ap-3 was down
 
-### 10 — Dual-stack ×10 — FAIL
+### 10 — Dual-stack ×10 — FAIL (as run) → fixed, re-run pending
 
 - AP + PX4 broadcast arms both **refused** with: broadcast cannot honour a `list` selection
 - State feed still useful for seeing ten peers; arm story blocked by example config (`selectionMode: "list"` + `executionMode: "broadcast"`)
+- **Diagnosis:** example bug, not a library bug. `lib/swarm/index.js` refuses the combination on
+  purpose and says why — broadcast is one `target_system=0` frame that every vehicle on the link
+  acts on, so it cannot address a subset. The flow's own comment already said "target_system=0 is
+  single-stack only"; the `list` selection contradicted it.
+- **Fix applied:** both broadcast nodes now use `selectionMode: "all"` (sysid list cleared — with
+  mode `all` it is ignored outright, so leaving it populated implied an addressing that never
+  happened). Each connection carries exactly one stack, so `all` resolves to that stack's five.
+- **Not re-run** — needs the compose lab.
 
-### 11 — Broadcast vs sequential — PARTIAL
+### 11 — Broadcast vs sequential — PARTIAL (as run) → fixed, re-run pending
 
 - Sequential confirm **succeeded** (5/5)
 - Broadcast confirm **refused** (same list+broadcast rule as 10)
+- **Fix applied:** the broadcast node uses `selectionMode: "all"`; the sequential node keeps its
+  sysid list, which is the honest contrast — fan-out addresses each vehicle so a subset is
+  meaningful, broadcast cannot. Both resolve to the same five vehicles, so the aggregates stay
+  comparable.
+- **Not re-run** — needs the compose lab.
 
 ### 12 — Signing — SKIP
 
