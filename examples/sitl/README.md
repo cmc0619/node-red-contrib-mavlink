@@ -56,3 +56,4 @@ without understanding each step.
 | `14-command-mission-basics.json` | SITL 14 Command & mission basics | 2× ArduPilot |
 | `15-companion-ap.json` | SITL 15 Companion AP | companion AP sysid 20 |
 | `16-companion-px4.json` | SITL 16 Companion PX4 | companion PX4 sysid 21 |
+| `17-int-carrier-goto.json` | SITL 17 INT carrier goto | 1× PX4 |
