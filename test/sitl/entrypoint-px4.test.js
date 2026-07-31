@@ -94,7 +94,7 @@ test('fixture rcS gets lab SYSID before commander start', () => {
   fs.mkdirSync(logsDir, { recursive: true });
   let body = fs.readFileSync(SCRIPT, 'utf8');
   body = body.replace(
-    /if \[\[ -d \/opt\/px4-gazebo \]\]; then\n  PX4_PREFIX=\/opt\/px4-gazebo\nelse\n  PX4_PREFIX=\/opt\/px4\nfi/,
+    /if \[\[ -d \/opt\/px4-gazebo \]\]; then\n {2}PX4_PREFIX=\/opt\/px4-gazebo\nelse\n {2}PX4_PREFIX=\/opt\/px4\nfi/,
     `PX4_PREFIX="${prefix}"`
   );
   body = body.replace(/mkdir -p \/logs/, `mkdir -p "${logsDir}"`);
