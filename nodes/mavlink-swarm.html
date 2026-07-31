@@ -60,11 +60,15 @@
       confirm: { value: false },
       delivery: { value: 'build' },
       actionType: { value: 'command' },
-      // Required for command and payload actions (§9): no default wire form.
-      // Move and Param actions carry no MAV_CMD, so a blank carrier is fine.
+      // Required for command actions and command-backed payload verbs (§9):
+      // no default wire form. Move and Param actions carry no MAV_CMD, and
+      // message-kind payload verbs (gimbal manager aiming) never consult the
+      // carrier, so a blank carrier is fine for those (Codex review on #61).
       carrier: { value: '', validate: function (v) {
         var t = this.actionType || 'command';
         if (t !== 'command' && t !== 'payload') return true;
+        if (t === 'payload' &&
+            RED.mavlink.payloadVerbIgnoresCarrier(this.topic, this.verb, this.path)) return true;
         return v === 'int' || v === 'long';
       } },
       frame: { value: '' },
@@ -144,7 +148,10 @@
 
       $('#node-input-topic').on('change', function () {
         refreshVerbOptions(false);
+        refreshCarrierRows();
       });
+      $('#node-input-verb').on('change', refreshCarrierRows);
+      $('#node-input-path').on('change', refreshCarrierRows);
       refreshVerbOptions(true);
 
       var _msgCatalogByKey = {};
@@ -336,11 +343,17 @@
       $('#node-input-selectionMode').on('change', refreshCatalogsAndVisibility);
 
       // ── Carrier (§9) ───────────────────────────────────────────────────────
-      // Carrier applies to command and payload actions (anything riding a
-      // MAV_CMD); frame only exists on the COMMAND_INT wire message.
+      // Carrier applies to anything riding a MAV_CMD: command actions and
+      // command-backed payload verbs. Message-kind payload verbs (gimbal
+      // manager aiming) ignore it. Frame only exists on COMMAND_INT.
       function refreshCarrierRows() {
         var t = $('#node-input-actionType').val() || 'command';
-        var usesCarrier = t === 'command' || t === 'payload';
+        var usesCarrier = t === 'command' ||
+          (t === 'payload' && !RED.mavlink.payloadVerbIgnoresCarrier(
+            $('#node-input-topic').val() || 'camera',
+            $('#node-input-verb').val() || '',
+            $('#node-input-path').val() || 'legacy'
+          ));
         $('#row-swarm-carrier').toggle(usesCarrier);
         $('#row-swarm-frame').toggle(usesCarrier && $('#node-input-carrier').val() === 'int');
       }
@@ -396,7 +409,8 @@
   <p>Fans one single-message MAVLink action out across the active vehicles selected from a Connection peer table.</p>
   <p>Sequential mode sends one targeted message per member at the configured interval. Broadcast mode sends one packet with target_system 0 and target_component 1.</p>
   <p>Output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail. Mission actions and parameter list requests are refused.</p>
-  <p>The <b>Carrier</b> field is required for Command and Payload actions (§9):
+  <p>The <b>Carrier</b> field is required for Command actions and command-backed
+  Payload verbs (§9) — message-kind payload verbs (gimbal manager aiming) ignore it:
   <code>COMMAND_INT</code> scales positional params from decimal degrees to
   <code>degE7</code> integers with an explicit <b>Frame</b>;
   <code>COMMAND_LONG</code> sends float params. Positional values are always

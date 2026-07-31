@@ -471,10 +471,12 @@ const { loadBundled } = require('../../lib/metadata');
 
 test('swarm INT command asks the XML: gimbal flags stay raw on the wire', async () => {
   const connection = connectionStub([peer(1)]);
-  connection.vehicle = { bundle: loadBundled('common') };
 
+  // The bundle arrives as an explicit option — the swarm node resolves it
+  // from the Vehicle Profile (the connection snapshot carries none, Codex #61).
   const result = await executeSwarm({
     connection,
+    vehicleBundle: loadBundled('common'),
     action: { type: 'command', carrier: 'int', commandId: 1000, params: { 1: -15, 2: 90, 5: 8 } },
     mode: 'sequential',
     delivery: 'send',
@@ -488,13 +490,13 @@ test('swarm INT command asks the XML: gimbal flags stay raw on the wire', async 
 
 test('swarm INT command with NaN lat/lon fails loud — nothing sent', async () => {
   const connection = connectionStub([peer(1)]);
-  connection.vehicle = { bundle: loadBundled('common') };
 
   // NaN means "leave unchanged" on the LONG carrier; on INT it must refuse,
   // not silently become 0,0 (§9/§10 "blank coordinates must not become 0,0").
   await assert.rejects(
     executeSwarm({
       connection,
+      vehicleBundle: loadBundled('common'),
       action: { type: 'command', carrier: 'int', commandId: 192, params: { 5: NaN, 6: 149, 7: 50 } },
       mode: 'sequential',
       delivery: 'send',
@@ -502,4 +504,28 @@ test('swarm INT command with NaN lat/lon fails loud — nothing sent', async () 
     /must be finite/
   );
   assert.equal(connection.sends.length, 0, 'the null-island command must never be sent');
+});
+
+test('message-kind payload actions need no carrier; command-backed ones still do (§9)', async () => {
+  // Gimbal manager aiming is a plain message — the carrier is meaningless and
+  // must not be demanded (Codex #61).
+  const managerAim = await executeSwarm({
+    connection: connectionStub([peer(1)]),
+    action: { type: 'payload', topic: 'gimbal', verb: 'aim', path: 'manager', values: { pitch: -10, yaw: 45 } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+  assert.equal(managerAim.success, true);
+
+  // A command-backed verb without a carrier is still refused with nothing sent.
+  const conn2 = connectionStub([peer(1)]);
+  const photo = await executeSwarm({
+    connection: conn2,
+    action: { type: 'payload', topic: 'camera', verb: 'photo', path: 'legacy', values: {} },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+  assert.equal(photo.result, 'refused');
+  assert.match(photo.detail, /carrier/);
+  assert.equal(conn2.sends.length, 0);
 });

@@ -7,10 +7,14 @@
       connection: { value: '', type: 'mavlink-connection' },
       identity: { value: '' },
       delivery: { value: 'build' },
-      // Required, no default (§9): the operator must state the wire carrier
-      // for command-backed verbs. Pre-existing flows red out until chosen.
-      carrier: { value: '', required: true,
-                 validate: function (v) { return v === 'int' || v === 'long'; } },
+      // Required for command-backed verbs, no default (§9): the operator must
+      // state the wire carrier. Message-kind verbs (gimbal manager aiming)
+      // never ride a MAV_CMD, so no carrier is demanded for them (Codex
+      // review on #61). Pre-existing command-verb flows red out until chosen.
+      carrier: { value: '', validate: function (v) {
+        if (RED.mavlink.payloadVerbIgnoresCarrier(this.topic, this.verb, this.path)) return true;
+        return v === 'int' || v === 'long';
+      } },
       frame: { value: '' },
       timeout: { value: 10000, validate: RED.validators.number(true) },
       maxRetries: { value: 3, validate: RED.validators.number(true) },
@@ -390,6 +394,7 @@
         $('#row-payload-action').toggle(!!show.action);
         $('#row-payload-length').toggle(!!show.length);
         $('#row-payload-rate').toggle(!!show.rate);
+        refreshFrameRow();
         refreshPayloadFieldTips();
       }
 
@@ -465,11 +470,19 @@
       $('#node-input-path').on('change', refreshVisibility);
 
       // ── Carrier (§9) ─────────────────────────────────────────────────────
-      // Frame only exists on the COMMAND_INT wire message, so its row follows
-      // the carrier choice. An empty carrier keeps the node invalid (required).
+      // Both rows follow the selected verb: a message-kind verb (gimbal
+      // manager aiming) ignores the carrier entirely, so neither row shows.
+      // Frame only exists on the COMMAND_INT wire message, so it also follows
+      // the carrier choice. An empty carrier keeps command-verb nodes invalid.
       function refreshFrameRow() {
+        const ignores = RED.mavlink.payloadVerbIgnoresCarrier(
+          $('#node-input-topic').val() || 'camera',
+          $('#node-input-verb').val() || '',
+          $('#node-input-path').val() || 'legacy'
+        );
         const isInt = $('#node-input-carrier').val() === 'int';
-        $('#row-payload-frame')[isInt ? 'show' : 'hide']();
+        $('#row-payload-carrier').toggle(!ignores);
+        $('#row-payload-frame').toggle(!ignores && isInt);
       }
       $('#node-input-carrier').on('change', refreshFrameRow);
       refreshFrameRow();
@@ -580,13 +593,14 @@
 <script type="text/html" data-help-name="mavlink-payload">
   <p>Controls camera, gimbal, servo, and release payload verbs. Command-backed verbs report command acknowledgement as their confirmation mode.</p>
   <p>Topic and verb reshape the form (§6): only the parameters for the selected verb are shown.</p>
-  <p>The <b>Carrier</b> field is required: command-backed verbs travel as
+  <p>The <b>Carrier</b> field is required for command-backed verbs: they travel as
   <code>COMMAND_INT</code> (positional values scaled to <code>degE7</code>
   integers, explicit <b>Frame</b>) or <code>COMMAND_LONG</code> (float params).
   Positional values — e.g. ROI latitude / longitude — are always entered in
   decimal degrees regardless of carrier. <code>msg.payload.carrier</code> and
   <code>msg.payload.mavFrame</code> override per message. Message-kind verbs
-  (gimbal manager aiming) ignore the carrier.</p>
+  (gimbal manager aiming) never ride a MAV_CMD — the carrier and frame rows
+  hide and no carrier is demanded for them.</p>
   <p>On <b>Build</b> delivery the Dialect picker supplies editor catalogs. Choose <i>from Vehicle Profile…</i> to use a profile dialect and target defaults; a concrete dialect has no profile target rung. On <b>Send</b> or <b>Send &amp; confirm</b> delivery a Connection is required. The Send-as identity drives target addressing: a companion identity derives the target sysid from its airframe; the target compid remains visible and config-resolved because it addresses a payload device (camera or gimbal), not the autopilot.</p>
   <p>On the <b>Send &amp; confirm</b> tier a command-backed verb waits for its <code>COMMAND_ACK</code>: output 0 (continue) fires only on <code>ACCEPTED</code>, and a <code>DENIED</code>, <code>TEMPORARILY_REJECTED</code>, or timeout halts the chain and reports on output 1.</p>
   <p>Gimbal manager aiming uses GIMBAL_MANAGER_SET_PITCHYAW and has no MAVLink acknowledgement, so it is always sent unconfirmed.</p>

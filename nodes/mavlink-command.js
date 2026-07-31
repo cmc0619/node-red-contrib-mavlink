@@ -186,7 +186,15 @@ module.exports = function registerMavlinkCommand(RED) {
           }
         }
       } else if (connNode && connNode.vehicle) {
-        bundle = connNode.vehicle.bundle || null;
+        // The connection's public vehicle snapshot deliberately carries no
+        // compiled bundle — only the profile node id. Per the snapshot's own
+        // contract (nodes/mavlink-connection.js): resolve the profile node
+        // and call getDialect(); never loadBundled, which would break custom
+        // XML profiles. (Codex review on #61 — the .bundle read was dead.)
+        const profileNode = connNode.vehicle.id ? RED.nodes.getNode(connNode.vehicle.id) : null;
+        if (profileNode && typeof profileNode.getDialect === 'function') {
+          try { bundle = profileNode.getDialect(); } catch { bundle = null; }
+        }
       }
       _coordKinds = bundle ? intCoordKinds(bundle, commandId) : null;
       return _coordKinds;

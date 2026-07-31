@@ -89,9 +89,9 @@ function redStub(nodesById) {
  * @param {object} [config]  extra node config overrides
  * @returns {{node: object, conn: object, warnings: string[]}}
  */
-function deploy(ackResults, config = {}) {
+function deploy(ackResults, config = {}, extraNodes = {}) {
   const conn = scriptedConn(ackResults);
-  const RED = redStub({ conn });
+  const RED = redStub({ conn, ...extraNodes });
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
@@ -298,13 +298,23 @@ test('msg.mavFrame selects a non-global frame so INT x/y stay in metres', async 
 
 const { loadBundled } = require('../../lib/metadata');
 
+// Compiled once like a real Vehicle Profile node — getDialect() returns a
+// held bundle, it does not re-parse per call.
+const COMMON_BUNDLE = loadBundled('common');
+
 test('INT + non-location command: XML kinds keep param5 raw on the wire', async () => {
-  const { node, conn } = deploy([MAV_RESULT.ACCEPTED], {
-    carrier: 'int',
-    mode: 'advanced',
-    advancedCommand: '1000', // DO_GIMBAL_MANAGER_PITCHYAW — param5 is flags
-  });
-  conn.vehicle = { bundle: loadBundled('common') };
+  // Production contract: the connection's vehicle snapshot exposes only the
+  // profile node id; the compiled bundle comes from getDialect() (Codex #61).
+  const { node, conn } = deploy(
+    [MAV_RESULT.ACCEPTED],
+    {
+      carrier: 'int',
+      mode: 'advanced',
+      advancedCommand: '1000', // DO_GIMBAL_MANAGER_PITCHYAW — param5 is flags
+    },
+    { veh: { getDialect: () => COMMON_BUNDLE } }
+  );
+  conn.vehicle = Object.freeze({ id: 'veh' });
 
   let sent;
   node.emit('input', { payload: { 1: -15, 2: 90, 5: 8 } }, (m) => { sent = m; }, () => {});
@@ -316,12 +326,16 @@ test('INT + non-location command: XML kinds keep param5 raw on the wire', async 
 });
 
 test('INT + NaN lat/lon refuses loud — nothing reaches the wire', async () => {
-  const { node, conn } = deploy([MAV_RESULT.ACCEPTED], {
-    carrier: 'int',
-    mode: 'advanced',
-    advancedCommand: '192', // DO_REPOSITION
-  });
-  conn.vehicle = { bundle: loadBundled('common') };
+  const { node, conn } = deploy(
+    [MAV_RESULT.ACCEPTED],
+    {
+      carrier: 'int',
+      mode: 'advanced',
+      advancedCommand: '192', // DO_REPOSITION
+    },
+    { veh: { getDialect: () => COMMON_BUNDLE } }
+  );
+  conn.vehicle = Object.freeze({ id: 'veh' });
 
   let sent;
   let doneErr;

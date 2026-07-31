@@ -328,12 +328,17 @@ test('mavlink-payload CompID reloads when catalog source changes', () => {
   );
 });
 
-test('payload carrier is a required select with no default (§9)', () => {
+test('payload carrier is required for command verbs, exempt for message-kind (§9)', () => {
   assert.match(payloadHtml, /id="node-input-carrier"/, 'carrier select must bind to the carrier property');
   assert.match(
     payloadHtml,
-    /carrier:\s*\{ value: '', required: true,/,
-    'carrier default is empty and required — the operator must choose'
+    /carrier:\s*\{ value: '', validate: function/,
+    'carrier default is empty with a conditional validate — no blanket required flag'
+  );
+  assert.match(
+    payloadHtml,
+    /payloadVerbIgnoresCarrier\(this\.topic, this\.verb, this\.path\)/,
+    'the validate exempts message-kind verbs via the shared predicate'
   );
   assert.match(payloadHtml, /<option value="int">/, 'COMMAND_INT option offered');
   assert.match(payloadHtml, /<option value="long">/, 'COMMAND_LONG option offered');

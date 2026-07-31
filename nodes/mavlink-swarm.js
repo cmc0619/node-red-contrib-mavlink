@@ -50,6 +50,7 @@ module.exports = function registerMavlinkSwarm(RED) {
 
         const aggregate = await executeSwarm({
           connection: effectiveConnection,
+          vehicleBundle: vehicleBundleFrom(RED, effectiveConnection),
           action: actionFrom(config, payload),
           selection,
           mode: payload.executionMode || config.executionMode || 'sequential',
@@ -219,6 +220,27 @@ function valuesFrom(config) {
 function valueFrom(payload, config, key) {
   if (payload[key] !== undefined) return payload[key];
   return config[key] === '' ? undefined : config[key];
+}
+
+/**
+ * Compiled dialect bundle for §9 "ask the XML" coordinate kinds. The
+ * connection's public vehicle snapshot deliberately carries no bundle — per
+ * its own contract, resolve the Vehicle Profile node and call getDialect().
+ * Null (no profile, build+list stub, or a throwing profile) keeps the
+ * historical treat-as-latlon scaling.
+ *
+ * @param {object} RED
+ * @param {object} connectionNode
+ * @returns {object|null}
+ */
+function vehicleBundleFrom(RED, connectionNode) {
+  const vehicle = connectionNode && connectionNode.vehicle;
+  if (!vehicle || !vehicle.id) return null;
+  const profileNode = RED.nodes.getNode(vehicle.id);
+  if (profileNode && typeof profileNode.getDialect === 'function') {
+    try { return profileNode.getDialect(); } catch { return null; }
+  }
+  return null;
 }
 
 /** MAV_FRAME for the INT carrier: msg.payload.mavFrame beats node config (§9). */
