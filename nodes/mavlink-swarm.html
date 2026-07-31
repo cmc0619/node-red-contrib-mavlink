@@ -65,10 +65,21 @@
       // message-kind payload verbs (gimbal manager aiming) never consult the
       // carrier, so a blank carrier is fine for those (Codex review on #61).
       carrier: { value: '', validate: function (v) {
-        var t = this.actionType || 'command';
+        // Live selectors first, saved values as fallback (house pattern, see
+        // the dialect validator above): this.* is stale during in-dialog
+        // validation.
+        var $type = $('#node-input-actionType');
+        var t = ($type && $type.length) ? $type.val() : (this.actionType || 'command');
         if (t !== 'command' && t !== 'payload') return true;
-        if (t === 'payload' &&
-            RED.mavlink.payloadVerbIgnoresCarrier(this.topic, this.verb, this.path)) return true;
+        if (t === 'payload') {
+          var $topic = $('#node-input-topic');
+          var topic = ($topic && $topic.length) ? $topic.val() : (this.topic || 'camera');
+          var $verb = $('#node-input-verb');
+          var verb = ($verb && $verb.length) ? $verb.val() : (this.verb || '');
+          var $path = $('#node-input-path');
+          var path = ($path && $path.length) ? $path.val() : (this.path || 'legacy');
+          if (RED.mavlink.payloadVerbIgnoresCarrier(topic, verb, path)) return true;
+        }
         return v === 'int' || v === 'long';
       } },
       frame: { value: '' },

@@ -337,8 +337,13 @@ test('payload carrier is required for command verbs, exempt for message-kind (§
   );
   assert.match(
     payloadHtml,
-    /payloadVerbIgnoresCarrier\(this\.topic, this\.verb, this\.path\)/,
+    /payloadVerbIgnoresCarrier\(topic, verb, path\)/,
     'the validate exempts message-kind verbs via the shared predicate'
+  );
+  assert.match(
+    payloadHtml,
+    /\$topic && \$topic\.length\) \? \$topic\.val\(\) : \(this\.topic/,
+    'the validate reads live selectors first, saved values as fallback (house pattern)'
   );
   assert.match(payloadHtml, /<option value="int">/, 'COMMAND_INT option offered');
   assert.match(payloadHtml, /<option value="long">/, 'COMMAND_LONG option offered');

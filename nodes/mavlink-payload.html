@@ -12,7 +12,17 @@
       // never ride a MAV_CMD, so no carrier is demanded for them (Codex
       // review on #61). Pre-existing command-verb flows red out until chosen.
       carrier: { value: '', validate: function (v) {
-        if (RED.mavlink.payloadVerbIgnoresCarrier(this.topic, this.verb, this.path)) return true;
+        // Live selectors first, saved values as fallback (house pattern, see
+        // swarm's dialect validator): during in-dialog validation this.* is
+        // stale, so a verb just switched to manager-aim must not still
+        // demand a carrier.
+        var $topic = $('#node-input-topic');
+        var topic = ($topic && $topic.length) ? $topic.val() : (this.topic || 'camera');
+        var $verb = $('#node-input-verb');
+        var verb = ($verb && $verb.length) ? $verb.val() : (this.verb || '');
+        var $path = $('#node-input-path');
+        var path = ($path && $path.length) ? $path.val() : (this.path || 'legacy');
+        if (RED.mavlink.payloadVerbIgnoresCarrier(topic, verb, path)) return true;
         return v === 'int' || v === 'long';
       } },
       frame: { value: '' },

@@ -256,7 +256,7 @@ test('carrier validate outcomes: MAV_CMD actions refuse blank, others pass (§9)
     else if (c === '}') depth -= 1;
   }
   const body = html.slice(bodyStart, i);
-  const validate = new Function('v', 'RED', body);
+  const validate = new Function('v', 'RED', '$', body);
   const RED = {
     mavlink: {
       // The real predicate from resources/mavlink-editor.js is drift-pinned
@@ -265,7 +265,10 @@ test('carrier validate outcomes: MAV_CMD actions refuse blank, others pass (§9)
         topic === 'gimbal' && verb === 'aim' && (path || 'legacy') === 'manager',
     },
   };
-  const run = (thisObj, v) => validate.call(thisObj, v, RED);
+  // No dialog open: every selector is absent, so the validator falls back to
+  // the saved node values (house pattern).
+  const $absent = () => ({ length: 0 });
+  const run = (thisObj, v) => validate.call(thisObj, v, RED, $absent);
 
   // MAV_CMD actions: blank refuses, int/long pass.
   assert.equal(run({ actionType: 'command' }, ''), false, 'command action refuses blank carrier');
@@ -283,6 +286,21 @@ test('carrier validate outcomes: MAV_CMD actions refuse blank, others pass (§9)
     run({ actionType: 'payload', topic: 'gimbal', verb: 'aim', path: 'manager' }, ''),
     true,
     'message-kind payload verb needs no carrier'
+  );
+
+  // Dialog open: live selector values beat stale saved values — a verb just
+  // switched to manager-aim must not still demand a carrier.
+  const live = {
+    '#node-input-actionType': 'payload',
+    '#node-input-topic': 'gimbal',
+    '#node-input-verb': 'aim',
+    '#node-input-path': 'manager',
+  };
+  const $live = (sel) => (sel in live ? { length: 1, val: () => live[sel] } : { length: 0 });
+  assert.equal(
+    validate.call({ actionType: 'payload', topic: 'camera', verb: 'photo', path: 'legacy' }, '', RED, $live),
+    true,
+    'live manager-aim selection wins over stale saved photo verb'
   );
 });
 
