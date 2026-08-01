@@ -43,7 +43,6 @@
     "serialport": "^12.0.0",
     "sockopt": "^2.0.1"
   },
-
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.8.0",
@@ -54,9 +53,16 @@
     "node-red": "^5.0.1",
     "node-red-node-test-helper": "^0.3.6"
   },
-  "keywords": ["node-red", "mavlink", "ardupilot", "px4", "drone"],
+  "keywords": [
+    "node-red",
+    "mavlink",
+    "ardupilot",
+    "px4",
+    "drone"
+  ],
   "node-red": {
     "version": ">=4.0.0",
+    "//": "mavlink-local-identity MUST stay first. It is the only node HTML that loads resources/mavlink-editor.js, and Node-RED appends node HTML one node at a time (a marker per node set, walked sequentially), so any node listed ahead of it runs registerType before RED.mavlink exists. Measured on Node-RED 5.0.1: moving it last leaves 2 of 10 palette nodes registered, with a TypeError on RED.mavlink.validateUint8. Pinned by test/tooling/package-contract.check.js.",
     "nodes": {
       "mavlink-local-identity": "nodes/mavlink-local-identity.js",
       "mavlink-vehicle": "nodes/mavlink-vehicle.js",
