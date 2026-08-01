@@ -132,6 +132,8 @@ test('each source component gets its own sequence stream (issue #92)', () => {
   assert.equal(s.nextSeq(255, 191), 0); // second identity starts fresh
   assert.equal(s.nextSeq(255, 190), 2); // first stream unaffected
   assert.equal(s.nextSeq(255, 191), 1);
+  assert.equal(s.nextSeq(254, 190), 0); // same compid, different sysid: fresh stream
+  assert.equal(s.nextSeq(255, 190), 3); // original stream still independent
 });
 
 test('sign-outbound with no key fails the connection closed', () => {
