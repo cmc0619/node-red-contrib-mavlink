@@ -46,20 +46,16 @@ test('mavlink-vehicle: defaultTargetComponent is a MAV_COMPONENT select', () => 
 
 test('mavlink-build: target_component field uses a MAV_COMPONENT select (§6)', () => {
   const html = readHtml('mavlink-build');
-  assert.match(html, /function targetComponentInput/, 'dedicated CompID renderer');
   assert.match(html, /spec\.name === ['"]target_component['"]/);
-  assert.match(html, /loadEnumsCatalog\(\['MAV_COMPONENT'\]/);
-  assert.match(html, /fillCompIdSelect\(/);
-  // Must not fall through to a raw number input for this field name alone —
-  // the special-case returns before the generic number path.
-  const fieldInput = html.slice(
-    html.indexOf('function fieldInput'),
-    html.indexOf('function syncSavedFieldsFromDom')
-  );
   assert.match(
-    fieldInput,
-    /if \(spec\.name === ['"]target_component['"]\) \{\s*return targetComponentInput/,
-    'target_component branches before the number input'
+    html,
+    /reloadCompIdSelect\(/,
+    'Build reuses the shared CompID reload helper'
+  );
+  assert.doesNotMatch(
+    html,
+    /loadEnumsCatalog\(\['MAV_COMPONENT'\]/,
+    'no parallel local MAV_COMPONENT fetch'
   );
 });
 

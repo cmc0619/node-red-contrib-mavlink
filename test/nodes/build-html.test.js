@@ -66,13 +66,20 @@ test('Build reshapes fields from message metadata and handles COMMAND_LONG/INT',
 });
 
 test('Build target_component is a MAV_COMPONENT pulldown, not a bare number (§6)', () => {
-  assert.match(html, /function targetComponentInput/);
-  assert.match(html, /loadEnumsCatalog\(\['MAV_COMPONENT'\]/);
-  assert.match(html, /fillCompIdSelect\(/);
   assert.match(
     html,
     /spec\.name === ['"]target_component['"]/,
     'XML leaves target_component without enum= — Build special-cases the name'
+  );
+  assert.match(
+    html,
+    /reloadCompIdSelect\(/,
+    'must reuse the shared CompID helper — not a local loadEnumsCatalog path'
+  );
+  assert.doesNotMatch(
+    html,
+    /loadEnumsCatalog\(\['MAV_COMPONENT'\]/,
+    'Build must not hand-roll the MAV_COMPONENT fetch'
   );
 });
 
