@@ -82,5 +82,7 @@ test('Dockerfile downloads the pinned Copter-4.7.0 prebuilt binary', () => {
     /COPY params\/ap-logging\.parm \/params\/ap-logging\.parm/,
     'must include lab logging parm'
   );
-  assert.doesNotMatch(src, /\bwaf\b/, 'must not compile SITL from source');
+  // Strip comments, then reject waf invocations.
+  const code = src.replace(/#[^\n]*/g, '');
+  assert.doesNotMatch(code, /\bwaf\b/, 'must not compile SITL from source');
 });
