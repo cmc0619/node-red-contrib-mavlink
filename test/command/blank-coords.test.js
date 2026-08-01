@@ -73,6 +73,41 @@ test('gimbal roi-set refuses blank lat/lon/alt (#88)', () => {
     BLANK_RE,
     'alt required'
   );
+  assert.throws(
+    () => buildPayloadMessage({
+      carrier: 'long',
+      topic: 'gimbal',
+      verb: 'roi-set',
+      target: { sysid: 1, compid: 154 },
+      values: { lat: '  ', lon: null, alt: 50 },
+    }),
+    BLANK_RE,
+    'whitespace/null lat/lon are blank'
+  );
+});
+
+test('gimbal roi-set preserves explicit NaN lat/lon (§14 #88)', () => {
+  const built = buildPayloadMessage({
+    carrier: 'long',
+    topic: 'gimbal',
+    verb: 'roi-set',
+    target: { sysid: 1, compid: 154 },
+    values: { lat: NaN, lon: 'NaN', alt: 50 },
+  });
+  assert.ok(Number.isNaN(built.message.fields.param5));
+  assert.ok(Number.isNaN(built.message.fields.param6));
+  assert.equal(built.message.fields.param7, 50);
+});
+
+test('reposition refuses whitespace/null location params (#88)', () => {
+  const { mergeParams } = require('../../lib/command/merge-params');
+  const user = mergeParams(
+    { params: '{"5":"  ","6":null,"7":50}' },
+    { 5: ' ', 6: null }
+  );
+  assert.equal(Object.prototype.hasOwnProperty.call(user, 5), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(user, 6), false);
+  assert.throws(() => buildParamArray(getPreset('reposition'), user), BLANK_RE);
 });
 
 test('command node: reposition with blank coords fails loud on build (#88)', async () => {

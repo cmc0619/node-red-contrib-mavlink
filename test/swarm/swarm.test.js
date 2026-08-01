@@ -506,6 +506,22 @@ test('swarm INT command with NaN lat/lon fails loud — nothing sent', async () 
   assert.equal(connection.sends.length, 0, 'the null-island command must never be sent');
 });
 
+test('swarm advanced LONG hasLocation refuses blank lat/lon/alt before send (#88)', async () => {
+  const connection = connectionStub([peer(1)]);
+  const result = await executeSwarm({
+    connection,
+    vehicleBundle: loadBundled('common'),
+    // DO_REPOSITION — location metadata must be resolved for LONG too, before
+    // validateWrap (CodeRabbit on #116).
+    action: { type: 'command', carrier: 'long', commandId: 192, params: { 1: 5 } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+  assert.equal(result.result, 'refused');
+  assert.match(result.detail, /blank coordinates must not become 0,0/);
+  assert.equal(connection.sends.length, 0);
+});
+
 test('message-kind payload actions need no carrier; command-backed ones still do (§9)', async () => {
   // Gimbal manager aiming is a plain message — the carrier is meaningless and
   // must not be demanded (Codex #61).
