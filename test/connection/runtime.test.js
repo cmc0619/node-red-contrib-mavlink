@@ -369,14 +369,52 @@ test('close before start still calls done (constructor-threw teardown path)', ()
   assert.equal(called, true);
 });
 
-test('_pump drops an item whose serialize throws (unknown dialect message) and keeps draining', async () => {
+test('send() throws synchronously for an unserializable message — no phantom success', async () => {
   const wire = fakeWire();
   const realSerialize = wire.serialize;
   wire.serialize = (message, ctx) => {
     // Mirrors wire.js's real failure: a message name absent from the bound
-    // dialect. Only the bad name should be dropped; the queue must not wedge.
+    // dialect. The sender must hear about it — its node routes the throw to
+    // status/done — and the queue must keep flowing for everyone else.
     if (message.name === 'BOGUS_MESSAGE') {
       throw new Error("no wire class for message 'BOGUS_MESSAGE'");
+    }
+    return realSerialize(message, ctx);
+  };
+  const { connection, dg } = build({}, { wire });
+  await connection.start();
+
+  assert.throws(
+    () => connection.send({ name: 'BOGUS_MESSAGE', fields: {} }, { band: BAND.CONTROL }),
+    /BOGUS_MESSAGE/,
+    'the caller gets the failure synchronously, on its own error path'
+  );
+  connection.send({ name: 'GOOD_MESSAGE', fields: {} }, { band: BAND.CONTROL });
+  await delay(30);
+
+  const names = dg.sockets[0].sent.map((s) => JSON.parse(s.buffer.toString()).name);
+  assert.deepEqual(names, ['GOOD_MESSAGE'], 'the rejected message never occupies the queue');
+
+  connection.heartbeats.tick();
+  await delay(30);
+  const afterNames = dg.sockets[0].sent.map((s) => JSON.parse(s.buffer.toString()).name);
+  assert.ok(afterNames.includes('HEARTBEAT'), 'heartbeats still transmit after a rejected send');
+  connection.close();
+});
+
+test('_pump backstop: a drain-time serialize throw drops that envelope and keeps draining', async () => {
+  // send()-time validation catches every deterministic failure, so reach the
+  // backstop by failing only the SECOND serialize of the same message (the
+  // drain-time one, which carries the real seq and signing context). The
+  // guard's job is narrower now but §2-critical: whatever still escapes must
+  // not wedge _draining or kill the runtime from a transport callback.
+  const wire = fakeWire();
+  const realSerialize = wire.serialize;
+  let calls = 0;
+  wire.serialize = (message, ctx) => {
+    if (message.name === 'FLAKY_MESSAGE') {
+      calls += 1;
+      if (calls > 1) throw new Error('drain-time failure for FLAKY_MESSAGE');
     }
     return realSerialize(message, ctx);
   };
@@ -387,16 +425,14 @@ test('_pump drops an item whose serialize throws (unknown dialect message) and k
   );
   await connection.start();
 
-  connection.send({ name: 'BOGUS_MESSAGE', fields: {} }, { band: BAND.CONTROL });
+  connection.send({ name: 'FLAKY_MESSAGE', fields: {} }, { band: BAND.CONTROL });
   connection.send({ name: 'GOOD_MESSAGE', fields: {} }, { band: BAND.CONTROL });
   await delay(30);
 
   const names = dg.sockets[0].sent.map((s) => JSON.parse(s.buffer.toString()).name);
   assert.deepEqual(names, ['GOOD_MESSAGE'], 'the bad envelope is dropped, the good one still transmits');
-  assert.ok(errors.some((m) => /BOGUS_MESSAGE/.test(m)), 'the serialize failure is surfaced via the logger');
+  assert.ok(errors.some((m) => /FLAKY_MESSAGE/.test(m)), 'the drain-time failure is surfaced via the logger');
 
-  // A heartbeat tick afterward proves _draining was correctly reset, not
-  // left wedged true by the throw.
   connection.heartbeats.tick();
   await delay(30);
   const afterNames = dg.sockets[0].sent.map((s) => JSON.parse(s.buffer.toString()).name);

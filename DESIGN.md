@@ -2029,3 +2029,21 @@ start, so a listener launched first reports the previous command.
 *Check (ArduPilot):* run the prebuilt SITL binary with
 `--serial0 udpclient:127.0.0.1:14550`, send `DO_SET_HOME` as COMMAND_INT under each frame, and
 read `HOME_POSITION` back.
+
+**node-mavlink's `sign()` cannot carry the runtime's signing timestamp, and does not mark the
+frame as signed.**
+*Wrong belief:* `MavLinkProtocolV2#sign(frame, linkId, key, timestamp)` is the supported channel
+for the runtime's per-stream signing timestamp — pass SigningState's precomputed value through
+its `timestamp` parameter.
+*Fact:* read from the dependency's source (`node-mavlink` `lib/mavlink.ts`): that parameter is a
+**Unix-milliseconds clock reading**, converted internally via
+`(timestamp − SIGNATURE_START_TIME) × 100` — so passing the runtime's already-converted 48-bit
+10 µs units double-converts them, and omitting the parameter stamps `Date.now()`, which gives two
+frames emitted in the same millisecond identical timestamps that a spec receiver rejects as
+REPLAY. `sign()` also never sets the v2 `IFLAG_SIGNED` incompatibility bit, which lives in the
+CRC'd header and must be set *before* `serialize()` writes it (node-mavlink's own `sendSigned()`
+helper does exactly that; its `sign()` alone does not). Both facts are why `wire.js`'s
+`signFrame()` bypasses `sign()`: it writes SigningState's timestamp into the signature block
+directly and computes the HMAC once. A future "simplify back to the library call" change breaks
+the timestamp path and the signed-header bit together.
+*Check:* `node --test test/connection/wire-signing.test.js`
