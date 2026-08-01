@@ -78,7 +78,7 @@ node sitl/run-example-suite.js --only 01,10,17
 
 Harness: **docker-restarts the vehicle fleet** (AP 1–5, PX4 11–15, companions
 20/21 — not `nrc-nodered`) before each non-SKIP example, waits for GPS/EKF
-settle (`SITL_FLEET_SETTLE_MS`, default 20s), re-applies PX4 lab helpers, then
+settle (`SITL_FLEET_SETTLE_MS`, default 8s), re-applies PX4 lab helpers, then
 deploys one `examples/sitl/*.json` → enable debug→console → fire injects →
 scrape `docker logs nrc-nodered` → write JSON under `/tmp/` (default). Example
 **25** (TCP) is **SKIP** unless Compose exposes SITL TCP.
