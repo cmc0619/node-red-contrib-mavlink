@@ -69,6 +69,37 @@ test('shared ensureConfigNodePicker uses RED.editor.prepareConfigNodeSelect (edi
   );
 });
 
+test('additionalIdentities has an editor row (issue #94 — feature must be reachable)', () => {
+  // The runtime consumes config.additionalIdentities and the shared editor
+  // helper reads conn.additionalIdentities for send-as selects; without this
+  // list the feature is only reachable by hand-editing flow JSON.
+  assert.match(
+    html,
+    /additionalIdentities:\s*\{\s*value:\s*\[\]\s*\}/,
+    'defaults.additionalIdentities stays declared'
+  );
+  assert.match(
+    html,
+    /id="mav-conn-additional-identities"/,
+    'template carries the editableList container'
+  );
+  assert.match(
+    html,
+    /editableList\(\{/,
+    'oneditprepare builds the list with Node-RED\'s stock editableList'
+  );
+  assert.match(
+    html,
+    /this\.additionalIdentities\s*=\s*out/,
+    'oneditsave writes the collected ids back to the property'
+  );
+  assert.match(
+    html,
+    /id !== primary/,
+    'oneditsave excludes the primary Identity so it is never bound twice'
+  );
+});
+
 test('Connection editor does not expose heartbeat interval or UDP broadcast controls', () => {
   assert.ok(!html.includes('heartbeatInterval'), 'heartbeat interval belongs to Local Identity');
   assert.ok(!html.includes('node-config-input-broadcast'), 'SO_BROADCAST is not a Connection option');
