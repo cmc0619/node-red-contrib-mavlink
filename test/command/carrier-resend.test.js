@@ -273,7 +273,7 @@ test('missing carrier config: node reds out and inputs do nothing', async () => 
   assert.equal(sent, undefined, 'no outputs fire from an invalid config');
 });
 
-test('msg.mavFrame selects a non-global frame so INT x/y stay in metres', async () => {
+test('msg.mavFrame selects a non-global frame so INT x/y scale by 1e4, not 1e7', async () => {
   const { node, conn } = deploy(
     [MAV_RESULT.COMMAND_INT_ONLY, MAV_RESULT.ACCEPTED]
   );
@@ -289,8 +289,10 @@ test('msg.mavFrame selects a non-global frame so INT x/y stay in metres', async 
 
   assert.equal(conn.sent[1].message.name, 'COMMAND_INT');
   assert.equal(conn.sent[1].message.fields.frame, 1);
-  assert.equal(conn.sent[1].message.fields.x, 10, 'metres rounded, not degE7-scaled');
-  assert.equal(conn.sent[1].message.fields.y, -4);
+  // Local frame scales metres × 1e4, not degE7 — measured against PX4 SITL
+  // (DESIGN.md §14). 10.4 m on the wire is 104000.
+  assert.equal(conn.sent[1].message.fields.x, 104000, 'metres × 1e4, not degE7-scaled');
+  assert.equal(conn.sent[1].message.fields.y, -36000);
   assert.equal(sent[1].result, 'accepted');
 });
 

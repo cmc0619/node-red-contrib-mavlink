@@ -318,7 +318,10 @@ it only because the output shapes are stable and few.
 - **No bitwise-math dependency.** `bitset`, `bitwise`, `bitfield` and the pre-BigInt `long` family
   all exist and none are needed. Arithmetic plus BigInt covers every case here.
 - **Blank, zero, and absent are three states.** A blank active field is an error; an explicit `0`
-  passes through untouched; an absent field is left absent rather than zero-filled.
+  passes through untouched; an absent field is left absent rather than zero-filled. One carve-out:
+  a degE7 field whose metadata declares an out-of-range invalid sentinel (`INT32_MAX`) accepts an
+  explicit `null`/`undefined` and encodes the sentinel — there blank is not a missing value but a
+  spec-declared one, and the same sentinel decodes back to `null` (§9 coordinate frames).
 - **`NaN` survives losslessly on every float.** Never through `JSON.stringify`. It means "keep
   current" only in the fields whose metadata declares `invalid="NaN"`; elsewhere it is simply
   invalid.
@@ -1015,8 +1018,23 @@ With this, the chain is `Arm → Takeoff → Move`, three nodes, each set to awa
 Three rules, each of which encodes a wrong message if missed:
 
 - **Wire lat/lon are `degE7` integers** — degrees × 10⁷ in an `int32`, not floats. The metadata
-  declares it; the conversion is the codec's (§5). A raw float in that field is off by seven
-  orders of magnitude.
+  declares it; the conversion is the codec's (§5), and it is **value-blind**: degrees always
+  scale, for every input type — no "integer means already-scaled" pass-through, no magnitude
+  heuristic. Every mature encoder (MAVSDK, QGC, pymavlink call sites, ArduPilot's LONG→INT
+  converter) decides *whether* to scale from static schema — command identity, frame, or a typed
+  API — never from the value; a value-inspecting rule silently mis-encodes whole-number degrees.
+  Degrees outside ±180° are rejected with a divide-by-1e7 hint, never reinterpreted (ArduPilot's
+  `check_latlng` uses the bound the same way: reject, not dispatch). A degE7 field whose metadata
+  declares `invalid="INT32_MAX"` maps `null` ↔ sentinel losslessly in both directions; in-range
+  markers (`invalid="0"`, SIM_STATE) get no mapping — 0° is a legal coordinate and nulling it
+  loses data.
+- **A COMMAND_INT coordinate scales by frame.** Global frames take degrees × 10⁷; local frames
+  take **metres × 10⁴** — the divisor is frame-dependent per common.xml, and both halves are
+  measured (§14), not inferred. This applies to real coordinate params only: a natively-degE7
+  param and a non-location `param5`/`param6` (gimbal flags and the like) carry what the operator
+  entered in either frame. `MISSION_ITEM_INT` declares the same field semantics but its decode
+  path is separate firmware code and **has not been measured** — do not assume it follows until
+  it has been.
 - **NED is down-positive.** Every UI and every operator says altitude up-positive, so the sign
   flips exactly once, at encode, in Move — never in the UI and never twice.
 - **A metre offset scales longitude by latitude.** North is metres ÷ 111,320 in degrees;
@@ -1101,12 +1119,21 @@ the vehicle drives the conversation.
 **Download.** `MISSION_REQUEST_LIST` → `MISSION_COUNT` → request each item by sequence →
 `MISSION_ACK`. A count of zero terminates immediately with an ack; do not wait for items that
 will never come. The `mission_type` on every message must match the one requested — a vehicle
-answering about a different type is a mismatch, not a mission.
+answering about a different type is a mismatch, not a mission. **Only the first count opens the
+walk**: a `MISSION_COUNT` arriving mid-walk is a retransmission and is ignored (the in-flight
+item step's timer drives recovery) — restarting from it discards progress, resets the retry
+ceiling, and a smaller stale count truncates the mission.
 
 **Upload.** `MISSION_COUNT` → the vehicle requests items by sequence → send each → `MISSION_ACK`.
 **The vehicle chooses the order**, and it may re-request an item it already received; answer
 whatever it asks for rather than assuming a walk from zero. Answer each request in the item
 format it asked for — a `MISSION_REQUEST_INT` is not satisfied by a `MISSION_ITEM`.
+**An error ack ends the upload immediately, at any phase**, carrying the vehicle's result code —
+the vehicle's only channel for "count too big" / "busy" / "can't allocate" is an error
+`MISSION_ACK` sent before any item request. Two exceptions: `INVALID_SEQUENCE` is dropped
+(ArduPilot emits it mid-transfer for duplicated items on lossy links while keeping the transfer
+alive), and an `ACCEPTED` before every declared item was requested is a protocol error — a
+failure, never a success and never silently ignored.
 
 **Clear.** `MISSION_CLEAR_ALL` → `MISSION_ACK`. This one is destructive and gets a confirmation
 gate.
@@ -1876,3 +1903,80 @@ bytewise vehicle failed the same way. Tolerance follows the wire too: a float32-
 must compare exactly — past 2^24 consecutive integers collide under `Math.fround`, and a
 tolerance there confirms a value the vehicle never stored.
 *Check:* `node --test test/param/param.test.js`
+
+**Whole-number degrees are degrees: degE7 encode must be value-blind.**
+*Wrong belief:* an integer given to a degE7 field is safest treated as an already-scaled wire
+value, so `lat: -35` should pass through untouched.
+*Fact:* no mature MAVLink encoder inspects the value — MAVSDK (`action_impl.cpp`,
+`int32_t(std::round(latitude_deg * 1e7))`), QGC (`MavCommandQueue.cc`, gated only on
+`MAV_FRAME_MISSION`), pymavlink call sites, and ArduPilot's `convert_COMMAND_LONG_loc_param`
+(gated on command identity) all scale unconditionally and decide *whether* from static schema.
+The pass-through encoded `lat: -35` as −0.0000035° — a silent null-island goto. Declared-invalid
+sentinels are the schema-driven replacement: `invalid="INT32_MAX"` fields map `null` ↔ sentinel
+both directions; out-of-±180° degrees are rejected with a divide-by-1e7 hint, matching how
+ArduPilot's `check_latlng` uses the bound (reject, never dispatch).
+*Check:* `node --test lib/codec/test/field.test.js`
+
+**An early error MISSION_ACK is the rejection, not a stale leftover.**
+*Wrong belief:* a `MISSION_ACK` error arriving before all items were requested is safest ignored
+as a stale ack from a prior transfer; only a post-delivery ack is this transfer's answer.
+*Fact:* ArduPilot's `MissionItemProtocol.cpp` answers an oversized count with `NO_SPACE`, an
+allocation failure with `ERROR`, and a competing GCS with `DENIED` — all directly after
+`MISSION_COUNT`, before requesting a single item; that ack is the vehicle's only channel for the
+rejection. MAVSDK's `process_mission_ack` has no phase gate (pinned by
+`UploadMissionNackAreHandled`), and QGC's `PlanManager.cc` comments "We can get a MISSION_ACK
+with an error at any time". Gating errors on delivery progress turns the most common rejection
+into a full retry stall with the reason code discarded. Stale-ack protection lives in the
+`mission_type` filter and subscription lifetime — the two mechanisms the ecosystem actually
+deploys. The one code worth exempting is `INVALID_SEQUENCE` (ArduPilot mid-transfer noise on
+lossy links, non-terminal on the vehicle side; QGC carries the same exemption), and a premature
+`ACCEPTED` is a protocol *failure* everywhere (MAVSDK `ProtocolError`, QGC `VehicleAckError`) —
+never a success, never ignored.
+*Measured, not only read:* against ArduPilot 4.7.0 SITL, a `MISSION_COUNT` of 60000 was answered
+with `MISSION_ACK type=4` (`NO_SPACE`) in **7 ms**, before a single `MISSION_REQUEST`. The control
+— a valid count of 2 — produced `MISSION_REQUEST seq=0` in 2 ms, resent at ~1 s intervals, and
+after 8 s of silence from the GCS the vehicle abandoned the transfer with `type=15`
+(`OPERATION_CANCELLED`), matching `upload_timeout_ms = 8000`. Under the old phase gate the
+`NO_SPACE` was dropped and the transfer stalled through the full count-retry ceiling before
+failing with the vehicle's reason discarded.
+*Check:* `node --test test/mission/upload.test.js`
+
+**COMMAND_INT x/y has no working keep-current sentinel.**
+*Wrong belief:* per common.xml, NaN lat/lon should encode as `INT32_MAX` ("keep current") in
+COMMAND_INT.
+*Fact:* ArduPilot's `location_from_command_t` runs `check_latlng` with no sentinel branch —
+`INT32_MAX` reads as 214.7°, out of range, command NAK'd; MAVSDK cannot even express unset x/y
+(bare `int32_t`, defaults 0) and QGC's equivalent path is latent UB (`NaN * 1e7 → int32`). The
+deployed way to say "keep current position" is COMMAND_LONG with NaN param5/6 — which is what the
+build-time rejection tells the operator.
+*Check:* `node --test test/command/carrier.test.js test/command/carrier-resend.test.js`
+
+**Local-frame COMMAND_INT x/y really is metres × 1e4 — PX4 implements it; ArduPilot refuses the
+frame rather than reading it raw.**
+*Wrong belief:* the common.xml `×1e4` local rule is dead documentation that nothing decodes, so
+raw rounded metres is the interoperable choice. (Asserted here from source archaeology across
+pymavlink/MAVSDK/QGC/ArduPilot — a survey that never covered PX4's decoder, which was the
+deciding case. Recorded as a caution: absence of evidence in four codebases was treated as
+evidence of absence, and one measurement overturned it.)
+*Fact:* measured against both autopilots with one `COMMAND_INT`, identical `x`/`y`, only the
+frame varied. **PX4** (`px4io/px4-sitl`, the digest pinned in `sitl/docker-compose.yml`) applies
+the frame-dependent divisor exactly as specified — `MAV_FRAME_LOCAL_NED` `x=1234567` decodes to
+`param5 = 123.4567` (÷1e4) while `MAV_FRAME_GLOBAL_INT` decodes the same input to `0.123457`
+(÷1e7), both ACCEPTED, read back from PX4's own `vehicle_command` uORB topic. **ArduPilot
+4.7.0** (official prebuilt `firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu`)
+does not scale local frames at all — it **denies** them for location-bearing commands, because
+`mavlink_coordinate_frame_to_location_alt_frame` maps only the GLOBAL variants so
+`location_from_command_t` returns false: `DO_SET_HOME` with `GLOBAL_INT` is ACCEPTED and sets
+`HOME_POSITION` to the verbatim degE7 value, while the identical command with `LOCAL_NED` returns
+`MAV_RESULT_DENIED` and leaves home unchanged.
+Therefore scaling ×1e4 is strictly correct, not a trade-off: it fixes a real 1e4 error on PX4
+(a local reposition to `x = 50` m currently arrives as 5 mm) and cannot regress ArduPilot, which
+rejects the frame regardless of the value. There is no raw-metres consumer to preserve
+compatibility with.
+*Check (PX4):* `cd sitl && docker compose --profile sitl up -d px4-11`, send a local-frame
+COMMAND_INT, then `docker exec nrc-px4-11 sh -lc 'cd /opt/px4 && ./bin/px4-listener
+vehicle_command 1'`. Send **before** reading — `px4-listener` prints uORB's retained value on
+start, so a listener launched first reports the previous command.
+*Check (ArduPilot):* run the prebuilt SITL binary with
+`--serial0 udpclient:127.0.0.1:14550`, send `DO_SET_HOME` as COMMAND_INT under each frame, and
+read `HOME_POSITION` back.
