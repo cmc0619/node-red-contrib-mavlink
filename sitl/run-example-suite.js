@@ -552,7 +552,9 @@ async function runOne(file) {
 
   await sleep(profile.waitMs);
 
-  const log = nrLogSince(Math.max(5, Math.ceil(profile.waitMs / 1000) + 10));
+  // Cover the whole example (prep gaps + injectGapMs + wait), not only waitMs —
+  // otherwise long multi-inject stories (e.g. 13) scrape an empty idle window.
+  const log = nrLogSince(Math.max(15, Math.floor(Date.now() / 1000) - mark + 5));
   const blocks = extractDebugBlocks(log);
   const summary = summarizeBlocks(blocks);
   const verdict = verdictFrom(profile, summary, log);
