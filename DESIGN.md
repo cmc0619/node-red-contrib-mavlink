@@ -1017,7 +1017,8 @@ meaningful completion state do not offer the tier — the dropdown stops at conf
 
 **Takeoff completion reasons in climb height, not raw altitude, because the takeoff param
 is a different datum per frame.** `GLOBAL_POSITION_INT` reports both `relative_alt`
-(metres above home) and `alt` (metres AMSL). For a relative frame — and for `COMMAND_LONG`,
+(above home) and `alt` (AMSL); the peer table stores both as the raw wire millimetres, and
+`lib/command/completion.js` divides by 1000 to reason in metres. For a relative frame — and for `COMMAND_LONG`,
 which carries no frame at all — the takeoff param *is* the climb, so completion compares it
 directly to `relative_alt`. For an absolute frame (`GLOBAL` 0, `GLOBAL_INT` 5) the param is
 an AMSL target, so the climb target is `param − home`, where home is derived as
