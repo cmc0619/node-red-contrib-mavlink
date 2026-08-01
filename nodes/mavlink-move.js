@@ -18,10 +18,9 @@ module.exports = function registerMavlinkMove(RED) {
     let stream = null;
 
     node.on('input', (msg, send, done) => {
-      const emit = send || ((messages) => node.send(messages));
       try {
         if (shouldSuppress(msg)) {
-          if (done) done();
+          done();
           return;
         }
 
@@ -58,7 +57,7 @@ module.exports = function registerMavlinkMove(RED) {
         });
 
         if (delivery === 'build') {
-          completeBuild(node, emit, message);
+          completeBuild(node, send, message);
         } else {
           if (!connectionNode || typeof connectionNode.send !== 'function') {
             throw new Error('mavlink-move requires a Connection for send/stream delivery');
@@ -77,44 +76,44 @@ module.exports = function registerMavlinkMove(RED) {
           if (delivery === 'stream') {
             stream = createMoveStream(options);
             stream.start();
-            completeResult(node, emit, 'succeeded', 'streaming', message);
+            completeResult(node, send, 'succeeded', 'streaming', message);
           } else {
             connectionNode.send(message, {
               band: require('../lib/connection/bands').BAND.STREAMING,
               target: options.target,
               identityId: options.identityId,
             });
-            completeResult(node, emit, 'succeeded', 'sent', message);
+            completeResult(node, send, 'succeeded', 'sent', message);
           }
         }
-        if (done) done();
+        done();
       } catch (err) {
-        fail(node, emit, err, msg, done);
+        fail(node, send, err, msg, done);
       }
     });
 
     node.on('close', (done) => {
       if (stream) stream.stop();
-      if (done) done();
+      done();
     });
   }
 
   RED.nodes.registerType('mavlink-move', MavlinkMoveNode);
 };
 
-function completeBuild(node, emit, message) {
+function completeBuild(node, send, message) {
   node.status({ fill: 'green', shape: 'dot', text: cap('built move') });
-  emit([{ payload: message }, statusRecord('succeeded', 'built', { message })]);
+  send([{ payload: message }, statusRecord('succeeded', 'built', { message })]);
 }
 
-function completeResult(node, emit, result, action, message) {
+function completeResult(node, send, result, action, message) {
   node.status({ fill: 'green', shape: 'dot', text: cap(action) });
-  emit([{ payload: { result, message } }, statusRecord(result, action, { message })]);
+  send([{ payload: { result, message } }, statusRecord(result, action, { message })]);
 }
 
-function fail(node, emit, err, msg, done) {
+function fail(node, send, err, msg, done) {
   node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
-  emit([null, statusRecord('failed', err.message)]);
+  send([null, statusRecord('failed', err.message)]);
   done(err);
 }
 

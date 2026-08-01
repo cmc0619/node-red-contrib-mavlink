@@ -91,12 +91,14 @@ function makeNodeInstance(config = {}) {
 
     /**
      * Simulate Node-RED dispatching an inbound msg. The runtime always supplies
-     * a `done` callback, so this passes one too; errors routed through it — the
-     * Catch path — land in `_doneErrors`.
+     * both `send` and `done` (node-red >=4), so this passes both; `send`
+     * records through the same `_sends` sink `node.send` uses, and errors
+     * routed through `done` — the Catch path — land in `_doneErrors`.
      */
     _input(msg) {
       const done = (err) => { if (err) this._doneErrors.push(err); };
-      for (const fn of (this._handlers.input || [])) fn(msg, undefined, done);
+      const send = (msgs) => this.send(msgs);
+      for (const fn of (this._handlers.input || [])) fn(msg, send, done);
     },
 
     /** Simulate Node-RED closing the node. */

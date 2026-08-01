@@ -213,7 +213,6 @@ module.exports = function registerMavlinkCommand(RED) {
     if (needsConnection && !connNode) {
       node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
     } else {
-      /** Show idle badge once after a reasonable delay. */
       node.status({});
     }
 

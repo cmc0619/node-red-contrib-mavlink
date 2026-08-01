@@ -275,7 +275,7 @@ module.exports = function registerMavlinkBuild(RED) {
     // Input handler.
     node.on('input', (msg, _send, done) => {
       if (shouldSuppress(msg)) {
-        if (done) done();
+        done();
         return;
       }
 

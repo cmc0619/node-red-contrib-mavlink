@@ -26,7 +26,7 @@ npm install ./node-red-contrib-mavlink-*.tgz
 
 Restart Node-RED. The nodes appear under the **MAVLink** palette (config nodes under
 **Configuration nodes**). Editor dialog screenshots live in
-[`docs/screenshots/`](docs/screenshots/).
+[`docs/screenshots/`](https://github.com/cmc0619/node-red-contrib-mavlink/tree/main/docs/screenshots).
 
 Requires Node.js 20+ and Node-RED 4.0+.
 

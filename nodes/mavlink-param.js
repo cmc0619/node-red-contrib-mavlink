@@ -146,10 +146,9 @@ module.exports = function registerMavlinkParam(RED) {
     }
 
     node.on('input', (msg, send, done) => {
-      const emit = send || ((messages) => node.send(messages));
       try {
         if (shouldSuppress(msg)) {
-          if (done) done();
+          done();
           return;
         }
 
@@ -178,8 +177,8 @@ module.exports = function registerMavlinkParam(RED) {
         const message = buildParamMessage(request);
 
         if (delivery === 'build') {
-          completeBuild(node, emit, message);
-          if (done) done();
+          completeBuild(node, send, message);
+          done();
           return;
         }
 
@@ -200,8 +199,8 @@ module.exports = function registerMavlinkParam(RED) {
         const isCollectList = delivery === 'collect' && request.action === 'request-list';
 
         if (!isConfirmSet && !isCollectList) {
-          completeResult(node, emit, 'succeeded', 'sent', message);
-          if (done) done();
+          completeResult(node, send, 'succeeded', 'sent', message);
+          done();
           return;
         }
 
@@ -223,14 +222,14 @@ module.exports = function registerMavlinkParam(RED) {
           if (isConfirmSet) {
             if (!matchesParamEcho(request, decoded)) return;
             settle((finishDone) => {
-              completeResult(node, emit, 'succeeded', 'echo-confirmed', decoded);
+              completeResult(node, send, 'succeeded', 'echo-confirmed', decoded);
               if (finishDone) finishDone();
             });
           } else {
             const params = collector.accept(decoded);
             if (!params) return;
             settle((finishDone) => {
-              completeResult(node, emit, 'succeeded', 'list-complete', params);
+              completeResult(node, send, 'succeeded', 'list-complete', params);
               if (finishDone) finishDone();
             });
           }
@@ -238,18 +237,18 @@ module.exports = function registerMavlinkParam(RED) {
 
         const timer = setTimeout(() => {
           settle((finishDone) =>
-            timeoutResult(node, emit, isConfirmSet ? 'echo timeout' : 'list timeout', msg, finishDone));
+            timeoutResult(node, send, isConfirmSet ? 'echo timeout' : 'list timeout', msg, finishDone));
         }, timeoutMs);
 
         pending = { unsubscribe, timer, done: done || null, gen: myGen };
       } catch (err) {
-        fail(node, emit, err, msg, done);
+        fail(node, send, err, msg, done);
       }
     });
 
     node.on('close', (done) => {
       clearPending(false);
-      if (done) done();
+      done();
     });
   }
 
@@ -323,25 +322,25 @@ function requireConnection(RED, id) {
   return node;
 }
 
-function completeBuild(node, emit, message) {
+function completeBuild(node, send, message) {
   applyActionStatus(node, 'ok', 'built param');
-  emit([{ payload: message }, statusRecord('built', 'built', { message })]);
+  send([{ payload: message }, statusRecord('built', 'built', { message })]);
 }
 
-function completeResult(node, emit, result, detail, payload) {
+function completeResult(node, send, result, detail, payload) {
   applyActionStatus(node, 'ok', detail);
-  emit([{ payload }, statusRecord(result, detail, { payload })]);
+  send([{ payload }, statusRecord(result, detail, { payload })]);
 }
 
-function timeoutResult(node, emit, detail, msg, done) {
+function timeoutResult(node, send, detail, msg, done) {
   applyActionStatus(node, 'error', detail);
-  emit([null, statusRecord('timed-out', detail)]);
+  send([null, statusRecord('timed-out', detail)]);
   done(new Error(`mavlink-param: ${detail}`));
 }
 
-function fail(node, emit, err, msg, done) {
+function fail(node, send, err, msg, done) {
   applyActionStatus(node, 'error', err.message);
-  emit([null, statusRecord('failed', err.message)]);
+  send([null, statusRecord('failed', err.message)]);
   done(err);
 }
 

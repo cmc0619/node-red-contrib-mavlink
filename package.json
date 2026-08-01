@@ -7,13 +7,18 @@
     "type": "git",
     "url": "git+https://github.com/cmc0619/node-red-contrib-mavlink.git"
   },
+  "homepage": "https://github.com/cmc0619/node-red-contrib-mavlink#readme",
+  "bugs": {
+    "url": "https://github.com/cmc0619/node-red-contrib-mavlink/issues"
+  },
+  "author": "cmc0619",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "lint": "npm run test:lint-config && eslint . --max-warnings=0",
     "test": "node --test lib/**/test/*.test.js test/**/*.test.js",
-    "test:lint-config": "node --test test/tooling/lint-coverage.check.js",
+    "test:lint-config": "node --test test/tooling/lint-coverage.check.js test/tooling/package-contract.check.js",
     "test:runtime": "node --test integration/node-red-smoke.test.js",
     "validate:node-red": "npm exec --yes --package=node-red-dev@0.1.6 -- node-red-dev validate",
     "generate-seed": "node scripts/generate-seed.js"

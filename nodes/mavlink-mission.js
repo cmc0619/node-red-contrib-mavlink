@@ -82,7 +82,7 @@ module.exports = function registerMavlinkMission(RED) {
     node.on('input', (msg, send, done) => {
       const emit = send || ((m) => node.send(m));
       const finish = () => {
-        if (done) done();
+        done();
       };
 
       if (shouldSuppress(msg)) {
