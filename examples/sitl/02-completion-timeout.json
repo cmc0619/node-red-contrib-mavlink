@@ -4,15 +4,15 @@
         "type": "tab",
         "label": "SITL 02 Completion timeout",
         "disabled": false,
-        "info": "Deliberately provoke completion-tier timeout: takeoff without GUIDED/arm prep so the vehicle may accept yet never reach altitude. Output 0 stays silent; status names the timeout.",
+        "info": "Deliberately provoke completion-tier timeout: arm, confirm GUIDED, then command an 80 m takeoff with a 3 s completion timeout. The takeoff should be ACCEPTED, but the vehicle should not reach altitude before the completion timer expires.",
         "env": []
     },
     {
         "id": "sitl02-comment",
         "type": "comment",
         "z": "sitl02-tab",
-        "name": "Takeoff complete with short timeout (no mode/arm prep)",
-        "info": "Fire takeoff with delivery=complete and completionTimeout=8000 without first entering GUIDED or arming. ArduPilot may ACK the command yet never climb; the node should end on the timeout branch.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. Do not arm or set GUIDED before pressing inject \u2014 that is the point.",
+        "name": "Accepted takeoff that cannot complete before timeout",
+        "info": "The chain prepares the vehicle with completion-checked arm and GUIDED commands, then asks for an 80 m takeoff using delivery=complete and completionTimeout=3000. ArduPilot should ACK the takeoff, but 80 m is intentionally unreachable in 3 seconds, so output 1 reports the completion timeout and output 0 stays silent.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. The harness also preps sysid 1 into GUIDED so this story tests completion timeout, not immediate DENIED.",
         "x": 250,
         "y": 40,
         "wires": []
@@ -65,7 +65,7 @@
         "id": "sitl02-inject",
         "type": "inject",
         "z": "sitl02-tab",
-        "name": "Takeoff (no prep)",
+        "name": "Arm, GUIDED, takeoff 80 m",
         "props": [
             {
                 "p": "payload"
@@ -82,15 +82,73 @@
         "y": 160,
         "wires": [
             [
-                "sitl02-takeoff"
+                "sitl02-arm"
             ]
         ]
+    },
+    {
+        "id": "sitl02-arm",
+        "type": "mavlink-command",
+        "z": "sitl02-tab",
+        "name": "Arm (complete prep)",
+        "mode": "preset",
+        "preset": "arm",
+        "advancedCommand": "",
+        "delivery": "complete",
+        "connection": "sitl02-connection",
+        "targetSysid": "",
+        "targetCompid": "",
+        "timeout": "10000",
+        "maxRetries": "1",
+        "unconfirmedContinue": false,
+        "completionTimeout": "10000",
+        "params": "{}",
+        "x": 350,
+        "y": 160,
+        "wires": [
+            [
+                "sitl02-guided"
+            ],
+            [
+                "sitl02-arm-status"
+            ]
+        ],
+        "carrier": "long"
+    },
+    {
+        "id": "sitl02-guided",
+        "type": "mavlink-command",
+        "z": "sitl02-tab",
+        "name": "Set GUIDED (complete prep)",
+        "mode": "preset",
+        "preset": "set_mode",
+        "advancedCommand": "",
+        "delivery": "complete",
+        "connection": "sitl02-connection",
+        "targetSysid": "",
+        "targetCompid": "",
+        "timeout": "10000",
+        "maxRetries": "1",
+        "unconfirmedContinue": false,
+        "completionTimeout": "10000",
+        "params": "{\"1\":1,\"2\":4}",
+        "x": 570,
+        "y": 160,
+        "wires": [
+            [
+                "sitl02-takeoff"
+            ],
+            [
+                "sitl02-guided-status"
+            ]
+        ],
+        "carrier": "long"
     },
     {
         "id": "sitl02-takeoff",
         "type": "mavlink-command",
         "z": "sitl02-tab",
-        "name": "Takeoff 10 m (timeout)",
+        "name": "Takeoff 80 m (3 s complete)",
         "mode": "preset",
         "preset": "takeoff",
         "advancedCommand": "",
@@ -101,9 +159,9 @@
         "timeout": "10000",
         "maxRetries": "0",
         "unconfirmedContinue": false,
-        "completionTimeout": "8000",
-        "params": "{\"7\":10}",
-        "x": 380,
+        "completionTimeout": "3000",
+        "params": "{\"7\":80}",
+        "x": 810,
         "y": 160,
         "wires": [
             [
@@ -128,8 +186,42 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 610,
+        "x": 1050,
         "y": 140,
+        "wires": []
+    },
+    {
+        "id": "sitl02-arm-status",
+        "type": "debug",
+        "z": "sitl02-tab",
+        "name": "arm status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 350,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "sitl02-guided-status",
+        "type": "debug",
+        "z": "sitl02-tab",
+        "name": "guided status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 570,
+        "y": 240,
         "wires": []
     },
     {
@@ -145,7 +237,7 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 610,
+        "x": 1050,
         "y": 200,
         "wires": []
     }

@@ -1,1 +1,4 @@
 logs/
+example-suite-results.json
+*.suite-results.json
+

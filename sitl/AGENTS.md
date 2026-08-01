@@ -2,8 +2,11 @@
 
 How to bring up the Docker lab and run `examples/sitl/` efficiently.
 Human-oriented detail lives in [`README.md`](README.md); design intent in
-[`DESIGN.md` §13–§14](../DESIGN.md). Live results go in repo-root
-[`testing.md`](../testing.md) + [`example-suite-results.json`](example-suite-results.json).
+[`DESIGN.md` §13–§14](../DESIGN.md).
+
+**Live results go to a GitHub Issue** (label `sitl-results`), not into a PR.
+Close the prior open `sitl-results` issue when posting a new run. See
+[`../testing.md`](../testing.md) for the pointer only.
 
 ## Do this, not that
 
@@ -12,8 +15,10 @@ Human-oriented detail lives in [`README.md`](README.md); design intent in
 | Use the official prebuilt AP binary (Dockerfile already does) | `waf copter` / clone ArduPilot in the image (~40 min in nested Docker) |
 | `docker compose --profile sitl --profile nodered up -d --build` | Hunt for a standalone Node-RED if Compose can host it |
 | Wait for HEARTBEATs, then `node sitl/run-example-suite.js` | Deploy all example flows at once (UDP bind exclusivity) |
-| Curate verdicts in `testing.md` from the JSON | Trust harness auto-status blindly (false PASS on “timeout” node names, etc.) |
+| Post curated verdicts to a **GitHub Issue** (`sitl-results`) | Open a docs PR that only updates `testing.md` / results JSON |
+| Close the previous `sitl-results` issue after posting | Leave a trail of open result issues |
 | Load `copter.parm` + `ap-logging.parm` (entrypoint default) | Run bare `arducopter` without autotest defaults → ARM DENIED |
+| Write harness JSON under `/tmp/` (default) | Commit `sitl/example-suite-results.json` |
 
 ## Cold start (cloud / nested Docker VM)
 
@@ -66,27 +71,39 @@ Multi-instance containers use `/tmp/px4-sock-<i>`; `px4-param` may say
 From **repo root** (not `sitl/`):
 
 ```bash
-node sitl/run-example-suite.js --out sitl/example-suite-results.json
+node sitl/run-example-suite.js --out /tmp/sitl-example-suite-results.json
 # subset:
 node sitl/run-example-suite.js --only 01,10,17
 ```
 
 Harness: deploy one `examples/sitl/*.json` at a time → enable debug→console →
-fire injects → scrape `docker logs nrc-nodered` → write JSON.
+fire injects → scrape `docker logs nrc-nodered` → write JSON under `/tmp/`
+(default). Example **25** (TCP) is **SKIP** unless Compose exposes SITL TCP.
 
-After the run, **update [`../testing.md`](../testing.md)** with human-curated
-verdicts (PASS / PARTIAL / FAIL / SKIP). Keep the JSON as the machine log.
-Force-add the JSON if needed (`sitl/.gitignore` only ignores `logs/`; the
-results file is tracked on purpose).
+### Post results (no PR)
+
+```bash
+# 1) Curate PASS/PARTIAL/FAIL/SKIP from the JSON (do not trust auto-status blindly).
+# 2) Open a new issue:
+gh issue create --label sitl-results \
+  --title "SITL suite results — run N" \
+  --body-file /tmp/sitl-run-N.md
+# 3) Close the previous open sitl-results issue:
+gh issue list --label sitl-results --state open
+gh issue close <prior> --comment "Superseded by #<new>"
+```
+
+Attach or paste a short summary table in the issue body. Keep the full JSON
+local or paste a collapsed `<details>` block — do not land it in git.
 
 ### Harness auto-verdict traps
 
-- Example **02** node name contains “timeout” → auto-PASS even when takeoff is
-  immediate DENIED. Curate as FAIL unless you see accept→completion-timeout.
-- Example **09**: `/failed|expired/` elsewhere in the log → auto-PASS even when
-  the kill was too late and the swarm aggregate succeeded.
-- Examples **15/16**: many `sent` lines → auto-UNKNOWN; NVF `sent` is PASS.
-- Example **07**: good+bad upload both `succeeded` → PARTIAL, not PASS.
+- Example **02** historically false-PASS’d on the word “timeout” in node names;
+  verdict now requires a real `timed-out` / timeout detail.
+- Example **09**: kill must land mid-run; late kill → all-accepted aggregate.
+- Examples **15/16**: many `sent` lines → look for `NAMED_VALUE_FLOAT` specifically.
+- Example **07**: bad upload must fail validation; empty success is not fail-loud.
+- Example **03**: `TEMPORARILY_REJECTED` needs a fresh AP boot race — often PARTIAL.
 
 ## Port / sysid map (quick)
 

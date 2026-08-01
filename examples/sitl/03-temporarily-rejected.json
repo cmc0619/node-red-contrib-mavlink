@@ -4,7 +4,7 @@
         "type": "tab",
         "label": "SITL 03 Temporarily rejected",
         "disabled": false,
-        "info": "Race SITL boot before GPS lock to draw TEMPORARILY_REJECTED; the node backs off and retries until the vehicle is ready.",
+        "info": "Race a freshly restarted SITL before GPS lock to draw TEMPORARILY_REJECTED; the node backs off and retries until the vehicle is ready. This is best-effort because ArduPilot may reach a ready state quickly.",
         "env": []
     },
     {
@@ -12,7 +12,7 @@
         "type": "comment",
         "z": "sitl03-tab",
         "name": "Arm/takeoff immediately after deploy (retry on TEMPORARILY_REJECTED)",
-        "info": "Inject fires once at deploy to race GPS readiness. Arm then takeoff use delivery=confirm with maxRetries=5 so TEMPORARILY_REJECTED (1) triggers backoff and retry.\n\nLaunch (fresh ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. Watch status port for retry count.",
+        "info": "Harness prep restarts nrc-ap-1, waits briefly, then deploys this flow. The once:true inject fires 5 seconds after deploy to race GPS readiness without landing in the earliest hard-fail boot window. Arm then takeoff use delivery=confirm with maxRetries=5 so TEMPORARILY_REJECTED (1) triggers backoff and retry when the fresh boot is still settling.\n\nLaunch (fresh ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. TEMPORARILY_REJECTED is best-effort; a fast GPS lock may go straight to ACCEPTED.",
         "x": 280,
         "y": 40,
         "wires": []
@@ -74,7 +74,7 @@
         "repeat": "",
         "crontab": "",
         "once": true,
-        "onceDelay": 0.5,
+        "onceDelay": 5,
         "topic": "",
         "payload": "",
         "payloadType": "date",

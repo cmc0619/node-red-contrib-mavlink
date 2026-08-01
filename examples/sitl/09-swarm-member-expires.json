@@ -12,7 +12,7 @@
         "type": "comment",
         "z": "sitl09-tab",
         "name": "Sequential arm \u00d75 \u2014 kill one instance after start",
-        "info": "Start sequential arm with 500 ms pacing (time to kill one process). Watch State feed for expired events. Expect four succeeded + one failed in the aggregate.\n\nLaunch five ArduCopter instances:\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. After inject, kill one sim_vehicle PID before pacing completes.",
+        "info": "Start sequential arm with 1000 ms pacing while the harness stops nrc-ap-3 immediately after inject. Watch State feed for expired events. Expect four succeeded + one failed in the aggregate.\n\nLaunch five ArduCopter instances:\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. After inject, kill one sim_vehicle PID before pacing reaches that member.",
         "x": 280,
         "y": 40,
         "wires": []
@@ -116,7 +116,7 @@
         "firmwareFilter": "",
         "armedFilter": "",
         "executionMode": "sequential",
-        "intervalMs": 500,
+        "intervalMs": 1000,
         "dryRun": false,
         "topic": "command",
         "verb": "arm",

@@ -154,6 +154,7 @@
         "paramIndex": -1,
         "value": "1",
         "paramType": "MAV_PARAM_TYPE_REAL32",
+        "timeout": "30000",
         "x": 440,
         "y": 280,
         "wires": [

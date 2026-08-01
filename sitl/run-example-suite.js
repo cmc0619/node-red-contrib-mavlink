@@ -2,7 +2,10 @@
 
 /**
  * Deploy each examples/sitl/*.json into the lab Node-RED (host :1880), fire
- * injects, scrape debug/error lines, and write a JSON report for testing.md.
+ * injects, scrape debug/error lines, and write a JSON report.
+ *
+ * Post curated verdicts to a GitHub Issue (label sitl-results), close the prior
+ * issue, and keep the JSON out of git — see sitl/AGENTS.md.
  *
  * Usage: node sitl/run-example-suite.js [--only 01,17] [--out /tmp/sitl-results.json]
  */
@@ -30,7 +33,7 @@ const ONLY = (() => {
 const OUT =
   process.argv.includes('--out')
     ? process.argv[process.argv.indexOf('--out') + 1]
-    : path.join(ROOT, 'sitl', 'example-suite-results.json');
+    : path.join('/tmp', 'sitl-example-suite-results.json');
 
 /** @type {Record<string, {waitMs: number, expect: string, notes?: string, prep?: string, afterInject?: Function}>} */
 const PROFILE = {
@@ -40,13 +43,15 @@ const PROFILE = {
     prep: 'ap-guided-1',
   },
   '02-completion-timeout': {
-    waitMs: 20000,
-    expect: 'completion timeout (status names timeout; intentional)',
+    waitMs: 35000,
+    expect: 'completion timeout after accepted takeoff',
+    prep: 'ap-guided-1',
   },
   '03-temporarily-rejected': {
-    waitMs: 25000,
+    waitMs: 30000,
     expect: 'arm eventually accepted (TEMPORARILY_REJECTED only on fresh boot)',
-    notes: 'once:true inject fires at deploy; GPS already locked → may skip reject',
+    notes: 'restart prep races fresh boot; TEMPORARILY_REJECTED remains best-effort if GPS is ready quickly',
+    prep: 'restart-ap-1',
   },
   '04-mode-tables': {
     waitMs: 15000,
@@ -107,6 +112,42 @@ const PROFILE = {
     waitMs: 55000,
     expect: 'arm+takeoff+INT goto accepted; ~150 m north',
     prep: 'px4-home-ready',
+  },
+  '18-int-local-vs-global': {
+    waitMs: 25000,
+    expect: 'GLOBAL_INT accepted both stacks; LOCAL_NED denied AP / accepted PX4',
+  },
+  '19-ap-int-carrier-goto': {
+    waitMs: 55000,
+    expect: 'AP arm+takeoff+INT goto accepted',
+    prep: 'ap-guided-1',
+  },
+  '20-move-stream-stop': {
+    waitMs: 25000,
+    expect: 'move stream started then stop sent',
+    prep: 'ap-guided-1',
+  },
+  '21-param-echo-float32': {
+    waitMs: 35000,
+    expect: 'AP + PX4 float32 param set/read echo',
+  },
+  '22-in-build-out': {
+    waitMs: 20000,
+    expect: 'mavlink-in → build → out composition',
+  },
+  '23-profile-target-inherit': {
+    waitMs: 20000,
+    expect: 'command inherits profile target sysid 2',
+  },
+  '24-companion-receive': {
+    waitMs: 15000,
+    expect: 'companion receive path sees vehicle traffic',
+  },
+  '25-tcp-connection': {
+    waitMs: 5000,
+    expect: 'TCP template — skip unless SITL TCP exposed',
+    notes: 'default Compose lab is UDP-only; skip without published :5760',
+    skip: true,
   },
 };
 
@@ -223,9 +264,32 @@ function verdictFrom(profile, summary, log) {
   const errText = summary.errors.join('\n');
   const expect = profile.expect || '';
 
-  if (/timeout \(status names timeout/.test(expect)) {
-    if (results.includes('timed-out') || /timeout/i.test(log) || results.includes('unconfirmed')) {
+  if (/completion timeout/i.test(expect)) {
+    const timedOutResult = results.includes('timed-out') || results.includes('unconfirmed');
+    const timeoutDetail = summary.debug.some((d) => d.detail && /timeout/i.test(d.detail));
+    if (timedOutResult || timeoutDetail) {
       return { status: 'PASS', reason: 'timeout path observed as designed' };
+    }
+    return { status: 'UNKNOWN', reason: 'completion timeout path not observed' };
+  }
+  if (/NVF|NAMED_VALUE_FLOAT|companion/i.test(expect)) {
+    const sentNamedValue = summary.debug.filter((d) =>
+      d.result === 'sent' && /NAMED_VALUE_FLOAT/i.test(d.excerpt)
+    );
+    if (sentNamedValue.length) {
+      return { status: 'PASS', reason: `NAMED_VALUE_FLOAT sent (${sentNamedValue.length})` };
+    }
+  }
+  if (/bad upload fails|good upload ok/i.test(expect)) {
+    const goodMission = summary.debug.some((d) =>
+      d.result === 'succeeded' && /mavlink-mission/.test(d.excerpt)
+    );
+    const validationFailure = summary.debug.some((d) =>
+      d.result === 'failed' && /phase:\s*'validate'/.test(d.excerpt)
+    );
+    const planSurvives = /operation:\s*'download'[\s\S]*result:\s*'succeeded'[\s\S]*count:\s*2/i.test(log);
+    if (goodMission && validationFailure && planSurvives) {
+      return { status: 'PASS', reason: 'good mission survived expected validation failure' };
     }
   }
   if (/fails loud|expect fail/i.test(expect)) {
@@ -249,7 +313,58 @@ function verdictFrom(profile, summary, log) {
     }
   }
   if (/one failed|member expires/i.test(expect)) {
-    if (/failed|expired/i.test(log)) return { status: 'PASS', reason: 'failed/expired member observed' };
+    const aggregateFailed = summary.debug.some((d) =>
+      d.result === 'failed' && /mavlink-swarm|aggregate|swarm/i.test(d.excerpt)
+    );
+    const memberFailed = /members:\s*\[[\s\S]*?(?:result:\s*'(?:failed|timed-out|unconfirmed)'|detail:\s*'[^']*(?:timeout|expired|failed))/i.test(log) ||
+      /"members"\s*:\s*\[[\s\S]*?(?:"result"\s*:\s*"(?:failed|timed-out|unconfirmed)"|"detail"\s*:\s*"[^"]*(?:timeout|expired|failed))/i.test(log);
+    if (aggregateFailed || memberFailed) {
+      return { status: 'PASS', reason: 'swarm aggregate/member failure observed' };
+    }
+    return { status: 'UNKNOWN', reason: 'swarm member failure not observed' };
+  }
+  if (/GLOBAL_INT|LOCAL_NED/i.test(expect)) {
+    const accepted = results.filter((r) => r === 'accepted').length;
+    const denied = results.filter((r) => /denied|failed/i.test(r)).length;
+    if (accepted >= 3 && denied >= 1) {
+      return { status: 'PASS', reason: `frame matrix: accepted=${accepted} denied=${denied}` };
+    }
+    if (accepted || denied) {
+      return {
+        status: 'PARTIAL',
+        reason: `frame matrix incomplete: accepted=${accepted} denied=${denied}`,
+      };
+    }
+  }
+  if (/move stream|stop sent/i.test(expect)) {
+    const sent = results.filter((r) => r === 'sent').length;
+    if (sent >= 2 || (/stop/i.test(log) && /sent|stream/i.test(log))) {
+      return { status: 'PASS', reason: 'move stream + stop observed' };
+    }
+  }
+  if (/float32 param|param set\/read echo/i.test(expect)) {
+    const echoes = summary.debug.filter((d) => d.result === 'succeeded').length;
+    if (echoes >= 2) {
+      return { status: 'PASS', reason: `param echoes succeeded (${echoes})` };
+    }
+    if (echoes === 1) {
+      return { status: 'PARTIAL', reason: 'only one stack echoed' };
+    }
+  }
+  if (/in → build → out|composition/i.test(expect)) {
+    if (results.includes('sent') || /mavlink-out|NAMED_VALUE|HEARTBEAT/i.test(log)) {
+      return { status: 'PASS', reason: 'in/build/out path exercised' };
+    }
+  }
+  if (/inherits profile target|sysid 2/i.test(expect)) {
+    if (results.includes('accepted') || results.includes('sent')) {
+      return { status: 'PASS', reason: 'profile target inherit exercised' };
+    }
+  }
+  if (/companion receive/i.test(expect)) {
+    if (summary.debug.length || /HEARTBEAT|NAMED_VALUE|sysid:\s*20/i.test(log)) {
+      return { status: 'PASS', reason: 'companion receive traffic observed' };
+    }
   }
 
   const bad = results.filter((r) =>
@@ -314,6 +429,10 @@ async function prep(kind) {
   if (kind === 'ap-guided-1') {
     await setApGuided(1);
   }
+  if (kind === 'restart-ap-1') {
+    sh('docker restart nrc-ap-1 >/dev/null', 30000);
+    await sleep(8000);
+  }
   if (kind === 'px4-home-ready') {
     sh('docker exec nrc-px4-11 /opt/px4/bin/px4-commander disarm -f >/dev/null 2>&1 || true');
     await sleep(1500);
@@ -322,7 +441,7 @@ async function prep(kind) {
 
 async function afterInjectHook(fileBase, startedAt) {
   if (fileBase === '09-swarm-member-expires') {
-    await sleep(2500);
+    await sleep(200);
     console.log('  killing nrc-ap-3 mid-run…');
     sh('docker stop nrc-ap-3 >/dev/null');
   }
@@ -335,7 +454,7 @@ async function cleanupAfter(fileBase) {
     await sleep(8000);
   }
   // Disarm fleets after arming examples
-  if (/01|08|10|11|14|17|03/.test(fileBase.slice(0, 2))) {
+  if (/01|03|08|10|11|14|17|19|20/.test(fileBase.slice(0, 2))) {
     sh(
       `for c in nrc-ap-1 nrc-ap-2 nrc-ap-3 nrc-ap-4 nrc-ap-5; do docker exec $c bash -c 'echo "mode GUIDED; arm throttle" >/dev/null' 2>/dev/null; done; true`
     );
@@ -360,6 +479,19 @@ async function runOne(file) {
   const injects = flows.filter((n) => n.type === 'inject');
 
   console.log(`\n=== ${file} (${tab}) ===`);
+  if (profile.skip) {
+    return {
+      file,
+      tab,
+      status: 'SKIP',
+      reason: profile.notes || profile.expect,
+      expect: profile.expect,
+      notes: profile.notes || null,
+      injects: [],
+      debug: [],
+      errors: [],
+    };
+  }
   if (profile.prep) await prep(profile.prep);
 
   const mark = Math.floor(Date.now() / 1000);
