@@ -22,8 +22,10 @@ docker compose --profile sitl --profile nodered up -d --build
 # Editor: http://localhost:1880
 ```
 
-First build of the ArduPilot image is large and slow (compiles SITL). PX4 uses the
-official `px4io/px4-sitl` image directly (no local rebuild).
+ArduPilot uses the official prebuilt static SITL binary from
+`firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu/arducopter`
+(~7 MB; image build is a download, not a waf compile). PX4 uses the official
+`px4io/px4-sitl` image directly (no local rebuild).
 
 **Nested Docker note:** if `docker run` fails with overlay/whiteout errors, set
 `"storage-driver": "vfs"` in `/etc/docker/daemon.json` and restart the daemon (slower,
@@ -41,15 +43,18 @@ but works in restricted VMs).
 Existing GCS examples expect AP on `14550/14551` and PX4 on `14560/14561`. Companion
 lab flows are `examples/sitl/15-companion-ap.json` and `16-companion-px4.json`.
 
-### Why ArduPilot uses two ports (MAVProxy)
+### Why examples still list two ports
 
-`sim_vehicle.py` starts a small helper (**MAVProxy**) in front of ArduPilot: it forwards
-telemetry to your GCS (`--out` → bind **14550**) and listens for commands on **14551**
-(instance 0). You do not run MAVProxy yourself. PX4 has no MAVProxy; this lab uses
-**14560/14561** for its GCS pair so it does not collide with ArduPilot’s `-I` port band
-(`14550 + 10×instance`).
+Each Connection binds the receive port (`14550` AP / `14560` PX4) and keeps a
+configured `remotePort` (`14551` / `14561`) as the pre-peer send fallback. Lab
+vehicles use **udpclient** (AP prebuilt `--serial0 udpclient:host:14550`, PX4
+mavlink `-t host -o 14560`): they send telemetry to the bind port, and after the
+first HEARTBEAT the Connection peer table replies to each vehicle’s source
+endpoint. Directed commands do not need a published listen on `14551`.
 
-Companion traffic uses the ecosystem convention around **14540** (onboard / MAVSDK).
+PX4 uses **14560/14561** so its GCS pair does not collide with ArduPilot’s
+historical `-I` port band (`14550 + 10×instance`). Companion traffic uses the
+ecosystem convention around **14540** (onboard / MAVSDK).
 
 ## What gets started
 
@@ -132,11 +137,13 @@ Entrypoints log `out=udp:<gateway-ip>:…` when `host-gateway` would otherwise p
 **PX4:** `docker compose --profile sitl up -d` emits HEARTBEATs with sysids **11–15** on UDP
 **14560** and sysid **21** on **14542** (re-checked after the gateway fallback).
 
-**ArduPilot:** image builds locally (`nrc-mavlink-ap-sitl:local`). The entrypoint passes
-`--mavproxy-args=--daemon` so MAVProxy runs headless under Compose (interactive MAVProxy
-with no TTY stops reading TCP 5760 and the container restart-loops). A log line
-“Waiting for internal clock bits” is the LP5562 LED sim, not a boot gate — ignore it.
-Check `/tmp/ArduCopter.log` inside the container if telemetry still never reaches the host.
+**ArduPilot:** image builds locally (`nrc-mavlink-ap-sitl:local`) by downloading the
+official Copter-4.7.0 static SITL binary plus `Tools/autotest/default_params/copter.parm`
+(see `Dockerfile.ardupilot`). The entrypoint runs `/usr/local/bin/arducopter` with
+`--defaults /params/copter.parm,/params/ap-logging.parm` and
+`--serial0 udpclient:<gateway>:14550` (or `14540` for the companion). Without the
+autotest defaults, ARM is DENIED. Confirm with `docker compose … logs ap-1` showing
+`Loaded defaults from /params/copter.parm,…` and HEARTBEATs on host UDP **14550**.
 
 ## CI note
 

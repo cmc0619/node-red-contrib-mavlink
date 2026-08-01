@@ -606,7 +606,8 @@ Every defensive branch must name a supported execution path that can reach it.
   never reported as verification.
 - Tests: fixture-based suites run in CI/this VM. SITL-backed tests (§13) need ArduPilot/PX4 SITL
   instances, which are **not** provisioned here; treat them as out of scope unless the user
-  provides a rig.
+  provides a rig. When running the Docker lab, follow [`sitl/AGENTS.md`](sitl/AGENTS.md)
+  (prebuilt AP binary — do not waf-compile).
 - Run: this is a Node-RED node package — "running" it means installing it into a local Node-RED
   instance (e.g. `npm install <path>` into a Node-RED user dir, then start Node-RED) and
   exercising the nodes in the editor, not launching a standalone server.
