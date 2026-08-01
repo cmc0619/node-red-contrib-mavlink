@@ -2173,3 +2173,17 @@ helper does exactly that; its `sign()` alone does not). Both facts are why `wire
 directly and computes the HMAC once. A future "simplify back to the library call" change breaks
 the timestamp path and the signed-header bit together.
 *Check:* `node --test test/connection/wire-signing.test.js`
+
+**Blank lat/lon/alt must not become 0,0 — require values on destination commands (issue #88).**
+*Wrong belief:* absent exposed params (including lat/lon/alt) can default to `0` the same way
+arm/disarm force bits do; or blank alt can be rewritten to a leave-unchanged sentinel
+(`NaN` / `INT32_MAX`) so the operator only has to fill lat/lon.
+*Fact:* for destination commands — `DO_REPOSITION`, `DO_ORBIT`, `DO_SET_HOME` (when not
+"use current"), `DO_SET_ROI_LOCATION`, and advanced `hasLocation` MAV_CMDs — `(0,0)` is the
+Gulf of Guinea, not "here". ArduPilot's `location_from_command_t` range-checks only; PX4
+treats only the paired `INT32_MAX` form as ignore, and that form is not cross-fleet (see
+entry above). Reposition/ROI param7 has no `invalid=NaN` in the XML; ArduPilot rejects NaN
+altitude. So the toolkit refuses blank params 5/6/7 (and ROI `lat`/`lon`/`alt`) with the same
+"blank coordinates must not become 0,0" error Swarm already raised for Move. Explicit `0` and
+explicit `NaN` remain values. Takeoff/land keep zero-fill for unused or land-here slots.
+*Check:* `node --test test/command/blank-coords.test.js test/command/merge-params-nan.test.js`

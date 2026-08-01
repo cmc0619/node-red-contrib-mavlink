@@ -215,8 +215,11 @@ test('every preset has the required shape fields', () => {
 // ── buildParamArray produces 7 elements ───────────────────────────────────
 
 test('buildParamArray always returns a 7-element array', () => {
+  // Destination presets refuse blank lat/lon/alt (#88) — supply them here.
+  const location = { 5: 0, 6: 0, 7: 0 };
   for (const p of PRESETS) {
-    const arr = buildParamArray(p, emptyUser());
+    const user = p.requireLocation ? location : emptyUser();
+    const arr = buildParamArray(p, user);
     assert.equal(arr.length, 7, `preset '${p.id}' must produce 7 params`);
   }
 });

@@ -25,10 +25,12 @@ test('orbit params with JSON "NaN" center coerce to numeric NaN in the param arr
   assert.ok(Number.isNaN(arr[6]), 'param7 alt must be NaN');
 });
 
-test('absent orbit center defaults to 0 — examples must send NaN explicitly', () => {
+test('absent orbit center refuses — blank must not become 0,0 (issue #88)', () => {
   const user = mergeParams({ params: '{"1":100,"2":5,"3":0}' }, null);
-  const arr = buildParamArray(getPreset('orbit'), user);
-  assert.deepEqual(arr, [100, 5, 0, 0, 0, 0, 0]);
+  assert.throws(
+    () => buildParamArray(getPreset('orbit'), user),
+    /blank coordinates must not become 0,0/
+  );
 });
 
 test('undefined payload override does not wipe a configured value into NaN', () => {

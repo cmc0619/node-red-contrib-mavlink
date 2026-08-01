@@ -37,6 +37,7 @@ const {
   RESULT_NAME,
   getPreset,
   buildParamArray,
+  requireLocationParamValues,
   mergeParams,
   AckWaiter,
   checkCompletion,
@@ -226,6 +227,12 @@ module.exports = function registerMavlinkCommand(RED) {
       const userParams = mergeParams(config, payload);
       if (preset) {
         return buildParamArray(preset, userParams);
+      }
+      // Advanced location commands: refuse blank param5/6/7 — the XML marks
+      // them lat/lon and filling 0 aims at null island (issue #88 / §9).
+      const kinds = coordKinds();
+      if (kinds && kinds[5] === 'latlon' && kinds[6] === 'latlon') {
+        requireLocationParamValues(userParams);
       }
       // Advanced: build a full 7-element array from userParams, default 0.
       return [1, 2, 3, 4, 5, 6, 7].map((i) =>

@@ -52,6 +52,10 @@ test('every catalog verb builds without error', () => {
       if (topic === 'gimbal' && verb === 'aim') {
         input.path = 'legacy';
       }
+      if (topic === 'gimbal' && verb === 'roi-set') {
+        // Required — blank must not become 0,0 (issue #88).
+        input.values = { lat: -35, lon: 149, alt: 50 };
+      }
       assert.doesNotThrow(() => buildPayloadMessage(input), `${topic}/${verb}`);
     }
   }
