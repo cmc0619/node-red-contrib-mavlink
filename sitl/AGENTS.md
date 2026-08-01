@@ -119,9 +119,16 @@ Directed commands use the Connection peer table (reply to HEARTBEAT source).
 
 ## Takeoff / GUIDED
 
-AP `NAV_TAKEOFF` needs GUIDED. The suite prep `ap-guided-1` sends SET_MODE for
-sysid 1 before deploy; if takeoff is DENIED (`resultCode: 4`) after a successful
-arm, re-check GUIDED and GPS/EKF — do not reintroduce a source build.
+AP `NAV_TAKEOFF` needs GUIDED. Example **01** sets GUIDED in-band (arm → mode →
+takeoff); harness prep `ap-guided-1` also force-disarms then SET_MODE before
+deploy. If takeoff is still DENIED (`resultCode: 4`), check GPS/EKF — do not
+reintroduce a source build.
+
+## Param echo types
+
+ArduPilot integer params (e.g. `ARMING_CHECK`) must use `MAV_PARAM_TYPE_INT32`
+on Param set. A REAL32-typed set writes float bit patterns; echo-confirm then
+times out even though the vehicle “accepted” a garbage int.
 
 ## Fixture tests (no Docker)
 

@@ -54,8 +54,9 @@ const PROFILE = {
     prep: 'restart-ap-1',
   },
   '04-mode-tables': {
-    waitMs: 15000,
+    waitMs: 20000,
     expect: 'AP GUIDED + PX4 mode set accepted',
+    prep: 'px4-mode-ready',
   },
   '05-px4-param-union': {
     waitMs: 15000,
@@ -87,13 +88,16 @@ const PROFILE = {
     expect: 'sequential + broadcast arm confirmed',
   },
   '12-signing': {
-    waitMs: 15000,
-    expect: 'signed arm attempt (setup-dependent; may warn/fail without matching SITL key)',
-    notes: 'dry-run template; lab SITL typically does not verify signatures',
+    waitMs: 5000,
+    expect: 'signed arm attempt (needs Admin signing passphrase)',
+    notes: 'Admin API deploy cannot supply signing credentials; skip in default lab',
+    skip: true,
   },
   '13-param-defs-live': {
     waitMs: 45000,
     expect: 'read / set / list param defs against AP',
+    // Set echo-confirm needs the list flood not to start mid-wait (separate injects).
+    injectGapMs: 35000,
   },
   '14-command-mission-basics': {
     waitMs: 40000,
@@ -395,7 +399,7 @@ function verdictFrom(profile, summary, log) {
   };
 }
 
-async function setApGuided(sysid = 1) {
+function runApControlScript(body, timeoutMs = 20000) {
   // Run out-of-band so Node-RED is not holding 14550.
   const script = `
     const { Connection, BAND } = require(${JSON.stringify(path.join(ROOT, 'lib/connection'))});
@@ -407,7 +411,7 @@ async function setApGuided(sysid = 1) {
       const bundle = loadBundled('ardupilotmega');
       const conn = new Connection({
         transport: { mode: 'udp', bindAddress: '0.0.0.0', bindPort: 14550, remoteAddress: '127.0.0.1', remotePort: 14551 },
-        vehicle: { targetSysid: ${sysid}, targetCompid: 1, bundle, firmware: 'ardupilot', autopilot: 3 },
+        vehicle: { targetSysid: 1, targetCompid: 1, bundle, firmware: 'ardupilot', autopilot: 3 },
         identities: [{ id: 'gcs', sysid: 255, compid: 190, heartbeat: { type: 6, autopilot: 8, systemStatus: 4, baseMode: 0, customMode: 0, mavlinkVersion: 3 }, heartbeatIntervalMs: 500 }],
         defaultIdentityId: 'gcs', boundIdentityIds: ['gcs'],
         signing: { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
@@ -415,14 +419,34 @@ async function setApGuided(sysid = 1) {
       }, { resolveIdentity, logger: { info() {}, warn() {}, error() {} } });
       await conn.start();
       await sleep(2000);
-      const t = { sysid: ${sysid}, compid: 1 };
-      conn.send(buildCommandLong(176, ${sysid}, 1, [1, 4, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
-      await sleep(800);
+      ${body}
       conn.close(() => process.exit(0));
       setTimeout(() => process.exit(0), 400);
     })().catch(() => process.exit(1));
   `;
-  sh(`node -e ${JSON.stringify(script)}`, 20000);
+  sh(`node -e ${JSON.stringify(script)}`, timeoutMs);
+}
+
+async function setApGuided(sysid = 1) {
+  runApControlScript(`
+      const t = { sysid: ${sysid}, compid: 1 };
+      // Force-disarm first so a leftover airborne/armed state cannot DENY takeoff.
+      conn.send(buildCommandLong(400, ${sysid}, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+      await sleep(800);
+      conn.send(buildCommandLong(176, ${sysid}, 1, [1, 4, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+      await sleep(800);
+  `);
+}
+
+async function forceDisarmApFleet() {
+  runApControlScript(`
+      for (const sysid of [1, 2, 3, 4, 5]) {
+        const t = { sysid, compid: 1 };
+        conn.send(buildCommandLong(400, sysid, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+        await sleep(200);
+      }
+      await sleep(500);
+  `, 25000);
 }
 
 async function prep(kind) {
@@ -431,10 +455,14 @@ async function prep(kind) {
   }
   if (kind === 'restart-ap-1') {
     sh('docker restart nrc-ap-1 >/dev/null', 30000);
-    await sleep(8000);
+    // GPS/EKF need longer than container "Up"; 8s was still DENY-on-arm.
+    await sleep(20000);
   }
-  if (kind === 'px4-home-ready') {
-    sh('docker exec nrc-px4-11 /opt/px4/bin/px4-commander disarm -f >/dev/null 2>&1 || true');
+  if (kind === 'px4-home-ready' || kind === 'px4-mode-ready') {
+    sh(
+      `docker exec nrc-px4-11 sh -lc 'cd /opt/px4 && ./bin/px4-param set MAV_0_BROADCAST 1 >/dev/null; ./bin/px4-param set COM_RCL_EXCEPT 7 >/dev/null; ./bin/px4-param set COM_ARM_MAG_STR 0 >/dev/null; ./bin/px4-commander disarm -f >/dev/null 2>&1 || true'`,
+      15000
+    );
     await sleep(1500);
   }
 }
@@ -453,11 +481,9 @@ async function cleanupAfter(fileBase) {
     sh('docker start nrc-ap-3 >/dev/null');
     await sleep(8000);
   }
-  // Disarm fleets after arming examples
-  if (/01|03|08|10|11|14|17|19|20/.test(fileBase.slice(0, 2))) {
-    sh(
-      `for c in nrc-ap-1 nrc-ap-2 nrc-ap-3 nrc-ap-4 nrc-ap-5; do docker exec $c bash -c 'echo "mode GUIDED; arm throttle" >/dev/null' 2>/dev/null; done; true`
-    );
+  // Disarm fleets after arming/flight examples. Caller must release UDP binds first.
+  if (/01|02|03|08|10|11|14|17|19|20/.test(fileBase.slice(0, 2))) {
+    await forceDisarmApFleet();
     for (const c of [
       'nrc-px4-11',
       'nrc-px4-12',
@@ -509,6 +535,7 @@ async function runOne(file) {
   // Let connections bind + learn peers
   await sleep(4000);
 
+  const injectGapMs = Number(profile.injectGapMs) > 0 ? Number(profile.injectGapMs) : 1500;
   const injectResults = [];
   for (const inj of injects) {
     if (inj.once) {
@@ -519,8 +546,8 @@ async function runOne(file) {
     injectResults.push({ id: inj.id, name: inj.name, http: r.status, body: r.body.slice(0, 80) });
     console.log(`  inject ${inj.name || inj.id} → ${r.status}`);
     await afterInjectHook(fileBase, mark);
-    // small gap between multi-inject flows
-    await sleep(1500);
+    // Gap before the next inject (example 13 needs set echo to finish before list flood).
+    await sleep(injectGapMs);
   }
 
   await sleep(profile.waitMs);
@@ -530,9 +557,7 @@ async function runOne(file) {
   const summary = summarizeBlocks(blocks);
   const verdict = verdictFrom(profile, summary, log);
 
-  await cleanupAfter(fileBase);
-
-  // Clear flows to idle so next bind is free
+  // Clear flows first so cleanup can bind 14550.
   await req(
     'POST',
     '/flows',
@@ -542,6 +567,7 @@ async function runOne(file) {
     { 'Node-RED-Deployment-Type': 'full' }
   );
   await sleep(1500);
+  await cleanupAfter(fileBase);
 
   return {
     file,
