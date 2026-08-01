@@ -72,7 +72,7 @@ module.exports = function registerMavlinkSwarm(RED) {
           : [null, aggregate]);
         if (!aggregate.success && aggregate.result !== 'dry_run') {
           done(new Error(`mavlink-swarm: ${aggregate.result}`));
-        } else if (done) {
+        } else {
           done();
         }
       } catch (err) {

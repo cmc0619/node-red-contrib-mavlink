@@ -124,7 +124,7 @@ module.exports = function registerMavlinkParam(RED) {
      * In-flight transaction, or null. `gen` is the single-flight token: a
      * callback or timeout only settles the node when its captured generation
      * still matches, so a superseded operation's late echo is ignored.
-     * @type {{unsubscribe: (()=>void)|null, timer: any, done: Function|null, gen: number}|null}
+     * @type {{unsubscribe: (()=>void)|null, timer: any, done: Function, gen: number}|null}
      */
     let pending = null;
     let generation = 0;
@@ -142,7 +142,7 @@ module.exports = function registerMavlinkParam(RED) {
       pending = null;
       if (unsubscribe) unsubscribe();
       if (timer) clearTimeout(timer);
-      if (releaseDone && done) done();
+      if (releaseDone) done();
     }
 
     node.on('input', (msg, send, done) => {
@@ -223,14 +223,14 @@ module.exports = function registerMavlinkParam(RED) {
             if (!matchesParamEcho(request, decoded)) return;
             settle((finishDone) => {
               completeResult(node, send, 'succeeded', 'echo-confirmed', decoded);
-              if (finishDone) finishDone();
+              finishDone();
             });
           } else {
             const params = collector.accept(decoded);
             if (!params) return;
             settle((finishDone) => {
               completeResult(node, send, 'succeeded', 'list-complete', params);
-              if (finishDone) finishDone();
+              finishDone();
             });
           }
         });
@@ -240,7 +240,7 @@ module.exports = function registerMavlinkParam(RED) {
             timeoutResult(node, send, isConfirmSet ? 'echo timeout' : 'list timeout', msg, finishDone));
         }, timeoutMs);
 
-        pending = { unsubscribe, timer, done: done || null, gen: myGen };
+        pending = { unsubscribe, timer, done, gen: myGen };
       } catch (err) {
         fail(node, send, err, msg, done);
       }
