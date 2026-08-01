@@ -1161,7 +1161,13 @@ Rules across all three:
   (issue #90): PX4 and ArduPilot accept different sets, the dialect XML carries no
   "mission-capable" attribute, and every reference client at this layer (pymavlink `MAVWPLoader`,
   MAVSDK `MissionRaw`, QGroundControl on upload) passes any command through and lets the vehicle's
-  `MAV_MISSION_UNSUPPORTED` be the authority. So do we.
+  `MAV_MISSION_UNSUPPORTED` be the authority. So do we. The fence/rally *reservation* is the one
+  exception, and its command set must track every dialect that defines one — `common.xml`
+  (fence 5000–5004, rally 5100) **and** `development.xml` (fence 5005 `NAV_FENCE_HOME_CIRCLE_INCLUSION`,
+  WIP). A fence id missing from that set would leak into a mission upload. Measured from the XML,
+  id by id — not a reserved id *range*, which would assume ids the dialect has not defined (§14).
+  Command ids are also required to be `uint16` integers before the family test, so a value like
+  `5001.9` cannot truncate on the wire into reserved fence `5001`.
 - **Lock per connection, profile, and type.** A fence upload and a mission download run
   concurrently; two fence uploads do not.
 - **Progress is status, not a port.** Phase and item counts go out output 1 as they happen.

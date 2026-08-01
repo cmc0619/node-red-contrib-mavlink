@@ -68,6 +68,13 @@ test('fence validator accepts only NAV_FENCE commands', () => {
   assert.equal(validateFenceItems([{ command: 5100 }]).ok, false);
 });
 
+test('the development.xml fence id 5005 is reserved to the fence family', () => {
+  // NAV_FENCE_HOME_CIRCLE_INCLUSION (5005) is defined only in development.xml.
+  // The family reservation must cover it: it belongs to a fence, not a mission.
+  assert.equal(validateFenceItems([{ command: 5005 }]).ok, true);
+  assert.equal(validateMissionItems([{ command: 5005 }]).ok, false);
+});
+
 test('rally validator accepts only NAV_RALLY_POINT', () => {
   assert.equal(validateRallyItems([{ command: 5100 }]).ok, true);
   assert.equal(validateRallyItems([{ command: 16 }]).ok, false);
