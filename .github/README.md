@@ -17,8 +17,11 @@ From your Node-RED user directory (usually `~/.node-red`, or `/data` in the offi
 load. Use one of:
 
 ```bash
-# From npm (when published), or from GitHub:
-npm install cmc0619/node-red-contrib-mavlink
+# From npm, once published — note the scope:
+npm install @cmc0619/node-red-contrib-mavlink
+
+# From GitHub (owner/repo, not the package name):
+npm install github:cmc0619/node-red-contrib-mavlink
 
 # From a local checkout — copy, don't symlink:
 npm install --install-links /path/to/node-red-contrib-mavlink

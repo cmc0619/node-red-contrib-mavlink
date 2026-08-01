@@ -55,7 +55,10 @@ const nodeRules = {
   'n/no-unsupported-features/node-builtins': [
     'error',
     {
-      // node:test and fetch are stable on the Node >=20 floor; only genuinely
+      // node:test is stable on the Node >=20 floor (since 20.0.0), so it needs
+      // no exemption. `fetch` is a different case: it stays marked experimental
+      // until Node 21, and lib/metadata/xml-catalog.js and lib/param/defs.js
+      // both use it — this flag is what keeps them passing. Only genuinely
       // newer modules (node:sqlite and friends) should fail this rule.
       allowExperimental: true,
     },
