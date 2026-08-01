@@ -249,3 +249,51 @@ test('NaN in param5/6 refuses the INT build — no silent null island (§9)', ()
   assert.ok(Number.isNaN(ok.param1));
   assert.ok(Number.isNaN(ok.z));
 });
+
+// ── Frame-classification drift pin (§9) ─────────────────────────────────────
+// Frame semantics are prose-only in MAVLink's XML, so they cannot be derived —
+// but the compiled dialect can enforce that the classification stays COMPLETE.
+// When a dialect refresh adds a MAV_FRAME entry, this fails naming it, instead
+// of the new frame silently passing through unscaled (or a name-heuristic
+// silently guessing a divisor deployed firmware doesn't implement yet).
+
+const {
+  GLOBAL_FRAMES,
+  LOCAL_FRAMES,
+  NON_POSITION_FRAMES,
+} = require('../../lib/command');
+
+test('every dialect MAV_FRAME entry is classified exactly once (drift pin, §9)', () => {
+  const mf = loadBundled('common').enums.MAV_FRAME;
+  assert.ok(mf && mf.entries.length > 0, 'bundled common dialect must declare MAV_FRAME');
+
+  for (const entry of mf.entries) {
+    const v = Number(entry.value);
+    const memberships = [
+      GLOBAL_FRAMES.has(v),
+      LOCAL_FRAMES.has(v),
+      NON_POSITION_FRAMES.has(v),
+    ].filter(Boolean).length;
+    assert.equal(
+      memberships,
+      1,
+      `${entry.name} (${v}) is classified ${memberships} times — a dialect refresh added or ` +
+        'moved a frame. Classify it in lib/command/carrier.js (GLOBAL_FRAMES / LOCAL_FRAMES / ' +
+        'NON_POSITION_FRAMES) and MEASURE against SITL before choosing local (§14).'
+    );
+  }
+
+  // Reverse direction: no classified value that the dialect does not declare —
+  // catches typos and upstream renumbering (which MAVLink promises never to do;
+  // this is the alarm if that promise ever breaks).
+  const declared = new Set(mf.entries.map((e) => Number(e.value)));
+  for (const [setName, set] of [
+    ['GLOBAL_FRAMES', GLOBAL_FRAMES],
+    ['LOCAL_FRAMES', LOCAL_FRAMES],
+    ['NON_POSITION_FRAMES', NON_POSITION_FRAMES],
+  ]) {
+    for (const v of set) {
+      assert.ok(declared.has(v), `${setName} classifies frame ${v}, which the dialect does not declare`);
+    }
+  }
+});
