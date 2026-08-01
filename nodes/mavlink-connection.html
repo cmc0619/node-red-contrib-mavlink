@@ -75,6 +75,37 @@
         );
       }
 
+      // Extra identities (issue #94): additionalIdentities is a *list* of
+      // Local Identity config refs, and the stock config picker handles one
+      // ref per property — so the list uses Node-RED's editableList with a
+      // select per row. Options enumerate every Local Identity config node in
+      // the workspace, including ones added this session but not yet deployed.
+      function identityOptions() {
+        var opts = [];
+        RED.nodes.eachConfig(function (n) {
+          if (n.type !== 'mavlink-local-identity') return;
+          opts.push({ id: n.id, label: (n.name || 'Local Identity') + ' (' + (n.role || 'gcs') + ')' });
+        });
+        return opts;
+      }
+      var $idList = $('#mav-conn-additional-identities');
+      $idList.editableList({
+        addButton: 'add identity',
+        removable: true,
+        height: 'auto',
+        addItem: function (container, _index, data) {
+          var $sel = $('<select>', { style: 'width:100%;' }).appendTo(container);
+          $sel.append($('<option></option>').val('').text('— select identity —'));
+          identityOptions().forEach(function (o) {
+            $sel.append($('<option></option>').val(o.id).text(o.label));
+          });
+          $sel.val(data && data.id ? data.id : '');
+        },
+      });
+      (this.additionalIdentities || []).forEach(function (id) {
+        $idList.editableList('addItem', { id: id });
+      });
+
       function refreshTransportRows() {
         var mode = $('#node-config-input-mode').val() || 'udp';
         var ip = mode === 'udp' || mode === 'tcp';
@@ -85,6 +116,16 @@
       }
       $('#node-config-input-mode').on('change', refreshTransportRows);
       refreshTransportRows();
+    },
+    oneditsave: function () {
+      // Collect the raw rows; the blank/duplicate/primary rules live in the
+      // shared, unit-tested RED.mavlink.normalizeIdentityIds (§6).
+      var primary = $('#node-config-input-localIdentity').val();
+      var raw = [];
+      $('#mav-conn-additional-identities').editableList('items').each(function () {
+        raw.push($(this).find('select').val());
+      });
+      this.additionalIdentities = RED.mavlink.normalizeIdentityIds(raw, primary);
     },
   });
 </script>
@@ -148,6 +189,16 @@
   <div class="form-row">
     <label for="node-config-input-localIdentity"><i class="fa fa-id-card"></i> Identity</label>
     <input type="text" id="node-config-input-localIdentity" style="width:70%" />
+  </div>
+  <div class="form-row" style="margin-bottom:0;">
+    <label style="vertical-align:top;"><i class="fa fa-id-card-o"></i> Extra identities</label>
+    <div style="display:inline-block; width:70%;">
+      <ol id="mav-conn-additional-identities"></ol>
+    </div>
+  </div>
+  <div class="form-tips" style="margin-bottom:8px;">
+    Optional further Local Identities bound to this connection. Each sends its own
+    heartbeat and is selectable as the send-as identity on action nodes.
   </div>
 
   <hr />
@@ -213,6 +264,12 @@
   TCP with a remote host/port is a client; with only bind settings it is a server.
   Serial opens a device path (optional <code>serialport</code> dependency) at the
   configured baud; peer-table endpoints are that path.</p>
+
+  <h3>Identities</h3>
+  <p><b>Identity</b> is the connection's default source identity. <b>Extra
+  identities</b> optionally bind further Local Identity profiles to the same
+  link: each sends its own heartbeat, and action nodes can pick any bound
+  identity as their send-as source.</p>
 
   <h3>Bands and scheduling</h3>
   <p>Every outbound message carries a priority band (emergency, liveness,

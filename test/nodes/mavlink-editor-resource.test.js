@@ -191,6 +191,34 @@ test('buildTierDialectDefaults honours modeField:tier for the Build node', () =>
   assert.equal(dialect.validate.call({ tier: 'send' }, ''), true);
 });
 
+// ── normalizeIdentityIds — the Connection dialog's extra-identity rules ──────
+
+test('normalizeIdentityIds drops blanks, duplicates, and the primary identity', () => {
+  const { RED } = loadResource();
+  assert.deepEqual(
+    plain(RED.mavlink.normalizeIdentityIds(
+      ['', 'id-2', 'id-1', 'id-2', null, undefined, 'id-3'],
+      'id-1' // the primary — runtime binds it first; repeating it would
+      //        register the same identity twice
+    )),
+    ['id-2', 'id-3']
+  );
+});
+
+test('normalizeIdentityIds preserves dialog order of the survivors', () => {
+  const { RED } = loadResource();
+  assert.deepEqual(
+    plain(RED.mavlink.normalizeIdentityIds(['id-c', 'id-a', 'id-b', 'id-a'], '')),
+    ['id-c', 'id-a', 'id-b']
+  );
+});
+
+test('normalizeIdentityIds tolerates absent input', () => {
+  const { RED } = loadResource();
+  assert.deepEqual(plain(RED.mavlink.normalizeIdentityIds(undefined, 'x')), []);
+  assert.deepEqual(plain(RED.mavlink.normalizeIdentityIds([], 'x')), []);
+});
+
 // ── payloadVerbIgnoresCarrier — drift pin against lib/payload (§9) ───────────
 
 test('payloadVerbIgnoresCarrier mirrors the lib recipe table exactly', () => {
