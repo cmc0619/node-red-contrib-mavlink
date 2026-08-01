@@ -1754,6 +1754,24 @@ product code. Curated PASS/PARTIAL/FAIL/SKIP tables go to Issues labeled `sitl-r
 In-tree `testing.md` is only a pointer to that workflow.
 *Check:* `sitl/AGENTS.md`, `testing.md`, `sitl/.gitignore`.
 
+**ArduCopter takeoff examples must set GUIDED in-band.**
+*Wrong belief:* an out-of-band harness `SET_MODE GUIDED` before deploy is enough for
+example 01’s arm→takeoff chain.
+*Fact:* after other suite members leave sysid 1 in STABILIZE (or the prep races a bind),
+`MAV_CMD_NAV_TAKEOFF` returns `MAV_RESULT_DENIED` (resultCode 4) even when arm ACKs.
+Example 01 now mirrors 02: arm → GUIDED → takeoff inside the flow. Harness prep still
+force-disarms then GUIDED as belt-and-suspenders, and cleanup disarms only after flows
+release the UDP bind.
+*Check:* `examples/sitl/01-completion-takeoff.json`, `sitl/run-example-suite.js`.
+
+**Param set echo-confirm must use the vehicle’s param type.**
+*Wrong belief:* `MAV_PARAM_TYPE_REAL32` is a fine default for every Param set in examples
+(including ArduPilot `ARMING_CHECK`).
+*Fact:* `ARMING_CHECK` is an INT32 bitmask. A REAL32-typed `PARAM_SET` of `1` writes float
+bits; echo-confirm then times out. Example 13 uses `MAV_PARAM_TYPE_INT32`; the suite also
+spaces its injects so `request-list` does not flood during the set wait.
+*Check:* `examples/sitl/13-param-defs-live.json`, `lib/param/index.js` (`matchesParamEcho`).
+
 **ArduPilot lab image downloads the official prebuilt SITL binary — it does not compile.**
 *Wrong belief:* `sitl/Dockerfile.ardupilot` must `git clone` + `waf copter` (README once said
 the AP image “compiles SITL”), so first bring-up is a long source build.
