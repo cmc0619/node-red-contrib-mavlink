@@ -44,7 +44,15 @@ module.exports = function registerMavlinkConnection(RED) {
       return;
     }
 
+    // getNode returns null for a deleted, disabled, or not-yet-deployed config
+    // node — an ordinary editing sequence, not an exotic one. Fail with the
+    // same clear-message style buildSigning uses, not a raw TypeError (#95).
     const vehicleNode = RED.nodes.getNode(config.vehicle);
+    if (!vehicleNode) {
+      throw new Error(
+        'mavlink-connection: the referenced Vehicle Profile is missing or disabled — reselect a Vehicle in the connection config and redeploy'
+      );
+    }
     const bundle = vehicleNode.getDialect();
     const defaults = vehicleNode.getDefaults();
 
@@ -65,7 +73,15 @@ module.exports = function registerMavlinkConnection(RED) {
     const identityIds = [config.localIdentity, ...(config.additionalIdentities || [])].filter(
       Boolean
     );
-    node._identityNodes = identityIds.map((id) => RED.nodes.getNode(id));
+    node._identityNodes = identityIds.map((id) => {
+      const idNode = RED.nodes.getNode(id);
+      if (!idNode) {
+        throw new Error(
+          `mavlink-connection: the referenced Local Identity "${id}" is missing or disabled — reselect the Identity in the connection config and redeploy`
+        );
+      }
+      return idNode;
+    });
 
     // Legacy flows stored cadence on the Connection (`heartbeatInterval`). Prefer
     // that when an identity still has the default 1000 ms so upgrades do not

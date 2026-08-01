@@ -486,3 +486,178 @@ test('an identity override outside the bound set is rejected, never falling back
   assert.throws(() => connection.send({ name: 'PING', fields: {} }, { identityId: 'ghost' }), /not bound/);
   connection.close();
 });
+
+// ── issue #91 / #93: endpoint durability and terminal-state hygiene ──────────
+
+/** Teach the peer table an endpoint for sysid 7 / compid 1 via a heartbeat. */
+function introducePeer(dg) {
+  dg.sockets[0].receive(
+    frameBuffer({
+      name: 'HEARTBEAT',
+      sysid: 7,
+      compid: 1,
+      fields: { type: 2, autopilot: 3, base_mode: 0, custom_mode: 0, system_status: 4 },
+    }),
+    { address: '10.0.0.7', port: 14551 }
+  );
+}
+
+test('a transient send error warns but keeps the peer endpoint (#91)', async () => {
+  const warns = [];
+  const { connection, dg } = build(
+    {},
+    { logger: { warn: (m) => warns.push(m), info() {}, error() {} } }
+  );
+  await connection.start();
+  introducePeer(dg);
+
+  dg.sockets[0].send = (_buffer, _port, _address, callback) => {
+    const err = new Error('send EHOSTUNREACH 10.0.0.7:14551');
+    err.code = 'EHOSTUNREACH';
+    setTimeout(() => callback(err), 0);
+  };
+  connection.send(
+    { name: 'COMMAND_LONG', fields: {} },
+    { band: BAND.CONTROL, target: { sysid: 7, compid: 1 } }
+  );
+  await delay(30);
+
+  assert.ok(
+    warns.some((m) => /outbound send failed/.test(m)),
+    'the failure itself is still surfaced'
+  );
+  assert.deepEqual(
+    connection.peerTable.endpointFor(7, 1),
+    { address: '10.0.0.7', port: 14551 },
+    'an ICMP blip must not delete the best-known address'
+  );
+  connection.close();
+});
+
+test('a non-transient send error still demotes the endpoint (failover intact)', async () => {
+  const { connection, dg } = build(
+    {},
+    { logger: { warn() {}, info() {}, error() {} } }
+  );
+  await connection.start();
+  introducePeer(dg);
+
+  dg.sockets[0].send = (_buffer, _port, _address, callback) => {
+    const err = new Error('send EMSGSIZE');
+    err.code = 'EMSGSIZE';
+    setTimeout(() => callback(err), 0);
+  };
+  connection.send(
+    { name: 'COMMAND_LONG', fields: {} },
+    { band: BAND.CONTROL, target: { sysid: 7, compid: 1 } }
+  );
+  await delay(30);
+
+  assert.equal(
+    connection.peerTable.endpointFor(7, 1),
+    null,
+    'non-transient failures keep the existing failover behaviour'
+  );
+  connection.close();
+});
+
+test('targeted send with no known endpoint warns once, not per packet (#91)', async () => {
+  const warns = [];
+  const { connection, dg } = build(
+    {},
+    { logger: { warn: (m) => warns.push(m), info() {}, error() {} } }
+  );
+  await connection.start();
+
+  const opts = { band: BAND.CONTROL, target: { sysid: 9, compid: 9 } };
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, opts);
+  await delay(20);
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, opts);
+  await delay(20);
+
+  assert.equal(
+    warns.filter((m) => /no known endpoint for target 9\/9/.test(m)).length,
+    1,
+    'the fallback is loud exactly once per unresolved target'
+  );
+  assert.equal(dg.sockets[0].sent.length, 2, 'the frames still go out via the configured remote');
+  connection.close();
+});
+
+test('a transport error stops heartbeats but keeps the peer sweep alive (#93)', async () => {
+  const { connection, dg, timers } = build(
+    {},
+    { logger: { warn() {}, info() {}, error() {} } }
+  );
+  await connection.start();
+  const running = timers.active();
+  assert.ok(running >= 2, 'heartbeat and sweep timers run while connected');
+
+  dg.sockets[0].emit('error', new Error('boom'));
+
+  assert.equal(connection.getState(), STATE.ERROR);
+  assert.equal(
+    timers.active(),
+    running - 1,
+    'only the heartbeat scheduler stops — the sweep must keep driving '
+      + 'stale/expired transitions, which mavlink-state consumes after ERROR'
+  );
+  // The "vehicle lost" signal still fires on a dead link: sweeping past
+  // expireMs must still transition and emit for a known peer.
+  introducePeer(dg);
+  const events = [];
+  connection.peerTable.on('expired', (e) => events.push(e));
+  connection.peerTable.sweep(Date.now() + 60000);
+  assert.equal(events.length, 1, 'expiry still emits after transport ERROR');
+  connection.close();
+});
+
+test('the fallback warning re-arms when the endpoint is learned, not only on send (#91)', async () => {
+  // warn → endpoint learned (no send in between) → endpoint lost → the next
+  // fallback must warn again. The re-arm rides peer-table endpoint-added, so
+  // a resolve/expire cycle with no intervening targeted send cannot leave the
+  // warning permanently disarmed.
+  const warns = [];
+  const { connection, dg } = build(
+    {},
+    { logger: { warn: (m) => warns.push(m), info() {}, error() {} } }
+  );
+  await connection.start();
+
+  const opts = { band: BAND.CONTROL, target: { sysid: 7, compid: 1 } };
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, opts);
+  await delay(20); // warns: endpoint unknown
+
+  introducePeer(dg); // endpoint learned — clears the warned flag via the event
+  connection.peerTable.markPrimaryFailed(7, 1); // sole endpoint drops again
+
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, opts);
+  await delay(20);
+
+  assert.equal(
+    warns.filter((m) => /no known endpoint for target 7\/1/.test(m)).length,
+    2,
+    'losing the endpoint after learning it must re-enable the warning'
+  );
+  connection.close();
+});
+
+test('broadcast target (sysid 0) never triggers the missing-endpoint warning (#91)', async () => {
+  const warns = [];
+  const { connection } = build(
+    {},
+    { logger: { warn: (m) => warns.push(m), info() {}, error() {} } }
+  );
+  await connection.start();
+  connection.send(
+    { name: 'COMMAND_LONG', fields: {} },
+    { band: BAND.CONTROL, target: { sysid: 0, compid: 1 } }
+  );
+  await delay(20);
+  assert.equal(
+    warns.filter((m) => /no known endpoint/.test(m)).length,
+    0,
+    'no endpoint is the definition of correct for broadcast'
+  );
+  connection.close();
+});
