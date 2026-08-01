@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * package.json contract pins (DESIGN.md §4, issue #105).
+ * Shipping-contract pins (DESIGN.md §4/§6, issue #105).
  *
- * Two invariants that are silently breakable by an ordinary-looking edit and
- * that no other test would catch. JSON has no comments, so the constraint is
+ * Invariants that are silently breakable by an ordinary-looking edit and that
+ * no other test would catch. JSON has no comments, so the constraint is
  * recorded as an executable check instead of a note nobody reads.
  */
 
@@ -13,35 +13,73 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'));
+const root = path.join(__dirname, '../..');
+const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const nodesDir = path.join(root, 'nodes');
 
-test('mavlink-local-identity is registered first — it loads the shared editor script', () => {
-  // Only nodes/mavlink-local-identity.html carries the
-  // <script src=".../mavlink-editor.js"> tag, and Node-RED concatenates editor
-  // HTML in the order of this map. Every other node HTML calls RED.mavlink.* at
-  // registerType evaluation time, so if any of them is registered first the
-  // helper is not defined yet and *all* node registration fails. Reordering
-  // this map is the whole failure mode; hence the pin.
-  const names = Object.keys(pkg['node-red'].nodes);
-  assert.equal(
-    names[0],
-    'mavlink-local-identity',
-    'mavlink-local-identity must lead node-red.nodes: it is the only HTML that loads '
-      + 'resources/mavlink-editor.js, which every other node HTML needs at registerType time'
-  );
-});
+const htmlFiles = fs.readdirSync(nodesDir).filter((f) => f.endsWith('.html'));
 
-test('the shared editor script is loaded exactly once, by that first node', () => {
-  const nodesDir = path.join(__dirname, '../../nodes');
-  const loaders = fs
-    .readdirSync(nodesDir)
-    .filter((f) => f.endsWith('.html'))
-    .filter((f) => /<script[^>]+mavlink-editor\.js/.test(fs.readFileSync(path.join(nodesDir, f), 'utf8')));
+/**
+ * Node-RED's own rule for "relative", from appendConfig in
+ * @node-red/editor-client/public/red/red.js: a `<script src>` is hoisted out of
+ * the module fragment and loaded ahead of every inline node script only when
+ * the src does NOT match this. The docs say the same thing in prose —
+ * "the node must use relative URLs rather than absolute URLs … Note the URLs do
+ * not start with a `/`" (nodered.org/docs/creating-nodes/resources).
+ */
+const ABSOLUTE_SRC = /^\s*(https?:|\/|\.)/;
+
+const SCRIPT_SRC = /<script[^>]*\ssrc=["']([^"']+)["']/g;
+
+/**
+ * @param {string} file  HTML filename under nodes/
+ * @returns {string[]}  every `src` the file loads
+ */
+function scriptSrcs(file) {
+  const html = fs.readFileSync(path.join(nodesDir, file), 'utf8');
+  return [...html.matchAll(SCRIPT_SRC)].map((m) => m[1]);
+}
+
+test('exactly one node HTML loads the shared editor script', () => {
+  // The pattern Node-RED core uses for its one shared editor resource: a single
+  // <script src> in the node HTML that owns the helper (debug-utils.js in
+  // core/common/21-debug.html), not one tag per node. appendConfig holds back
+  // every inline script in the *module* until that script loads, so one tag
+  // covers all thirteen nodes and the order in node-red.nodes does not matter.
+  const loaders = htmlFiles.filter((f) => scriptSrcs(f).some((s) => s.includes('mavlink-editor.js')));
   assert.deepEqual(
     loaders,
     ['mavlink-local-identity.html'],
-    'exactly one node HTML may load mavlink-editor.js — a second loader would '
-      + 'execute the helper twice in the editor'
+    'mavlink-local-identity.html is the single loader of resources/mavlink-editor.js; '
+      + 'the other node HTMLs consume RED.mavlink.* without loading it themselves'
+  );
+});
+
+test('every editor resource src is relative — an absolute src skips the hoist', () => {
+  // This is the sharp edge. Rewriting the src to "./resources/…" or
+  // "/resources/…" leaves the script inside the module fragment instead of
+  // hoisting it, so RED.mavlink.* is no longer guaranteed to exist when the
+  // other twelve nodes' registerType calls evaluate. One character, silent
+  // breakage, and nothing else in the suite would notice.
+  for (const file of htmlFiles) {
+    for (const src of scriptSrcs(file)) {
+      assert.equal(
+        ABSOLUTE_SRC.test(src),
+        false,
+        `${file} loads "${src}" — editor resource srcs must be relative (no leading /, ./ or scheme)`
+      );
+    }
+  }
+});
+
+test('the shared editor script is actually shipped', () => {
+  assert.ok(
+    fs.existsSync(path.join(root, 'resources/mavlink-editor.js')),
+    'resources/mavlink-editor.js is missing'
+  );
+  assert.ok(
+    pkg.files.includes('resources'),
+    'package.json "files" must include "resources" or the editor script is absent from the tarball'
   );
 });
 

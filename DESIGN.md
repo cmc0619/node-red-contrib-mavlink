@@ -1918,10 +1918,17 @@ fills, dialect select, `currentCatalogQuery`, `validateUint8`, …) and its own 
 asynchronously so helpers might be undefined when a later node's `registerType` parses.
 *Fact:* The helpers live once in [`resources/mavlink-editor.js`](resources/mavlink-editor.js),
 served at `resources/node-red-contrib-mavlink/mavlink-editor.js` and loaded by a relative
-`<script src>` at the top of `mavlink-local-identity.html` (listed first in `package.json`
-`node-red.nodes` so its resource tag leads the module). Node-RED's `appendConfig` defers every inline node
-`<script>` until each module's relative-`src` scripts have fired `onload`, so `RED.mavlink.*` is
-defined before any `registerType` runs — no async race. The catalog source matrix is one function,
+`<script src>` at the top of `mavlink-local-identity.html` — one tag in the node HTML that owns the
+helper, which is the shape Node-RED core uses for its own shared editor resource (`debug-utils.js`
+in `core/common/21-debug.html`), and the only shape the resource docs describe. Node-RED's
+`appendConfig` *hoists* a relative-`src` script out of the module fragment, loads it first, and holds
+back every inline node `<script>` in that module until its `onload` fires, so `RED.mavlink.*` is
+defined before any `registerType` runs — no async race, and **position in `node-red.nodes` is
+irrelevant** (`loadNodes` splits the payload per module, not per node, so all thirteen share one
+`appendConfig` call). What *would* break it is an absolute `src`: `appendConfig` only hoists when the
+src fails `/^\s*(https?:|\/|\.)/`, so a leading `/` or `./` silently drops the guarantee — hence the
+relative-src pin in `test/tooling/package-contract.check.js`, and the docs' own
+"Note the URLs do not start with a `/`". The catalog source matrix is one function,
 `RED.mavlink.resolveCatalogTarget({ isBuild? })` (Build → Dialect/`__vehicle`; wire → connection
 profile; empty → `{key:'empty', query:null}`, never `ardupilotmega`); the Build-tier default
 descriptors are `RED.mavlink.buildTierDialectDefaults({ modeField, withFirmware })`
@@ -1929,8 +1936,10 @@ descriptors are `RED.mavlink.buildTierDialectDefaults({ modeField, withFirmware 
 that into its `defaults` with `Object.assign` and calls the shared resolver; Swarm passes its
 narrower Build+list case as the `isBuild` override. `resources` is in `package.json` `files`, and
 `resources/**/*.js` lints as a browser script.
-*Check:* `node --test test/nodes/mavlink-editor-resource.test.js`; `rg -n 'function resolveCatalogTarget'
-nodes` returns nothing; `rg -n 'buildTierDialectDefaults' nodes/mavlink-*.html`.
+*Check:* `node --test test/nodes/mavlink-editor-resource.test.js test/tooling/package-contract.check.js`;
+`rg -n 'function resolveCatalogTarget' nodes` returns nothing; `rg -n 'buildTierDialectDefaults'
+nodes/mavlink-*.html`; `rg -n '<script[^>]*src=' nodes` returns exactly one line, in
+`mavlink-local-identity.html`, with no leading `/` or `.`.
 
 **Build-tier enum catalogs must see the saved dialect before `/mavlink/dialects` returns.**
 *Wrong belief:* calling `loadEnumsCatalog` at the start of `oneditprepare` is fine because the
