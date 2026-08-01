@@ -21,6 +21,11 @@ test('entrypoint launches official prebuilt arducopter via udpclient', () => {
     /--serial0\s+"udpclient:\$\{OUT_IP\}:\$\{OUT_PORT\}"/,
     'must send telemetry to the Node-RED bind port via udpclient'
   );
+  assert.match(
+    src,
+    /--defaults\s+\/params\/copter\.parm,\/params\/ap-logging\.parm/,
+    'must load autotest copter defaults plus lab logging parm'
+  );
   assert.doesNotMatch(src, /sim_vehicle\.py/, 'must not require a source tree / sim_vehicle');
   assert.doesNotMatch(src, /mavproxy/i, 'must not require MAVProxy');
 });
@@ -31,6 +36,11 @@ test('Dockerfile downloads the pinned Copter-4.7.0 prebuilt binary', () => {
     src,
     /firmware\.ardupilot\.org\/Copter\/stable-4\.7\.0\/SITL_x86_64_linux_gnu\/arducopter/,
     'must fetch the official static SITL binary'
+  );
+  assert.match(
+    src,
+    /Tools\/autotest\/default_params\/copter\.parm/,
+    'must fetch Copter-4.7.0 autotest default params'
   );
   assert.doesNotMatch(src, /\.\/waf\s+copter/, 'must not compile SITL from source');
 });

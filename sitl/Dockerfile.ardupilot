@@ -8,6 +8,9 @@ FROM ubuntu:22.04
 
 ARG ARDUPILOT_SITL_URL=https://firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu/arducopter
 ARG ARDUPILOT_REF=Copter-4.7.0
+# Same ref's autotest defaults — sim_vehicle used to load these; the bare
+# prebuilt binary does not, and without them ARM is DENIED (resultCode 4).
+ARG ARDUPILOT_COPTER_PARM_URL=https://raw.githubusercontent.com/ArduPilot/ardupilot/Copter-4.7.0/Tools/autotest/default_params/copter.parm
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
     USER=sitl \
@@ -21,10 +24,12 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
  && rm -rf /var/lib/apt/lists/* \
  && curl -fsSL -o /usr/local/bin/arducopter "${ARDUPILOT_SITL_URL}" \
  && chmod 0755 /usr/local/bin/arducopter \
- && /usr/local/bin/arducopter --help >/dev/null
+ && /usr/local/bin/arducopter --help >/dev/null \
+ && mkdir -p /params \
+ && curl -fsSL -o /params/copter.parm "${ARDUPILOT_COPTER_PARM_URL}"
 
 RUN useradd -m -s /bin/bash sitl \
- && mkdir -p /home/sitl/aircraft /logs /params \
+ && mkdir -p /home/sitl/aircraft /logs \
  && chown -R sitl:sitl /home/sitl /logs /params
 
 COPY scripts/entrypoint-ap.sh /usr/local/bin/entrypoint-ap.sh

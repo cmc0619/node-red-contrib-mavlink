@@ -76,6 +76,7 @@ services:
     volumes:
       - ./logs/ap-1:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./params/copter.parm:/params/copter.parm:ro
       - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
       - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 
@@ -89,6 +90,7 @@ services:
     volumes:
       - ./logs/ap-2:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./params/copter.parm:/params/copter.parm:ro
       - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
       - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 
@@ -102,6 +104,7 @@ services:
     volumes:
       - ./logs/ap-3:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./params/copter.parm:/params/copter.parm:ro
       - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
       - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 
@@ -115,6 +118,7 @@ services:
     volumes:
       - ./logs/ap-4:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./params/copter.parm:/params/copter.parm:ro
       - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
       - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 
@@ -128,6 +132,7 @@ services:
     volumes:
       - ./logs/ap-5:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./params/copter.parm:/params/copter.parm:ro
       - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
       - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 
@@ -207,6 +212,7 @@ services:
     volumes:
       - ./logs/ap-companion-20:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./params/copter.parm:/params/copter.parm:ro
       - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
       - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 

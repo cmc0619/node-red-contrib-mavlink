@@ -138,10 +138,12 @@ Entrypoints log `out=udp:<gateway-ip>:…` when `host-gateway` would otherwise p
 **14560** and sysid **21** on **14542** (re-checked after the gateway fallback).
 
 **ArduPilot:** image builds locally (`nrc-mavlink-ap-sitl:local`) by downloading the
-official Copter-4.7.0 static SITL binary (see `Dockerfile.ardupilot`). The entrypoint
-runs `/usr/local/bin/arducopter` with `--serial0 udpclient:<gateway>:14550` (or
-`14540` for the companion). Confirm with `docker compose … logs ap-1` showing
-`out=udpclient:…` and HEARTBEATs on host UDP **14550**.
+official Copter-4.7.0 static SITL binary plus `Tools/autotest/default_params/copter.parm`
+(see `Dockerfile.ardupilot`). The entrypoint runs `/usr/local/bin/arducopter` with
+`--defaults /params/copter.parm,/params/ap-logging.parm` and
+`--serial0 udpclient:<gateway>:14550` (or `14540` for the companion). Without the
+autotest defaults, ARM is DENIED. Confirm with `docker compose … logs ap-1` showing
+`Loaded defaults from /params/copter.parm,…` and HEARTBEATs on host UDP **14550**.
 
 ## CI note
 

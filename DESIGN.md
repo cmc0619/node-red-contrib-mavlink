@@ -1744,9 +1744,12 @@ listens there.
 the AP image “compiles SITL”), so first bring-up is a long source build.
 *Fact:* ArduPilot publishes a statically linked SITL binary at
 `firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu/arducopter` (~7 MB) for the
-same Copter-4.7.0 line this lab pins. The Dockerfile curls that binary; image build is under a
-minute. More authoritative than a third-party image and far faster than compiling in nested
-Docker. PX4 already used a prebuilt image; AP now matches that posture.
+same Copter-4.7.0 line this lab pins. The Dockerfile curls that binary plus
+`Tools/autotest/default_params/copter.parm` from the matching git tag; the entrypoint passes
+`--defaults copter.parm,ap-logging.parm`. Without the autotest defaults, ARM returns
+`MAV_RESULT_DENIED` (resultCode 4) — `sim_vehicle` used to load them implicitly. Image build
+is under a minute. More authoritative than a third-party image and far faster than compiling
+in nested Docker. PX4 already used a prebuilt image; AP now matches that posture.
 *Check:* `sitl/Dockerfile.ardupilot`, `node --test test/sitl/entrypoint-ap.test.js`.
 
 **Vehicle Profile target defaults only reach the Connection runtime, not palette nodes.**

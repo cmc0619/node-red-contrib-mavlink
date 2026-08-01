@@ -46,5 +46,5 @@ exec /usr/local/bin/arducopter \
   --speedup 1 \
   --sysid "${SYSID}" \
   --home "${LAT},${LON},${HOME_ALT},270" \
-  --defaults /params/ap-logging.parm \
+  --defaults /params/copter.parm,/params/ap-logging.parm \
   --serial0 "udpclient:${OUT_IP}:${OUT_PORT}"
