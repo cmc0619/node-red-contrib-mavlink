@@ -1744,7 +1744,8 @@ listens there.
 the AP image “compiles SITL”), so first bring-up is a long source build.
 *Fact:* ArduPilot publishes a statically linked SITL binary at
 `firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu/arducopter` (~7 MB) for the
-same Copter-4.7.0 line this lab pins. The Dockerfile curls that binary plus
+same Copter-4.7.0 line this lab pins. The Dockerfile is `FROM --platform=linux/amd64` (the
+artifact is x86_64-only) and curls that binary plus
 `Tools/autotest/default_params/copter.parm` from the matching git tag; the entrypoint passes
 `--defaults copter.parm,ap-logging.parm`. Without the autotest defaults, ARM returns
 `MAV_RESULT_DENIED` (resultCode 4) — `sim_vehicle` used to load them implicitly. Image build

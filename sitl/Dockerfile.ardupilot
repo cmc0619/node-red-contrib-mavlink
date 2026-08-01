@@ -4,7 +4,9 @@
 #
 # Build: docker build -f sitl/Dockerfile.ardupilot -t nrc-mavlink-ap-sitl:local sitl/
 
-FROM ubuntu:22.04
+# Official SITL artifact is x86_64-only; pin the image so arm64 hosts do not
+# pull an aarch64 userspace and then fail with exec-format on arducopter.
+FROM --platform=linux/amd64 ubuntu:22.04
 
 ARG ARDUPILOT_SITL_URL=https://firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu/arducopter
 ARG ARDUPILOT_REF=Copter-4.7.0
