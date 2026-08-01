@@ -1772,10 +1772,13 @@ harness `SET_MODE GUIDED` before deploy is enough.
 `MAV_RESULT_DENIED` (resultCode 4) until GPS/EKF is ready, while GUIDED while
 disarmed succeeds within seconds. Examples 01/02 chain GUIDED → arm → takeoff.
 Harness prep `ap-guided-1` polls until HEARTBEAT `custom_mode === 4` (learned peer
-endpoint required — pre-peer fallback sends never arrive). The prep runner must
-invoke `node -e` via argv (not `bash -c` + `JSON.stringify`): bash double-quotes
-leave literal `\\n`, the eval SyntaxError’d, and the old harness ignored the exit
-code so GUIDED prep never ran. Measured against official prebuilt
+endpoint required — pre-peer fallback sends never arrive) **and** a probe arm
+succeeds (cold boot STATUSTEXT: `Need Position Estimate` / gyros inconsistent
+for ~30–40 s), then force-disarms so the example’s arm step still runs. The prep
+runner must invoke `node -e` via argv (not `bash -c` + `JSON.stringify`): bash
+double-quotes leave literal `\\n`, the eval SyntaxError’d, and the old harness
+ignored the exit code so GUIDED prep never ran. Measured against official
+prebuilt
 `firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu/arducopter`
 (`ARDUPILOT_REF=Copter-4.7.0` in `sitl/Dockerfile.ardupilot`).
 *Check:* `examples/sitl/01-completion-takeoff.json`, `examples/sitl/02-completion-timeout.json`,

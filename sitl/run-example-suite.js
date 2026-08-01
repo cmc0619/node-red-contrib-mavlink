@@ -515,27 +515,32 @@ const PX4_VEHICLE_CONTAINERS = [
   'nrc-px4-15',
 ];
 
-/** GPS/EKF settle after docker restart (override with SITL_FLEET_SETTLE_MS). */
+/**
+ * Brief pause after docker restart before peer learning / PX4 helpers.
+ * Arm-ready is not this sleep — `ap-guided-1` polls until arm succeeds
+ * (override with SITL_FLEET_SETTLE_MS).
+ */
 const FLEET_SETTLE_MS = Number(process.env.SITL_FLEET_SETTLE_MS) > 0
   ? Number(process.env.SITL_FLEET_SETTLE_MS)
-  : 20000;
+  : 8000;
 
 async function setApGuided(sysid = 1) {
-  // After fleet restart, SET_MODE must wait for a learned peer endpoint — a
-  // fire-and-forget send often hits the pre-peer fallback and never arrives.
-  // Also: armed STABILIZE→GUIDED is DENIED until GPS/EKF is ready; set GUIDED
-  // while disarmed and confirm HEARTBEAT custom_mode === 4 before deploy.
-  console.log(`  waiting for AP-${sysid} GUIDED (disarmed)…`);
+  // After fleet restart:
+  // 1) SET_MODE needs a learned peer endpoint (pre-peer fallback never arrives).
+  // 2) GUIDED while disarmed succeeds in seconds; arm stays DENIED until EKF
+  //    has a position estimate (~30–40 s cold — "Need Position Estimate").
+  // 3) Prove arm works, then force-disarm so the example's own arm step runs.
+  console.log(`  waiting for AP-${sysid} GUIDED + arm-ready…`);
   runApControlScript(
     `
       const t = { sysid: ${sysid}, compid: 1 };
-      const deadline = Date.now() + 90000;
-      const compOf = () => conn.peerTable.get(${sysid})?.components?.get?.(1);
-      let ready = false;
+      const deadline = Date.now() + 120000;
+      const compOf = () => conn.peerTable.getComponent(${sysid}, 1);
+      let guided = false;
       while (Date.now() < deadline) {
         const comp = compOf();
         if (comp?.primaryEndpoint) {
-          if (comp.flightMode === 4) { ready = true; break; }
+          if (comp.flightMode === 4) { guided = true; break; }
           if (comp.armed) {
             conn.send(buildCommandLong(400, ${sysid}, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
             await sleep(500);
@@ -543,11 +548,28 @@ async function setApGuided(sysid = 1) {
           conn.send(buildCommandLong(176, ${sysid}, 1, [1, 4, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
         }
         await sleep(1000);
-        if (compOf()?.flightMode === 4) { ready = true; break; }
       }
-      if (!ready) throw new Error('AP-${sysid} did not enter GUIDED after fleet restart');
+      if (!guided && compOf()?.flightMode !== 4) {
+        throw new Error('AP-${sysid} did not enter GUIDED after fleet restart');
+      }
+      let armedOk = false;
+      while (Date.now() < deadline) {
+        const comp = compOf();
+        if (comp?.primaryEndpoint) {
+          conn.send(buildCommandLong(400, ${sysid}, 1, [1, 0, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+        }
+        await sleep(2000);
+        if (compOf()?.armed) { armedOk = true; break; }
+      }
+      if (!armedOk) throw new Error('AP-${sysid} did not become armable after fleet restart');
+      conn.send(buildCommandLong(400, ${sysid}, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+      await sleep(800);
+      if (compOf()?.flightMode !== 4) {
+        conn.send(buildCommandLong(176, ${sysid}, 1, [1, 4, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+        await sleep(800);
+      }
     `,
-    120000
+    150000
   );
 }
 
