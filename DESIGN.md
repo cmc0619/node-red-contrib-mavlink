@@ -1171,11 +1171,20 @@ Rules across all three:
   mission is recoverable; one silently emptied is not.
 - **Retry per item, with a ceiling**, then abort the whole transfer with the sequence number
   that stalled. A transfer that hangs forever is worse than one that fails.
-- **Item validation is per type.** Mission items accept `MAV_CMD_NAV_*` navigation commands
-  plus the `CONDITION_*` / `DO_*` commands that real plans embed (`DO_JUMP`,
-  `CONDITION_DELAY`, …) while rejecting fence and rally command ids; fence items are only
-  `MAV_CMD_NAV_FENCE_*`; rally is only `MAV_CMD_NAV_RALLY_POINT`. Three validators, not one
-  with a flag.
+- **Item validation is per type, and reserves families — it does not allowlist commands.** A
+  mission item may carry *any* command except the fence and rally families; fence items are only
+  `MAV_CMD_NAV_FENCE_*`; rally is only `MAV_CMD_NAV_RALLY_POINT`. Three validators, not one with a
+  flag. The mission validator deliberately does **not** decide which commands a firmware supports
+  (issue #90): PX4 and ArduPilot accept different sets, the dialect XML carries no
+  "mission-capable" attribute, and every reference client at this layer (pymavlink `MAVWPLoader`,
+  MAVSDK `MissionRaw`, QGroundControl on upload) passes any command through and lets the vehicle's
+  `MAV_MISSION_UNSUPPORTED` be the authority. So do we. The fence/rally *reservation* is the one
+  exception, and its command set must track every dialect that defines one — `common.xml`
+  (fence 5000–5004, rally 5100) **and** `development.xml` (fence 5005 `NAV_FENCE_HOME_CIRCLE_INCLUSION`,
+  WIP). A fence id missing from that set would leak into a mission upload. Measured from the XML,
+  id by id — not a reserved id *range*, which would assume ids the dialect has not defined (§14).
+  Command ids are also required to be `uint16` integers before the family test, so a value like
+  `5001.9` cannot truncate on the wire into reserved fence `5001`.
 - **Lock per connection, profile, and type.** A fence upload and a mission download run
   concurrently; two fence uploads do not.
 - **Progress is status, not a port.** Phase and item counts go out output 1 as they happen.
@@ -1662,15 +1671,24 @@ PX4 has no equivalent, so the editor supplies a URL and nothing is baked in to r
 one measurement in this document was initially wrong because of that, including a count that
 measured the regex rather than the code.
 
-**Mission-item validation is not NAV-only.**
-*Wrong belief:* §9's shorthand "Mission items are `MAV_CMD_NAV_*`" means the mission validator
-rejects every non-NAV command.
-*Fact:* uploaded missions routinely contain `MAV_CMD_DO_*` and `MAV_CMD_CONDITION_*` (e.g.
-`DO_JUMP`, `CONDITION_DELAY`) alongside navigation. The mission validator's real job is to
-reject *fence* and *rally* command ids (and other out-of-family ids), not to strip DO/CONDITION
-items. Fence and rally validators stay strict to their families.
-*Check:* inspect any ArduPilot `.waypoints` / QGC plan with a jump or delay, or
-`rg "DO_JUMP|CONDITION_DELAY" ` against a captured mission download.
+**The mission validator reserves families; it does not allowlist commands (issue #90).**
+*Wrong belief (held, and shipped, until #90):* a mission item must fall inside a NAV + DO/CONDITION
+numeric window (16–95, 112–250); anything outside is rejected before upload.
+*Fact:* that window silently rejected legitimate items. PX4's mission parser
+(`mavlink_mission.cpp`, `parse_mavlink_mission_item`) accepts `SET_CAMERA_MODE` (530),
+`IMAGE_START_CAPTURE`/`STOP` (2000/2001), `VIDEO_START_CAPTURE`/`STOP` (2500/2501), and
+`DO_VTOL_TRANSITION` (3000) — all outside the window (verified: `DO_VTOL_TRANSITION` falls through
+to `nav_cmd` assignment, the `default` returns `MAV_MISSION_UNSUPPORTED`). ArduPilot's Copter
+mission-command list accepts a *different* set (the 176–250 `DO_*` camera commands, not the 2000s).
+The two firmwares disagree, the dialect XML has no "mission-capable" attribute to derive it from
+(a `MAV_CMD` entry carries only `hasLocation`/`isDestination`), and the reference clients at this
+layer do not guess: pymavlink `MAVWPLoader` and MAVSDK `MissionRaw` pass any command through, and
+QGroundControl treats the vehicle's `MISSION_ACK` as the authority on upload. So the validator now
+reserves only the fence (5000–5004) and rally (5100) families — the one rule that stops the three
+mission types corrupting each other's buffers — and defers command support to the firmware, which
+answers `MAV_MISSION_UNSUPPORTED` on output 1 for anything it cannot run.
+*Check:* `node --test test/mission/validate.test.js` (the #90 cases: 530/2000/3000 upload as mission
+items; 5001/5100 do not); PX4 source `parse_mavlink_mission_item`; the four reference clients above.
 
 **Missing Vehicle Profile must not invent a dialect catalog.**
 *Wrong belief:* `GET /mavlink/command/commands?vehicle=<id>` (or `/mavlink/enums` with no
