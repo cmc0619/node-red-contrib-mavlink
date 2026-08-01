@@ -1920,15 +1920,20 @@ asynchronously so helpers might be undefined when a later node's `registerType` 
 served at `resources/node-red-contrib-mavlink/mavlink-editor.js` and loaded by a relative
 `<script src>` at the top of `mavlink-local-identity.html` — one tag in the node HTML that owns the
 helper, which is the shape Node-RED core uses for its own shared editor resource (`debug-utils.js`
-in `core/common/21-debug.html`), and the only shape the resource docs describe. Node-RED's
-`appendConfig` *hoists* a relative-`src` script out of the module fragment, loads it first, and holds
-back every inline node `<script>` in that module until its `onload` fires, so `RED.mavlink.*` is
-defined before any `registerType` runs — no async race, and **position in `node-red.nodes` is
-irrelevant** (`loadNodes` splits the payload per module, not per node, so all thirteen share one
-`appendConfig` call). What *would* break it is an absolute `src`: `appendConfig` only hoists when the
-src fails `/^\s*(https?:|\/|\.)/`, so a leading `/` or `./` silently drops the guarantee — hence the
-relative-src pin in `test/tooling/package-contract.check.js`, and the docs' own
-"Note the URLs do not start with a `/`". The catalog source matrix is one function,
+in `core/common/21-debug.html`; core has no case at all of one node's HTML defining a global another
+node's HTML consumes, so there is no precedent for a tag per node). Two rules make it safe, and both
+are load-bearing. **Local Identity must be first in `node-red.nodes`:** the editor appends node HTML
+one *node* at a time — `getAllNodeConfigs` (registry.js:488) emits a
+`<!-- --- [red-module:<setId>] --- -->` marker per node **set** (the marker is named "red-module" but
+carries `module/node`), `loadNodes` (red.js:224) splits on it, and `stepConfig` walks the pieces
+sequentially with each `appendNodeConfig` waiting on the previous `done()`. `appendConfig` defers a
+node's inline scripts, and its `done()`, only when *that node's* HTML carries a relative-`src`
+script, so any node listed ahead of Local Identity runs `registerType` with `RED.mavlink` still
+undefined. **The `src` must stay relative:** `appendConfig` hoists and applies
+`RED.settings.apiRootUrl + srcUrl` only when the src fails `/^\s*(https?:|\/|\.)/`, so a leading `/`
+or `./` both drops the deferral and 404s under a non-root `httpAdminRoot` — the docs' own "Note the
+URLs do not start with a `/`". Both are pinned in `test/tooling/package-contract.check.js`.
+The catalog source matrix is one function,
 `RED.mavlink.resolveCatalogTarget({ isBuild? })` (Build → Dialect/`__vehicle`; wire → connection
 profile; empty → `{key:'empty', query:null}`, never `ardupilotmega`); the Build-tier default
 descriptors are `RED.mavlink.buildTierDialectDefaults({ modeField, withFirmware })`
@@ -1940,6 +1945,15 @@ narrower Build+list case as the `isBuild` override. `resources` is in `package.j
 `rg -n 'function resolveCatalogTarget' nodes` returns nothing; `rg -n 'buildTierDialectDefaults'
 nodes/mavlink-*.html`; `rg -n '<script[^>]*src=' nodes` returns exactly one line, in
 `mavlink-local-identity.html`, with no leading `/` or `.`.
+*Measured (Node-RED 5.0.1, Chromium):* boot `node node_modules/node-red/red.js -u <dir> -p 18800` with
+the package symlinked into `<dir>/node_modules`, load `/` and count
+`#red-ui-palette .red-ui-palette-node[data-palette-type^=mavlink-]`. Current order → **10/10** nodes
+registered, `RED.mavlink` 22 keys, no page errors. Move `mavlink-local-identity` last in
+`node-red.nodes` and restart → **2/10** (only `mavlink-out` and `mavlink-swarm`, the two that never
+touch `RED.mavlink` at `registerType` time), with `TypeError: Cannot read properties of undefined
+(reading 'validateUint8')` and `(reading 'buildTierDialectDefaults')`. `curl -H "Accept: text/html"
+localhost:18800/nodes | grep -c 'red-module:node-red-contrib-mavlink'` → **13**, one marker per node,
+which is what makes the order matter.
 
 **Build-tier enum catalogs must see the saved dialect before `/mavlink/dialects` returns.**
 *Wrong belief:* calling `loadEnumsCatalog` at the start of `oneditprepare` is fine because the

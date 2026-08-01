@@ -2,15 +2,24 @@
   Shared MAVLink editor helpers live in resources/mavlink-editor.js and are
   loaded via the stock Node-RED resource mechanism (DESIGN.md §6,
   https://nodered.org/docs/creating-nodes/resources). One node HTML carries the
-  tag and the rest of the module uses the helpers, the same shape Node-RED core
-  uses for debug-utils.js in core/common/21-debug.html.
+  tag and the other twelve use the helpers — the same shape Node-RED core uses
+  for debug-utils.js in core/common/21-debug.html.
 
-  The `src` must stay relative — no leading `/`, no leading `./`, no scheme.
-  Node-RED's appendConfig hoists a relative-`src` script out of the module
-  fragment, loads it first, and holds back *every* inline node script in the
-  module until its onload fires, so RED.mavlink.* is defined before any
-  registerType runs. Position in package.json node-red.nodes is irrelevant to
-  that; an absolute src is what would break it, by skipping the hoist.
+  Two rules keep this working, both load-bearing:
+
+  1. Local Identity must be FIRST in package.json node-red.nodes. Node-RED
+     appends node HTML one *node* at a time (getAllNodeConfigs emits a marker
+     per node set; loadNodes splits on it and walks the pieces sequentially),
+     and appendConfig only defers a node's inline scripts when that node's HTML
+     carries a relative-`src` script. Anything listed ahead of this file runs
+     its registerType with RED.mavlink still undefined. Measured against
+     Node-RED 5.0.1: moving this entry last leaves 2 of 10 palette nodes
+     registered and throws on RED.mavlink.validateUint8.
+  2. The `src` stays relative — no leading `/`, no `./`, no scheme. That is what
+     triggers the hoist and the RED.settings.apiRootUrl prefixing; an absolute
+     src 404s under a non-root httpAdminRoot.
+
+  Both are pinned in test/tooling/package-contract.check.js.
 -->
 <script src="resources/node-red-contrib-mavlink/mavlink-editor.js"></script>
 
