@@ -133,6 +133,26 @@
     return falseOk && trueOk;
   };
 
+  /**
+   * Normalize an extra-identity id list: drop blanks, duplicates, and the
+   * primary identity — the runtime always binds the primary first, so
+   * repeating it would register the same identity twice (issue #94). Pure so
+   * the Connection dialog's oneditsave stays glue and this rule is
+   * unit-testable without the editableList widget.
+   *
+   * @param {Array<string|null|undefined>} ids  raw row values, dialog order
+   * @param {string} primaryId  the Connection's primary Local Identity id
+   * @returns {string[]}
+   */
+  RED.mavlink.normalizeIdentityIds = function (ids, primaryId) {
+    var out = [];
+    (ids || []).forEach(function (id) {
+      if (!id || id === primaryId || out.indexOf(id) !== -1) return;
+      out.push(id);
+    });
+    return out;
+  };
+
   function valueFromSelector(selector) {
     var $el = $(selector);
     return $el && $el.length ? String($el.val() || '').trim() : '';

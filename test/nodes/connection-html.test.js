@@ -90,13 +90,10 @@ test('additionalIdentities has an editor row (issue #94 — feature must be reac
   );
   assert.match(
     html,
-    /this\.additionalIdentities\s*=\s*out/,
-    'oneditsave writes the collected ids back to the property'
-  );
-  assert.match(
-    html,
-    /id !== primary/,
-    'oneditsave excludes the primary Identity so it is never bound twice'
+    /this\.additionalIdentities\s*=\s*RED\.mavlink\.normalizeIdentityIds\(raw,\s*primary\)/,
+    'oneditsave routes through the shared, unit-tested normalizer — the '
+      + 'blank/duplicate/primary rules are behaviorally covered in '
+      + 'mavlink-editor-resource.test.js, not re-derived here'
   );
 });
 

@@ -118,16 +118,14 @@
       refreshTransportRows();
     },
     oneditsave: function () {
-      // Collect the extra-identity rows: drop blanks, duplicates, and the
-      // primary Identity — the runtime always binds that one first, so
-      // repeating it here would register the same identity twice.
+      // Collect the raw rows; the blank/duplicate/primary rules live in the
+      // shared, unit-tested RED.mavlink.normalizeIdentityIds (§6).
       var primary = $('#node-config-input-localIdentity').val();
-      var out = [];
+      var raw = [];
       $('#mav-conn-additional-identities').editableList('items').each(function () {
-        var id = $(this).find('select').val();
-        if (id && id !== primary && out.indexOf(id) === -1) out.push(id);
+        raw.push($(this).find('select').val());
       });
-      this.additionalIdentities = out;
+      this.additionalIdentities = RED.mavlink.normalizeIdentityIds(raw, primary);
     },
   });
 </script>
