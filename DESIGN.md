@@ -1955,15 +1955,20 @@ after 8 s of silence from the GCS the vehicle abandoned the transfer with `type=
 failing with the vehicle's reason discarded.
 *Check:* `node --test test/mission/upload.test.js`
 
-**COMMAND_INT x/y has no working keep-current sentinel.**
-*Wrong belief:* per common.xml, NaN lat/lon should encode as `INT32_MAX` ("keep current") in
-COMMAND_INT.
-*Fact:* ArduPilot's `location_from_command_t` runs `check_latlng` with no sentinel branch —
-`INT32_MAX` reads as 214.7°, out of range, command NAK'd; MAVSDK cannot even express unset x/y
-(bare `int32_t`, defaults 0) and QGC's equivalent path is latent UB (`NaN * 1e7 → int32`). The
-deployed way to say "keep current position" is COMMAND_LONG with NaN param5/6 — which is what the
-build-time rejection tells the operator.
-*Check:* `node --test test/command/carrier.test.js test/command/carrier-resend.test.js`
+**COMMAND_INT x/y has no *cross-fleet* keep-current sentinel — PX4 honors one, ArduPilot NAKs it.**
+*Wrong belief (round 1):* per common.xml, NaN lat/lon should encode as `INT32_MAX` ("keep
+current") in COMMAND_INT. *(Round 2, over-corrected: "no reference implements the sentinel at
+all" — too strong, see below.)*
+*Fact:* split by autopilot. **PX4's** receiver honors the paired form: `x == INT32_MAX && y ==
+INT32_MAX` decodes to NaN/NaN ("ignore") — the first branch of its COMMAND_INT handler in
+`mavlink_receiver.cpp`. **ArduPilot's** `location_from_command_t` runs `check_latlng` with no
+sentinel branch — `INT32_MAX` reads as 214.7°, out of range, command NAK'd. MAVSDK cannot even
+express unset x/y (bare `int32_t`, defaults 0) and QGC's equivalent path is latent UB
+(`NaN * 1e7 → int32`). So the sentinel works on exactly half the fleet, only in the
+both-fields-together form, and the cross-fleet way to say "keep current position" remains
+COMMAND_LONG with NaN param5/6 — which is what the build-time rejection tells the operator.
+*Check:* `node --test test/command/carrier.test.js test/command/carrier-resend.test.js`; PX4
+branch: `src/modules/mavlink/mavlink_receiver.cpp`, COMMAND_INT handler, first condition.
 
 **Local-frame COMMAND_INT x/y really is metres × 1e4 — PX4 implements it; ArduPilot refuses the
 frame rather than reading it raw.**
@@ -1987,6 +1992,18 @@ Therefore scaling ×1e4 is strictly correct, not a trade-off: it fixes a real 1e
 (a local reposition to `x = 50` m currently arrives as 5 mm) and cannot regress ArduPilot, which
 rejects the frame regardless of the value. There is no raw-metres consumer to preserve
 compatibility with.
+*Full frame matrix, later measured one frame at a time (same `x=1234567`, PX4, all ACCEPTED):*
+÷1e4 (metres) — LOCAL_NED (1), LOCAL_ENU (4), LOCAL_OFFSET_NED (7), BODY_NED (8),
+BODY_OFFSET_NED (9), BODY_FRD (12), LOCAL_FRD (20), LOCAL_FLU (21); ÷1e7 — GLOBAL_INT (5),
+MISSION (2), and RESERVED_13 (13, via the fallthrough). Every `LOCAL_FRAMES` member is therefore
+measured, none inferred, and the set is member-for-member identical to PX4's
+`mavlink_receiver.cpp` COMMAND_INT chain — the only decoder implementing the rule. The
+classification is code, not data, in every implementation (PX4 if-chain, ArduPilot switch, QGC
+equality): MAVLink's XML carries no is-local attribute, so a static named table is the ecosystem
+form, values frozen by MAVLink's no-renumbering rule (13's tombstone is the in-data proof).
+Frame 13 stays *unclassified* here — metres pass through unscaled — deliberately not matching
+PX4's ÷1e7 fallthrough, because either treatment invents semantics for a slot upstream deleted;
+passthrough is the do-nothing default.
 *Check (PX4):* `cd sitl && docker compose --profile sitl up -d px4-11`, send a local-frame
 COMMAND_INT, then `docker exec nrc-px4-11 sh -lc 'cd /opt/px4 && ./bin/px4-listener
 vehicle_command 1'`. Send **before** reading — `px4-listener` prints uORB's retained value on

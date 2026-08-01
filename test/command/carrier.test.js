@@ -123,13 +123,27 @@ test('MAV_FRAME_MISSION is not a local frame — x/y stay unscaled', () => {
   assert.deepEqual(intFieldsToLong(int).slice(4, 6), [10, -4]);
 });
 
-test('every measured local frame scales by 1e4, not just LOCAL_NED', () => {
-  // Measured on PX4: LOCAL_NED (1), BODY_NED (8) and LOCAL_FRD (20) all decode
-  // x=1234567 as 123.4567 m.
-  for (const frame of [1, 8, 20]) {
+test('all eight local frames scale by 1e4 — every member SITL-measured (§14)', () => {
+  // Measured on PX4, one frame at a time: x=1234567 decoded as 123.4567 m
+  // under LOCAL_NED (1), LOCAL_ENU (4), LOCAL_OFFSET_NED (7), BODY_NED (8),
+  // BODY_OFFSET_NED (9), BODY_FRD (12), LOCAL_FRD (20), LOCAL_FLU (21). The
+  // set is member-for-member identical to PX4's mavlink_receiver.cpp chain.
+  for (const frame of [1, 4, 7, 8, 9, 12, 20, 21]) {
     const int = longToIntFields([0, 0, 0, 0, 123.4567, 0, 0], { frame });
     assert.equal(int.x, 1234567, `frame ${frame} should scale ×1e4`);
   }
+});
+
+test('RESERVED_13 stays unclassified: metres pass through unscaled', () => {
+  // Frame 13 is a tombstone (upstream removed BODY_FLU and reserved the
+  // slot). Measured: PX4's fallthrough decodes it ÷1e7 — NOT as metres — so
+  // a name-based "BODY_* means local" rule would emit a wrong divisor today.
+  // We deliberately do not match PX4's fallthrough either: unclassified
+  // frames pass through unscaled, the do-nothing default for a slot whose
+  // semantics upstream deleted.
+  const int = longToIntFields([0, 0, 0, 0, 10, -4, 0], { frame: 13 });
+  assert.equal(int.x, 10);
+  assert.equal(int.y, -4);
 });
 
 test('non-coordinate param5/6 stay unscaled in a local frame', () => {
