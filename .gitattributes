@@ -1,0 +1,15 @@
+# Normalize line endings so a Windows checkout cannot corrupt what ships.
+# Without this, core.autocrlf=true materializes CRLF locally and the SITL
+# shell entrypoints break inside Linux containers ("\r: command not found"),
+# while a multiline LF regex in test/sitl/entrypoint-px4.test.js silently
+# stops matching (issue #101).
+* text=auto
+
+# Shell scripts are executed by Linux containers — always LF, on every OS.
+*.sh text eol=lf
+
+# Binary payloads: never touch. `text=auto` already detects these, but the
+# dialect seed is a ~2 MB load-bearing artifact and the screenshots are
+# documentation — declare them so no future attribute change can mangle them.
+*.gz binary
+*.png binary

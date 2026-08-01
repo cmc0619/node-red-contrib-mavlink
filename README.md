@@ -28,7 +28,7 @@ Restart Node-RED. The nodes appear under the **MAVLink** palette (config nodes u
 **Configuration nodes**). Editor dialog screenshots live in
 [`docs/screenshots/`](docs/screenshots/).
 
-Requires Node.js 18.5+ and Node-RED 4.0+.
+Requires Node.js 20+ and Node-RED 4.0+.
 
 ### Docker / volume mount (`/module`, Unraid, etc.)
 
@@ -108,3 +108,7 @@ npm install
 npm test
 npm run lint
 ```
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).

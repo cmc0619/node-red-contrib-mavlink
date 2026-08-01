@@ -55,10 +55,9 @@ const nodeRules = {
   'n/no-unsupported-features/node-builtins': [
     'error',
     {
-      // Supported Node 18 releases expose node:test and fetch even though
-      // plugin-n records their later non-experimental milestone.
+      // node:test and fetch are stable on the Node >=20 floor; only genuinely
+      // newer modules (node:sqlite and friends) should fail this rule.
       allowExperimental: true,
-      ignores: ['test'],
     },
   ],
 };
@@ -88,7 +87,7 @@ export default [
     },
     settings: {
       node: {
-        version: '>=18.5',
+        version: '>=20',
       },
     },
     linterOptions: {
@@ -106,7 +105,6 @@ export default [
         'error',
         {
           allowExperimental: true,
-          ignores: ['test', 'test.after', 'test.before'],
         },
       ],
     },
