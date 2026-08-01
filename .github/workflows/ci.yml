@@ -22,12 +22,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - node_version: 18.20.8
-            lint: false
           - node_version: 20.19.0
-            lint: true
           - node_version: 22.13.0
-            lint: true
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -43,10 +39,7 @@ jobs:
       - name: Install
         run: npm ci
 
-      # ESLint 10 requires Node >=20.19. Node 18 remains in the matrix to
-      # enforce the package's declared runtime floor with the full unit suite.
       - name: Lint
-        if: matrix.lint
         run: npm run lint
 
       - name: Unit tests
@@ -89,7 +82,7 @@ jobs:
             "$RUNNER_TEMP/$archive" \
             node-red@4.1.11 \
             node-red-node-test-helper@0.3.6
-          MAVLINK_PACKAGE_ROOT="$install_root/node_modules/node-red-contrib-mavlink" \
+          MAVLINK_PACKAGE_ROOT="$install_root/node_modules/@cmc0619/node-red-contrib-mavlink" \
             NODE_PATH="$install_root/node_modules" \
             node --test integration/node-red-smoke.test.js
 
@@ -100,7 +93,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - node_version: 18.20.8
+          - node_version: 20.19.0
             node_red: 4.1.11
           - node_version: 22.13.0
             node_red: 5.0.1

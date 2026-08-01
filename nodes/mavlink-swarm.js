@@ -21,10 +21,9 @@ module.exports = function registerMavlinkSwarm(RED) {
     }
 
     node.on('input', async (msg, send, done) => {
-      const emit = send || ((messages) => node.send(messages));
       const guard = guardSwarmInput(msg);
       if (guard.action === 'suppress') {
-        if (done) done();
+        done();
         return;
       }
 
@@ -68,12 +67,12 @@ module.exports = function registerMavlinkSwarm(RED) {
         // Output 1 carries the aggregate status record at the message root.
         // Output 0 (continue) wraps the aggregate under msg.payload as a normal
         // trigger (§9).
-        emit(aggregate.continue
+        send(aggregate.continue
           ? [{ payload: aggregate }, aggregate]
           : [null, aggregate]);
         if (!aggregate.success && aggregate.result !== 'dry_run') {
           done(new Error(`mavlink-swarm: ${aggregate.result}`));
-        } else if (done) {
+        } else {
           done();
         }
       } catch (err) {
@@ -85,7 +84,7 @@ module.exports = function registerMavlinkSwarm(RED) {
           detail: err.message,
         });
         delivery.applyActionStatus(node, 'error', err.message);
-        emit([null, record]);
+        send([null, record]);
         done(err);
       }
     });

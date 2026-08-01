@@ -37,10 +37,9 @@ module.exports = function registerMavlinkPayload(RED) {
     }
 
     node.on('input', (msg, send, done) => {
-      const emit = send || ((messages) => node.send(messages));
       try {
         if (shouldSuppress(msg)) {
-          if (done) done();
+          done();
           return;
         }
 
@@ -84,8 +83,8 @@ module.exports = function registerMavlinkPayload(RED) {
         });
 
         if (delivery === 'build') {
-          completeBuild(node, emit, built);
-          if (done) done();
+          completeBuild(node, send, built);
+          done();
           return;
         }
 
@@ -128,15 +127,15 @@ module.exports = function registerMavlinkPayload(RED) {
             .then((outcome) => {
               if (activeWaiter === waiter) activeWaiter = null;
               if (outcome.result === 'accepted') {
-                completeAck(node, emit, built, outcome);
-                if (done) done();
+                completeAck(node, send, built, outcome);
+                done();
               } else {
-                failAck(node, emit, built, outcome, msg, done);
+                failAck(node, send, built, outcome, msg, done);
               }
             })
             .catch((err) => {
               if (activeWaiter === waiter) activeWaiter = null;
-              fail(node, emit, err, msg, done);
+              fail(node, send, err, msg, done);
             });
           return;
         }
@@ -144,16 +143,16 @@ module.exports = function registerMavlinkPayload(RED) {
         // Send tier, or confirm requested on an unconfirmable message.
         connectionNode.send(built.message, { band: BAND.CONTROL, target, identityId });
         const detail = built.confirmation === 'command_ack' ? 'sent' : 'sent (unconfirmed)';
-        completeResult(node, emit, 'succeeded', detail, built);
-        if (done) done();
+        completeResult(node, send, 'succeeded', detail, built);
+        done();
       } catch (err) {
-        fail(node, emit, err, msg, done);
+        fail(node, send, err, msg, done);
       }
     });
 
     node.on('close', (done) => {
       cancelWaiter();
-      if (done) done();
+      done();
     });
   }
 
@@ -250,9 +249,9 @@ module.exports = function registerMavlinkPayload(RED) {
   RED.nodes.registerType('mavlink-payload', MavlinkPayloadNode);
 };
 
-function completeAck(node, emit, built, outcome) {
+function completeAck(node, send, built, outcome) {
   node.status({ fill: 'green', shape: 'dot', text: cap(`ack ${built.message.name}`) });
-  emit([
+  send([
     { payload: { result: 'succeeded', message: built.message } },
     statusRecord('succeeded', 'command-ack accepted', {
       confirmation: built.confirmation,
@@ -264,9 +263,9 @@ function completeAck(node, emit, built, outcome) {
   ]);
 }
 
-function failAck(node, emit, built, outcome, msg, done) {
+function failAck(node, send, built, outcome, msg, done) {
   node.status({ fill: 'red', shape: 'ring', text: cap(`${built.message.name} ${outcome.result}`) });
-  emit([
+  send([
     null,
     statusRecord(outcome.result, outcome.detail || 'command not accepted', {
       confirmation: built.confirmation,
@@ -323,25 +322,25 @@ function valuesFrom(config) {
   };
 }
 
-function completeBuild(node, emit, built) {
+function completeBuild(node, send, built) {
   node.status({ fill: 'green', shape: 'dot', text: cap('built payload') });
-  emit([
+  send([
     { payload: built.message },
     statusRecord('succeeded', 'built', { confirmation: built.confirmation }),
   ]);
 }
 
-function completeResult(node, emit, result, detail, built) {
+function completeResult(node, send, result, detail, built) {
   node.status({ fill: 'green', shape: 'dot', text: cap(detail) });
-  emit([
+  send([
     { payload: { result, message: built.message } },
     statusRecord(result, detail, { confirmation: built.confirmation }),
   ]);
 }
 
-function fail(node, emit, err, msg, done) {
+function fail(node, send, err, msg, done) {
   node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
-  emit([null, statusRecord('failed', err.message)]);
+  send([null, statusRecord('failed', err.message)]);
   done(err);
 }
 

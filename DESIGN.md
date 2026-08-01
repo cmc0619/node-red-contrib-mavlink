@@ -1387,7 +1387,7 @@ instead of something that catches defects.
 |---|---|---|
 | `@eslint/js` recommended | error | The maintained ESLint correctness baseline catches undefined names, unreachable code, dead bindings, precision loss, discarded error causes, and similar defects without imposing a house style. MAVLink's intentional NUL-stripping regexes exempt `no-control-regex`; empty `catch` blocks are allowed where absence is the fallback contract. |
 | `eslint-plugin-n` dependency checks | error | `no-deprecated-api`, `no-extraneous-require`, and `no-missing-require` catch Node.js/package mistakes. The optional `sockopt` module and `node-mavlink`-provided `mavlink-mappings` are explicit resolution exceptions. |
-| `eslint-plugin-n` compatibility checks | error | `no-unsupported-features/es-builtins`, `no-unsupported-features/es-syntax`, and `no-unsupported-features/node-builtins` enforce the package's Node `>=18.5` floor. The builtins check allows experimental APIs and explicitly ignores `test`, `test.before`, and `test.after` because the CI-pinned Node 18 runtime exposes them (as it does `fetch`) before their later non-experimental milestones; newer modules such as `node:sqlite` still fail. |
+| `eslint-plugin-n` compatibility checks | error | `no-unsupported-features/es-builtins`, `no-unsupported-features/es-syntax`, and `no-unsupported-features/node-builtins` enforce the package's Node `>=20` floor, set in `eslint.config.mjs`'s `settings.node.version` (the plugin does not read `engines` here — both must move together). The builtins check allows experimental APIs. `node:test` is stable on this floor (since Node 20.0.0), so the Node-18-era `ignores` for `test`/`test.before`/`test.after` are gone. `fetch` is not — it stays marked experimental until Node 21, and `allowExperimental` is what keeps `lib/metadata/xml-catalog.js` and `lib/param/defs.js` passing. Newer modules such as `node:sqlite` still fail. |
 | `eslint-plugin-promise` API checks | error | `no-new-statics`, `no-return-in-finally`, `no-return-wrap`, and `valid-params` catch concrete Promise API/control-flow mistakes without imposing chaining style or rejecting Node-RED's callback boundaries. |
 | `no-bitwise` | error, **codec directory only** | The field codec builds masks arithmetically (§5). Banning the operators makes that a build failure rather than a review comment, in the bug class that historically cost the most rework. Runtime code elsewhere is unaffected. |
 
@@ -1686,7 +1686,7 @@ Local Identity editor shows HB Interval; Connection editor has no Heartbeat/Broa
 *Fact:* Node resolves `require('mavlink-mappings')` from the file that loads
 (`…/lib/metadata/bundled.js`), walking `node_modules` upward from that real path. A bare mount
 has no `node_modules`. Worse, `npm install /path` **symlinks** the package and npm's local-path
-rule skips installing that package's dependencies — so `/data/node_modules/node-red-contrib-mavlink`
+rule skips installing that package's dependencies — so `/data/node_modules/@cmc0619/node-red-contrib-mavlink`
 → `/module` still cannot see `mavlink-mappings`. Fix with `npm install --omit=dev` **on the
 mount**, or install a real copy into the user directory (`npm install --install-links /path` or
 a packed `.tgz` / git URL).
@@ -1917,7 +1917,7 @@ fills, dialect select, `currentCatalogQuery`, `validateUint8`, …) and its own 
 + dialect/vehicle/firmware `defaults.validate` blocks, because Node-RED loads external `<script src>`
 asynchronously so helpers might be undefined when a later node's `registerType` parses.
 *Fact:* The helpers live once in [`resources/mavlink-editor.js`](resources/mavlink-editor.js),
-served at `resources/node-red-contrib-mavlink/mavlink-editor.js` and loaded by a relative
+served at `resources/@cmc0619/node-red-contrib-mavlink/mavlink-editor.js` and loaded by a relative
 `<script src>` at the top of `mavlink-local-identity.html` (listed first in `package.json`
 `node-red.nodes` so its resource tag leads the module). Node-RED's `appendConfig` defers every inline node
 `<script>` until each module's relative-`src` scripts have fired `onload`, so `RED.mavlink.*` is

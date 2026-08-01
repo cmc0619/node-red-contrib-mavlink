@@ -61,10 +61,9 @@ module.exports = function registerMavlinkOut(RED) {
     node.status({ fill: 'grey', shape: 'ring', text: '' });
 
     node.on('input', (msg, send, done) => {
-      const emit = send || ((messages) => node.send(messages));
       // §9 suppress: msg.payload === false → silent no-op.
       if (shouldSuppress(msg)) {
-        if (done) done();
+        done();
         return;
       }
 
@@ -76,7 +75,7 @@ module.exports = function registerMavlinkOut(RED) {
           timestamp: Date.now(),
         });
         applyActionStatus(node, 'error', 'bad payload');
-        emit([null, sr]);
+        send([null, sr]);
         done(new Error('mavlink-out: unrecognised payload shape'));
         return;
       }
@@ -100,7 +99,7 @@ module.exports = function registerMavlinkOut(RED) {
           timestamp: Date.now(),
         });
         applyActionStatus(node, 'error', capBadge(err.message));
-        emit([null, sr]);
+        send([null, sr]);
         done(new Error(`mavlink-out: ${err.message}`));
         return;
       }
@@ -112,8 +111,8 @@ module.exports = function registerMavlinkOut(RED) {
         timestamp: Date.now(),
       });
       applyActionStatus(node, 'ok', capBadge(message.name));
-      emit([msg, sr]);
-      if (done) done();
+      send([msg, sr]);
+      done();
     });
 
     node.on('close', (_done) => {

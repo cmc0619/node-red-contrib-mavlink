@@ -21,10 +21,9 @@ module.exports = function registerMavlinkState(RED) {
     }
 
     node.on('input', (msg, send, done) => {
-      const emit = send || ((messages) => node.send(messages));
       try {
         if (msg.payload === false) {
-          if (done) done();
+          done();
           return;
         }
         if (!connectionNode || !connectionNode.peerTable) {
@@ -38,21 +37,21 @@ module.exports = function registerMavlinkState(RED) {
           compid: firstDefined(payload.compid, config.targetComponent),
         });
         node.status({ fill: 'green', shape: 'dot', text: cap(`${peers.length} peer(s)`) });
-        emit([
+        send([
           { payload: peers },
           statusRecord('succeeded', 'snapshot', { count: peers.length }),
         ]);
-        if (done) done();
+        done();
       } catch (err) {
         node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
-        emit([null, statusRecord('failed', err.message)]);
+        send([null, statusRecord('failed', err.message)]);
         done(err);
       }
     });
 
     node.on('close', (done) => {
       if (feed) feed.close();
-      if (done) done();
+      done();
     });
   }
 
