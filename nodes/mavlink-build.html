@@ -315,8 +315,53 @@
           return 'param' + index;
         }
 
+        /**
+         * §6: target components are MAV_COMPONENT dropdowns. The dialect XML
+         * leaves `target_component` as a bare uint8 (no enum=), so the generic
+         * enum path never fires — same CompID table every other node uses.
+         * Option values are numeric: the wire field has no enum metadata, so
+         * encodeMessage cannot resolve entry names.
+         */
+        function targetComponentInput(spec) {
+          var saved = savedFields[spec.name];
+          var sel = $('<select class="mav-field-input"></select>')
+            .attr('data-field', spec.name)
+            .attr('data-kind', 'enum')
+            .attr('title', spec.description || '');
+          // Seed with the saved id so a slow catalog fetch does not look blank.
+          sel.append($('<option></option>').val('').text('\u2014'));
+          if (saved !== undefined && saved !== null && saved !== '') {
+            sel.append(
+              $('<option></option>').val(String(saved)).text('#' + saved)
+            );
+            sel.val(String(saved));
+          }
+          if (RED.mavlink && typeof RED.mavlink.loadEnumsCatalog === 'function') {
+            RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
+              // May run before the select is appended (empty-dialect sync
+              // short-circuit) — fillCompIdSelect on a detached node is fine;
+              // options ride along when the row is inserted.
+              RED.mavlink.fillCompIdSelect(
+                sel,
+                ((catalog || {}).enums || {}).MAV_COMPONENT || [],
+                {
+                  allowEmpty: true,
+                  emptyLabel: '\u2014',
+                  saved: saved !== undefined && saved !== null && saved !== ''
+                    ? saved
+                    : sel.val(),
+                }
+              );
+            });
+          }
+          return sel;
+        }
+
         function fieldInput(spec, enums) {
           var saved = savedFields[spec.name];
+          if (spec.name === 'target_component') {
+            return targetComponentInput(spec);
+          }
           if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
             var entries = enums[spec.enum];
             var falseTrue = RED.mavlink.isFalseTrueEnum(entries);
