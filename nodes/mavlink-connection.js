@@ -130,6 +130,10 @@ module.exports = function registerMavlinkConnection(RED) {
   });
 };
 
+// Exposed for direct unit testing (test/nodes/connection-signing.test.js) —
+// same pattern as mavlink-vehicle.js's FIRMWARE_TYPES/VEHICLE_FAMILIES export.
+module.exports.buildSigning = buildSigning;
+
 /**
  * Build the runtime identity snapshot from a Local Identity config node,
  * deriving the companion's sysid from the vehicle and resolving heartbeat enum
@@ -209,8 +213,13 @@ function buildTransportConfig(config) {
 /**
  * Assemble the signing config for the runtime. The passphrase lives only in
  * Node-RED encrypted credentials; the key is derived from it via node-mavlink's
- * primitive, and only when signing is actually on (§7). Sign-outbound with no
- * passphrase fails the connection closed in the runtime.
+ * primitive whenever a passphrase is present (§7). Sign-outbound and
+ * require-signed stay independent switches that control *policy* — outbound
+ * signing and whether unsigned inbound is rejected — not whether the key
+ * exists to verify with: gating derivation on those checkboxes left a
+ * passphrase-only connection with no key at all, so every signed inbound
+ * frame failed verification silently. Sign-outbound with no passphrase still
+ * fails the connection closed in the runtime.
  *
  * @param {object} config
  * @param {object} [credentials]
@@ -218,17 +227,15 @@ function buildTransportConfig(config) {
  */
 function buildSigning(config, credentials) {
   const passphrase = credentials && credentials.signingPassphrase;
-  const signOutbound = !!config.signOutbound;
-  const requireSigned = !!config.requireSigned;
   const signing = {
     linkId: config.linkId ? Number(config.linkId) : 0,
-    signOutbound,
-    requireSigned,
+    signOutbound: !!config.signOutbound,
+    requireSigned: !!config.requireSigned,
     acceptInvalid: !!config.acceptInvalid,
     hasKey: !!passphrase,
     key: null,
   };
-  if (passphrase && (signOutbound || requireSigned)) {
+  if (passphrase) {
     const { MavLinkPacketSignature } = require('node-mavlink');
     signing.key = MavLinkPacketSignature.key(passphrase);
   }

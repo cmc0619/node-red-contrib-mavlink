@@ -96,7 +96,12 @@ module.exports = function registerMavlinkIn(RED) {
 
       // Changed-only: drop if the fields are byte-for-byte identical to the last delivery.
       if (changedOnly) {
-        const json = JSON.stringify(decoded.fields);
+        // 64-bit fields decode as BigInt (node-mavlink); JSON.stringify throws
+        // on those unless given a replacer. This only affects the comparison
+        // key — msg.payload below still carries the original decoded.fields.
+        const json = JSON.stringify(decoded.fields, (k, v) =>
+          typeof v === 'bigint' ? v.toString() : v
+        );
         if (lastFieldJson.get(key) === json) return;
         lastFieldJson.set(key, json);
       }

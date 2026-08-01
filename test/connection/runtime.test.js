@@ -369,6 +369,81 @@ test('close before start still calls done (constructor-threw teardown path)', ()
   assert.equal(called, true);
 });
 
+test('_pump drops an item whose serialize throws (unknown dialect message) and keeps draining', async () => {
+  const wire = fakeWire();
+  const realSerialize = wire.serialize;
+  wire.serialize = (message, ctx) => {
+    // Mirrors wire.js's real failure: a message name absent from the bound
+    // dialect. Only the bad name should be dropped; the queue must not wedge.
+    if (message.name === 'BOGUS_MESSAGE') {
+      throw new Error("no wire class for message 'BOGUS_MESSAGE'");
+    }
+    return realSerialize(message, ctx);
+  };
+  const errors = [];
+  const { connection, dg } = build(
+    {},
+    { wire, logger: { info() {}, warn() {}, error: (m) => errors.push(m) } }
+  );
+  await connection.start();
+
+  connection.send({ name: 'BOGUS_MESSAGE', fields: {} }, { band: BAND.CONTROL });
+  connection.send({ name: 'GOOD_MESSAGE', fields: {} }, { band: BAND.CONTROL });
+  await delay(30);
+
+  const names = dg.sockets[0].sent.map((s) => JSON.parse(s.buffer.toString()).name);
+  assert.deepEqual(names, ['GOOD_MESSAGE'], 'the bad envelope is dropped, the good one still transmits');
+  assert.ok(errors.some((m) => /BOGUS_MESSAGE/.test(m)), 'the serialize failure is surfaced via the logger');
+
+  // A heartbeat tick afterward proves _draining was correctly reset, not
+  // left wedged true by the throw.
+  connection.heartbeats.tick();
+  await delay(30);
+  const afterNames = dg.sockets[0].sent.map((s) => JSON.parse(s.buffer.toString()).name);
+  assert.ok(afterNames.includes('HEARTBEAT'), 'heartbeats still transmit after a dropped envelope');
+  connection.close();
+});
+
+test('close() during an in-flight start() must not resume into CONNECTED with live timers', async () => {
+  const { connection, dg, timers } = build();
+
+  const starting = connection.start();
+  // close() races the still-pending transport.open() (mockDgram's socket.bind
+  // resolves 'listening' via a queued setTimeout, so this runs first).
+  connection.close();
+  await starting;
+  await delay(30);
+
+  assert.notEqual(connection.getState(), STATE.CONNECTED, 'must not resume into CONNECTED after close()');
+  assert.equal(timers.active(), 0, 'no heartbeat/sweep timer left running after the race');
+  assert.equal(dg.sockets[0].closed, true, 'the just-opened transport must still be closed');
+});
+
+test('an open() rejected by a racing close() resolves start() quietly, not as an error', async () => {
+  // TCP-style race: the transport settles its pending open() with a rejection
+  // when close() interrupts it. start() must swallow that — surfacing it would
+  // paint a spurious deploy-time ERROR via the node's start().catch().
+  const { connection } = build();
+  let rejectOpen;
+  connection._transportFactory = () => ({
+    mode: 'tcp',
+    on() {},
+    open: () => new Promise((resolve, reject) => { rejectOpen = reject; }),
+    close: (cb) => {
+      const err = new Error('TCP transport closed during open');
+      err.code = 'TCP_CLOSED_DURING_OPEN';
+      rejectOpen(err);
+      cb();
+    },
+    send() {},
+  });
+
+  const starting = connection.start();
+  connection.close();
+  await starting; // must not reject
+  assert.notEqual(connection.getState(), STATE.CONNECTED);
+});
+
 test('an identity override outside the bound set is rejected, never falling back', async () => {
   const { connection } = build();
   await connection.start();
