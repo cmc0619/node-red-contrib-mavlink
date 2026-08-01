@@ -117,10 +117,21 @@ test('a stalled clock still yields strictly increasing outbound timestamps', () 
 test('the outbound sequence wraps 0..255', () => {
   const s = new SigningState();
   const seqs = [];
-  for (let i = 0; i < 257; i += 1) seqs.push(s.nextSeq());
+  for (let i = 0; i < 257; i += 1) seqs.push(s.nextSeq(1, 1));
   assert.equal(seqs[0], 0);
   assert.equal(seqs[255], 255);
   assert.equal(seqs[256], 0); // wrapped
+});
+
+test('each source component gets its own sequence stream (issue #92)', () => {
+  // Receivers do loss detection per (sysid, compid); interleaving two
+  // identities on one counter would show phantom gaps in both streams.
+  const s = new SigningState();
+  assert.equal(s.nextSeq(255, 190), 0);
+  assert.equal(s.nextSeq(255, 190), 1);
+  assert.equal(s.nextSeq(255, 191), 0); // second identity starts fresh
+  assert.equal(s.nextSeq(255, 190), 2); // first stream unaffected
+  assert.equal(s.nextSeq(255, 191), 1);
 });
 
 test('sign-outbound with no key fails the connection closed', () => {

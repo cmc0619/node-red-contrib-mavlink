@@ -486,3 +486,119 @@ test('an identity override outside the bound set is rejected, never falling back
   assert.throws(() => connection.send({ name: 'PING', fields: {} }, { identityId: 'ghost' }), /not bound/);
   connection.close();
 });
+
+// ── issue #91 / #93: endpoint durability and terminal-state hygiene ──────────
+
+/** Teach the peer table an endpoint for sysid 7 / compid 1 via a heartbeat. */
+function introducePeer(dg) {
+  dg.sockets[0].receive(
+    frameBuffer({
+      name: 'HEARTBEAT',
+      sysid: 7,
+      compid: 1,
+      fields: { type: 2, autopilot: 3, base_mode: 0, custom_mode: 0, system_status: 4 },
+    }),
+    { address: '10.0.0.7', port: 14551 }
+  );
+}
+
+test('a transient send error warns but keeps the peer endpoint (#91)', async () => {
+  const warns = [];
+  const { connection, dg } = build(
+    {},
+    { logger: { warn: (m) => warns.push(m), info() {}, error() {} } }
+  );
+  await connection.start();
+  introducePeer(dg);
+
+  dg.sockets[0].send = (_buffer, _port, _address, callback) => {
+    const err = new Error('send EHOSTUNREACH 10.0.0.7:14551');
+    err.code = 'EHOSTUNREACH';
+    setTimeout(() => callback(err), 0);
+  };
+  connection.send(
+    { name: 'COMMAND_LONG', fields: {} },
+    { band: BAND.CONTROL, target: { sysid: 7, compid: 1 } }
+  );
+  await delay(30);
+
+  assert.ok(
+    warns.some((m) => /outbound send failed/.test(m)),
+    'the failure itself is still surfaced'
+  );
+  assert.deepEqual(
+    connection.peerTable.endpointFor(7, 1),
+    { address: '10.0.0.7', port: 14551 },
+    'an ICMP blip must not delete the best-known address'
+  );
+  connection.close();
+});
+
+test('a non-transient send error still demotes the endpoint (failover intact)', async () => {
+  const { connection, dg } = build(
+    {},
+    { logger: { warn() {}, info() {}, error() {} } }
+  );
+  await connection.start();
+  introducePeer(dg);
+
+  dg.sockets[0].send = (_buffer, _port, _address, callback) => {
+    const err = new Error('send EMSGSIZE');
+    err.code = 'EMSGSIZE';
+    setTimeout(() => callback(err), 0);
+  };
+  connection.send(
+    { name: 'COMMAND_LONG', fields: {} },
+    { band: BAND.CONTROL, target: { sysid: 7, compid: 1 } }
+  );
+  await delay(30);
+
+  assert.equal(
+    connection.peerTable.endpointFor(7, 1),
+    null,
+    'non-transient failures keep the existing failover behaviour'
+  );
+  connection.close();
+});
+
+test('targeted send with no known endpoint warns once, not per packet (#91)', async () => {
+  const warns = [];
+  const { connection, dg } = build(
+    {},
+    { logger: { warn: (m) => warns.push(m), info() {}, error() {} } }
+  );
+  await connection.start();
+
+  const opts = { band: BAND.CONTROL, target: { sysid: 9, compid: 9 } };
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, opts);
+  await delay(20);
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, opts);
+  await delay(20);
+
+  assert.equal(
+    warns.filter((m) => /no known endpoint for target 9\/9/.test(m)).length,
+    1,
+    'the fallback is loud exactly once per unresolved target'
+  );
+  assert.equal(dg.sockets[0].sent.length, 2, 'the frames still go out via the configured remote');
+  connection.close();
+});
+
+test('a transport error stops the heartbeat and sweep timers (#93)', async () => {
+  const { connection, dg, timers } = build(
+    {},
+    { logger: { warn() {}, info() {}, error() {} } }
+  );
+  await connection.start();
+  assert.ok(timers.active() > 0, 'heartbeat/sweep timers run while connected');
+
+  dg.sockets[0].emit('error', new Error('boom'));
+
+  assert.equal(connection.getState(), STATE.ERROR);
+  assert.equal(
+    timers.active(),
+    0,
+    'ERROR is terminal until redeploy — periodic work must stop with it'
+  );
+  connection.close();
+});
