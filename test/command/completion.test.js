@@ -95,3 +95,14 @@ test('TAKEOFF completion stays pending on an absolute frame until the AMSL targe
   const res = checkCompletion(COMPLETION.TAKEOFF, amslParams, pt, 1, 1, 5);
   assert.equal(res.done, false);
 });
+
+test('TAKEOFF completion reports missing AMSL position data for an absolute frame', () => {
+  // relative_alt present but alt absent: an absolute frame cannot derive the
+  // climb target without AMSL, so it must stay pending rather than fall back to
+  // the relative datum and confirm on the wrong number.
+  const amslParams = [0, 0, 0, 0, 0, 0, 520];
+  const pt = peerWithAlts(1, 1, undefined, 20000);
+  const res = checkCompletion(COMPLETION.TAKEOFF, amslParams, pt, 1, 1, 5);
+  assert.equal(res.done, false);
+  assert.match(res.detail, /no AMSL position data/);
+});
