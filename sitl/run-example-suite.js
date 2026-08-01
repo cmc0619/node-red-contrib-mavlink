@@ -450,6 +450,9 @@ function verdictFrom(profile, summary, log) {
 
 function runApControlScript(body, timeoutMs = 20000) {
   // Run out-of-band so Node-RED is not holding 14550.
+  // Pass the source as node argv (not bash -c + JSON.stringify): bash double
+  // quotes leave `\\n` literal, so `node -e` used to SyntaxError and the old
+  // harness ignored the exit code — GUIDED prep never actually ran.
   const script = `
     const { Connection, BAND } = require(${JSON.stringify(path.join(ROOT, 'lib/connection'))});
     const { loadBundled } = require(${JSON.stringify(path.join(ROOT, 'lib/metadata'))});
@@ -476,11 +479,16 @@ function runApControlScript(body, timeoutMs = 20000) {
       process.exit(1);
     });
   `;
-  const r = sh(`node -e ${JSON.stringify(script)}`, timeoutMs);
-  if (r.code !== 0) {
-    throw new Error(`AP control script failed (exit ${r.code}): ${r.out.slice(0, 300)}`);
+  const r = spawnSync('node', ['-e', script], {
+    encoding: 'utf8',
+    timeout: timeoutMs,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  const out = `${r.stdout || ''}${r.stderr || ''}`;
+  if (r.status !== 0) {
+    throw new Error(`AP control script failed (exit ${r.status}): ${out.slice(0, 300)}`);
   }
-  return r;
+  return { code: r.status, out };
 }
 
 /** Vehicle containers only — never restart nrc-nodered between examples. */
