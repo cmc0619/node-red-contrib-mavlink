@@ -1770,12 +1770,25 @@ only a pointer to that workflow.
 example 01’s arm→takeoff chain.
 *Fact:* after other suite members leave sysid 1 in STABILIZE (or the prep races a bind),
 `MAV_CMD_NAV_TAKEOFF` returns `MAV_RESULT_DENIED` (resultCode 4) even when arm ACKs.
-Example 01 now mirrors 02: arm → GUIDED → takeoff inside the flow. Harness prep still
-force-disarms then GUIDED as belt-and-suspenders, and cleanup disarms only after flows
-release the UDP bind. Measured against official prebuilt
+Example 01 now mirrors 02: arm → GUIDED → takeoff inside the flow. Harness prep
+`ap-guided-1` still SET_MODE GUIDED after the per-example fleet restart. Measured
+against official prebuilt
 `firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu/arducopter`
 (`ARDUPILOT_REF=Copter-4.7.0` in `sitl/Dockerfile.ardupilot`).
 *Check:* `examples/sitl/01-completion-takeoff.json`, `sitl/run-example-suite.js`.
+
+**SITL suite must docker-restart the vehicle fleet between examples.**
+*Wrong belief:* post-example force-disarm (AP `COMPONENT_ARM_DISARM` with magic
+`21196`, PX4 `commander disarm -f`) is enough isolation for the next takeoff /
+arm example.
+*Fact:* force-disarm leaves the SITL vehicle at the previous AGL (measured ~18 m
+after example 01). ArduCopter then accepts arm + GUIDED but returns
+`MAV_RESULT_DENIED` (resultCode 4) on `MAV_CMD_NAV_TAKEOFF` because the vehicle
+is not on the ground. The harness `docker restart`s AP 1–5, PX4 11–15, and
+companions 20/21 before each non-SKIP example (not `nrc-nodered`), waits for
+GPS/EKF settle, and re-applies PX4 lab helpers. That is the altitude reset;
+force-disarm cleanup was removed as ineffective for this path.
+*Check:* `sitl/run-example-suite.js` (`restartVehicleFleet`), `sitl/AGENTS.md`.
 
 **Param set echo-confirm must use a live param id and the vehicle’s type.**
 *Wrong belief:* example 13 can keep `ARMING_CHECK` as `MAV_PARAM_TYPE_REAL32` forever.

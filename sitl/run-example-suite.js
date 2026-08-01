@@ -4,6 +4,10 @@
  * Deploy each examples/sitl/*.json into the lab Node-RED (host :1880), fire
  * injects, scrape debug/error lines, and write a JSON report.
  *
+ * Before each non-SKIP example, docker-restarts the vehicle fleet (not
+ * Node-RED) so altitude / EKF / arm state cannot leak across tests — force-
+ * disarm alone leaves AGL and makes NAV_TAKEOFF DENIED. See sitl/AGENTS.md.
+ *
  * Post curated verdicts to a GitHub Issue (label sitl-results), close the prior
  * issue, and keep the JSON out of git — see sitl/AGENTS.md.
  *
@@ -50,8 +54,8 @@ const PROFILE = {
   '03-temporarily-rejected': {
     waitMs: 30000,
     expect: 'arm eventually accepted (TEMPORARILY_REJECTED only on fresh boot)',
-    notes: 'restart prep races fresh boot; TEMPORARILY_REJECTED remains best-effort if GPS is ready quickly',
-    prep: 'restart-ap-1',
+    notes:
+      'fleet restart already boots AP-1; TEMPORARILY_REJECTED remains best-effort if GPS/EKF settle before inject',
   },
   '04-mode-tables': {
     waitMs: 20000,
@@ -472,42 +476,83 @@ function runApControlScript(body, timeoutMs = 20000) {
   sh(`node -e ${JSON.stringify(script)}`, timeoutMs);
 }
 
+/** Vehicle containers only — never restart nrc-nodered between examples. */
+const VEHICLE_CONTAINERS = [
+  'nrc-ap-1',
+  'nrc-ap-2',
+  'nrc-ap-3',
+  'nrc-ap-4',
+  'nrc-ap-5',
+  'nrc-px4-11',
+  'nrc-px4-12',
+  'nrc-px4-13',
+  'nrc-px4-14',
+  'nrc-px4-15',
+  'nrc-ap-companion-20',
+  'nrc-px4-companion-21',
+];
+
+const PX4_VEHICLE_CONTAINERS = [
+  'nrc-px4-11',
+  'nrc-px4-12',
+  'nrc-px4-13',
+  'nrc-px4-14',
+  'nrc-px4-15',
+];
+
+/** GPS/EKF settle after docker restart (override with SITL_FLEET_SETTLE_MS). */
+const FLEET_SETTLE_MS = Number(process.env.SITL_FLEET_SETTLE_MS) > 0
+  ? Number(process.env.SITL_FLEET_SETTLE_MS)
+  : 20000;
+
 async function setApGuided(sysid = 1) {
+  // Fleet restart already put the vehicle on the ground disarmed; only GUIDED.
   runApControlScript(`
       const t = { sysid: ${sysid}, compid: 1 };
-      // Force-disarm first so a leftover airborne/armed state cannot DENY takeoff.
-      conn.send(buildCommandLong(400, ${sysid}, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
-      await sleep(800);
       conn.send(buildCommandLong(176, ${sysid}, 1, [1, 4, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
       await sleep(800);
   `);
 }
 
-async function forceDisarmApFleet() {
-  runApControlScript(`
-      for (const sysid of [1, 2, 3, 4, 5]) {
-        const t = { sysid, compid: 1 };
-        conn.send(buildCommandLong(400, sysid, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
-        await sleep(200);
-      }
-      await sleep(500);
-  `, 25000);
+function applyPx4LabHelpers(containers = PX4_VEHICLE_CONTAINERS) {
+  // Parallel param poke — each SIH instance needs its own socket.
+  const inner =
+    "cd /opt/px4 && ./bin/px4-param set MAV_0_BROADCAST 1 >/dev/null; " +
+    "./bin/px4-param set COM_RCL_EXCEPT 7 >/dev/null; " +
+    "./bin/px4-param set COM_ARM_MAG_STR 0 >/dev/null; " +
+    "./bin/px4-commander disarm -f >/dev/null 2>&1 || true";
+  const parts = containers.map(
+    (c) => `docker exec ${c} sh -lc ${JSON.stringify(inner)} >/dev/null 2>&1 || true`
+  );
+  sh(`(${parts.join(' & ')}; wait)`, 60000);
+}
+
+/**
+ * Reset every SITL vehicle between examples. Force-disarm does not clear AGL;
+ * ArduCopter then DENY's NAV_TAKEOFF when still ~airborne from a prior flight.
+ */
+async function restartVehicleFleet() {
+  console.log('  restarting vehicle fleet…');
+  const r = sh(
+    `for c in ${VEHICLE_CONTAINERS.join(' ')}; do docker restart "$c" >/dev/null & done; wait`,
+    180000
+  );
+  if (r.code !== 0) {
+    console.warn(`  fleet restart exit ${r.code}: ${r.out.slice(0, 200)}`);
+  }
+  await sleep(FLEET_SETTLE_MS);
+  applyPx4LabHelpers();
+  await sleep(1500);
 }
 
 async function prep(kind) {
   if (kind === 'ap-guided-1') {
     await setApGuided(1);
   }
-  if (kind === 'restart-ap-1') {
-    sh('docker restart nrc-ap-1 >/dev/null', 30000);
-    // GPS/EKF need longer than container "Up"; 8s was still DENY-on-arm.
-    await sleep(20000);
-  }
   if (kind === 'px4-home-ready' || kind === 'px4-mode-ready') {
-    sh(
-      `docker exec nrc-px4-11 sh -lc 'cd /opt/px4 && ./bin/px4-param set MAV_0_BROADCAST 1 >/dev/null; ./bin/px4-param set COM_RCL_EXCEPT 7 >/dev/null; ./bin/px4-param set COM_ARM_MAG_STR 0 >/dev/null; ./bin/px4-commander disarm -f >/dev/null 2>&1 || true'`,
-      15000
-    );
+    // Fleet restart already applied helpers to all PX4; refresh sysid 11 once more
+    // immediately before deploy (params can race early HEARTBEAT).
+    applyPx4LabHelpers(['nrc-px4-11']);
     await sleep(1500);
   }
 }
@@ -521,23 +566,12 @@ async function afterInjectHook(fileBase, startedAt) {
 }
 
 async function cleanupAfter(fileBase) {
+  // Next example's fleet restart is the real altitude/arm reset. Only recover
+  // containers the example intentionally stopped so docker restart can proceed.
   if (fileBase === '09-swarm-member-expires') {
-    console.log('  restarting nrc-ap-3…');
-    sh('docker start nrc-ap-3 >/dev/null');
-    await sleep(8000);
-  }
-  // Disarm fleets after arming/flight examples. Caller must release UDP binds first.
-  if (/01|02|03|08|10|11|14|17|19|20/.test(fileBase.slice(0, 2))) {
-    await forceDisarmApFleet();
-    for (const c of [
-      'nrc-px4-11',
-      'nrc-px4-12',
-      'nrc-px4-13',
-      'nrc-px4-14',
-      'nrc-px4-15',
-    ]) {
-      sh(`docker exec ${c} /opt/px4/bin/px4-commander disarm -f >/dev/null 2>&1 || true`);
-    }
+    console.log('  ensuring nrc-ap-3 is startable for next fleet restart…');
+    sh('docker start nrc-ap-3 >/dev/null 2>&1 || true');
+    await sleep(2000);
   }
 }
 
@@ -563,6 +597,9 @@ async function runOne(file) {
       errors: [],
     };
   }
+  // Isolation: docker-restart vehicles so AGL/EKF/arm from prior examples cannot
+  // DENY takeoff or poison swarm members. Node-RED stays up (UDP binds cleared later).
+  await restartVehicleFleet();
   if (profile.prep) await prep(profile.prep);
 
   const mark = Math.floor(Date.now() / 1000);

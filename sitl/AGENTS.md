@@ -76,9 +76,16 @@ node sitl/run-example-suite.js --out /tmp/sitl-example-suite-results.json
 node sitl/run-example-suite.js --only 01,10,17
 ```
 
-Harness: deploy one `examples/sitl/*.json` at a time → enable debug→console →
-fire injects → scrape `docker logs nrc-nodered` → write JSON under `/tmp/`
-(default). Example **25** (TCP) is **SKIP** unless Compose exposes SITL TCP.
+Harness: **docker-restarts the vehicle fleet** (AP 1–5, PX4 11–15, companions
+20/21 — not `nrc-nodered`) before each non-SKIP example, waits for GPS/EKF
+settle (`SITL_FLEET_SETTLE_MS`, default 20s), re-applies PX4 lab helpers, then
+deploys one `examples/sitl/*.json` → enable debug→console → fire injects →
+scrape `docker logs nrc-nodered` → write JSON under `/tmp/` (default). Example
+**25** (TCP) is **SKIP** unless Compose exposes SITL TCP.
+
+Force-disarm alone does **not** reset AGL; without the fleet restart, a prior
+takeoff leaves sysid 1 airborne and the next `NAV_TAKEOFF` returns
+`MAV_RESULT_DENIED` (resultCode 4).
 
 ### Post results (no PR)
 
@@ -119,10 +126,12 @@ Directed commands use the Connection peer table (reply to HEARTBEAT source).
 
 ## Takeoff / GUIDED
 
-AP `NAV_TAKEOFF` needs GUIDED. Example **01** sets GUIDED in-band (arm → mode →
-takeoff); harness prep `ap-guided-1` also force-disarms then SET_MODE before
-deploy. If takeoff is still DENIED (`resultCode: 4`), check GPS/EKF — do not
-reintroduce a source build.
+AP `NAV_TAKEOFF` needs GUIDED **and** a vehicle on the ground. Example **01**
+sets GUIDED in-band (arm → mode → takeoff); harness prep `ap-guided-1` SET_MODE
+GUIDED after the per-example fleet restart. If takeoff is still DENIED
+(`resultCode: 4`), check that the fleet restart ran and GPS/EKF settled — do
+not reintroduce a source build, and do not rely on force-disarm to clear
+altitude.
 
 ## Param echo types
 
