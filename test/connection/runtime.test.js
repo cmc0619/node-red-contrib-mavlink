@@ -612,6 +612,36 @@ test('a transport error stops heartbeats but keeps the peer sweep alive (#93)', 
   connection.close();
 });
 
+test('the fallback warning re-arms when the endpoint is learned, not only on send (#91)', async () => {
+  // warn → endpoint learned (no send in between) → endpoint lost → the next
+  // fallback must warn again. The re-arm rides peer-table endpoint-added, so
+  // a resolve/expire cycle with no intervening targeted send cannot leave the
+  // warning permanently disarmed.
+  const warns = [];
+  const { connection, dg } = build(
+    {},
+    { logger: { warn: (m) => warns.push(m), info() {}, error() {} } }
+  );
+  await connection.start();
+
+  const opts = { band: BAND.CONTROL, target: { sysid: 7, compid: 1 } };
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, opts);
+  await delay(20); // warns: endpoint unknown
+
+  introducePeer(dg); // endpoint learned — clears the warned flag via the event
+  connection.peerTable.markPrimaryFailed(7, 1); // sole endpoint drops again
+
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, opts);
+  await delay(20);
+
+  assert.equal(
+    warns.filter((m) => /no known endpoint for target 7\/1/.test(m)).length,
+    2,
+    'losing the endpoint after learning it must re-enable the warning'
+  );
+  connection.close();
+});
+
 test('broadcast target (sysid 0) never triggers the missing-endpoint warning (#91)', async () => {
   const warns = [];
   const { connection } = build(
