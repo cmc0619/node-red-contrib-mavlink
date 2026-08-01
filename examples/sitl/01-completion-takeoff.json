@@ -4,15 +4,15 @@
         "type": "tab",
         "label": "SITL 01 Completion takeoff",
         "disabled": false,
-        "info": "Arm (confirm ACK) \u2192 Takeoff with completion-tier await on ArduPilot SITL sysid 1. Requires ArduPilot Copter SITL at 127.0.0.1:14551. The takeoff node uses delivery=complete which waits for IN_PROGRESS then ACCEPTED, distinguishing a real climb from a premature accept.",
+        "info": "Arm (confirm ACK) \u2192 GUIDED \u2192 Takeoff with completion-tier await on ArduPilot SITL sysid 1. Copter NAV_TAKEOFF is DENIED outside GUIDED; the mode step is in-band so the story does not depend on an out-of-band prep race. The takeoff node uses delivery=complete which waits for IN_PROGRESS then ACCEPTED, distinguishing a real climb from a premature accept.",
         "env": []
     },
     {
         "id": "ex06-comment",
         "type": "comment",
         "z": "ex06-tab",
-        "name": "Arm then takeoff (completion tier against ArduPilot Copter SITL)",
-        "info": "This flow targets sysid 1 (first ArduPilot SITL). Set completionTimeout to at least 30 s; ArduPilot typically sends IN_PROGRESS within 2 s then ACCEPTED once the vehicle is airborne.\n\nDelivery=complete blocks output 0 until the completion-tier ACCEPTED arrives. A timeout on output 1 means the vehicle accepted the command but never reached the target altitude (or the link was lost).\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551 for a local Copter SITL started with\n  sim_vehicle.py -v ArduCopter --out udp:127.0.0.1:14550",
+        "name": "Arm, GUIDED, then takeoff (completion tier)",
+        "info": "This flow targets sysid 1 (first ArduPilot SITL). Chain: arm (confirm) \u2192 DO_SET_MODE GUIDED (custom_mode 4) \u2192 NAV_TAKEOFF 10 m (complete). Without the GUIDED step ArduPilot returns MAV_RESULT_DENIED (resultCode 4) for takeoff whenever the vehicle is still in STABILIZE/LOITER from a prior run.\n\nSet completionTimeout to at least 30 s; ArduPilot typically sends IN_PROGRESS within 2 s then ACCEPTED once the vehicle is airborne.\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551 for a local Copter SITL started with\n  sim_vehicle.py -v ArduCopter --out udp:127.0.0.1:14550",
         "x": 230,
         "y": 40,
         "wires": []
@@ -107,10 +107,39 @@
         "y": 160,
         "wires": [
             [
-                "ex06-takeoff"
+                "ex06-guided"
             ],
             [
                 "ex06-arm-status"
+            ]
+        ],
+        "carrier": "long"
+    },
+    {
+        "id": "ex06-guided",
+        "type": "mavlink-command",
+        "z": "ex06-tab",
+        "name": "Set GUIDED (confirm)",
+        "mode": "preset",
+        "preset": "set_mode",
+        "advancedCommand": "",
+        "delivery": "confirm",
+        "connection": "ex06-connection",
+        "targetSysid": "",
+        "targetCompid": "",
+        "timeout": "10000",
+        "maxRetries": "3",
+        "unconfirmedContinue": false,
+        "completionTimeout": "30000",
+        "params": "{\"1\":1,\"2\":4}",
+        "x": 550,
+        "y": 160,
+        "wires": [
+            [
+                "ex06-takeoff"
+            ],
+            [
+                "ex06-guided-status"
             ]
         ],
         "carrier": "long"
@@ -132,7 +161,7 @@
         "unconfirmedContinue": false,
         "completionTimeout": "120000",
         "params": "{\"7\":10}",
-        "x": 570,
+        "x": 800,
         "y": 160,
         "wires": [
             [
@@ -157,7 +186,7 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 780,
+        "x": 1020,
         "y": 160,
         "wires": []
     },
@@ -179,6 +208,23 @@
         "wires": []
     },
     {
+        "id": "ex06-guided-status",
+        "type": "debug",
+        "z": "ex06-tab",
+        "name": "guided status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 550,
+        "y": 240,
+        "wires": []
+    },
+    {
         "id": "ex06-takeoff-status",
         "type": "debug",
         "z": "ex06-tab",
@@ -191,7 +237,7 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 570,
+        "x": 800,
         "y": 240,
         "wires": []
     }

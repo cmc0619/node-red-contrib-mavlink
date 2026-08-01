@@ -2,7 +2,10 @@
 
 /**
  * Deploy each examples/sitl/*.json into the lab Node-RED (host :1880), fire
- * injects, scrape debug/error lines, and write a JSON report for testing.md.
+ * injects, scrape debug/error lines, and write a JSON report.
+ *
+ * Post curated verdicts to a GitHub Issue (label sitl-results), close the prior
+ * issue, and keep the JSON out of git — see sitl/AGENTS.md.
  *
  * Usage: node sitl/run-example-suite.js [--only 01,17] [--out /tmp/sitl-results.json]
  */
@@ -30,7 +33,7 @@ const ONLY = (() => {
 const OUT =
   process.argv.includes('--out')
     ? process.argv[process.argv.indexOf('--out') + 1]
-    : path.join(ROOT, 'sitl', 'example-suite-results.json');
+    : path.join('/tmp', 'sitl-example-suite-results.json');
 
 /** @type {Record<string, {waitMs: number, expect: string, notes?: string, prep?: string, afterInject?: Function}>} */
 const PROFILE = {
@@ -40,17 +43,20 @@ const PROFILE = {
     prep: 'ap-guided-1',
   },
   '02-completion-timeout': {
-    waitMs: 20000,
-    expect: 'completion timeout (status names timeout; intentional)',
+    waitMs: 35000,
+    expect: 'completion timeout after accepted takeoff',
+    prep: 'ap-guided-1',
   },
   '03-temporarily-rejected': {
-    waitMs: 25000,
+    waitMs: 30000,
     expect: 'arm eventually accepted (TEMPORARILY_REJECTED only on fresh boot)',
-    notes: 'once:true inject fires at deploy; GPS already locked → may skip reject',
+    notes: 'restart prep races fresh boot; TEMPORARILY_REJECTED remains best-effort if GPS is ready quickly',
+    prep: 'restart-ap-1',
   },
   '04-mode-tables': {
-    waitMs: 15000,
+    waitMs: 20000,
     expect: 'AP GUIDED + PX4 mode set accepted',
+    prep: 'px4-mode-ready',
   },
   '05-px4-param-union': {
     waitMs: 15000,
@@ -82,13 +88,16 @@ const PROFILE = {
     expect: 'sequential + broadcast arm confirmed',
   },
   '12-signing': {
-    waitMs: 15000,
-    expect: 'signed arm attempt (setup-dependent; may warn/fail without matching SITL key)',
-    notes: 'dry-run template; lab SITL typically does not verify signatures',
+    waitMs: 5000,
+    expect: 'signed arm attempt (needs Admin signing passphrase)',
+    notes: 'Admin API deploy cannot supply signing credentials; skip in default lab',
+    skip: true,
   },
   '13-param-defs-live': {
-    waitMs: 45000,
+    waitMs: 20000,
     expect: 'read / set / list param defs against AP',
+    // Let set echo-confirm finish before request-list floods PARAM_VALUE.
+    injectGapMs: 8000,
   },
   '14-command-mission-basics': {
     waitMs: 40000,
@@ -107,6 +116,42 @@ const PROFILE = {
     waitMs: 55000,
     expect: 'arm+takeoff+INT goto accepted; ~150 m north',
     prep: 'px4-home-ready',
+  },
+  '18-int-local-vs-global': {
+    waitMs: 25000,
+    expect: 'GLOBAL_INT accepted both stacks; LOCAL_NED denied AP / accepted PX4',
+  },
+  '19-ap-int-carrier-goto': {
+    waitMs: 55000,
+    expect: 'AP arm+takeoff+INT goto accepted',
+    prep: 'ap-guided-1',
+  },
+  '20-move-stream-stop': {
+    waitMs: 25000,
+    expect: 'move stream then zero-velocity stop',
+    prep: 'ap-guided-1',
+  },
+  '21-param-echo-float32': {
+    waitMs: 35000,
+    expect: 'AP + PX4 float32 param set/read echo',
+  },
+  '22-in-build-out': {
+    waitMs: 20000,
+    expect: 'mavlink-in → build → out composition',
+  },
+  '23-profile-target-inherit': {
+    waitMs: 20000,
+    expect: 'command inherits profile target sysid 2',
+  },
+  '24-companion-receive': {
+    waitMs: 15000,
+    expect: 'companion receive path sees vehicle traffic',
+  },
+  '25-tcp-connection': {
+    waitMs: 5000,
+    expect: 'TCP template — skip unless SITL TCP exposed',
+    notes: 'default Compose lab is UDP-only; skip without published :5760',
+    skip: true,
   },
 };
 
@@ -223,9 +268,43 @@ function verdictFrom(profile, summary, log) {
   const errText = summary.errors.join('\n');
   const expect = profile.expect || '';
 
-  if (/timeout \(status names timeout/.test(expect)) {
-    if (results.includes('timed-out') || /timeout/i.test(log) || results.includes('unconfirmed')) {
-      return { status: 'PASS', reason: 'timeout path observed as designed' };
+  if (/completion timeout/i.test(expect)) {
+    // Must be the takeoff node's completion timeout — arm/GUIDED timed-out must not PASS.
+    const takeoffTimedOut = summary.debug.some((d) => {
+      const aboutTakeoff =
+        /takeoff/i.test(d.tag) ||
+        /NAV_TAKEOFF|MAV_CMD_NAV_TAKEOFF/i.test(d.command || '') ||
+        /NAV_TAKEOFF|takeoff/i.test(d.excerpt || '');
+      return (
+        aboutTakeoff &&
+        (d.result === 'timed-out' ||
+          d.result === 'unconfirmed' ||
+          /timeout/i.test(d.detail || ''))
+      );
+    });
+    if (takeoffTimedOut) {
+      return { status: 'PASS', reason: 'takeoff completion timeout observed as designed' };
+    }
+    return { status: 'UNKNOWN', reason: 'takeoff completion timeout path not observed' };
+  }
+  if (/NVF|NAMED_VALUE_FLOAT/i.test(expect)) {
+    const sentNamedValue = summary.debug.filter((d) =>
+      d.result === 'sent' && /NAMED_VALUE_FLOAT/i.test(d.excerpt)
+    );
+    if (sentNamedValue.length) {
+      return { status: 'PASS', reason: `NAMED_VALUE_FLOAT sent (${sentNamedValue.length})` };
+    }
+  }
+  if (/bad upload fails|good upload ok/i.test(expect)) {
+    const goodMission = summary.debug.some((d) =>
+      d.result === 'succeeded' && /mavlink-mission/.test(d.excerpt)
+    );
+    const validationFailure = summary.debug.some((d) =>
+      d.result === 'failed' && /phase:\s*'validate'/.test(d.excerpt)
+    );
+    const planSurvives = /operation:\s*'download'[\s\S]*result:\s*'succeeded'[\s\S]*count:\s*2/i.test(log);
+    if (goodMission && validationFailure && planSurvives) {
+      return { status: 'PASS', reason: 'good mission survived expected validation failure' };
     }
   }
   if (/fails loud|expect fail/i.test(expect)) {
@@ -249,7 +328,92 @@ function verdictFrom(profile, summary, log) {
     }
   }
   if (/one failed|member expires/i.test(expect)) {
-    if (/failed|expired/i.test(log)) return { status: 'PASS', reason: 'failed/expired member observed' };
+    const aggregateFailed = summary.debug.some((d) =>
+      d.result === 'failed' && /mavlink-swarm|aggregate|swarm/i.test(d.excerpt)
+    );
+    const memberFailed = /members:\s*\[[\s\S]*?(?:result:\s*'(?:failed|timed-out|unconfirmed)'|detail:\s*'[^']*(?:timeout|expired|failed))/i.test(log) ||
+      /"members"\s*:\s*\[[\s\S]*?(?:"result"\s*:\s*"(?:failed|timed-out|unconfirmed)"|"detail"\s*:\s*"[^"]*(?:timeout|expired|failed))/i.test(log);
+    if (aggregateFailed || memberFailed) {
+      return { status: 'PASS', reason: 'swarm aggregate/member failure observed' };
+    }
+    return { status: 'UNKNOWN', reason: 'swarm member failure not observed' };
+  }
+  if (/GLOBAL_INT|LOCAL_NED/i.test(expect)) {
+    const apGlobal = summary.debug.some(
+      (d) => /ap global/i.test(d.tag) && d.result === 'accepted'
+    );
+    const apLocalDenied = summary.debug.some(
+      (d) => /ap local/i.test(d.tag) && /denied|failed/i.test(d.result || '')
+    );
+    const px4Global = summary.debug.some(
+      (d) => /px4 global/i.test(d.tag) && d.result === 'accepted'
+    );
+    const px4Local = summary.debug.some(
+      (d) => /px4 local/i.test(d.tag) && d.result === 'accepted'
+    );
+    if (apGlobal && apLocalDenied && px4Global && px4Local) {
+      return {
+        status: 'PASS',
+        reason: 'frame matrix: AP GLOBAL ok / AP LOCAL denied / PX4 both ok',
+      };
+    }
+    if (apGlobal || apLocalDenied || px4Global || px4Local) {
+      return {
+        status: 'PARTIAL',
+        reason: `frame matrix incomplete: apG=${apGlobal} apLden=${apLocalDenied} px4G=${px4Global} px4L=${px4Local}`,
+      };
+    }
+  }
+  if (/move stream|stop sent|zero.?velocity/i.test(expect)) {
+    const streaming = summary.debug.some(
+      (d) => d.result === 'succeeded' && /streaming/i.test(d.detail || d.excerpt || '')
+    );
+    const zeroOrResent = summary.debug.filter(
+      (d) => d.result === 'succeeded' && /streaming|sent/i.test(d.detail || d.excerpt || '')
+    ).length;
+    if (streaming && zeroOrResent >= 2) {
+      return { status: 'PASS', reason: 'move stream then zero-velocity/stop observed' };
+    }
+  }
+  if (/float32 param|param set\/read echo/i.test(expect)) {
+    // Require per-stack set success (debug names are AP/PX4-specific) — one
+    // stack's set+read pair must not count as two echoes.
+    const apSet = summary.debug.some((d) => /ap set/i.test(d.tag) && d.result === 'succeeded');
+    const px4Set = summary.debug.some((d) => /px4 set/i.test(d.tag) && d.result === 'succeeded');
+    if (apSet && px4Set) {
+      return { status: 'PASS', reason: 'AP + PX4 float32 param echoes succeeded' };
+    }
+    if (apSet || px4Set) {
+      return { status: 'PARTIAL', reason: `param echoes: ap=${apSet} px4=${px4Set}` };
+    }
+  }
+  if (/in → build → out|composition/i.test(expect)) {
+    if (results.includes('sent') || /mavlink-out|NAMED_VALUE|HEARTBEAT/i.test(log)) {
+      return { status: 'PASS', reason: 'in/build/out path exercised' };
+    }
+  }
+  if (/inherits profile target|sysid 2/i.test(expect)) {
+    const inheritOk = summary.debug.some((d) => {
+      if (d.result !== 'accepted' && d.result !== 'sent') return false;
+      return /sysid:\s*2\b/.test(d.excerpt || '') || /target:\s*\{\s*sysid:\s*2\b/.test(d.excerpt || '');
+    });
+    if (inheritOk) {
+      return { status: 'PASS', reason: 'profile target inherit resolved sysid 2' };
+    }
+    return { status: 'UNKNOWN', reason: 'accepted/sent without resolved target sysid 2' };
+  }
+  if (/companion receive/i.test(expect)) {
+    // Receive proof only — outbound NVF `sent` must not PASS this story.
+    const rx = summary.debug.some((d) => {
+      if (/nvf/i.test(d.tag)) return false;
+      if (/vehicle heartbeat|vehicle statustext|state events/i.test(d.tag)) return true;
+      if (/result:\s*'sent'|NAMED_VALUE_FLOAT/i.test(d.excerpt || '')) return false;
+      return /sysid:\s*20\b/.test(d.excerpt || '') &&
+        (/HEARTBEAT|STATUSTEXT|kind:\s*'transition'|peer-new|heartbeat/i.test(d.excerpt || ''));
+    });
+    if (rx) {
+      return { status: 'PASS', reason: 'companion receive traffic observed (sysid 20)' };
+    }
   }
 
   const bad = results.filter((r) =>
@@ -280,7 +444,7 @@ function verdictFrom(profile, summary, log) {
   };
 }
 
-async function setApGuided(sysid = 1) {
+function runApControlScript(body, timeoutMs = 20000) {
   // Run out-of-band so Node-RED is not holding 14550.
   const script = `
     const { Connection, BAND } = require(${JSON.stringify(path.join(ROOT, 'lib/connection'))});
@@ -292,7 +456,7 @@ async function setApGuided(sysid = 1) {
       const bundle = loadBundled('ardupilotmega');
       const conn = new Connection({
         transport: { mode: 'udp', bindAddress: '0.0.0.0', bindPort: 14550, remoteAddress: '127.0.0.1', remotePort: 14551 },
-        vehicle: { targetSysid: ${sysid}, targetCompid: 1, bundle, firmware: 'ardupilot', autopilot: 3 },
+        vehicle: { targetSysid: 1, targetCompid: 1, bundle, firmware: 'ardupilot', autopilot: 3 },
         identities: [{ id: 'gcs', sysid: 255, compid: 190, heartbeat: { type: 6, autopilot: 8, systemStatus: 4, baseMode: 0, customMode: 0, mavlinkVersion: 3 }, heartbeatIntervalMs: 500 }],
         defaultIdentityId: 'gcs', boundIdentityIds: ['gcs'],
         signing: { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
@@ -300,29 +464,57 @@ async function setApGuided(sysid = 1) {
       }, { resolveIdentity, logger: { info() {}, warn() {}, error() {} } });
       await conn.start();
       await sleep(2000);
-      const t = { sysid: ${sysid}, compid: 1 };
-      conn.send(buildCommandLong(176, ${sysid}, 1, [1, 4, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
-      await sleep(800);
+      ${body}
       conn.close(() => process.exit(0));
       setTimeout(() => process.exit(0), 400);
     })().catch(() => process.exit(1));
   `;
-  sh(`node -e ${JSON.stringify(script)}`, 20000);
+  sh(`node -e ${JSON.stringify(script)}`, timeoutMs);
+}
+
+async function setApGuided(sysid = 1) {
+  runApControlScript(`
+      const t = { sysid: ${sysid}, compid: 1 };
+      // Force-disarm first so a leftover airborne/armed state cannot DENY takeoff.
+      conn.send(buildCommandLong(400, ${sysid}, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+      await sleep(800);
+      conn.send(buildCommandLong(176, ${sysid}, 1, [1, 4, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+      await sleep(800);
+  `);
+}
+
+async function forceDisarmApFleet() {
+  runApControlScript(`
+      for (const sysid of [1, 2, 3, 4, 5]) {
+        const t = { sysid, compid: 1 };
+        conn.send(buildCommandLong(400, sysid, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+        await sleep(200);
+      }
+      await sleep(500);
+  `, 25000);
 }
 
 async function prep(kind) {
   if (kind === 'ap-guided-1') {
     await setApGuided(1);
   }
-  if (kind === 'px4-home-ready') {
-    sh('docker exec nrc-px4-11 /opt/px4/bin/px4-commander disarm -f >/dev/null 2>&1 || true');
+  if (kind === 'restart-ap-1') {
+    sh('docker restart nrc-ap-1 >/dev/null', 30000);
+    // GPS/EKF need longer than container "Up"; 8s was still DENY-on-arm.
+    await sleep(20000);
+  }
+  if (kind === 'px4-home-ready' || kind === 'px4-mode-ready') {
+    sh(
+      `docker exec nrc-px4-11 sh -lc 'cd /opt/px4 && ./bin/px4-param set MAV_0_BROADCAST 1 >/dev/null; ./bin/px4-param set COM_RCL_EXCEPT 7 >/dev/null; ./bin/px4-param set COM_ARM_MAG_STR 0 >/dev/null; ./bin/px4-commander disarm -f >/dev/null 2>&1 || true'`,
+      15000
+    );
     await sleep(1500);
   }
 }
 
 async function afterInjectHook(fileBase, startedAt) {
   if (fileBase === '09-swarm-member-expires') {
-    await sleep(2500);
+    await sleep(200);
     console.log('  killing nrc-ap-3 mid-run…');
     sh('docker stop nrc-ap-3 >/dev/null');
   }
@@ -334,11 +526,9 @@ async function cleanupAfter(fileBase) {
     sh('docker start nrc-ap-3 >/dev/null');
     await sleep(8000);
   }
-  // Disarm fleets after arming examples
-  if (/01|08|10|11|14|17|03/.test(fileBase.slice(0, 2))) {
-    sh(
-      `for c in nrc-ap-1 nrc-ap-2 nrc-ap-3 nrc-ap-4 nrc-ap-5; do docker exec $c bash -c 'echo "mode GUIDED; arm throttle" >/dev/null' 2>/dev/null; done; true`
-    );
+  // Disarm fleets after arming/flight examples. Caller must release UDP binds first.
+  if (/01|02|03|08|10|11|14|17|19|20/.test(fileBase.slice(0, 2))) {
+    await forceDisarmApFleet();
     for (const c of [
       'nrc-px4-11',
       'nrc-px4-12',
@@ -360,6 +550,19 @@ async function runOne(file) {
   const injects = flows.filter((n) => n.type === 'inject');
 
   console.log(`\n=== ${file} (${tab}) ===`);
+  if (profile.skip) {
+    return {
+      file,
+      tab,
+      status: 'SKIP',
+      reason: profile.notes || profile.expect,
+      expect: profile.expect,
+      notes: profile.notes || null,
+      injects: [],
+      debug: [],
+      errors: [],
+    };
+  }
   if (profile.prep) await prep(profile.prep);
 
   const mark = Math.floor(Date.now() / 1000);
@@ -377,6 +580,7 @@ async function runOne(file) {
   // Let connections bind + learn peers
   await sleep(4000);
 
+  const injectGapMs = Number(profile.injectGapMs) > 0 ? Number(profile.injectGapMs) : 1500;
   const injectResults = [];
   for (const inj of injects) {
     if (inj.once) {
@@ -387,20 +591,20 @@ async function runOne(file) {
     injectResults.push({ id: inj.id, name: inj.name, http: r.status, body: r.body.slice(0, 80) });
     console.log(`  inject ${inj.name || inj.id} → ${r.status}`);
     await afterInjectHook(fileBase, mark);
-    // small gap between multi-inject flows
-    await sleep(1500);
+    // Gap before the next inject (example 13 needs set echo to finish before list flood).
+    await sleep(injectGapMs);
   }
 
   await sleep(profile.waitMs);
 
-  const log = nrLogSince(Math.max(5, Math.ceil(profile.waitMs / 1000) + 10));
+  // Cover the whole example (prep gaps + injectGapMs + wait), not only waitMs —
+  // otherwise long multi-inject stories (e.g. 13) scrape an empty idle window.
+  const log = nrLogSince(Math.max(15, Math.floor(Date.now() / 1000) - mark + 5));
   const blocks = extractDebugBlocks(log);
   const summary = summarizeBlocks(blocks);
   const verdict = verdictFrom(profile, summary, log);
 
-  await cleanupAfter(fileBase);
-
-  // Clear flows to idle so next bind is free
+  // Clear flows first so cleanup can bind 14550.
   await req(
     'POST',
     '/flows',
@@ -410,6 +614,7 @@ async function runOne(file) {
     { 'Node-RED-Deployment-Type': 'full' }
   );
   await sleep(1500);
+  await cleanupAfter(fileBase);
 
   return {
     file,

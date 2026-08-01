@@ -57,3 +57,18 @@ without understanding each step.
 | `15-companion-ap.json` | SITL 15 Companion AP | companion AP sysid 20 |
 | `16-companion-px4.json` | SITL 16 Companion PX4 | companion PX4 sysid 21 |
 | `17-int-carrier-goto.json` | SITL 17 INT carrier goto | 1× PX4 |
+| `18-int-local-vs-global.json` | SITL 18 INT local vs global | 1× ArduPilot + 1× PX4 |
+| `19-ap-int-carrier-goto.json` | SITL 19 AP INT carrier goto | 1× ArduPilot |
+| `20-move-stream-stop.json` | SITL 20 Move stream + stop | 1× ArduPilot |
+| `21-param-echo-float32.json` | SITL 21 Param float32 echo | 1× ArduPilot + 1× PX4 |
+| `22-in-build-out.json` | SITL 22 In → Build → Out | 1× ArduPilot |
+| `23-profile-target-inherit.json` | SITL 23 Profile target inherit | 1× ArduPilot (sysid 2) |
+| `24-companion-receive.json` | SITL 24 Companion receive | companion AP sysid 20 |
+| `25-tcp-connection.json` | SITL 25 TCP connection (template) | TCP SITL on `:5760` (not in default Compose) |
+
+## Running the suite
+
+Use the Docker lab + harness (`sitl/AGENTS.md`). Default lab skips **25** (UDP-only).
+
+**Results:** GitHub Issues labeled `sitl-results` — not PRs that rewrite `testing.md`.
+Close the prior open results issue when posting a new run.

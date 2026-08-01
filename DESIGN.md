@@ -1307,9 +1307,9 @@ by silence. Update this list when an item lands.
 | **Move editor §6 reshape** | **done** | Per-field rows + mode/delivery visibility in the Move dialog. |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
 | **`httpAdminRoot` on non-enum admin routes** | **done** | Command/Build/In/Swarm/Param/Vehicle editor catalogs use `RED.mavlink.adminApiUrl('/mavlink/…')`. |
-| **SITL example flows** | **done** | `examples/sitl/` 01–16 (incl. companion 15–16) + README; regular demos in `examples/` (see `CATALOG.md`). |
+| **SITL example flows** | **done** | `examples/sitl/` 01–25 (companion, INT matrix, Move, param echo, In/Build/Out, inherit, TCP template) + README; regular demos in `examples/` (see `CATALOG.md`). |
 | **SITL Docker lab** | **done** | Compose under [`sitl/`](sitl/README.md): 5× AP + 5× PX4 + companions 20/21; arm-only logs; optional `nodered` profile. |
-| **SITL-backed tests (§13)** | open | Fixture suite in CI; firmware behaviour still needs the live five+five rig (local Docker lab). |
+| **SITL-backed tests (§13)** | open | Fixture suite in CI; firmware behaviour still needs the live five+five rig (local Docker lab). Live suite results are logged as GitHub Issues (`sitl-results`), not in-repo `testing.md` churn. |
 | **Cross-connection swarm** | out of scope | As designed (§10): two Connections → two Swarm nodes. |
 
 ## 13. Testing and SITL
@@ -1325,7 +1325,13 @@ Companion-mode vehicles (sysid **20** AP / **21** PX4) use **14540→14541** and
 
 **Docker lab.** A Compose harness that launches this rig (plus the companion pair) lives under
 [`sitl/`](sitl/README.md). Operator instructions stay there — this section defines the rig;
-`sitl/README.md` is how to run it.
+`sitl/README.md` / [`sitl/AGENTS.md`](sitl/AGENTS.md) are how to run it.
+
+**Live suite results.** Each suite run closes the previous open GitHub Issue labeled
+`sitl-results`, publishes the new curated PASS/PARTIAL/FAIL/SKIP table in a new
+`sitl-results` issue, and does not open a results-only PR. Do not land per-run
+`testing.md` or `example-suite-results.json` updates in product PRs — those only churn
+review bots. `testing.md` in-tree is a pointer to this workflow.
 
 **Test sources are two, and only two.** Pain points conceived up front, written before the code
 they guard. Then one regression test per bug, added when the bug is found. No coverage target —
@@ -1745,6 +1751,48 @@ After HEARTBEAT, Connection replies via the peer-table source endpoint. `remoteP
 the pre-peer send fallback — examples keep `14551`/`14561` for that, not because the vehicle
 listens there.
 *Check:* `sitl/scripts/entrypoint-ap.sh`, `examples/sitl/`, `sitl/README.md`.
+
+**SITL suite results belong in GitHub Issues, not result-only PRs.**
+*Wrong belief:* each live suite run should update repo-root `testing.md` and commit
+`sitl/example-suite-results.json` so history lives in git.
+*Fact:* those files are large, change every run, and trigger review bots without changing
+product code. Each suite run closes the previous open GitHub Issue labeled `sitl-results`,
+publishes the new curated PASS/PARTIAL/FAIL/SKIP table in a new `sitl-results` issue, and
+does not open a results-only PR. Harness JSON defaults to `/tmp/`. In-tree `testing.md` is
+only a pointer to that workflow.
+*Check:* `sitl/AGENTS.md`, `testing.md`, `sitl/.gitignore`.
+
+**ArduCopter takeoff examples must set GUIDED in-band.**
+*Wrong belief:* an out-of-band harness `SET_MODE GUIDED` before deploy is enough for
+example 01’s arm→takeoff chain.
+*Fact:* after other suite members leave sysid 1 in STABILIZE (or the prep races a bind),
+`MAV_CMD_NAV_TAKEOFF` returns `MAV_RESULT_DENIED` (resultCode 4) even when arm ACKs.
+Example 01 now mirrors 02: arm → GUIDED → takeoff inside the flow. Harness prep still
+force-disarms then GUIDED as belt-and-suspenders, and cleanup disarms only after flows
+release the UDP bind. Measured against official prebuilt
+`firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu/arducopter`
+(`ARDUPILOT_REF=Copter-4.7.0` in `sitl/Dockerfile.ardupilot`).
+*Check:* `examples/sitl/01-completion-takeoff.json`, `sitl/run-example-suite.js`.
+
+**Param set echo-confirm must use a live param id and the vehicle’s type.**
+*Wrong belief:* example 13 can keep `ARMING_CHECK` as `MAV_PARAM_TYPE_REAL32` forever.
+*Fact:* Copter-4.7.0 SITL (`stable-4.7.0` prebuilt above) answers `PARAM_ERROR` for
+`ARMING_CHECK` (removed/renamed; the live bitmask is `ARMING_OPTIONS`). Integer params must
+use `MAV_PARAM_TYPE_INT32` — a REAL32-typed set writes float bits and echo-confirm times
+out. The suite spaces injects so `request-list` does not flood during the set wait.
+*Check:* `examples/sitl/13-param-defs-live.json`, `lib/param/index.js` (`matchesParamEcho`).
+
+**PX4 DO_SET_MODE on this SIH wants main_mode in param2, not the HEARTBEAT bitfield.**
+*Wrong belief:* send `custom_mode=196608` (POSCTL packed) because that is what HEARTBEAT
+reports and what many QGC builds send.
+*Fact:* against the lab image
+`px4io/px4-sitl@sha256:bab4270c4849b7027df4bd760c79d743d738c81d7830dde14c4cc5714f781216`,
+`MAV_CMD_DO_SET_MODE` with param2=`196608` is `TEMPORARILY_REJECTED`; param2=`3` (PX4
+main_mode POSCTL) is `ACCEPTED` and HEARTBEAT then reports `196608`. Completion-tier mode
+match compares param2 to peer `flightMode`, so delivery=`complete` cannot succeed across
+that encoding split — example 04 uses delivery=`confirm` for the PX4 leg. Re-measure if the
+Compose digest changes.
+*Check:* `examples/sitl/04-mode-tables.json`, `sitl/docker-compose.yml`.
 
 **ArduPilot lab image downloads the official prebuilt SITL binary — it does not compile.**
 *Wrong belief:* `sitl/Dockerfile.ardupilot` must `git clone` + `waf copter` (README once said
