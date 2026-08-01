@@ -1728,12 +1728,26 @@ must too. Server route registration stays `/mavlink/…` — only the browser UR
 test/nodes/param-html.test.js` — `adminApiUrl('/mavlink/enums')` under `/red` →
 `/red/mavlink/enums`; HTML drift tests forbid bare `'/mavlink/` in `$.getJSON`/`$.ajax`.
 
-**SITL `--out` targets the Node-RED bind port.**
-*Wrong belief:* `sim_vehicle.py --out udp:127.0.0.1:14551` pairs with Connection bind `14550`
-/ remote `14551`.
-*Fact:* `--out` is where MAVProxy *sends* telemetry. Node-RED receives on `bindPort` (`14550`)
-and *sends* commands to `remotePort` (`14551`, MAVProxy's listen). Point `--out` at `14550`.
-*Check:* examples under `examples/sitl/` and `examples/sitl/README.md`.
+**SITL telemetry targets the Node-RED bind port.**
+*Wrong belief:* point the vehicle “out” at `14551` because Connection is configured
+`bindPort 14550` / `remotePort 14551`.
+*Fact:* vehicles must send telemetry **to** `bindPort` (`14550` AP / `14560` PX4). The lab
+ArduPilot entrypoint uses the official prebuilt binary with
+`--serial0 udpclient:<gateway>:14550` (no MAVProxy); PX4 mavlink uses `-t <gateway> -o 14560`.
+After HEARTBEAT, Connection replies via the peer-table source endpoint. `remotePort` is only
+the pre-peer send fallback — examples keep `14551`/`14561` for that, not because the vehicle
+listens there.
+*Check:* `sitl/scripts/entrypoint-ap.sh`, `examples/sitl/`, `sitl/README.md`.
+
+**ArduPilot lab image downloads the official prebuilt SITL binary — it does not compile.**
+*Wrong belief:* `sitl/Dockerfile.ardupilot` must `git clone` + `waf copter` (README once said
+the AP image “compiles SITL”), so first bring-up is a long source build.
+*Fact:* ArduPilot publishes a statically linked SITL binary at
+`firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu/arducopter` (~7 MB) for the
+same Copter-4.7.0 line this lab pins. The Dockerfile curls that binary; image build is under a
+minute. More authoritative than a third-party image and far faster than compiling in nested
+Docker. PX4 already used a prebuilt image; AP now matches that posture.
+*Check:* `sitl/Dockerfile.ardupilot`, `node --test test/sitl/entrypoint-ap.test.js`.
 
 **Vehicle Profile target defaults only reach the Connection runtime, not palette nodes.**
 *Wrong belief:* setting `defaultTargetSystem = 42` in a Vehicle Profile propagates to every

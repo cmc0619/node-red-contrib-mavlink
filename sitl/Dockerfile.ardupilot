@@ -1,54 +1,38 @@
-# ArduCopter SITL + MAVProxy for the node-red-contrib-mavlink lab.
-# Build: docker build -f sitl/Dockerfile.ardupilot -t nrc-mavlink-ap-sitl sitl/
-# Pin ARDUPILOT_REF when rebuilding so fleets stay reproducible.
+# ArduCopter SITL for the node-red-contrib-mavlink lab.
+# Uses the official prebuilt static binary (same Copter-4.7.0 line DESIGN.md pins),
+# not a from-source waf build — ~7 MB download vs tens of minutes compiling.
+#
+# Build: docker build -f sitl/Dockerfile.ardupilot -t nrc-mavlink-ap-sitl:local sitl/
 
 FROM ubuntu:22.04
 
+ARG ARDUPILOT_SITL_URL=https://firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu/arducopter
 ARG ARDUPILOT_REF=Copter-4.7.0
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
     USER=sitl \
-    ARDUPILOT_REF=${ARDUPILOT_REF}
+    ARDUPILOT_REF=${ARDUPILOT_REF} \
+    ARDUPILOT_SITL_URL=${ARDUPILOT_SITL_URL}
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
  && echo "$TZ" > /etc/timezone \
  && apt-get update && apt-get install -y --no-install-recommends \
-      sudo git curl ca-certificates lsb-release tzdata \
-      python3 python3-pip python3-dev python3-setuptools python3-wheel \
-      build-essential ccache gawk pkg-config \
-      libtool libxml2-dev libxslt1-dev \
-      libffi-dev libjpeg-dev \
-    && rm -rf /var/lib/apt/lists/*
+      ca-certificates curl \
+ && rm -rf /var/lib/apt/lists/* \
+ && curl -fsSL -o /usr/local/bin/arducopter "${ARDUPILOT_SITL_URL}" \
+ && chmod 0755 /usr/local/bin/arducopter \
+ && /usr/local/bin/arducopter --help >/dev/null
 
 RUN useradd -m -s /bin/bash sitl \
- && echo "sitl ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/sitl \
- && chmod 0440 /etc/sudoers.d/sitl
+ && mkdir -p /home/sitl/aircraft /logs /params \
+ && chown -R sitl:sitl /home/sitl /logs /params
 
-USER sitl
-WORKDIR /home/sitl
-
-# Official installer pulls toolchain + MAVProxy deps for this Ubuntu.
-# Force noninteractive for nested apt calls inside install-prereqs.
-RUN git clone --depth 1 --branch "${ARDUPILOT_REF}" https://github.com/ArduPilot/ardupilot.git \
- && cd ardupilot \
- && git submodule update --init --recursive --depth 1 \
- && DEBIAN_FRONTEND=noninteractive TZ=UTC \
-      Tools/environment_install/install-prereqs-ubuntu.sh -y \
- && ./waf configure --board sitl \
- && ./waf copter
-
-ENV PATH="/home/sitl/ardupilot/Tools/autotest:/home/sitl/.local/bin:${PATH}" \
-    PYTHONPATH="/home/sitl/ardupilot/Tools/autotest:${PYTHONPATH}"
-
-USER root
 COPY scripts/entrypoint-ap.sh /usr/local/bin/entrypoint-ap.sh
 COPY scripts/resolve-out-host.sh /usr/local/bin/resolve-out-host.sh
 COPY params/ap-logging.parm /params/ap-logging.parm
-RUN chmod +x /usr/local/bin/entrypoint-ap.sh /usr/local/bin/resolve-out-host.sh \
- && mkdir -p /logs \
- && chown -R sitl:sitl /logs /params
+RUN chmod +x /usr/local/bin/entrypoint-ap.sh /usr/local/bin/resolve-out-host.sh
 
 USER sitl
-WORKDIR /home/sitl/ardupilot
+WORKDIR /home/sitl/aircraft
 VOLUME ["/logs"]
 ENTRYPOINT ["/usr/local/bin/entrypoint-ap.sh"]

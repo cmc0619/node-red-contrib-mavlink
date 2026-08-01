@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch one ArduCopter SITL instance for the lab.
+# Launch one ArduCopter SITL instance for the lab from the official prebuilt binary.
 # Required: SYSID. Optional: INSTANCE, OUT_HOST, OUT_PORT, HOME_*.
 set -euo pipefail
 
@@ -24,30 +24,27 @@ if [[ -z "${OUT_IP}" ]]; then
 fi
 
 mkdir -p /logs
-cd /home/sitl/ardupilot
-
-# Persist DataFlash into the Compose bind mount. sim_vehicle -w writes under the
-# aircraft directory's logs/ as well as (sometimes) the tree-level logs/.
 AIRCRAFT="lab-ap-${SYSID}"
-mkdir -p "/home/sitl/ardupilot/${AIRCRAFT}"
-rm -rf /home/sitl/ardupilot/logs "/home/sitl/ardupilot/${AIRCRAFT}/logs"
-ln -sfn /logs /home/sitl/ardupilot/logs
-ln -sfn /logs "/home/sitl/ardupilot/${AIRCRAFT}/logs"
+RUN_DIR="/home/sitl/aircraft/${AIRCRAFT}"
+mkdir -p "${RUN_DIR}"
+# DataFlash lands under cwd/logs; point that at the Compose bind mount.
+rm -rf "${RUN_DIR}/logs"
+ln -sfn /logs "${RUN_DIR}/logs"
+cd "${RUN_DIR}"
 export HOME="/home/sitl"
 
-echo "entrypoint-ap: sysid=${SYSID} instance=${INSTANCE} out=udp:${OUT_IP}:${OUT_PORT} (from ${OUT_HOST}) home=${LAT},${LON},${HOME_ALT} aircraft=${AIRCRAFT}"
+echo "entrypoint-ap: sysid=${SYSID} instance=${INSTANCE} out=udpclient:${OUT_IP}:${OUT_PORT} (from ${OUT_HOST}) home=${LAT},${LON},${HOME_ALT} aircraft=${AIRCRAFT}"
 
-# Compose has no TTY. Interactive MAVProxy then stops reading TCP SERIAL0
-# (kernel rx queue grows, no HEARTBEAT seen), exits after --retries, and
-# sim_vehicle tears the stack down — host UDP stays silent. --daemon skips
-# the interactive stdin loop.
-exec sim_vehicle.py -v ArduCopter \
+# Official static binary (firmware.ardupilot.org). udpclient sends telemetry to
+# the Node-RED bind port; Connection learns each vehicle's source endpoint from
+# HEARTBEATs and replies there (same pattern as the PX4 lab link).
+# -I kept so SIM/RC ports do not collide if several instances share a netns.
+exec /usr/local/bin/arducopter \
+  -w \
   -I "${INSTANCE}" \
+  --model quad \
+  --speedup 1 \
   --sysid "${SYSID}" \
-  --aircraft "${AIRCRAFT}" \
-  --custom-location="${LAT},${LON},${HOME_ALT},270" \
-  --add-param-file=/params/ap-logging.parm \
-  --out="udp:${OUT_IP}:${OUT_PORT}" \
-  --mavproxy-args="--daemon" \
-  --no-rebuild \
-  -w
+  --home "${LAT},${LON},${HOME_ALT},270" \
+  --defaults /params/ap-logging.parm \
+  --serial0 "udpclient:${OUT_IP}:${OUT_PORT}"
