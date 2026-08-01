@@ -318,10 +318,9 @@ it only because the output shapes are stable and few.
 - **No bitwise-math dependency.** `bitset`, `bitwise`, `bitfield` and the pre-BigInt `long` family
   all exist and none are needed. Arithmetic plus BigInt covers every case here.
 - **Blank, zero, and absent are three states.** A blank active field is an error; an explicit `0`
-  passes through untouched; an absent field is left absent rather than zero-filled. One carve-out:
-  a degE7 field whose metadata declares an out-of-range invalid sentinel (`INT32_MAX`) accepts an
-  explicit `null`/`undefined` and encodes the sentinel — there blank is not a missing value but a
-  spec-declared one, and the same sentinel decodes back to `null` (§9 coordinate frames).
+  passes through untouched; an absent field is left absent rather than zero-filled. No carve-outs:
+  a sentinel (`INT32_MAX` "unknown", `INT32_MIN` "at infinity") is an ordinary integer the
+  operator enters as the label says — the raw surface never guesses one from a blank.
 - **`NaN` survives losslessly on every float.** Never through `JSON.stringify`. It means "keep
   current" only in the fields whose metadata declares `invalid="NaN"`; elsewhere it is simply
   invalid.
@@ -1017,17 +1016,19 @@ With this, the chain is `Arm → Takeoff → Move`, three nodes, each set to awa
 
 Three rules, each of which encodes a wrong message if missed:
 
-- **Wire lat/lon are `degE7` integers** — degrees × 10⁷ in an `int32`, not floats. The metadata
-  declares it; the conversion is the codec's (§5), and it is **value-blind**: degrees always
-  scale, for every input type — no "integer means already-scaled" pass-through, no magnitude
-  heuristic. Every mature encoder (MAVSDK, QGC, pymavlink call sites, ArduPilot's LONG→INT
-  converter) decides *whether* to scale from static schema — command identity, frame, or a typed
-  API — never from the value; a value-inspecting rule silently mis-encodes whole-number degrees.
-  Degrees outside ±180° are rejected with a divide-by-1e7 hint, never reinterpreted (ArduPilot's
-  `check_latlng` uses the bound the same way: reject, not dispatch). A degE7 field whose metadata
-  declares `invalid="INT32_MAX"` maps `null` ↔ sentinel losslessly in both directions; in-range
-  markers (`invalid="0"`, SIM_STATE) get no mapping — 0° is a legal coordinate and nulling it
-  loses data.
+- **Wire lat/lon are `degE7` integers, and unit conversion belongs to exactly one of two
+  surfaces.** The **typed operator surfaces** — command/swarm/payload/mission builders — take
+  degrees and scale (×1e7 global, ×1e4 local, §14-measured), deciding *whether* from static
+  schema (command identity, frame), never from the value. The **raw surface** — mavlink-build's
+  codec — performs **no unit conversion in either direction**: a field labelled `degE7` takes
+  degE7, matching every reference raw layer (pymavlink's generated `*_send`, node-mavlink's
+  message classes, MAVSDK's passthrough — none contain a single unit multiply). This split is
+  also what makes `mavlink-in → mavlink-build` compose: mavlink-in emits raw wire fields
+  (`lib/connection/wire.js` `extractFields`, no codec decode), so Build must accept them
+  unchanged — sentinels (`INT32_MAX` "unknown", `INT32_MIN` "at infinity") included, as plain
+  integers with no mapping to guess wrong. The one degE7-specific kindness on the raw surface
+  is the error message: a degrees-looking decimal is rejected naming the unit and the fix
+  (× 1e7), not with a generic non-integer complaint.
 - **A COMMAND_INT coordinate scales by frame.** Global frames take degrees × 10⁷; local frames
   take **metres × 10⁴** — the divisor is frame-dependent per common.xml, and both halves are
   measured (§14), not inferred. This applies to real coordinate params only: a natively-degE7
@@ -1922,18 +1923,31 @@ must compare exactly — past 2^24 consecutive integers collide under `Math.frou
 tolerance there confirms a value the vehicle never stored.
 *Check:* `node --test test/param/param.test.js`
 
-**Whole-number degrees are degrees: degE7 encode must be value-blind.**
-*Wrong belief:* an integer given to a degE7 field is safest treated as an already-scaled wire
-value, so `lat: -35` should pass through untouched.
-*Fact:* no mature MAVLink encoder inspects the value — MAVSDK (`action_impl.cpp`,
-`int32_t(std::round(latitude_deg * 1e7))`), QGC (`MavCommandQueue.cc`, gated only on
-`MAV_FRAME_MISSION`), pymavlink call sites, and ArduPilot's `convert_COMMAND_LONG_loc_param`
-(gated on command identity) all scale unconditionally and decide *whether* from static schema.
-The pass-through encoded `lat: -35` as −0.0000035° — a silent null-island goto. Declared-invalid
-sentinels are the schema-driven replacement: `invalid="INT32_MAX"` fields map `null` ↔ sentinel
-both directions; out-of-±180° degrees are rejected with a divide-by-1e7 hint, matching how
-ArduPilot's `check_latlng` uses the bound (reject, never dispatch).
-*Check:* `node --test lib/codec/test/field.test.js`
+**The raw codec does no unit conversion — degE7 scaling belongs only to the typed surfaces.**
+This entry replaces one that argued the opposite ("degE7 encode must be value-blind: degrees
+always scale ×1e7"), which shipped, broke `mavlink-in → mavlink-build`, and was reverted. Both
+that entry and the older integer-pass-through hybrid it attacked were wrong, in mirror-image
+ways, and the wrongness was the same each time: reasoning from half the picture.
+*Wrong belief (round 1):* an integer given to a degE7 field is an already-scaled wire value, a
+decimal is degrees — dispatch on integrality. (Silently mis-scaled decimals under the raw
+doctrine, and made `lat: -35` mean −0.0000035° under the degrees doctrine — coherent under
+neither.)
+*Wrong belief (round 2):* since every mature encoder scales degrees unconditionally, the codec
+should too. The citations (MAVSDK `action_impl.cpp`, QGC `MavCommandQueue.cc`, pymavlink call
+sites, ArduPilot's LONG→INT converter) were all real — and all from **typed operator surfaces**,
+the wrong comparison class for a raw builder.
+*Fact:* every reference **raw** message layer is unit-blind — pymavlink's generated `*_send`
+functions (no unit math in `mavgen_python.py`), node-mavlink's message classes (zero scaling in
+`lib/`), MAVSDK's `mavlink_passthrough` (raw `mavlink_message_t`). Scaling lives one layer up,
+exactly where #61/#52 put ours (command/swarm/payload/mission builders, ×1e7/×1e4 measured
+against SITL). Locally decisive: `mavlink-in` emits raw wire fields (`extractFields` copies off
+the node-mavlink instance, no codec decode), so a scaling Build cannot consume mavlink-in's own
+output — the always-scale version rejected `lat: 473977420` from a received GLOBAL_POSITION_INT
+as "does not fit int32". The codec's decode half (`decodeMessage`/`decodeField`) has **zero
+production callers**; only its encode half is live, in mavlink-build.
+*Check:* `node --test lib/codec/test/field.test.js` — pins raw pass-through both directions,
+sentinel (`INT32_MAX`/`INT32_MIN`) transparency, and the degrees-looking-decimal error that
+names the unit and the ×1e7 fix.
 
 **An early error MISSION_ACK is the rejection, not a stale leftover.**
 *Wrong belief:* a `MISSION_ACK` error arriving before all items were requested is safest ignored
@@ -1959,15 +1973,20 @@ after 8 s of silence from the GCS the vehicle abandoned the transfer with `type=
 failing with the vehicle's reason discarded.
 *Check:* `node --test test/mission/upload.test.js`
 
-**COMMAND_INT x/y has no working keep-current sentinel.**
-*Wrong belief:* per common.xml, NaN lat/lon should encode as `INT32_MAX` ("keep current") in
-COMMAND_INT.
-*Fact:* ArduPilot's `location_from_command_t` runs `check_latlng` with no sentinel branch —
-`INT32_MAX` reads as 214.7°, out of range, command NAK'd; MAVSDK cannot even express unset x/y
-(bare `int32_t`, defaults 0) and QGC's equivalent path is latent UB (`NaN * 1e7 → int32`). The
-deployed way to say "keep current position" is COMMAND_LONG with NaN param5/6 — which is what the
-build-time rejection tells the operator.
-*Check:* `node --test test/command/carrier.test.js test/command/carrier-resend.test.js`
+**COMMAND_INT x/y has no *cross-fleet* keep-current sentinel — PX4 honors one, ArduPilot NAKs it.**
+*Wrong belief (round 1):* per common.xml, NaN lat/lon should encode as `INT32_MAX` ("keep
+current") in COMMAND_INT. *(Round 2, over-corrected: "no reference implements the sentinel at
+all" — too strong, see below.)*
+*Fact:* split by autopilot. **PX4's** receiver honors the paired form: `x == INT32_MAX && y ==
+INT32_MAX` decodes to NaN/NaN ("ignore") — the first branch of its COMMAND_INT handler in
+`mavlink_receiver.cpp`. **ArduPilot's** `location_from_command_t` runs `check_latlng` with no
+sentinel branch — `INT32_MAX` reads as 214.7°, out of range, command NAK'd. MAVSDK cannot even
+express unset x/y (bare `int32_t`, defaults 0) and QGC's equivalent path is latent UB
+(`NaN * 1e7 → int32`). So the sentinel works on exactly half the fleet, only in the
+both-fields-together form, and the cross-fleet way to say "keep current position" remains
+COMMAND_LONG with NaN param5/6 — which is what the build-time rejection tells the operator.
+*Check:* `node --test test/command/carrier.test.js test/command/carrier-resend.test.js`; PX4
+branch: `src/modules/mavlink/mavlink_receiver.cpp`, COMMAND_INT handler, first condition.
 
 **Local-frame COMMAND_INT x/y really is metres × 1e4 — PX4 implements it; ArduPilot refuses the
 frame rather than reading it raw.**
@@ -1991,6 +2010,18 @@ Therefore scaling ×1e4 is strictly correct, not a trade-off: it fixes a real 1e
 (a local reposition to `x = 50` m currently arrives as 5 mm) and cannot regress ArduPilot, which
 rejects the frame regardless of the value. There is no raw-metres consumer to preserve
 compatibility with.
+*Full frame matrix, later measured one frame at a time (same `x=1234567`, PX4, all ACCEPTED):*
+÷1e4 (metres) — LOCAL_NED (1), LOCAL_ENU (4), LOCAL_OFFSET_NED (7), BODY_NED (8),
+BODY_OFFSET_NED (9), BODY_FRD (12), LOCAL_FRD (20), LOCAL_FLU (21); ÷1e7 — GLOBAL_INT (5),
+MISSION (2), and RESERVED_13 (13, via the fallthrough). Every `LOCAL_FRAMES` member is therefore
+measured, none inferred, and the set is member-for-member identical to PX4's
+`mavlink_receiver.cpp` COMMAND_INT chain — the only decoder implementing the rule. The
+classification is code, not data, in every implementation (PX4 if-chain, ArduPilot switch, QGC
+equality): MAVLink's XML carries no is-local attribute, so a static named table is the ecosystem
+form, values frozen by MAVLink's no-renumbering rule (13's tombstone is the in-data proof).
+Frame 13 stays *unclassified* here — metres pass through unscaled — deliberately not matching
+PX4's ÷1e7 fallthrough, because either treatment invents semantics for a slot upstream deleted;
+passthrough is the do-nothing default.
 *Check (PX4):* `cd sitl && docker compose --profile sitl up -d px4-11`, send a local-frame
 COMMAND_INT, then `docker exec nrc-px4-11 sh -lc 'cd /opt/px4 && ./bin/px4-listener
 vehicle_command 1'`. Send **before** reading — `px4-listener` prints uORB's retained value on
