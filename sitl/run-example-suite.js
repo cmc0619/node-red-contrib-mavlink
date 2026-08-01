@@ -128,7 +128,7 @@ const PROFILE = {
   },
   '20-move-stream-stop': {
     waitMs: 25000,
-    expect: 'move stream started then stop sent',
+    expect: 'move stream then zero-velocity stop',
     prep: 'ap-guided-1',
   },
   '21-param-echo-float32': {
@@ -269,12 +269,23 @@ function verdictFrom(profile, summary, log) {
   const expect = profile.expect || '';
 
   if (/completion timeout/i.test(expect)) {
-    const timedOutResult = results.includes('timed-out') || results.includes('unconfirmed');
-    const timeoutDetail = summary.debug.some((d) => d.detail && /timeout/i.test(d.detail));
-    if (timedOutResult || timeoutDetail) {
-      return { status: 'PASS', reason: 'timeout path observed as designed' };
+    // Must be the takeoff node's completion timeout — arm/GUIDED timed-out must not PASS.
+    const takeoffTimedOut = summary.debug.some((d) => {
+      const aboutTakeoff =
+        /takeoff/i.test(d.tag) ||
+        /NAV_TAKEOFF|MAV_CMD_NAV_TAKEOFF/i.test(d.command || '') ||
+        /NAV_TAKEOFF|takeoff/i.test(d.excerpt || '');
+      return (
+        aboutTakeoff &&
+        (d.result === 'timed-out' ||
+          d.result === 'unconfirmed' ||
+          /timeout/i.test(d.detail || ''))
+      );
+    });
+    if (takeoffTimedOut) {
+      return { status: 'PASS', reason: 'takeoff completion timeout observed as designed' };
     }
-    return { status: 'UNKNOWN', reason: 'completion timeout path not observed' };
+    return { status: 'UNKNOWN', reason: 'takeoff completion timeout path not observed' };
   }
   if (/NVF|NAMED_VALUE_FLOAT/i.test(expect)) {
     const sentNamedValue = summary.debug.filter((d) =>
@@ -328,31 +339,52 @@ function verdictFrom(profile, summary, log) {
     return { status: 'UNKNOWN', reason: 'swarm member failure not observed' };
   }
   if (/GLOBAL_INT|LOCAL_NED/i.test(expect)) {
-    const accepted = results.filter((r) => r === 'accepted').length;
-    const denied = results.filter((r) => /denied|failed/i.test(r)).length;
-    if (accepted >= 3 && denied >= 1) {
-      return { status: 'PASS', reason: `frame matrix: accepted=${accepted} denied=${denied}` };
+    const apGlobal = summary.debug.some(
+      (d) => /ap global/i.test(d.tag) && d.result === 'accepted'
+    );
+    const apLocalDenied = summary.debug.some(
+      (d) => /ap local/i.test(d.tag) && /denied|failed/i.test(d.result || '')
+    );
+    const px4Global = summary.debug.some(
+      (d) => /px4 global/i.test(d.tag) && d.result === 'accepted'
+    );
+    const px4Local = summary.debug.some(
+      (d) => /px4 local/i.test(d.tag) && d.result === 'accepted'
+    );
+    if (apGlobal && apLocalDenied && px4Global && px4Local) {
+      return {
+        status: 'PASS',
+        reason: 'frame matrix: AP GLOBAL ok / AP LOCAL denied / PX4 both ok',
+      };
     }
-    if (accepted || denied) {
+    if (apGlobal || apLocalDenied || px4Global || px4Local) {
       return {
         status: 'PARTIAL',
-        reason: `frame matrix incomplete: accepted=${accepted} denied=${denied}`,
+        reason: `frame matrix incomplete: apG=${apGlobal} apLden=${apLocalDenied} px4G=${px4Global} px4L=${px4Local}`,
       };
     }
   }
-  if (/move stream|stop sent/i.test(expect)) {
-    const sent = results.filter((r) => r === 'sent').length;
-    if (sent >= 2 || (/stop/i.test(log) && /sent|stream/i.test(log))) {
-      return { status: 'PASS', reason: 'move stream + stop observed' };
+  if (/move stream|stop sent|zero.?velocity/i.test(expect)) {
+    const streaming = summary.debug.some(
+      (d) => d.result === 'succeeded' && /streaming/i.test(d.detail || d.excerpt || '')
+    );
+    const zeroOrResent = summary.debug.filter(
+      (d) => d.result === 'succeeded' && /streaming|sent/i.test(d.detail || d.excerpt || '')
+    ).length;
+    if (streaming && zeroOrResent >= 2) {
+      return { status: 'PASS', reason: 'move stream then zero-velocity/stop observed' };
     }
   }
   if (/float32 param|param set\/read echo/i.test(expect)) {
-    const echoes = summary.debug.filter((d) => d.result === 'succeeded').length;
-    if (echoes >= 2) {
-      return { status: 'PASS', reason: `param echoes succeeded (${echoes})` };
+    // Require per-stack set success (debug names are AP/PX4-specific) — one
+    // stack's set+read pair must not count as two echoes.
+    const apSet = summary.debug.some((d) => /ap set/i.test(d.tag) && d.result === 'succeeded');
+    const px4Set = summary.debug.some((d) => /px4 set/i.test(d.tag) && d.result === 'succeeded');
+    if (apSet && px4Set) {
+      return { status: 'PASS', reason: 'AP + PX4 float32 param echoes succeeded' };
     }
-    if (echoes === 1) {
-      return { status: 'PARTIAL', reason: 'only one stack echoed' };
+    if (apSet || px4Set) {
+      return { status: 'PARTIAL', reason: `param echoes: ap=${apSet} px4=${px4Set}` };
     }
   }
   if (/in → build → out|composition/i.test(expect)) {
@@ -361,13 +393,26 @@ function verdictFrom(profile, summary, log) {
     }
   }
   if (/inherits profile target|sysid 2/i.test(expect)) {
-    if (results.includes('accepted') || results.includes('sent')) {
-      return { status: 'PASS', reason: 'profile target inherit exercised' };
+    const inheritOk = summary.debug.some((d) => {
+      if (d.result !== 'accepted' && d.result !== 'sent') return false;
+      return /sysid:\s*2\b/.test(d.excerpt || '') || /target:\s*\{\s*sysid:\s*2\b/.test(d.excerpt || '');
+    });
+    if (inheritOk) {
+      return { status: 'PASS', reason: 'profile target inherit resolved sysid 2' };
     }
+    return { status: 'UNKNOWN', reason: 'accepted/sent without resolved target sysid 2' };
   }
   if (/companion receive/i.test(expect)) {
-    if (summary.debug.length || /HEARTBEAT|NAMED_VALUE|sysid:\s*20/i.test(log)) {
-      return { status: 'PASS', reason: 'companion receive traffic observed' };
+    // Receive proof only — outbound NVF `sent` must not PASS this story.
+    const rx = summary.debug.some((d) => {
+      if (/nvf/i.test(d.tag)) return false;
+      if (/vehicle heartbeat|vehicle statustext|state events/i.test(d.tag)) return true;
+      if (/result:\s*'sent'|NAMED_VALUE_FLOAT/i.test(d.excerpt || '')) return false;
+      return /sysid:\s*20\b/.test(d.excerpt || '') &&
+        (/HEARTBEAT|STATUSTEXT|kind:\s*'transition'|peer-new|heartbeat/i.test(d.excerpt || ''));
+    });
+    if (rx) {
+      return { status: 'PASS', reason: 'companion receive traffic observed (sysid 20)' };
     }
   }
 

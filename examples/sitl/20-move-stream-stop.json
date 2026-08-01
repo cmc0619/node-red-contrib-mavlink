@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 20 Move stream stop",
     "disabled": false,
-    "info": "ArduPilot SITL move stream proof: prepare with Arm + GUIDED, stream a forward local velocity setpoint, then stop with payload:false.",
+    "info": "ArduPilot SITL move stream proof: prepare with Arm + GUIDED, stream a forward local velocity setpoint, then stop by injecting zero velocity (replaces/stops the prior stream). Do not use payload:false — that is the toolkit-wide suppress rule and never reaches stream.stop().",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl20-tab",
     "name": "Move stream with explicit stop",
-    "info": "Adapted from examples/23-velocity-joystick.json for the SITL lab. Connection binds 0.0.0.0:14550 and sends to 127.0.0.1:14551.\n\nUse the Arm + GUIDED inject first. Then fire Fwd 1 m/s to start the stream. The Stop inject sends payload:false to the same mavlink-move node, exercising the stream stop surface.",
+    "info": "Adapted from examples/23-velocity-joystick.json for the SITL lab. Connection binds 0.0.0.0:14550 and sends to 127.0.0.1:14551.\n\nUse the Arm + GUIDED inject first. Then fire Fwd 1 m/s to start the stream. The Stop inject sends velocity {north:0,east:0,up:0}; mavlink-move stops the prior stream before starting the zero-velocity stream (DESIGN.md: payload===false suppresses and must not be used as stop).",
     "x": 230,
     "y": 40,
     "wires": []
@@ -173,7 +173,7 @@
     "id": "sitl20-inject-stop",
     "type": "inject",
     "z": "sitl20-tab",
-    "name": "Stop",
+    "name": "Stop (zero velocity)",
     "props": [
       {
         "p": "payload"
@@ -184,9 +184,9 @@
     "once": false,
     "onceDelay": 0.1,
     "topic": "",
-    "payload": "false",
-    "payloadType": "bool",
-    "x": 130,
+    "payload": "{\"velocity\":{\"north\":0,\"east\":0,\"up\":0}}",
+    "payloadType": "json",
+    "x": 160,
     "y": 400,
     "wires": [
       [

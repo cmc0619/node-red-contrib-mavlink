@@ -4,9 +4,9 @@ How to bring up the Docker lab and run `examples/sitl/` efficiently.
 Human-oriented detail lives in [`README.md`](README.md); design intent in
 [`DESIGN.md` §13–§14](../DESIGN.md).
 
-**Live results go to a GitHub Issue** (label `sitl-results`), not into a PR.
-Close the prior open `sitl-results` issue when posting a new run. See
-[`../testing.md`](../testing.md) for the pointer only.
+**Live results:** each suite run closes the previous open GitHub Issue labeled
+`sitl-results`, publishes the new curated table in a new `sitl-results` issue,
+and does not open a results-only PR. See [`../testing.md`](../testing.md).
 
 ## Do this, not that
 
