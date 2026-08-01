@@ -8,7 +8,7 @@ Live runs of every flow under `examples/sitl/` against the Docker lab
 | **Latest run** | 2026-08-01 **03:50–04:00 UTC** (run 4) |
 | **Prior runs** | 2026-07-31 05:01–05:12 (run 3); 04:34–04:45 (run 2); ~03:28–03:40 (run 1) |
 | **Host** | Cloud agent VM, Node-RED `http://127.0.0.1:1880` |
-| **Repo** | `cursor/sitl-examples-rerun-9d7b` @ `41cee85` (prebuilt AP SITL + `copter.parm`) |
+| **Repo** | `cursor/sitl-examples-rerun-9d7b` @ `d4d28f7` (prebuilt AP SITL + `copter.parm`) |
 | **Fleet** | AP 1–5 (`14550`), PX4 11–15 (`14560`), companions 20 / 21 |
 | **Harness** | `node sitl/run-example-suite.js` → `sitl/example-suite-results.json` |
 | **Prep (run 4)** | AP image = official `firmware.ardupilot.org` Copter-4.7.0 static binary + autotest `copter.parm`; PX4-11 `COM_RCL_EXCEPT=7`, `COM_ARM_MAG_STR=0`, `MAV_0_BROADCAST=1` |
