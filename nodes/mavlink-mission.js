@@ -80,12 +80,8 @@ module.exports = function registerMavlinkMission(RED) {
     }
 
     node.on('input', (msg, send, done) => {
-      const finish = () => {
-        done();
-      };
-
       if (shouldSuppress(msg)) {
-        finish();
+        done();
         return;
       }
 
@@ -198,7 +194,7 @@ module.exports = function registerMavlinkMission(RED) {
             messageCount: plan.messages.length,
           }),
         ]);
-        finish();
+        done();
         return;
       }
 
@@ -254,11 +250,11 @@ module.exports = function registerMavlinkMission(RED) {
           if (outcome.result === 'succeeded') {
             applyActionStatus(node, 'ok', successBadge(operation, missionTypeKey, outcome));
             send([{ payload: rec }, rec]);
-            finish();
+            done();
           } else if (outcome.result === 'cancelled') {
             applyActionStatus(node, 'error', `${operation} ${outcome.result}`);
             send([null, rec]);
-            finish();
+            done();
           } else {
             applyActionStatus(node, 'error', `${operation} ${outcome.result}`);
             send([null, rec]);
