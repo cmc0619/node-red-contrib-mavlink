@@ -1686,7 +1686,7 @@ Local Identity editor shows HB Interval; Connection editor has no Heartbeat/Broa
 *Fact:* Node resolves `require('mavlink-mappings')` from the file that loads
 (`…/lib/metadata/bundled.js`), walking `node_modules` upward from that real path. A bare mount
 has no `node_modules`. Worse, `npm install /path` **symlinks** the package and npm's local-path
-rule skips installing that package's dependencies — so `/data/node_modules/node-red-contrib-mavlink`
+rule skips installing that package's dependencies — so `/data/node_modules/@cmc0619/node-red-contrib-mavlink`
 → `/module` still cannot see `mavlink-mappings`. Fix with `npm install --omit=dev` **on the
 mount**, or install a real copy into the user directory (`npm install --install-links /path` or
 a packed `.tgz` / git URL).
@@ -1917,7 +1917,7 @@ fills, dialect select, `currentCatalogQuery`, `validateUint8`, …) and its own 
 + dialect/vehicle/firmware `defaults.validate` blocks, because Node-RED loads external `<script src>`
 asynchronously so helpers might be undefined when a later node's `registerType` parses.
 *Fact:* The helpers live once in [`resources/mavlink-editor.js`](resources/mavlink-editor.js),
-served at `resources/node-red-contrib-mavlink/mavlink-editor.js` and loaded by a relative
+served at `resources/@cmc0619/node-red-contrib-mavlink/mavlink-editor.js` and loaded by a relative
 `<script src>` at the top of `mavlink-local-identity.html` (listed first in `package.json`
 `node-red.nodes` so its resource tag leads the module). Node-RED's `appendConfig` defers every inline node
 `<script>` until each module's relative-`src` scripts have fired `onload`, so `RED.mavlink.*` is

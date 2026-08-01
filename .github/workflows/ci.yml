@@ -82,7 +82,7 @@ jobs:
             "$RUNNER_TEMP/$archive" \
             node-red@4.1.11 \
             node-red-node-test-helper@0.3.6
-          MAVLINK_PACKAGE_ROOT="$install_root/node_modules/node-red-contrib-mavlink" \
+          MAVLINK_PACKAGE_ROOT="$install_root/node_modules/@cmc0619/node-red-contrib-mavlink" \
             NODE_PATH="$install_root/node_modules" \
             node --test integration/node-red-smoke.test.js
 

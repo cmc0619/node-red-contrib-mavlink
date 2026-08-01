@@ -13,7 +13,7 @@ mkdir -p "${USER_DIR}"
 cd "${USER_DIR}"
 
 echo "nodered: installing node-red-contrib-mavlink from ${MODULE_SRC}"
-rm -rf node_modules/node-red-contrib-mavlink
+rm -rf node_modules/@cmc0619/node-red-contrib-mavlink
 npm install --unsafe-perm --no-fund --no-audit --install-links "${MODULE_SRC}"
 
 cd "${APP_DIR}"

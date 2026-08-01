@@ -11,7 +11,7 @@ From your Node-RED user directory (usually `~/.node-red`, or `/data` in the offi
 image):
 
 ```bash
-npm install node-red-contrib-mavlink
+npm install @cmc0619/node-red-contrib-mavlink
 ```
 
 Or through the Node-RED editor: **Menu → Manage palette → Install**.
@@ -43,7 +43,7 @@ Requires Node.js 20+ and Node-RED 4.0+.
 ## Examples
 
 Importable flows ship with the package. In the Node-RED editor:
-**Import → Examples → node-red-contrib-mavlink**.
+**Import → Examples → @cmc0619/node-red-contrib-mavlink**.
 
 | File | Demonstrates |
 |------|----------------|

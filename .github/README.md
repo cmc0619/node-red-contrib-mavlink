@@ -25,7 +25,7 @@ npm install --install-links /path/to/node-red-contrib-mavlink
 
 # Or pack first, then install the tarball (also a real copy):
 npm pack /path/to/node-red-contrib-mavlink
-npm install ./node-red-contrib-mavlink-*.tgz
+npm install ./cmc0619-node-red-contrib-mavlink-*.tgz
 ```
 
 Restart Node-RED. The nodes appear under the **MAVLink** palette (config nodes under
@@ -40,7 +40,7 @@ If the log shows a require stack under `/module/lib/...`, Node-RED is loading th
 checkout directly. A bare mount has no `node_modules`:
 
 ```text
-[node-red-contrib-mavlink/mavlink-connection] Error: Cannot find module 'node-mavlink'
+[@cmc0619/node-red-contrib-mavlink/mavlink-connection] Error: Cannot find module 'node-mavlink'
 ```
 
 Install dependencies **on the mount** (so resolution from `/module/lib/...` succeeds):
@@ -86,7 +86,7 @@ Importable flows live in [`examples/`](../examples), and they **do** ship in the
 Firmware pain-tests that need a live SITL rig are in [`examples/sitl/`](../examples/sitl) — see
 that folder's README and the [`sitl/`](../sitl/README.md) Docker lab.
 
-In the Node-RED editor: **Import → Examples → node-red-contrib-mavlink** (nested `sitl/`
+In the Node-RED editor: **Import → Examples → @cmc0619/node-red-contrib-mavlink** (nested `sitl/`
 entries appear under the package examples folder).
 
 | File | Demonstrates |

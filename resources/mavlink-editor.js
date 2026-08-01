@@ -2,7 +2,7 @@
  * Shared MAVLink editor helpers, loaded once for every node dialog.
  *
  * Node-RED serves this file at
- * `resources/node-red-contrib-mavlink/mavlink-editor.js` (DESIGN.md §6,
+ * `resources/@cmc0619/node-red-contrib-mavlink/mavlink-editor.js` (DESIGN.md §6,
  * https://nodered.org/docs/creating-nodes/resources). Each node HTML loads it
  * with a relative `<script src>`; Node-RED's `appendConfig` defers every inline
  * node script until this external script's `onload` fires, so `RED.mavlink.*`
