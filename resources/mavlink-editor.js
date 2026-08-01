@@ -3,13 +3,10 @@
  *
  * Node-RED serves this file at
  * `resources/node-red-contrib-mavlink/mavlink-editor.js` (DESIGN.md §6,
- * https://nodered.org/docs/creating-nodes/resources). Exactly one node HTML
- * loads it — `mavlink-local-identity.html` — with a relative `<script src>`.
- * Node-RED appends node HTML one node at a time, and `appendConfig` holds back
- * a node's inline scripts only when that node's own HTML carries a
- * relative-`src` script, so Local Identity must stay first in `node-red.nodes`
- * for `RED.mavlink.*` to exist when the other twelve `registerType` calls run.
- * Both rules are pinned in `test/tooling/package-contract.check.js`.
+ * https://nodered.org/docs/creating-nodes/resources). Each node HTML loads it
+ * with a relative `<script src>`; Node-RED's `appendConfig` defers every inline
+ * node script until this external script's `onload` fires, so `RED.mavlink.*`
+ * is defined before any `registerType` runs.
  *
  * This is the browser (editor) half of the toolkit. It owns the config-node
  * picker, the enum/dialect catalog helpers, the role × tier matrix source
