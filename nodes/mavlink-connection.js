@@ -126,7 +126,7 @@ module.exports = function registerMavlinkConnection(RED) {
   }
 
   RED.nodes.registerType('mavlink-connection', MavlinkConnectionNode, {
-    credentials: { signingPassphrase: { type: 'password' } },
+    credentials: { signingPassphrase: { type: 'password' }, signingKeyHex: { type: 'password' } },
   });
 };
 
@@ -227,15 +227,39 @@ function buildTransportConfig(config) {
  */
 function buildSigning(config, credentials) {
   const passphrase = credentials && credentials.signingPassphrase;
+  const keyHex = credentials && credentials.signingKeyHex && credentials.signingKeyHex.trim();
+
+  // Two independent key sources configured is an ambiguous deploy, and which
+  // one wins would be a silent guess — fail loud at construction (§7, §2).
+  if (passphrase && keyHex) {
+    throw new Error(
+      'mavlink-connection: both a signing passphrase and a raw signing key are set — ' +
+        'clear one; the connection will not guess which key to use'
+    );
+  }
+
   const signing = {
     linkId: config.linkId ? Number(config.linkId) : 0,
     signOutbound: !!config.signOutbound,
     requireSigned: !!config.requireSigned,
     acceptInvalid: !!config.acceptInvalid,
-    hasKey: !!passphrase,
+    hasKey: !!(passphrase || keyHex),
     key: null,
   };
-  if (passphrase) {
+  if (keyHex) {
+    // Raw 32-byte key, entered as 64 hex chars — the form both firmwares are
+    // provisioned with (SETUP_SIGNING carries raw bytes) and the only way to
+    // match a fleet whose key did not come from a Mission-Planner-style
+    // sha256(passphrase) (e.g. QGC derives via PBKDF2, which a passphrase
+    // here cannot reproduce).
+    if (!/^[0-9a-fA-F]{64}$/.test(keyHex)) {
+      throw new Error(
+        'mavlink-connection: raw signing key must be exactly 64 hex characters ' +
+          `(32 bytes); got ${keyHex.length} characters`
+      );
+    }
+    signing.key = Buffer.from(keyHex, 'hex');
+  } else if (passphrase) {
     const { MavLinkPacketSignature } = require('node-mavlink');
     signing.key = MavLinkPacketSignature.key(passphrase);
   }

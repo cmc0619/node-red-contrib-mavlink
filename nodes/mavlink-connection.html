@@ -44,6 +44,7 @@
     },
     credentials: {
       signingPassphrase: { type: 'password' },
+      signingKeyHex: { type: 'password' },
     },
     label: function () {
       var mode = (this.mode || 'udp').toUpperCase();
@@ -163,6 +164,10 @@
   <div class="form-row">
     <label for="node-config-input-signingPassphrase"><i class="fa fa-key"></i> Passphrase</label>
     <input type="password" id="node-config-input-signingPassphrase" />
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-signingKeyHex"><i class="fa fa-key"></i> Raw key (hex)</label>
+    <input type="password" id="node-config-input-signingKeyHex" placeholder="64 hex characters" />
   </div>
   <div class="form-row">
     <label for="node-config-input-linkId"><i class="fa fa-link"></i> Link ID</label>
