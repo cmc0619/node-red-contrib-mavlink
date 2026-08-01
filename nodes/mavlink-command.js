@@ -142,7 +142,7 @@ module.exports = function registerMavlinkCommand(RED) {
     if (commandId === null || configuredCarrier === null) {
       node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
       node.on('input', (_msg, _send, done) => {
-        done && done();
+        done();
       });
       node.on('close', (done) => done());
       return;
@@ -255,7 +255,7 @@ module.exports = function registerMavlinkCommand(RED) {
     async function handleInput(msg, send, done) {
       // § Suppress: msg.payload === false → do nothing.
       if (shouldSuppress(msg)) {
-        done && done();
+        done();
         return;
       }
 
@@ -382,7 +382,7 @@ module.exports = function registerMavlinkCommand(RED) {
           detail: 'build tier: message constructed, not sent',
         });
         emitStatus(rec, send, true, message);
-        done && done();
+        done();
         return;
       }
 
@@ -394,7 +394,7 @@ module.exports = function registerMavlinkCommand(RED) {
         const rec = makeRecord({ result: 'sent', confirmedBy: 'none', elapsed: 0 });
         node.status({ fill: 'green', shape: 'dot', text: badge24(`sent ${displayName}`) });
         emitStatus(rec, send, true, message);
-        done && done();
+        done();
         return;
       }
 
@@ -525,7 +525,7 @@ module.exports = function registerMavlinkCommand(RED) {
             });
             node.status({ fill: 'green', shape: 'dot', text: badge24(`${displayName} accepted`) });
             emitStatus(rec, send, true, rec);
-            done && done();
+            done();
             return;
           }
         }
@@ -585,7 +585,7 @@ module.exports = function registerMavlinkCommand(RED) {
             failDone(`${displayName} completion timeout`);
             return;
           }
-          done && done();
+          done();
           return;
         }
 
@@ -600,7 +600,7 @@ module.exports = function registerMavlinkCommand(RED) {
         });
         node.status({ fill: 'green', shape: 'dot', text: badge24(`${displayName} accepted`) });
         emitStatus(rec, send, true, rec);
-        done && done();
+        done();
         return;
       }
 
