@@ -459,9 +459,8 @@ test('an open() rejected by a racing close() resolves start() quietly, not as an
   // TCP-style race: the transport settles its pending open() with a rejection
   // when close() interrupts it. start() must swallow that — surfacing it would
   // paint a spurious deploy-time ERROR via the node's start().catch().
-  const { connection } = build();
   let rejectOpen;
-  connection._transportFactory = () => ({
+  const transportFactory = () => ({
     mode: 'tcp',
     on() {},
     open: () => new Promise((resolve, reject) => { rejectOpen = reject; }),
@@ -473,11 +472,12 @@ test('an open() rejected by a racing close() resolves start() quietly, not as an
     },
     send() {},
   });
+  const { connection } = build({}, { transportFactory });
 
   const starting = connection.start();
   connection.close();
   await starting; // must not reject
-  assert.notEqual(connection.getState(), STATE.CONNECTED);
+  assert.equal(connection.getState(), STATE.CLOSED, 'the race must settle in CLOSED, not CONNECTING');
 });
 
 test('an identity override outside the bound set is rejected, never falling back', async () => {

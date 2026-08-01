@@ -44,7 +44,17 @@
     },
     credentials: {
       signingPassphrase: { type: 'password' },
-      signingKeyHex: { type: 'password' },
+      signingKeyHex: {
+        type: 'password',
+        // Static format rule mirrored from buildSigning(): blank, or exactly
+        // 64 hex chars. The passphrase/raw-key exclusivity stays a deploy-time
+        // check — saved password credentials only surface as has_* booleans in
+        // the editor, so the loud constructor failure is the authoritative one.
+        validate: function (v) {
+          var val = String(v == null ? '' : v).trim();
+          return val === '' || /^[0-9a-fA-F]{64}$/.test(val);
+        },
+      },
     },
     label: function () {
       var mode = (this.mode || 'udp').toUpperCase();

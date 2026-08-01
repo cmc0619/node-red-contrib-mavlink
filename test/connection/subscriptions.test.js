@@ -94,7 +94,11 @@ test('a throwing subscriber does not block delivery to the next one, or escape d
     secondReceived = msg;
   });
 
-  assert.doesNotThrow(() => reg.dispatch(decoded()));
+  let delivered;
+  assert.doesNotThrow(() => {
+    delivered = reg.dispatch(decoded());
+  });
+  assert.equal(delivered, 1, 'a throwing subscriber must not count as delivered');
   assert.ok(secondReceived, 'second subscriber must still receive the frame');
   assert.equal(errors.length, 1);
   assert.match(errors[0], /BigInt/);
