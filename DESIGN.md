@@ -1008,12 +1008,29 @@ command plus its own params, checked against the peer table:
 | Command | Completion |
 |---|---|
 | `COMPONENT_ARM_DISARM` | armed state matches the requested param |
-| `NAV_TAKEOFF` | relative altitude reaches the commanded altitude, within tolerance |
+| `NAV_TAKEOFF` | climb height reaches the commanded climb, within tolerance |
 | `NAV_LAND`, `NAV_RETURN_TO_LAUNCH` | landed state reports on-ground |
 | `DO_SET_MODE` | active mode matches the requested mode |
 
 The node already holds the param, so it already holds the threshold. Commands with no
 meaningful completion state do not offer the tier — the dropdown stops at confirm.
+
+**Takeoff completion reasons in climb height, not raw altitude, because the takeoff param
+is a different datum per frame.** `GLOBAL_POSITION_INT` reports both `relative_alt`
+(above home) and `alt` (AMSL); the peer table stores both as the raw wire millimetres, and
+`lib/command/completion.js` divides by 1000 to reason in metres. For a relative frame — and for `COMMAND_LONG`,
+which carries no frame at all — the takeoff param *is* the climb, so completion compares it
+directly to `relative_alt`. For an absolute frame (`GLOBAL` 0, `GLOBAL_INT` 5) the param is
+an AMSL target, so the climb target is `param − home`, where home is derived as
+`alt − relative_alt`; completion then compares that climb target to `relative_alt`. This
+keeps the ±10% tolerance meaningful — 90% of an AMSL number is a point below the ground — and
+avoids a false timeout from comparing an AMSL target against a relative reading. Because only
+`COMMAND_INT` puts a frame on the wire, the command node passes the frame to completion only
+when the effective carrier (after any INT→LONG swap) is INT; a `COMMAND_LONG` takeoff always
+uses the relative datum. The AMSL branch is reasoned from the frame semantics and unit-tested
+against synthetic peer positions, not yet measured against SITL. Terrain frames
+(`GLOBAL_TERRAIN_ALT` 10/11) are treated as relative-to-home; over near-home takeoff terrain
+that holds, but a terrain-relative completion datum is unimplemented.
 
 Every completion wait carries a timeout. A vehicle that accepts a takeoff and never climbs must
 not hang the flow — the wait ends, Continue does not fire, and the status record names the
@@ -1442,6 +1459,19 @@ next agent reads only this file.
 sequential PRs. Count: `git diff --name-only <base>...HEAD | wc -l`.
 
 ---
+
+**Takeoff completion compares climb height, and the takeoff param's datum is frame-dependent.**
+*Wrong belief:* the `NAV_TAKEOFF` param is always a relative altitude, so completion can compare
+it directly to `GLOBAL_POSITION_INT.relative_alt` regardless of frame.
+*Fact:* the param carries whatever datum the command's `MAV_FRAME` names. In an absolute frame
+(`GLOBAL` 0 / `GLOBAL_INT` 5) it is an AMSL target; comparing it to `relative_alt` never
+satisfies at a non-zero home elevation and times out a successful takeoff. Completion converts
+to a climb target — relative frames and `COMMAND_LONG` use the param as-is, absolute frames use
+`param − home` where `home = alt − relative_alt`. Only `COMMAND_INT` carries a frame on the
+wire, so the command node passes the frame to completion only when the effective carrier (after
+any INT→LONG swap) is INT. This branch is reasoned from frame semantics and unit-tested against
+synthetic peer positions; it is not yet SITL-measured.
+*Check:* `node --test test/command/completion.test.js`
 
 **Inline Node-RED editor JavaScript is useful lint scope even though HTML contract tests remain
 necessary.**

@@ -175,6 +175,13 @@ test('Land has completion key COMPLETION.LAND', () => {
   assert.equal(getPreset('land').completionKey, COMPLETION.LAND);
 });
 
+test('Land pins yaw (param 4) to NaN — keep current heading, never yaw-to-north (issue #98b)', () => {
+  const land = getPreset('land');
+  assert.ok(!land.exposedParams.includes(4), 'param 4 is not exposed (no editor field ever existed)');
+  const arr = buildParamArray(land, {}); // operator supplies nothing
+  assert.ok(Number.isNaN(arr[3]), 'param 4 must be NaN (keep heading), not 0 (yaw to north)');
+});
+
 test('RTL has completion key COMPLETION.LAND', () => {
   assert.equal(getPreset('rtl').completionKey, COMPLETION.LAND);
 });

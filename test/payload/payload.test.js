@@ -66,6 +66,40 @@ test('gimbal manager aim uses the message path and declares no confirmation', ()
   });
 });
 
+test('gimbal manager angle aim NaN-s the unused rate pair, not zero-rate (issue #87)', () => {
+  // An angle aim with the rate fields left blank must send pitch_rate / yaw_rate
+  // as NaN ("axis not rate-controlled"), not 0 — a literal zero rate alongside a
+  // pitch/yaw angle is the ambiguous both-modes command some firmwares drop.
+  const built = buildPayloadMessage({
+    topic: 'gimbal',
+    verb: 'aim',
+    path: 'manager',
+    target: { sysid: 2, compid: 154 },
+    values: { pitch: -45, yaw: 90, pitchRate: '', yawRate: '' },
+  });
+  const f = built.message.fields;
+  assert.equal(f.pitch, -45);
+  assert.equal(f.yaw, 90);
+  assert.ok(Number.isNaN(f.pitch_rate), 'blank pitch rate must be NaN, not 0');
+  assert.ok(Number.isNaN(f.yaw_rate), 'blank yaw rate must be NaN, not 0');
+});
+
+test('gimbal manager angle aim NaN-s the rate pair when the fields are omitted entirely', () => {
+  // Blank strings exercise one default path; a values object with no rate keys
+  // at all exercises the recipe's missing-field default. Both must resolve to
+  // NaN, never a literal 0 rate (issue #87).
+  const built = buildPayloadMessage({
+    topic: 'gimbal',
+    verb: 'aim',
+    path: 'manager',
+    target: { sysid: 2, compid: 154 },
+    values: { pitch: -45, yaw: 90 },
+  });
+  const f = built.message.fields;
+  assert.ok(Number.isNaN(f.pitch_rate), 'omitted pitch rate must default to NaN');
+  assert.ok(Number.isNaN(f.yaw_rate), 'omitted yaw rate must default to NaN');
+});
+
 test('servo repeat and release verbs map to their MAV_CMD command values', () => {
   const servo = buildPayloadMessage({
     carrier: 'long',

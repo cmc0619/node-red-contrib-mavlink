@@ -503,6 +503,13 @@ module.exports = function registerMavlinkCommand(RED) {
       const carrierSwapped = carrier !== configuredCarrier;
       const carrierLabel = `COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'}`;
 
+      // Completion's TAKEOFF datum is frame-aware, but only COMMAND_INT carries
+      // a frame on the wire — COMMAND_LONG has none. After a possible INT→LONG
+      // carrier swap, the effective carrier decides whether a frame applies:
+      // pass it for INT, withhold it for LONG so completion uses the relative
+      // datum instead of AMSL math against a frame the vehicle never saw.
+      const completionFrame = carrier === CARRIER.INT ? frame : undefined;
+
       // Timeout: check peer table for completion condition.
       if (ackOutcome.result === 'timeout') {
         if (completionKey && connNode.peerTable) {
@@ -511,7 +518,8 @@ module.exports = function registerMavlinkCommand(RED) {
             paramArray,
             connNode.peerTable,
             target.sysid,
-            target.compid
+            target.compid,
+            completionFrame
           );
           if (stateCheck.done) {
             // Ack was lost on the return leg; the command ran.
@@ -557,6 +565,7 @@ module.exports = function registerMavlinkCommand(RED) {
             peerTable: connNode.peerTable,
             sysid: target.sysid,
             compid: target.compid,
+            frame: completionFrame,
             timeoutMs: config.completionTimeout ? Number(config.completionTimeout) : 60000,
           });
 
