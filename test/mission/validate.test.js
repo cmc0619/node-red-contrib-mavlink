@@ -32,6 +32,34 @@ test('mission validator accepts NAV and DO/CONDITION items, rejects fence/rally'
   assert.equal(validateMissionItems([{ command: 5100 }]).ok, false);
 });
 
+test('mission validator admits out-of-window commands the firmware may support (issue #90)', () => {
+  // PX4 accepts these as mission items (its mavlink_mission.cpp parser), even
+  // though they fall outside the old NAV/DO numeric window. The validator no
+  // longer second-guesses firmware support — only the fence/rally families are
+  // reserved. A firmware that cannot run one of these answers MAV_MISSION_UNSUPPORTED.
+  const ids = [
+    530,  // SET_CAMERA_MODE
+    2000, // IMAGE_START_CAPTURE
+    2001, // IMAGE_STOP_CAPTURE
+    2500, // VIDEO_START_CAPTURE
+    2501, // VIDEO_STOP_CAPTURE
+    3000, // DO_VTOL_TRANSITION
+  ];
+  for (const command of ids) {
+    assert.equal(validateMissionItems([{ command }]).ok, true, `command ${command} must upload`);
+  }
+});
+
+test('fence and rally families are still reserved out of a mission (issue #90 keeps the one real rule)', () => {
+  for (const command of [5000, 5001, 5002, 5003, 5004, 5100]) {
+    assert.equal(
+      validateMissionItems([{ command }]).ok,
+      false,
+      `fence/rally command ${command} must not upload as a mission item`
+    );
+  }
+});
+
 test('fence validator accepts only NAV_FENCE commands', () => {
   assert.equal(validateFenceItems([{ command: 5001 }, { command: 5004 }]).ok, true);
   // A waypoint is not a fence item.
