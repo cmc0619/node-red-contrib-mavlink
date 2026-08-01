@@ -255,6 +255,14 @@ test('command Build visibility shows Vehicle Profile only for __vehicle dialect'
   );
 });
 
+test('command params validate delegates to shared location-params gate (#88)', () => {
+  assert.match(
+    html,
+    /validateCommandLocationParams/,
+    'params default uses shared blank-coords validator'
+  );
+});
+
 test('command catalog targeting delegates to the shared resolver (no local copy)', () => {
   // The catalog source matrix — empty Build dialect ⇒ no target (never a silent
   // ardupilotmega), __vehicle ⇒ profile id + dialect, wire ⇒ connection profile

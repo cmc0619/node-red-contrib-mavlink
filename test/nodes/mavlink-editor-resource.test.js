@@ -236,3 +236,72 @@ test('payloadVerbIgnoresCarrier mirrors the lib recipe table exactly', () => {
     );
   }
 });
+
+// ── blank-coordinate editor gates (issue #88) ────────────────────────────────
+
+test('validateRoiCoordinate requires a value only for gimbal/roi-set', () => {
+  const { RED } = loadResource({});
+  assert.equal(
+    RED.mavlink.validateRoiCoordinate.call({ topic: 'camera', verb: 'photo' }, ''),
+    true,
+    'non-ROI verbs ignore blank lat'
+  );
+  assert.equal(
+    RED.mavlink.validateRoiCoordinate.call({ topic: 'gimbal', verb: 'roi-set' }, ''),
+    false,
+    'ROI refuses blank'
+  );
+  assert.equal(
+    RED.mavlink.validateRoiCoordinate.call({ topic: 'gimbal', verb: 'roi-set' }, 0),
+    true,
+    'explicit 0 is a value'
+  );
+  assert.equal(
+    RED.mavlink.validateRoiCoordinate.call({ topic: 'gimbal', verb: 'roi-set' }, '  '),
+    false,
+    'whitespace is blank'
+  );
+});
+
+test('validateCommandLocationParams requires lat/lon/alt for destination presets', () => {
+  const { RED } = loadResource({});
+  assert.equal(
+    RED.mavlink.validateCommandLocationParams.call(
+      { mode: 'preset', preset: 'arm' },
+      '{}'
+    ),
+    true,
+    'non-location presets pass'
+  );
+  assert.equal(
+    RED.mavlink.validateCommandLocationParams.call(
+      { mode: 'preset', preset: 'reposition' },
+      '{}'
+    ),
+    false,
+    'reposition refuses blank coords'
+  );
+  assert.equal(
+    RED.mavlink.validateCommandLocationParams.call(
+      { mode: 'preset', preset: 'reposition' },
+      '{"5":-35,"6":149,"7":50}'
+    ),
+    true
+  );
+  assert.equal(
+    RED.mavlink.validateCommandLocationParams.call(
+      { mode: 'preset', preset: 'set_home' },
+      '{"1":1}'
+    ),
+    true,
+    'set_home use-current skips location'
+  );
+  assert.equal(
+    RED.mavlink.validateCommandLocationParams.call(
+      { mode: 'preset', preset: 'orbit' },
+      '{"5":"NaN","6":"NaN","7":"NaN"}'
+    ),
+    true,
+    'explicit NaN is a value'
+  );
+});

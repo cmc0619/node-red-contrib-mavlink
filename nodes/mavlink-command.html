@@ -217,7 +217,11 @@
       maxRetries:        { value: '3' },
       unconfirmedContinue: { value: false },
       completionTimeout: { value: '60000' },
-      params:            { value: '{}' },
+      // Destination presets / on-screen lat-lon-alt: refuse blank so deploy
+      // cannot ship 0,0 (issue #88). Runtime still guards msg overrides.
+      params:            { value: '{}', validate: function (v) {
+        return RED.mavlink.validateCommandLocationParams.call(this, v);
+      } },
     },
     RED.mavlink.buildTierDialectDefaults()
   );

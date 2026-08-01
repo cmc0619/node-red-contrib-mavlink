@@ -170,6 +170,29 @@ test('mavlink-payload has rows for gimbal roi-set lat/lon/alt (§B)', () => {
   );
 });
 
+test('mavlink-payload ROI lat/lon/alt default blank and use conditional validate (#88)', () => {
+  assert.match(
+    payloadHtml,
+    /lat:\s*\{\s*value:\s*''/,
+    'lat default is blank — not 0 (null island)'
+  );
+  assert.match(
+    payloadHtml,
+    /lon:\s*\{\s*value:\s*''/,
+    'lon default is blank'
+  );
+  assert.match(
+    payloadHtml,
+    /alt:\s*\{\s*value:\s*''/,
+    'alt default is blank'
+  );
+  assert.match(
+    payloadHtml,
+    /validateRoiCoordinate/,
+    'ROI coordinates use shared conditional validator'
+  );
+});
+
 test('mavlink-payload has rows for gimbal manager aim flags and gimbalDeviceId (§B)', () => {
   assert.match(payloadHtml, /id="row-payload-flags"/, 'flags row for manager aim');
   assert.match(payloadHtml, /id="row-payload-gimbalDeviceId"/, 'gimbalDeviceId row for manager aim');

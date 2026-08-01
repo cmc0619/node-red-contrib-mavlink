@@ -97,6 +97,78 @@
   };
 
   /**
+   * ROI lat/lon/alt: required (and numeric) only for gimbal/roi-set. Blank
+   * default — never invent 0,0,0 (issue #88). Live selectors beat stale this.*
+   * during in-dialog validation (same house pattern as the carrier validator).
+   *
+   * @param {*} value
+   * @returns {boolean}
+   */
+  RED.mavlink.validateRoiCoordinate = function (value) {
+    var $topic = typeof $ !== 'undefined' ? $('#node-input-topic') : null;
+    var topic = ($topic && $topic.length) ? $topic.val() : (this.topic || 'camera');
+    var $verb = typeof $ !== 'undefined' ? $('#node-input-verb') : null;
+    var verb = ($verb && $verb.length) ? $verb.val() : (this.verb || '');
+    if (!(topic === 'gimbal' && verb === 'roi-set')) return true;
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string' && value.trim() === '') return false;
+    var n = Number(value);
+    return Number.isFinite(n) || Number.isNaN(n);
+  };
+
+  /**
+   * Command-node params: require lat/lon/alt for destination presets and for
+   * advanced commands whose on-screen param5 label is Latitude (issue #88).
+   *
+   * @param {string} rawJson
+   * @returns {boolean}
+   */
+  RED.mavlink.validateCommandLocationParams = function (rawJson) {
+    function present(val) {
+      if (val === undefined || val === null) return false;
+      if (typeof val === 'string' && String(val).trim() === '') return false;
+      var n = Number(val);
+      return Number.isFinite(n) || Number.isNaN(n);
+    }
+    function readIdx(idx, parsed) {
+      if (typeof $ !== 'undefined') {
+        var $inp = $('.param-input[data-idx="' + idx + '"]');
+        if ($inp.length) return $inp.val();
+      }
+      if (!parsed) return undefined;
+      if (parsed[idx] !== undefined) return parsed[idx];
+      return parsed[String(idx)];
+    }
+    var parsed;
+    try { parsed = JSON.parse(rawJson || '{}'); } catch (_e) { return false; }
+    if (!parsed || typeof parsed !== 'object') return false;
+
+    var $mode = typeof $ !== 'undefined' ? $('#node-input-mode') : null;
+    var mode = ($mode && $mode.length) ? $mode.val() : (this.mode || 'preset');
+    if (mode === 'preset') {
+      var $preset = typeof $ !== 'undefined' ? $('#node-input-preset') : null;
+      var preset = ($preset && $preset.length) ? $preset.val() : (this.preset || 'arm');
+      if (preset !== 'reposition' && preset !== 'orbit' && preset !== 'set_home') return true;
+      if (preset === 'set_home' && Number(readIdx(1, parsed)) === 1) return true;
+      return present(readIdx(5, parsed)) && present(readIdx(6, parsed)) && present(readIdx(7, parsed));
+    }
+
+    // Advanced: only when a Latitude field is visible (or was last saved with
+    // param5 present under a location command). Non-location param5 (gimbal
+    // flags) must not be treated as a coordinate.
+    var needsLocation = false;
+    if (typeof $ !== 'undefined') {
+      var $lat = $('.param-input[data-idx="5"]');
+      if ($lat.length) {
+        var label = $lat.closest('.form-row').find('label').text() || '';
+        needsLocation = /latitude/i.test(label);
+      }
+    }
+    if (!needsLocation) return true;
+    return present(readIdx(5, parsed)) && present(readIdx(6, parsed)) && present(readIdx(7, parsed));
+  };
+
+  /**
    * Editor-side copy of lib/metadata/naming.js isFalseTrueEnum. Client HTML
    * cannot require() the Node module, so keep this rule mirrored here.
    * Exactly two entries: *_FALSE=0 and *_TRUE=1 (not mixed tables).

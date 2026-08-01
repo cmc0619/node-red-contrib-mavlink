@@ -60,10 +60,17 @@
       stabilizeRoll: { value: 0, validate: RED.validators.number(true) },
       stabilizePitch: { value: 0, validate: RED.validators.number(true) },
       stabilizeYaw: { value: 0, validate: RED.validators.number(true) },
-      /* gimbal roi-set */
-      lat: { value: 0, validate: RED.validators.number(true) },
-      lon: { value: 0, validate: RED.validators.number(true) },
-      alt: { value: 0, validate: RED.validators.number(true) },
+      /* gimbal roi-set — blank default; required when verb is roi-set so the
+         editor cannot silently ship 0,0,0 (null island, issue #88 / Codex #116). */
+      lat: { value: '', validate: function (v) {
+        return RED.mavlink.validateRoiCoordinate.call(this, v);
+      } },
+      lon: { value: '', validate: function (v) {
+        return RED.mavlink.validateRoiCoordinate.call(this, v);
+      } },
+      alt: { value: '', validate: function (v) {
+        return RED.mavlink.validateRoiCoordinate.call(this, v);
+      } },
       /* servo */
       servo: { value: 0, validate: RED.validators.number(true) },
       pwm: { value: 0, validate: RED.validators.number(true) },
