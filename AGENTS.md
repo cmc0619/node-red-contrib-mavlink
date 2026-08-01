@@ -24,10 +24,10 @@ long-lived feature branches waiting for perfection or for optional bots.
 
 **PRs are opened ready for review (not draft)** so bot reviewers run immediately. After push,
 wait for a **quorum of finished bots** — enough completed reviews to act on, not every
-configured bot. Today that means **CodeRabbit and Greptile both finished** (check
-success/failure and read their findings). Codex (`chatgpt-codex-connector`) is not required
-for quorum: it often ignores `@codex review` from `cursor[bot]`. If Codex (or a human) does
-leave findings, handle them; do not stall waiting for a bot that never starts.
+configured bot. Today that means **CodeRabbit finished** (check success/failure and read its
+findings). Greptile is gone — do not wait for it. Codex (`chatgpt-codex-connector`) is not
+required for quorum: it often ignores `@codex review` from `cursor[bot]`. If Codex (or a human)
+does leave findings, handle them; do not stall waiting for a bot that never starts.
 
 Do not treat the implementation as finished until the quorum's Critical/Important findings
 are addressed or explicitly declined per DESIGN.md §2 (with a §14 note when a belief was
@@ -40,15 +40,15 @@ open for the next passer-by.
 
 **GitHub → Cursor wake-up (owner setup).** Create a private automation at
 https://cursor.com/automations (or `/automate` in the Agents Window) on this repo with
-triggers: **CI completed** (covers CodeRabbit / Greptile check completion) and **PR review
-submitted** (covers Codex and human reviews). Prompt should: identify the open PR, collect
-inline comments from CodeRabbit / Greptile / Codex, apply or decline each finding against
-DESIGN.md, push fixes under the 50-file cap, and reply on the threads. Without this, agents
-only learn reviews finished when a human pings them.
+triggers: **CI completed** (covers CodeRabbit check completion) and **PR review submitted**
+(covers Codex and human reviews). Prompt should: identify the open PR, collect inline comments
+from CodeRabbit / Codex, apply or decline each finding against DESIGN.md, push fixes under the
+50-file cap, and reply on the threads. Without this, agents only learn reviews finished when a
+human pings them.
 
 **PRs are opened ready for review, not as drafts.** After push, mark the PR ready and **wait
-for bot reviewers** (CodeRabbit, Greptile, and any other configured checks) to finish before
-treating the change as done or stacking more work that depends on their feedback. Address
+for bot reviewers** (CodeRabbit, and any other configured checks) to finish before treating
+the change as done or stacking more work that depends on their feedback. Address
 Critical/Important findings before moving on.
 
 ## Implementation workflow: use sub-agents (repo-owner directive)
