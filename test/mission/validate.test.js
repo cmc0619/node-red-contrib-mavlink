@@ -88,6 +88,25 @@ test('an item without a numeric command is rejected naming its sequence', () => 
   assert.equal(result.seq, 1);
 });
 
+test('a non-uint16 command is rejected before the family test (would corrupt the wire)', () => {
+  // 5001.9 is finite and not === any fence id, so the family predicate alone
+  // would pass it — but it truncates on the uint16 wire to reserved fence
+  // command 5001, defeating the one reservation the validator holds.
+  const frac = validateMissionItems([{ command: 5001.9 }]);
+  assert.equal(frac.ok, false);
+  assert.equal(frac.seq, 0);
+
+  // Out-of-range ids would throw mid-serialization; reject them cleanly here.
+  assert.equal(validateMissionItems([{ command: -1 }]).ok, false);
+  assert.equal(validateMissionItems([{ command: 65536 }]).ok, false);
+
+  // A fence upload of 5001.9 must not slip through as 5001 either.
+  assert.equal(validateFenceItems([{ command: 5001.9 }]).ok, false);
+
+  // A genuine uint16 command id still passes.
+  assert.equal(validateMissionItems([{ command: 16 }]).ok, true);
+});
+
 test('firmware gates the mission type list (§11)', () => {
   assert.deepEqual(supportedMissionTypes('ardupilot'), ['mission', 'fence', 'rally']);
   // PX4 does not carry fence and rally the same way — mission only.
