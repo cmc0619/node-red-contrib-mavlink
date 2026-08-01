@@ -126,12 +126,12 @@ Directed commands use the Connection peer table (reply to HEARTBEAT source).
 
 ## Takeoff / GUIDED
 
-AP `NAV_TAKEOFF` needs GUIDED **and** a vehicle on the ground. Example **01**
-sets GUIDED in-band (arm → mode → takeoff); harness prep `ap-guided-1` SET_MODE
-GUIDED after the per-example fleet restart. If takeoff is still DENIED
-(`resultCode: 4`), check that the fleet restart ran and GPS/EKF settled — do
-not reintroduce a source build, and do not rely on force-disarm to clear
-altitude.
+AP `NAV_TAKEOFF` needs GUIDED **and** a vehicle on the ground. Examples **01/02**
+set GUIDED **before** arm (cold SITL often DENYs armed STABILIZE→GUIDED).
+Harness prep `ap-guided-1` polls until HEARTBEAT shows GUIDED after the
+per-example fleet restart. If takeoff is still DENIED (`resultCode: 4`), check
+that the fleet restart ran and GUIDED prep confirmed — do not reintroduce a
+source build, and do not rely on force-disarm to clear altitude.
 
 ## Param echo types
 

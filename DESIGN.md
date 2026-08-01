@@ -1765,17 +1765,19 @@ does not open a results-only PR. Harness JSON defaults to `/tmp/`. In-tree `test
 only a pointer to that workflow.
 *Check:* `sitl/AGENTS.md`, `testing.md`, `sitl/.gitignore`.
 
-**ArduCopter takeoff examples must set GUIDED in-band.**
-*Wrong belief:* an out-of-band harness `SET_MODE GUIDED` before deploy is enough for
-example 01’s arm→takeoff chain.
-*Fact:* after other suite members leave sysid 1 in STABILIZE (or the prep races a bind),
-`MAV_CMD_NAV_TAKEOFF` returns `MAV_RESULT_DENIED` (resultCode 4) even when arm ACKs.
-Example 01 now mirrors 02: arm → GUIDED → takeoff inside the flow. Harness prep
-`ap-guided-1` still SET_MODE GUIDED after the per-example fleet restart. Measured
-against official prebuilt
+**ArduCopter takeoff examples set GUIDED before arm.**
+*Wrong belief:* arm → GUIDED → takeoff is always safe on SITL, and a fire-and-forget
+harness `SET_MODE GUIDED` before deploy is enough.
+*Fact:* after a cold docker restart, armed `STABILIZE→GUIDED` often returns
+`MAV_RESULT_DENIED` (resultCode 4) until GPS/EKF is ready, while GUIDED while
+disarmed succeeds within seconds. Examples 01/02 chain GUIDED → arm → takeoff.
+Harness prep `ap-guided-1` polls until HEARTBEAT `custom_mode === 4` (learned peer
+endpoint required — pre-peer fallback sends never arrive). Measured against
+official prebuilt
 `firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu/arducopter`
 (`ARDUPILOT_REF=Copter-4.7.0` in `sitl/Dockerfile.ardupilot`).
-*Check:* `examples/sitl/01-completion-takeoff.json`, `sitl/run-example-suite.js`.
+*Check:* `examples/sitl/01-completion-takeoff.json`, `examples/sitl/02-completion-timeout.json`,
+`sitl/run-example-suite.js`.
 
 **SITL suite must docker-restart the vehicle fleet between examples.**
 *Wrong belief:* post-example force-disarm (AP `COMPONENT_ARM_DISARM` with magic
@@ -1786,8 +1788,9 @@ after example 01). ArduCopter then accepts arm + GUIDED but returns
 `MAV_RESULT_DENIED` (resultCode 4) on `MAV_CMD_NAV_TAKEOFF` because the vehicle
 is not on the ground. The harness `docker restart`s AP 1–5, PX4 11–15, and
 companions 20/21 before each non-SKIP example (not `nrc-nodered`), waits for
-GPS/EKF settle, and re-applies PX4 lab helpers. That is the altitude reset;
-force-disarm cleanup was removed as ineffective for this path.
+GPS/EKF settle, re-applies PX4 lab helpers, and confirms GUIDED on AP-1 when the
+example prep asks for it. That is the altitude reset; force-disarm cleanup was
+removed as ineffective for this path.
 *Check:* `sitl/run-example-suite.js` (`restartVehicleFleet`), `sitl/AGENTS.md`.
 
 **Param set echo-confirm must use a live param id and the vehicle’s type.**

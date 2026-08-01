@@ -471,9 +471,16 @@ function runApControlScript(body, timeoutMs = 20000) {
       ${body}
       conn.close(() => process.exit(0));
       setTimeout(() => process.exit(0), 400);
-    })().catch(() => process.exit(1));
+    })().catch((err) => {
+      console.error(err && err.stack ? err.stack : err);
+      process.exit(1);
+    });
   `;
-  sh(`node -e ${JSON.stringify(script)}`, timeoutMs);
+  const r = sh(`node -e ${JSON.stringify(script)}`, timeoutMs);
+  if (r.code !== 0) {
+    throw new Error(`AP control script failed (exit ${r.code}): ${r.out.slice(0, 300)}`);
+  }
+  return r;
 }
 
 /** Vehicle containers only — never restart nrc-nodered between examples. */
@@ -506,12 +513,34 @@ const FLEET_SETTLE_MS = Number(process.env.SITL_FLEET_SETTLE_MS) > 0
   : 20000;
 
 async function setApGuided(sysid = 1) {
-  // Fleet restart already put the vehicle on the ground disarmed; only GUIDED.
-  runApControlScript(`
+  // After fleet restart, SET_MODE must wait for a learned peer endpoint — a
+  // fire-and-forget send often hits the pre-peer fallback and never arrives.
+  // Also: armed STABILIZE→GUIDED is DENIED until GPS/EKF is ready; set GUIDED
+  // while disarmed and confirm HEARTBEAT custom_mode === 4 before deploy.
+  console.log(`  waiting for AP-${sysid} GUIDED (disarmed)…`);
+  runApControlScript(
+    `
       const t = { sysid: ${sysid}, compid: 1 };
-      conn.send(buildCommandLong(176, ${sysid}, 1, [1, 4, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
-      await sleep(800);
-  `);
+      const deadline = Date.now() + 90000;
+      const compOf = () => conn.peerTable.get(${sysid})?.components?.get?.(1);
+      let ready = false;
+      while (Date.now() < deadline) {
+        const comp = compOf();
+        if (comp?.primaryEndpoint) {
+          if (comp.flightMode === 4) { ready = true; break; }
+          if (comp.armed) {
+            conn.send(buildCommandLong(400, ${sysid}, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+            await sleep(500);
+          }
+          conn.send(buildCommandLong(176, ${sysid}, 1, [1, 4, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+        }
+        await sleep(1000);
+        if (compOf()?.flightMode === 4) { ready = true; break; }
+      }
+      if (!ready) throw new Error('AP-${sysid} did not enter GUIDED after fleet restart');
+    `,
+    120000
+  );
 }
 
 function applyPx4LabHelpers(containers = PX4_VEHICLE_CONTAINERS) {
