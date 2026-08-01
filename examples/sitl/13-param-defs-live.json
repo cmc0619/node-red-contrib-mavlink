@@ -12,7 +12,7 @@
         "type": "comment",
         "z": "ex08-tab",
         "name": "Param read\u2215set with definition catalog",
-        "info": "This flow demonstrates:\n\n1. Param read (Send tier) \u2014 reads ARMING_CHECK and shows the raw PARAM_VALUE on output 0.\n2. Param set (echo-confirm) \u2014 sets ARMING_CHECK=1 as MAV_PARAM_TYPE_INT32 (ArduPilot stores this bitmask as int; REAL32 encodes the wrong wire bits and the echo never matches) and confirms via PARAM_VALUE.\n3. Param list (collect) \u2014 requests all params and collects them into one array on output 0.\n\nParameter definition catalog (DESIGN.md \u00a74):\n\u2022 ArduPilot copter/plane/rover/sub: the editor fetches defs from\n  https://autotest.ardupilot.org/Parameters/<Vehicle>/apm.pdef.json automatically.\n\u2022 PX4 / custom firmware: set paramDefsUrl in the Vehicle Profile \u2192 Advanced.\n\u2022 Generic / unknown family: no auto-defs; the Param id field remains free-form text.\n\nWith defs loaded, the Param id input becomes a searchable datalist. Selecting a param\nshows its description, unit, and range inline. For params with discrete values (enums),\nthe Value field offers a datalist of named options when Action=Set.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nBind Connection 0.0.0.0:14550 \u2192 remote 127.0.0.1:14551. Defs fetch needs internet once at the bench; read/set/list needs the live vehicle.",
+        "info": "This flow demonstrates:\n\n1. Param read (Send tier) \u2014 reads ARMING_OPTIONS and shows the raw PARAM_VALUE on output 0.\n2. Param set (echo-confirm) \u2014 sets ARMING_OPTIONS=1 as MAV_PARAM_TYPE_INT32. Copter-4.7 removed ARMING_CHECK (PARAM_ERROR); ARMING_OPTIONS is the live bitmask stand-in. REAL32 encodes the wrong wire bits for int params.\n3. Param list (collect) \u2014 requests all params and collects them into one array on output 0.\n\nParameter definition catalog (DESIGN.md \u00a74):\n\u2022 ArduPilot copter/plane/rover/sub: the editor fetches defs from\n  https://autotest.ardupilot.org/Parameters/<Vehicle>/apm.pdef.json automatically.\n\u2022 PX4 / custom firmware: set paramDefsUrl in the Vehicle Profile \u2192 Advanced.\n\u2022 Generic / unknown family: no auto-defs; the Param id field remains free-form text.\n\nWith defs loaded, the Param id input becomes a searchable datalist. Selecting a param\nshows its description, unit, and range inline. For params with discrete values (enums),\nthe Value field offers a datalist of named options when Action=Set.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nBind Connection 0.0.0.0:14550 \u2192 remote 127.0.0.1:14551. Defs fetch needs internet once at the bench; read/set/list needs the live vehicle.",
         "x": 210,
         "y": 40,
         "wires": []
@@ -65,7 +65,7 @@
         "id": "ex08-inject-read",
         "type": "inject",
         "z": "ex08-tab",
-        "name": "Read ARMING_CHECK",
+        "name": "Read ARMING_OPTIONS",
         "props": [
             {
                 "p": "payload"
@@ -90,14 +90,14 @@
         "id": "ex08-read",
         "type": "mavlink-param",
         "z": "ex08-tab",
-        "name": "Read ARMING_CHECK",
+        "name": "Read ARMING_OPTIONS",
         "connection": "ex08-connection",
         "delivery": "send",
         "action": "read",
         "firmware": "ardupilot",
         "targetSystem": 1,
         "targetComponent": 1,
-        "paramId": "ARMING_CHECK",
+        "paramId": "ARMING_OPTIONS",
         "paramIndex": -1,
         "value": "",
         "paramType": "MAV_PARAM_TYPE_INT32",
@@ -116,11 +116,11 @@
         "id": "ex08-inject-set",
         "type": "inject",
         "z": "ex08-tab",
-        "name": "Set ARMING_CHECK=1",
+        "name": "Set ARMING_OPTIONS=1",
         "props": [
             {
                 "p": "payload",
-                "v": "{\"action\":\"set\",\"paramId\":\"ARMING_CHECK\",\"value\":1,\"paramType\":\"MAV_PARAM_TYPE_INT32\"}",
+                "v": "{\"action\":\"set\",\"paramId\":\"ARMING_OPTIONS\",\"value\":1,\"paramType\":\"MAV_PARAM_TYPE_INT32\"}",
                 "vt": "json"
             }
         ],
@@ -143,14 +143,14 @@
         "id": "ex08-set",
         "type": "mavlink-param",
         "z": "ex08-tab",
-        "name": "Set ARMING_CHECK (echo-confirm)",
+        "name": "Set ARMING_OPTIONS (echo-confirm)",
         "connection": "ex08-connection",
         "delivery": "confirm",
         "action": "set",
         "firmware": "ardupilot",
         "targetSystem": 1,
         "targetComponent": 1,
-        "paramId": "ARMING_CHECK",
+        "paramId": "ARMING_OPTIONS",
         "paramIndex": -1,
         "value": "1",
         "paramType": "MAV_PARAM_TYPE_INT32",

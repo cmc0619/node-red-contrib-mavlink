@@ -126,9 +126,9 @@ reintroduce a source build.
 
 ## Param echo types
 
-ArduPilot integer params (e.g. `ARMING_CHECK`) must use `MAV_PARAM_TYPE_INT32`
-on Param set. A REAL32-typed set writes float bit patterns; echo-confirm then
-times out even though the vehicle “accepted” a garbage int.
+Copter-4.7 removed `ARMING_CHECK` (`PARAM_ERROR`); example 13 uses
+`ARMING_OPTIONS` as `MAV_PARAM_TYPE_INT32`. A REAL32-typed set of an int param
+writes float bit patterns; echo-confirm then times out.
 
 ## Fixture tests (no Docker)
 

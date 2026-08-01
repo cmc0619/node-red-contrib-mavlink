@@ -94,10 +94,10 @@ const PROFILE = {
     skip: true,
   },
   '13-param-defs-live': {
-    waitMs: 45000,
+    waitMs: 20000,
     expect: 'read / set / list param defs against AP',
-    // Set echo-confirm needs the list flood not to start mid-wait (separate injects).
-    injectGapMs: 35000,
+    // Let set echo-confirm finish before request-list floods PARAM_VALUE.
+    injectGapMs: 8000,
   },
   '14-command-mission-basics': {
     waitMs: 40000,

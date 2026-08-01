@@ -1764,13 +1764,23 @@ force-disarms then GUIDED as belt-and-suspenders, and cleanup disarms only after
 release the UDP bind.
 *Check:* `examples/sitl/01-completion-takeoff.json`, `sitl/run-example-suite.js`.
 
-**Param set echo-confirm must use the vehicle’s param type.**
-*Wrong belief:* `MAV_PARAM_TYPE_REAL32` is a fine default for every Param set in examples
-(including ArduPilot `ARMING_CHECK`).
-*Fact:* `ARMING_CHECK` is an INT32 bitmask. A REAL32-typed `PARAM_SET` of `1` writes float
-bits; echo-confirm then times out. Example 13 uses `MAV_PARAM_TYPE_INT32`; the suite also
-spaces its injects so `request-list` does not flood during the set wait.
+**Param set echo-confirm must use a live param id and the vehicle’s type.**
+*Wrong belief:* example 13 can keep `ARMING_CHECK` as `MAV_PARAM_TYPE_REAL32` forever.
+*Fact:* Copter-4.7.0 SITL answers `PARAM_ERROR` for `ARMING_CHECK` (removed/renamed; the
+live bitmask is `ARMING_OPTIONS`). Integer params must use `MAV_PARAM_TYPE_INT32` — a
+REAL32-typed set writes float bits and echo-confirm times out. The suite spaces injects so
+`request-list` does not flood during the set wait.
 *Check:* `examples/sitl/13-param-defs-live.json`, `lib/param/index.js` (`matchesParamEcho`).
+
+**PX4 DO_SET_MODE on this SIH wants main_mode in param2, not the HEARTBEAT bitfield.**
+*Wrong belief:* send `custom_mode=196608` (POSCTL packed) because that is what HEARTBEAT
+reports and what many QGC builds send.
+*Fact:* against the lab `px4io/px4-sitl` image, `MAV_CMD_DO_SET_MODE` with param2=`196608`
+is `TEMPORARILY_REJECTED`; param2=`3` (PX4 main_mode POSCTL) is `ACCEPTED` and HEARTBEAT
+then reports `196608`. Completion-tier mode match compares param2 to peer `flightMode`, so
+delivery=`complete` cannot succeed across that encoding split — example 04 uses
+delivery=`confirm` for the PX4 leg.
+*Check:* `examples/sitl/04-mode-tables.json`.
 
 **ArduPilot lab image downloads the official prebuilt SITL binary — it does not compile.**
 *Wrong belief:* `sitl/Dockerfile.ardupilot` must `git clone` + `waf copter` (README once said
