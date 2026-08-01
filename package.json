@@ -62,7 +62,7 @@
   ],
   "node-red": {
     "version": ">=4.0.0",
-    "//": "mavlink-local-identity MUST stay first. It is the only node HTML that loads resources/mavlink-editor.js, and Node-RED appends node HTML one node at a time (a marker per node set, walked sequentially), so any node listed ahead of it runs registerType before RED.mavlink exists. Measured on Node-RED 5.0.1: moving it last leaves 2 of 10 palette nodes registered, with a TypeError on RED.mavlink.validateUint8. Pinned by test/tooling/package-contract.check.js.",
+    "//": "mavlink-local-identity MUST stay first. It is the only node HTML that loads resources/mavlink-editor.js, and Node-RED appends node HTML one node at a time (a marker per node set, walked sequentially), so any node listed ahead of it runs registerType before RED.mavlink exists. Measured on Node-RED 5.0.1: moving it last leaves 2 of 10 palette nodes registered, with a TypeError on RED.mavlink.validateUint8. Nothing enforces this automatically — it is a comment, deliberately, so keep it accurate.",
     "nodes": {
       "mavlink-local-identity": "nodes/mavlink-local-identity.js",
       "mavlink-vehicle": "nodes/mavlink-vehicle.js",
