@@ -247,7 +247,12 @@ module.exports = function registerMavlinkParam(RED) {
     });
 
     node.on('close', (done) => {
-      clearPending(false);
+      // Release the in-flight transaction's own done() — a redeploy mid-request
+      // otherwise leaves that message forever unfinished for Node-RED's
+      // onComplete hook / any wired Complete node. Matches the supersede path
+      // above and the close handlers in mavlink-command / mavlink-mission
+      // (issue #96).
+      clearPending(true);
       done();
     });
   }

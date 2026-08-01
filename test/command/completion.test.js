@@ -52,3 +52,46 @@ test('DO_SET_MODE completion stays pending when custom mode 0 is requested but t
   const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
   assert.equal(res.done, false);
 });
+
+// ── TAKEOFF altitude datum by frame (issue #98c) ─────────────────────────────
+
+/** A peer whose GLOBAL_POSITION_INT carries distinct AMSL and relative alts. */
+function peerWithAlts(sysid, compid, altMm, relativeAltMm) {
+  const pt = new StubPeerTable();
+  pt.setComponent(sysid, compid, { position: { alt: altMm, relativeAlt: relativeAltMm } });
+  return pt;
+}
+
+// Home elevation 500 m: vehicle at 20 m AGL reads relative_alt 20 m, alt 520 m.
+const TAKEOFF_PARAMS = [0, 0, 0, 0, 0, 0, 20]; // param7 (index 6) = 20 m target
+
+test('TAKEOFF completion compares relative_alt for COMMAND_LONG (no frame)', () => {
+  const pt = peerWithAlts(1, 1, 520000, 20000);
+  const res = checkCompletion(COMPLETION.TAKEOFF, TAKEOFF_PARAMS, pt, 1, 1); // frame undefined
+  assert.equal(res.done, true, '20 m relative ≥ 20 m target');
+});
+
+test('TAKEOFF completion compares relative_alt for a relative frame (GLOBAL_RELATIVE_ALT_INT = 6)', () => {
+  const pt = peerWithAlts(1, 1, 520000, 20000);
+  const res = checkCompletion(COMPLETION.TAKEOFF, TAKEOFF_PARAMS, pt, 1, 1, 6);
+  assert.equal(res.done, true);
+  assert.match(res.detail, /rel/);
+});
+
+test('TAKEOFF completion compares AMSL for an absolute frame (GLOBAL_INT = 5) — no false timeout', () => {
+  // The bug: comparing the 520 m AMSL target against 20 m relative_alt would
+  // never satisfy, timing out a successful takeoff. With the AMSL datum the
+  // 520 m reading meets the 520 m target.
+  const amslParams = [0, 0, 0, 0, 0, 0, 520];
+  const pt = peerWithAlts(1, 1, 520000, 20000);
+  const res = checkCompletion(COMPLETION.TAKEOFF, amslParams, pt, 1, 1, 5);
+  assert.equal(res.done, true, 'AMSL 520 m ≥ 520 m target');
+  assert.match(res.detail, /AMSL/);
+});
+
+test('TAKEOFF completion stays pending on an absolute frame until the AMSL target is reached', () => {
+  const amslParams = [0, 0, 0, 0, 0, 0, 520];
+  const pt = peerWithAlts(1, 1, 505000, 5000); // only 5 m up: 505 m AMSL
+  const res = checkCompletion(COMPLETION.TAKEOFF, amslParams, pt, 1, 1, 5);
+  assert.equal(res.done, false);
+});

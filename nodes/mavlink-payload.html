@@ -49,8 +49,10 @@
       pitch: { value: 0, validate: RED.validators.number(true) },
       roll: { value: 0, validate: RED.validators.number(true) },
       yaw: { value: 0, validate: RED.validators.number(true) },
-      pitchRate: { value: 0, validate: RED.validators.number(true) },
-      yawRate: { value: 0, validate: RED.validators.number(true) },
+      /* Blank by default: the manager recipe reads a blank rate as NaN (axis
+         not rate-controlled), so an angle aim does not also command zero rate. */
+      pitchRate: { value: '', validate: RED.validators.number(true) },
+      yawRate: { value: '', validate: RED.validators.number(true) },
       flags: { value: 0, validate: RED.validators.number(true) },
       gimbalDeviceId: { value: 0, validate: RED.validators.number(true) },
       /* gimbal set-mode */
