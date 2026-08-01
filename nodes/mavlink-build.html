@@ -341,15 +341,16 @@
               // May run before the select is appended (empty-dialect sync
               // short-circuit) — fillCompIdSelect on a detached node is fine;
               // options ride along when the row is inserted.
+              // Live selection wins: if the operator cleared the control while
+              // the catalog was in flight, do not resurrect the snapshot `saved`
+              // (CodeRabbit #118).
               RED.mavlink.fillCompIdSelect(
                 sel,
                 ((catalog || {}).enums || {}).MAV_COMPONENT || [],
                 {
                   allowEmpty: true,
                   emptyLabel: '\u2014',
-                  saved: saved !== undefined && saved !== null && saved !== ''
-                    ? saved
-                    : sel.val(),
+                  saved: sel.val(),
                 }
               );
             });
