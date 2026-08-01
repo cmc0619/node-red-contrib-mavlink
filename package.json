@@ -29,11 +29,8 @@
     "resources",
     "examples",
     "seed",
-    "sitl",
     "README.md",
-    "LICENSE",
-    "DESIGN.md",
-    "AGENTS.md"
+    "LICENSE"
   ],
   "dependencies": {
     "fast-xml-parser": "^5.10.1",

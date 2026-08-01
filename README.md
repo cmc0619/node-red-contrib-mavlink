@@ -2,7 +2,8 @@
 
 MAVLink toolkit for Node-RED — GCS and companion roles, one node set.
 
-Full design and behaviour are specified in [DESIGN.md](DESIGN.md).
+Full design and behaviour are specified in
+[DESIGN.md](https://github.com/cmc0619/node-red-contrib-mavlink/blob/main/DESIGN.md).
 
 ## Install
 
