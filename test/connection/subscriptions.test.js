@@ -81,3 +81,45 @@ test('dispatch reports how many subscribers received the message', () => {
   assert.equal(reg.dispatch(decoded({ name: 'HEARTBEAT' })), 2);
   assert.equal(reg.dispatch(decoded({ name: 'SYS_STATUS' })), 1);
 });
+
+test('a throwing subscriber does not block delivery to the next one, or escape dispatch', () => {
+  const errors = [];
+  const reg = new SubscriptionRegistry({ logger: { error: (m) => errors.push(m) } });
+  let secondReceived = null;
+
+  reg.subscribe(null, () => {
+    throw new TypeError('Do not know how to serialize a BigInt');
+  });
+  reg.subscribe(null, (msg) => {
+    secondReceived = msg;
+  });
+
+  let delivered;
+  assert.doesNotThrow(() => {
+    delivered = reg.dispatch(decoded());
+  });
+  assert.equal(delivered, 1, 'a throwing subscriber must not count as delivered');
+  assert.ok(secondReceived, 'second subscriber must still receive the frame');
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /BigInt/);
+});
+
+test('a subscriber throwing a non-Error (null) is still isolated', () => {
+  // `throw null` has no .message — reading it inside the catch would throw
+  // from the isolation code itself and escape dispatch.
+  const errors = [];
+  const reg = new SubscriptionRegistry({ logger: { error: (m) => errors.push(m) } });
+  let secondReceived = null;
+
+  reg.subscribe(null, () => {
+    throw null;
+  });
+  reg.subscribe(null, (msg) => {
+    secondReceived = msg;
+  });
+
+  assert.doesNotThrow(() => reg.dispatch(decoded()));
+  assert.ok(secondReceived, 'second subscriber must still receive the frame');
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /null/);
+});

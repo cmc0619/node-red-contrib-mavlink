@@ -632,9 +632,15 @@ a policy; it never owns channel state. The library provides signing and verifica
 primitives only; accept/reject policy, the allowlist, and the timestamp store are ours. These
 rules are binding:
 
-- Passphrases live in Node-RED encrypted credentials only. Never in exported flow JSON, never
-  in logs, never echoed back to the editor.
-- Sign-outbound enabled without a passphrase **fails the connection closed**. It does not
+- Passphrases and raw keys live in Node-RED encrypted credentials only. Never in exported flow
+  JSON, never in logs, never echoed back to the editor.
+- The key comes from exactly one of two credential fields: a **passphrase** (sha256 — Mission
+  Planner's convention, which node-mavlink deliberately copies) or a **raw key** (64 hex chars =
+  the 32 bytes both firmwares are provisioned with via `SETUP_SIGNING`, and the only way to match
+  a fleet whose key is not a sha256-of-passphrase — QGC, for instance, derives via PBKDF2, which
+  no passphrase entered here can reproduce). Both set at once is an ambiguous deploy and fails
+  loud at construction; the connection never guesses which key wins.
+- Sign-outbound enabled without a key source **fails the connection closed**. It does not
   quietly transmit unsigned.
 - Two connections sharing a key still need **distinct link IDs**. Reusing one identity across
   connections must not share channel state.
@@ -2029,3 +2035,21 @@ start, so a listener launched first reports the previous command.
 *Check (ArduPilot):* run the prebuilt SITL binary with
 `--serial0 udpclient:127.0.0.1:14550`, send `DO_SET_HOME` as COMMAND_INT under each frame, and
 read `HOME_POSITION` back.
+
+**node-mavlink's `sign()` cannot carry the runtime's signing timestamp, and does not mark the
+frame as signed.**
+*Wrong belief:* `MavLinkProtocolV2#sign(frame, linkId, key, timestamp)` is the supported channel
+for the runtime's per-stream signing timestamp — pass SigningState's precomputed value through
+its `timestamp` parameter.
+*Fact:* read from the dependency's source (`node-mavlink` `lib/mavlink.ts`): that parameter is a
+**Unix-milliseconds clock reading**, converted internally via
+`(timestamp − SIGNATURE_START_TIME) × 100` — so passing the runtime's already-converted 48-bit
+10 µs units double-converts them, and omitting the parameter stamps `Date.now()`, which gives two
+frames emitted in the same millisecond identical timestamps that a spec receiver rejects as
+REPLAY. `sign()` also never sets the v2 `IFLAG_SIGNED` incompatibility bit, which lives in the
+CRC'd header and must be set *before* `serialize()` writes it (node-mavlink's own `sendSigned()`
+helper does exactly that; its `sign()` alone does not). Both facts are why `wire.js`'s
+`signFrame()` bypasses `sign()`: it writes SigningState's timestamp into the signature block
+directly and computes the HMAC once. A future "simplify back to the library call" change breaks
+the timestamp path and the signed-header bit together.
+*Check:* `node --test test/connection/wire-signing.test.js`

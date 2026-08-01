@@ -126,9 +126,13 @@ module.exports = function registerMavlinkConnection(RED) {
   }
 
   RED.nodes.registerType('mavlink-connection', MavlinkConnectionNode, {
-    credentials: { signingPassphrase: { type: 'password' } },
+    credentials: { signingPassphrase: { type: 'password' }, signingKeyHex: { type: 'password' } },
   });
 };
+
+// Exposed for direct unit testing (test/nodes/connection-signing.test.js) —
+// same pattern as mavlink-vehicle.js's FIRMWARE_TYPES/VEHICLE_FAMILIES export.
+module.exports.buildSigning = buildSigning;
 
 /**
  * Build the runtime identity snapshot from a Local Identity config node,
@@ -209,8 +213,13 @@ function buildTransportConfig(config) {
 /**
  * Assemble the signing config for the runtime. The passphrase lives only in
  * Node-RED encrypted credentials; the key is derived from it via node-mavlink's
- * primitive, and only when signing is actually on (§7). Sign-outbound with no
- * passphrase fails the connection closed in the runtime.
+ * primitive whenever a passphrase is present (§7). Sign-outbound and
+ * require-signed stay independent switches that control *policy* — outbound
+ * signing and whether unsigned inbound is rejected — not whether the key
+ * exists to verify with: gating derivation on those checkboxes left a
+ * passphrase-only connection with no key at all, so every signed inbound
+ * frame failed verification silently. Sign-outbound with no passphrase still
+ * fails the connection closed in the runtime.
  *
  * @param {object} config
  * @param {object} [credentials]
@@ -218,17 +227,39 @@ function buildTransportConfig(config) {
  */
 function buildSigning(config, credentials) {
   const passphrase = credentials && credentials.signingPassphrase;
-  const signOutbound = !!config.signOutbound;
-  const requireSigned = !!config.requireSigned;
+  const keyHex = credentials && credentials.signingKeyHex && credentials.signingKeyHex.trim();
+
+  // Two independent key sources configured is an ambiguous deploy, and which
+  // one wins would be a silent guess — fail loud at construction (§7, §2).
+  if (passphrase && keyHex) {
+    throw new Error(
+      'mavlink-connection: both a signing passphrase and a raw signing key are set — ' +
+        'clear one; the connection will not guess which key to use'
+    );
+  }
+
   const signing = {
     linkId: config.linkId ? Number(config.linkId) : 0,
-    signOutbound,
-    requireSigned,
+    signOutbound: !!config.signOutbound,
+    requireSigned: !!config.requireSigned,
     acceptInvalid: !!config.acceptInvalid,
-    hasKey: !!passphrase,
+    hasKey: !!(passphrase || keyHex),
     key: null,
   };
-  if (passphrase && (signOutbound || requireSigned)) {
+  if (keyHex) {
+    // Raw 32-byte key, entered as 64 hex chars — the form both firmwares are
+    // provisioned with (SETUP_SIGNING carries raw bytes) and the only way to
+    // match a fleet whose key did not come from a Mission-Planner-style
+    // sha256(passphrase) (e.g. QGC derives via PBKDF2, which a passphrase
+    // here cannot reproduce).
+    if (!/^[0-9a-fA-F]{64}$/.test(keyHex)) {
+      throw new Error(
+        'mavlink-connection: raw signing key must be exactly 64 hex characters ' +
+          `(32 bytes); got ${keyHex.length} characters`
+      );
+    }
+    signing.key = Buffer.from(keyHex, 'hex');
+  } else if (passphrase) {
     const { MavLinkPacketSignature } = require('node-mavlink');
     signing.key = MavLinkPacketSignature.key(passphrase);
   }
