@@ -272,7 +272,7 @@ function verdictFrom(profile, summary, log) {
     }
     return { status: 'UNKNOWN', reason: 'completion timeout path not observed' };
   }
-  if (/NVF|NAMED_VALUE_FLOAT|companion/i.test(expect)) {
+  if (/NVF|NAMED_VALUE_FLOAT/i.test(expect)) {
     const sentNamedValue = summary.debug.filter((d) =>
       d.result === 'sent' && /NAMED_VALUE_FLOAT/i.test(d.excerpt)
     );
