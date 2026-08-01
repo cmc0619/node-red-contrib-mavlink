@@ -819,7 +819,10 @@ same ID.
 deconfliction, and sequence numbers cannot supply it because each channel carries its own
 counter. Surface the condition instead: a component seen on more than one endpoint is reported,
 and the operator decides which case it is. Sending follows the **primary** endpoint, falling back
-to another on failure — the spec's own recommendation — rather than alternating between them.
+to another on non-transient failure — the spec's own recommendation — rather than alternating
+between them. Transient OS errors (ICMP unreachable while a peer reboots, full socket buffers)
+warn but keep the endpoint: one lost packet must not turn the best-known address into a
+permanently forgotten one (issue #91); genuinely dead peers age out via the expiry sweep.
 
 Emit an event when the primary changes. That is a link failover or a spoof, and both are worth
 seeing.

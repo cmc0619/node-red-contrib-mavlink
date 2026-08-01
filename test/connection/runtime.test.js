@@ -584,21 +584,50 @@ test('targeted send with no known endpoint warns once, not per packet (#91)', as
   connection.close();
 });
 
-test('a transport error stops the heartbeat and sweep timers (#93)', async () => {
+test('a transport error stops heartbeats but keeps the peer sweep alive (#93)', async () => {
   const { connection, dg, timers } = build(
     {},
     { logger: { warn() {}, info() {}, error() {} } }
   );
   await connection.start();
-  assert.ok(timers.active() > 0, 'heartbeat/sweep timers run while connected');
+  const running = timers.active();
+  assert.ok(running >= 2, 'heartbeat and sweep timers run while connected');
 
   dg.sockets[0].emit('error', new Error('boom'));
 
   assert.equal(connection.getState(), STATE.ERROR);
   assert.equal(
     timers.active(),
+    running - 1,
+    'only the heartbeat scheduler stops — the sweep must keep driving '
+      + 'stale/expired transitions, which mavlink-state consumes after ERROR'
+  );
+  // The "vehicle lost" signal still fires on a dead link: sweeping past
+  // expireMs must still transition and emit for a known peer.
+  introducePeer(dg);
+  const events = [];
+  connection.peerTable.on('expired', (e) => events.push(e));
+  connection.peerTable.sweep(Date.now() + 60000);
+  assert.equal(events.length, 1, 'expiry still emits after transport ERROR');
+  connection.close();
+});
+
+test('broadcast target (sysid 0) never triggers the missing-endpoint warning (#91)', async () => {
+  const warns = [];
+  const { connection } = build(
+    {},
+    { logger: { warn: (m) => warns.push(m), info() {}, error() {} } }
+  );
+  await connection.start();
+  connection.send(
+    { name: 'COMMAND_LONG', fields: {} },
+    { band: BAND.CONTROL, target: { sysid: 0, compid: 1 } }
+  );
+  await delay(20);
+  assert.equal(
+    warns.filter((m) => /no known endpoint/.test(m)).length,
     0,
-    'ERROR is terminal until redeploy — periodic work must stop with it'
+    'no endpoint is the definition of correct for broadcast'
   );
   connection.close();
 });
