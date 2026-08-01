@@ -185,7 +185,13 @@
    */
   function currentEnumQuery(names) {
     var query = {};
-    var buildTier = valueFromSelector('#node-input-delivery') === 'build';
+    // Build-tier detection must match resolveCatalogTarget: most action nodes
+    // use `#node-input-delivery`, but mavlink-build uses `#node-input-tier`.
+    // Prefer delivery when that control exists; otherwise read tier (Codex #118).
+    var mode = (typeof $ !== 'undefined' && $('#node-input-delivery').length)
+      ? valueFromSelector('#node-input-delivery')
+      : valueFromSelector('#node-input-tier');
+    var buildTier = mode === 'build';
     if (buildTier) {
       var buildDialect = valueFromSelector('#node-input-dialect');
       if (buildDialect && buildDialect !== '__vehicle') {
