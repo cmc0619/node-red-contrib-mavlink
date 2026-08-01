@@ -1,0 +1,316 @@
+[
+  {
+    "id": "sitl20-tab",
+    "type": "tab",
+    "label": "SITL 20 Move stream stop",
+    "disabled": false,
+    "info": "ArduPilot SITL move stream proof: prepare with Arm + GUIDED, stream a forward local velocity setpoint, then stop with payload:false.",
+    "env": []
+  },
+  {
+    "id": "sitl20-comment",
+    "type": "comment",
+    "z": "sitl20-tab",
+    "name": "Move stream with explicit stop",
+    "info": "Adapted from examples/23-velocity-joystick.json for the SITL lab. Connection binds 0.0.0.0:14550 and sends to 127.0.0.1:14551.\n\nUse the Arm + GUIDED inject first. Then fire Fwd 1 m/s to start the stream. The Stop inject sends payload:false to the same mavlink-move node, exercising the stream stop surface.",
+    "x": 230,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl20-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl20-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl20-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "sitl20-vehicle",
+    "localIdentity": "sitl20-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl20-inject-prep",
+    "type": "inject",
+    "z": "sitl20-tab",
+    "name": "Arm + GUIDED",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 160,
+    "wires": [
+      [
+        "sitl20-arm"
+      ]
+    ]
+  },
+  {
+    "id": "sitl20-arm",
+    "type": "mavlink-command",
+    "z": "sitl20-tab",
+    "name": "Arm",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl20-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{}",
+    "carrier": "long",
+    "x": 330,
+    "y": 160,
+    "wires": [
+      [
+        "sitl20-guided"
+      ],
+      [
+        "sitl20-arm-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl20-guided",
+    "type": "mavlink-command",
+    "z": "sitl20-tab",
+    "name": "GUIDED",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl20-connection",
+    "targetSysid": "",
+    "targetCompid": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "60000",
+    "params": "{\"1\":1,\"2\":4}",
+    "carrier": "long",
+    "x": 540,
+    "y": 160,
+    "wires": [
+      [
+        "sitl20-prep-done"
+      ],
+      [
+        "sitl20-guided-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl20-inject-fwd",
+    "type": "inject",
+    "z": "sitl20-tab",
+    "name": "Fwd 1 m/s",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"velocity\":{\"north\":1,\"east\":0,\"up\":0}}",
+    "payloadType": "json",
+    "x": 140,
+    "y": 320,
+    "wires": [
+      [
+        "sitl20-move"
+      ]
+    ]
+  },
+  {
+    "id": "sitl20-inject-stop",
+    "type": "inject",
+    "z": "sitl20-tab",
+    "name": "Stop",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "false",
+    "payloadType": "bool",
+    "x": 130,
+    "y": 400,
+    "wires": [
+      [
+        "sitl20-move"
+      ]
+    ]
+  },
+  {
+    "id": "sitl20-move",
+    "type": "mavlink-move",
+    "z": "sitl20-tab",
+    "name": "Velocity stream",
+    "connection": "sitl20-connection",
+    "delivery": "stream",
+    "mode": "local-velocity",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "north": 0,
+    "east": 0,
+    "up": 0,
+    "vNorth": 0,
+    "vEast": 0,
+    "vUp": 0,
+    "lat": "",
+    "lon": "",
+    "alt": "",
+    "yaw": "",
+    "yawRate": "",
+    "intervalMs": 100,
+    "ttlMs": 500,
+    "x": 390,
+    "y": 360,
+    "wires": [
+      [
+        "sitl20-move-out"
+      ],
+      [
+        "sitl20-move-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl20-arm-status",
+    "type": "debug",
+    "z": "sitl20-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 330,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl20-guided-status",
+    "type": "debug",
+    "z": "sitl20-tab",
+    "name": "guided status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 540,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl20-prep-done",
+    "type": "debug",
+    "z": "sitl20-tab",
+    "name": "prep done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 750,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "sitl20-move-out",
+    "type": "debug",
+    "z": "sitl20-tab",
+    "name": "move continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 610,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "sitl20-move-status",
+    "type": "debug",
+    "z": "sitl20-tab",
+    "name": "move status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 610,
+    "y": 400,
+    "wires": []
+  }
+]

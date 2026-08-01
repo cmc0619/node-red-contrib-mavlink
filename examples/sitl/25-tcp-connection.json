@@ -1,0 +1,182 @@
+[
+  {
+    "id": "sitl25-tab",
+    "type": "tab",
+    "label": "SITL 25 TCP connection template",
+    "disabled": false,
+    "info": "Template only: TCP client connection to 127.0.0.1:5760. The default Compose SITL lab is UDP-first and does not publish AP TCP 5760, so harnesses should skip this unless SITL TCP is explicitly exposed.",
+    "env": []
+  },
+  {
+    "id": "sitl25-comment",
+    "type": "comment",
+    "z": "sitl25-tab",
+    "name": "TCP template - requires exposed SITL TCP",
+    "info": "This is a structural TCP example, not a default-lab live flow. It uses Connection mode tcp with remoteHost 127.0.0.1 and remotePort 5760, which requires a SITL setup that exposes TCP on that port. The repository's default Compose lab uses UDP client ports, so skip this file in live SITL harnesses unless you publish TCP deliberately.\n\nThe receive path listens for HEARTBEAT. The inject path sends one NAMED_VALUE_FLOAT if the TCP peer is connected.",
+    "x": 300,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl25-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl25-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter TCP template",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl25-connection",
+    "type": "mavlink-connection",
+    "name": "TCP SITL template",
+    "mode": "tcp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 0,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 5760,
+    "broadcast": false,
+    "vehicle": "sitl25-vehicle",
+    "localIdentity": "sitl25-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl25-in-hb",
+    "type": "mavlink-in",
+    "z": "sitl25-tab",
+    "name": "HEARTBEAT over TCP",
+    "connection": "sitl25-connection",
+    "message": "HEARTBEAT",
+    "sysid": "",
+    "compid": "",
+    "changedOnly": false,
+    "rateLimit": 1,
+    "x": 360,
+    "y": 180,
+    "wires": [
+      [
+        "sitl25-debug-hb"
+      ]
+    ]
+  },
+  {
+    "id": "sitl25-inject-nvf",
+    "type": "inject",
+    "z": "sitl25-tab",
+    "name": "Send TCP NVF",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 300,
+    "wires": [
+      [
+        "sitl25-build-nvf"
+      ]
+    ]
+  },
+  {
+    "id": "sitl25-build-nvf",
+    "type": "mavlink-build",
+    "z": "sitl25-tab",
+    "name": "TCP NVF (send)",
+    "vehicle": "sitl25-vehicle",
+    "connection": "sitl25-connection",
+    "messageName": "NAMED_VALUE_FLOAT",
+    "fields": "{\"time_boot_ms\":0,\"name\":\"tcp\",\"value\":25}",
+    "tier": "send",
+    "band": "2",
+    "repeatMs": 0,
+    "x": 360,
+    "y": 300,
+    "wires": [
+      [
+        "sitl25-debug-nvf"
+      ],
+      [
+        "sitl25-debug-nvf-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl25-debug-hb",
+    "type": "debug",
+    "z": "sitl25-tab",
+    "name": "tcp heartbeat",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 590,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "sitl25-debug-nvf-status",
+    "type": "debug",
+    "z": "sitl25-tab",
+    "name": "tcp nvf status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 360,
+    "y": 370,
+    "wires": []
+  },
+  {
+    "id": "sitl25-debug-nvf",
+    "type": "debug",
+    "z": "sitl25-tab",
+    "name": "tcp nvf sent",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 590,
+    "y": 300,
+    "wires": []
+  }
+]
