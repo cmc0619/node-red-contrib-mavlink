@@ -73,8 +73,8 @@ test('advanced catalog load ignores stale responses and keeps the in-progress se
     /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
     'commands catalog uses the shared loader'
   );
-  assert.match(html, /_cmdCatalog\s*=\s*\{\s*value:\s*null,\s*seq:\s*0\s*\}/,
-    'commands render state has a current value and request sequence');
+  assert.match(html, /_cmdCatalog\s*=\s*\{\s*seq:\s*0\s*\}/,
+    'commands render state has only a request sequence');
   assert.match(html, /const prefer = sel\.val\(\)/, 'in-progress select value is read');
   assert.match(html, /saved:\s*prefer/, 'current-or-saved prefer is passed to fillEnumSelect');
 });

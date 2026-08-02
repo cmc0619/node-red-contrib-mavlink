@@ -353,7 +353,7 @@ test('loadCatalog empty target returns without fetching', () => {
       },
     }
   );
-  const state = { value: null, seq: 0 };
+  const state = { seq: 0 };
   const got = [];
   RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(c), {
     isBuild: true,
@@ -362,7 +362,7 @@ test('loadCatalog empty target returns without fetching', () => {
   assert.equal(fetched, 0);
   assert.equal(state.seq, 1);
   assert.deepEqual(plain(got[0]), { messages: [], enums: {}, dialect: '' });
-  assert.deepEqual(plain(state.value), { messages: [], enums: {}, dialect: '' });
+  assert.equal(Object.hasOwn(state, 'value'), false, 'loader returns the catalog only through its callback');
 });
 
 test('loadCatalog fetches for every nonempty call', () => {
@@ -377,7 +377,7 @@ test('loadCatalog fetches for every nonempty call', () => {
       },
     }
   );
-  const state = { value: null, seq: 0 };
+  const state = { seq: 0 };
   const got = [];
   RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(c), {
     isBuild: true,
@@ -408,7 +408,7 @@ test('loadCatalog seq-guard drops a stale success', () => {
       },
     }
   );
-  const state = { value: null, seq: 0 };
+  const state = { seq: 0 };
   const got = [];
   RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(['a', c]), {
     isBuild: true,

@@ -816,8 +816,8 @@
   /**
    * Shared dialect catalog fetch: resolve target → getJSON → race guard.
    *
-   * Caller owns the currently rendered catalog plus its request sequence:
-   * `{ value: null, seq: 0 }`.
+   * Caller owns only its request sequence: `{ seq: 0 }`. The catalog travels
+   * through the callback.
    *
    * @param {string} endpoint  admin path (`/mavlink/build/messages` or
    *   `/mavlink/command/commands`)
@@ -857,7 +857,6 @@
     }
 
     function render(catalog) {
-      state.value = catalog;
       cb(catalog);
     }
 

@@ -194,14 +194,27 @@ test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
   assert.equal(rendered.params, '{}', 'a rendered empty form saves {}');
 });
 
-test('Command catalog state keeps only the rendered value and request sequence', () => {
+test('Command does not mark an empty preset picker as a rendered zero-param form', () => {
+  const html = readHtml('mavlink-command');
+  const start = html.indexOf("const presetId = $('#node-input-preset').val();");
+  const end = html.indexOf('if (needsPresetMessages(paramSpec)', start);
+  assert.ok(start > 0 && end > start, 'preset render branch exists');
+  const branch = html.slice(start, end);
+  assert.match(
+    branch,
+    /const presetId = \$\('#node-input-preset'\)\.val\(\);\s*if \(!presetId\) return;/,
+    'the async-empty picker remains unrendered so Done preserves saved params'
+  );
+});
+
+test('Command catalog state keeps only its request sequence', () => {
   const html = readHtml('mavlink-command');
   assert.match(
     html,
     /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
     'commands catalog uses the shared loader'
   );
-  assert.match(html, /_cmdCatalog\s*=\s*\{\s*value:\s*null,\s*seq:\s*0\s*\}/);
+  assert.match(html, /_cmdCatalog\s*=\s*\{\s*seq:\s*0\s*\}/);
   assert.doesNotMatch(html, /\bbyKey\b|\binflight\b/);
 });
 

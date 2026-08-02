@@ -7,9 +7,9 @@
 
     var COMMAND_MESSAGES = { COMMAND_LONG: true, COMMAND_INT: true };
 
-    /** Messages / commands catalog render state (DESIGN.md §6 shared loadCatalog). */
-    var _msgCatalog = { value: null, seq: 0 };
-    var _cmdCatalog = { value: null, seq: 0 };
+    /** Messages / commands catalog request sequences (DESIGN.md §6 shared loadCatalog). */
+    var _msgCatalog = { seq: 0 };
+    var _cmdCatalog = { seq: 0 };
     /** Catalog the loader last handed this dialog — paint from this. */
     var _currentMsgCatalog = null;
 

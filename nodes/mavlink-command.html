@@ -38,12 +38,12 @@
 
   // ── Presets / command catalog loaded from server ───────────────────────────
   let _currentPresetGroups = [];
-  /** Commands catalog render state. */
-  const _cmdCatalog = { value: null, seq: 0 };
+  /** Commands catalog request sequence. */
+  const _cmdCatalog = { seq: 0 };
   /** Commands catalog the loader last handed this dialog — paint from this. */
   let _currentCmdCatalog = null;
-  /** Messages catalog render state (request_message picker). */
-  const _msgCatalog = { value: null, seq: 0 };
+  /** Messages catalog request sequence (request_message picker). */
+  const _msgCatalog = { seq: 0 };
 
   function loadPresets(cb) {
     $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/presets'), function (data) {
@@ -612,6 +612,7 @@
           node._mavParamsRendered = true;
         } else {
           const presetId = $('#node-input-preset').val();
+          if (!presetId) return;
           const paramSpec = PRESET_PARAMS[presetId] || [];
           if (paramSpec.length === 0) {
             container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));

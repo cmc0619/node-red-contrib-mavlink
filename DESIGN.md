@@ -577,7 +577,7 @@ through the stock change→validate path (never a parallel validation API).
 **Editor helpers are shared, not pasted.** The `RED.mavlink.*` browser helpers — config-node
 pickers, enum/dialect catalog fills, `currentCatalogQuery`, `validateUint8`, the catalog source
 matrix `resolveCatalogTarget`, the shared catalog fetch `loadCatalog(endpoint, state)` (caller
-state is `{ value: null, seq: 0 }`), Target
+state is `{ seq: 0 }`), Target
 CompID reload `reloadTargetCompId`, identity refresh `refreshIdentitySelect`, select title-sync /
 missing-option helpers (`bindSelectTitleSync`, `ensureSavedEnumOption`), `enumOptionLabel`
 (§6 `NAME (value)`; Node twin in `lib/metadata/commands-list.js`), queue-band picker
@@ -2098,7 +2098,7 @@ defined before any `registerType` runs — no async race. The catalog source mat
 `RED.mavlink.resolveCatalogTarget({ isBuild? })` (Build → Dialect/`__vehicle`; wire → connection
 profile; empty → `{key:'empty', query:null}`, never `ardupilotmega`); the catalog fetch skeleton
 is `RED.mavlink.loadCatalog(endpoint, state, cb, opts)` (caller-owned
-`{ value: null, seq: 0 }`). Each invocation makes a fresh local admin request; the sequence
+`{ seq: 0 }`). Each invocation makes a fresh local admin request; the sequence
 guard prevents an older response from repainting a newer selection. There is no result cache,
 in-flight waiter queue, or same-key request coalescing. Nodes paint from the catalog the loader
 hands the callback (or a `_current*Catalog` handle set from that callback). Target CompID

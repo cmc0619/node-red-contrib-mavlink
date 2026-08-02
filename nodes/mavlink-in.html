@@ -1,7 +1,7 @@
 <script type="text/javascript">
   (function () {
-    /** Messages catalog render state (DESIGN.md §6 shared loadCatalog). */
-    var _msgCatalog = { value: null, seq: 0 };
+    /** Messages catalog request sequence (DESIGN.md §6 shared loadCatalog). */
+    var _msgCatalog = { seq: 0 };
 
     function loadMessagesCatalog(cb) {
       // mavlink-in is wire-only (no Build tier): the bound Connection's Vehicle

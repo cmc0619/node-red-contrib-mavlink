@@ -286,5 +286,5 @@
   <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — pick a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Send-as</b> identity stamps the source address.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). For GCS/custom identities, fill target sysid/compid or leave blank to inherit the profile default.</p>
   <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast.</p>
-  <p>When the flow is deployed and the Vehicle Profile has a known family, the <b>Param id</b> field becomes a searchable datalist. ArduPilot definitions are fetched automatically; PX4 or custom firmware requires a <b>Param defs URL</b> in the Vehicle Profile advanced settings.</p>
+  <p>When the flow is deployed and its Vehicle Profile has downloaded parameter definitions, the <b>Param id</b> field becomes a searchable datalist. Set a <b>Param defs URL</b> and use <b>Update</b> in the Vehicle Profile editor to download definitions for any firmware, including ArduPilot.</p>
 </script>
