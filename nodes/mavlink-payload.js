@@ -13,6 +13,7 @@ const {
 } = require('../lib/command');
 const {
   resolveDeliveryContext,
+  missingConnectionGate,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -35,6 +36,9 @@ module.exports = function registerMavlinkPayload(RED) {
     const maxRetries = config.maxRetries !== undefined && config.maxRetries !== ''
       ? Number(config.maxRetries)
       : DEFAULT_MAX_RETRIES;
+    const delivery = config.delivery;
+    const connAtDeploy = delivery === 'build' ? null : RED.nodes.getNode(config.connection);
+    missingConnectionGate(node, delivery, connAtDeploy);
 
     function cancelWaiter() {
       if (activeWaiter) {
@@ -50,7 +54,6 @@ module.exports = function registerMavlinkPayload(RED) {
           return;
         }
 
-        const delivery = config.delivery;
         const payload = msg.payload ?? {};
         // Payload: compidFromConfig keeps the compid field authoritative even
         // under a companion identity — compid addresses a payload device, not
@@ -80,7 +83,7 @@ module.exports = function registerMavlinkPayload(RED) {
           return;
         }
 
-        if (!connectionNode || typeof connectionNode.send !== 'function') {
+        if (!connectionNode) {
           throw new Error('mavlink-payload requires a Connection');
         }
         // Confirm tier for a command-backed verb: send the COMMAND_LONG and
