@@ -571,12 +571,13 @@ them (§14 records the load-order fact and the picker API).
 `lib/move` config mappers (`positionFrom` / `velocityFrom` / `valueFrom`), and
 `lib/metadata/admin-catalog` (`loadMetadata`, `registerDialectCatalogRoute`,
 `resolveCatalogSource`), `lib/connection/endpoint-key` + `clone.deepCopy`,
-`lib/metadata/xml-catalog.extractIncludes`, `lib/command/lookup.commandByValue`,
-catalog `nameValueLabel` / `mapEnumEntries`, and param `PARAM_TYPE` derived from
-codec `PARAM_TYPES` — rather than re-declaring `BADGE_MAX = 24`, hand-slicing badge
-text, pasting the vehicle/dialect catalog route skeleton, or copying role×tier
-resolution between action nodes. Command's editor target fields are the canonical
-`targetSystem` / `targetComponent` only (pre-1.0: no leftover-key readers) (§14).
+`lib/metadata/xml-catalog.extractIncludes`, `lib/command.commandByValue` (on
+carrier), catalog `mapEnumEntries` / `commandLabel`, and param `PARAM_TYPE`
+derived from codec `PARAM_TYPES` — rather than re-declaring `BADGE_MAX = 24`,
+hand-slicing badge text, pasting the vehicle/dialect catalog route skeleton, or
+copying role×tier resolution between action nodes. Command's editor target fields
+are the canonical `targetSystem` / `targetComponent` only (pre-1.0: no leftover-key
+readers) (§14).
 
 ## 7. Config nodes
 
@@ -2285,12 +2286,15 @@ scan twice, carrier may re-find commands by value, catalogs may map enum entries
 param may hardcode `MAV_PARAM_TYPE` beside codec `PARAM_TYPES`.
 *Fact:* `lib/connection/endpoint-key` and `clone.deepCopy` (NaN-safe) are the shared copies;
 `xml-catalog.extractIncludes` is the include walker (fetch does not re-export a shim);
-`OutboundQueue._bestItem` feeds dequeue/peek; `lib/command/lookup.commandByValue` serves carrier
-and payload; `commands-list` owns `nameValueLabel` + safe-integer `mapEnumEntries`; param
-`PARAM_TYPE` is derived from codec `PARAM_TYPES` (numeric resolver stays in param — different
-return shape than codec’s info+`fail()`). Declined as non-dupes: `numberOr`/`valueOr`/`keepParam`
-family, GLOBAL_FRAMES/DEG_E7 tables, TCP/serial write-drain skeleton.
-*Check:* `node --test test/connection/queue.test.js test/state/state.test.js test/command/lookup.test.js
-test/metadata/commands-list.test.js test/param/ lib/codec/test/param-union.test.js`;
-`rg -n 'function endpointKey|JSON\\.parse\\(JSON\\.stringify|function extractIncludes'
-lib/connection/peer-table.js lib/state lib/metadata/fetch.js` (expect no private copies).
+`OutboundQueue._bestItem` feeds dequeue/peek; `commandByValue` lives on `lib/command/carrier`
+(shared with payload via `lib/command`); `commands-list` owns `commandLabel` + safe-integer
+`mapEnumEntries` (enums-list coverage for unsafe integers — no speculative command-catalog
+fixture); param `PARAM_TYPE` is derived from codec `PARAM_TYPES` (numeric resolver stays in
+param — different return shape than codec’s info+`fail()`). Declined as non-dupes:
+`numberOr`/`valueOr`/`keepParam` family, GLOBAL_FRAMES/DEG_E7 tables, TCP/serial write-drain
+skeleton.
+*Check:* `node --test test/connection/queue.test.js test/state/state.test.js
+test/metadata/enums-list.test.js test/param/ lib/codec/test/param-union.test.js`;
+`rg -n 'function endpointKey|JSON\\.parse\\(JSON\\.stringify|function extractIncludes|lookup\\.js|nameValueLabel'
+lib/connection/peer-table.js lib/state lib/metadata/fetch.js lib/command lib/metadata/commands-list.js`
+(expect no private copies / no lookup module / no nameValueLabel export).
