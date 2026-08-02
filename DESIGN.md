@@ -2262,5 +2262,16 @@ send-without-connection deploy badge; `dialectFromConnection` owns the profile `
 hop. Command's editor fields are `targetSystem` / `targetComponent` like every other palette
 node; `resolveDeliveryContext` still accepts historical `targetSysid` / `targetCompid` once.
 *Check:* `node --test test/metadata/admin-catalog.test.js test/addressing/delivery-context.test.js
-test/command/commands-route.test.js`; `rg -n 'targetSysid:' nodes/mavlink-command.html` (expect
-no matches).
+test/command/commands-route.test.js test/nodes/command-html.test.js`; `rg -n 'targetSysid:'
+nodes/mavlink-command.html` (expect no matches in `defaults`).
+
+**Command editor must migrate `targetSysid` before the form round-trips.**
+*Wrong belief:* a runtime `firstDefined(config.targetSystem, config.targetSysid)` is enough when
+renaming the editor field; old flows keep working without an editor migration.
+*Fact:* Node-RED fills `#node-input-*` from `defaults` *before* `oneditprepare`. A rename-only
+change leaves the new inputs blank, and Done saves `targetSystem:''` — profile inheritance —
+over an explicit legacy target. Shipped examples (e.g. `12-ebony-and-ivory`, SITL INT carrier)
+still carried non-empty `targetSysid`. `oneditprepare` copies legacy → canonical (and the live
+sysid input); `oneditsave` deletes the old keys.
+*Check:* `node --test test/nodes/command-html.test.js` (migration block executes against a stub
+node); `rg -n '"targetSysid"' examples` (expect no Command-node property matches).

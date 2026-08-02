@@ -95,8 +95,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex23-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -112,7 +110,9 @@
         "ex23-debug-arm-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex23-cmd-guided",
@@ -124,8 +124,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex23-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -141,7 +139,9 @@
         "ex23-debug-guided-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex23-move",

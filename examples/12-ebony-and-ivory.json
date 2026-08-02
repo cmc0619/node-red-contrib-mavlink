@@ -103,8 +103,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex12-conn-ap",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -120,7 +118,9 @@
         "ex12-dbg-ap-arm"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex12-cmd-ap-guided",
@@ -132,8 +132,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex12-conn-ap",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -149,7 +147,9 @@
         "ex12-dbg-ap-guided"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex12-cmd-ap-takeoff",
@@ -161,8 +161,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex12-conn-ap",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -178,7 +176,9 @@
         "ex12-dbg-ap-takeoff-st"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex12-cmd-px4-arm",
@@ -190,8 +190,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex12-conn-px4",
-    "targetSysid": "11",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -207,7 +205,9 @@
         "ex12-dbg-px4-arm"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "11",
+    "targetComponent": ""
   },
   {
     "id": "ex12-cmd-px4-takeoff",
@@ -219,8 +219,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex12-conn-px4",
-    "targetSysid": "11",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -236,7 +234,9 @@
         "ex12-dbg-px4-takeoff-st"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "11",
+    "targetComponent": ""
   },
   {
     "id": "ex12-cmd-ap-rtl",
@@ -248,8 +248,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex12-conn-ap",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -265,7 +263,9 @@
         "ex12-dbg-ap-rtl-st"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex12-cmd-px4-rtl",
@@ -277,8 +277,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex12-conn-px4",
-    "targetSysid": "11",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -294,7 +292,9 @@
         "ex12-dbg-px4-rtl-st"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "11",
+    "targetComponent": ""
   },
   {
     "id": "ex12-state-feed-ap",

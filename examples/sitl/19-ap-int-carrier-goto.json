@@ -96,8 +96,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "sitl19-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -114,7 +112,9 @@
       [
         "sitl19-arm-status"
       ]
-    ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "sitl19-takeoff",
@@ -126,8 +126,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "sitl19-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -144,7 +142,9 @@
       [
         "sitl19-takeoff-status"
       ]
-    ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "sitl19-climb",
@@ -181,8 +181,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "sitl19-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -199,7 +197,9 @@
       [
         "sitl19-goto-status"
       ]
-    ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "sitl19-arm-status",

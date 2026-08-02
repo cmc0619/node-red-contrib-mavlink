@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 23 Profile target inherit",
     "disabled": false,
-    "info": "Vehicle profile targetSystem is 2. The command node leaves targetSysid and targetCompid blank, proving the wire-tier address inherits from the profile default.",
+    "info": "Vehicle profile targetSystem is 2. The command node leaves targetSystem and targetComponent blank, proving the wire-tier address inherits from the profile default.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl23-tab",
     "name": "Blank command target inherits profile sysid 2",
-    "info": "The Vehicle Profile default target is sysid 2, compid 1. The Arm command intentionally saves targetSysid and targetCompid as empty strings, the same inherited-address shape used throughout the examples.\n\nRun an ArduPilot SITL configured as sysid 2 on the default AP port pair, then fire the inject. The status output should show the resolved target as sysid 2 / compid 1.",
+    "info": "The Vehicle Profile default target is sysid 2, compid 1. The Arm command intentionally saves targetSystem and targetComponent as empty strings, the same inherited-address shape used throughout the examples.\n\nRun an ArduPilot SITL configured as sysid 2 on the default AP port pair, then fire the inject. The status output should show the resolved target as sysid 2 / compid 1.",
     "x": 280,
     "y": 40,
     "wires": []
@@ -96,8 +96,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "sitl23-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -114,7 +112,9 @@
       [
         "sitl23-arm-status"
       ]
-    ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "sitl23-arm-done",

@@ -130,8 +130,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "sitl18-connection-ap",
-    "targetSysid": "1",
-    "targetCompid": "1",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -148,7 +146,9 @@
       [
         "sitl18-ap-global-status"
       ]
-    ]
+    ],
+    "targetSystem": "1",
+    "targetComponent": "1"
   },
   {
     "id": "sitl18-inject-ap-local",
@@ -185,8 +185,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "sitl18-connection-ap",
-    "targetSysid": "1",
-    "targetCompid": "1",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -203,7 +201,9 @@
       [
         "sitl18-ap-local-status"
       ]
-    ]
+    ],
+    "targetSystem": "1",
+    "targetComponent": "1"
   },
   {
     "id": "sitl18-inject-px4-global",
@@ -240,8 +240,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "sitl18-connection-px4",
-    "targetSysid": "11",
-    "targetCompid": "1",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -258,7 +256,9 @@
       [
         "sitl18-px4-global-status"
       ]
-    ]
+    ],
+    "targetSystem": "11",
+    "targetComponent": "1"
   },
   {
     "id": "sitl18-inject-px4-local",
@@ -295,8 +295,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "sitl18-connection-px4",
-    "targetSysid": "11",
-    "targetCompid": "1",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -313,7 +311,9 @@
       [
         "sitl18-px4-local-status"
       ]
-    ]
+    ],
+    "targetSystem": "11",
+    "targetComponent": "1"
   },
   {
     "id": "sitl18-ap-global-done",

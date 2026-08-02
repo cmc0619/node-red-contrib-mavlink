@@ -177,6 +177,21 @@
       const node = this;
       const container = $('#node-input-params-container');
 
+      // Pre-#122 flows (and shipped examples) persisted targetSysid/targetCompid.
+      // Node-RED fills #node-input-* from defaults *before* oneditprepare, so a
+      // rename-only change leaves the new inputs blank and Done would save
+      // targetSystem:'' — profile inheritance — over an explicit legacy target.
+      // Copy once into the canonical fields and the live inputs (§2 compat).
+      if ((node.targetSystem === undefined || node.targetSystem === '') &&
+          node.targetSysid !== undefined && node.targetSysid !== null && node.targetSysid !== '') {
+        node.targetSystem = node.targetSysid;
+        $('#node-input-targetSystem').val(String(node.targetSystem));
+      }
+      if ((node.targetComponent === undefined || node.targetComponent === '') &&
+          node.targetCompid !== undefined && node.targetCompid !== null && node.targetCompid !== '') {
+        node.targetComponent = node.targetCompid;
+      }
+
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
         RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
@@ -672,6 +687,9 @@
     },
 
     oneditsave: function () {
+      // Drop legacy keys so a later export does not keep two names for one field.
+      delete this.targetSysid;
+      delete this.targetCompid;
       // Scrape only a rendered form. If Done lands while the catalog is still
       // loading (or an error placeholder is showing), the container holds no
       // inputs — scraping it would silently wipe the saved params (Codex #36).

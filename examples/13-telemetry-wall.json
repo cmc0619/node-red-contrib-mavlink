@@ -165,8 +165,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex13-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -182,7 +180,9 @@
         "ex13-dbg-cmd-st"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex13-inject-set-interval",

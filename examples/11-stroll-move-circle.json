@@ -70,8 +70,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex11-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -87,7 +85,9 @@
         "ex11-dbg-arm"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex11-cmd-guided",
@@ -99,8 +99,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex11-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -116,7 +114,9 @@
         "ex11-dbg-guided"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex11-cmd-takeoff",
@@ -128,8 +128,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex11-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -145,7 +143,9 @@
         "ex11-dbg-takeoff-st"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex11-cmd-land",
@@ -157,8 +157,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex11-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -174,7 +172,9 @@
         "ex11-dbg-land-st"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex11-fn-ring",
