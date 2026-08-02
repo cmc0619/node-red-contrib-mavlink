@@ -3,10 +3,13 @@
 ## Mission
 
 This repository is the build target for `DESIGN.md`: implement the complete
-**"MAVLink for Node-RED"** toolkit described there. `DESIGN.md` is the authoritative
-specification — its code principles (§2), UI rules (§6), build order (§12), testing plan (§13),
-and ground truth (§14) are binding, not suggestions. When code and spec disagree, the spec wins;
-when the spec and measured reality disagree, re-measure (§14) and update the spec in the same PR.
+**"MAVLink for Node-RED"** toolkit described there. `DESIGN.md` is the working specification —
+a direction, not a bible. It has had many hands in it and may contain incorrect information.
+Its code principles (§2), UI rules (§6), build order (§12), testing plan (§13), and ground
+truth (§14) are the default authority, not infallible law: when code and spec disagree, the
+spec wins until proven wrong; when the spec and measured reality disagree, re-measure (§14)
+and update the spec in the same PR. When you find a stale or incorrect statement in
+`DESIGN.md`, fix it there rather than working around it.
 
 **Session lessons belong in files, not in chat.** Toolkit lessons — every displaced belief,
 measured fact, or working reference that changes how the toolkit must be built — are written
@@ -36,8 +39,9 @@ are green, not when the work looks finished, not when reviewers approve. Push th
 the PR current, and stop. The repo owner reviews the code and merges when satisfied.
 
 **PRs are opened as drafts — only the repo owner marks them ready.** Bot reviews are a finite
-resource; never spend them on work-in-progress. Open every PR as a draft and keep pushing to it
-while iterating. Do not mark a PR ready for review yourself under any circumstances — the owner
+resource; never spend them on work-in-progress. Open every PR as a draft and keep pushing to
+it while iterating. The boundary is absolute: an agent never flips a PR to ready-for-review —
+not when the work looks done, not when tests are green, not when told to "wrap up." The owner
 flips it when they're satisfied, and that flip is what triggers the reviewers (today:
 **CodeRabbit and Codex** (`chatgpt-codex-connector`)).
 
@@ -69,10 +73,6 @@ while restating the concrete problem and smallest fix per the YAGNI section, the
 under the 50-file cap and reply on the threads. Without a trigger like this, the fallback is
 the periodic timer check above — agents otherwise only learn reviews finished when a human
 pings them.
-
-**The draft boundary is absolute.** An agent never flips a PR to ready-for-review — not when
-the work looks done, not when tests are green, not when told to "wrap up." If the owner wants
-reviews, they say so or flip it themselves.
 
 ## Simplicity: YAGNI is a hard constraint
 
