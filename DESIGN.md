@@ -551,10 +551,13 @@ through the stock change→validate path (never a parallel validation API).
 pickers, enum/dialect catalog fills, `currentCatalogQuery`, `validateUint8`, the catalog source
 matrix `resolveCatalogTarget`, the shared catalog fetch `loadCatalog(endpoint, cache)`, Target
 CompID reload `reloadTargetCompId`, identity refresh `refreshIdentitySelect`, select title-sync /
-missing-option helpers (`bindSelectTitleSync`, `ensureSavedEnumOption`), the payload verb catalog
-(`PAYLOAD_VERBS` / `refreshVerbOptions`), bitmask select helpers (`bitmaskTitle`,
-`booleanEntryLabel`, `selectedBitmaskValues`), the Build-tier dialect/vehicle/firmware default
-descriptors `buildTierDialectDefaults`, and the Build-tier row toggle
+missing-option helpers (`bindSelectTitleSync`, `ensureSavedEnumOption`), `enumOptionLabel`
+(§6 `NAME (value)`; Node twin in `lib/metadata/commands-list.js`), queue-band picker
+`BAND_OPTIONS` / `fillBandSelect`, companion target-row visibility
+`applyCompanionTargetVisibility`, the payload verb catalog (`PAYLOAD_VERBS` /
+`refreshVerbOptions`), bitmask select helpers (`bitmaskTitle`, `booleanEntryLabel`,
+`selectedBitmaskValues`), the Build-tier dialect/vehicle/firmware default descriptors
+`buildTierDialectDefaults`, and the Build-tier row toggle
 `applyBuildTierRowVisibility` — live once in `resources/mavlink-editor.js`, loaded via the stock
 resource mechanism (a relative `<script src>` in the first-listed node). Node-RED guarantees that
 file runs before any inline `registerType`, so nodes call the shared helpers rather than copying
@@ -1994,11 +1997,13 @@ fills, dialect select, `currentCatalogQuery`, `validateUint8`, …), its own `re
 + dialect/vehicle/firmware `defaults.validate` blocks, its own `reloadTargetCompId` thin wrapper
 over `reloadCompIdSelect`, its own resolve→cache→getJSON→seq-guard catalog loader skeleton,
 its own `PAYLOAD_VERBS` + `refreshVerbOptions`, its own bitmaskTitle/booleanEntryLabel/
-selectedBitmaskValues trio, its own select title-sync / `#N (not in dialect)` sentinel, its
-own `refreshIdentitySelect` wrapper, and its own Build-tier dialect/vehicle/firmware/connection row toggles,
-because Node-RED loads external `<script src>` asynchronously so helpers might be undefined when
-a later node's `registerType` parses — or because each dialog's coalesce/`onKey` options and
-remaining role/mode rows make the shared implementations "not quite the same."
+selectedBitmaskValues trio, its own select title-sync / `#N (not in dialect)` sentinel, its own
+`refreshIdentitySelect` wrapper, its own `BAND_OPTIONS` table, its own `NAME (value)` label
+concat, its own companion target-hiding `if (!isBuild) { identityRole… }` block, and its own
+Build-tier dialect/vehicle/firmware/connection row toggles, because Node-RED loads external
+`<script src>` asynchronously so helpers might be undefined when a later node's
+`registerType` parses — or because each dialog's coalesce/`onKey` / Payload-compid
+exception and remaining role/mode rows make the shared implementations "not quite the same."
 *Fact:* The helpers live once in [`resources/mavlink-editor.js`](resources/mavlink-editor.js),
 served at `resources/@cmc0619/node-red-contrib-mavlink/mavlink-editor.js` and loaded by a relative
 `<script src>` at the top of `mavlink-local-identity.html` (listed first in `package.json`
@@ -2014,23 +2019,27 @@ reload is `RED.mavlink.reloadTargetCompId(node, { field? })` (default `targetCom
 passes `field:'targetCompid'`); identity refresh is `RED.mavlink.refreshIdentitySelect(node,
 { rolesAllowed? })` (Swarm passes `['gcs','custom']`); catalog-backed selects share
 `fillEnumSelect` plus `bindSelectTitleSync` / `ensureSavedEnumOption` (one `#N (not in dialect)`
-wording — Build's old `(missing)` is gone); the payload verb catalog is
-`RED.mavlink.PAYLOAD_VERBS` + `RED.mavlink.refreshVerbOptions({ saved? })` (mirrors `lib/payload`,
-used by Payload and Swarm); bitmask selects share `bitmaskTitle` / `booleanEntryLabel` /
-`selectedBitmaskValues` (Command + Build); the Build-tier default descriptors are
-`RED.mavlink.buildTierDialectDefaults({ modeField, withFirmware })` (`modeField:'tier'` for Build,
-`withFirmware:true` for Param/Mission); the Build-tier row visibility matrix is
-`RED.mavlink.applyBuildTierRowVisibility({ isBuild, dialect, dialectRow, vehicleRow,
-firmwareRow?, connectionRow })` (dialect on Build; vehicle on Build+`__vehicle`; firmware on
-Build+concrete dialect; connection on wire). Each palette node merges the defaults into
-`defaults` with `Object.assign`, calls the shared resolver, visibility helper, and catalog/reload
+wording — Build's old `(missing)` is gone) and `enumOptionLabel` for the §6 `NAME (value)` format
+(browser mirror of `lib/metadata/commands-list.js`); queue-band pickers share
+`BAND_OPTIONS` / `fillBandSelect` (Build + Out); companion target-row visibility is
+`applyCompanionTargetVisibility({ isBuild, identityId, hideCompidWhenCompanion?, …Rows })`
+(Command / Mission / Param / Move; Payload passes `hideCompidWhenCompanion:false`); the payload
+verb catalog is `RED.mavlink.PAYLOAD_VERBS` + `RED.mavlink.refreshVerbOptions({ saved? })`
+(mirrors `lib/payload`, used by Payload and Swarm); bitmask selects share `bitmaskTitle` /
+`booleanEntryLabel` / `selectedBitmaskValues` (Command + Build); the Build-tier default
+descriptors are `RED.mavlink.buildTierDialectDefaults({ modeField, withFirmware })`
+(`modeField:'tier'` for Build, `withFirmware:true` for Param/Mission); the Build-tier row
+visibility matrix is `RED.mavlink.applyBuildTierRowVisibility({ isBuild, dialect, dialectRow,
+vehicleRow, firmwareRow?, connectionRow })` (dialect on Build; vehicle on Build+`__vehicle`;
+firmware on Build+concrete dialect; connection on wire). Each palette node merges the defaults
+into `defaults` with `Object.assign`, calls the shared resolver, visibility helper, and catalog/reload
 helpers — node-owned rows (identity, timeout, mode fields, verb fields, …) stay local. Swarm
 passes its narrower Build+list case as the `isBuild` override to both the resolver and the
 visibility helper. `resources` is in `package.json` `files`, and `resources/**/*.js` lints as a
 browser script.
 *Check:* `node --test test/nodes/mavlink-editor-resource.test.js`; `rg -n 'function resolveCatalogTarget'
-nodes` returns nothing; `rg -n 'function reloadTargetCompId|function refreshIdentitySelect|function refreshVerbOptions|PAYLOAD_VERBS\s*=|function bitmaskTitle|function sync(Msg|Cmd|Advanced|Type|Message)Title|\(missing\)' nodes` returns nothing;
-`rg -n 'loadCatalog|bindSelectTitleSync|refreshIdentitySelect' nodes/mavlink-*.html`;
+nodes` returns nothing; `rg -n 'function reloadTargetCompId|function refreshIdentitySelect|function refreshVerbOptions|PAYLOAD_VERBS\s*=|BAND_OPTIONS\s*=|function bitmaskTitle|function sync(Msg|Cmd|Advanced|Type|Message)Title|\(missing\)|name \+ . \(.' nodes` returns nothing;
+`rg -n 'loadCatalog|bindSelectTitleSync|refreshIdentitySelect|fillBandSelect|applyCompanionTargetVisibility|enumOptionLabel' nodes/mavlink-*.html`;
 `rg -n 'applyBuildTierRowVisibility' nodes/mavlink-*.html` hits every Build-capable palette node;
 `rg -n 'buildTierDialectDefaults' nodes/mavlink-*.html`.
 

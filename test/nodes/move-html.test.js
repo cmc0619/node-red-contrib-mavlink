@@ -142,18 +142,27 @@ test('mavlink-move fills identity select and re-fills on connection change (§6)
 });
 
 test('mavlink-move companion hides both target sysid and compid rows (§6)', () => {
-  assert.match(html, /isCompanion/, 'companion flag drives visibility');
+  assert.match(
+    html,
+    /RED\.mavlink\.applyCompanionTargetVisibility\(/,
+    'shared companion target visibility helper is used'
+  );
   assert.match(html, /id="row-move-targetSystem"/, 'targetSystem row has ID for toggling');
   assert.match(html, /id="row-move-targetComponent"/, 'targetComponent row has ID for toggling');
   assert.match(
     html,
-    /targetSystem:\s*isBuild\s*\|\|\s*!isCompanion/,
+    /targetSystemRow:\s*['"]#row-move-targetSystem['"]/,
     'sysid gated by companion for move'
   );
   assert.match(
     html,
-    /targetComponent:\s*isBuild\s*\|\|\s*!isCompanion/,
+    /targetComponentRow:\s*['"]#row-move-targetComponent['"]/,
     'compid also gated by companion for move (no spec exception here)'
+  );
+  assert.doesNotMatch(
+    html,
+    /hideCompidWhenCompanion:\s*false/,
+    'move does not take the Payload compid exception'
   );
 });
 

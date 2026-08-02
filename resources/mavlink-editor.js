@@ -73,13 +73,41 @@
 
   /**
    * Shared enum option label. Server catalogs should already include labels,
-   * but local/generated entries use the same §6 NAME (value) format.
+   * but local/generated entries use the same §6 NAME (value) format
+   * (Node twin: `lib/metadata/commands-list.js` `enumOptionLabel`).
    *
    * @param {{name: string, value: number|string}} entry
    * @returns {string}
    */
   RED.mavlink.enumOptionLabel = function (entry) {
     return entry.name + ' (' + entry.value + ')';
+  };
+
+  /**
+   * Outbound queue band picker options (DESIGN.md §7). Editor-side copy of
+   * `lib/connection/bands` names — browser HTML cannot require() the module.
+   * Labels are Title Case (`Emergency (0)`), not screaming-snake enum names.
+   */
+  RED.mavlink.BAND_OPTIONS = [
+    { value: '0', label: 'Emergency (0)' },
+    { value: '1', label: 'Liveness (1)' },
+    { value: '2', label: 'Control (2)' },
+    { value: '3', label: 'Streaming (3)' },
+    { value: '4', label: 'Bulk (4)' },
+  ];
+
+  /**
+   * Fill `#node-input-band` from {@link RED.mavlink.BAND_OPTIONS}.
+   *
+   * @param {object} $select  jQuery select
+   * @param {string|number|undefined|null} saved
+   */
+  RED.mavlink.fillBandSelect = function ($select, saved) {
+    $select.empty();
+    RED.mavlink.BAND_OPTIONS.forEach(function (opt) {
+      $('<option></option>').val(opt.value).text(opt.label).appendTo($select);
+    });
+    $select.val(saved !== undefined && saved !== null ? String(saved) : '2');
   };
 
   /**
@@ -1088,5 +1116,42 @@
     toggle(opts.vehicleRow, isBuild && dialect === '__vehicle');
     toggle(opts.firmwareRow, isBuild && !!dialect && dialect !== '__vehicle');
     toggle(opts.connectionRow, !isBuild);
+  };
+
+  /**
+   * §6 companion Send-as identity hides target addressing rows on wire tiers.
+   * Build always shows them (must stamp targets). Payload passes
+   * `hideCompidWhenCompanion: false` — compid addresses a payload device.
+   *
+   * @param {object} opts
+   * @param {boolean} opts.isBuild
+   * @param {string} [opts.identityId='']
+   * @param {boolean} [opts.hideCompidWhenCompanion=true]
+   * @param {string} [opts.combinedTargetRow]  single sysid+compid row (Command)
+   * @param {string} [opts.targetSystemRow]
+   * @param {string} [opts.targetComponentRow]
+   * @returns {{isCompanion: boolean, targetSystem: boolean, targetComponent: boolean}}
+   */
+  RED.mavlink.applyCompanionTargetVisibility = function (opts) {
+    opts = opts || {};
+    var isBuild = !!opts.isBuild;
+    var identityId = opts.identityId != null ? opts.identityId : '';
+    var hideCompid = opts.hideCompidWhenCompanion !== false;
+    var isCompanion = !isBuild && RED.mavlink.identityRole(identityId) === 'companion';
+    var targetSystem = isBuild || !isCompanion;
+    var targetComponent = hideCompid ? (isBuild || !isCompanion) : true;
+    function toggle(selector, shown) {
+      if (!selector) return;
+      var $el = $(selector);
+      if ($el && $el.length) $el.toggle(!!shown);
+    }
+    if (opts.combinedTargetRow) toggle(opts.combinedTargetRow, targetSystem);
+    toggle(opts.targetSystemRow, targetSystem);
+    toggle(opts.targetComponentRow, targetComponent);
+    return {
+      isCompanion: isCompanion,
+      targetSystem: targetSystem,
+      targetComponent: targetComponent,
+    };
   };
 })();

@@ -14,6 +14,11 @@ const html = fs.readFileSync(
   'utf8'
 );
 
+test('Build band select uses shared BAND_OPTIONS / fillBandSelect', () => {
+  assert.match(html, /RED\.mavlink\.fillBandSelect\(/, 'band picker uses shared fillBandSelect');
+  assert.doesNotMatch(html, /BAND_OPTIONS\s*=/, 'no local BAND_OPTIONS copy');
+});
+
 test('Build dialect + vehicle defaults come from the shared Build-tier helper', () => {
   // dialect/vehicle default descriptors + validators are the shared §6 rule,
   // merged in via buildTierDialectDefaults; the Build node keys it off `tier`.

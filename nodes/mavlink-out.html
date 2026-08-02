@@ -1,13 +1,5 @@
 <script type="text/javascript">
   (function () {
-    var BAND_OPTIONS = [
-      { value: '0', label: 'Emergency (0)' },
-      { value: '1', label: 'Liveness (1)' },
-      { value: '2', label: 'Control (2)' },
-      { value: '3', label: 'Streaming (3)' },
-      { value: '4', label: 'Bulk (4)' },
-    ];
-
     RED.nodes.registerType('mavlink-out', {
       category: 'mavlink',
       color: '#6ea6d7',
@@ -31,12 +23,10 @@
         if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
           RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
         }
-        var $band = $('#node-input-band');
-        $band.empty();
-        BAND_OPTIONS.forEach(function (opt) {
-          $('<option>').val(opt.value).text(opt.label).appendTo($band);
-        });
-        $band.val(this.band !== undefined ? String(this.band) : '2');
+        RED.mavlink.fillBandSelect(
+          $('#node-input-band'),
+          this.band !== undefined ? String(this.band) : '2'
+        );
       },
     });
   }());

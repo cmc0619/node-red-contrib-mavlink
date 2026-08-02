@@ -58,19 +58,12 @@
         $('#row-timeout').toggle(!isBuild);
 
         /* role-driven rows: companion hides both target rows */
-        if (!isBuild) {
-          var identityId = $('#node-input-identity').val() || '';
-          var role = RED.mavlink && RED.mavlink.identityRole
-            ? RED.mavlink.identityRole(identityId)
-            : 'gcs';
-          var isCompanion = (role === 'companion');
-          $('#row-targetSystem').toggle(!isCompanion);
-          $('#row-targetComponent').toggle(!isCompanion);
-        } else {
-          /* build tier always shows target rows */
-          $('#row-targetSystem').show();
-          $('#row-targetComponent').show();
-        }
+        RED.mavlink.applyCompanionTargetVisibility({
+          isBuild: isBuild,
+          identityId: $('#node-input-identity').val() || '',
+          targetSystemRow: '#row-targetSystem',
+          targetComponentRow: '#row-targetComponent',
+        });
       }
 
       /* ── Param definition catalog ─────────────────────────────── */
@@ -185,7 +178,7 @@
             var entry = def.values[i];
             var $vopt = $('<option></option>')
               .val(String(entry.value))
-              .text(entry.label + ' (' + entry.value + ')');
+              .text(RED.mavlink.enumOptionLabel({ name: entry.label, value: entry.value }));
             if (entry.description) $vopt.attr('title', entry.description);
             $valueList.append($vopt);
           }

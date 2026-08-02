@@ -680,6 +680,110 @@ test('refreshIdentitySelect reads the live connection and forwards rolesAllowed'
   assert.equal(calls[0].length, 1);
 });
 
+// ── BAND_OPTIONS + companion target visibility ───────────────────────────────
+
+test('BAND_OPTIONS lists the five §7 queue bands once', () => {
+  const { RED } = loadResource();
+  assert.deepEqual(
+    plain(RED.mavlink.BAND_OPTIONS.map((o) => o.value)),
+    ['0', '1', '2', '3', '4']
+  );
+  assert.equal(RED.mavlink.BAND_OPTIONS[2].label, 'Control (2)');
+});
+
+test('fillBandSelect rebuilds options and restores the saved band', () => {
+  const options = [];
+  let selected;
+  const $select = {
+    empty() { options.length = 0; return $select; },
+    append($opt) {
+      options.push({ value: $opt._val, text: $opt._text });
+      return $select;
+    },
+    val(v) {
+      if (arguments.length) { selected = v; return $select; }
+      return selected;
+    },
+  };
+  const context = {
+    RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node() { return null; } } },
+    $: function (html) {
+      if (typeof html === 'string' && html.startsWith('<option')) {
+        const opt = { _val: '', _text: '' };
+        opt.val = function (v) { opt._val = v; return opt; };
+        opt.text = function (t) { opt._text = t; return opt; };
+        opt.appendTo = function (sel) { sel.append(opt); return opt; };
+        return opt;
+      }
+      return $select;
+    },
+  };
+  vm.runInNewContext(resourceScript, context);
+  context.RED.mavlink.fillBandSelect($select, '3');
+  assert.equal(options.length, 5);
+  assert.equal(options[0].text, 'Emergency (0)');
+  assert.equal(selected, '3');
+});
+
+test('applyCompanionTargetVisibility hides both rows for wire companion', () => {
+  const toggles = {};
+  const context = {
+    RED: {
+      settings: { httpAdminRoot: '/' },
+      mavlink: {},
+      nodes: {
+        node(id) {
+          return id === 'comp-1' ? { role: 'companion' } : null;
+        },
+      },
+    },
+    $(selector) {
+      return {
+        length: 1,
+        toggle(shown) { toggles[selector] = !!shown; },
+      };
+    },
+  };
+  vm.runInNewContext(resourceScript, context);
+  const vis = context.RED.mavlink.applyCompanionTargetVisibility({
+    isBuild: false,
+    identityId: 'comp-1',
+    targetSystemRow: '#sys',
+    targetComponentRow: '#comp',
+  });
+  assert.equal(vis.isCompanion, true);
+  assert.equal(vis.targetSystem, false);
+  assert.equal(vis.targetComponent, false);
+  assert.equal(toggles['#sys'], false);
+  assert.equal(toggles['#comp'], false);
+});
+
+test('applyCompanionTargetVisibility keeps payload compid when hideCompidWhenCompanion is false', () => {
+  const { RED } = loadResource({}, {
+    'comp-1': { role: 'companion' },
+  });
+  const vis = RED.mavlink.applyCompanionTargetVisibility({
+    isBuild: false,
+    identityId: 'comp-1',
+    hideCompidWhenCompanion: false,
+  });
+  assert.equal(vis.targetSystem, false);
+  assert.equal(vis.targetComponent, true);
+});
+
+test('applyCompanionTargetVisibility shows targets on Build regardless of identity', () => {
+  const { RED } = loadResource({}, {
+    'comp-1': { role: 'companion' },
+  });
+  const vis = RED.mavlink.applyCompanionTargetVisibility({
+    isBuild: true,
+    identityId: 'comp-1',
+  });
+  assert.equal(vis.isCompanion, false);
+  assert.equal(vis.targetSystem, true);
+  assert.equal(vis.targetComponent, true);
+});
+
 // ── normalizeIdentityIds — the Connection dialog's extra-identity rules ──────
 
 test('normalizeIdentityIds drops blanks, duplicates, and the primary identity', () => {

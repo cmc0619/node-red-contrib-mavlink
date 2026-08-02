@@ -43,9 +43,13 @@ test('mavlink-mission dialect + vehicle + firmware defaults come from the shared
 
 test('mavlink-mission has refreshVisibility and companion row hiding', () => {
   assert.match(html, /function refreshVisibility/, 'refreshVisibility function present');
-  assert.match(html, /isCompanion/, 'companion role detected in visibility logic');
-  assert.match(html, /row-targetSystem/, 'row-targetSystem referenced in visibility');
-  assert.match(html, /row-targetComponent/, 'row-targetComponent referenced in visibility');
+  assert.match(
+    html,
+    /RED\.mavlink\.applyCompanionTargetVisibility\(/,
+    'shared companion target visibility helper is used'
+  );
+  assert.match(html, /targetSystemRow:\s*['"]#row-targetSystem['"]/, 'row-targetSystem referenced');
+  assert.match(html, /targetComponentRow:\s*['"]#row-targetComponent['"]/, 'row-targetComponent referenced');
   assert.match(html, /row-vehicle/, 'row-vehicle present for build tier');
   assert.match(html, /row-connection/, 'row-connection present for wire tiers');
   assert.match(html, /row-identity/, 'row-identity present for wire tiers');

@@ -125,18 +125,12 @@
         $('#row-maxRetries').toggle(isWire);
 
         /* role-driven rows: companion hides both target rows */
-        if (!isBuild) {
-          var identityId = $('#node-input-identity').val() || '';
-          var role = RED.mavlink && RED.mavlink.identityRole
-            ? RED.mavlink.identityRole(identityId)
-            : 'gcs';
-          var isCompanion = (role === 'companion');
-          $('#row-targetSystem').toggle(!isCompanion);
-          $('#row-targetComponent').toggle(!isCompanion);
-        } else {
-          $('#row-targetSystem').show();
-          $('#row-targetComponent').show();
-        }
+        RED.mavlink.applyCompanionTargetVisibility({
+          isBuild: isBuild,
+          identityId: $('#node-input-identity').val() || '',
+          targetSystemRow: '#row-targetSystem',
+          targetComponentRow: '#row-targetComponent',
+        });
 
         refreshRows();
         repopulateTypes();

@@ -72,6 +72,16 @@ test('select title-sync and missing-option sentinel live once in the resource', 
   assert.match(resourceScript, /namespace \|\| 'mavEnumTip'/);
 });
 
+test('queue band picker and companion target visibility live once in the resource', () => {
+  assert.match(resourceScript, /RED\.mavlink\.BAND_OPTIONS\s*=/);
+  assert.match(resourceScript, /RED\.mavlink\.fillBandSelect\s*=/);
+  assert.match(resourceScript, /RED\.mavlink\.applyCompanionTargetVisibility\s*=/);
+  assert.match(resourceScript, /hideCompidWhenCompanion/);
+  const out = readHtml('mavlink-out');
+  assert.match(out, /RED\.mavlink\.fillBandSelect\(/);
+  assert.doesNotMatch(out, /BAND_OPTIONS\s*=/);
+});
+
 test('Param node titles come from loaded param defs, not baked HTML', () => {
   const html = readHtml('mavlink-param');
   assert.match(html, /#node-input-paramId'\)\.attr\('title', def\.description\)/);

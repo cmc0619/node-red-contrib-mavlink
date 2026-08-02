@@ -240,24 +240,27 @@ test('mavlink-payload has vehicle and identity defaults for role × tier matrix 
 });
 
 test('mavlink-payload companion hides sysid row but NOT compid row (§6 spec exception)', () => {
-  assert.match(payloadHtml, /isCompanion/, 'companion flag drives visibility');
+  assert.match(
+    payloadHtml,
+    /RED\.mavlink\.applyCompanionTargetVisibility\(/,
+    'shared companion target visibility helper is used'
+  );
   assert.match(payloadHtml, /id="row-payload-targetSystem"/, 'targetSystem row has ID');
   assert.match(payloadHtml, /id="row-payload-targetComponent"/, 'targetComponent row has ID');
-  // sysid is gated by companion
   assert.match(
     payloadHtml,
-    /targetSystem:\s*isBuild\s*\|\|\s*!isCompanion/,
+    /hideCompidWhenCompanion:\s*false/,
+    'payload keeps compid visible on companion (compidFromConfig exception)'
+  );
+  assert.match(
+    payloadHtml,
+    /targetSystemRow:\s*['"]#row-payload-targetSystem['"]/,
     'sysid gated by companion for payload'
   );
-  // compid is NOT gated by companion (spec exception: payload device address stays visible)
   assert.match(
     payloadHtml,
-    /targetComponent:\s*true/,
-    'compid always visible for payload (payload device address exception)'
-  );
-  assert.ok(
-    !payloadHtml.includes('targetComponent: isBuild || !isCompanion'),
-    'payload compid row must NOT be gated the same as move (no isCompanion suppression)'
+    /targetComponentRow:\s*['"]#row-payload-targetComponent['"]/,
+    'compid row still wired through the shared helper'
   );
 });
 

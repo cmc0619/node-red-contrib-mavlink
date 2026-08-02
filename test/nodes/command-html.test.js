@@ -355,13 +355,13 @@ test('companion identity hides target sysid/compid rows', () => {
   );
   assert.match(
     html,
-    /isCompanion\s*\?\s*'hide'\s*:\s*'show'/,
-    'target row hidden when companion identity selected'
+    /RED\.mavlink\.applyCompanionTargetVisibility\(/,
+    'shared companion target visibility helper is used'
   );
   assert.match(
     html,
-    /identityRole\(identityId\)/,
-    'identity role is checked via RED.mavlink.identityRole'
+    /combinedTargetRow:\s*['"]#row-cmd-target['"]/,
+    'command passes its combined target row'
   );
 });
 

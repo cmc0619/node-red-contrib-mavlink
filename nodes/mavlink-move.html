@@ -59,8 +59,12 @@
         var dialect = $('#node-input-dialect').val() || node.dialect || '';
         var isBuild = delivery === 'build';
         var isWire = !isBuild;
-        var identityId = isWire ? $('#node-input-identity').val() : '';
-        var isCompanion = isWire && RED.mavlink.identityRole(identityId) === 'companion';
+        var tgt = RED.mavlink.applyCompanionTargetVisibility({
+          isBuild: isBuild,
+          identityId: isWire ? $('#node-input-identity').val() : '',
+          targetSystemRow: '#row-move-targetSystem',
+          targetComponentRow: '#row-move-targetComponent',
+        });
 
         RED.mavlink.applyBuildTierRowVisibility({
           isBuild: isBuild,
@@ -72,8 +76,8 @@
 
         var show = {
           identity: isWire,
-          targetSystem: isBuild || !isCompanion,
-          targetComponent: isBuild || !isCompanion,
+          targetSystem: tgt.targetSystem,
+          targetComponent: tgt.targetComponent,
           north: mode === 'local-position',
           east: mode === 'local-position',
           up: mode === 'local-position',
@@ -90,8 +94,6 @@
         };
 
         $('#row-move-identity').toggle(!!show.identity);
-        $('#row-move-targetSystem').toggle(!!show.targetSystem);
-        $('#row-move-targetComponent').toggle(!!show.targetComponent);
         $('#row-move-north').toggle(!!show.north);
         $('#row-move-east').toggle(!!show.east);
         $('#row-move-up').toggle(!!show.up);

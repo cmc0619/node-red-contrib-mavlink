@@ -1,13 +1,5 @@
 <script type="text/javascript">
   (function () {
-    var BAND_OPTIONS = [
-      { value: '0', label: 'Emergency (0)' },
-      { value: '1', label: 'Liveness (1)' },
-      { value: '2', label: 'Control (2)' },
-      { value: '3', label: 'Streaming (3)' },
-      { value: '4', label: 'Bulk (4)' },
-    ];
-
     var TIER_OPTIONS = [
       { value: 'build', label: 'Build' },
       { value: 'send',  label: 'Send' },
@@ -159,12 +151,10 @@
         });
         $tier.val(node.tier || 'send');
 
-        var $band = $('#node-input-band');
-        $band.empty();
-        BAND_OPTIONS.forEach(function (opt) {
-          $('<option>').val(opt.value).text(opt.label).appendTo($band);
-        });
-        $band.val(node.band !== undefined ? String(node.band) : '2');
+        RED.mavlink.fillBandSelect(
+          $('#node-input-band'),
+          node.band !== undefined ? String(node.band) : '2'
+        );
 
         function updateVisibility() {
           var dialectVal = $('#node-input-dialect').val() || node.dialect || '';

@@ -200,18 +200,12 @@
         $('#row-cmd-maxRetries')[isBuild ? 'hide' : 'show']();
         $('#row-cmd-unconfirmedContinue')[isBuild ? 'hide' : 'show']();
 
-        if (!isBuild) {
-          // Wire tiers: companion identity → target sysid/compid are derived, hide them.
-          const identityId = $('#node-input-identity').val();
-          const role = RED.mavlink && RED.mavlink.identityRole
-            ? RED.mavlink.identityRole(identityId)
-            : 'gcs';
-          const isCompanion = role === 'companion';
-          $('#row-cmd-target')[isCompanion ? 'hide' : 'show']();
-        } else {
-          // Build tier always shows the target rows (must stamp targets).
-          $('#row-cmd-target').show();
-        }
+        // Wire + companion → target derived; Build always shows (must stamp).
+        RED.mavlink.applyCompanionTargetVisibility({
+          isBuild: isBuild,
+          identityId: $('#node-input-identity').val(),
+          combinedTargetRow: '#row-cmd-target',
+        });
       }
 
       $('#node-input-identity').on('change', refreshVisibility);
@@ -467,7 +461,8 @@
           return {
             name: msg.name,
             value: msg.id,
-            label: msg.label || (msg.name + ' (' + msg.id + ')'),
+            // label optional — fillEnumSelect falls back to enumOptionLabel
+            label: msg.label,
             description: msg.description || null,
           };
         });
