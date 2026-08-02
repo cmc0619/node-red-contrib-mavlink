@@ -13,9 +13,15 @@
 - PR size cap: ≤50 files (`git diff --name-only main...HEAD | wc -l`).
 - Branch: `cursor/<descriptive-name>-5bd3`.
 - PRs opened as **draft** unless the user says otherwise.
-- Pre-1.0: rename examples/tests; **no** flow “migrate” / legacy key readers.
+- Pre-1.0: **no** flow “migrate” / legacy key readers. Strip leftover readers; do not invent compat.
+- **`examples/**` is out of scope** for this PR. Parked in
+  `docs/superpowers/plans/2026-08-02-examples-afterthought-STASH.md`.
 - Do **not** merge: `numberOr`/`valueOr`/`keepParam` family (three contracts); GLOBAL_FRAMES/DEG_E7/MAV_FRAME; transport write/drain; blank-predicate mega-helper; documented intentional lookalikes.
 - Session lessons → DESIGN.md affected section + §14, not chat-only.
+- Also fold in prior plan-review fixes: no fetch `extractIncludes` re-export shim;
+  Task 6 test path is `lib/codec/test/param-union.test.js`; catalog safe-integer
+  unify is a deliberate coercion change for commands/messages; draft PR per user
+  preference (not AGENTS ready-by-default).
 
 ## File map
 
@@ -53,15 +59,18 @@
 - Modify: `DESIGN.md` §6 Command field note + §14 migrate entries → pre-1.0 rename-only
 
 **Interfaces:**
-- Consumes: examples already on canonical `targetSystem` / `targetComponent` (merged #122)
-- Produces: runtime/editor read only canonical keys
+- Produces: runtime/editor read only canonical `targetSystem` / `targetComponent`
+- Does **not** touch `examples/**` (see STASH note)
 
-- [ ] **Step 1:** Delete editor migrate block and `oneditsave` legacy deletes.
-- [ ] **Step 2:** In `resolveDeliveryContext`, use only `config.targetSystem` / `config.targetComponent` (via existing `firstDefined` only if still needed for other sources — not legacy keys).
-- [ ] **Step 3:** Remove tests that assert migration / legacy key acceptance.
-- [ ] **Step 4:** Rewrite DESIGN §14: displace “must migrate” with “pre-1.0: examples/tests renamed; no flow compat; do not say migrate.”
+- [ ] **Step 1:** Delete editor leftover-key copy/delete blocks (`oneditprepare` / `oneditsave`).
+- [ ] **Step 2:** In `resolveDeliveryContext`, pass only `config.targetSystem` /
+  `config.targetComponent` (no `targetSysid` / `targetCompid` fallbacks; drop
+  unnecessary `firstDefined` around those two config fields).
+- [ ] **Step 3:** Remove tests that assert leftover-key acceptance / editor copy.
+- [ ] **Step 4:** Rewrite DESIGN §6/§14: pre-1.0 means rename shipped assets later
+  if needed — **no** flow compat, **do not say migrate**.
 - [ ] **Step 5:** `node --test test/addressing/delivery-context.test.js test/nodes/command-html.test.js test/command/node.test.js`
-- [ ] **Step 6:** Commit `fix(command): drop pre-1.0 targetSysid compat path`
+- [ ] **Step 6:** Commit `fix(command): drop leftover targetSysid readers`
 
 ---
 
@@ -81,9 +90,11 @@
 ### Task 3: extractIncludes + queue best-item
 
 **Files:**
-- Modify: `lib/metadata/fetch.js` — `const { extractIncludes } = require('./xml-catalog')`; stop exporting a private copy (or re-export xml-catalog’s for back-compat if anything required fetch’s export — today only fetch itself + module.exports; check `rg extractIncludes`).
+- Modify: `lib/metadata/fetch.js` — `const { extractIncludes } = require('./xml-catalog')`;
+  delete the private copy **and** drop it from `module.exports` (nothing imports it
+  from fetch; do not leave a re-export “compat” shim).
 - Modify: `lib/connection/queue.js` — private `_bestItem(now)` with the shared 10-line scan; `dequeue` removes, `peek` returns.
-- Test: `test/metadata/xml-catalog.test.js`, queue tests under `test/connection/`
+- Test: `test/metadata/xml-catalog.test.js`, `test/connection/` queue tests
 
 - [ ] **Step 1:** Point fetch at xml-catalog’s stricter extractor (strips comments).
 - [ ] **Step 2:** Deduplicate queue scan.
@@ -113,10 +124,14 @@
 **Files:**
 - Modify: `lib/metadata/commands-list.js` — add/export:
   - `nameValueLabel(name, value)` → `` `${name} (${value})` ``
-  - `mapEnumEntries(table)` using safe-integer coercion (move `enumEntryValue` here from enums-list, or import from a tiny shared spot in commands-list)
+  - `mapEnumEntries(table)` using **enums-list’s safe-integer coercion** (move
+    `enumEntryValue` here). This **changes** commands/messages catalogs, which
+    today use bare `Number(entry.value)` — deliberate; stock `common.xml` has no
+    unsafe integers, but private dialects might.
 - Modify: `lib/metadata/messages-list.js` — use `nameValueLabel` + `mapEnumEntries`; drop private `messageLabel` and duplicate enum map.
 - Modify: `lib/metadata/enums-list.js` — use shared `mapEnumEntries` / `enumEntryValue`.
 - `commandLabel` / `enumOptionLabel` become thin wrappers or call `nameValueLabel`.
+- Test: mirror the enums-list safe-integer case for a commands or messages catalog path.
 
 - [ ] **Step 1:** Centralize helpers in commands-list (already the shared hub for `enumOptionLabel`).
 - [ ] **Step 2:** Switch messages-list + enums-list.
@@ -138,7 +153,7 @@ const PARAM_TYPE = Object.fromEntries(
 ```
 
 - [ ] **Step 1:** Derive table; keep numeric resolver API.
-- [ ] **Step 2:** `node --test test/param/ test/codec/test/param-union.test.js`
+- [ ] **Step 2:** `node --test test/param/ lib/codec/test/param-union.test.js`
 - [ ] **Step 3:** Commit `refactor(param): derive PARAM_TYPE from codec PARAM_TYPES`
 
 ---
@@ -159,6 +174,7 @@ const PARAM_TYPE = Object.fromEntries(
 
 ## Out of scope (approved declines/skips)
 
+- **`examples/**`** — see `2026-08-02-examples-afterthought-STASH.md`
 - `numberOr` / `valueOr` / `keepParam` / mission `num` unification
 - GLOBAL_FRAMES / DEG_E7 / isGlobalFrame / MAV_FRAME tables
 - TCP vs serial write/drain skeleton
