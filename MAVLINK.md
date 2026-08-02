@@ -12,9 +12,13 @@ An entry is written **only when sure**. "Sure" means confirmed against:
 - measured on-wire behavior — a SITL capture or real-vehicle exchange, recorded as a §14
   ground-truth entry in `DESIGN.md`.
 
-Never from reading pymavlink, MAVSDK, or GCS code. Those are idea sources, not ground truth
-(see `AGENTS.md`). If a belief is plausible but unconfirmed, it does not go in the entries —
-it goes in **Open questions** below until someone measures it.
+Reading the established implementations — pymavlink, MAVSDK, the GCS codebases, and above all
+the ArduPilot and PX4 source trees — is the right way to form the hypothesis; their behavior
+is the default expectation. But an entry is only written once that hypothesis is confirmed
+against the XML or the wire: even the true references disagree with each other, and with the
+spec, often enough that none of them alone is ground truth (see `AGENTS.md`). If a belief is
+plausible but unconfirmed, it does not go in the entries — it goes in **Open questions** below
+until someone measures it.
 
 ## Entry format
 
