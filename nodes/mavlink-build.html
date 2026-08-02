@@ -467,13 +467,17 @@
             sel.replaceWith($select);
             sel = $select;
           }
-          sel.off('change.mavmsg').on('change.mavmsg', refreshFieldForm);
+          // Tip sync and the field-form rebuild must use different change
+          // namespaces — fillEnumSelect's bindSelectTitleSync does
+          // off('change.' + ns), which would erase the renderer if both used
+          // mavmsg.
           RED.mavlink.fillEnumSelect(sel, catalog.messages || [], {
             saved: prefer,
             valueKey: 'name',
-            titleNamespace: 'mavmsg',
+            titleNamespace: 'mavmsgTip',
             triggerChange: false
           });
+          sel.off('change.mavmsgForm').on('change.mavmsgForm', refreshFieldForm);
           refreshFieldForm();
         }
 

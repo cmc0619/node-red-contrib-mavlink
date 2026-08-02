@@ -30,8 +30,9 @@ test('Build message and MAV_CMD selects title via shared fillEnumSelect', () => 
   const html = readHtml('mavlink-build');
   assert.match(html, /RED\.mavlink\.fillEnumSelect\(sel,/);
   assert.match(html, /RED\.mavlink\.fillEnumSelect\(cmdSel,/);
-  assert.match(html, /titleNamespace:\s*'mavmsg'/);
+  assert.match(html, /titleNamespace:\s*'mavmsgTip'/);
   assert.match(html, /titleNamespace:\s*'mavcmd'/);
+  assert.match(html, /change\.mavmsgForm/, 'field-form rebuild uses a distinct change namespace');
   // Field controls already use spec.description (pre-existing).
   assert.match(html, /\.attr\('title',\s*(?:multi \? RED\.mavlink\.bitmaskTitle\(spec\.description\) : \(spec\.description \|\| ''\))/);
   assert.doesNotMatch(html, /\(missing\)/, 'Build uses the shared not-in-dialect sentinel wording');
