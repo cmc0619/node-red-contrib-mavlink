@@ -570,8 +570,8 @@ them (§14 records the load-order fact and the picker API).
 `DEFAULT_TIMEOUT_MS` / `DEFAULT_MAX_RETRIES`), `lib/connection/bands` (`BAND.*`),
 `lib/move` config mappers (`positionFrom` / `velocityFrom` / `valueFrom`), and
 `lib/metadata/loadMetadata`, `lib/metadata/admin-catalog`
-(`registerDialectCatalogRoute`, `resolveCatalogSource` via
-`dialectFromVehicleId`), `lib/connection/endpoint-key` + `clone.deepCopy`,
+(`registerDialectCatalogRoute`, `resolveCatalogSource`),
+`lib/connection/endpoint-key` + `clone.deepCopy`,
 `lib/metadata/xml-catalog.extractIncludes`, `lib/command.commandByValue` (on
 carrier), catalog `mapEnumEntries` / `commandLabel`,
 `lib/vehicle/firmware-autopilot`, and param `PARAM_TYPE` derived from codec
@@ -2290,14 +2290,16 @@ param may hardcode `MAV_PARAM_TYPE` beside codec `PARAM_TYPES`.
 `OutboundQueue._bestItem` feeds dequeue/peek; `commandByValue` lives on `lib/command/carrier`
 (payload imports it; does not re-export); `commands-list` owns `commandLabel` + safe-integer
 `mapEnumEntries`; param `PARAM_TYPE` is derived from codec `PARAM_TYPES`;
-`admin-catalog` does not re-export `loadMetadata`; catalog vehicle hops use
-`dialectFromVehicleId`; firmware↔autopilot is `lib/vehicle/firmware-autopilot`; Swarm uses
-`DEFAULT_TIMEOUT_MS` from command; Param/Move/Payload call `missingConnectionGate` at deploy.
-Declined as non-dupes: `numberOr`/`valueOr`/`keepParam` family, GLOBAL_FRAMES/DEG_E7 tables,
-TCP/serial write-drain skeleton, move/swarm `sendOptions`, `sanitize` vs `urlToFilename`.
+`admin-catalog` does not re-export `loadMetadata`; catalog `?vehicle=` calls
+`getDialect()` and lets failures propagate (no catch that invents a generic
+"dialect unavailable" body — that was planning for gravity to fail). Firmware↔autopilot
+is `lib/vehicle/firmware-autopilot`; Swarm uses `DEFAULT_TIMEOUT_MS` from command;
+Param/Move/Payload call `missingConnectionGate` at deploy. Declined as non-dupes:
+`numberOr`/`valueOr`/`keepParam` family, GLOBAL_FRAMES/DEG_E7 tables, TCP/serial
+write-drain skeleton, move/swarm `sendOptions`, `sanitize` vs `urlToFilename`.
 *Check:* `node --test test/connection/queue.test.js test/state/state.test.js
 test/metadata/admin-catalog.test.js test/metadata/enums-list.test.js test/param/
 lib/codec/test/param-union.test.js`;
-`rg -n 'loadMetadata,|commandByValue,|AUTOPILOT_FIRMWARE|firmwareAutopilot|DEFAULT_TIMEOUT_MS = 10000'
+`rg -n 'loadMetadata,|commandByValue,|AUTOPILOT_FIRMWARE|firmwareAutopilot|DEFAULT_TIMEOUT_MS = 10000|dialect unavailable'
 lib/metadata/admin-catalog.js lib/payload/index.js lib/swarm nodes/mavlink-connection.js`
-(expect no matches).
+(expect no matches in admin-catalog for the invent-a-body pattern).
