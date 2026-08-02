@@ -74,10 +74,15 @@
         var identityId = isWire ? $('#node-input-identity').val() : '';
         var isCompanion = isWire && RED.mavlink.identityRole(identityId) === 'companion';
 
+        RED.mavlink.applyBuildTierRowVisibility({
+          isBuild: isBuild,
+          dialect: dialect,
+          dialectRow: '#row-move-dialect',
+          vehicleRow: '#row-move-vehicle',
+          connectionRow: '#row-move-connection'
+        });
+
         var show = {
-          dialect: isBuild,
-          vehicle: isBuild && dialect === '__vehicle',
-          connection: isWire,
           identity: isWire,
           targetSystem: isBuild || !isCompanion,
           targetComponent: isBuild || !isCompanion,
@@ -96,9 +101,6 @@
           ttl: delivery === 'stream'
         };
 
-        $('#row-move-dialect').toggle(!!show.dialect);
-        $('#row-move-vehicle').toggle(!!show.vehicle);
-        $('#row-move-connection').toggle(!!show.connection);
         $('#row-move-identity').toggle(!!show.identity);
         $('#row-move-targetSystem').toggle(!!show.targetSystem);
         $('#row-move-targetComponent').toggle(!!show.targetComponent);

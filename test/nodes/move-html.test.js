@@ -153,10 +153,20 @@ test('mavlink-move companion hides both target sysid and compid rows (§6)', () 
 });
 
 test('mavlink-move build tier shows vehicle, hides connection/identity (§6)', () => {
-  assert.match(html, /dialect:\s*isBuild/, 'dialect row shown only for build tier');
-  assert.match(html, /vehicle:\s*isBuild\s*&&\s*dialect\s*===\s*'__vehicle'/, 'vehicle row shown only for Build Vehicle Profile escape');
-  assert.match(html, /connection:\s*isWire/, 'connection row shown only for wire tiers');
-  assert.match(html, /identity:\s*isWire/, 'identity row shown only for wire tiers');
+  assert.match(
+    html,
+    /RED\.mavlink\.applyBuildTierRowVisibility\(\{/,
+    'Move must call the shared visibility helper'
+  );
+  assert.match(html, /dialectRow:\s*'#row-move-dialect'/, 'dialect row selector passed');
+  assert.match(html, /vehicleRow:\s*'#row-move-vehicle'/, 'vehicle row selector passed');
+  assert.match(html, /connectionRow:\s*'#row-move-connection'/, 'connection row selector passed');
+  assert.match(html, /identity:\s*isWire/, 'identity row shown only for wire tiers (local)');
+  assert.doesNotMatch(
+    html,
+    /\$\('#row-move-dialect'\)\.toggle/,
+    'no hand-rolled dialect row toggle'
+  );
 });
 
 test('mavlink-move dialect + vehicle defaults come from the shared Build-tier helper', () => {
@@ -171,12 +181,11 @@ test('mavlink-move dialect + vehicle defaults come from the shared Build-tier he
 });
 
 test('mavlink-move Build dialect select uses shared helper with Vehicle Profile escape', () => {
+  // Option value/label are injected by populateDialectSelect; Move pins the call.
   assert.match(html, /id="row-move-dialect"/, 'template must have a dialect row');
   assert.match(html, /id="node-input-dialect"/, 'template must have a dialect select');
   assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
   assert.match(html, /includeVehicleEscape:\s*true/, 'dialect helper must include Vehicle Profile escape');
-  assert.match(html, /__vehicle/, 'visibility/runtime contract must reference __vehicle');
-  assert.match(html, /from Vehicle Profile/, 'help text must name the Vehicle Profile escape');
 });
 
 test('mavlink-move has no Firmware row and no silent ardupilotmega default', () => {

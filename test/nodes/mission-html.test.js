@@ -55,24 +55,27 @@ test('mavlink-mission Build dialect select uses shared helper with Vehicle Profi
   assert.match(html, /id="node-input-dialect"/, 'template must have a dialect select');
   assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
   assert.match(html, /includeVehicleEscape:\s*true/, 'dialect helper must include Vehicle Profile escape');
-  assert.match(html, /__vehicle/, 'visibility/runtime contract must reference __vehicle');
-  assert.match(html, /from Vehicle Profile/, 'help text must name the Vehicle Profile escape');
+  // Runtime firmware path still gates on the escape value (getEffectiveFirmware).
+  assert.match(html, /dialect\s*!==\s*'__vehicle'/, 'Vehicle Profile escape gates profile firmware');
 });
 
-test('mavlink-mission Build visibility is Vehicle Profile XOR dialect plus Firmware', () => {
-  assert.match(html, /dialect:\s*isBuild/, 'dialect row shown only for build tier');
+test('mavlink-mission Build visibility delegates shared rows to applyBuildTierRowVisibility', () => {
   assert.match(
     html,
-    /vehicle:\s*isBuild\s*&&\s*dialect\s*===\s*'__vehicle'/,
-    'vehicle row shown only for Build Vehicle Profile escape'
+    /RED\.mavlink\.applyBuildTierRowVisibility\(\{/,
+    'Mission must call the shared visibility helper'
   );
-  assert.match(
-    html,
-    /firmware:\s*isBuild\s*&&\s*!!dialect\s*&&\s*dialect\s*!==\s*'__vehicle'/,
-    'firmware row shown only for Build concrete dialect'
-  );
+  assert.match(html, /dialectRow:\s*'#row-mission-dialect'/, 'dialect row selector passed');
+  assert.match(html, /vehicleRow:\s*'#row-vehicle'/, 'vehicle row selector passed');
+  assert.match(html, /firmwareRow:\s*'#row-mission-firmware'/, 'firmware row selector passed');
+  assert.match(html, /connectionRow:\s*'#row-connection'/, 'connection row selector passed');
   assert.match(html, /id="row-mission-firmware"/, 'template must have a firmware row');
   assert.match(html, /id="node-input-firmware"/, 'template must have the firmware select');
+  assert.doesNotMatch(
+    html,
+    /\$\('#row-mission-dialect'\)\.toggle/,
+    'no hand-rolled dialect row toggle'
+  );
 });
 
 test('mavlink-mission firmware type list follows dialect, vehicle, or connection', () => {
@@ -88,7 +91,7 @@ test('mavlink-mission getEffectiveFirmware is tier-aware', () => {
   // reads from the connection's vehicle node.
   assert.match(html, /delivery.*===.*'build'|'build'.*===.*delivery/,
     'firmware derivation branches on delivery tier');
-  assert.match(html, /dialect\s*===\s*'__vehicle'/, 'Vehicle Profile escape gates profile firmware');
+  assert.match(html, /dialect\s*!==\s*'__vehicle'/, 'Vehicle Profile escape gates profile firmware');
   assert.match(html, /node-input-firmware.*\.val\(\)|\.val\(\).*node-input-firmware/s,
     'firmware field consulted on concrete Build dialect');
   assert.match(html, /node-input-vehicle.*\.val\(\)|\.val\(\).*node-input-vehicle/s,

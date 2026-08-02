@@ -114,6 +114,27 @@ test('swarm catalog target delegates to the shared resolver with its Build+list 
   assert.match(commandsLoader, /if \(!target\.query\)/, 'command catalog loader must not fetch an invented dialect for empty targets');
 });
 
+test('swarm Build visibility delegates shared rows with the Build+list isBuild flag', () => {
+  // Same isBuildList override resolveCatalogTarget already takes — the matrix
+  // behaviour is proven once in mavlink-editor-resource.test.js.
+  const visStart = html.indexOf('function refreshVisibility');
+  const visEnd = html.indexOf('function refreshCatalogsAndVisibility');
+  assert.notEqual(visStart, -1, 'refreshVisibility must exist');
+  assert.notEqual(visEnd, -1, 'refreshCatalogsAndVisibility must follow');
+  const vis = html.slice(visStart, visEnd);
+  assert.match(vis, /isBuildList\s*=\s*d === ['"]build['"] && sel === ['"]list['"]/,
+    'Build+list determines when dialect/vehicle/connection swap');
+  assert.match(vis, /RED\.mavlink\.applyBuildTierRowVisibility\(\{/,
+    'shared visibility helper is called');
+  assert.match(vis, /isBuild:\s*isBuildList/,
+    'Build+list is passed as the isBuild override');
+  assert.match(vis, /dialectRow:\s*'#row-swarm-dialect'/, 'dialect row selector passed');
+  assert.match(vis, /vehicleRow:\s*'#row-swarm-vehicle'/, 'vehicle row selector passed');
+  assert.match(vis, /connectionRow:\s*'#row-swarm-connection'/, 'connection row selector passed');
+  assert.doesNotMatch(vis, /\$\('#row-swarm-dialect'\)\.toggle/,
+    'no hand-rolled dialect row toggle');
+});
+
 test('commandId preserves the saved numeric value after async catalog load', () => {
   assert.match(html, /node\.commandId/, 'saved commandId is re-applied');
   assert.match(html, /not in dialect/, 'unknown saved values remain selectable');

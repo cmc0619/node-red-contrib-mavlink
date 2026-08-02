@@ -232,26 +232,30 @@ test('command Build dialect + vehicle defaults come from the shared Build-tier h
 });
 
 test('command Build dialect select uses shared helper and includes __vehicle escape option', () => {
+  // Option value/label (`__vehicle` / "from Vehicle Profile…") are injected by
+  // populateDialectSelect — proven in mavlink-editor-resource.test.js. Command
+  // pins the call site, not a pasted copy of the option.
   assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
-  assert.match(html, /__vehicle/, 'dialect select must have __vehicle option value');
-  assert.match(html, /from Vehicle Profile/, 'dialect select must label the escape option');
+  assert.match(html, /includeVehicleEscape:\s*true/, 'dialect select must request Vehicle Profile escape');
   assert.match(html, /row-cmd-dialect/, 'template must have a dialect row');
   assert.match(html, /id="node-input-dialect"/, 'template must have the dialect select');
 });
 
-test('command Build visibility shows Vehicle Profile only for __vehicle dialect', () => {
+test('command Build visibility delegates shared rows to applyBuildTierRowVisibility', () => {
   const vis = html.slice(
     html.indexOf('function refreshVisibility'),
     html.indexOf("$('#node-input-identity').on")
   );
 
-  assert.match(vis, /#row-cmd-dialect/, 'Build visibility toggles the dialect row');
+  assert.match(vis, /RED\.mavlink\.applyBuildTierRowVisibility\(\{/, 'shared visibility helper called');
   assert.match(vis, /#node-input-dialect/, 'Build visibility reads the dialect select');
-  assert.match(vis, /dialectVal\s*===\s*['"]__vehicle['"]/, 'Vehicle row depends on __vehicle');
-  assert.match(
+  assert.match(vis, /dialectRow:\s*'#row-cmd-dialect'/, 'dialect row selector passed');
+  assert.match(vis, /vehicleRow:\s*'#row-cmd-vehicle'/, 'vehicle row selector passed');
+  assert.match(vis, /connectionRow:\s*'#row-cmd-connection'/, 'connection row selector passed');
+  assert.doesNotMatch(
     vis,
-    /#row-cmd-vehicle['"]\)\s*\[\s*isBuild\s*&&\s*dialectVal\s*===\s*['"]__vehicle['"]\s*\?\s*['"]show['"]\s*:\s*['"]hide['"]\s*\]/,
-    'Vehicle Profile is visible only for Build + __vehicle'
+    /#row-cmd-dialect['"]\)\s*\[/,
+    'no hand-rolled dialect show/hide'
   );
 });
 
@@ -318,18 +322,19 @@ test('build tier hides connection row; wire tiers show it', () => {
   );
   assert.match(
     vis,
-    /#row-cmd-connection/,
-    'connection row must be toggled in refreshVisibility'
+    /connectionRow:\s*'#row-cmd-connection'/,
+    'connection row is handed to the shared visibility helper'
   );
   assert.match(
     vis,
-    /#row-cmd-vehicle/,
-    'vehicle row must be toggled in refreshVisibility'
+    /vehicleRow:\s*'#row-cmd-vehicle'/,
+    'vehicle row is handed to the shared visibility helper'
   );
+  // Command-owned wire rows (identity/timeout/…) stay local and still hide on Build.
   assert.match(
     vis,
-    /isBuild\s*\?\s*'hide'\s*:\s*'show'\s*\]\(\)/,
-    'connection/identity rows hidden in build tier'
+    /#row-cmd-identity['"]\)\s*\[\s*isBuild\s*\?\s*'hide'\s*:\s*'show'\s*\]/,
+    'identity row remains a command-owned Build hide'
   );
 });
 

@@ -255,21 +255,14 @@
         $band.val(node.band !== undefined ? String(node.band) : '2');
 
         function updateVisibility() {
-          var tierVal = $tier.val();
           var dialectVal = $('#node-input-dialect').val() || node.dialect || '';
-          if (tierVal === 'build') {
-            $('#mav-connection-row').hide();
-            $('#mav-dialect-row').show();
-            if (dialectVal === '__vehicle') {
-              $('#mav-vehicle-row').show();
-            } else {
-              $('#mav-vehicle-row').hide();
-            }
-          } else {
-            $('#mav-connection-row').show();
-            $('#mav-dialect-row').hide();
-            $('#mav-vehicle-row').hide();
-          }
+          RED.mavlink.applyBuildTierRowVisibility({
+            isBuild: $tier.val() === 'build',
+            dialect: dialectVal,
+            dialectRow: '#mav-dialect-row',
+            vehicleRow: '#mav-vehicle-row',
+            connectionRow: '#mav-connection-row'
+          });
         }
         $tier.on('change', function () {
           _msgCatalogByKey = {};

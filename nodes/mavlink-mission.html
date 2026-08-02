@@ -127,24 +127,19 @@
         var dialect = $('#node-input-dialect').val() || node.dialect || '';
         var isBuild = (delivery === 'build');
         var isWire = !isBuild;
-        var show = {
-          dialect: isBuild,
-          vehicle: isBuild && dialect === '__vehicle',
-          firmware: isBuild && !!dialect && dialect !== '__vehicle',
-          connection: isWire,
-          identity: isWire,
-          timeout: isWire,
-          maxRetries: isWire
-        };
 
-        /* tier-driven rows */
-        $('#row-mission-dialect').toggle(!!show.dialect);
-        $('#row-vehicle').toggle(!!show.vehicle);
-        $('#row-mission-firmware').toggle(!!show.firmware);
-        $('#row-connection').toggle(!!show.connection);
-        $('#row-identity').toggle(!!show.identity);
-        $('#row-timeout').toggle(!!show.timeout);
-        $('#row-maxRetries').toggle(!!show.maxRetries);
+        RED.mavlink.applyBuildTierRowVisibility({
+          isBuild: isBuild,
+          dialect: dialect,
+          dialectRow: '#row-mission-dialect',
+          vehicleRow: '#row-vehicle',
+          firmwareRow: '#row-mission-firmware',
+          connectionRow: '#row-connection'
+        });
+        /* Mission-owned wire rows stay local */
+        $('#row-identity').toggle(isWire);
+        $('#row-timeout').toggle(isWire);
+        $('#row-maxRetries').toggle(isWire);
 
         /* role-driven rows: companion hides both target rows */
         if (!isBuild) {
