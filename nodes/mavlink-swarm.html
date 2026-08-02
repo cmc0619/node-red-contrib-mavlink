@@ -128,8 +128,8 @@
       $('#node-input-path').on('change', refreshCarrierRows);
       RED.mavlink.refreshVerbOptions({ saved: node.verb });
 
-      var _msgCatalog = { byKey: {}, seq: 0 };
-      var _cmdCatalog = { byKey: {}, seq: 0 };
+      var _msgCatalog = { value: null, seq: 0 };
+      var _cmdCatalog = { value: null, seq: 0 };
 
       // Swarm's Build path is narrower than the shared rule: the Dialect picker
       // only governs when Delivery is Build AND Selection is an explicit list;

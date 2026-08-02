@@ -814,42 +814,33 @@
   };
 
   /**
-   * Shared dialect catalog fetch: resolve target → cache → getJSON → race guard.
+   * Shared dialect catalog fetch: resolve target → getJSON → race guard.
    *
-   * Caller owns the cache bag:
-   *   `{ byKey: {}, seq: 0 }`                          — seq-guarded (default)
-   *   `{ byKey: {}, seq: 0, inflight: {} }`             — coalesce waiters per key
-   *                                                      (Command Advanced; Greptile #36)
+   * Caller owns the currently rendered catalog plus its request sequence:
+   * `{ value: null, seq: 0 }`.
    *
    * @param {string} endpoint  admin path (`/mavlink/build/messages` or
    *   `/mavlink/command/commands`)
-   * @param {{byKey: Object, seq: number, inflight?: Object}} cache
+   * @param {{value: object|null, seq: number}} state
    * @param {function(object):void} cb
    * @param {object} [opts]
    * @param {boolean} [opts.isBuild]  resolveCatalogTarget override
    * @param {object} [opts.resolve]   full resolveCatalogTarget opts (wins over isBuild)
    * @param {'messages'|'commands'} [opts.listKey]  empty/success list property
-   * @param {function(string):void} [opts.onKey]    active-key side effect
    */
-  RED.mavlink.loadCatalog = function (endpoint, cache, cb, opts) {
+  RED.mavlink.loadCatalog = function (endpoint, state, cb, opts) {
     opts = opts || {};
     cb = typeof cb === 'function' ? cb : function () {};
-    cache = cache || {};
-    if (!cache.byKey) cache.byKey = {};
-    if (typeof cache.seq !== 'number') cache.seq = 0;
+    state = state || {};
+    if (typeof state.seq !== 'number') state.seq = 0;
 
     var listKey = opts.listKey
       || (String(endpoint).indexOf('/messages') !== -1 ? 'messages' : 'commands');
     var resolveOpts = opts.resolve
       || (typeof opts.isBuild === 'boolean' ? { isBuild: opts.isBuild } : {});
     var target = RED.mavlink.resolveCatalogTarget(resolveOpts);
-    var requestedKey = target.key;
-    var coalesce = !!cache.inflight;
-
-    // Bump before cache-hit return so an in-flight request for a prior target
-    // cannot overwrite after a later call resolved from cache (Swarm/In).
-    cache.seq += 1;
-    var seq = cache.seq;
+    state.seq += 1;
+    var seq = state.seq;
 
     function emptyShape(dialect, error) {
       var catalog = { enums: {}, dialect: dialect || '' };
@@ -865,57 +856,23 @@
       return catalog;
     }
 
-    function activate(catalog) {
-      if (typeof opts.onKey === 'function') opts.onKey(requestedKey);
+    function render(catalog) {
+      state.value = catalog;
       cb(catalog);
     }
 
-    if (cache.byKey[requestedKey]) {
-      activate(cache.byKey[requestedKey]);
-      return;
-    }
     if (!target.query) {
-      var emptyCatalog = emptyShape('');
-      cache.byKey[requestedKey] = emptyCatalog;
-      activate(emptyCatalog);
-      return;
-    }
-
-    if (coalesce) {
-      if (!cache.inflight[requestedKey]) {
-        cache.inflight[requestedKey] = [];
-        $.getJSON(RED.mavlink.adminApiUrl(endpoint), target.query, function (data) {
-          var waiters = cache.inflight[requestedKey] || [];
-          delete cache.inflight[requestedKey];
-          var catalog = fromData(data || {});
-          cache.byKey[requestedKey] = catalog;
-          // Drop waiters when the editor target moved (do not cancel sibling
-          // consumers of the same key — Greptile #36).
-          if (RED.mavlink.resolveCatalogTarget(resolveOpts).key !== requestedKey) return;
-          if (typeof opts.onKey === 'function') opts.onKey(requestedKey);
-          for (var i = 0; i < waiters.length; i++) waiters[i](catalog);
-        }).fail(function (_xhr, _status, err) {
-          var waiters = cache.inflight[requestedKey] || [];
-          delete cache.inflight[requestedKey];
-          if (RED.mavlink.resolveCatalogTarget(resolveOpts).key !== requestedKey) return;
-          if (typeof opts.onKey === 'function') opts.onKey(requestedKey);
-          var failed = emptyShape(target.dialect, String(err || 'load failed'));
-          for (var j = 0; j < waiters.length; j++) waiters[j](failed);
-        });
-      }
-      cache.inflight[requestedKey].push(cb);
+      render(emptyShape(''));
       return;
     }
 
     $.getJSON(RED.mavlink.adminApiUrl(endpoint), target.query, function (data) {
-      if (seq !== cache.seq) return;
+      if (seq !== state.seq) return;
       var catalog = fromData(data || {});
-      cache.byKey[requestedKey] = catalog;
-      activate(catalog);
+      render(catalog);
     }).fail(function (_xhr, _status, err) {
-      if (seq !== cache.seq) return;
-      // Failures are not cached — a later open can retry.
-      activate(emptyShape(target.dialect, String(err || 'load failed')));
+      if (seq !== state.seq) return;
+      render(emptyShape(target.dialect, String(err || 'load failed')));
     });
   };
 

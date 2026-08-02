@@ -67,13 +67,14 @@ test('advanced mode enumerates params from dialect metadata, not Param 1–7 (§
 });
 
 test('advanced catalog load ignores stale responses and keeps the in-progress selection', () => {
-  // Coalesce + stale-target drop live in RED.mavlink.loadCatalog (cache.inflight).
+  // Stale-response protection lives in RED.mavlink.loadCatalog.
   assert.match(
     html,
     /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
     'commands catalog uses the shared loader'
   );
-  assert.match(html, /inflight:\s*\{\s*\}/, 'commands cache bag enables coalesce waiters');
+  assert.match(html, /_cmdCatalog\s*=\s*\{\s*value:\s*null,\s*seq:\s*0\s*\}/,
+    'commands render state has a current value and request sequence');
   assert.match(html, /const prefer = sel\.val\(\)/, 'in-progress select value is read');
   assert.match(html, /saved:\s*prefer/, 'current-or-saved prefer is passed to fillEnumSelect');
 });
