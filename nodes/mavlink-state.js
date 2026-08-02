@@ -1,8 +1,12 @@
 'use strict';
 
 const { createStateFeed, snapshotPeers } = require('../lib/state');
-
-const BADGE_MAX = 24;
+const { firstDefined } = require('../lib/addressing');
+const {
+  makeStatusRecord,
+  applyActionStatus,
+  shouldSuppress,
+} = require('../lib/delivery');
 
 module.exports = function registerMavlinkState(RED) {
   function MavlinkStateNode(config) {
@@ -12,7 +16,7 @@ module.exports = function registerMavlinkState(RED) {
     let feed = null;
 
     if (!connectionNode || !connectionNode.peerTable) {
-      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+      applyActionStatus(node, 'invalid', 'invalid config');
     } else if (config.mode === 'feed') {
       feed = createStateFeed(connectionNode.peerTable, { events: selectedEvents(config) }, (record) => {
         node.send([{ payload: record }]);
@@ -22,7 +26,7 @@ module.exports = function registerMavlinkState(RED) {
 
     node.on('input', (msg, send, done) => {
       try {
-        if (msg.payload === false) {
+        if (shouldSuppress(msg)) {
           done();
           return;
         }
@@ -36,15 +40,24 @@ module.exports = function registerMavlinkState(RED) {
           sysid: firstDefined(payload.sysid, config.targetSystem),
           compid: firstDefined(payload.compid, config.targetComponent),
         });
-        node.status({ fill: 'green', shape: 'dot', text: cap(`${peers.length} peer(s)`) });
+        applyActionStatus(node, 'ok', `${peers.length} peer(s)`);
         send([
           { payload: peers },
-          statusRecord('succeeded', 'snapshot', { count: peers.length }),
+          makeStatusRecord({
+            node: 'mavlink-state',
+            result: 'succeeded',
+            detail: 'snapshot',
+            count: peers.length,
+          }),
         ]);
         done();
       } catch (err) {
-        node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
-        send([null, statusRecord('failed', err.message)]);
+        applyActionStatus(node, 'error', err.message);
+        send([null, makeStatusRecord({
+          node: 'mavlink-state',
+          result: 'failed',
+          detail: err.message,
+        })]);
         done(err);
       }
     });
@@ -64,20 +77,4 @@ function selectedEvents(config) {
     return config.events.split(',').map((s) => s.trim()).filter(Boolean);
   }
   return undefined;
-}
-
-function statusRecord(result, detail, extra = {}) {
-  return { node: 'mavlink-state', result, detail, ...extra };
-}
-
-function firstDefined(...values) {
-  for (const v of values) {
-    if (v !== undefined && v !== null && v !== '') return v;
-  }
-  return undefined;
-}
-
-function cap(text) {
-  const s = String(text || '');
-  return s.length > BADGE_MAX ? `${s.slice(0, BADGE_MAX - 1)}…` : s;
 }

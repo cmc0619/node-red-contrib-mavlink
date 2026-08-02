@@ -2,7 +2,8 @@
 
 const delivery = require('../lib/delivery');
 const { executeSwarm, guardSwarmInput } = require('../lib/swarm');
-const { resolveFrame } = require('../lib/command');
+const { resolveFrame, mergeParams, DEFAULT_TIMEOUT_MS } = require('../lib/command');
+const { positionFrom, velocityFrom, valueFrom } = require('../lib/move');
 
 module.exports = function registerMavlinkSwarm(RED) {
   function MavlinkSwarmNode(config) {
@@ -57,7 +58,7 @@ module.exports = function registerMavlinkSwarm(RED) {
           delivery: effectiveDelivery,
           dryRun: payload.dryRun !== undefined ? !!payload.dryRun : !!config.dryRun,
           intervalMs: numberOption(payload, config, 'intervalMs', 100),
-          timeoutMs: numberOption(payload, config, 'timeoutMs', 10000),
+          timeoutMs: numberOption(payload, config, 'timeoutMs', DEFAULT_TIMEOUT_MS),
           maxRetries: numberOption(payload, config, 'maxRetries', 0),
           identityId: payload.identityId || config.identity,
           confirmed: msg.confirmed === true || config.confirm === true,
@@ -100,7 +101,8 @@ function actionFrom(config, payload) {
       type,
       commandId: payload.commandId || config.commandId || config.advancedCommand,
       preset: payload.preset || config.preset,
-      params: { ...parseJson(config.params), ...numericPayloadParams(payload), ...(payload.params || {}) },
+      // mergeParams Number-coerces 1–7; payload.params overlays last.
+      params: mergeParams(config, { ...payload, ...(payload.params || {}) }),
       carrier: payload.carrier || config.carrier,
       frame: resolveFrame(payload.mavFrame, config.frame),
     };
@@ -167,35 +169,6 @@ function assignIfPresent(target, key, value) {
   if (value !== undefined && value !== null && value !== '') target[key] = value;
 }
 
-function numericPayloadParams(payload) {
-  const params = {};
-  for (const [key, value] of Object.entries(payload)) {
-    const index = Number(key);
-    if (Number.isInteger(index) && index >= 1 && index <= 7) params[index] = value;
-  }
-  return params;
-}
-
-function parseJson(value) {
-  if (!value) return {};
-  return typeof value === 'string' ? JSON.parse(value) : value;
-}
-
-function positionFrom(config) {
-  return {
-    north: config.north,
-    east: config.east,
-    up: config.up,
-    lat: config.lat,
-    lon: config.lon,
-    alt: config.alt,
-  };
-}
-
-function velocityFrom(config) {
-  return { north: config.vNorth, east: config.vEast, up: config.vUp };
-}
-
 function valuesFrom(config) {
   return {
     count: config.count,
@@ -215,11 +188,6 @@ function valuesFrom(config) {
     length: config.length,
     rate: config.rate,
   };
-}
-
-function valueFrom(payload, config, key) {
-  if (payload[key] !== undefined) return payload[key];
-  return config[key] === '' ? undefined : config[key];
 }
 
 /**

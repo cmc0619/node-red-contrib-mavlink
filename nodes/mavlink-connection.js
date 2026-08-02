@@ -20,9 +20,7 @@
 
 const { Connection, STATE } = require('../lib/connection');
 const { resolveIdentity } = require('../lib/identity');
-
-/** Cap on node-status badge text (§6 "Cap badge text at 24 characters"). */
-const BADGE_MAX = 24;
+const { capBadge } = require('../lib/delivery');
 
 module.exports = function registerMavlinkConnection(RED) {
   /**
@@ -322,7 +320,7 @@ function enumValue(bundle, enumName, entryName) {
  */
 function applyStatus(node, state) {
   const badge = STATUS_BADGES[state] || { fill: 'grey', shape: 'ring', text: state };
-  node.status({ fill: badge.fill, shape: badge.shape, text: badge.text.slice(0, BADGE_MAX) });
+  node.status({ fill: badge.fill, shape: badge.shape, text: capBadge(badge.text) });
 }
 
 /** @type {Object<string, {fill: string, shape: string, text: string}>} */

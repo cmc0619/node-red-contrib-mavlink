@@ -23,9 +23,6 @@
 
 const { capBadge } = require('../lib/delivery');
 
-/** @type {number} */
-const BADGE_MAX = 24;
-
 /**
  * Minimum interval (ms) between status-badge writes for an unchanged badge.
  * A high-rate stream (e.g. 50 Hz ATTITUDE) would otherwise rewrite the same
@@ -119,7 +116,7 @@ module.exports = function registerMavlinkIn(RED) {
       // Rate-limit status writes: refresh only when the badge text changes or
       // after the minimum interval, so a steady high-rate stream does not
       // rewrite an identical badge on every frame.
-      const badgeText = capBadge(decoded.name).slice(0, BADGE_MAX);
+      const badgeText = capBadge(decoded.name);
       if (badgeText !== lastStatusText || now - lastStatusMs >= STATUS_MIN_INTERVAL_MS) {
         node.status({ fill: 'green', shape: 'dot', text: badgeText });
         lastStatusText = badgeText;

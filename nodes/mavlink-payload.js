@@ -5,16 +5,22 @@ const {
   fieldMetaFromBundle,
 } = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
-const { AckWaiter, resolveFrame } = require('../lib/command');
+const {
+  AckWaiter,
+  resolveFrame,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_MAX_RETRIES,
+} = require('../lib/command');
 const {
   resolveActionTarget,
   profileFromVehicleNode,
 } = require('../lib/addressing/resolve');
 const {
   shouldSuppress,
+  makeStatusRecord,
+  applyActionStatus,
 } = require('../lib/delivery');
 
-const BADGE_MAX = 24;
 const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';
 
 module.exports = function registerMavlinkPayload(RED) {
@@ -24,10 +30,10 @@ module.exports = function registerMavlinkPayload(RED) {
 
     // At most one COMMAND_ACK wait in flight per node.
     let activeWaiter = null;
-    const timeoutMs = config.timeout ? Number(config.timeout) : 10000;
+    const timeoutMs = config.timeout ? Number(config.timeout) : DEFAULT_TIMEOUT_MS;
     const maxRetries = config.maxRetries !== undefined && config.maxRetries !== ''
       ? Number(config.maxRetries)
-      : 3;
+      : DEFAULT_MAX_RETRIES;
 
     function cancelWaiter() {
       if (activeWaiter) {
@@ -100,7 +106,7 @@ module.exports = function registerMavlinkPayload(RED) {
         // timeout can halt the chain (§9). Gimbal-manager setpoints carry no
         // acknowledgement, so they can only ever be sent unconfirmed.
         if (delivery === 'confirm' && built.confirmation === 'command_ack') {
-          node.status({ fill: 'blue', shape: 'dot', text: cap(`${built.message.name}…`) });
+          applyActionStatus(node, 'sending', `${built.message.name}…`);
           cancelWaiter();
           const waiter = new AckWaiter({
             subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
@@ -250,7 +256,7 @@ module.exports = function registerMavlinkPayload(RED) {
 };
 
 function completeAck(node, send, built, outcome) {
-  node.status({ fill: 'green', shape: 'dot', text: cap(`ack ${built.message.name}`) });
+  applyActionStatus(node, 'ok', `ack ${built.message.name}`);
   send([
     { payload: { result: 'succeeded', message: built.message } },
     statusRecord('succeeded', 'command-ack accepted', {
@@ -264,7 +270,7 @@ function completeAck(node, send, built, outcome) {
 }
 
 function failAck(node, send, built, outcome, msg, done) {
-  node.status({ fill: 'red', shape: 'ring', text: cap(`${built.message.name} ${outcome.result}`) });
+  applyActionStatus(node, 'error', `${built.message.name} ${outcome.result}`);
   send([
     null,
     statusRecord(outcome.result, outcome.detail || 'command not accepted', {
@@ -323,7 +329,7 @@ function valuesFrom(config) {
 }
 
 function completeBuild(node, send, built) {
-  node.status({ fill: 'green', shape: 'dot', text: cap('built payload') });
+  applyActionStatus(node, 'ok', 'built payload');
   send([
     { payload: built.message },
     statusRecord('succeeded', 'built', { confirmation: built.confirmation }),
@@ -331,7 +337,7 @@ function completeBuild(node, send, built) {
 }
 
 function completeResult(node, send, result, detail, built) {
-  node.status({ fill: 'green', shape: 'dot', text: cap(detail) });
+  applyActionStatus(node, 'ok', detail);
   send([
     { payload: { result, message: built.message } },
     statusRecord(result, detail, { confirmation: built.confirmation }),
@@ -339,16 +345,11 @@ function completeResult(node, send, result, detail, built) {
 }
 
 function fail(node, send, err, msg, done) {
-  node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
+  applyActionStatus(node, 'error', err.message);
   send([null, statusRecord('failed', err.message)]);
   done(err);
 }
 
 function statusRecord(result, detail, extra = {}) {
-  return { node: 'mavlink-payload', result, detail, ...extra };
-}
-
-function cap(text) {
-  const s = String(text || '');
-  return s.length > BADGE_MAX ? `${s.slice(0, BADGE_MAX - 1)}…` : s;
+  return makeStatusRecord({ node: 'mavlink-payload', result, detail, ...extra });
 }

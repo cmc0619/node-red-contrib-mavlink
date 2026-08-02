@@ -35,9 +35,7 @@ const {
   profileFromVehicleNode,
   firstDefined,
 } = require('../lib/addressing');
-
-/** Default param transaction timeout (ms). */
-const DEFAULT_TIMEOUT_MS = 10000;
+const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
 
 /** Admin route for the parameter definition catalog. */
 const PARAM_DEFS_ROUTE = '/mavlink/param/defs';
