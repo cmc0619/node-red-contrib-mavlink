@@ -43,8 +43,8 @@ const {
   buildItemInt,
 } = require('../lib/mission');
 const {
-  resolveActionTarget,
-  profileFromVehicleNode,
+  resolveDeliveryContext,
+  missingConnectionGate,
   firstDefined,
 } = require('../lib/addressing');
 
@@ -71,13 +71,8 @@ module.exports = function registerMavlinkMission(RED) {
      */
     const activeByKey = new Map();
 
-    // Wire-tier confirm needs a Connection. Do not silently degrade into Build
-    // and report a phantom plan (§9) — same rule as mavlink-command.
-    if (delivery !== 'build' && !connNode) {
-      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
-    } else {
-      node.status({});
-    }
+    // Wire-tier confirm needs a Connection — same gate as mavlink-command (§9).
+    missingConnectionGate(node, delivery, connNode);
 
     node.on('input', (msg, send, done) => {
       if (shouldSuppress(msg)) {
@@ -103,32 +98,16 @@ module.exports = function registerMavlinkMission(RED) {
         return;
       }
 
-      // Build tier: Vehicle Profile is used only through the explicit dialect
-      // escape. Concrete Build dialects carry firmware but no profile target rung.
-      // Wire tiers: profile from Connection's bound Vehicle, identity from config/payload.
-      const isBuild = delivery === 'build';
-      const useVehicleProfile = isBuild && config.dialect === '__vehicle';
-      const profile = isBuild
-        ? (useVehicleProfile ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle)) : null)
-        : (connNode && connNode.vehicle) || null;
-      const identityNode = delivery !== 'build'
-        ? RED.nodes.getNode(payload.identityId || config.identity)
-        : null;
-
-      // Firmware: dynamic override → selected profile → Build concrete firmware.
-      const firmware = firstDefined(
-        payload.firmware,
-        profile && profile.firmware,
-        isBuild && !useVehicleProfile ? config.firmware : undefined
-      );
-
-      const target = resolveActionTarget({
-        payloadTarget: payload.target,
-        configSysid: config.targetSystem,
-        configCompid: config.targetComponent,
-        identityNode,
-        profile,
+      const { profile, target } = resolveDeliveryContext(RED, {
+        delivery,
+        config,
+        payload,
+        connectionNode: connNode,
+        buildFirmwareProfile: true,
       });
+
+      // Firmware: dynamic override → selected profile (incl. concrete Build).
+      const firmware = firstDefined(payload.firmware, profile && profile.firmware);
 
       // Refuse a type the selected stack does not carry over this protocol rather
       // than sending a request it will silently no-op (§9, §11).

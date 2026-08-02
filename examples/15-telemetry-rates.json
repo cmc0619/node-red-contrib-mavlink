@@ -70,8 +70,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex15-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -87,7 +85,9 @@
         "ex15-dbg-req-st"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex15-cmd-set-pos",
@@ -99,8 +99,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex15-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -116,7 +114,9 @@
         "ex15-dbg-set-st"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex15-cmd-stop-pos",
@@ -128,8 +128,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex15-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -145,7 +143,9 @@
         "ex15-dbg-stop-st"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex15-in-pos",

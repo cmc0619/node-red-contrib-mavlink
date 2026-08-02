@@ -155,30 +155,55 @@ test('preset rows render through the Advanced catalog path', () => {
   assert.match(renderer, /spec\.messages/, 'message-backed preset params keep their picker');
 });
 
+test('oneditprepare migrates legacy targetSysid/targetCompid into canonical fields', () => {
+  // Historical Command flows (and shipped examples) persist targetSysid.
+  // Extract the migration block and run it against a stub node + jQuery.
+  const start = html.indexOf('// Pre-#122 flows');
+  assert.ok(start > 0, 'legacy target migration comment present');
+  const end = html.indexOf('if (RED.mavlink && RED.mavlink.ensureConfigNodePicker)', start);
+  assert.ok(end > start, 'migration sits before picker setup');
+  const body = html.slice(start, end);
+  const vals = {};
+  const $ = (sel) => ({
+    val(v) {
+      if (v === undefined) return vals[sel];
+      vals[sel] = v;
+      return this;
+    },
+  });
+  const node = { targetSysid: '11', targetCompid: '191', targetSystem: '', targetComponent: '' };
+  new Function('node', '$', body)(node, $);
+  assert.equal(node.targetSystem, '11');
+  assert.equal(node.targetComponent, '191');
+  assert.equal(vals['#node-input-targetSystem'], '11');
+  assert.match(html, /delete this\.targetSysid/, 'oneditsave drops legacy sysid key');
+  assert.match(html, /delete this\.targetCompid/, 'oneditsave drops legacy compid key');
+});
+
 test('Command CompID reloads when catalog source changes', () => {
-  assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node, \{\s*field:\s*'targetCompid'\s*\}\)/, 'CompID reload uses shared helper with Command field name');
+  assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node, \{\s*field:\s*'targetComponent'\s*\}\)/, 'CompID reload uses shared helper with Command field name');
   assertChangeHandlerContains(
     html,
     "$('#node-input-connection')",
-    'RED.mavlink.reloadTargetCompId(node, { field: \'targetCompid\' })',
+    'RED.mavlink.reloadTargetCompId(node, { field: \'targetComponent\' })',
     'Connection change refreshes MAV_COMPONENT for the new dialect'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-delivery')",
-    'RED.mavlink.reloadTargetCompId(node, { field: \'targetCompid\' })',
+    'RED.mavlink.reloadTargetCompId(node, { field: \'targetComponent\' })',
     'Delivery tier change refreshes CompID catalog'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-vehicle')",
-    'RED.mavlink.reloadTargetCompId(node, { field: \'targetCompid\' })',
+    'RED.mavlink.reloadTargetCompId(node, { field: \'targetComponent\' })',
     'Build Vehicle Profile change refreshes CompID catalog'
   );
   assertChangeHandlerContains(
     html,
     '$dialect',
-    'RED.mavlink.reloadTargetCompId(node, { field: \'targetCompid\' })',
+    'RED.mavlink.reloadTargetCompId(node, { field: \'targetComponent\' })',
     'Dialect change refreshes CompID catalog'
   );
 });
@@ -191,7 +216,7 @@ test('mavlink-command target sysid/compid use "(profile default)" wording', () =
   );
   assert.match(
     html,
-    /RED\.mavlink\.reloadTargetCompId\(node,\s*\{\s*field:\s*'targetCompid'\s*\}\)/,
+    /RED\.mavlink\.reloadTargetCompId\(node,\s*\{\s*field:\s*'targetComponent'\s*\}\)/,
     'compid uses shared reloadTargetCompId (default emptyLabel is profile default)'
   );
   assert.ok(

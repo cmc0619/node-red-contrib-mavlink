@@ -100,8 +100,8 @@ function deploy(ackResults, config = {}, extraNodes = {}) {
     preset: 'reposition',
     delivery: 'confirm',
     connection: 'conn',
-    targetSysid: '1',
-    targetCompid: '1',
+    targetSystem: '1',
+    targetComponent: '1',
     timeout: '1000',
     ...config,
   });

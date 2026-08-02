@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 20 Move stream stop",
     "disabled": false,
-    "info": "ArduPilot SITL move stream proof: prepare with Arm + GUIDED, stream a forward local velocity setpoint, then stop by injecting zero velocity (replaces/stops the prior stream). Do not use payload:false — that is the toolkit-wide suppress rule and never reaches stream.stop().",
+    "info": "ArduPilot SITL move stream proof: prepare with Arm + GUIDED, stream a forward local velocity setpoint, then stop by injecting zero velocity (replaces/stops the prior stream). Do not use payload:false \u2014 that is the toolkit-wide suppress rule and never reaches stream.stop().",
     "env": []
   },
   {
@@ -96,8 +96,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "sitl20-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -113,7 +111,9 @@
       [
         "sitl20-arm-status"
       ]
-    ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "sitl20-guided",
@@ -125,8 +125,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "sitl20-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -142,7 +140,9 @@
       [
         "sitl20-guided-status"
       ]
-    ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "sitl20-inject-fwd",

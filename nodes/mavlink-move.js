@@ -8,10 +8,7 @@ const {
   valueFrom,
 } = require('../lib/move');
 const { BAND } = require('../lib/connection/bands');
-const {
-  resolveActionTarget,
-  profileFromVehicleNode,
-} = require('../lib/addressing/resolve');
+const { resolveDeliveryContext } = require('../lib/addressing');
 const {
   shouldSuppress,
   makeStatusRecord,
@@ -32,25 +29,12 @@ module.exports = function registerMavlinkMove(RED) {
         }
 
         const delivery = config.delivery;
-        const connectionNode = delivery !== 'build'
-          ? RED.nodes.getNode(config.connection)
-          : null;
         const payload = msg.payload ?? {};
-
-        const profile = delivery === 'build' && config.dialect === '__vehicle'
-          ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
-          : (connectionNode && connectionNode.vehicle) || null;
-        const identityNode = delivery === 'build'
-          ? null
-          : RED.nodes.getNode(payload.identityId || config.identity);
-
-        const target = resolveActionTarget({
-          payloadTarget: payload.target,
-          configSysid: config.targetSystem,
-          configCompid: config.targetComponent,
-          identityNode,
-          profile,
-          // Move: companion hides both sysid and compid — no compidFromConfig
+        // Move: companion hides both sysid and compid — no compidFromConfig.
+        const { connectionNode, target, identityId } = resolveDeliveryContext(RED, {
+          delivery,
+          config,
+          payload,
         });
 
         const message = buildMoveMessage({
@@ -69,8 +53,6 @@ module.exports = function registerMavlinkMove(RED) {
           if (!connectionNode || typeof connectionNode.send !== 'function') {
             throw new Error('mavlink-move requires a Connection for send/stream delivery');
           }
-          // Payload-first, matching the target derivation above.
-          const identityId = payload.identityId || config.identity;
           const options = {
             connection: connectionNode,
             message,

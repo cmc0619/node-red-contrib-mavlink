@@ -70,8 +70,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex10-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -87,7 +85,9 @@
         "ex10-dbg-arm"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex10-dbg-arm",
@@ -116,8 +116,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex10-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -133,7 +131,9 @@
         "ex10-dbg-guided"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex10-dbg-guided",
@@ -162,8 +162,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex10-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -179,7 +177,9 @@
         "ex10-dbg-takeoff"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex10-dbg-takeoff",
@@ -208,8 +208,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex10-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -225,7 +223,9 @@
         "ex10-dbg-orbit"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex10-dbg-orbit",
@@ -254,8 +254,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex10-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -271,7 +269,9 @@
         "ex10-dbg-rotate"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex10-dbg-rotate",
@@ -300,8 +300,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex10-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -317,7 +315,9 @@
         "ex10-dbg-flip"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex10-dbg-flip",
@@ -346,8 +346,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex10-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -363,7 +361,9 @@
         "ex10-dbg-land"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex10-dbg-land",

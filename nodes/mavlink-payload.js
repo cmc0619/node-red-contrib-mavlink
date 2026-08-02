@@ -12,14 +12,15 @@ const {
   DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
 const {
-  resolveActionTarget,
-  profileFromVehicleNode,
-} = require('../lib/addressing/resolve');
+  resolveDeliveryContext,
+} = require('../lib/addressing');
 const {
   shouldSuppress,
   makeStatusRecord,
   applyActionStatus,
 } = require('../lib/delivery');
+const { loadMetadata } = require('../lib/metadata/load');
+const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
 
 const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';
 
@@ -50,29 +51,14 @@ module.exports = function registerMavlinkPayload(RED) {
         }
 
         const delivery = config.delivery;
-        const connectionNode = delivery !== 'build'
-          ? RED.nodes.getNode(config.connection)
-          : null;
         const payload = msg.payload ?? {};
-
-        const profile = delivery === 'build'
-          ? (config.dialect === '__vehicle'
-            ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
-            : null)
-          : (connectionNode && connectionNode.vehicle) || null;
-        const identityNode = delivery === 'build'
-          ? null
-          : RED.nodes.getNode(payload.identityId || config.identity);
-
         // Payload: compidFromConfig keeps the compid field authoritative even
         // under a companion identity — compid addresses a payload device, not
         // the autopilot (DESIGN.md §6 spec'd exception).
-        const target = resolveActionTarget({
-          payloadTarget: payload.target,
-          configSysid: config.targetSystem,
-          configCompid: config.targetComponent,
-          identityNode,
-          profile,
+        const { connectionNode, target, identityId } = resolveDeliveryContext(RED, {
+          delivery,
+          config,
+          payload,
           compidFromConfig: true,
         });
 
@@ -97,10 +83,6 @@ module.exports = function registerMavlinkPayload(RED) {
         if (!connectionNode || typeof connectionNode.send !== 'function') {
           throw new Error('mavlink-payload requires a Connection');
         }
-        // Payload-first, matching the target derivation above: the runtime
-        // override must drive both the source stamp and the derived target.
-        const identityId = payload.identityId || config.identity;
-
         // Confirm tier for a command-backed verb: send the COMMAND_LONG and
         // wait for its COMMAND_ACK so a later DENIED / TEMPORARILY_REJECTED /
         // timeout can halt the chain (§9). Gimbal-manager setpoints carry no
@@ -163,17 +145,13 @@ module.exports = function registerMavlinkPayload(RED) {
   }
 
   if (!MavlinkPayloadNode._fieldTipsRouteRegistered && RED.httpAdmin && RED.auth) {
-    let metadataApi = null;
-    try {
-      metadataApi = require('../lib/metadata');
-    } catch {
-      metadataApi = null;
-    }
+    const { api: metadataApi } = loadMetadata('mavlink-payload', RED);
 
     /**
      * GET /mavlink/payload/field-tips?topic=&verb=&path=&vehicle=&dialect=
      * Returns `{ fields: { sequence: { description, units }, … } }` joined from
-     * PAYLOAD_RECIPES + the dialect bundle (DESIGN.md §6).
+     * PAYLOAD_RECIPES + the dialect bundle (DESIGN.md §6). Soft notices (not
+     * hard 404s) when the profile is undeployed — editor tips stay usable.
      */
     RED.httpAdmin.get(
       FIELD_TIPS_ROUTE,
@@ -189,45 +167,43 @@ module.exports = function registerMavlinkPayload(RED) {
           return res.status(503).json({ fields: {}, error: 'metadata unavailable' });
         }
         try {
-          const vehicleId = typeof req.query.vehicle === 'string'
-            ? req.query.vehicle.trim()
-            : '';
-          let bundle = null;
-          let dialect = '';
-          const requested = typeof req.query.dialect === 'string'
-            ? req.query.dialect.trim()
-            : '';
-          if (vehicleId) {
-            const vehicleNode = RED.nodes.getNode(vehicleId);
-            if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
-              bundle = vehicleNode.getDialect();
-              dialect = vehicleNode.dialect || (bundle && bundle.dialect) || 'custom';
-            } else if (!requested || requested === 'custom') {
-              // Custom / undeployed profile — do not invent ardupilotmega tips
-              // (Codex #36). Same posture as command/message catalog routes.
-              return res.json({
-                dialect: requested || '',
-                fields: {},
-                notice: 'Vehicle Profile not deployed — deploy the flow first',
-              });
-            }
-            // Pre-deploy bundled Vehicle Profile: editor sends vehicle=id plus
-            // an allow-listed dialect; load that seed until Deploy creates the
-            // runtime node (mirrors mavlink-command.js catalog fallback).
+          const source = resolveCatalogSource(RED, metadataApi, req.query || {}, { soft: true });
+          if (source.kind === 'empty') {
+            return res.json({
+              dialect: source.dialect,
+              fields: {},
+              notice: source.notice,
+            });
           }
-          if (!bundle) {
+          if (source.kind === 'error') {
+            // getDialect / resolve failures can include filesystem paths —
+            // keep the client response generic (same posture as the catch below).
+            if (RED.log && typeof RED.log.error === 'function') {
+              RED.log.error(
+                `[mavlink-payload] field-tips unavailable: ${source.body.error}`
+              );
+            }
+            return res.status(400).json({
+              fields: {},
+              error: 'field tips unavailable',
+            });
+          }
+          let bundle;
+          let dialect;
+          if (source.kind === 'bundle') {
+            bundle = source.bundle;
+            dialect = source.dialect;
+          } else {
             const known = metadataApi.knownDialects();
-            if (!requested || !known.includes(requested)) {
+            if (!known.includes(source.dialect)) {
               return res.json({
-                dialect: requested || '',
+                dialect: source.dialect,
                 fields: {},
-                notice: requested
-                  ? `unknown dialect ${JSON.stringify(requested)}`
-                  : 'no dialect supplied',
+                notice: `unknown dialect ${JSON.stringify(source.dialect)}`,
               });
             }
-            bundle = metadataApi.loadBundled(requested);
-            dialect = requested;
+            bundle = metadataApi.loadBundled(source.dialect);
+            dialect = source.dialect;
           }
           return res.json({
             dialect,

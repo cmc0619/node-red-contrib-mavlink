@@ -797,8 +797,8 @@
 
   /**
    * Reload the Target CompID select for a palette node. Thin defaulting wrapper
-   * over `reloadCompIdSelect` — Command uses `field:'targetCompid'`; everyone
-   * else keeps the default `targetComponent`.
+   * over `reloadCompIdSelect`. Defaults to `targetComponent` (all palette nodes
+   * including Command).
    *
    * @param {object} node
    * @param {{field?: string, selector?: string, emptyLabel?: string}} [opts]

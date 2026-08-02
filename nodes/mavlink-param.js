@@ -31,8 +31,7 @@ const {
   applyActionStatus,
 } = require('../lib/delivery');
 const {
-  resolveActionTarget,
-  profileFromVehicleNode,
+  resolveDeliveryContext,
   firstDefined,
 } = require('../lib/addressing');
 const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
@@ -153,22 +152,21 @@ module.exports = function registerMavlinkParam(RED) {
         const payload = msg.payload ?? {};
         const delivery = config.delivery;
 
-        // Build tier: profile only for the Vehicle Profile dialect escape.
-        // Concrete Build dialects carry firmware directly from the editor.
-        // Wire tiers: profile from the Connection's bound Vehicle, identity from config/payload.
-        const connNode = delivery !== 'build' ? RED.nodes.getNode(config.connection) : null;
-        const useVehicle = delivery === 'build' && config.dialect === '__vehicle';
-        const profile = delivery === 'build'
-          ? (useVehicle
-            ? profileFromVehicleNode(RED.nodes.getNode(config.vehicle))
-            : { firmware: config.firmware })
-          : (connNode && connNode.vehicle) || null;
-        const identityNode = delivery !== 'build'
-          ? RED.nodes.getNode(payload.identityId || config.identity)
-          : null;
+        // Concrete Build dialects carry firmware from the editor (no target rung).
+        const {
+          connectionNode: connNode,
+          profile,
+          target,
+          identityId,
+        } = resolveDeliveryContext(RED, {
+          delivery,
+          config,
+          payload,
+          buildFirmwareProfile: true,
+        });
 
         const request = requestFrom(config, payload, {
-          identityNode,
+          target,
           profile,
           connectionNode: connNode,
         });
@@ -180,11 +178,13 @@ module.exports = function registerMavlinkParam(RED) {
           return;
         }
 
-        const connectionNode = requireConnection(RED, config.connection);
-        connectionNode.send(message, {
+        if (!connNode || typeof connNode.send !== 'function') {
+          throw new Error('mavlink-param requires a Connection');
+        }
+        connNode.send(message, {
           band: request.action === 'request-list' ? BAND.BULK : BAND.CONTROL,
           target: request.target,
-          identityId: payload.identityId || config.identity,
+          identityId,
         });
 
         // Scope the PARAM_VALUE subscription to the addressed vehicle so a
@@ -215,7 +215,7 @@ module.exports = function registerMavlinkParam(RED) {
         }
 
         const collector = isCollectList ? createParamListCollector() : null;
-        const unsubscribe = connectionNode.subscribe(echoFilter, (decoded) => {
+        const unsubscribe = connNode.subscribe(echoFilter, (decoded) => {
           if (!pending || pending.gen !== myGen) return;
           if (isConfirmSet) {
             if (!matchesParamEcho(request, decoded)) return;
@@ -270,17 +270,10 @@ module.exports = function registerMavlinkParam(RED) {
  *
  * @param {object} config
  * @param {object} payload
- * @param {{identityNode: object|null, profile: object|null, connectionNode?: object|null}} ctx
+ * @param {{target: object, profile: object|null, connectionNode?: object|null}} ctx
  * @returns {object} normalized param request
  */
-function requestFrom(config, payload, { identityNode, profile, connectionNode }) {
-  const target = resolveActionTarget({
-    payloadTarget: payload.target,
-    configSysid: config.targetSystem,
-    configCompid: config.targetComponent,
-    identityNode,
-    profile,
-  });
+function requestFrom(config, payload, { target, profile, connectionNode }) {
   const firmware = firstDefined(payload.firmware, profile && profile.firmware);
   const encoding = firstDefined(payload.paramEncoding, payload.encoding);
   const capabilities = capabilitiesFromPeer(connectionNode, target);
@@ -317,12 +310,6 @@ function capabilitiesFromPeer(connectionNode, target) {
   }
   const caps = Number(component.capabilities);
   return Number.isFinite(caps) ? caps : null;
-}
-
-function requireConnection(RED, id) {
-  const node = RED.nodes.getNode(id);
-  if (!node || typeof node.send !== 'function') throw new Error('mavlink-param requires a Connection');
-  return node;
 }
 
 function completeBuild(node, send, message) {

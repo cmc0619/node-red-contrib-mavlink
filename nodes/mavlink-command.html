@@ -144,8 +144,8 @@
       frame:             { value: '' },
       connection:        { value: '', type: 'mavlink-connection', required: false },
       identity:          { value: '' },
-      targetSysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
-      targetCompid:      { value: '' },
+      targetSystem:       { value: '', validate: RED.mavlink.validateUint8(0) },
+      targetComponent:      { value: '' },
       timeout:           { value: '10000' },
       maxRetries:        { value: '3' },
       unconfirmedContinue: { value: false },
@@ -176,6 +176,21 @@
     oneditprepare: function () {
       const node = this;
       const container = $('#node-input-params-container');
+
+      // Pre-#122 flows (and shipped examples) persisted targetSysid/targetCompid.
+      // Node-RED fills #node-input-* from defaults *before* oneditprepare, so a
+      // rename-only change leaves the new inputs blank and Done would save
+      // targetSystem:'' — profile inheritance — over an explicit legacy target.
+      // Copy once into the canonical fields and the live inputs (§2 compat).
+      if ((node.targetSystem === undefined || node.targetSystem === '') &&
+          node.targetSysid !== undefined && node.targetSysid !== null && node.targetSysid !== '') {
+        node.targetSystem = node.targetSysid;
+        $('#node-input-targetSystem').val(String(node.targetSystem));
+      }
+      if ((node.targetComponent === undefined || node.targetComponent === '') &&
+          node.targetCompid !== undefined && node.targetCompid !== null && node.targetCompid !== '') {
+        node.targetComponent = node.targetCompid;
+      }
 
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
         RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
@@ -364,7 +379,7 @@
         _currentCmdCatalog = null;
         refreshDelivery();
         // Connection binds a Vehicle Profile → dialect; CompID + Advanced follow it.
-        RED.mavlink.reloadTargetCompId(node, { field: 'targetCompid' });
+        RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
         // Re-fill the identity dropdown for the newly selected connection.
         RED.mavlink.refreshIdentitySelect(node);
         refreshVisibility();
@@ -377,7 +392,7 @@
         if ($('#node-input-delivery').val() === 'build') {
           presetMessagesCatalog = null;
           _currentCmdCatalog = null;
-          RED.mavlink.reloadTargetCompId(node, { field: 'targetCompid' });
+          RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
           if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
           if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
         }
@@ -390,7 +405,7 @@
         // Invalidate all cached dialect data and reload.
         presetMessagesCatalog = null;
         _currentCmdCatalog = null;
-        RED.mavlink.reloadTargetCompId(node, { field: 'targetCompid' });
+        RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
         if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });
@@ -420,7 +435,7 @@
         presetMessagesCatalog = null;
         _currentCmdCatalog = null;
         refreshVisibility();
-        RED.mavlink.reloadTargetCompId(node, { field: 'targetCompid' });
+        RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
         if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });
@@ -431,7 +446,7 @@
       // Compid catalog must run after the dialect select is pinned (see
       // populateDialectSelect); the earlier CompID reload at prepare
       // start raced an empty select on Build.
-      RED.mavlink.reloadTargetCompId(node, { field: 'targetCompid' });
+      RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
 
       function loadPresetMessages(cb) {
         const target = RED.mavlink.resolveCatalogTarget();
@@ -672,6 +687,9 @@
     },
 
     oneditsave: function () {
+      // Drop legacy keys so a later export does not keep two names for one field.
+      delete this.targetSysid;
+      delete this.targetCompid;
       // Scrape only a rendered form. If Done lands while the catalog is still
       // loading (or an error placeholder is showing), the container holds no
       // inputs — scraping it would silently wipe the saved params (Codex #36).
@@ -803,10 +821,10 @@
   <hr style="margin:8px 0">
 
   <div class="form-row" id="row-cmd-target">
-    <label for="node-input-targetSysid" style="width:120px">Target sysid</label>
-    <input type="number" id="node-input-targetSysid" min="0" max="255" placeholder="(profile default)" style="width:80px">
-    <label for="node-input-targetCompid" style="margin-left:10px;width:80px">Compid</label>
-    <select id="node-input-targetCompid" style="width:80px"></select>
+    <label for="node-input-targetSystem" style="width:120px">Target sysid</label>
+    <input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)" style="width:80px">
+    <label for="node-input-targetComponent" style="margin-left:10px;width:80px">Compid</label>
+    <select id="node-input-targetComponent" style="width:80px"></select>
   </div>
 
   <div class="form-row" id="row-cmd-timeout">

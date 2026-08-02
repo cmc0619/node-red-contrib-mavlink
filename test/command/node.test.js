@@ -44,8 +44,8 @@ test('Build tier with carrier int: output 0 carries a COMMAND_INT with config fr
     mode: 'preset',
     preset: 'reposition',
     delivery: 'build',
-    targetSysid: '1',
-    targetCompid: '1',
+    targetSystem: '1',
+    targetComponent: '1',
   });
 
   let sent;
@@ -73,8 +73,8 @@ test('Safety preset refuses a truthy-but-non-boolean confirmation token', async 
     preset: 'flight_termination',
     delivery: 'confirm',
     connection: 'conn',
-    targetSysid: '1',
-    targetCompid: '1',
+    targetSystem: '1',
+    targetComponent: '1',
   });
 
   let sent;
@@ -98,8 +98,8 @@ test('Safety preset Build tier also requires msg.confirmed === true', async () =
     preset: 'flight_termination',
     delivery: 'build',
     connection: 'conn',
-    targetSysid: '1',
-    targetCompid: '1',
+    targetSystem: '1',
+    targetComponent: '1',
   });
 
   let sent;
@@ -121,8 +121,8 @@ test('Safety preset with confirmed === true proceeds to send the command', async
     preset: 'flight_termination',
     delivery: 'confirm',
     connection: 'conn',
-    targetSysid: '1',
-    targetCompid: '1',
+    targetSystem: '1',
+    targetComponent: '1',
     timeout: '2000',
   });
 
@@ -150,8 +150,8 @@ test('Async handler contains a throw as a terminal failed status plus done(err)'
     preset: 'arm',
     delivery: 'confirm',
     connection: 'conn',
-    targetSysid: '1',
-    targetCompid: '1',
+    targetSystem: '1',
+    targetComponent: '1',
   });
 
   let sent;
@@ -178,8 +178,8 @@ test('resolveTarget: wire tier empty config inherits Vehicle Profile target from
     preset: 'arm',
     delivery: 'send',
     connection: 'conn',
-    targetSysid: '',
-    targetCompid: '',
+    targetSystem: '',
+    targetComponent: '',
   });
 
   let sent;
@@ -201,8 +201,8 @@ test('resolveTarget: explicit config value wins over Vehicle Profile', async () 
     preset: 'arm',
     delivery: 'build',
     connection: 'conn',
-    targetSysid: '7',
-    targetCompid: '100',
+    targetSystem: '7',
+    targetComponent: '100',
   });
 
   let sent;
@@ -246,8 +246,8 @@ test('resolveTarget: companion identity derives {airframe sysid, 1} as target', 
     delivery: 'send',
     connection: 'conn',
     identity: 'identity',
-    targetSysid: '',
-    targetCompid: '',
+    targetSystem: '',
+    targetComponent: '',
   });
 
   let sent;
@@ -275,8 +275,8 @@ test('resolveTarget: msg.payload.target overrides companion derivation', async (
     delivery: 'send',
     connection: 'conn',
     identity: 'identity',
-    targetSysid: '',
-    targetCompid: '',
+    targetSystem: '',
+    targetComponent: '',
   });
 
   let sent;
@@ -298,8 +298,8 @@ test('resolveTarget: config 0 is broadcast and survives (new semantics)', async 
     preset: 'arm',
     delivery: 'send',
     connection: 'conn',
-    targetSysid: '0',
-    targetCompid: '0',
+    targetSystem: '0',
+    targetComponent: '0',
   });
 
   let sent;
@@ -326,8 +326,8 @@ test('resolveTarget: build tier inherits from config.vehicle profile stub', asyn
     delivery: 'build',
     dialect: '__vehicle',
     vehicle: 'vehicle',
-    targetSysid: '',
-    targetCompid: '',
+    targetSystem: '',
+    targetComponent: '',
   });
 
   let sent;
@@ -354,8 +354,8 @@ test('resolveTarget: build tier ignores config.vehicle profile unless dialect is
     delivery: 'build',
     dialect: 'common',
     vehicle: 'vehicle',
-    targetSysid: '',
-    targetCompid: '',
+    targetSystem: '',
+    targetComponent: '',
   });
 
   let sent;
@@ -383,8 +383,8 @@ test('ack-matcher pin: companion target used for COMMAND_ACK matching; ack from 
     delivery: 'confirm',
     connection: 'conn',
     identity: 'identity',
-    targetSysid: '',
-    targetCompid: '',
+    targetSystem: '',
+    targetComponent: '',
     timeout: '5000',
   });
 

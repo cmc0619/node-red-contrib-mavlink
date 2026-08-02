@@ -329,13 +329,13 @@ test('reloadTargetCompId defaults to #node-input-targetComponent', () => {
   assert.equal(calls[0].initialSaved, 190);
 });
 
-test('reloadTargetCompId honours Command\'s targetCompid field name', () => {
-  const { RED } = loadResource({ '#node-input-targetCompid': '' });
+test('reloadTargetCompId honours Command\'s targetComponent field name', () => {
+  const { RED } = loadResource({ '#node-input-targetComponent': '' });
   const calls = [];
   RED.mavlink.reloadCompIdSelect = (_$select, opts) => {
     calls.push(opts.initialSaved);
   };
-  RED.mavlink.reloadTargetCompId({ targetCompid: 1 }, { field: 'targetCompid' });
+  RED.mavlink.reloadTargetCompId({ targetComponent: 1 }, { field: 'targetComponent' });
   assert.deepEqual(calls, [1]);
 });
 

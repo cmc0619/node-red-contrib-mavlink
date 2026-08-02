@@ -50,33 +50,26 @@ const {
   DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
 
-/**
- * Lazy, failure-tolerant metadata access (§6): the palette must register even
- * when `mavlink-mappings` is missing, so the bundled-dialect lookup for
- * coordKinds degrades to null (historical scaling) instead of throwing.
- * @returns {object|false}
- */
-let _metadataApi = null;
-function metadataApi() {
-  if (_metadataApi !== null) return _metadataApi;
-  try {
-    _metadataApi = require('../lib/metadata');
-  } catch {
-    _metadataApi = false;
-  }
-  return _metadataApi;
-}
-
+const { loadMetadata } = require('../lib/metadata/load');
 const {
-  resolveActionTarget,
-  profileFromVehicleNode,
+  resolveDeliveryContext,
+  missingConnectionGate,
+  dialectFromVehicleId,
+  dialectFromConnection,
 } = require('../lib/addressing');
-
 const {
   shouldSuppress,
   applyActionStatus,
 } = require('../lib/delivery');
 const { BAND } = require('../lib/connection/bands');
+
+/** Lazy metadata for coordKinds — palette still registers when deps are missing. */
+let _metadataApi;
+function metadataApi() {
+  if (_metadataApi !== undefined) return _metadataApi;
+  _metadataApi = loadMetadata('mavlink-command').api;
+  return _metadataApi;
+}
 
 /**
  * Return the command ID for the current node config (preset or advanced).
@@ -171,26 +164,16 @@ module.exports = function registerMavlinkCommand(RED) {
       let bundle = null;
       if (delivery === 'build') {
         if (config.dialect === '__vehicle') {
-          const vehicleNode = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
-          if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
-            try { bundle = vehicleNode.getDialect(); } catch { bundle = null; }
-          }
+          bundle = dialectFromVehicleId(RED, config.vehicle);
         } else if (config.dialect) {
           const api = metadataApi();
           if (api) {
             try { bundle = api.loadBundled(config.dialect); } catch { bundle = null; }
           }
         }
-      } else if (connNode && connNode.vehicle) {
-        // The connection's public vehicle snapshot deliberately carries no
-        // compiled bundle — only the profile node id. Per the snapshot's own
-        // contract (nodes/mavlink-connection.js): resolve the profile node
-        // and call getDialect(); never loadBundled, which would break custom
-        // XML profiles. (Codex review on #61 — the .bundle read was dead.)
-        const profileNode = connNode.vehicle.id ? RED.nodes.getNode(connNode.vehicle.id) : null;
-        if (profileNode && typeof profileNode.getDialect === 'function') {
-          try { bundle = profileNode.getDialect(); } catch { bundle = null; }
-        }
+      } else {
+        // Connection snapshot has no bundle — resolve the profile node (§7).
+        bundle = dialectFromConnection(RED, connNode);
       }
       _coordKinds = bundle ? intCoordKinds(bundle, commandId) : null;
       return _coordKinds;
@@ -200,16 +183,8 @@ module.exports = function registerMavlinkCommand(RED) {
     const maxRetries = config.maxRetries !== undefined ? Number(config.maxRetries) : DEFAULT_MAX_RETRIES;
     const unconfirmedContinue = !!config.unconfirmedContinue;
 
-    // A send/confirm/complete tier needs a Connection. When one is not bound
-    // the node must not silently degrade into Build and report a phantom
-    // success (§9): flag it at deploy (§6 "misconfigured at deploy") and fail
-    // every trigger with a status record naming the problem.
-    const needsConnection = delivery !== 'build';
-    if (needsConnection && !connNode) {
-      applyActionStatus(node, 'invalid', 'invalid config');
-    } else {
-      node.status({});
-    }
+    // Wire tiers need a Connection — do not silently degrade into Build (§9).
+    missingConnectionGate(node, delivery, connNode);
 
     /**
      * Build the 7-element param array for this send, merging config + payload.
@@ -255,35 +230,13 @@ module.exports = function registerMavlinkCommand(RED) {
       }
 
       const paramArray = getParams(msg.payload);
-      const payloadTarget =
-        (msg.payload && typeof msg.payload === 'object') ? msg.payload.target : undefined;
-      const identityId =
-        (msg.payload && typeof msg.payload === 'object' && msg.payload.identityId != null
-          ? msg.payload.identityId
-          : config.identity) || '';
-
-      let target;
-      if (delivery === 'build') {
-        // Build tier: profile only for the explicit `__vehicle` dialect escape.
-        const useVehicle = config.dialect === '__vehicle';
-        const vehicleNode = useVehicle && config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
-        target = resolveActionTarget({
-          payloadTarget,
-          configSysid: config.targetSysid,
-          configCompid: config.targetCompid,
-          profile: profileFromVehicleNode(vehicleNode),
-        });
-      } else {
-        // Wire tiers: profile comes from the bound connection's vehicle context.
-        const identityNode = identityId ? RED.nodes.getNode(identityId) : null;
-        target = resolveActionTarget({
-          payloadTarget,
-          configSysid: config.targetSysid,
-          configCompid: config.targetCompid,
-          identityNode,
-          profile: connNode ? connNode.vehicle : null,
-        });
-      }
+      const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
+      const { target, identityId } = resolveDeliveryContext(RED, {
+        delivery,
+        config,
+        payload,
+        connectionNode: connNode,
+      });
 
       const startMs = Date.now();
 
@@ -663,16 +616,7 @@ module.exports = function registerMavlinkCommand(RED) {
    */
   if (!MavlinkCommandNode._routeRegistered) {
     const { presetGroups } = require('../lib/command');
-    let catalogApi = null;
-    let catalogLoadError = null;
-    try {
-      catalogApi = require('../lib/metadata');
-    } catch (err) {
-      catalogLoadError = err;
-      if (RED.log && typeof RED.log.error === 'function') {
-        RED.log.error(`[mavlink-command] catalog unavailable: ${err.message}`);
-      }
-    }
+    const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
     RED.httpAdmin.get(
       '/mavlink/command/presets',
@@ -685,77 +629,14 @@ module.exports = function registerMavlinkCommand(RED) {
     /**
      * Advanced-mode catalog: every MAV_CMD plus param specs and the enum
      * tables those params reference (§6 / §9).
-     *
-     * Prefer `?vehicle=<id>` so a custom Vehicle Profile's compiled bundle is
-     * used when the config node is deployed. Otherwise `?dialect=` must be an
-     * allow-listed bundled name (never a filesystem path).
      */
-    RED.httpAdmin.get(
-      '/mavlink/command/commands',
-      RED.auth.needsPermission('mavlink.read'),
-      (req, res) => {
-        if (!catalogApi) {
-          return res.status(503).json({
-            error: catalogLoadError
-              ? catalogLoadError.message
-              : 'command catalog unavailable',
-          });
-        }
-        const {
-          listCommandsCatalog,
-          catalogFromBundle,
-          knownDialects,
-        } = catalogApi;
-        try {
-          const vehicleId = typeof req.query.vehicle === 'string'
-            ? req.query.vehicle.trim()
-            : '';
-          const requested = typeof req.query.dialect === 'string' && req.query.dialect.trim()
-            ? req.query.dialect.trim()
-            : '';
-
-          if (vehicleId) {
-            // Treat the id as an opaque key into the live node table — never as
-            // a path segment (§6 editor endpoints).
-            const vehicleNode = RED.nodes.getNode(vehicleId);
-            if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
-              const bundle = vehicleNode.getDialect();
-              const dialect = (vehicleNode.dialect || bundle.dialect || 'custom');
-              return res.json(catalogFromBundle(bundle, dialect));
-            }
-            // Referenced profile is not deployed. Serve a bundled dialect only
-            // when the editor also names an allow-listed one — never invent
-            // ardupilotmega under a vehicle: key (wrong commands would cache).
-            if (!requested || requested === 'custom') {
-              return res.status(404).json({
-                error: 'Vehicle Profile not found or not deployed; Deploy the flow, or pass a bundled ?dialect=',
-                dialects: knownDialects(),
-              });
-            }
-            return res.json(listCommandsCatalog(requested));
-          }
-
-          if (!requested) {
-            return res.status(400).json({
-              error: 'dialect is required',
-              dialects: knownDialects(),
-            });
-          }
-          if (requested === 'custom') {
-            return res.status(400).json({
-              error: 'custom dialect requires a deployed Vehicle Profile (?vehicle=id)',
-              dialects: knownDialects(),
-            });
-          }
-          res.json(listCommandsCatalog(requested));
-        } catch (err) {
-          res.status(400).json({
-            error: err.message,
-            dialects: catalogApi.knownDialects(),
-          });
-        }
-      }
-    );
+    registerDialectCatalogRoute(RED, {
+      path: '/mavlink/command/commands',
+      logLabel: 'mavlink-command',
+      unavailableMessage: 'command catalog unavailable',
+      fromBundle: (api, bundle, dialect) => api.catalogFromBundle(bundle, dialect),
+      fromDialect: (api, dialect) => api.listCommandsCatalog(dialect),
+    });
 
     MavlinkCommandNode._routeRegistered = true;
   }

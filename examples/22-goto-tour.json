@@ -95,8 +95,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex22-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -112,7 +110,9 @@
         "ex22-debug-arm-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex22-cmd-guided",
@@ -124,8 +124,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex22-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -141,7 +139,9 @@
         "ex22-debug-guided-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex22-debug-arm-status",
@@ -229,8 +229,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex22-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -246,7 +244,9 @@
         "ex22-debug-a-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex22-debug-a-status",
@@ -317,8 +317,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex22-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -334,7 +332,9 @@
         "ex22-debug-b-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex22-debug-b-status",
@@ -405,8 +405,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex22-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -422,7 +420,9 @@
         "ex22-debug-c-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex22-debug-c-status",

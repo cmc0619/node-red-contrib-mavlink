@@ -95,8 +95,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex25-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -112,7 +110,9 @@
         "ex25-debug-arm-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex25-cmd-guided",
@@ -124,8 +124,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex25-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -141,7 +139,9 @@
         "ex25-debug-guided-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex25-cmd-takeoff",
@@ -153,8 +153,6 @@
     "advancedCommand": "",
     "delivery": "complete",
     "connection": "ex25-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -170,7 +168,9 @@
         "ex25-debug-takeoff-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex25-inject-speed",
@@ -207,8 +207,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex25-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -224,7 +222,9 @@
         "ex25-debug-speed-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex25-inject-yaw",
@@ -261,8 +261,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex25-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -278,7 +276,9 @@
         "ex25-debug-yaw-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex25-inject-rotate",
@@ -315,8 +315,6 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "ex25-connection",
-    "targetSysid": "",
-    "targetCompid": "",
     "timeout": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
@@ -332,7 +330,9 @@
         "ex25-debug-rotate-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
   },
   {
     "id": "ex25-debug-arm-status",
