@@ -32,6 +32,7 @@
         const $revision = $('#node-config-input-dialectRevision');
         const $firmware = $('#node-config-input-firmware');
         const $status = $('#mav-catalog-status');
+        const $paramDefsStatus = $('#mav-param-defs-status');
         const FIRMWARE_DIALECT = { ardupilot: 'ardupilotmega', px4: 'development', custom: 'common' };
         let library = [];
 
@@ -195,6 +196,29 @@
             });
         });
 
+        $('#mav-param-defs-update').on('click', function (e) {
+          e.preventDefault();
+          const url = $('#node-config-input-paramDefsUrl').val().trim();
+          if (!url) {
+            $paramDefsStatus.text('Enter a parameter definitions URL before Update.');
+            return;
+          }
+          $paramDefsStatus.text('Downloading parameter definitions...');
+          $.ajax({
+            url: mavlinkAdminUrl('/mavlink/param/defs/update'),
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ vehicle: node.id, url: url })
+          })
+            .done(function (data) {
+              $paramDefsStatus.text('Updated ' + data.count + ' parameter definitions.');
+            })
+            .fail(function (xhr) {
+              const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'update failed';
+              $paramDefsStatus.text('Update failed: ' + msg);
+            });
+        });
+
         loadLibrary(function () {
           populateDialects(node.dialect);
         });
@@ -286,11 +310,13 @@
     <div class="form-tips" id="mav-catalog-status" style="min-height:1em;"></div>
     <div class="form-row">
       <label for="node-config-input-paramDefsUrl">Param defs URL</label>
-      <input type="text" id="node-config-input-paramDefsUrl" placeholder="(optional) PX4 / custom parameter metadata URL">
+      <input type="text" id="node-config-input-paramDefsUrl" style="width:55%;" placeholder="(optional) parameter metadata URL">
+      <button id="mav-param-defs-update" class="red-ui-button">Update</button>
     </div>
+    <div class="form-tips" id="mav-param-defs-status" style="min-height:1em;"></div>
     <div class="form-tips">
-      Optional URL to firmware parameter definitions (PX4 / custom stacks). Leave
-      blank for ArduPilot — its per-family metadata URL is derived at runtime.
+      This URL is optional and is used only by Update. Update downloads definitions into
+      this Vehicle Profile's local holding file. A profile without downloaded definitions still works.
     </div>
   </div>
   <script type="text/javascript">
@@ -327,5 +353,6 @@
     <li><b>Firmware</b> — ArduPilot, PX4, or custom (suggests a dialect).</li>
     <li><b>Target SysID / CompID</b> — defaults blank palette fields inherit on wire tiers.</li>
     <li><b>Dialect / Version</b> — Advanced: seed or a downloaded snapshot date.</li>
+    <li><b>Param defs URL</b> — optional; used only when you click Update to refresh this profile's local definitions.</li>
   </ul>
 </script>
