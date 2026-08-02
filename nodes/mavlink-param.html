@@ -37,17 +37,6 @@
         RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
 
-      /* ── Identity select ──────────────────────────────────────── */
-      function refreshIdentitySelect() {
-        if (!(RED.mavlink && RED.mavlink.fillIdentitySelect)) return;
-        var connectionId = $('#node-input-connection').val() || '';
-        RED.mavlink.fillIdentitySelect(
-          $('#node-input-identity'),
-          connectionId,
-          { saved: node.identity }
-        );
-      }
-
       /* ── Component picker (reload when dialect/connection changes) ─ */
 
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
@@ -220,7 +209,7 @@
       });
       $('#node-input-connection').on('change', function () {
         clearParamDefs();
-        refreshIdentitySelect();
+        RED.mavlink.refreshIdentitySelect(node);
         loadParamDefs();
         RED.mavlink.reloadTargetCompId(node);
       });
@@ -257,7 +246,7 @@
       $('#node-input-action').on('change', refreshParamInfo);
 
       /* Initial state. */
-      refreshIdentitySelect();
+      RED.mavlink.refreshIdentitySelect(node);
       refreshVisibility();
       loadParamDefs();
     }

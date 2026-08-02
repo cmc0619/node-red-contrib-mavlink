@@ -232,7 +232,7 @@ test('mavlink-payload has vehicle and identity defaults for role Ã— tier matrix 
   // The vehicle (mavlink-vehicle) descriptor is contributed by the shared
   // buildTierDialectDefaults(); the delegation is asserted below.
   assert.match(payloadHtml, /identity:\s*\{\s*value:\s*''/, 'identity default is empty string');
-  assert.match(payloadHtml, /fillIdentitySelect/, 'fillIdentitySelect fills the identity dropdown');
+  assert.match(payloadHtml, /RED\.mavlink\.refreshIdentitySelect\(node\)/, 'shared refreshIdentitySelect fills the identity dropdown');
   assert.match(payloadHtml, /id="row-payload-vehicle"/, 'vehicle row has ID for tier-driven toggling');
   assert.match(payloadHtml, /id="row-payload-identity"/, 'identity row has ID for tier-driven toggling');
   assert.match(payloadHtml, /id="row-payload-connection"/, 'connection row has ID for tier-driven toggling');
@@ -321,7 +321,12 @@ test('mavlink-payload fills identity select and re-fills on connection change (Â
     /\$\('#node-input-connection'\)\.on\('change'/,
     'connection change handler exists'
   );
-  assert.match(payloadHtml, /fillIdentitySelect[^)]*\$\('#node-input-identity'\)/, 'identity refilled on connection change');
+  assertChangeHandlerContains(
+    payloadHtml,
+    "$('#node-input-connection')",
+    'RED.mavlink.refreshIdentitySelect(node)',
+    'identity refilled on connection change'
+  );
 });
 
 test('mavlink-payload CompID reloads when catalog source changes', () => {

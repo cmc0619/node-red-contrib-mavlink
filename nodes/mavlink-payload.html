@@ -93,13 +93,7 @@
         RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
 
-      if (RED.mavlink && RED.mavlink.fillIdentitySelect) {
-        RED.mavlink.fillIdentitySelect(
-          $('#node-input-identity'),
-          node.connection,
-          { saved: node.identity }
-        );
-      }
+      RED.mavlink.refreshIdentitySelect(node);
 
       var PAYLOAD_ENUM_NAMES = [
         'CAMERA_MODE',
@@ -467,13 +461,7 @@
       $('#node-input-identity').on('change', refreshVisibility);
       $('#node-input-connection').on('change', function () {
         resetEnumCatalog();
-        if (RED.mavlink && RED.mavlink.fillIdentitySelect) {
-          RED.mavlink.fillIdentitySelect(
-            $('#node-input-identity'),
-            $(this).val(),
-            { saved: node.identity }
-          );
-        }
+        RED.mavlink.refreshIdentitySelect(node);
         refreshEnumControls();
         RED.mavlink.reloadTargetCompId(node);
       });

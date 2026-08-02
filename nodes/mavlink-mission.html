@@ -39,17 +39,6 @@
         RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
 
-      /* ── Identity select ──────────────────────────────────────── */
-      function refreshIdentitySelect() {
-        if (!(RED.mavlink && RED.mavlink.fillIdentitySelect)) return;
-        var connectionId = $('#node-input-connection').val() || '';
-        RED.mavlink.fillIdentitySelect(
-          $('#node-input-identity'),
-          connectionId,
-          { saved: node.identity }
-        );
-      }
-
       /* ── Target compid enum (after dialect is pinned/populated) ─ */
 
       // Mission types offered per firmware (§9 firmware gating, §11). ArduPilot
@@ -158,7 +147,7 @@
         RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-connection').on('change', function () {
-        refreshIdentitySelect();
+        RED.mavlink.refreshIdentitySelect(node);
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);
       });
@@ -184,7 +173,7 @@
       RED.mavlink.reloadTargetCompId(node);
 
       /* Initial state. */
-      refreshIdentitySelect();
+      RED.mavlink.refreshIdentitySelect(node);
       refreshVisibility();
     }
   });

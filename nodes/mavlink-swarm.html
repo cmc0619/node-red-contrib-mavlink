@@ -145,33 +145,19 @@
 
       function buildVehicleTypeDropdown(catalog) {
         if (!catalog) return;
-        var entries = (catalog.enums && catalog.enums.MAV_TYPE) || [];
         var sel = $('#node-input-vehicleType');
-        var current = sel.val();
-        var saved = node.vehicleType !== undefined && node.vehicleType !== null
-          ? String(node.vehicleType)
-          : '';
-        var prefer = current || saved;
-
-        sel.empty();
-        sel.append($('<option></option>').val('').text('Any type'));
-        for (var i = 0; i < entries.length; i++) {
-          var entry = entries[i];
-          var $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
-          if (entry.description) $opt.attr('title', entry.description);
-          sel.append($opt);
-        }
-        if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
-          sel.append($('<option></option>').val(prefer).text('#' + prefer + ' (not in dialect)'));
-        }
-        if (prefer) sel.val(prefer);
-        function syncTypeTitle() {
-          var tip = sel.find('option:selected').attr('title') || '';
-          if (tip) sel.attr('title', tip);
-          else sel.removeAttr('title');
-        }
-        syncTypeTitle();
-        sel.off('change.mavTypeTip').on('change.mavTypeTip', syncTypeTitle);
+        var prefer = sel.val() || (
+          node.vehicleType !== undefined && node.vehicleType !== null
+            ? String(node.vehicleType)
+            : ''
+        );
+        RED.mavlink.fillEnumSelect(sel, (catalog.enums && catalog.enums.MAV_TYPE) || [], {
+          saved: prefer,
+          allowEmpty: true,
+          emptyLabel: 'Any type',
+          titleNamespace: 'mavTypeTip',
+          triggerChange: false
+        });
       }
 
       function loadCommandsCatalog(cb) {
@@ -183,31 +169,16 @@
 
       function buildCommandDropdown(catalog) {
         var sel = $('#node-input-commandId');
-        var current = sel.val();
-        var saved = node.commandId !== undefined && node.commandId !== null
-          ? String(node.commandId)
-          : '';
-        var prefer = current || saved;
-
-        sel.empty();
-        for (var i = 0; i < (catalog.commands || []).length; i++) {
-          var entry = catalog.commands[i];
-          var $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
-          if (entry.description) $opt.attr('title', entry.description);
-          sel.append($opt);
-        }
-        if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
-          sel.append($('<option></option>').val(prefer).text('#' + prefer + ' (not in dialect)'));
-        }
-        if (prefer) sel.val(prefer);
-        else if (catalog.commands && catalog.commands.length) sel.val(String(catalog.commands[0].value));
-        function syncCmdTitle() {
-          var tip = sel.find('option:selected').attr('title') || '';
-          if (tip) sel.attr('title', tip);
-          else sel.removeAttr('title');
-        }
-        syncCmdTitle();
-        sel.off('change.mavCmdTip').on('change.mavCmdTip', syncCmdTitle);
+        var prefer = sel.val() || (
+          node.commandId !== undefined && node.commandId !== null
+            ? String(node.commandId)
+            : ''
+        );
+        RED.mavlink.fillEnumSelect(sel, catalog.commands || [], {
+          saved: prefer,
+          titleNamespace: 'mavCmdTip',
+          triggerChange: false
+        });
       }
 
       function refreshVehicleTypeOptions() {
@@ -216,14 +187,6 @@
 
       function refreshCommandOptions() {
         loadCommandsCatalog(buildCommandDropdown);
-      }
-
-      function refreshIdentitySelect() {
-        var connId = $('#node-input-connection').val();
-        RED.mavlink.fillIdentitySelect($('#node-input-identity'), connId, {
-          rolesAllowed: ['gcs', 'custom'],
-          saved: node.identity
-        });
       }
 
       function refreshVisibility() {
@@ -264,7 +227,7 @@
       $('#node-input-connection').on('change', function () {
         refreshVehicleTypeOptions();
         refreshCommandOptions();
-        refreshIdentitySelect();
+        RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: ['gcs', 'custom'] });
         refreshVisibility();
       });
       $('#node-input-delivery').on('change', refreshCatalogsAndVisibility);
@@ -290,7 +253,7 @@
       refreshCarrierRows();
       refreshVehicleTypeOptions();
       refreshCommandOptions();
-      refreshIdentitySelect();
+      RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: ['gcs', 'custom'] });
       refreshVisibility();
     }
   });

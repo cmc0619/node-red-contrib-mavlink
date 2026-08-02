@@ -33,8 +33,8 @@ test('message filter loads dialect messages from build/messages catalog', () => 
     'dialect message catalog uses shared loadCatalog'
   );
   assert.match(html, /function buildMessageDropdown/, 'dropdown is rebuilt from catalog entries');
-  assert.match(html, /entry\.name/, 'option values are message names');
-  assert.match(html, /entry\.label/, 'option labels come from the catalog (NAME (id))');
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'options are built via shared fillEnumSelect');
+  assert.match(html, /valueKey:\s*['"]name['"]/, 'option values are message names');
   assert.match(html, /All messages/, 'empty selection means all traffic');
 });
 
@@ -54,8 +54,9 @@ test('message filter resolves dialect from the Connection vehicle graph (wire-on
 
 test('message filter preserves the saved message name after async catalog load', () => {
   assert.match(html, /node\.message/, 'saved message is re-applied');
-  assert.match(html, /const prefer = current \|\| saved|var prefer = current \|\| saved/, 'in-progress selection wins over saved');
-  assert.match(html, /not in dialect/, 'unknown saved values remain selectable');
+  assert.match(html, /var prefer = sel\.val\(\)/, 'in-progress selection wins over saved');
+  assert.match(html, /saved:\s*prefer/, 'prefer is passed to fillEnumSelect');
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'unknown saved values use shared fillEnumSelect sentinel');
 });
 
 test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)', () => {

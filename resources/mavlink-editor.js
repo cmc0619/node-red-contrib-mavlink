@@ -565,6 +565,56 @@
   };
 
   /**
+   * Label for a saved select value that is not in the current dialect catalog.
+   * One wording — `#N (not in dialect)` — for numeric ids and message names.
+   *
+   * @param {string|number} saved
+   * @returns {string}
+   */
+  RED.mavlink.missingEnumOptionLabel = function (saved) {
+    return '#' + String(saved) + ' (not in dialect)';
+  };
+
+  /**
+   * Append a sentinel option when `saved` is non-empty and absent from `$select`.
+   *
+   * @param {object} $select  jQuery select
+   * @param {string|number|null|undefined} saved
+   * @returns {boolean} true when a sentinel was appended
+   */
+  RED.mavlink.ensureSavedEnumOption = function ($select, saved) {
+    if (saved === undefined || saved === null || saved === '') return false;
+    var value = String(saved);
+    if ($select.find('option[value="' + value + '"]').length) return false;
+    $select.append(
+      $('<option></option>').val(value).text(RED.mavlink.missingEnumOptionLabel(value))
+    );
+    return true;
+  };
+
+  /**
+   * Keep a select's `title` in sync with the selected option's dialect
+   * description (§6). Canonical home for the tip-sync idiom used by
+   * `fillEnumSelect` and every catalog-backed dropdown.
+   *
+   * @param {object} $select  jQuery select
+   * @param {{namespace?: string}} [opts]  change-event namespace (default mavEnumTip)
+   * @returns {function(): void} sync function (for manual re-sync)
+   */
+  RED.mavlink.bindSelectTitleSync = function ($select, opts) {
+    opts = opts || {};
+    var ns = opts.namespace || 'mavEnumTip';
+    function sync() {
+      var tip = $select.find('option:selected').attr('title') || '';
+      if (tip) $select.attr('title', tip);
+      else $select.removeAttr('title');
+    }
+    $select.off('change.' + ns).on('change.' + ns, sync);
+    sync();
+    return sync;
+  };
+
+  /**
    * Fill a select from enum entries. Option values are numeric strings so
    * node configs save MAVLink enum ids, not localized labels.
    *
@@ -589,25 +639,16 @@
       if (entry.description) $opt.attr('title', entry.description);
       $select.append($opt);
     });
-    // Select tooltip follows the selected entry's dialect description (§6).
-    function syncEnumSelectTitle() {
-      var tip = $select.find('option:selected').attr('title') || '';
-      if (tip) $select.attr('title', tip);
-      else $select.removeAttr('title');
-    }
-    $select.off('change.mavEnumTip').on('change.mavEnumTip', syncEnumSelectTitle);
-    if (saved && !$select.find('option[value="' + saved + '"]').length) {
-      $select.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
-    }
+    RED.mavlink.ensureSavedEnumOption($select, saved);
     if (saved || opts.allowEmpty) {
       $select.val(saved);
     } else if (entries && entries.length) {
       $select.val(String(entries[0][valueKey]));
     }
-    syncEnumSelectTitle();
+    RED.mavlink.bindSelectTitleSync($select, { namespace: opts.titleNamespace || 'mavEnumTip' });
     // Node-RED attaches change→validateNodeEditor before oneditprepare; async
     // fills must re-fire change or a pre-fill `input-error` sticks (§6).
-    if (typeof $select.trigger === 'function') {
+    if (opts.triggerChange !== false && typeof $select.trigger === 'function') {
       $select.trigger('change');
     }
   };
@@ -914,6 +955,25 @@
     var selected = eligible ? opts.saved : (options.length ? options[0].id : '');
     $select.val(selected);
     return selected;
+  };
+
+  /**
+   * Reload the send-as identity select from the live Connection picker.
+   * Thin defaulting wrapper over `fillIdentitySelect` — Swarm passes
+   * `rolesAllowed: ['gcs','custom']`; everyone else keeps the full set.
+   *
+   * @param {object} node
+   * @param {{rolesAllowed?: string[], connectionSelector?: string, identitySelector?: string}} [opts]
+   * @returns {string} selected identity id
+   */
+  RED.mavlink.refreshIdentitySelect = function (node, opts) {
+    opts = opts || {};
+    var connectionId = $(opts.connectionSelector || '#node-input-connection').val() || '';
+    return RED.mavlink.fillIdentitySelect(
+      $(opts.identitySelector || '#node-input-identity'),
+      connectionId,
+      { saved: node.identity, rolesAllowed: opts.rolesAllowed }
+    );
   };
 
   /**

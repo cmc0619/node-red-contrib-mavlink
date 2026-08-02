@@ -47,9 +47,10 @@ test('mavlink-param has identity default (vehicle comes from the shared helper)'
   );
 });
 
-test('mavlink-param calls fillIdentitySelect on connection change', () => {
-  assert.match(html, /fillIdentitySelect/, 'fillIdentitySelect helper is called');
+test('mavlink-param calls refreshIdentitySelect on connection change', () => {
+  assert.match(html, /RED\.mavlink\.refreshIdentitySelect\(node\)/, 'shared refreshIdentitySelect is called');
   assert.match(html, /node-input-identity/, 'identity select element exists');
+  assert.doesNotMatch(html, /function refreshIdentitySelect/, 'no local identity-refresh copy');
 });
 
 test('mavlink-param dialect + vehicle + firmware defaults come from the shared helper', () => {

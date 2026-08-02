@@ -595,6 +595,91 @@ test('selectedBitmaskValues returns the set flag values', () => {
   );
 });
 
+// ── select title-sync + missing-option sentinel ──────────────────────────────
+
+test('missingEnumOptionLabel is the single #N (not in dialect) wording', () => {
+  const { RED } = loadResource();
+  assert.equal(RED.mavlink.missingEnumOptionLabel(190), '#190 (not in dialect)');
+  assert.equal(RED.mavlink.missingEnumOptionLabel('HEARTBEAT'), '#HEARTBEAT (not in dialect)');
+});
+
+test('ensureSavedEnumOption appends only when the value is absent', () => {
+  const options = [];
+  const context = {
+    RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node() { return null; } } },
+    $: null,
+  };
+  const $select = {
+    find() {
+      return { length: options.some((o) => o.value === '190') ? 1 : 0 };
+    },
+    append($opt) {
+      options.push({ value: $opt._val, text: $opt._text });
+      return $select;
+    },
+  };
+  context.$ = function (html) {
+    if (typeof html === 'string' && html.startsWith('<option')) {
+      const opt = { _val: '', _text: '' };
+      opt.val = function (v) { opt._val = v; return opt; };
+      opt.text = function (t) { opt._text = t; return opt; };
+      return opt;
+    }
+    return { length: 0, val() { return undefined; } };
+  };
+  vm.runInNewContext(resourceScript, context);
+  assert.equal(context.RED.mavlink.ensureSavedEnumOption($select, ''), false);
+  assert.equal(context.RED.mavlink.ensureSavedEnumOption($select, 190), true);
+  assert.equal(options[0].text, '#190 (not in dialect)');
+  assert.equal(context.RED.mavlink.ensureSavedEnumOption($select, 190), false);
+});
+
+test('bindSelectTitleSync mirrors the selected option title onto the select', () => {
+  let selectTitle = '';
+  let changeHandler = null;
+  const $select = {
+    find() {
+      return { attr() { return 'Dialect tip'; } };
+    },
+    attr(name, value) {
+      if (name === 'title' && arguments.length > 1) selectTitle = value;
+      return $select;
+    },
+    removeAttr() {
+      selectTitle = '';
+      return $select;
+    },
+    off() { return $select; },
+    on(_evt, fn) { changeHandler = fn; return $select; },
+  };
+  const { RED } = loadResource();
+  const sync = RED.mavlink.bindSelectTitleSync($select, { namespace: 'mavTestTip' });
+  assert.equal(selectTitle, 'Dialect tip');
+  assert.equal(typeof changeHandler, 'function');
+  assert.equal(typeof sync, 'function');
+});
+
+test('refreshIdentitySelect reads the live connection and forwards rolesAllowed', () => {
+  const calls = [];
+  const values = {
+    '#node-input-connection': 'conn-1',
+    '#node-input-identity': 'id-1',
+  };
+  const { RED } = loadResource(values);
+  RED.mavlink.fillIdentitySelect = ($select, connectionId, opts) => {
+    calls.push({ connectionId, opts: plain(opts), length: $select.length });
+    return 'id-1';
+  };
+  const selected = RED.mavlink.refreshIdentitySelect(
+    { identity: 'id-1' },
+    { rolesAllowed: ['gcs', 'custom'] }
+  );
+  assert.equal(selected, 'id-1');
+  assert.equal(calls[0].connectionId, 'conn-1');
+  assert.deepEqual(calls[0].opts, { saved: 'id-1', rolesAllowed: ['gcs', 'custom'] });
+  assert.equal(calls[0].length, 1);
+});
+
 // ── normalizeIdentityIds — the Connection dialog's extra-identity rules ──────
 
 test('normalizeIdentityIds drops blanks, duplicates, and the primary identity', () => {

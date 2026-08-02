@@ -26,20 +26,22 @@ test('fillEnumSelect applies entry.description as option title', () => {
   assert.match(resourceScript, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
 });
 
-test('Build message and MAV_CMD selects title from catalog descriptions', () => {
+test('Build message and MAV_CMD selects title via shared fillEnumSelect', () => {
   const html = readHtml('mavlink-build');
-  assert.match(html, /if \(m\.description\) \$opt\.attr\('title', m\.description\)/);
-  assert.match(html, /if \(c\.description\) \$opt\.attr\('title', c\.description\)/);
-  assert.match(html, /function syncMsgTitle/);
-  assert.match(html, /function syncCmdTitle/);
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(sel,/);
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(cmdSel,/);
+  assert.match(html, /titleNamespace:\s*'mavmsg'/);
+  assert.match(html, /titleNamespace:\s*'mavcmd'/);
   // Field controls already use spec.description (pre-existing).
   assert.match(html, /\.attr\('title',\s*(?:multi \? RED\.mavlink\.bitmaskTitle\(spec\.description\) : \(spec\.description \|\| ''\))/);
+  assert.doesNotMatch(html, /\(missing\)/, 'Build uses the shared not-in-dialect sentinel wording');
 });
 
 test('Command Advanced MAV_CMD select and enum options use catalog descriptions', () => {
   const html = readHtml('mavlink-command');
-  assert.match(html, /if \(c\.description\) \$opt\.attr\('title', c\.description\)/);
-  assert.match(html, /function syncAdvancedTitle/);
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(sel,\s*catalog\.commands/);
+  assert.match(html, /titleNamespace:\s*'mavCmdTip'/);
+  assert.match(html, /RED\.mavlink\.bindSelectTitleSync\(sel,\s*\{\s*namespace:\s*'mavPresetTip'/);
   assert.match(html, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
   assert.match(html, /catalogParamByIndex/);
   // Preset rows merge the whole catalog param spec (description included) and
@@ -48,15 +50,26 @@ test('Command Advanced MAV_CMD select and enum options use catalog descriptions'
   assert.match(html, /spec\.description \|\| ''/);
 });
 
-test('In / Swarm message and command selects use catalog descriptions', () => {
+test('In / Swarm message and command selects use shared fillEnumSelect', () => {
   const inn = readHtml('mavlink-in');
-  assert.match(inn, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
-  assert.match(inn, /function syncMessageTitle/);
+  assert.match(inn, /RED\.mavlink\.fillEnumSelect\(sel,/);
+  assert.match(inn, /titleNamespace:\s*'mavMsgTip'/);
+  assert.doesNotMatch(inn, /function syncMessageTitle/);
 
   const swarm = readHtml('mavlink-swarm');
-  assert.match(swarm, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
-  assert.match(swarm, /function syncCmdTitle/);
-  assert.match(swarm, /function syncTypeTitle/);
+  assert.match(swarm, /RED\.mavlink\.fillEnumSelect\(sel,/);
+  assert.match(swarm, /titleNamespace:\s*'mavCmdTip'/);
+  assert.match(swarm, /titleNamespace:\s*'mavTypeTip'/);
+  assert.doesNotMatch(swarm, /function syncCmdTitle|function syncTypeTitle/);
+});
+
+test('select title-sync and missing-option sentinel live once in the resource', () => {
+  assert.match(resourceScript, /RED\.mavlink\.bindSelectTitleSync\s*=/);
+  assert.match(resourceScript, /RED\.mavlink\.ensureSavedEnumOption\s*=/);
+  assert.match(resourceScript, /#.*\(not in dialect\)/);
+  // Namespace is concatenated (`'change.' + ns`); default ns is mavEnumTip.
+  assert.match(resourceScript, /off\('change\.' \+ ns\)\.on\('change\.' \+ ns/);
+  assert.match(resourceScript, /namespace \|\| 'mavEnumTip'/);
 });
 
 test('Param node titles come from loaded param defs, not baked HTML', () => {

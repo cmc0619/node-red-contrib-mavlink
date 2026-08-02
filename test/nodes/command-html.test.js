@@ -74,8 +74,8 @@ test('advanced catalog load ignores stale responses and keeps the in-progress se
     'commands catalog uses the shared loader'
   );
   assert.match(html, /inflight:\s*\{\s*\}/, 'commands cache bag enables coalesce waiters');
-  assert.match(html, /const current = sel\.val\(\)/, 'in-progress select value is read');
-  assert.match(html, /const prefer = current \|\| saved/, 'current selection wins over saved');
+  assert.match(html, /const prefer = sel\.val\(\)/, 'in-progress select value is read');
+  assert.match(html, /saved:\s*prefer/, 'current-or-saved prefer is passed to fillEnumSelect');
 });
 
 test('preset dropdown re-applies the saved selection and fires change after the async load', () => {
@@ -284,22 +284,18 @@ test('command catalog targeting delegates to the shared loader (no local copy)',
   assert.doesNotMatch(html, /ardupilotmega/, 'catalog target resolution must not hardcode ardupilotmega');
 });
 
-test('fillIdentitySelect is called to populate the identity select', () => {
+test('refreshIdentitySelect is called to populate the identity select', () => {
   assert.match(
     html,
-    /RED\.mavlink\.fillIdentitySelect\(/,
-    'fillIdentitySelect must be called'
+    /RED\.mavlink\.refreshIdentitySelect\(node\)/,
+    'shared refreshIdentitySelect must be called'
   );
   assert.match(
     html,
     /\$\('#node-input-identity'\)/,
     'identity select must be referenced as #node-input-identity'
   );
-  assert.match(
-    html,
-    /saved:\s*node\.identity/,
-    'saved identity must be passed to fillIdentitySelect'
-  );
+  assert.doesNotMatch(html, /function refreshIdentitySelect/, 'no local identity-refresh copy');
 });
 
 test('refreshVisibility handles delivery and identity change events', () => {

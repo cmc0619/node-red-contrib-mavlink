@@ -34,14 +34,15 @@ test('vehicleType loads MAV_TYPE entries from the build/messages catalog', () =>
   );
   assert.match(html, /enums\.MAV_TYPE/, 'MAV_TYPE table is read from the catalog');
   assert.match(html, /function buildVehicleTypeDropdown/, 'dropdown is rebuilt from catalog entries');
-  assert.match(html, /entry\.label/, 'option labels come from the catalog (value in parentheses)');
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'options are built via shared fillEnumSelect');
   assert.match(html, /Any type/, 'empty selection means any vehicle type');
 });
 
 test('vehicleType preserves the saved numeric value after async catalog load', () => {
   assert.match(html, /node\.vehicleType/, 'saved vehicleType is re-applied');
-  assert.match(html, /const prefer = current \|\| saved|var prefer = current \|\| saved/, 'in-progress selection wins over saved');
-  assert.match(html, /not in dialect/, 'unknown saved values remain selectable');
+  assert.match(html, /var prefer = sel\.val\(\)/, 'in-progress selection wins over saved');
+  assert.match(html, /saved:\s*prefer/, 'prefer is passed to fillEnumSelect');
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'unknown saved values use shared fillEnumSelect sentinel');
   assert.match(
     html,
     /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/,
@@ -75,8 +76,7 @@ test('commandId loads MAV_CMD entries from command/commands catalog', () => {
     'dialect MAV_CMD catalog uses shared loadCatalog'
   );
   assert.match(html, /function buildCommandDropdown/, 'dropdown is rebuilt from catalog entries');
-  assert.match(html, /entry\.label/, 'option labels come from the catalog (MAV_CMD_… (n))');
-  assert.match(html, /entry\.value/, 'option values are numeric command ids');
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(\s*sel,\s*catalog\.commands/, 'options are built via shared fillEnumSelect');
 });
 
 test('build+list catalog path has an explicit Dialect picker with Vehicle Profile escape', () => {
@@ -139,7 +139,7 @@ test('swarm Build visibility delegates shared rows with the Build+list isBuild f
 
 test('commandId preserves the saved numeric value after async catalog load', () => {
   assert.match(html, /node\.commandId/, 'saved commandId is re-applied');
-  assert.match(html, /not in dialect/, 'unknown saved values remain selectable');
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'unknown saved values use shared fillEnumSelect sentinel');
 });
 
 test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)', () => {
@@ -150,7 +150,7 @@ test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)',
   );
 });
 
-test('identity defaults to empty string and fillIdentitySelect is called with gcs+custom filter (§6)', () => {
+test('identity defaults to empty string and refreshIdentitySelect uses gcs+custom filter (§6)', () => {
   assert.match(
     html,
     /identity:\s*\{\s*value:\s*''\s*\}/,
@@ -158,24 +158,15 @@ test('identity defaults to empty string and fillIdentitySelect is called with gc
   );
   assert.match(
     html,
-    /RED\.mavlink\.fillIdentitySelect\(/,
-    'fillIdentitySelect is called to populate the Send-as dropdown'
-  );
-  assert.match(
-    html,
-    /rolesAllowed.*\[.*['"]gcs['"].*,.*['"]custom['"]/,
-    "rolesAllowed filters to ['gcs','custom'] (gcs-paradigm by nature, §6)"
+    /RED\.mavlink\.refreshIdentitySelect\(node,\s*\{\s*rolesAllowed:\s*\[\s*['"]gcs['"]\s*,\s*['"]custom['"]\s*\]\s*\}\)/,
+    'shared refreshIdentitySelect is called with gcs+custom filter'
   );
   assert.match(
     html,
     /<select id="node-input-identity"/,
     'Send-as identity field is a plain <select>'
   );
-  assert.match(
-    html,
-    /node\.identity/,
-    'saved identity is passed to fillIdentitySelect as the saved option'
-  );
+  assert.doesNotMatch(html, /function refreshIdentitySelect/, 'no local identity-refresh copy');
 });
 
 test('connection row hidden only for build+list; identity row hidden for build delivery (§6 exception)', () => {
@@ -196,15 +187,14 @@ test('connection row hidden only for build+list; identity row hidden for build d
 test('identity is re-filled when connection selection changes', () => {
   assert.match(
     html,
-    /refreshIdentitySelect/,
-    'refreshIdentitySelect helper is defined'
+    /RED\.mavlink\.refreshIdentitySelect\(node,\s*\{\s*rolesAllowed:/,
+    'shared refreshIdentitySelect is used'
   );
   assert.match(
     html,
     /#node-input-connection.*change|change.*#node-input-connection/,
     'connection change event handler is wired'
   );
-  // The connection change handler must call refreshIdentitySelect.
   const changeHandlerMatch = html.match(
     /#node-input-connection['"]\)\.on\(['"]change['"][^)]*\)\s*\{([\s\S]*?)\}/
   );

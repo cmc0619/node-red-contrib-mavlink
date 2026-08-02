@@ -429,37 +429,28 @@
             var cmdSel = $('<select id="mav-build-command-select" class="mav-field-input"></select>')
               .attr('data-field', 'command')
               .attr('data-kind', 'number');
-            cmdSel.append($('<option></option>').val('').text('\u2014 select MAV_CMD \u2014'));
             container.append(formRow('command (MAV_CMD)', cmdSel));
             container.append($('<div id="mav-command-params"></div>'));
             loadCommandsCatalog(function (cmdCatalog) {
-              function syncCmdTitle() {
-                var v = cmdSel.val();
-                var tip = '';
-                (cmdCatalog.commands || []).forEach(function (c) {
-                  if (String(c.value) === String(v)) tip = c.description || '';
-                });
-                if (tip) cmdSel.attr('title', tip);
-                else cmdSel.removeAttr('title');
-              }
-              (cmdCatalog.commands || []).forEach(function (c) {
-                var $opt = $('<option></option>').val(String(c.value)).text(c.label);
-                if (c.description) $opt.attr('title', c.description);
-                cmdSel.append($opt);
-              });
+              var commands = cmdCatalog.commands || [];
               var savedCmd = savedFields.command;
+              var prefer = '';
               if (savedCmd !== undefined && savedCmd !== null && savedCmd !== '') {
-                cmdSel.val(String(savedCmd));
-              } else if (cmdCatalog.commands && cmdCatalog.commands.length) {
+                prefer = String(savedCmd);
+              } else if (commands.length) {
                 // Prefer ARM if present, else first command — never leave blank.
-                var arm = cmdCatalog.commands.find(function (c) { return c.value === 400; });
-                cmdSel.val(String((arm || cmdCatalog.commands[0]).value));
+                var arm = commands.find(function (c) { return c.value === 400; });
+                prefer = String((arm || commands[0]).value);
               }
-              cmdSel.off('change.mavcmd').on('change.mavcmd', function () {
-                syncCmdTitle();
+              // Drop the placeholder empty option — fillEnumSelect rebuilds the list.
+              RED.mavlink.fillEnumSelect(cmdSel, commands, {
+                saved: prefer,
+                titleNamespace: 'mavcmd',
+                triggerChange: false
+              });
+              cmdSel.off('change.mavcmdParams').on('change.mavcmdParams', function () {
                 refreshCommandParams(msg.name, cmdCatalog);
               });
-              syncCmdTitle();
               refreshCommandParams(msg.name, cmdCatalog);
             });
             return;
@@ -484,31 +475,13 @@
             sel.replaceWith($select);
             sel = $select;
           }
-          sel.empty();
-          (catalog.messages || []).forEach(function (m) {
-            var $opt = $('<option></option>').val(m.name).text(m.label);
-            if (m.description) $opt.attr('title', m.description);
-            sel.append($opt);
+          sel.off('change.mavmsg').on('change.mavmsg', refreshFieldForm);
+          RED.mavlink.fillEnumSelect(sel, catalog.messages || [], {
+            saved: prefer,
+            valueKey: 'name',
+            titleNamespace: 'mavmsg',
+            triggerChange: false
           });
-          if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
-            sel.append($('<option></option>').val(prefer).text(prefer + ' (missing)'));
-          }
-          if (prefer) sel.val(prefer);
-          else if (catalog.messages && catalog.messages.length) sel.val(catalog.messages[0].name);
-          function syncMsgTitle() {
-            var name = sel.val();
-            var tip = '';
-            (catalog.messages || []).forEach(function (m) {
-              if (m.name === name) tip = m.description || '';
-            });
-            if (tip) sel.attr('title', tip);
-            else sel.removeAttr('title');
-          }
-          sel.off('change.mavmsg').on('change.mavmsg', function () {
-            syncMsgTitle();
-            refreshFieldForm();
-          });
-          syncMsgTitle();
           refreshFieldForm();
         }
 

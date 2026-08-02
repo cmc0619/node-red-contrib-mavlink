@@ -180,13 +180,6 @@
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
       }
 
-      // ── Identity (send-as) select ──────────────────────────────────────────
-      function refreshIdentitySelect() {
-        if (!(RED.mavlink && RED.mavlink.fillIdentitySelect)) return;
-        const connId = $('#node-input-connection').val();
-        RED.mavlink.fillIdentitySelect($('#node-input-identity'), connId, { saved: node.identity });
-      }
-
       // ── Role × tier visibility matrix (DESIGN.md §6) ──────────────────────
       function refreshVisibility() {
         const tier = $('#node-input-delivery').val() || 'confirm';
@@ -287,13 +280,7 @@
             if (tip) $(this).attr('title', tip);
             else $(this).removeAttr('title');
           });
-          function syncPresetTitle() {
-            const tip = sel.find('option:selected').attr('title') || '';
-            if (tip) sel.attr('title', tip);
-            else sel.removeAttr('title');
-          }
-          syncPresetTitle();
-          sel.off('change.mavPresetTip').on('change.mavPresetTip', syncPresetTitle);
+          RED.mavlink.bindSelectTitleSync(sel, { namespace: 'mavPresetTip' });
         }
         if (catalog) {
           paint(catalog);
@@ -332,35 +319,20 @@
       // ── Advanced MAV_CMD dropdown (§6 / §9 — every command in the dialect) ─
       function buildAdvancedDropdown(catalog) {
         if (!catalog) return;
-        const commands = catalog.commands || [];
         const sel = $('#node-input-advancedCommand');
         // Prefer the in-progress selection over the pre-edit saved value so a
         // Connection change mid-dialog does not snap the MAV_CMD back.
-        const current = sel.val();
-        const saved = node.advancedCommand !== undefined && node.advancedCommand !== null
-          ? String(node.advancedCommand)
-          : '';
-        const prefer = current || saved;
-
-        sel.empty();
-        sel.append($('<option></option>').val('').text('\u2014 select MAV_CMD \u2014'));
-        for (const c of commands) {
-          const $opt = $('<option></option>').val(String(c.value)).text(c.label);
-          if (c.description) $opt.attr('title', c.description);
-          sel.append($opt);
-        }
-        if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
-          sel.append($('<option></option>').val(prefer).text('#' + prefer + ' (not in dialect)'));
-        }
-        if (prefer) sel.val(prefer);
-        function syncAdvancedTitle() {
-          const tip = sel.find('option:selected').attr('title') || '';
-          if (tip) sel.attr('title', tip);
-          else sel.removeAttr('title');
-        }
-        syncAdvancedTitle();
-        sel.off('change.mavCmdTip').on('change.mavCmdTip', syncAdvancedTitle);
-        sel.trigger('change');
+        const prefer = sel.val() || (
+          node.advancedCommand !== undefined && node.advancedCommand !== null
+            ? String(node.advancedCommand)
+            : ''
+        );
+        RED.mavlink.fillEnumSelect(sel, catalog.commands || [], {
+          saved: prefer,
+          allowEmpty: true,
+          emptyLabel: '\u2014 select MAV_CMD \u2014',
+          titleNamespace: 'mavCmdTip'
+        });
       }
 
       function refreshAdvancedCommands() {
@@ -403,7 +375,7 @@
         // Connection binds a Vehicle Profile → dialect; CompID + Advanced follow it.
         RED.mavlink.reloadTargetCompId(node, { field: 'targetCompid' });
         // Re-fill the identity dropdown for the newly selected connection.
-        refreshIdentitySelect();
+        RED.mavlink.refreshIdentitySelect(node);
         refreshVisibility();
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
         if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
@@ -488,32 +460,6 @@
 
       function presetMessagesReady() {
         return presetMessagesCatalog && presetMessagesKey === RED.mavlink.resolveCatalogTarget().key;
-      }
-
-      function fillSelect($select, entries, opts) {
-        if (RED.mavlink && typeof RED.mavlink.fillEnumSelect === 'function') {
-          RED.mavlink.fillEnumSelect($select, entries, opts || {});
-          return;
-        }
-        const options = opts || {};
-        const saved = options.saved !== undefined && options.saved !== null
-          ? String(options.saved)
-          : String($select.val() || '');
-        $select.empty();
-        if (options.allowEmpty) {
-          $select.append($('<option></option>').val('').text(options.emptyLabel || '\u2014'));
-        }
-        for (const entry of entries || []) {
-          const value = String(entry.value);
-          const label = entry.label || (entry.name + ' (' + entry.value + ')');
-          const $opt = $('<option></option>').val(value).text(label);
-          if (entry.description) $opt.attr('title', entry.description);
-          $select.append($opt);
-        }
-        if (saved && !$select.find('option[value="' + saved + '"]').length) {
-          $select.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
-        }
-        if (saved || options.allowEmpty) $select.val(saved);
       }
 
       function messageEntries(catalog) {
@@ -619,7 +565,11 @@
             const sel = $('<select class="param-input"></select>')
               .attr('data-idx', spec.index)
               .attr('data-kind', 'enum');
-            fillSelect(sel, entries, { allowEmpty: true, emptyLabel: '\u2014 message \u2014', saved: saved });
+            RED.mavlink.fillEnumSelect(sel, entries, {
+              allowEmpty: true,
+              emptyLabel: '\u2014 message \u2014',
+              saved: saved,
+            });
             return sel;
           }
         }
@@ -728,7 +678,7 @@
       $('#node-input-mode').on('change', refreshSafetyNotice);
 
       // ── Initial state ──────────────────────────────────────────────────────
-      refreshIdentitySelect();
+      RED.mavlink.refreshIdentitySelect(node);
       applyMode(node.mode || 'preset');
       refreshSafetyNotice();
       refreshCompletionRow();

@@ -122,7 +122,7 @@ test('mavlink-move has vehicle and identity defaults for role × tier matrix (§
 });
 
 test('mavlink-move fills identity select and re-fills on connection change (§6)', () => {
-  assert.match(html, /fillIdentitySelect/, 'fillIdentitySelect fills the identity dropdown');
+  assert.match(html, /RED\.mavlink\.refreshIdentitySelect\(node\)/, 'shared refreshIdentitySelect fills the identity dropdown');
   assert.match(
     html,
     /\$\('#node-input-identity'\)\.on\('change', refreshVisibility\)/,
@@ -133,7 +133,12 @@ test('mavlink-move fills identity select and re-fills on connection change (§6)
     /\$\('#node-input-connection'\)\.on\('change'/,
     'connection change handler exists'
   );
-  assert.match(html, /fillIdentitySelect[^)]*\$\('#node-input-identity'\)/, 'identity refilled on connection change');
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-connection')",
+    'RED.mavlink.refreshIdentitySelect(node)',
+    'identity refilled on connection change'
+  );
 });
 
 test('mavlink-move companion hides both target sysid and compid rows (§6)', () => {
