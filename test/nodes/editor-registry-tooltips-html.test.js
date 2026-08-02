@@ -158,8 +158,8 @@ test('Payload TIP_FIELDS excludes enum selects driven by fillEnumSelect', () => 
 
 test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
   const html = readHtml('mavlink-command');
-  // Catalog-driven rendering: a cache hit renders synchronously; while the
-  // catalog is loading only a placeholder shows, and oneditsave refuses to
+  // Catalog-driven rendering: while the catalog is loading only a placeholder
+  // shows, and oneditsave refuses to
   // scrape a form that never rendered — saved params survive.
   assert.match(html, /_mavParamsRendered = false/, 'render pass starts unrendered');
   assert.match(html, /_mavParamsRendered = true/, 'real renders mark the form scrapable');
@@ -194,23 +194,22 @@ test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
   assert.equal(rendered.params, '{}', 'a rendered empty form saves {}');
 });
 
-test('Command catalog loads coalesce waiters per target key', () => {
+test('Command catalog state keeps only its request sequence', () => {
   const html = readHtml('mavlink-command');
-  // Coalesce is the cache bag's `inflight` map — behaviour proven once in
-  // mavlink-editor-resource.test.js against RED.mavlink.loadCatalog.
   assert.match(
     html,
     /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
     'commands catalog uses the shared loader'
   );
-  assert.match(html, /inflight:\s*\{\s*\}/, 'commands cache bag enables coalesce waiters');
+  assert.match(html, /_cmdCatalog\s*=\s*\{\s*seq:\s*0\s*\}/);
+  assert.doesNotMatch(html, /\bbyKey\b|\binflight\b/);
 });
 
 test('Command reapplies preset option tips when Connection / Vehicle changes', () => {
   const html = readHtml('mavlink-command');
   assert.match(html, /function applyPresetOptionTips/);
   assert.match(html, /function refreshPresetTipsAndParams/);
-  // One catalog load paints tips then refreshParamFields (cache hit) — no race.
+  // One catalog load paints tips then refreshParamFields with the latest data.
   assert.match(
     html,
     /loadCommandsCatalog\(function \(catalog\) \{[\s\S]*applyPresetOptionTips\(null, catalog\);[\s\S]*refreshParamFields\(\);/

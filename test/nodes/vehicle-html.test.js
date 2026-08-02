@@ -86,6 +86,18 @@ test('paramDefsUrl is persisted and shown as an input', () => {
   assert.match(html, /<input type="text" id="node-config-input-paramDefsUrl"/);
 });
 
+test('parameter definitions use an explicit profile-keyed Update workflow', () => {
+  assert.match(html, /id="mav-param-defs-update"[^>]*>Update<\/button>/);
+  assert.match(html, /id="mav-param-defs-status"/);
+  assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/param\/defs\/update['"]\)/);
+  assert.match(html, /method:\s*'POST'/);
+  assert.match(html, /vehicle:\s*node\.id/);
+  assert.match(html, /const url = \$\('#node-config-input-paramDefsUrl'\)\.val\(\)\.trim\(\)/);
+  assert.match(html, /url:\s*url/);
+  assert.match(html, /used only by Update/i);
+  assert.match(html, /without downloaded definitions/i);
+});
+
 test('the XML-catalog admin endpoints are wired under mavlink/xml-catalog', () => {
   assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/xml-catalog['"]\)/, 'list endpoint');
   assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/xml-catalog\/update['"]\)/, 'update endpoint');

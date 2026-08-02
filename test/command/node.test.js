@@ -166,6 +166,79 @@ test('Async handler contains a throw as a terminal failed status plus done(err)'
   assert.ok(doneErr instanceof Error, 'done(err) was called');
 });
 
+test('two consecutive INT inputs both fail loud when dialect lookup fails', async () => {
+  let dialectLookups = 0;
+  const vehicle = {
+    getDialect() {
+      dialectLookups++;
+      throw new Error('temporary dialect failure');
+    },
+  };
+  const conn = connStub({ id: 'vehicle', targetSysid: 1, targetCompid: 1 });
+  const RED = redStub({ conn, vehicle });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    carrier: 'int',
+    frame: '3',
+    mode: 'preset',
+    preset: 'reposition',
+    delivery: 'send',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '10000',
+    maxRetries: '3',
+  });
+  const outputs = [];
+  const doneErrors = [];
+
+  function runFailedInput() {
+    return new Promise((resolve, reject) => {
+      let outputCaptured = false;
+      let doneCalled = false;
+      const finishWhenTerminal = () => {
+        if (outputCaptured && doneCalled) resolve();
+      };
+
+      node.emit(
+        'input',
+        { payload: { 5: -35, 6: 149, 7: 50 } },
+        (messages) => {
+          outputs.push(messages);
+          outputCaptured = true;
+          finishWhenTerminal();
+        },
+        (err) => {
+          try {
+            assert.ok(err instanceof Error, 'done(err) receives the dialect failure');
+            doneErrors.push(err);
+            doneCalled = true;
+            finishWhenTerminal();
+          } catch (assertionError) {
+            reject(assertionError);
+          }
+        }
+      );
+    });
+  }
+
+  for (let i = 0; i < 2; i++) {
+    await runFailedInput();
+  }
+
+  assert.equal(dialectLookups, 2, 'failed lookup is retried for the next input');
+  assert.equal(conn.sent.length, 0, 'no historically scaled command reaches the wire');
+  assert.equal(outputs.length, 2);
+  assert.equal(doneErrors.length, 2);
+  for (let i = 0; i < 2; i++) {
+    assert.equal(outputs[i][0], null, 'output 0 stays terminally silent');
+    assert.equal(outputs[i][1].result, 'failed');
+    assert.match(outputs[i][1].detail, /temporary dialect failure/);
+    assert.match(doneErrors[i].message, /temporary dialect failure/);
+  }
+});
+
 test('resolveTarget: wire tier empty config inherits Vehicle Profile target from connNode.vehicle', async () => {
   const conn = connStub({ targetSysid: 42, targetCompid: 191 });
   const RED = redStub({ conn });
@@ -221,12 +294,19 @@ test('Send/confirm tier with no connection fails loud instead of silently buildi
   const node = new Node({ carrier: 'long', mode: 'preset', preset: 'arm', delivery: 'confirm' });
 
   let sent;
-  node.emit('input', { payload: { 1: 1 } }, (m) => { sent = m; }, () => {});
+  let doneError;
+  node.emit(
+    'input',
+    { payload: { 1: 1 } },
+    (m) => { sent = m; },
+    (err) => { doneError = err; }
+  );
   await tick();
 
   assert.equal(sent[0], null, 'output 0 must not fire');
   assert.equal(sent[1].result, 'failed');
   assert.ok(/no connection/.test(sent[1].detail));
+  assert.match(doneError.message, /no connection/);
 });
 
 test('resolveTarget: companion identity derives {airframe sysid, 1} as target', async () => {
@@ -406,6 +486,99 @@ test('ack-matcher pin: companion target used for COMMAND_ACK matching; ack from 
 
   node.emit('close', () => {});
 });
+
+test('blank Command timeout keeps the 10000 ms ACK window', async (t) => {
+  const timers = installAckTimerHarness(t);
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '',
+    maxRetries: '3',
+  });
+
+  node.emit('input', { payload: null }, () => {}, () => {});
+  await Promise.resolve();
+
+  assert.equal(timers.delays[0], 10000);
+  conn.injectAck({ command: 400, result: 0 }, 1, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+  node.emit('close', () => {});
+});
+
+test('blank Command maxRetries keeps three temporary-rejection retries', async (t) => {
+  installAckTimerHarness(t);
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '10000',
+    maxRetries: '',
+  });
+  let output;
+
+  node.emit('input', { payload: null }, (messages) => { output = messages; }, () => {});
+  await Promise.resolve();
+  for (let retry = 1; retry <= 3; retry++) {
+    conn.injectAck({ command: 400, result: 1 }, 1, 1);
+    await Promise.resolve();
+    assert.equal(conn.sent.length, retry + 1, `retry ${retry} is sent`);
+  }
+  conn.injectAck({ command: 400, result: 1 }, 1, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(
+    conn.sent.map(({ message }) => message.fields.confirmation),
+    [0, 1, 2, 3]
+  );
+  assert.equal(output[0], null);
+  assert.equal(output[1].retries, 3);
+  node.emit('close', () => {});
+});
+
+function installAckTimerHarness(t) {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const active = new Set();
+  const delays = [];
+
+  globalThis.setTimeout = (fn, delay) => {
+    const handle = {};
+    active.add(handle);
+    delays.push(delay);
+    if (delay === 1000) {
+      queueMicrotask(() => {
+        if (active.delete(handle)) fn();
+      });
+    }
+    return handle;
+  };
+  globalThis.clearTimeout = (handle) => {
+    active.delete(handle);
+  };
+  t.after(() => {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  });
+
+  return { delays };
+}
 
 function connStubWithInject(vehicleOverride) {
   const subs = [];

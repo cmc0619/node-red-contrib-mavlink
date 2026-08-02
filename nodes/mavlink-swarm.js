@@ -52,7 +52,7 @@ module.exports = function registerMavlinkSwarm(RED) {
 
         const aggregate = await executeSwarm({
           connection: effectiveConnection,
-          vehicleBundle: vehicleBundleFrom(RED, effectiveConnection),
+          vehicleBundle: dialectFromConnection(RED, effectiveConnection),
           action: actionFrom(config, payload),
           selection,
           mode: payload.executionMode || config.executionMode || 'sequential',
@@ -189,18 +189,6 @@ function valuesFrom(config) {
     length: config.length,
     rate: config.rate,
   };
-}
-
-/**
- * Compiled dialect bundle for §9 "ask the XML" coordinate kinds.
- * Null keeps the historical treat-as-latlon scaling.
- *
- * @param {object} RED
- * @param {object} connectionNode
- * @returns {object|null}
- */
-function vehicleBundleFrom(RED, connectionNode) {
-  return dialectFromConnection(RED, connectionNode);
 }
 
 function numberOption(payload, config, key, fallback) {

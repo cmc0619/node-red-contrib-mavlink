@@ -32,10 +32,8 @@ module.exports = function registerMavlinkPayload(RED) {
 
     // At most one COMMAND_ACK wait in flight per node.
     let activeWaiter = null;
-    const timeoutMs = config.timeout ? Number(config.timeout) : DEFAULT_TIMEOUT_MS;
-    const maxRetries = config.maxRetries !== undefined && config.maxRetries !== ''
-      ? Number(config.maxRetries)
-      : DEFAULT_MAX_RETRIES;
+    const timeoutMs = config.timeout === '' ? DEFAULT_TIMEOUT_MS : Number(config.timeout);
+    const maxRetries = config.maxRetries === '' ? DEFAULT_MAX_RETRIES : Number(config.maxRetries);
     const delivery = config.delivery;
     const connAtDeploy = delivery === 'build' ? null : RED.nodes.getNode(config.connection);
     missingConnectionGate(node, delivery, connAtDeploy);
@@ -62,6 +60,7 @@ module.exports = function registerMavlinkPayload(RED) {
           delivery,
           config,
           payload,
+          connectionNode: connAtDeploy,
           compidFromConfig: true,
         });
 

@@ -82,7 +82,7 @@ module.exports = function registerMavlinkBuild(RED) {
     }
 
     // Repeat interval.
-    const repeatMs = config.repeatMs ? Number(config.repeatMs) : 0;
+    const repeatMs = Number(config.repeatMs);
     let repeatTimer = null;
     let lastFireMs = 0;
     let fireCount = 0;

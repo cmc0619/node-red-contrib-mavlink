@@ -67,15 +67,34 @@ test('advanced mode enumerates params from dialect metadata, not Param 1–7 (§
 });
 
 test('advanced catalog load ignores stale responses and keeps the in-progress selection', () => {
-  // Coalesce + stale-target drop live in RED.mavlink.loadCatalog (cache.inflight).
+  // Stale-response protection lives in RED.mavlink.loadCatalog.
   assert.match(
     html,
     /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
     'commands catalog uses the shared loader'
   );
-  assert.match(html, /inflight:\s*\{\s*\}/, 'commands cache bag enables coalesce waiters');
+  assert.match(html, /_cmdCatalog\s*=\s*\{\s*seq:\s*0\s*\}/,
+    'commands render state has only a request sequence');
   assert.match(html, /const prefer = sel\.val\(\)/, 'in-progress select value is read');
   assert.match(html, /saved:\s*prefer/, 'current-or-saved prefer is passed to fillEnumSelect');
+});
+
+test('Advanced mode populates commands before loading their parameter fields', () => {
+  assert.match(
+    html,
+    /function refreshAdvancedCommands\(\) \{[\s\S]*loadCommandsCatalog\(function \(catalog\) \{[\s\S]*buildAdvancedDropdown\(catalog\);[\s\S]*refreshParamFields\(\);/
+  );
+});
+
+test('initial preset load paints option tips before triggering the parameter refresh', () => {
+  const builder = html.slice(
+    html.indexOf('function buildPresetDropdown(groups)'),
+    html.indexOf('/**\n       * Dialect-sourced titles')
+  );
+  assert.match(
+    builder,
+    /loadCommandsCatalog\(function \(catalog\) \{[\s\S]*applyPresetOptionTips\(sel, catalog\);[\s\S]*sel\.trigger\('change'\);/
+  );
 });
 
 test('preset dropdown re-applies the saved selection and fires change after the async load', () => {
@@ -379,13 +398,14 @@ test('command help documents status fields at message root, not under payload', 
   );
 });
 
-test('carrier is a required select with no default (§9)', () => {
+test('carrier defaults to the first valid option with no blank prompt', () => {
   assert.match(html, /id="node-input-carrier"/, 'carrier select must bind to the carrier property');
   assert.match(
     html,
-    /carrier:\s*\{ value: '', required: true,/,
-    'carrier default is empty and required — the operator must choose'
+    /carrier:\s*\{ value: 'int' \}/,
+    'new command nodes default to COMMAND_INT'
   );
+  assert.doesNotMatch(html, /select carrier/, 'carrier select has no meaningless blank prompt');
   assert.match(
     html,
     /<option value="int">/,

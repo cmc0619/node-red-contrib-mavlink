@@ -7,10 +7,10 @@
 
     var COMMAND_MESSAGES = { COMMAND_LONG: true, COMMAND_INT: true };
 
-    /** Messages / commands catalog caches (DESIGN.md §6 shared loadCatalog). */
-    var _msgCatalog = { byKey: {}, seq: 0 };
-    var _cmdCatalog = { byKey: {}, seq: 0 };
-    /** Catalog the loader last handed this dialog — paint from this, not byKey. */
+    /** Messages / commands catalog request sequences (DESIGN.md §6 shared loadCatalog). */
+    var _msgCatalog = { seq: 0 };
+    var _cmdCatalog = { seq: 0 };
+    /** Catalog the loader last handed this dialog — paint from this. */
     var _currentMsgCatalog = null;
 
     // Catalog source follows the shared role × tier matrix (DESIGN.md §6). The
@@ -489,8 +489,6 @@
 
         function clearCatalogs() {
           _currentMsgCatalog = null;
-          _msgCatalog.byKey = {};
-          _cmdCatalog.byKey = {};
         }
 
         $('#node-input-vehicle').on('change', function () {

@@ -45,6 +45,38 @@ test('resolveDeliveryContext Param buildFirmwareProfile supplies firmware', () =
   assert.equal(ctx.profile.firmware, 'px4');
 });
 
+test('resolveDeliveryContext wire tiers use only the deploy-bound Connection', () => {
+  const bound = { vehicle: { targetSysid: 3, targetCompid: 1 } };
+  const RED = redStub({
+    conn: { vehicle: { targetSysid: 99, targetCompid: 99 } },
+  });
+  const ctx = resolveDeliveryContext(RED, {
+    delivery: 'send',
+    config: {
+      connection: 'conn',
+      targetSystem: '',
+      targetComponent: '',
+    },
+    payload: {},
+    connectionNode: bound,
+  });
+  assert.equal(ctx.connectionNode, bound);
+  assert.equal(ctx.profile, bound.vehicle);
+  assert.equal(ctx.target.sysid, 3);
+});
+
+test('resolveDeliveryContext does not re-resolve a missing deploy-time Connection', () => {
+  const RED = redStub({
+    conn: { vehicle: { targetSysid: 1, targetCompid: 1 } },
+  });
+  const ctx = resolveDeliveryContext(RED, {
+    delivery: 'send',
+    config: { connection: 'conn', targetSystem: '1', targetComponent: '1' },
+    payload: {},
+  });
+  assert.equal(ctx.connectionNode, null);
+});
+
 test('missingConnectionGate flags wire tiers without a connection', () => {
   const statuses = [];
   const node = { status: (s) => statuses.push(s) };

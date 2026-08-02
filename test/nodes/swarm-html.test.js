@@ -260,79 +260,16 @@ test('delivery and selectionMode changes reload catalogs and refresh visibility'
   assert.match(helper, /refreshVisibility\(\)/, 'visibility is still refreshed');
 });
 
-test('carrier select exists with a conditional required validate (§9)', () => {
+test('carrier defaults to the first valid option with no blank prompt', () => {
   assert.match(html, /id="node-input-carrier"/, 'carrier select must bind to the carrier property');
   assert.match(html, /<option value="int">/, 'COMMAND_INT option offered');
   assert.match(html, /<option value="long">/, 'COMMAND_LONG option offered');
-  // Required only for actions that ride a MAV_CMD — the validate consults
-  // actionType rather than a blanket required flag.
   assert.match(
     html,
-    /carrier:\s*\{ value: '', validate: function/,
-    'carrier validate is conditional on the action type'
+    /carrier:\s*\{ value: 'int' \}/,
+    'new swarm nodes default to COMMAND_INT'
   );
-});
-
-test('carrier validate outcomes: MAV_CMD actions refuse blank, others pass (§9)', () => {
-  // Execute the actual validator, not just its source text (conditional
-  // validation, per guidelines). Extract the function body from defaults.
-  const start = html.indexOf("carrier: { value: '', validate: function (v) {");
-  assert.ok(start > 0, 'carrier validator exists');
-  let i = html.indexOf('{', html.indexOf('function (v)', start));
-  const bodyStart = i + 1;
-  let depth = 1;
-  while (i < html.length && depth > 0) {
-    const c = html[++i];
-    if (c === '{') depth += 1;
-    else if (c === '}') depth -= 1;
-  }
-  const body = html.slice(bodyStart, i);
-  const validate = new Function('v', 'RED', '$', body);
-  const RED = {
-    mavlink: {
-      // The real predicate from resources/mavlink-editor.js is drift-pinned
-      // against lib/payload in mavlink-editor-resource.test.js.
-      payloadVerbIgnoresCarrier: (topic, verb, path) =>
-        topic === 'gimbal' && verb === 'aim' && (path || 'legacy') === 'manager',
-    },
-  };
-  // No dialog open: every selector is absent, so the validator falls back to
-  // the saved node values (house pattern).
-  const $absent = () => ({ length: 0 });
-  const run = (thisObj, v) => validate.call(thisObj, v, RED, $absent);
-
-  // MAV_CMD actions: blank refuses, int/long pass.
-  assert.equal(run({ actionType: 'command' }, ''), false, 'command action refuses blank carrier');
-  assert.equal(run({ actionType: 'command' }, 'int'), true);
-  assert.equal(run({ actionType: 'command' }, 'long'), true);
-  assert.equal(
-    run({ actionType: 'payload', topic: 'camera', verb: 'photo', path: 'legacy' }, ''),
-    false,
-    'command-backed payload verb refuses blank carrier'
-  );
-  // No MAV_CMD involved: blank is fine.
-  assert.equal(run({ actionType: 'move' }, ''), true, 'move action needs no carrier');
-  assert.equal(run({ actionType: 'param' }, ''), true, 'param action needs no carrier');
-  assert.equal(
-    run({ actionType: 'payload', topic: 'gimbal', verb: 'aim', path: 'manager' }, ''),
-    true,
-    'message-kind payload verb needs no carrier'
-  );
-
-  // Dialog open: live selector values beat stale saved values — a verb just
-  // switched to manager-aim must not still demand a carrier.
-  const live = {
-    '#node-input-actionType': 'payload',
-    '#node-input-topic': 'gimbal',
-    '#node-input-verb': 'aim',
-    '#node-input-path': 'manager',
-  };
-  const $live = (sel) => (sel in live ? { length: 1, val: () => live[sel] } : { length: 0 });
-  assert.equal(
-    validate.call({ actionType: 'payload', topic: 'camera', verb: 'photo', path: 'legacy' }, '', RED, $live),
-    true,
-    'live manager-aim selection wins over stale saved photo verb'
-  );
+  assert.doesNotMatch(html, /select carrier/, 'carrier select has no meaningless blank prompt');
 });
 
 test('frame row binds to the frame property and follows the INT carrier (§9)', () => {

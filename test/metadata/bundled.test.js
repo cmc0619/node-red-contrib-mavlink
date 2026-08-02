@@ -8,7 +8,7 @@ const path = require('path');
 const {
   knownDialects,
   loadBundled,
-  seedRoot,
+  resolveSeedFile,
   readManifest,
   seedStamp,
 } = require('../../lib/metadata/bundled');
@@ -27,7 +27,7 @@ const CORE = [
 ];
 
 test('seed ships as a stamp-named gzip blob pointed at by active.json', () => {
-  const blob = seedRoot();
+  const blob = resolveSeedFile();
   assert.match(path.basename(blob), /^mavlink-\d{4}-\d{2}-\d{2}-[0-9a-f]+\.seed\.gz$/);
   assert.ok(fs.existsSync(blob));
   const active = JSON.parse(

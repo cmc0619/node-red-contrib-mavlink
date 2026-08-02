@@ -12,9 +12,9 @@
  *              friendly name; the form reshapes for the chosen preset.
  *   advanced — pick any MAV_CMD from the loaded dialect; all params exposed.
  *
- * Carrier (§9 "Coordinate frames"): the operator must pick COMMAND_INT or
- * COMMAND_LONG in the node config — a required field, no default. Positional
- * params are always entered in decimal degrees; the INT carrier scales them to
+ * Carrier (§9 "Coordinate frames"): the editor defaults to COMMAND_INT and
+ * the operator can pick COMMAND_LONG instead. Positional params are always
+ * entered in decimal degrees; the INT carrier scales them to
  * degE7 on the wire. A wrong-carrier ack still triggers the one-shot auto
  * resend in the other form (§9 "resend in the other form").
  *
@@ -87,9 +87,9 @@ function resolveCommandId(config) {
 }
 
 /**
- * Resolve the operator's required carrier choice from config, or null when it
- * is missing/invalid (§9). No default: a flow that never picked a carrier is
- * misconfigured and must red out at deploy, not silently pick a wire format.
+ * Resolve the configured carrier choice, or null when it is missing/invalid
+ * (§9). The editor supplies the default; runtime does not repair malformed or
+ * hand-edited flow data.
  *
  * @param {object} config  node config from editor
  * @returns {'long'|'int'|null}
@@ -123,9 +123,8 @@ module.exports = function registerMavlinkCommand(RED) {
 
     /** Validate configuration at deploy time. */
     const commandId = resolveCommandId(config);
-    // Carrier is a required choice (§9): no default, so a node deployed
-    // without one — including flows saved before the field existed — reds out
-    // exactly like a missing command.
+    // The editor supplies the normal default. Missing or invalid saved config
+    // still reds out exactly like a missing command.
     const configuredCarrier = resolveCarrier(config);
     if (commandId === null || configuredCarrier === null) {
       applyActionStatus(node, 'invalid', 'invalid config');
@@ -160,27 +159,25 @@ module.exports = function registerMavlinkCommand(RED) {
     let _coordKindsResolved = false;
     function coordKinds() {
       if (_coordKindsResolved) return _coordKinds;
-      _coordKindsResolved = true;
       let bundle = null;
       if (delivery === 'build') {
         if (config.dialect === '__vehicle') {
-          bundle = dialectFromVehicleId(RED, config.vehicle);
+          bundle = dialectFromVehicleId(RED, config.vehicle, { rethrow: true });
         } else if (config.dialect) {
           const api = metadataApi();
-          if (api) {
-            try { bundle = api.loadBundled(config.dialect); } catch { bundle = null; }
-          }
+          if (api) bundle = api.loadBundled(config.dialect);
         }
       } else {
         // Connection snapshot has no bundle — resolve the profile node (§7).
-        bundle = dialectFromConnection(RED, connNode);
+        bundle = dialectFromConnection(RED, connNode, { rethrow: true });
       }
       _coordKinds = bundle ? intCoordKinds(bundle, commandId) : null;
+      _coordKindsResolved = true;
       return _coordKinds;
     }
 
-    const timeoutMs = config.timeout ? Number(config.timeout) : DEFAULT_TIMEOUT_MS;
-    const maxRetries = config.maxRetries !== undefined ? Number(config.maxRetries) : DEFAULT_MAX_RETRIES;
+    const timeoutMs = config.timeout === '' ? DEFAULT_TIMEOUT_MS : Number(config.timeout);
+    const maxRetries = config.maxRetries === '' ? DEFAULT_MAX_RETRIES : Number(config.maxRetries);
     const unconfirmedContinue = !!config.unconfirmedContinue;
 
     // Wire tiers need a Connection — do not silently degrade into Build (§9).

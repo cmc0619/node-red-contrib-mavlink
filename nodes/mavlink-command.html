@@ -36,29 +36,27 @@
     return opts;
   }
 
-  // ── Preset / command caches loaded from server ─────────────────────────────
-  let _presetGroups = null;
-  /** Commands catalog cache; `inflight` enables same-key waiter coalesce (#36). */
-  const _cmdCatalog = { byKey: {}, seq: 0, inflight: {} };
+  // ── Presets / command catalog loaded from server ───────────────────────────
+  let _currentPresetGroups = [];
+  /** Commands catalog request sequence. */
+  const _cmdCatalog = { seq: 0 };
   /** Commands catalog the loader last handed this dialog — paint from this. */
   let _currentCmdCatalog = null;
-  /** Messages catalog cache (request_message picker). */
-  const _msgCatalog = { byKey: {}, seq: 0 };
+  /** Messages catalog request sequence (request_message picker). */
+  const _msgCatalog = { seq: 0 };
 
   function loadPresets(cb) {
-    if (_presetGroups) { cb(_presetGroups); return; }
     $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/presets'), function (data) {
-      _presetGroups = data.groups || [];
-      cb(_presetGroups);
+      _currentPresetGroups = data.groups || [];
+      cb(_currentPresetGroups);
     }).fail(function () {
-      _presetGroups = [];
-      cb(_presetGroups);
+      _currentPresetGroups = [];
+      cb(_currentPresetGroups);
     });
   }
 
   /**
-   * Load the Advanced catalog (commands + enums). Coalesce is on the cache bag
-   * (`inflight`) so preset-tip and Advanced consumers share one XHR (#36).
+   * Load the Advanced catalog (commands + enums).
    *
    * @param {function({commands:Array, enums:Object, dialect:string}):void} cb
    */
@@ -137,10 +135,7 @@
       preset:            { value: 'arm' },
       advancedCommand:   { value: '' },
       delivery:          { value: 'confirm' },
-      // Required, no default (§9): the operator must state the wire carrier.
-      // Flows saved before this field existed red out until a choice is made.
-      carrier:           { value: '', required: true,
-                           validate: function (v) { return v === 'int' || v === 'long'; } },
+      carrier:           { value: 'int' },
       frame:             { value: '' },
       connection:        { value: '', type: 'mavlink-connection', required: false },
       identity:          { value: '' },
@@ -223,8 +218,8 @@
         } else {
           $('#row-preset').show();
           $('#row-advanced').hide();
+          refreshParamFields();
         }
-        refreshParamFields();
         refreshDelivery();
       }
 
@@ -249,8 +244,10 @@
         // callback runs after the initial applyMode() left the dialog empty —
         // without this the exposed params stay stale until the user re-picks.
         sel.val(node.preset || 'arm');
-        applyPresetOptionTips(sel);
-        sel.trigger('change');
+        loadCommandsCatalog(function (catalog) {
+          applyPresetOptionTips(sel, catalog);
+          sel.trigger('change');
+        });
       }
 
       /**
@@ -282,15 +279,13 @@
           paint(catalog);
           return;
         }
-        // One catalog load that does not gate control rendering (Codex #36).
-        // loadCatalog serves from its bag synchronously when already warm.
+        // One catalog load that does not gate control rendering.
         loadCommandsCatalog(paint);
       }
 
       /**
-       * One catalog fetch for both preset-option titles and param field tips
-       * when Connection / Vehicle / delivery changes (Greptile #36). Painting
-       * then refreshParamFields (cache hit) avoids last-request-wins cancel.
+       * Refresh preset-option titles and parameter fields when Connection,
+       * Vehicle, or delivery changes.
        */
       function refreshPresetTipsAndParams() {
         loadCommandsCatalog(function (catalog) {
@@ -327,7 +322,11 @@
       }
 
       function refreshAdvancedCommands() {
-        loadCommandsCatalog(buildAdvancedDropdown);
+        loadCommandsCatalog(function (catalog) {
+          if ($('#node-input-mode').val() !== 'advanced') return;
+          buildAdvancedDropdown(catalog);
+          refreshParamFields();
+        });
       }
 
       $('#node-input-advancedCommand').on('change', function () {
@@ -387,7 +386,7 @@
         refreshCompletionRow();
         refreshVisibility();
         // Tier switch may change catalog source (build→vehicle, wire→connection).
-        // Invalidate all cached dialect data and reload.
+        // Reload dialect data for the selected catalog source.
         presetMessagesCatalog = null;
         _currentCmdCatalog = null;
         RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
@@ -402,7 +401,7 @@
 
       // ── Carrier (§9) ───────────────────────────────────────────────────────
       // Frame only exists on the COMMAND_INT wire message, so its row follows
-      // the carrier choice. An empty carrier keeps the node invalid (required).
+      // the carrier choice.
       function refreshFrameRow() {
         const isInt = $('#node-input-carrier').val() === 'int';
         $('#row-cmd-frame')[isInt ? 'show' : 'hide']();
@@ -465,7 +464,7 @@
 
       /** Look up a preset's numeric MAV_CMD id from the loaded presets API. */
       function presetCommandId(presetId) {
-        const groups = _presetGroups || [];
+        const groups = _currentPresetGroups;
         for (let g = 0; g < groups.length; g++) {
           const presets = groups[g].presets || [];
           for (let i = 0; i < presets.length; i++) {
@@ -779,7 +778,6 @@
   <div class="form-row" id="row-cmd-carrier">
     <label for="node-input-carrier" style="width:120px">Carrier</label>
     <select id="node-input-carrier" style="width:280px">
-      <option value="">&mdash; select carrier &mdash;</option>
       <option value="int">COMMAND_INT (positional; degE7 on the wire)</option>
       <option value="long">COMMAND_LONG (float params)</option>
     </select>
@@ -854,7 +852,7 @@
 
   <h3>Carrier</h3>
   <p>
-    The <b>Carrier</b> field is required — pick the wire form before deploy.
+    <b>Carrier</b> defaults to COMMAND_INT; choose COMMAND_LONG only when needed.
     Positional parameters (latitude / longitude) are always entered in
     <b>decimal degrees</b>; the choice only changes how they travel:
   </p>

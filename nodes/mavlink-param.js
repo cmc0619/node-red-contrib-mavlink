@@ -18,12 +18,15 @@
  * echo or dropped list message cannot leave the flow open forever.
  */
 
-const path = require('node:path');
 const {
   buildParamMessage,
   createParamListCollector,
   matchesParamEcho,
 } = require('../lib/param');
+const {
+  readParamDefs,
+  updateParamDefs,
+} = require('../lib/param/defs');
 const { BAND } = require('../lib/connection/bands');
 const {
   makeStatusRecord,
@@ -39,73 +42,61 @@ const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
 
 /** Admin route for the parameter definition catalog. */
 const PARAM_DEFS_ROUTE = '/mavlink/param/defs';
+const PARAM_DEFS_UPDATE_ROUTE = '/mavlink/param/defs/update';
 
 /** Guard against double-registering the admin route (one per process). */
 let _paramDefsRouteRegistered = false;
 
 module.exports = function registerMavlinkParam(RED) {
   if (!_paramDefsRouteRegistered && RED.httpAdmin && RED.auth) {
-    let defsApi = null;
-    try { defsApi = require('../lib/param/defs'); } catch { }
-
     RED.httpAdmin.get(
       PARAM_DEFS_ROUTE,
       RED.auth.needsPermission('mavlink.read'),
       async (req, res) => {
-        if (!defsApi) {
-          return res.status(503).json({ defs: {}, notice: 'param defs library unavailable' });
-        }
-        const vehicleId = typeof req.query.vehicle === 'string'
+        const profileId = typeof req.query.vehicle === 'string'
           ? req.query.vehicle.trim() : '';
-        const dialect = typeof req.query.dialect === 'string'
-          ? req.query.dialect.trim() : '';
-        let url;
-        if (vehicleId) {
-          const vehicleNode = RED.nodes.getNode(vehicleId);
-          if (!vehicleNode) {
+        if (!profileId) {
+          return res.json({
+            defs: {},
+            notice: 'Parameter definitions require a Vehicle Profile holding file.',
+          });
+        }
+        try {
+          const map = await readParamDefs(RED.settings.userDir, profileId);
+          if (map.size === 0) {
             return res.json({
               defs: {},
-              notice: 'Vehicle Profile not deployed — deploy the flow first',
+              notice: 'No downloaded parameter definitions. Use Update in the Vehicle Profile editor.',
             });
           }
-          url = defsApi.resolveDefsUrl(
-            vehicleNode.vehicleFamily || 'generic',
-            vehicleNode.firmware,
-            vehicleNode.paramDefsUrl || ''
-          );
-        } else {
-          if (!dialect) {
-            return res.json({ defs: {}, notice: 'no dialect supplied' });
-          }
-          // ArduPilot pdefs are keyed by vehicle family (DESIGN.md §4), not by
-          // MAVLink dialect. Concrete Build dialect + Firmware has no family —
-          // do not pass dialect into resolveDefsUrl as if it were one.
-          return res.json({
+          return res.json({ defs: Object.fromEntries(map) });
+        } catch (err) {
+          return res.status(500).json({
             defs: {},
-            notice: 'parameter definitions require a Vehicle Profile (vehicle family); '
-              + 'dialect-only Build has no family-keyed defs',
+            error: `Local parameter definitions are invalid: ${err.message}`,
           });
+        }
+      }
+    );
+
+    RED.httpAdmin.post(
+      PARAM_DEFS_UPDATE_ROUTE,
+      RED.auth.needsPermission('mavlink.read'),
+      async (req, res) => {
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const profileId = typeof body.vehicle === 'string' ? body.vehicle.trim() : '';
+        const url = typeof body.url === 'string' ? body.url.trim() : '';
+        if (!profileId) {
+          return res.status(400).json({ ok: false, error: 'Vehicle Profile ID is required' });
         }
         if (!url) {
-          return res.json({
-            defs: {},
-            notice: 'no parameter definitions available for this vehicle family and firmware',
-          });
+          return res.status(400).json({ ok: false, error: 'Parameter definitions URL is required' });
         }
-        const userDir = (RED.settings && RED.settings.userDir) || '';
-        const cacheDir = userDir
-          ? path.join(userDir, 'mavlink', 'param-defs') : undefined;
         try {
-          const map = await defsApi.fetchParamDefs(url, { cacheDir });
-          const defs = {};
-          for (const [k, v] of map) defs[k] = v;
-          return res.json({ defs, url });
+          const result = await updateParamDefs(RED.settings.userDir, profileId, url);
+          return res.json({ ok: true, count: result.count });
         } catch (err) {
-          return res.status(502).json({
-            defs: {},
-            notice: `fetch failed: ${err.message}`,
-            url,
-          });
+          return res.status(500).json({ ok: false, error: err.message });
         }
       }
     );
@@ -165,6 +156,7 @@ module.exports = function registerMavlinkParam(RED) {
           delivery,
           config,
           payload,
+          connectionNode: connAtDeploy,
           buildFirmwareProfile: true,
         });
 
