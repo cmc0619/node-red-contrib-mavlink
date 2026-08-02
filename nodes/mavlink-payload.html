@@ -7,24 +7,7 @@
       connection: { value: '', type: 'mavlink-connection' },
       identity: { value: '' },
       delivery: { value: 'build' },
-      // Required for command-backed verbs, no default (§9): the operator must
-      // state the wire carrier. Message-kind verbs (gimbal manager aiming)
-      // never ride a MAV_CMD, so no carrier is demanded for them (Codex
-      // review on #61). Pre-existing command-verb flows red out until chosen.
-      carrier: { value: '', validate: function (v) {
-        // Live selectors first, saved values as fallback (house pattern, see
-        // swarm's dialect validator): during in-dialog validation this.* is
-        // stale, so a verb just switched to manager-aim must not still
-        // demand a carrier.
-        var $topic = $('#node-input-topic');
-        var topic = ($topic && $topic.length) ? $topic.val() : (this.topic || 'camera');
-        var $verb = $('#node-input-verb');
-        var verb = ($verb && $verb.length) ? $verb.val() : (this.verb || '');
-        var $path = $('#node-input-path');
-        var path = ($path && $path.length) ? $path.val() : (this.path || 'legacy');
-        if (RED.mavlink.payloadVerbIgnoresCarrier(topic, verb, path)) return true;
-        return v === 'int' || v === 'long';
-      } },
+      carrier: { value: 'int' },
       frame: { value: '' },
       timeout: { value: 10000, validate: RED.validators.number(true) },
       maxRetries: { value: 3, validate: RED.validators.number(true) },
@@ -487,7 +470,7 @@
   <div class="form-row" id="row-payload-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
   <div class="form-row" id="row-payload-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option></select></div>
-  <div class="form-row" id="row-payload-carrier"><label for="node-input-carrier">Carrier</label><select id="node-input-carrier" style="width:70%"><option value="">&mdash; select carrier &mdash;</option><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
+  <div class="form-row" id="row-payload-carrier"><label for="node-input-carrier">Carrier</label><select id="node-input-carrier" style="width:70%"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
   <div class="form-row" id="row-payload-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="">Global, absolute alt (default)</option><option value="3">Global, relative alt</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
   <div class="form-row" id="row-payload-timeout"><label for="node-input-timeout">ACK timeout</label><input type="number" id="node-input-timeout" style="width:80px"> ms</div>
   <div class="form-row" id="row-payload-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>

@@ -135,10 +135,7 @@
       preset:            { value: 'arm' },
       advancedCommand:   { value: '' },
       delivery:          { value: 'confirm' },
-      // Required, no default (§9): the operator must state the wire carrier.
-      // Flows saved before this field existed red out until a choice is made.
-      carrier:           { value: '', required: true,
-                           validate: function (v) { return v === 'int' || v === 'long'; } },
+      carrier:           { value: 'int' },
       frame:             { value: '' },
       connection:        { value: '', type: 'mavlink-connection', required: false },
       identity:          { value: '' },
@@ -404,7 +401,7 @@
 
       // ── Carrier (§9) ───────────────────────────────────────────────────────
       // Frame only exists on the COMMAND_INT wire message, so its row follows
-      // the carrier choice. An empty carrier keeps the node invalid (required).
+      // the carrier choice.
       function refreshFrameRow() {
         const isInt = $('#node-input-carrier').val() === 'int';
         $('#row-cmd-frame')[isInt ? 'show' : 'hide']();
@@ -781,7 +778,6 @@
   <div class="form-row" id="row-cmd-carrier">
     <label for="node-input-carrier" style="width:120px">Carrier</label>
     <select id="node-input-carrier" style="width:280px">
-      <option value="">&mdash; select carrier &mdash;</option>
       <option value="int">COMMAND_INT (positional; degE7 on the wire)</option>
       <option value="long">COMMAND_LONG (float params)</option>
     </select>
@@ -856,7 +852,7 @@
 
   <h3>Carrier</h3>
   <p>
-    The <b>Carrier</b> field is required — pick the wire form before deploy.
+    <b>Carrier</b> defaults to COMMAND_INT; choose COMMAND_LONG only when needed.
     Positional parameters (latitude / longitude) are always entered in
     <b>decimal degrees</b>; the choice only changes how they travel:
   </p>

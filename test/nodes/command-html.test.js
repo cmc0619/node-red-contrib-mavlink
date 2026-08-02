@@ -398,13 +398,14 @@ test('command help documents status fields at message root, not under payload', 
   );
 });
 
-test('carrier is a required select with no default (§9)', () => {
+test('carrier defaults to the first valid option with no blank prompt', () => {
   assert.match(html, /id="node-input-carrier"/, 'carrier select must bind to the carrier property');
   assert.match(
     html,
-    /carrier:\s*\{ value: '', required: true,/,
-    'carrier default is empty and required — the operator must choose'
+    /carrier:\s*\{ value: 'int' \}/,
+    'new command nodes default to COMMAND_INT'
   );
+  assert.doesNotMatch(html, /select carrier/, 'carrier select has no meaningless blank prompt');
   assert.match(
     html,
     /<option value="int">/,
