@@ -178,8 +178,10 @@ module.exports = function registerMavlinkParam(RED) {
           return;
         }
 
-        const connectionNode = requireConnection(RED, config.connection);
-        connectionNode.send(message, {
+        if (!connNode || typeof connNode.send !== 'function') {
+          throw new Error('mavlink-param requires a Connection');
+        }
+        connNode.send(message, {
           band: request.action === 'request-list' ? BAND.BULK : BAND.CONTROL,
           target: request.target,
           identityId,
@@ -213,7 +215,7 @@ module.exports = function registerMavlinkParam(RED) {
         }
 
         const collector = isCollectList ? createParamListCollector() : null;
-        const unsubscribe = connectionNode.subscribe(echoFilter, (decoded) => {
+        const unsubscribe = connNode.subscribe(echoFilter, (decoded) => {
           if (!pending || pending.gen !== myGen) return;
           if (isConfirmSet) {
             if (!matchesParamEcho(request, decoded)) return;
@@ -308,12 +310,6 @@ function capabilitiesFromPeer(connectionNode, target) {
   }
   const caps = Number(component.capabilities);
   return Number.isFinite(caps) ? caps : null;
-}
-
-function requireConnection(RED, id) {
-  const node = RED.nodes.getNode(id);
-  if (!node || typeof node.send !== 'function') throw new Error('mavlink-param requires a Connection');
-  return node;
 }
 
 function completeBuild(node, send, message) {

@@ -98,19 +98,16 @@ module.exports = function registerMavlinkMission(RED) {
         return;
       }
 
-      const { isBuild, useVehicle, profile, target } = resolveDeliveryContext(RED, {
+      const { profile, target } = resolveDeliveryContext(RED, {
         delivery,
         config,
         payload,
         connectionNode: connNode,
+        buildFirmwareProfile: true,
       });
 
-      // Firmware: dynamic override → selected profile → Build concrete firmware.
-      const firmware = firstDefined(
-        payload.firmware,
-        profile && profile.firmware,
-        isBuild && !useVehicle ? config.firmware : undefined
-      );
+      // Firmware: dynamic override → selected profile (incl. concrete Build).
+      const firmware = firstDefined(payload.firmware, profile && profile.firmware);
 
       // Refuse a type the selected stack does not carry over this protocol rather
       // than sending a request it will silently no-op (§9, §11).
