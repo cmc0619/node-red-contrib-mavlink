@@ -1,67 +1,33 @@
 <script type="text/javascript">
   (function () {
-    /** @type {Object<string, {messages:Array, enums:Object, dialect:string}>} */
-    var _msgCatalogByKey = {};
-    var _msgRequestSeq = 0;
+    /** Messages catalog cache (DESIGN.md §6 shared loadCatalog). */
+    var _msgCatalog = { byKey: {}, seq: 0 };
 
     function loadMessagesCatalog(cb) {
       // mavlink-in is wire-only (no Build tier): the bound Connection's Vehicle
       // Profile is the sole catalog source (§6). No connection / no profile
       // resolves to an empty catalog — never a silent `ardupilotmega`.
-      var target = RED.mavlink.resolveCatalogTarget({ isBuild: false });
-      var seq = ++_msgRequestSeq;
-      if (_msgCatalogByKey[target.key]) {
-        cb(_msgCatalogByKey[target.key]);
-        return;
-      }
-      if (!target.query) {
-        var emptyCatalog = { messages: [], enums: {}, dialect: '' };
-        _msgCatalogByKey[target.key] = emptyCatalog;
-        cb(emptyCatalog);
-        return;
-      }
-      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/build/messages'), target.query, function (data) {
-        if (seq !== _msgRequestSeq) return;
-        var catalog = {
-          messages: data.messages || [],
-          enums: data.enums || {},
-          dialect: data.dialect || target.dialect,
-        };
-        _msgCatalogByKey[target.key] = catalog;
-        cb(catalog);
-      }).fail(function () {
-        if (seq !== _msgRequestSeq) return;
-        cb({ messages: [], enums: {}, dialect: target.dialect });
+      RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
+        isBuild: false,
+        listKey: 'messages'
       });
     }
 
     function buildMessageDropdown(node, catalog) {
       var sel = $('#node-input-message');
-      var current = sel.val();
-      var saved = node.message !== undefined && node.message !== null
-        ? String(node.message)
-        : '';
-      var prefer = current || saved;
-
-      sel.empty();
-      sel.append($('<option></option>').val('').text('All messages'));
-      for (var i = 0; i < (catalog.messages || []).length; i++) {
-        var entry = catalog.messages[i];
-        var $opt = $('<option></option>').val(entry.name).text(entry.label);
-        if (entry.description) $opt.attr('title', entry.description);
-        sel.append($opt);
-      }
-      if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
-        sel.append($('<option></option>').val(prefer).text(prefer + ' (not in dialect)'));
-      }
-      if (prefer) sel.val(prefer);
-      function syncMessageTitle() {
-        var tip = sel.find('option:selected').attr('title') || '';
-        if (tip) sel.attr('title', tip);
-        else sel.removeAttr('title');
-      }
-      syncMessageTitle();
-      sel.off('change.mavMsgTip').on('change.mavMsgTip', syncMessageTitle);
+      var prefer = sel.val() || (
+        node.message !== undefined && node.message !== null
+          ? String(node.message)
+          : ''
+      );
+      RED.mavlink.fillEnumSelect(sel, catalog.messages || [], {
+        saved: prefer,
+        allowEmpty: true,
+        emptyLabel: 'All messages',
+        valueKey: 'name',
+        titleNamespace: 'mavMsgTip',
+        triggerChange: false
+      });
     }
 
     function refreshMessageOptions(node) {

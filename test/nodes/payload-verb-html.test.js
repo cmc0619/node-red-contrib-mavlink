@@ -36,31 +36,46 @@ function assertVerbSelect(html, label) {
 
 test('mavlink-payload verb is a topic-dependent select', () => {
   assertVerbSelect(payloadHtml, 'mavlink-payload');
-  assert.match(payloadHtml, /PAYLOAD_VERBS/, 'editor mirrors the payload verb catalog');
+  assert.match(
+    payloadHtml,
+    /RED\.mavlink\.refreshVerbOptions/,
+    'verb options come from the shared helper'
+  );
   assert.match(
     payloadHtml,
     /\$\('#node-input-topic'\)\.on\('change'/,
     'topic change refreshes verb options'
   );
-  assert.match(payloadHtml, /function refreshVerbOptions/, 'verb options are rebuilt');
+  assert.doesNotMatch(payloadHtml, /function refreshVerbOptions/, 'no local verb-options copy');
+  assert.doesNotMatch(payloadHtml, /PAYLOAD_VERBS\s*=/, 'no local PAYLOAD_VERBS table');
 });
 
 test('mavlink-swarm verb is a topic-dependent select', () => {
   assertVerbSelect(swarmHtml, 'mavlink-swarm');
-  assert.match(swarmHtml, /PAYLOAD_VERBS/, 'editor mirrors the payload verb catalog');
+  assert.match(
+    swarmHtml,
+    /RED\.mavlink\.refreshVerbOptions/,
+    'verb options come from the shared helper'
+  );
   assert.match(
     swarmHtml,
     /\$\('#node-input-topic'\)\.on\('change'/,
     'topic change refreshes verb options'
   );
-  assert.match(swarmHtml, /function refreshVerbOptions/, 'verb options are rebuilt');
+  assert.doesNotMatch(swarmHtml, /function refreshVerbOptions/, 'no local verb-options copy');
+  assert.doesNotMatch(swarmHtml, /PAYLOAD_VERBS\s*=/, 'no local PAYLOAD_VERBS table');
 });
 
 test('editor catalog includes every lib/payload verb value', () => {
+  // Catalog lives once in resources/mavlink-editor.js — pin it there, not in
+  // each node's HTML (the HTML only calls refreshVerbOptions).
+  const resource = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'),
+    'utf8'
+  );
   for (const [topic, verbs] of Object.entries(PAYLOAD_VERBS)) {
     for (const { value } of verbs) {
-      assert.match(payloadHtml, new RegExp(`value:\\s*'${value}'`), `payload editor missing ${topic}/${value}`);
-      assert.match(swarmHtml, new RegExp(`value:\\s*'${value}'`), `swarm editor missing ${topic}/${value}`);
+      assert.match(resource, new RegExp(`value:\\s*'${value}'`), `editor resource missing ${topic}/${value}`);
     }
   }
 });
@@ -189,7 +204,7 @@ test('mavlink-payload target sysid/compid default to empty (inherit profile) not
   assert.match(payloadHtml, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
   assert.match(payloadHtml, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(payloadHtml, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(payloadHtml, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
+  assert.match(payloadHtml, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid uses shared reloadTargetCompId');
 });
 
 test('mavlink-payload fractional params use step=any', () => {
@@ -217,7 +232,7 @@ test('mavlink-payload has vehicle and identity defaults for role × tier matrix 
   // The vehicle (mavlink-vehicle) descriptor is contributed by the shared
   // buildTierDialectDefaults(); the delegation is asserted below.
   assert.match(payloadHtml, /identity:\s*\{\s*value:\s*''/, 'identity default is empty string');
-  assert.match(payloadHtml, /fillIdentitySelect/, 'fillIdentitySelect fills the identity dropdown');
+  assert.match(payloadHtml, /RED\.mavlink\.refreshIdentitySelect\(node\)/, 'shared refreshIdentitySelect fills the identity dropdown');
   assert.match(payloadHtml, /id="row-payload-vehicle"/, 'vehicle row has ID for tier-driven toggling');
   assert.match(payloadHtml, /id="row-payload-identity"/, 'identity row has ID for tier-driven toggling');
   assert.match(payloadHtml, /id="row-payload-connection"/, 'connection row has ID for tier-driven toggling');
@@ -225,24 +240,27 @@ test('mavlink-payload has vehicle and identity defaults for role × tier matrix 
 });
 
 test('mavlink-payload companion hides sysid row but NOT compid row (§6 spec exception)', () => {
-  assert.match(payloadHtml, /isCompanion/, 'companion flag drives visibility');
+  assert.match(
+    payloadHtml,
+    /RED\.mavlink\.applyCompanionTargetVisibility\(/,
+    'shared companion target visibility helper is used'
+  );
   assert.match(payloadHtml, /id="row-payload-targetSystem"/, 'targetSystem row has ID');
   assert.match(payloadHtml, /id="row-payload-targetComponent"/, 'targetComponent row has ID');
-  // sysid is gated by companion
   assert.match(
     payloadHtml,
-    /targetSystem:\s*isBuild\s*\|\|\s*!isCompanion/,
+    /hideCompidWhenCompanion:\s*false/,
+    'payload keeps compid visible on companion (compidFromConfig exception)'
+  );
+  assert.match(
+    payloadHtml,
+    /targetSystemRow:\s*['"]#row-payload-targetSystem['"]/,
     'sysid gated by companion for payload'
   );
-  // compid is NOT gated by companion (spec exception: payload device address stays visible)
   assert.match(
     payloadHtml,
-    /targetComponent:\s*true/,
-    'compid always visible for payload (payload device address exception)'
-  );
-  assert.ok(
-    !payloadHtml.includes('targetComponent: isBuild || !isCompanion'),
-    'payload compid row must NOT be gated the same as move (no isCompanion suppression)'
+    /targetComponentRow:\s*['"]#row-payload-targetComponent['"]/,
+    'compid row still wired through the shared helper'
   );
 });
 
@@ -306,32 +324,37 @@ test('mavlink-payload fills identity select and re-fills on connection change (�
     /\$\('#node-input-connection'\)\.on\('change'/,
     'connection change handler exists'
   );
-  assert.match(payloadHtml, /fillIdentitySelect[^)]*\$\('#node-input-identity'\)/, 'identity refilled on connection change');
+  assertChangeHandlerContains(
+    payloadHtml,
+    "$('#node-input-connection')",
+    'RED.mavlink.refreshIdentitySelect(node)',
+    'identity refilled on connection change'
+  );
 });
 
 test('mavlink-payload CompID reloads when catalog source changes', () => {
   assertChangeHandlerContains(
     payloadHtml,
     "$('#node-input-delivery')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'delivery change reloads CompID'
   );
   assertChangeHandlerContains(
     payloadHtml,
     "$('#node-input-connection')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'connection change reloads CompID'
   );
   assertChangeHandlerContains(
     payloadHtml,
     "$('#node-input-vehicle')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'vehicle change reloads CompID'
   );
   assertChangeHandlerContains(
     payloadHtml,
     '$dialect',
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'dialect change reloads CompID'
   );
 });

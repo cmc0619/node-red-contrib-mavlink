@@ -30,8 +30,8 @@ for (const name of TARGET_COMP_NODES) {
       !html.includes('type="number" id="node-input-targetComponent"'),
       'numeric targetComponent input must be gone'
     );
-    // Build-tier senders use the shared reloadCompIdSelect (pin-safe + sequenced).
-    assert.match(html, /reloadCompIdSelect\(/);
+    // Build-tier senders use the shared reloadTargetCompId (pin-safe + sequenced).
+    assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node\)/);
     assert.match(html, /node-input-targetComponent/);
   });
 }
@@ -63,7 +63,10 @@ test('mavlink-command: static targetCompid is a MAV_COMPONENT select only', () =
   const html = readHtml('mavlink-command');
   assert.match(html, /<select id="node-input-targetCompid"/);
   assert.ok(!html.includes('type="number" id="node-input-targetCompid"'));
-  assert.match(html, /reloadCompIdSelect\([\s\S]*targetCompid/);
+  assert.match(
+    html,
+    /RED\.mavlink\.reloadTargetCompId\(node,\s*\{\s*field:\s*'targetCompid'\s*\}\)/
+  );
 });
 
 test('mavlink-state: filter targetComponent allows blank = any', () => {

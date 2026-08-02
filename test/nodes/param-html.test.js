@@ -36,7 +36,7 @@ test('mavlink-param target sysid/compid default to empty (inherit profile) not 1
   assert.match(html, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
   assert.match(html, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(html, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(html, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
+  assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid uses shared reloadTargetCompId');
 });
 
 test('mavlink-param has identity default (vehicle comes from the shared helper)', () => {
@@ -47,9 +47,10 @@ test('mavlink-param has identity default (vehicle comes from the shared helper)'
   );
 });
 
-test('mavlink-param calls fillIdentitySelect on connection change', () => {
-  assert.match(html, /fillIdentitySelect/, 'fillIdentitySelect helper is called');
+test('mavlink-param calls refreshIdentitySelect on connection change', () => {
+  assert.match(html, /RED\.mavlink\.refreshIdentitySelect\(node\)/, 'shared refreshIdentitySelect is called');
   assert.match(html, /node-input-identity/, 'identity select element exists');
+  assert.doesNotMatch(html, /function refreshIdentitySelect/, 'no local identity-refresh copy');
 });
 
 test('mavlink-param dialect + vehicle + firmware defaults come from the shared helper', () => {
@@ -82,9 +83,13 @@ test('mavlink-param Build shows Dialect and concrete dialects require Firmware',
 
 test('mavlink-param has refreshVisibility and companion row hiding', () => {
   assert.match(html, /function refreshVisibility/, 'refreshVisibility function present');
-  assert.match(html, /isCompanion/, 'companion role detected in visibility logic');
-  assert.match(html, /row-targetSystem/, 'row-targetSystem referenced in visibility');
-  assert.match(html, /row-targetComponent/, 'row-targetComponent referenced in visibility');
+  assert.match(
+    html,
+    /RED\.mavlink\.applyCompanionTargetVisibility\(/,
+    'shared companion target visibility helper is used'
+  );
+  assert.match(html, /targetSystemRow:\s*['"]#row-targetSystem['"]/, 'row-targetSystem referenced');
+  assert.match(html, /targetComponentRow:\s*['"]#row-targetComponent['"]/, 'row-targetComponent referenced');
   assert.match(html, /row-vehicle/, 'row-vehicle present for build tier');
   assert.match(html, /row-connection/, 'row-connection present for wire tiers');
   assert.match(html, /row-identity/, 'row-identity present for wire tiers');
@@ -138,25 +143,25 @@ test('mavlink-param CompID reloads when catalog source changes', () => {
   assertChangeHandlerContains(
     html,
     "$('#node-input-delivery')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'delivery change reloads CompID'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-connection')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'connection change reloads CompID'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-vehicle')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'vehicle change reloads CompID'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-dialect')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'dialect change reloads CompID'
   );
 });

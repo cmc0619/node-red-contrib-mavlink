@@ -1,13 +1,5 @@
 <script type="text/javascript">
   (function () {
-    var BAND_OPTIONS = [
-      { value: '0', label: 'Emergency (0)' },
-      { value: '1', label: 'Liveness (1)' },
-      { value: '2', label: 'Control (2)' },
-      { value: '3', label: 'Streaming (3)' },
-      { value: '4', label: 'Bulk (4)' },
-    ];
-
     var TIER_OPTIONS = [
       { value: 'build', label: 'Build' },
       { value: 'send',  label: 'Send' },
@@ -15,13 +7,11 @@
 
     var COMMAND_MESSAGES = { COMMAND_LONG: true, COMMAND_INT: true };
 
-    /** @type {Object<string, {messages:Array, enums:Object, dialect:string, error?:string}>} */
-    var _msgCatalogByKey = {};
-    var _msgCatalogKey = '';
-    var _msgRequestSeq = 0;
-    /** @type {Object<string, {commands:Array, enums:Object}>} */
-    var _cmdCatalogByKey = {};
-    var _cmdRequestSeq = 0;
+    /** Messages / commands catalog caches (DESIGN.md §6 shared loadCatalog). */
+    var _msgCatalog = { byKey: {}, seq: 0 };
+    var _cmdCatalog = { byKey: {}, seq: 0 };
+    /** Catalog the loader last handed this dialog — paint from this, not byKey. */
+    var _currentMsgCatalog = null;
 
     // Catalog source follows the shared role × tier matrix (DESIGN.md §6). The
     // Build node's tier field is `tier`; the dialect picker governs on Build,
@@ -31,102 +21,16 @@
     }
 
     function loadMessagesCatalog(cb) {
-      var target = RED.mavlink.resolveCatalogTarget({ isBuild: buildTierIsBuild() });
-      if (_msgCatalogByKey[target.key]) {
-        _msgCatalogKey = target.key;
-        cb(_msgCatalogByKey[target.key]);
-        return;
-      }
-      if (!target.query) {
-        var emptyCatalog = { messages: [], enums: {}, dialect: '' };
-        _msgCatalogByKey[target.key] = emptyCatalog;
-        _msgCatalogKey = target.key;
-        cb(emptyCatalog);
-        return;
-      }
-      var seq = ++_msgRequestSeq;
-      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/build/messages'), target.query, function (data) {
-        if (seq !== _msgRequestSeq) return;
-        var catalog = {
-          messages: data.messages || [],
-          enums: data.enums || {},
-          dialect: data.dialect || target.dialect,
-        };
-        _msgCatalogByKey[target.key] = catalog;
-        _msgCatalogKey = target.key;
-        cb(catalog);
-    }).fail(function (_xhr, _status, err) {
-      if (seq !== _msgRequestSeq) return;
-      var catalog = {
-        messages: [],
-        enums: {},
-        dialect: target.dialect,
-        error: String(err || 'load failed'),
-      };
-      _msgCatalogByKey[target.key] = catalog;
-      _msgCatalogKey = target.key;
-      cb(catalog);
-    });
-  }
-
-    function loadCommandsCatalog(cb) {
-      var target = RED.mavlink.resolveCatalogTarget({ isBuild: buildTierIsBuild() });
-      if (_cmdCatalogByKey[target.key]) {
-        cb(_cmdCatalogByKey[target.key]);
-        return;
-      }
-      if (!target.query) {
-        var emptyCatalog = { commands: [], enums: {}, dialect: '' };
-        _cmdCatalogByKey[target.key] = emptyCatalog;
-        cb(emptyCatalog);
-        return;
-      }
-      var seq = ++_cmdRequestSeq;
-      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
-        if (seq !== _cmdRequestSeq) return;
-        var catalog = {
-          commands: data.commands || [],
-          enums: data.enums || {},
-          dialect: data.dialect || target.dialect,
-        };
-        _cmdCatalogByKey[target.key] = catalog;
-        cb(catalog);
-      }).fail(function (_xhr, _status, err) {
-        if (seq !== _cmdRequestSeq) return;
-        cb({ commands: [], enums: {}, dialect: target.dialect, error: String(err || 'load failed') });
+      RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
+        isBuild: buildTierIsBuild(),
+        listKey: 'messages'
       });
     }
 
-    function bitmaskTitle(description) {
-      var base = description || 'Bitmask flags';
-      return base + ' (Ctrl/Cmd-click to select multiple flags.)';
-    }
-
-    function booleanEntryLabel(entry) {
-      var name = entry && entry.name ? entry.name : '';
-      if (name === 'FALSE' || name.slice(-6) === '_FALSE') return 'false';
-      if (name === 'TRUE' || name.slice(-5) === '_TRUE') return 'true';
-      return entry.label || name;
-    }
-
-    function selectedBitmaskValues(saved, entries) {
-      if (saved === undefined || saved === null || saved === '') return [];
-      var mask;
-      try {
-        mask = BigInt(String(saved));
-      } catch (_e) {
-        return [];
-      }
-      return entries.filter(function (entry) {
-        var value;
-        try {
-          value = BigInt(String(entry.value));
-        } catch (_e) {
-          return false;
-        }
-        return (value === 0n && mask === 0n) || (value !== 0n && (mask & value) === value);
-      }).map(function (entry) {
-        return String(entry.value);
+    function loadCommandsCatalog(cb) {
+      RED.mavlink.loadCatalog('/mavlink/command/commands', _cmdCatalog, cb, {
+        isBuild: buildTierIsBuild(),
+        listKey: 'commands'
       });
     }
 
@@ -247,12 +151,10 @@
         });
         $tier.val(node.tier || 'send');
 
-        var $band = $('#node-input-band');
-        $band.empty();
-        BAND_OPTIONS.forEach(function (opt) {
-          $('<option>').val(opt.value).text(opt.label).appendTo($band);
-        });
-        $band.val(node.band !== undefined ? String(node.band) : '2');
+        RED.mavlink.fillBandSelect(
+          $('#node-input-band'),
+          node.band !== undefined ? String(node.band) : '2'
+        );
 
         function updateVisibility() {
           var dialectVal = $('#node-input-dialect').val() || node.dialect || '';
@@ -265,8 +167,7 @@
           });
         }
         $tier.on('change', function () {
-          _msgCatalogByKey = {};
-          _cmdCatalogByKey = {};
+          clearCatalogs();
           updateVisibility();
           reloadCatalogs();
         });
@@ -332,12 +233,12 @@
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', spec.name)
               .attr('data-kind', falseTrue ? 'enum' : (multi ? 'bitmask' : 'enum'))
-              .attr('title', multi ? bitmaskTitle(spec.description) : (spec.description || ''));
+              .attr('title', multi ? RED.mavlink.bitmaskTitle(spec.description) : (spec.description || ''));
             if (multi) sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
             else sel.append($('<option></option>').val('').text('\u2014'));
             entries.forEach(function (entry) {
               var $opt = $('<option></option>').val(entry.name).text(entry.label);
-              if (falseTrue) $opt.val(String(entry.value)).text(booleanEntryLabel(entry));
+              if (falseTrue) $opt.val(String(entry.value)).text(RED.mavlink.booleanEntryLabel(entry));
               if (entry.description) $opt.attr('title', entry.description);
               sel.append($opt);
             });
@@ -423,19 +324,19 @@
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', key)
               .attr('data-kind', falseTrue ? 'enum' : (isBitmask ? 'bitmask-mask' : 'enum'))
-              .attr('title', isBitmask ? bitmaskTitle(spec.description) : (spec.description || ''));
+              .attr('title', isBitmask ? RED.mavlink.bitmaskTitle(spec.description) : (spec.description || ''));
             if (isBitmask) {
               sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
             } else {
               sel.append($('<option></option>').val('').text('\u2014'));
             }
             entries.forEach(function (entry) {
-              var $opt = $('<option></option>').val(String(entry.value)).text(falseTrue ? booleanEntryLabel(entry) : entry.label);
+              var $opt = $('<option></option>').val(String(entry.value)).text(falseTrue ? RED.mavlink.booleanEntryLabel(entry) : entry.label);
               if (entry.description) $opt.attr('title', entry.description);
               sel.append($opt);
             });
             if (isBitmask) {
-              sel.val(selectedBitmaskValues(saved, entries));
+              sel.val(RED.mavlink.selectedBitmaskValues(saved, entries));
             } else if (saved !== undefined && saved !== null && saved !== '') {
               sel.val(String(saved));
             }
@@ -493,7 +394,7 @@
         function refreshFieldForm() {
           syncSavedFieldsFromDom();
           container.empty();
-          var catalog = _msgCatalogByKey[_msgCatalogKey];
+          var catalog = _currentMsgCatalog;
           var msgName = $('#node-input-messageName').val();
           if (!catalog) {
             container.append($('<div class="form-row"><em>Loading message fields\u2026</em></div>'));
@@ -517,37 +418,28 @@
             var cmdSel = $('<select id="mav-build-command-select" class="mav-field-input"></select>')
               .attr('data-field', 'command')
               .attr('data-kind', 'number');
-            cmdSel.append($('<option></option>').val('').text('\u2014 select MAV_CMD \u2014'));
             container.append(formRow('command (MAV_CMD)', cmdSel));
             container.append($('<div id="mav-command-params"></div>'));
             loadCommandsCatalog(function (cmdCatalog) {
-              function syncCmdTitle() {
-                var v = cmdSel.val();
-                var tip = '';
-                (cmdCatalog.commands || []).forEach(function (c) {
-                  if (String(c.value) === String(v)) tip = c.description || '';
-                });
-                if (tip) cmdSel.attr('title', tip);
-                else cmdSel.removeAttr('title');
-              }
-              (cmdCatalog.commands || []).forEach(function (c) {
-                var $opt = $('<option></option>').val(String(c.value)).text(c.label);
-                if (c.description) $opt.attr('title', c.description);
-                cmdSel.append($opt);
-              });
+              var commands = cmdCatalog.commands || [];
               var savedCmd = savedFields.command;
+              var prefer = '';
               if (savedCmd !== undefined && savedCmd !== null && savedCmd !== '') {
-                cmdSel.val(String(savedCmd));
-              } else if (cmdCatalog.commands && cmdCatalog.commands.length) {
+                prefer = String(savedCmd);
+              } else if (commands.length) {
                 // Prefer ARM if present, else first command — never leave blank.
-                var arm = cmdCatalog.commands.find(function (c) { return c.value === 400; });
-                cmdSel.val(String((arm || cmdCatalog.commands[0]).value));
+                var arm = commands.find(function (c) { return c.value === 400; });
+                prefer = String((arm || commands[0]).value);
               }
-              cmdSel.off('change.mavcmd').on('change.mavcmd', function () {
-                syncCmdTitle();
+              // Drop the placeholder empty option — fillEnumSelect rebuilds the list.
+              RED.mavlink.fillEnumSelect(cmdSel, commands, {
+                saved: prefer,
+                titleNamespace: 'mavcmd',
+                triggerChange: false
+              });
+              cmdSel.off('change.mavcmdParams').on('change.mavcmdParams', function () {
                 refreshCommandParams(msg.name, cmdCatalog);
               });
-              syncCmdTitle();
               refreshCommandParams(msg.name, cmdCatalog);
             });
             return;
@@ -564,6 +456,7 @@
         }
 
         function buildMessageDropdown(catalog) {
+          _currentMsgCatalog = catalog;
           var sel = $('#node-input-messageName');
           var current = sel.is('select') ? sel.val() : null;
           var prefer = current || node.messageName || 'HEARTBEAT';
@@ -572,53 +465,44 @@
             sel.replaceWith($select);
             sel = $select;
           }
-          sel.empty();
-          (catalog.messages || []).forEach(function (m) {
-            var $opt = $('<option></option>').val(m.name).text(m.label);
-            if (m.description) $opt.attr('title', m.description);
-            sel.append($opt);
+          // Tip sync and the field-form rebuild must use different change
+          // namespaces — fillEnumSelect's bindSelectTitleSync does
+          // off('change.' + ns), which would erase the renderer if both used
+          // mavmsg.
+          RED.mavlink.fillEnumSelect(sel, catalog.messages || [], {
+            saved: prefer,
+            valueKey: 'name',
+            titleNamespace: 'mavmsgTip',
+            triggerChange: false
           });
-          if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
-            sel.append($('<option></option>').val(prefer).text(prefer + ' (missing)'));
-          }
-          if (prefer) sel.val(prefer);
-          else if (catalog.messages && catalog.messages.length) sel.val(catalog.messages[0].name);
-          function syncMsgTitle() {
-            var name = sel.val();
-            var tip = '';
-            (catalog.messages || []).forEach(function (m) {
-              if (m.name === name) tip = m.description || '';
-            });
-            if (tip) sel.attr('title', tip);
-            else sel.removeAttr('title');
-          }
-          sel.off('change.mavmsg').on('change.mavmsg', function () {
-            syncMsgTitle();
-            refreshFieldForm();
-          });
-          syncMsgTitle();
+          sel.off('change.mavmsgForm').on('change.mavmsgForm', refreshFieldForm);
           refreshFieldForm();
         }
 
         function reloadCatalogs() {
+          _currentMsgCatalog = null;
           container.empty().append($('<div class="form-row"><em>Loading messages\u2026</em></div>'));
           loadMessagesCatalog(function (catalog) {
             buildMessageDropdown(catalog);
           });
         }
 
+        function clearCatalogs() {
+          _currentMsgCatalog = null;
+          _msgCatalog.byKey = {};
+          _cmdCatalog.byKey = {};
+        }
+
         $('#node-input-vehicle').on('change', function () {
           if ($tier.val() === 'build' && $('#node-input-dialect').val() === '__vehicle') {
-            _msgCatalogByKey = {};
-            _cmdCatalogByKey = {};
+            clearCatalogs();
             reloadCatalogs();
           }
         });
 
         $('#node-input-connection').on('change', function () {
           if ($tier.val() !== 'build') {
-            _msgCatalogByKey = {};
-            _cmdCatalogByKey = {};
+            clearCatalogs();
             reloadCatalogs();
           }
         });
@@ -627,8 +511,7 @@
         // validator accepts a concrete dialect or the Vehicle Profile escape.
         var $dialect = $('#node-input-dialect');
         $dialect.on('change', function () {
-          _msgCatalogByKey = {};
-          _cmdCatalogByKey = {};
+          clearCatalogs();
           updateVisibility();
           reloadCatalogs();
         });

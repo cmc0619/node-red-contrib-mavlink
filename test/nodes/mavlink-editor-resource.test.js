@@ -2,7 +2,8 @@
 
 /**
  * Shared editor helpers (resources/mavlink-editor.js) — the single home for the
- * catalog source matrix (resolveCatalogTarget), the Build-tier dialect /
+ * catalog source matrix (resolveCatalogTarget), catalog fetch (loadCatalog),
+ * Target CompID reload (reloadTargetCompId), the Build-tier dialect /
  * vehicle / firmware default descriptors (buildTierDialectDefaults), and the
  * Build-tier row toggle (applyBuildTierRowVisibility). Every palette node
  * delegates here (DESIGN.md §6), so the matrix behaviour is proven once against
@@ -29,9 +30,14 @@ function plain(value) {
  * given a value, and `.val()` returns it. Absent selectors report length 0 so
  * helpers fall back to the node snapshot (`this`) exactly as they do in the
  * editor before a dialog is open.
+ *
+ * @param {object} [values]
+ * @param {object} [nodeLookup]
+ * @param {{trackToggle?: boolean, getJSON?: Function}} [opts]
  */
-function loadResource(values = {}, nodeLookup = {}, { trackToggle = false } = {}) {
+function loadResource(values = {}, nodeLookup = {}, opts = {}) {
   const toggled = {};
+  const trackToggle = opts.trackToggle === true;
   function $(selector) {
     const has = Object.prototype.hasOwnProperty.call(values, selector);
     return {
@@ -47,6 +53,9 @@ function loadResource(values = {}, nodeLookup = {}, { trackToggle = false } = {}
       },
     };
   }
+  $.getJSON = opts.getJSON || function () {
+    return { fail() { return this; } };
+  };
   const context = {
     RED: {
       settings: { httpAdminRoot: '/' },
@@ -304,6 +313,475 @@ test('applyBuildTierRowVisibility skips absent optional firmwareRow', () => {
   assert.equal(toggled['#row-dialect'], true);
   assert.equal(toggled['#row-connection'], false);
   assert.equal(toggled['#row-firmware'], undefined);
+});
+
+// ── reloadTargetCompId — thin defaulting wrapper over reloadCompIdSelect ─────
+
+test('reloadTargetCompId defaults to #node-input-targetComponent', () => {
+  const { RED } = loadResource({ '#node-input-targetComponent': '' });
+  const calls = [];
+  RED.mavlink.reloadCompIdSelect = ($select, opts) => {
+    calls.push({ length: $select.length, initialSaved: opts.initialSaved });
+  };
+  RED.mavlink.reloadTargetCompId({ targetComponent: 190 });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].length, 1);
+  assert.equal(calls[0].initialSaved, 190);
+});
+
+test('reloadTargetCompId honours Command\'s targetCompid field name', () => {
+  const { RED } = loadResource({ '#node-input-targetCompid': '' });
+  const calls = [];
+  RED.mavlink.reloadCompIdSelect = (_$select, opts) => {
+    calls.push(opts.initialSaved);
+  };
+  RED.mavlink.reloadTargetCompId({ targetCompid: 1 }, { field: 'targetCompid' });
+  assert.deepEqual(calls, [1]);
+});
+
+// ── loadCatalog — resolve → cache → getJSON → race guard ─────────────────────
+
+test('loadCatalog empty target caches and returns without fetching', () => {
+  let fetched = 0;
+  const { RED } = loadResource(
+    { '#node-input-dialect': '' },
+    {},
+    {
+      getJSON() {
+        fetched += 1;
+        return { fail() { return this; } };
+      },
+    }
+  );
+  const cache = { byKey: {}, seq: 0 };
+  const got = [];
+  RED.mavlink.loadCatalog('/mavlink/build/messages', cache, (c) => got.push(c), {
+    isBuild: true,
+    listKey: 'messages',
+  });
+  assert.equal(fetched, 0);
+  assert.equal(cache.seq, 1);
+  assert.deepEqual(plain(got[0]), { messages: [], enums: {}, dialect: '' });
+  assert.deepEqual(plain(cache.byKey.empty), { messages: [], enums: {}, dialect: '' });
+});
+
+test('loadCatalog cache hit bumps seq and skips getJSON', () => {
+  let fetched = 0;
+  const { RED } = loadResource(
+    { '#node-input-dialect': 'common' },
+    {},
+    {
+      getJSON() {
+        fetched += 1;
+        return { fail() { return this; } };
+      },
+    }
+  );
+  const cache = {
+    byKey: { 'dialect:common': { messages: [{ name: 'HEARTBEAT' }], enums: {}, dialect: 'common' } },
+    seq: 0,
+  };
+  const got = [];
+  RED.mavlink.loadCatalog('/mavlink/build/messages', cache, (c) => got.push(c), {
+    isBuild: true,
+    listKey: 'messages',
+  });
+  assert.equal(fetched, 0);
+  assert.equal(cache.seq, 1);
+  assert.equal(got[0].messages[0].name, 'HEARTBEAT');
+});
+
+test('loadCatalog seq-guard drops a stale success', () => {
+  const values = { '#node-input-dialect': 'common' };
+  const pending = [];
+  const { RED } = loadResource(
+    values,
+    {},
+    {
+      getJSON(_url, _query, ok) {
+        pending.push(ok);
+        return { fail() { return this; } };
+      },
+    }
+  );
+  const cache = { byKey: {}, seq: 0 };
+  const got = [];
+  RED.mavlink.loadCatalog('/mavlink/build/messages', cache, (c) => got.push(['a', c]), {
+    isBuild: true,
+    listKey: 'messages',
+  });
+  values['#node-input-dialect'] = 'ardupilotmega';
+  RED.mavlink.loadCatalog('/mavlink/build/messages', cache, (c) => got.push(['b', c]), {
+    isBuild: true,
+    listKey: 'messages',
+  });
+  assert.equal(pending.length, 2);
+  pending[0]({ messages: [{ name: 'STALE' }], enums: {}, dialect: 'common' });
+  assert.equal(got.length, 0);
+  pending[1]({ messages: [{ name: 'OK' }], enums: {}, dialect: 'ardupilotmega' });
+  assert.equal(got.length, 1);
+  assert.equal(got[0][0], 'b');
+  assert.equal(got[0][1].messages[0].name, 'OK');
+});
+
+test('loadCatalog coalesce fans out waiters for the same key', () => {
+  let fetches = 0;
+  let okHandler;
+  const { RED } = loadResource(
+    { '#node-input-dialect': 'common' },
+    {},
+    {
+      getJSON(_url, _query, ok) {
+        fetches += 1;
+        okHandler = ok;
+        return { fail() { return this; } };
+      },
+    }
+  );
+  const cache = { byKey: {}, seq: 0, inflight: {} };
+  const got = [];
+  RED.mavlink.loadCatalog('/mavlink/command/commands', cache, (c) => got.push(c), {
+    isBuild: true,
+    listKey: 'commands',
+  });
+  RED.mavlink.loadCatalog('/mavlink/command/commands', cache, (c) => got.push(c), {
+    isBuild: true,
+    listKey: 'commands',
+  });
+  assert.equal(fetches, 1, 'same-key consumers share one XHR');
+  okHandler({ commands: [{ value: 400 }], enums: {}, dialect: 'common' });
+  assert.equal(got.length, 2);
+  assert.equal(got[0].commands[0].value, 400);
+  assert.equal(Object.keys(cache.inflight).length, 0);
+});
+
+test('loadCatalog coalesce drops waiters when resolve key moved', () => {
+  let okHandler;
+  const values = { '#node-input-dialect': 'common' };
+  const { RED } = loadResource(
+    values,
+    {},
+    {
+      getJSON(_url, _query, ok) {
+        okHandler = ok;
+        return { fail() { return this; } };
+      },
+    }
+  );
+  const cache = { byKey: {}, seq: 0, inflight: {} };
+  const got = [];
+  RED.mavlink.loadCatalog('/mavlink/command/commands', cache, (c) => got.push(c), {
+    isBuild: true,
+    listKey: 'commands',
+  });
+  values['#node-input-dialect'] = 'ardupilotmega';
+  okHandler({ commands: [{ value: 400 }], enums: {}, dialect: 'common' });
+  // Catalog is cached, but waiters are dropped because the live target moved.
+  assert.equal(got.length, 0);
+  assert.ok(cache.byKey['dialect:common']);
+  assert.equal(Object.keys(cache.inflight).length, 0);
+});
+
+test('loadCatalog onKey fires for cache hit and empty target', () => {
+  const { RED } = loadResource({ '#node-input-dialect': '' });
+  const keys = [];
+  const cache = { byKey: {}, seq: 0 };
+  RED.mavlink.loadCatalog('/mavlink/build/messages', cache, () => {}, {
+    isBuild: true,
+    listKey: 'messages',
+    onKey: (k) => keys.push(k),
+  });
+  assert.deepEqual(keys, ['empty']);
+});
+
+// ── PAYLOAD_VERBS / refreshVerbOptions ───────────────────────────────────────
+
+test('PAYLOAD_VERBS mirrors lib/payload exactly', () => {
+  const { RED } = loadResource();
+  const { PAYLOAD_VERBS } = require('../../lib/payload');
+  assert.deepEqual(plain(RED.mavlink.PAYLOAD_VERBS), plain(PAYLOAD_VERBS));
+});
+
+/**
+ * jQuery stub rich enough for refreshVerbOptions (empty/append/option factory).
+ * @param {object} values
+ * @returns {{RED: object, values: object, options: string[]}}
+ */
+function loadVerbResource(values) {
+  const options = [];
+  function $(selector) {
+    if (typeof selector === 'string' && selector.startsWith('<option')) {
+      const opt = { _val: '', _text: '' };
+      opt.val = function (v) { opt._val = v; return opt; };
+      opt.text = function (t) { opt._text = t; return opt; };
+      return opt;
+    }
+    const has = Object.prototype.hasOwnProperty.call(values, selector);
+    const api = {
+      length: has ? 1 : 0,
+      val(v) {
+        if (arguments.length === 0) return has ? values[selector] : undefined;
+        values[selector] = v;
+        return api;
+      },
+      empty() { options.length = 0; return api; },
+      append($el) { options.push($el._val); return api; },
+    };
+    return api;
+  }
+  $.getJSON = () => ({ fail() { return this; } });
+  const context = {
+    RED: {
+      settings: { httpAdminRoot: '/' },
+      mavlink: {},
+      nodes: { node() { return null; } },
+    },
+    $,
+  };
+  vm.runInNewContext(resourceScript, context);
+  return { RED: context.RED, values, options };
+}
+
+test('refreshVerbOptions rebuilds the verb select for the topic', () => {
+  const { RED, values, options } = loadVerbResource({
+    '#node-input-topic': 'servo',
+    '#node-input-verb': 'set',
+  });
+  RED.mavlink.refreshVerbOptions();
+  assert.deepEqual(options, ['set', 'repeat']);
+  assert.equal(values['#node-input-verb'], 'set');
+});
+
+test('refreshVerbOptions prefers opts.saved when still valid', () => {
+  const { RED, values } = loadVerbResource({
+    '#node-input-topic': 'camera',
+    '#node-input-verb': 'photo',
+  });
+  RED.mavlink.refreshVerbOptions({ saved: 'start-video' });
+  assert.equal(values['#node-input-verb'], 'start-video');
+});
+
+// ── bitmask helpers ──────────────────────────────────────────────────────────
+
+test('bitmaskTitle appends the Ctrl/Cmd-click hint', () => {
+  const { RED } = loadResource();
+  assert.equal(
+    RED.mavlink.bitmaskTitle('Flags'),
+    'Flags (Ctrl/Cmd-click to select multiple flags.)'
+  );
+  assert.match(RED.mavlink.bitmaskTitle(), /Bitmask flags/);
+});
+
+test('booleanEntryLabel maps FALSE/TRUE names to boolean words', () => {
+  const { RED } = loadResource();
+  assert.equal(RED.mavlink.booleanEntryLabel({ name: 'FALSE', label: 'FALSE (0)' }), 'false');
+  assert.equal(RED.mavlink.booleanEntryLabel({ name: 'MAV_BOOL_TRUE', label: 'x' }), 'true');
+  assert.equal(RED.mavlink.booleanEntryLabel({ name: 'OTHER', label: 'Other (2)' }), 'Other (2)');
+});
+
+test('selectedBitmaskValues returns the set flag values', () => {
+  const { RED } = loadResource();
+  const entries = [
+    { value: 1 },
+    { value: 2 },
+    { value: 4 },
+  ];
+  // plain() crosses the vm realm boundary for deepStrictEqual.
+  assert.deepEqual(plain(RED.mavlink.selectedBitmaskValues(5, entries)), ['1', '4']);
+  assert.deepEqual(plain(RED.mavlink.selectedBitmaskValues('', entries)), []);
+  assert.deepEqual(
+    plain(RED.mavlink.selectedBitmaskValues(0, [{ value: 0 }, { value: 1 }])),
+    ['0']
+  );
+});
+
+// ── select title-sync + missing-option sentinel ──────────────────────────────
+
+test('missingEnumOptionLabel is the single #N (not in dialect) wording', () => {
+  const { RED } = loadResource();
+  assert.equal(RED.mavlink.missingEnumOptionLabel(190), '#190 (not in dialect)');
+  assert.equal(RED.mavlink.missingEnumOptionLabel('HEARTBEAT'), '#HEARTBEAT (not in dialect)');
+});
+
+test('ensureSavedEnumOption appends only when the value is absent', () => {
+  const options = [];
+  const context = {
+    RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node() { return null; } } },
+    $: null,
+  };
+  const $select = {
+    find() {
+      return { length: options.some((o) => o.value === '190') ? 1 : 0 };
+    },
+    append($opt) {
+      options.push({ value: $opt._val, text: $opt._text });
+      return $select;
+    },
+  };
+  context.$ = function (html) {
+    if (typeof html === 'string' && html.startsWith('<option')) {
+      const opt = { _val: '', _text: '' };
+      opt.val = function (v) { opt._val = v; return opt; };
+      opt.text = function (t) { opt._text = t; return opt; };
+      return opt;
+    }
+    return { length: 0, val() { return undefined; } };
+  };
+  vm.runInNewContext(resourceScript, context);
+  assert.equal(context.RED.mavlink.ensureSavedEnumOption($select, ''), false);
+  assert.equal(context.RED.mavlink.ensureSavedEnumOption($select, 190), true);
+  assert.equal(options[0].text, '#190 (not in dialect)');
+  assert.equal(context.RED.mavlink.ensureSavedEnumOption($select, 190), false);
+});
+
+test('bindSelectTitleSync mirrors the selected option title onto the select', () => {
+  let selectTitle = '';
+  let changeHandler = null;
+  const $select = {
+    find() {
+      return { attr() { return 'Dialect tip'; } };
+    },
+    attr(name, value) {
+      if (name === 'title' && arguments.length > 1) selectTitle = value;
+      return $select;
+    },
+    removeAttr() {
+      selectTitle = '';
+      return $select;
+    },
+    off() { return $select; },
+    on(_evt, fn) { changeHandler = fn; return $select; },
+  };
+  const { RED } = loadResource();
+  const sync = RED.mavlink.bindSelectTitleSync($select, { namespace: 'mavTestTip' });
+  assert.equal(selectTitle, 'Dialect tip');
+  assert.equal(typeof changeHandler, 'function');
+  assert.equal(typeof sync, 'function');
+});
+
+test('refreshIdentitySelect reads the live connection and forwards rolesAllowed', () => {
+  const calls = [];
+  const values = {
+    '#node-input-connection': 'conn-1',
+    '#node-input-identity': 'id-1',
+  };
+  const { RED } = loadResource(values);
+  RED.mavlink.fillIdentitySelect = ($select, connectionId, opts) => {
+    calls.push({ connectionId, opts: plain(opts), length: $select.length });
+    return 'id-1';
+  };
+  const selected = RED.mavlink.refreshIdentitySelect(
+    { identity: 'id-1' },
+    { rolesAllowed: ['gcs', 'custom'] }
+  );
+  assert.equal(selected, 'id-1');
+  assert.equal(calls[0].connectionId, 'conn-1');
+  assert.deepEqual(calls[0].opts, { saved: 'id-1', rolesAllowed: ['gcs', 'custom'] });
+  assert.equal(calls[0].length, 1);
+});
+
+// ── BAND_OPTIONS + companion target visibility ───────────────────────────────
+
+test('BAND_OPTIONS lists the five §7 queue bands once', () => {
+  const { RED } = loadResource();
+  assert.deepEqual(
+    plain(RED.mavlink.BAND_OPTIONS.map((o) => o.value)),
+    ['0', '1', '2', '3', '4']
+  );
+  assert.equal(RED.mavlink.BAND_OPTIONS[2].label, 'Control (2)');
+});
+
+test('fillBandSelect rebuilds options and restores the saved band', () => {
+  const options = [];
+  let selected;
+  const $select = {
+    empty() { options.length = 0; return $select; },
+    append($opt) {
+      options.push({ value: $opt._val, text: $opt._text });
+      return $select;
+    },
+    val(v) {
+      if (arguments.length) { selected = v; return $select; }
+      return selected;
+    },
+  };
+  const context = {
+    RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node() { return null; } } },
+    $: function (html) {
+      if (typeof html === 'string' && html.startsWith('<option')) {
+        const opt = { _val: '', _text: '' };
+        opt.val = function (v) { opt._val = v; return opt; };
+        opt.text = function (t) { opt._text = t; return opt; };
+        opt.appendTo = function (sel) { sel.append(opt); return opt; };
+        return opt;
+      }
+      return $select;
+    },
+  };
+  vm.runInNewContext(resourceScript, context);
+  context.RED.mavlink.fillBandSelect($select, '3');
+  assert.equal(options.length, 5);
+  assert.equal(options[0].text, 'Emergency (0)');
+  assert.equal(selected, '3');
+});
+
+test('applyCompanionTargetVisibility hides both rows for wire companion', () => {
+  const toggles = {};
+  const context = {
+    RED: {
+      settings: { httpAdminRoot: '/' },
+      mavlink: {},
+      nodes: {
+        node(id) {
+          return id === 'comp-1' ? { role: 'companion' } : null;
+        },
+      },
+    },
+    $(selector) {
+      return {
+        length: 1,
+        toggle(shown) { toggles[selector] = !!shown; },
+      };
+    },
+  };
+  vm.runInNewContext(resourceScript, context);
+  const vis = context.RED.mavlink.applyCompanionTargetVisibility({
+    isBuild: false,
+    identityId: 'comp-1',
+    targetSystemRow: '#sys',
+    targetComponentRow: '#comp',
+  });
+  assert.equal(vis.isCompanion, true);
+  assert.equal(vis.targetSystem, false);
+  assert.equal(vis.targetComponent, false);
+  assert.equal(toggles['#sys'], false);
+  assert.equal(toggles['#comp'], false);
+});
+
+test('applyCompanionTargetVisibility keeps payload compid when hideCompidWhenCompanion is false', () => {
+  const { RED } = loadResource({}, {
+    'comp-1': { role: 'companion' },
+  });
+  const vis = RED.mavlink.applyCompanionTargetVisibility({
+    isBuild: false,
+    identityId: 'comp-1',
+    hideCompidWhenCompanion: false,
+  });
+  assert.equal(vis.targetSystem, false);
+  assert.equal(vis.targetComponent, true);
+});
+
+test('applyCompanionTargetVisibility shows targets on Build regardless of identity', () => {
+  const { RED } = loadResource({}, {
+    'comp-1': { role: 'companion' },
+  });
+  const vis = RED.mavlink.applyCompanionTargetVisibility({
+    isBuild: true,
+    identityId: 'comp-1',
+  });
+  assert.equal(vis.isCompanion, false);
+  assert.equal(vis.targetSystem, true);
+  assert.equal(vis.targetComponent, true);
 });
 
 // ── normalizeIdentityIds — the Connection dialog's extra-identity rules ──────

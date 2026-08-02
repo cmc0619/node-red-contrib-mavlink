@@ -37,24 +37,7 @@
         RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
 
-      /* ── Identity select ──────────────────────────────────────── */
-      function refreshIdentitySelect() {
-        if (!(RED.mavlink && RED.mavlink.fillIdentitySelect)) return;
-        var connectionId = $('#node-input-connection').val() || '';
-        RED.mavlink.fillIdentitySelect(
-          $('#node-input-identity'),
-          connectionId,
-          { saved: node.identity }
-        );
-      }
-
       /* ── Component picker (reload when dialect/connection changes) ─ */
-      function reloadTargetCompId() {
-        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
-        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
-          initialSaved: node.targetComponent
-        });
-      }
 
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
       function refreshVisibility() {
@@ -75,19 +58,12 @@
         $('#row-timeout').toggle(!isBuild);
 
         /* role-driven rows: companion hides both target rows */
-        if (!isBuild) {
-          var identityId = $('#node-input-identity').val() || '';
-          var role = RED.mavlink && RED.mavlink.identityRole
-            ? RED.mavlink.identityRole(identityId)
-            : 'gcs';
-          var isCompanion = (role === 'companion');
-          $('#row-targetSystem').toggle(!isCompanion);
-          $('#row-targetComponent').toggle(!isCompanion);
-        } else {
-          /* build tier always shows target rows */
-          $('#row-targetSystem').show();
-          $('#row-targetComponent').show();
-        }
+        RED.mavlink.applyCompanionTargetVisibility({
+          isBuild: isBuild,
+          identityId: $('#node-input-identity').val() || '',
+          targetSystemRow: '#row-targetSystem',
+          targetComponentRow: '#row-targetComponent',
+        });
       }
 
       /* ── Param definition catalog ─────────────────────────────── */
@@ -202,7 +178,7 @@
             var entry = def.values[i];
             var $vopt = $('<option></option>')
               .val(String(entry.value))
-              .text(entry.label + ' (' + entry.value + ')');
+              .text(RED.mavlink.enumOptionLabel({ name: entry.label, value: entry.value }));
             if (entry.description) $vopt.attr('title', entry.description);
             $valueList.append($vopt);
           }
@@ -222,24 +198,24 @@
         clearParamDefs();
         refreshVisibility();
         loadParamDefs();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-connection').on('change', function () {
         clearParamDefs();
-        refreshIdentitySelect();
+        RED.mavlink.refreshIdentitySelect(node);
         loadParamDefs();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-dialect').on('change', function () {
         clearParamDefs();
         refreshVisibility();
         loadParamDefs();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-vehicle').on('change', function () {
         clearParamDefs();
         loadParamDefs();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-firmware').on('change', function () {
         clearParamDefs();
@@ -257,13 +233,13 @@
           includeVehicleEscape: true
         });
       }
-      reloadTargetCompId();
+      RED.mavlink.reloadTargetCompId(node);
 
       $('#node-input-paramId').on('input change', refreshParamInfo);
       $('#node-input-action').on('change', refreshParamInfo);
 
       /* Initial state. */
-      refreshIdentitySelect();
+      RED.mavlink.refreshIdentitySelect(node);
       refreshVisibility();
       loadParamDefs();
     }

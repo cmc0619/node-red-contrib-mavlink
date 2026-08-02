@@ -41,7 +41,7 @@ test('mavlink-move editor reshapes fields by mode and delivery (§6)', () => {
   assertChangeHandlerContains(
     html,
     "$('#node-input-delivery')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'delivery change refreshes CompID catalog'
   );
   assert.match(html, /refreshVisibility\(\)/, 'visibility is applied on dialog open');
@@ -86,18 +86,18 @@ test('mavlink-move has one labeled row per parameter, not dual local/global rows
 test('mavlink-move keeps target sysid/compid and reloadCompIdSelect catalog', () => {
   assert.match(html, /id="node-input-targetSystem"/, 'target sysid field remains');
   assert.match(html, /id="node-input-targetComponent"/, 'target compid select remains');
-  assert.match(html, /reloadCompIdSelect/, 'compid enum catalog uses shared helper');
+  assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid enum catalog uses shared helper');
   assert.match(html, /ensureConfigNodePicker/, 'connection picker remains');
   assertChangeHandlerContains(
     html,
     "$('#node-input-connection')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'connection change reloads CompID'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-vehicle')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'vehicle change reloads CompID'
   );
 });
@@ -107,7 +107,7 @@ test('mavlink-move target sysid/compid default to empty (inherit profile) not 1'
   assert.match(html, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(html, /RED\.validators\.number\(true\)/, 'blank-allowed validator is used');
   assert.match(html, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(html, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
+  assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid uses shared reloadTargetCompId');
 });
 
 test('mavlink-move has vehicle and identity defaults for role × tier matrix (§6)', () => {
@@ -122,7 +122,7 @@ test('mavlink-move has vehicle and identity defaults for role × tier matrix (§
 });
 
 test('mavlink-move fills identity select and re-fills on connection change (§6)', () => {
-  assert.match(html, /fillIdentitySelect/, 'fillIdentitySelect fills the identity dropdown');
+  assert.match(html, /RED\.mavlink\.refreshIdentitySelect\(node\)/, 'shared refreshIdentitySelect fills the identity dropdown');
   assert.match(
     html,
     /\$\('#node-input-identity'\)\.on\('change', refreshVisibility\)/,
@@ -133,22 +133,36 @@ test('mavlink-move fills identity select and re-fills on connection change (§6)
     /\$\('#node-input-connection'\)\.on\('change'/,
     'connection change handler exists'
   );
-  assert.match(html, /fillIdentitySelect[^)]*\$\('#node-input-identity'\)/, 'identity refilled on connection change');
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-connection')",
+    'RED.mavlink.refreshIdentitySelect(node)',
+    'identity refilled on connection change'
+  );
 });
 
 test('mavlink-move companion hides both target sysid and compid rows (§6)', () => {
-  assert.match(html, /isCompanion/, 'companion flag drives visibility');
+  assert.match(
+    html,
+    /RED\.mavlink\.applyCompanionTargetVisibility\(/,
+    'shared companion target visibility helper is used'
+  );
   assert.match(html, /id="row-move-targetSystem"/, 'targetSystem row has ID for toggling');
   assert.match(html, /id="row-move-targetComponent"/, 'targetComponent row has ID for toggling');
   assert.match(
     html,
-    /targetSystem:\s*isBuild\s*\|\|\s*!isCompanion/,
+    /targetSystemRow:\s*['"]#row-move-targetSystem['"]/,
     'sysid gated by companion for move'
   );
   assert.match(
     html,
-    /targetComponent:\s*isBuild\s*\|\|\s*!isCompanion/,
+    /targetComponentRow:\s*['"]#row-move-targetComponent['"]/,
     'compid also gated by companion for move (no spec exception here)'
+  );
+  assert.doesNotMatch(
+    html,
+    /hideCompidWhenCompanion:\s*false/,
+    'move does not take the Payload compid exception'
   );
 });
 

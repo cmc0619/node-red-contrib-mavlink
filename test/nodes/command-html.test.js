@@ -37,7 +37,11 @@ test('advanced command is a MAV_CMD <select>, not a free-form number (§6/§9)',
     !html.includes('type="number" id="node-input-advancedCommand"'),
     'the free-form numeric id field must be gone'
   );
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/command\/commands['"]\)/, 'dialect MAV_CMD list is loaded from admin API');
+  assert.match(
+    html,
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
+    'dialect MAV_CMD list uses shared loadCatalog'
+  );
   assert.match(html, /function buildAdvancedDropdown/, 'async load re-applies the saved command');
 });
 
@@ -63,16 +67,15 @@ test('advanced mode enumerates params from dialect metadata, not Param 1–7 (§
 });
 
 test('advanced catalog load ignores stale responses and keeps the in-progress selection', () => {
-  assert.match(html, /_catalogRequestSeq/, 'request sequence token exists');
-  assert.match(html, /_catalogInflight/, 'same-key loads coalesce waiters');
-  // Drop the result when the editor target moved while the request was in flight.
+  // Coalesce + stale-target drop live in RED.mavlink.loadCatalog (cache.inflight).
   assert.match(
     html,
-    /resolveCatalogTarget\(\)\.key !== requestedKey/,
-    'stale target results are dropped'
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
+    'commands catalog uses the shared loader'
   );
-  assert.match(html, /const current = sel\.val\(\)/, 'in-progress select value is read');
-  assert.match(html, /const prefer = current \|\| saved/, 'current selection wins over saved');
+  assert.match(html, /inflight:\s*\{\s*\}/, 'commands cache bag enables coalesce waiters');
+  assert.match(html, /const prefer = sel\.val\(\)/, 'in-progress select value is read');
+  assert.match(html, /saved:\s*prefer/, 'current-or-saved prefer is passed to fillEnumSelect');
 });
 
 test('preset dropdown re-applies the saved selection and fires change after the async load', () => {
@@ -97,8 +100,8 @@ test('advanced bitmask command params render as multi-select controls', () => {
   assert.match(renderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE command params are detected before bitmask rendering');
   assert.match(renderer, /data-kind['"],\s*falseTrue \? ['"]enum['"] : \(isBitmask \? ['"]bitmask['"] : ['"]enum['"]\)/, 'FALSE/TRUE bitmask params are tagged as enum selects');
   assert.match(renderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'bitmask enum params use native multi-select');
-  assert.match(renderer, /booleanEntryLabel\(entry\)/, 'FALSE/TRUE command param options use boolean labels');
-  assert.match(html, /Ctrl\/Cmd-click/, 'multi-select title/help explains how to select multiple flags');
+  assert.match(renderer, /RED\.mavlink\.booleanEntryLabel\(entry\)/, 'FALSE/TRUE command param options use boolean labels');
+  assert.match(renderer, /RED\.mavlink\.bitmaskTitle/, 'multi-select title comes from the shared helper');
 });
 
 test('advanced bitmask command params save one numeric mask value', () => {
@@ -144,7 +147,7 @@ test('preset rows render through the Advanced catalog path', () => {
   );
 
   assert.ok(!/loadEnumsCatalog/.test(html), 'no separate preset enum fetch — enums ride the commands catalog');
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/build\/messages['"]\)/, 'message ids load from the shared messages API');
+  assert.match(html, /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/, 'message ids load via shared loadCatalog');
   assert.match(presetBlock, /catalogParamByIndex\(catalog, commandId, spec\.index\)/, 'each row merges the catalog param spec');
   assert.match(presetBlock, /Object\.assign\(\{\}, catalogParamByIndex/, 'curation keys override, omitted keys inherit');
   assert.match(presetBlock, /presetParamInput\(merged, catalog\.enums \|\| \{\}\)/, 'rows render with catalog enums');
@@ -153,29 +156,29 @@ test('preset rows render through the Advanced catalog path', () => {
 });
 
 test('Command CompID reloads when catalog source changes', () => {
-  assert.match(html, /function reloadTargetCompId/, 'CompID load is a reusable helper');
+  assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node, \{\s*field:\s*'targetCompid'\s*\}\)/, 'CompID reload uses shared helper with Command field name');
   assertChangeHandlerContains(
     html,
     "$('#node-input-connection')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node, { field: \'targetCompid\' })',
     'Connection change refreshes MAV_COMPONENT for the new dialect'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-delivery')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node, { field: \'targetCompid\' })',
     'Delivery tier change refreshes CompID catalog'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-vehicle')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node, { field: \'targetCompid\' })',
     'Build Vehicle Profile change refreshes CompID catalog'
   );
   assertChangeHandlerContains(
     html,
     '$dialect',
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node, { field: \'targetCompid\' })',
     'Dialect change refreshes CompID catalog'
   );
 });
@@ -188,8 +191,8 @@ test('mavlink-command target sysid/compid use "(profile default)" wording', () =
   );
   assert.match(
     html,
-    /reloadCompIdSelect\(/,
-    'compid uses shared reloadCompIdSelect (default emptyLabel is profile default)'
+    /RED\.mavlink\.reloadTargetCompId\(node,\s*\{\s*field:\s*'targetCompid'\s*\}\)/,
+    'compid uses shared reloadTargetCompId (default emptyLabel is profile default)'
   );
   assert.ok(
     !html.includes('(connection default)'),
@@ -202,7 +205,10 @@ test('mavlink-command target sysid/compid use "(profile default)" wording', () =
 });
 
 test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(/, 'admin fetches must use adminApiUrl');
+  // Dialect catalogs go through loadCatalog (adminApiUrl inside the helper);
+  // presets still call adminApiUrl directly.
+  assert.match(html, /RED\.mavlink\.loadCatalog\(/, 'dialect catalogs use shared loadCatalog');
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(/, 'remaining admin fetches use adminApiUrl');
   assert.ok(
     !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
     'bare absolute /mavlink getJSON paths must be gone'
@@ -259,34 +265,37 @@ test('command Build visibility delegates shared rows to applyBuildTierRowVisibil
   );
 });
 
-test('command catalog targeting delegates to the shared resolver (no local copy)', () => {
-  // The catalog source matrix — empty Build dialect ⇒ no target (never a silent
-  // ardupilotmega), __vehicle ⇒ profile id + dialect, wire ⇒ connection profile
-  // — lives in the shared resource helper and is proven in
-  // mavlink-editor-resource.test.js. Command must call it, not paste its own.
-  assert.match(html, /RED\.mavlink\.resolveCatalogTarget\(\)/, 'command calls the shared resolver');
-  assert.doesNotMatch(html, /function resolveCatalogTarget/, 'no local catalog resolver copy');
-  assert.doesNotMatch(html, /function emptyCatalogTarget/, 'no local empty-target helper copy');
-  assert.doesNotMatch(html, /ardupilotmega/, 'catalog target resolution must not hardcode ardupilotmega');
-  assert.match(html, /if \(!target\.query\)/, 'empty catalog target must not fetch an invented dialect');
-});
-
-test('fillIdentitySelect is called to populate the identity select', () => {
+test('command catalog targeting delegates to the shared loader (no local copy)', () => {
+  // resolve → cache → getJSON → race guard lives in RED.mavlink.loadCatalog
+  // (proven in mavlink-editor-resource.test.js). Command must call it, not paste.
   assert.match(
     html,
-    /RED\.mavlink\.fillIdentitySelect\(/,
-    'fillIdentitySelect must be called'
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
+    'commands catalog uses shared loadCatalog'
+  );
+  assert.match(
+    html,
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/,
+    'messages catalog uses shared loadCatalog'
+  );
+  assert.doesNotMatch(html, /function resolveCatalogTarget/, 'no local catalog resolver copy');
+  assert.doesNotMatch(html, /\$\.getJSON\(\s*RED\.mavlink\.adminApiUrl\(\s*['"]\/mavlink\/(build\/messages|command\/commands)/,
+    'no hand-rolled dialect-catalog getJSON');
+  assert.doesNotMatch(html, /ardupilotmega/, 'catalog target resolution must not hardcode ardupilotmega');
+});
+
+test('refreshIdentitySelect is called to populate the identity select', () => {
+  assert.match(
+    html,
+    /RED\.mavlink\.refreshIdentitySelect\(node\)/,
+    'shared refreshIdentitySelect must be called'
   );
   assert.match(
     html,
     /\$\('#node-input-identity'\)/,
     'identity select must be referenced as #node-input-identity'
   );
-  assert.match(
-    html,
-    /saved:\s*node\.identity/,
-    'saved identity must be passed to fillIdentitySelect'
-  );
+  assert.doesNotMatch(html, /function refreshIdentitySelect/, 'no local identity-refresh copy');
 });
 
 test('refreshVisibility handles delivery and identity change events', () => {
@@ -346,13 +355,13 @@ test('companion identity hides target sysid/compid rows', () => {
   );
   assert.match(
     html,
-    /isCompanion\s*\?\s*'hide'\s*:\s*'show'/,
-    'target row hidden when companion identity selected'
+    /RED\.mavlink\.applyCompanionTargetVisibility\(/,
+    'shared companion target visibility helper is used'
   );
   assert.match(
     html,
-    /identityRole\(identityId\)/,
-    'identity role is checked via RED.mavlink.identityRole'
+    /combinedTargetRow:\s*['"]#row-cmd-target['"]/,
+    'command passes its combined target row'
   );
 });
 

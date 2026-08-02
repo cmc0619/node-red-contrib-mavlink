@@ -115,188 +115,70 @@
         RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
 
-      RED.mavlink = RED.mavlink || {};
-      if (!RED.mavlink.PAYLOAD_VERBS) {
-        RED.mavlink.PAYLOAD_VERBS = {
-          camera: [
-            { value: 'photo', label: 'Photo' },
-            { value: 'start-video', label: 'Start video' },
-            { value: 'stop-video', label: 'Stop video' },
-            { value: 'set-mode', label: 'Set mode' },
-            { value: 'trigger-distance', label: 'Trigger by distance' }
-          ],
-          gimbal: [
-            { value: 'aim', label: 'Aim' },
-            { value: 'set-mode', label: 'Set mode' },
-            { value: 'roi-set', label: 'ROI set' },
-            { value: 'roi-clear', label: 'ROI clear' }
-          ],
-          servo: [
-            { value: 'set', label: 'Set' },
-            { value: 'repeat', label: 'Repeat' }
-          ],
-          release: [
-            { value: 'gripper', label: 'Gripper' },
-            { value: 'winch', label: 'Winch' },
-            { value: 'parachute', label: 'Parachute' }
-          ]
-        };
-      }
-
-      function refreshVerbOptions(useSaved) {
-        var topic = $('#node-input-topic').val() || 'camera';
-        var verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
-        var $verb = $('#node-input-verb');
-        var saved = useSaved ? (node.verb || $verb.val()) : $verb.val();
-        $verb.empty();
-        for (var i = 0; i < verbs.length; i++) {
-          var entry = verbs[i];
-          $verb.append($('<option></option>').val(entry.value).text(entry.label));
-        }
-        var valid = verbs.some(function (v) { return v.value === saved; });
-        $verb.val(valid ? saved : (verbs[0] ? verbs[0].value : ''));
-      }
-
       $('#node-input-topic').on('change', function () {
-        refreshVerbOptions(false);
+        RED.mavlink.refreshVerbOptions();
         refreshCarrierRows();
       });
       $('#node-input-verb').on('change', refreshCarrierRows);
       $('#node-input-path').on('change', refreshCarrierRows);
-      refreshVerbOptions(true);
+      RED.mavlink.refreshVerbOptions({ saved: node.verb });
 
-      var _msgCatalogByKey = {};
-      var _msgRequestSeq = 0;
-      var _cmdCatalogByKey = {};
-      var _cmdRequestSeq = 0;
+      var _msgCatalog = { byKey: {}, seq: 0 };
+      var _cmdCatalog = { byKey: {}, seq: 0 };
 
       // Swarm's Build path is narrower than the shared rule: the Dialect picker
       // only governs when Delivery is Build AND Selection is an explicit list;
       // every other combination reads the connection's profile (§6). Feed that
-      // as the isBuild override into the shared resolver.
-      function swarmCatalogTarget() {
+      // as the isBuild override into the shared loadCatalog / resolver.
+      function swarmIsBuildList() {
         var delivery = $('#node-input-delivery').val() || 'build';
         var selectionMode = $('#node-input-selectionMode').val() || 'all';
-        var isBuildList = delivery === 'build' && selectionMode === 'list';
-        return RED.mavlink.resolveCatalogTarget({ isBuild: isBuildList });
+        return delivery === 'build' && selectionMode === 'list';
       }
 
       function loadMessagesCatalog(cb) {
-        var target = swarmCatalogTarget();
-        // Always advance the seq so an in-flight request for another Connection
-        // cannot overwrite this catalog after a cache hit.
-        var seq = ++_msgRequestSeq;
-        if (_msgCatalogByKey[target.key]) {
-          cb(_msgCatalogByKey[target.key]);
-          return;
-        }
-        if (!target.query) {
-          var emptyCatalog = { messages: [], enums: {}, dialect: '' };
-          _msgCatalogByKey[target.key] = emptyCatalog;
-          cb(emptyCatalog);
-          return;
-        }
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/build/messages'), target.query, function (data) {
-          if (seq !== _msgRequestSeq) return;
-          var catalog = {
-            messages: data.messages || [],
-            enums: data.enums || {},
-            dialect: data.dialect || target.dialect,
-          };
-          _msgCatalogByKey[target.key] = catalog;
-          cb(catalog);
-        }).fail(function () {
-          if (seq !== _msgRequestSeq) return;
-          cb({ messages: [], enums: {}, dialect: target.dialect });
+        RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
+          isBuild: swarmIsBuildList(),
+          listKey: 'messages'
         });
       }
 
       function buildVehicleTypeDropdown(catalog) {
         if (!catalog) return;
-        var entries = (catalog.enums && catalog.enums.MAV_TYPE) || [];
         var sel = $('#node-input-vehicleType');
-        var current = sel.val();
-        var saved = node.vehicleType !== undefined && node.vehicleType !== null
-          ? String(node.vehicleType)
-          : '';
-        var prefer = current || saved;
-
-        sel.empty();
-        sel.append($('<option></option>').val('').text('Any type'));
-        for (var i = 0; i < entries.length; i++) {
-          var entry = entries[i];
-          var $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
-          if (entry.description) $opt.attr('title', entry.description);
-          sel.append($opt);
-        }
-        if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
-          sel.append($('<option></option>').val(prefer).text('#' + prefer + ' (not in dialect)'));
-        }
-        if (prefer) sel.val(prefer);
-        function syncTypeTitle() {
-          var tip = sel.find('option:selected').attr('title') || '';
-          if (tip) sel.attr('title', tip);
-          else sel.removeAttr('title');
-        }
-        syncTypeTitle();
-        sel.off('change.mavTypeTip').on('change.mavTypeTip', syncTypeTitle);
+        var prefer = sel.val() || (
+          node.vehicleType !== undefined && node.vehicleType !== null
+            ? String(node.vehicleType)
+            : ''
+        );
+        RED.mavlink.fillEnumSelect(sel, (catalog.enums && catalog.enums.MAV_TYPE) || [], {
+          saved: prefer,
+          allowEmpty: true,
+          emptyLabel: 'Any type',
+          titleNamespace: 'mavTypeTip',
+          triggerChange: false
+        });
       }
 
       function loadCommandsCatalog(cb) {
-        var target = swarmCatalogTarget();
-        var seq = ++_cmdRequestSeq;
-        if (_cmdCatalogByKey[target.key]) {
-          cb(_cmdCatalogByKey[target.key]);
-          return;
-        }
-        if (!target.query) {
-          var emptyCatalog = { commands: [], enums: {}, dialect: '' };
-          _cmdCatalogByKey[target.key] = emptyCatalog;
-          cb(emptyCatalog);
-          return;
-        }
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
-          if (seq !== _cmdRequestSeq) return;
-          var catalog = {
-            commands: data.commands || [],
-            enums: data.enums || {},
-            dialect: data.dialect || target.dialect,
-          };
-          _cmdCatalogByKey[target.key] = catalog;
-          cb(catalog);
-        }).fail(function () {
-          if (seq !== _cmdRequestSeq) return;
-          cb({ commands: [], enums: {}, dialect: target.dialect });
+        RED.mavlink.loadCatalog('/mavlink/command/commands', _cmdCatalog, cb, {
+          isBuild: swarmIsBuildList(),
+          listKey: 'commands'
         });
       }
 
       function buildCommandDropdown(catalog) {
         var sel = $('#node-input-commandId');
-        var current = sel.val();
-        var saved = node.commandId !== undefined && node.commandId !== null
-          ? String(node.commandId)
-          : '';
-        var prefer = current || saved;
-
-        sel.empty();
-        for (var i = 0; i < (catalog.commands || []).length; i++) {
-          var entry = catalog.commands[i];
-          var $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
-          if (entry.description) $opt.attr('title', entry.description);
-          sel.append($opt);
-        }
-        if (prefer && !sel.find('option[value="' + prefer + '"]').length) {
-          sel.append($('<option></option>').val(prefer).text('#' + prefer + ' (not in dialect)'));
-        }
-        if (prefer) sel.val(prefer);
-        else if (catalog.commands && catalog.commands.length) sel.val(String(catalog.commands[0].value));
-        function syncCmdTitle() {
-          var tip = sel.find('option:selected').attr('title') || '';
-          if (tip) sel.attr('title', tip);
-          else sel.removeAttr('title');
-        }
-        syncCmdTitle();
-        sel.off('change.mavCmdTip').on('change.mavCmdTip', syncCmdTitle);
+        var prefer = sel.val() || (
+          node.commandId !== undefined && node.commandId !== null
+            ? String(node.commandId)
+            : ''
+        );
+        RED.mavlink.fillEnumSelect(sel, catalog.commands || [], {
+          saved: prefer,
+          titleNamespace: 'mavCmdTip',
+          triggerChange: false
+        });
       }
 
       function refreshVehicleTypeOptions() {
@@ -305,14 +187,6 @@
 
       function refreshCommandOptions() {
         loadCommandsCatalog(buildCommandDropdown);
-      }
-
-      function refreshIdentitySelect() {
-        var connId = $('#node-input-connection').val();
-        RED.mavlink.fillIdentitySelect($('#node-input-identity'), connId, {
-          rolesAllowed: ['gcs', 'custom'],
-          saved: node.identity
-        });
       }
 
       function refreshVisibility() {
@@ -353,7 +227,7 @@
       $('#node-input-connection').on('change', function () {
         refreshVehicleTypeOptions();
         refreshCommandOptions();
-        refreshIdentitySelect();
+        RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: ['gcs', 'custom'] });
         refreshVisibility();
       });
       $('#node-input-delivery').on('change', refreshCatalogsAndVisibility);
@@ -379,7 +253,7 @@
       refreshCarrierRows();
       refreshVehicleTypeOptions();
       refreshCommandOptions();
-      refreshIdentitySelect();
+      RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: ['gcs', 'custom'] });
       refreshVisibility();
     }
   });

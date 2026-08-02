@@ -93,41 +93,7 @@
         RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
 
-      if (RED.mavlink && RED.mavlink.fillIdentitySelect) {
-        RED.mavlink.fillIdentitySelect(
-          $('#node-input-identity'),
-          node.connection,
-          { saved: node.identity }
-        );
-      }
-
-      RED.mavlink = RED.mavlink || {};
-      if (!RED.mavlink.PAYLOAD_VERBS) {
-        RED.mavlink.PAYLOAD_VERBS = {
-          camera: [
-            { value: 'photo', label: 'Photo' },
-            { value: 'start-video', label: 'Start video' },
-            { value: 'stop-video', label: 'Stop video' },
-            { value: 'set-mode', label: 'Set mode' },
-            { value: 'trigger-distance', label: 'Trigger by distance' }
-          ],
-          gimbal: [
-            { value: 'aim', label: 'Aim' },
-            { value: 'set-mode', label: 'Set mode' },
-            { value: 'roi-set', label: 'ROI set' },
-            { value: 'roi-clear', label: 'ROI clear' }
-          ],
-          servo: [
-            { value: 'set', label: 'Set' },
-            { value: 'repeat', label: 'Repeat' }
-          ],
-          release: [
-            { value: 'gripper', label: 'Gripper' },
-            { value: 'winch', label: 'Winch' },
-            { value: 'parachute', label: 'Parachute' }
-          ]
-        };
-      }
+      RED.mavlink.refreshIdentitySelect(node);
 
       var PAYLOAD_ENUM_NAMES = [
         'CAMERA_MODE',
@@ -284,21 +250,11 @@
       }
 
       function fillSelect($select, entries, saved, emptyLabel) {
-        if (RED.mavlink && typeof RED.mavlink.fillEnumSelect === 'function') {
-          RED.mavlink.fillEnumSelect($select, entries, {
-            allowEmpty: true,
-            emptyLabel: emptyLabel || '\u2014',
-            saved: saved
-          });
-          return;
-        }
-        $select.empty();
-        $select.append($('<option></option>').val('').text(emptyLabel || '\u2014'));
-        for (var i = 0; i < entries.length; i++) {
-          var entry = entries[i];
-          $select.append($('<option></option>').val(String(entry.value)).text(entry.label || (entry.name + ' (' + entry.value + ')')));
-        }
-        if (saved !== undefined && saved !== null && saved !== '') $select.val(String(saved));
+        RED.mavlink.fillEnumSelect($select, entries, {
+          allowEmpty: true,
+          emptyLabel: emptyLabel || '\u2014',
+          saved: saved
+        });
       }
 
       /**
@@ -316,8 +272,14 @@
         var isBuild = delivery === 'build';
         var isWire = !isBuild;
         var dialectVal = $('#node-input-dialect').val() || '';
-        var identityId = isWire ? $('#node-input-identity').val() : '';
-        var isCompanion = isWire && RED.mavlink.identityRole(identityId) === 'companion';
+        // Companion hides sysid; payload compid stays visible (compidFromConfig).
+        var tgt = RED.mavlink.applyCompanionTargetVisibility({
+          isBuild: isBuild,
+          identityId: isWire ? $('#node-input-identity').val() : '',
+          hideCompidWhenCompanion: false,
+          targetSystemRow: '#row-payload-targetSystem',
+          targetComponentRow: '#row-payload-targetComponent',
+        });
         var isManager = topic === 'gimbal' && verb === 'aim' && path === 'manager';
 
         RED.mavlink.applyBuildTierRowVisibility({
@@ -333,9 +295,8 @@
           identity: isWire,
           timeout: isWire,
           maxRetries: isWire,
-          /* target addressing: companion hides sysid; payload compid stays visible always */
-          targetSystem: isBuild || !isCompanion,
-          targetComponent: true,
+          targetSystem: tgt.targetSystem,
+          targetComponent: tgt.targetComponent,
           /* camera */
           cameraId:        (topic === 'camera' && (verb === 'photo' || verb === 'set-mode')),
           count:           (topic === 'camera' && verb === 'photo') || (topic === 'servo' && verb === 'repeat'),
@@ -376,8 +337,6 @@
         $('#row-payload-identity').toggle(!!show.identity);
         $('#row-payload-timeout').toggle(!!show.timeout);
         $('#row-payload-maxRetries').toggle(!!show.maxRetries);
-        $('#row-payload-targetSystem').toggle(!!show.targetSystem);
-        $('#row-payload-targetComponent').toggle(!!show.targetComponent);
         $('#row-payload-cameraId').toggle(!!show.cameraId);
         $('#row-payload-count').toggle(!!show.count);
         $('#row-payload-interval').toggle(!!show.interval);
@@ -456,20 +415,6 @@
         });
       }
 
-      function refreshVerbOptions(useSaved) {
-        var topic = $('#node-input-topic').val() || 'camera';
-        var verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
-        var $verb = $('#node-input-verb');
-        var saved = useSaved ? (node.verb || $verb.val()) : $verb.val();
-        $verb.empty();
-        for (var i = 0; i < verbs.length; i++) {
-          var entry = verbs[i];
-          $verb.append($('<option></option>').val(entry.value).text(entry.label));
-        }
-        var valid = verbs.some(function (v) { return v.value === saved; });
-        $verb.val(valid ? saved : (verbs[0] ? verbs[0].value : ''));
-      }
-
       function resetEnumCatalog() {
         enumCatalog = { enums: {} };
         enumCatalogLoaded = false;
@@ -478,7 +423,7 @@
       }
 
       $('#node-input-topic').on('change', function () {
-        refreshVerbOptions(false);
+        RED.mavlink.refreshVerbOptions();
         refreshEnumControls();
       });
       $('#node-input-verb').on('change', refreshEnumControls);
@@ -501,48 +446,36 @@
       }
       $('#node-input-carrier').on('change', refreshFrameRow);
       refreshFrameRow();
-      function reloadTargetCompId() {
-        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
-        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
-          initialSaved: node.targetComponent
-        });
-      }
       $('#node-input-delivery').on('change', function () {
         resetEnumCatalog();
         refreshEnumControls();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-identity').on('change', refreshVisibility);
       $('#node-input-connection').on('change', function () {
         resetEnumCatalog();
-        if (RED.mavlink && RED.mavlink.fillIdentitySelect) {
-          RED.mavlink.fillIdentitySelect(
-            $('#node-input-identity'),
-            $(this).val(),
-            { saved: node.identity }
-          );
-        }
+        RED.mavlink.refreshIdentitySelect(node);
         refreshEnumControls();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-vehicle').on('change', function () {
         resetEnumCatalog();
         refreshEnumControls();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       var $dialect = $('#node-input-dialect');
       $dialect.on('change', function () {
         resetEnumCatalog();
         refreshEnumControls();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       RED.mavlink.populateDialectSelect($dialect, {
         saved: node.dialect || '',
         includeVehicleEscape: true
       });
-      refreshVerbOptions(true);
+      RED.mavlink.refreshVerbOptions({ saved: node.verb });
       refreshEnumControls();
-      reloadTargetCompId();
+      RED.mavlink.reloadTargetCompId(node);
     }
   });
 </script>

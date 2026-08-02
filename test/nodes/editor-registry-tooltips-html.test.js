@@ -26,20 +26,23 @@ test('fillEnumSelect applies entry.description as option title', () => {
   assert.match(resourceScript, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
 });
 
-test('Build message and MAV_CMD selects title from catalog descriptions', () => {
+test('Build message and MAV_CMD selects title via shared fillEnumSelect', () => {
   const html = readHtml('mavlink-build');
-  assert.match(html, /if \(m\.description\) \$opt\.attr\('title', m\.description\)/);
-  assert.match(html, /if \(c\.description\) \$opt\.attr\('title', c\.description\)/);
-  assert.match(html, /function syncMsgTitle/);
-  assert.match(html, /function syncCmdTitle/);
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(sel,/);
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(cmdSel,/);
+  assert.match(html, /titleNamespace:\s*'mavmsgTip'/);
+  assert.match(html, /titleNamespace:\s*'mavcmd'/);
+  assert.match(html, /change\.mavmsgForm/, 'field-form rebuild uses a distinct change namespace');
   // Field controls already use spec.description (pre-existing).
-  assert.match(html, /\.attr\('title',\s*(?:multi \? bitmaskTitle\(spec\.description\) : \(spec\.description \|\| ''\))/);
+  assert.match(html, /\.attr\('title',\s*(?:multi \? RED\.mavlink\.bitmaskTitle\(spec\.description\) : \(spec\.description \|\| ''\))/);
+  assert.doesNotMatch(html, /\(missing\)/, 'Build uses the shared not-in-dialect sentinel wording');
 });
 
 test('Command Advanced MAV_CMD select and enum options use catalog descriptions', () => {
   const html = readHtml('mavlink-command');
-  assert.match(html, /if \(c\.description\) \$opt\.attr\('title', c\.description\)/);
-  assert.match(html, /function syncAdvancedTitle/);
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(sel,\s*catalog\.commands/);
+  assert.match(html, /titleNamespace:\s*'mavCmdTip'/);
+  assert.match(html, /RED\.mavlink\.bindSelectTitleSync\(sel,\s*\{\s*namespace:\s*'mavPresetTip'/);
   assert.match(html, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
   assert.match(html, /catalogParamByIndex/);
   // Preset rows merge the whole catalog param spec (description included) and
@@ -48,15 +51,36 @@ test('Command Advanced MAV_CMD select and enum options use catalog descriptions'
   assert.match(html, /spec\.description \|\| ''/);
 });
 
-test('In / Swarm message and command selects use catalog descriptions', () => {
+test('In / Swarm message and command selects use shared fillEnumSelect', () => {
   const inn = readHtml('mavlink-in');
-  assert.match(inn, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
-  assert.match(inn, /function syncMessageTitle/);
+  assert.match(inn, /RED\.mavlink\.fillEnumSelect\(sel,/);
+  assert.match(inn, /titleNamespace:\s*'mavMsgTip'/);
+  assert.doesNotMatch(inn, /function syncMessageTitle/);
 
   const swarm = readHtml('mavlink-swarm');
-  assert.match(swarm, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
-  assert.match(swarm, /function syncCmdTitle/);
-  assert.match(swarm, /function syncTypeTitle/);
+  assert.match(swarm, /RED\.mavlink\.fillEnumSelect\(sel,/);
+  assert.match(swarm, /titleNamespace:\s*'mavCmdTip'/);
+  assert.match(swarm, /titleNamespace:\s*'mavTypeTip'/);
+  assert.doesNotMatch(swarm, /function syncCmdTitle|function syncTypeTitle/);
+});
+
+test('select title-sync and missing-option sentinel live once in the resource', () => {
+  assert.match(resourceScript, /RED\.mavlink\.bindSelectTitleSync\s*=/);
+  assert.match(resourceScript, /RED\.mavlink\.ensureSavedEnumOption\s*=/);
+  assert.match(resourceScript, /#.*\(not in dialect\)/);
+  // Namespace is concatenated (`'change.' + ns`); default ns is mavEnumTip.
+  assert.match(resourceScript, /off\('change\.' \+ ns\)\.on\('change\.' \+ ns/);
+  assert.match(resourceScript, /namespace \|\| 'mavEnumTip'/);
+});
+
+test('queue band picker and companion target visibility live once in the resource', () => {
+  assert.match(resourceScript, /RED\.mavlink\.BAND_OPTIONS\s*=/);
+  assert.match(resourceScript, /RED\.mavlink\.fillBandSelect\s*=/);
+  assert.match(resourceScript, /RED\.mavlink\.applyCompanionTargetVisibility\s*=/);
+  assert.match(resourceScript, /hideCompidWhenCompanion/);
+  const out = readHtml('mavlink-out');
+  assert.match(out, /RED\.mavlink\.fillBandSelect\(/);
+  assert.doesNotMatch(out, /BAND_OPTIONS\s*=/);
 });
 
 test('Param node titles come from loaded param defs, not baked HTML', () => {
@@ -139,7 +163,7 @@ test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
   // scrape a form that never rendered — saved params survive.
   assert.match(html, /_mavParamsRendered = false/, 'render pass starts unrendered');
   assert.match(html, /_mavParamsRendered = true/, 'real renders mark the form scrapable');
-  assert.match(html, /\+\+_catalogRequestSeq;/);
+  assert.match(html, /RED\.mavlink\.loadCatalog\(/, 'catalog loads go through the shared helper');
 
   // Execute the actual oneditsave body, not just its source text: extract it
   // from the registration and run it against a node object (widget
@@ -172,15 +196,14 @@ test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
 
 test('Command catalog loads coalesce waiters per target key', () => {
   const html = readHtml('mavlink-command');
-  assert.match(html, /_catalogInflight/);
-  // Second consumer for the same key joins the in-flight queue (no second HTTP).
-  assert.match(html, /_catalogInflight\[requestedKey\]\.push\(cb\)/);
-  // Both waiters receive the resolved catalog (CodeRabbit #36 concurrent consumers).
+  // Coalesce is the cache bag's `inflight` map — behaviour proven once in
+  // mavlink-editor-resource.test.js against RED.mavlink.loadCatalog.
   assert.match(
     html,
-    /for \(let i = 0; i < waiters\.length; i\+\+\) waiters\[i\]\(catalog\)/
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
+    'commands catalog uses the shared loader'
   );
-  assert.match(html, /resolveCatalogTarget\(\)\.key !== requestedKey/);
+  assert.match(html, /inflight:\s*\{\s*\}/, 'commands cache bag enables coalesce waiters');
 });
 
 test('Command reapplies preset option tips when Connection / Vehicle changes', () => {

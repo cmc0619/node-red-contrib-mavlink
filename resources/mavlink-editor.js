@@ -10,9 +10,12 @@
  *
  * This is the browser (editor) half of the toolkit. It owns the config-node
  * picker, the enum/dialect catalog helpers, the role × tier matrix source
- * (`resolveCatalogTarget`), and the shared Build-tier dialect/vehicle/firmware
- * default descriptors + validators (`buildTierDialectDefaults`). Local-Identity
- * keeps only its role presets and identity-specific validators.
+ * (`resolveCatalogTarget`), the shared catalog fetch (`loadCatalog`), Target
+ * CompID reload (`reloadTargetCompId`), the payload verb catalog
+ * (`PAYLOAD_VERBS` / `refreshVerbOptions`), bitmask select helpers, and the
+ * Build-tier dialect/vehicle/firmware default descriptors + validators
+ * (`buildTierDialectDefaults`). Local-Identity keeps only its role presets and
+ * identity-specific validators.
  */
 (function () {
   RED.mavlink = RED.mavlink || {};
@@ -70,13 +73,98 @@
 
   /**
    * Shared enum option label. Server catalogs should already include labels,
-   * but local/generated entries use the same §6 NAME (value) format.
+   * but local/generated entries use the same §6 NAME (value) format
+   * (Node twin: `lib/metadata/commands-list.js` `enumOptionLabel`).
    *
    * @param {{name: string, value: number|string}} entry
    * @returns {string}
    */
   RED.mavlink.enumOptionLabel = function (entry) {
     return entry.name + ' (' + entry.value + ')';
+  };
+
+  /**
+   * Outbound queue band picker options (DESIGN.md §7). Editor-side copy of
+   * `lib/connection/bands` names — browser HTML cannot require() the module.
+   * Labels are Title Case (`Emergency (0)`), not screaming-snake enum names.
+   */
+  RED.mavlink.BAND_OPTIONS = [
+    { value: '0', label: 'Emergency (0)' },
+    { value: '1', label: 'Liveness (1)' },
+    { value: '2', label: 'Control (2)' },
+    { value: '3', label: 'Streaming (3)' },
+    { value: '4', label: 'Bulk (4)' },
+  ];
+
+  /**
+   * Fill `#node-input-band` from {@link RED.mavlink.BAND_OPTIONS}.
+   *
+   * @param {object} $select  jQuery select
+   * @param {string|number|undefined|null} saved
+   */
+  RED.mavlink.fillBandSelect = function ($select, saved) {
+    $select.empty();
+    RED.mavlink.BAND_OPTIONS.forEach(function (opt) {
+      $('<option></option>').val(opt.value).text(opt.label).appendTo($select);
+    });
+    $select.val(saved !== undefined && saved !== null ? String(saved) : '2');
+  };
+
+  /**
+   * Editor-side copy of lib/payload `PAYLOAD_VERBS`. Client HTML cannot
+   * require() the Node module, so the topic→verb catalog lives once here —
+   * Payload and Swarm both read it. Pinned against the lib table by test.
+   */
+  RED.mavlink.PAYLOAD_VERBS = {
+    camera: [
+      { value: 'photo', label: 'Photo' },
+      { value: 'start-video', label: 'Start video' },
+      { value: 'stop-video', label: 'Stop video' },
+      { value: 'set-mode', label: 'Set mode' },
+      { value: 'trigger-distance', label: 'Trigger by distance' }
+    ],
+    gimbal: [
+      { value: 'aim', label: 'Aim' },
+      { value: 'set-mode', label: 'Set mode' },
+      { value: 'roi-set', label: 'ROI set' },
+      { value: 'roi-clear', label: 'ROI clear' }
+    ],
+    servo: [
+      { value: 'set', label: 'Set' },
+      { value: 'repeat', label: 'Repeat' }
+    ],
+    release: [
+      { value: 'gripper', label: 'Gripper' },
+      { value: 'winch', label: 'Winch' },
+      { value: 'parachute', label: 'Parachute' }
+    ]
+  };
+
+  /**
+   * Rebuild `#node-input-verb` options for the selected topic from
+   * `PAYLOAD_VERBS`. When `opts.saved` is provided (dialog open), prefer it
+   * over the live select value; otherwise keep the current selection if still
+   * valid for the new topic.
+   *
+   * @param {{saved?: string, topicSelector?: string, verbSelector?: string}} [opts]
+   */
+  RED.mavlink.refreshVerbOptions = function (opts) {
+    opts = opts || {};
+    var topicSelector = opts.topicSelector || '#node-input-topic';
+    var verbSelector = opts.verbSelector || '#node-input-verb';
+    var topic = $(topicSelector).val() || 'camera';
+    var $verb = $(verbSelector);
+    var verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
+    var saved = Object.prototype.hasOwnProperty.call(opts, 'saved')
+      ? (opts.saved || $verb.val())
+      : $verb.val();
+    $verb.empty();
+    for (var i = 0; i < verbs.length; i++) {
+      var entry = verbs[i];
+      $verb.append($('<option></option>').val(entry.value).text(entry.label));
+    }
+    var valid = verbs.some(function (v) { return v.value === saved; });
+    $verb.val(valid ? saved : (verbs[0] ? verbs[0].value : ''));
   };
 
   /**
@@ -94,6 +182,60 @@
    */
   RED.mavlink.payloadVerbIgnoresCarrier = function (topic, verb, path) {
     return topic === 'gimbal' && verb === 'aim' && (path || 'legacy') === 'manager';
+  };
+
+  /**
+   * Title text for a multi-select bitmask control (Ctrl/Cmd-click hint).
+   * @param {string} [description]
+   * @returns {string}
+   */
+  RED.mavlink.bitmaskTitle = function (description) {
+    var base = description || 'Bitmask flags';
+    return base + ' (Ctrl/Cmd-click to select multiple flags.)';
+  };
+
+  /**
+   * Display label for a FALSE/TRUE enum entry (`false` / `true`); otherwise
+   * the entry's catalog label or name.
+   * @param {{name?: string, label?: string}} entry
+   * @returns {string}
+   */
+  RED.mavlink.booleanEntryLabel = function (entry) {
+    var name = entry && entry.name ? entry.name : '';
+    if (name === 'FALSE' || name.slice(-6) === '_FALSE') return 'false';
+    if (name === 'TRUE' || name.slice(-5) === '_TRUE') return 'true';
+    return (entry && entry.label) || name;
+  };
+
+  /**
+   * Which bitmask option values are set in `saved` (numeric mask).
+   * @param {string|number|null|undefined} saved
+   * @param {Array<{value: string|number}>} entries
+   * @returns {string[]}
+   */
+  RED.mavlink.selectedBitmaskValues = function (saved, entries) {
+    if (saved === undefined || saved === null || saved === '') return [];
+    var mask;
+    try {
+      mask = BigInt(String(saved));
+    } catch (_e) {
+      return [];
+    }
+    var selected = [];
+    var list = entries || [];
+    for (var i = 0; i < list.length; i++) {
+      var entry = list[i];
+      var value;
+      try {
+        value = BigInt(String(entry.value));
+      } catch (_e2) {
+        continue;
+      }
+      if ((value === 0n && mask === 0n) || (value !== 0n && (mask & value) === value)) {
+        selected.push(String(entry.value));
+      }
+    }
+    return selected;
   };
 
   /**
@@ -451,6 +593,56 @@
   };
 
   /**
+   * Label for a saved select value that is not in the current dialect catalog.
+   * One wording — `#N (not in dialect)` — for numeric ids and message names.
+   *
+   * @param {string|number} saved
+   * @returns {string}
+   */
+  RED.mavlink.missingEnumOptionLabel = function (saved) {
+    return '#' + String(saved) + ' (not in dialect)';
+  };
+
+  /**
+   * Append a sentinel option when `saved` is non-empty and absent from `$select`.
+   *
+   * @param {object} $select  jQuery select
+   * @param {string|number|null|undefined} saved
+   * @returns {boolean} true when a sentinel was appended
+   */
+  RED.mavlink.ensureSavedEnumOption = function ($select, saved) {
+    if (saved === undefined || saved === null || saved === '') return false;
+    var value = String(saved);
+    if ($select.find('option[value="' + value + '"]').length) return false;
+    $select.append(
+      $('<option></option>').val(value).text(RED.mavlink.missingEnumOptionLabel(value))
+    );
+    return true;
+  };
+
+  /**
+   * Keep a select's `title` in sync with the selected option's dialect
+   * description (§6). Canonical home for the tip-sync idiom used by
+   * `fillEnumSelect` and every catalog-backed dropdown.
+   *
+   * @param {object} $select  jQuery select
+   * @param {{namespace?: string}} [opts]  change-event namespace (default mavEnumTip)
+   * @returns {function(): void} sync function (for manual re-sync)
+   */
+  RED.mavlink.bindSelectTitleSync = function ($select, opts) {
+    opts = opts || {};
+    var ns = opts.namespace || 'mavEnumTip';
+    function sync() {
+      var tip = $select.find('option:selected').attr('title') || '';
+      if (tip) $select.attr('title', tip);
+      else $select.removeAttr('title');
+    }
+    $select.off('change.' + ns).on('change.' + ns, sync);
+    sync();
+    return sync;
+  };
+
+  /**
    * Fill a select from enum entries. Option values are numeric strings so
    * node configs save MAVLink enum ids, not localized labels.
    *
@@ -475,25 +667,16 @@
       if (entry.description) $opt.attr('title', entry.description);
       $select.append($opt);
     });
-    // Select tooltip follows the selected entry's dialect description (§6).
-    function syncEnumSelectTitle() {
-      var tip = $select.find('option:selected').attr('title') || '';
-      if (tip) $select.attr('title', tip);
-      else $select.removeAttr('title');
-    }
-    $select.off('change.mavEnumTip').on('change.mavEnumTip', syncEnumSelectTitle);
-    if (saved && !$select.find('option[value="' + saved + '"]').length) {
-      $select.append($('<option></option>').val(saved).text('#' + saved + ' (not in dialect)'));
-    }
+    RED.mavlink.ensureSavedEnumOption($select, saved);
     if (saved || opts.allowEmpty) {
       $select.val(saved);
     } else if (entries && entries.length) {
       $select.val(String(entries[0][valueKey]));
     }
-    syncEnumSelectTitle();
+    RED.mavlink.bindSelectTitleSync($select, { namespace: opts.titleNamespace || 'mavEnumTip' });
     // Node-RED attaches change→validateNodeEditor before oneditprepare; async
     // fills must re-fire change or a pre-fill `input-error` sticks (§6).
-    if (typeof $select.trigger === 'function') {
+    if (opts.triggerChange !== false && typeof $select.trigger === 'function') {
       $select.trigger('change');
     }
   };
@@ -613,6 +796,130 @@
   };
 
   /**
+   * Reload the Target CompID select for a palette node. Thin defaulting wrapper
+   * over `reloadCompIdSelect` — Command uses `field:'targetCompid'`; everyone
+   * else keeps the default `targetComponent`.
+   *
+   * @param {object} node
+   * @param {{field?: string, selector?: string, emptyLabel?: string}} [opts]
+   */
+  RED.mavlink.reloadTargetCompId = function (node, opts) {
+    opts = opts || {};
+    var field = opts.field || 'targetComponent';
+    var selector = opts.selector || ('#node-input-' + field);
+    RED.mavlink.reloadCompIdSelect($(selector), {
+      initialSaved: node[field],
+      emptyLabel: opts.emptyLabel,
+    });
+  };
+
+  /**
+   * Shared dialect catalog fetch: resolve target → cache → getJSON → race guard.
+   *
+   * Caller owns the cache bag:
+   *   `{ byKey: {}, seq: 0 }`                          — seq-guarded (default)
+   *   `{ byKey: {}, seq: 0, inflight: {} }`             — coalesce waiters per key
+   *                                                      (Command Advanced; Greptile #36)
+   *
+   * @param {string} endpoint  admin path (`/mavlink/build/messages` or
+   *   `/mavlink/command/commands`)
+   * @param {{byKey: Object, seq: number, inflight?: Object}} cache
+   * @param {function(object):void} cb
+   * @param {object} [opts]
+   * @param {boolean} [opts.isBuild]  resolveCatalogTarget override
+   * @param {object} [opts.resolve]   full resolveCatalogTarget opts (wins over isBuild)
+   * @param {'messages'|'commands'} [opts.listKey]  empty/success list property
+   * @param {function(string):void} [opts.onKey]    active-key side effect
+   */
+  RED.mavlink.loadCatalog = function (endpoint, cache, cb, opts) {
+    opts = opts || {};
+    cb = typeof cb === 'function' ? cb : function () {};
+    cache = cache || {};
+    if (!cache.byKey) cache.byKey = {};
+    if (typeof cache.seq !== 'number') cache.seq = 0;
+
+    var listKey = opts.listKey
+      || (String(endpoint).indexOf('/messages') !== -1 ? 'messages' : 'commands');
+    var resolveOpts = opts.resolve
+      || (typeof opts.isBuild === 'boolean' ? { isBuild: opts.isBuild } : {});
+    var target = RED.mavlink.resolveCatalogTarget(resolveOpts);
+    var requestedKey = target.key;
+    var coalesce = !!cache.inflight;
+
+    // Bump before cache-hit return so an in-flight request for a prior target
+    // cannot overwrite after a later call resolved from cache (Swarm/In).
+    cache.seq += 1;
+    var seq = cache.seq;
+
+    function emptyShape(dialect, error) {
+      var catalog = { enums: {}, dialect: dialect || '' };
+      catalog[listKey] = [];
+      if (error !== undefined) catalog.error = error;
+      return catalog;
+    }
+
+    function fromData(data) {
+      var catalog = emptyShape(data.dialect || target.dialect);
+      catalog[listKey] = data[listKey] || [];
+      catalog.enums = data.enums || {};
+      return catalog;
+    }
+
+    function activate(catalog) {
+      if (typeof opts.onKey === 'function') opts.onKey(requestedKey);
+      cb(catalog);
+    }
+
+    if (cache.byKey[requestedKey]) {
+      activate(cache.byKey[requestedKey]);
+      return;
+    }
+    if (!target.query) {
+      var emptyCatalog = emptyShape('');
+      cache.byKey[requestedKey] = emptyCatalog;
+      activate(emptyCatalog);
+      return;
+    }
+
+    if (coalesce) {
+      if (!cache.inflight[requestedKey]) {
+        cache.inflight[requestedKey] = [];
+        $.getJSON(RED.mavlink.adminApiUrl(endpoint), target.query, function (data) {
+          var waiters = cache.inflight[requestedKey] || [];
+          delete cache.inflight[requestedKey];
+          var catalog = fromData(data || {});
+          cache.byKey[requestedKey] = catalog;
+          // Drop waiters when the editor target moved (do not cancel sibling
+          // consumers of the same key — Greptile #36).
+          if (RED.mavlink.resolveCatalogTarget(resolveOpts).key !== requestedKey) return;
+          if (typeof opts.onKey === 'function') opts.onKey(requestedKey);
+          for (var i = 0; i < waiters.length; i++) waiters[i](catalog);
+        }).fail(function (_xhr, _status, err) {
+          var waiters = cache.inflight[requestedKey] || [];
+          delete cache.inflight[requestedKey];
+          if (RED.mavlink.resolveCatalogTarget(resolveOpts).key !== requestedKey) return;
+          if (typeof opts.onKey === 'function') opts.onKey(requestedKey);
+          var failed = emptyShape(target.dialect, String(err || 'load failed'));
+          for (var j = 0; j < waiters.length; j++) waiters[j](failed);
+        });
+      }
+      cache.inflight[requestedKey].push(cb);
+      return;
+    }
+
+    $.getJSON(RED.mavlink.adminApiUrl(endpoint), target.query, function (data) {
+      if (seq !== cache.seq) return;
+      var catalog = fromData(data || {});
+      cache.byKey[requestedKey] = catalog;
+      activate(catalog);
+    }).fail(function (_xhr, _status, err) {
+      if (seq !== cache.seq) return;
+      // Failures are not cached — a later open can retry.
+      activate(emptyShape(target.dialect, String(err || 'load failed')));
+    });
+  };
+
+  /**
    * Normalized role of a Local Identity config node, editor-side.
    * Unknown / unset resolves to 'gcs' (show-everything shape).
    *
@@ -676,6 +983,25 @@
     var selected = eligible ? opts.saved : (options.length ? options[0].id : '');
     $select.val(selected);
     return selected;
+  };
+
+  /**
+   * Reload the send-as identity select from the live Connection picker.
+   * Thin defaulting wrapper over `fillIdentitySelect` — Swarm passes
+   * `rolesAllowed: ['gcs','custom']`; everyone else keeps the full set.
+   *
+   * @param {object} node
+   * @param {{rolesAllowed?: string[], connectionSelector?: string, identitySelector?: string}} [opts]
+   * @returns {string} selected identity id
+   */
+  RED.mavlink.refreshIdentitySelect = function (node, opts) {
+    opts = opts || {};
+    var connectionId = $(opts.connectionSelector || '#node-input-connection').val() || '';
+    return RED.mavlink.fillIdentitySelect(
+      $(opts.identitySelector || '#node-input-identity'),
+      connectionId,
+      { saved: node.identity, rolesAllowed: opts.rolesAllowed }
+    );
   };
 
   /**
@@ -790,5 +1116,42 @@
     toggle(opts.vehicleRow, isBuild && dialect === '__vehicle');
     toggle(opts.firmwareRow, isBuild && !!dialect && dialect !== '__vehicle');
     toggle(opts.connectionRow, !isBuild);
+  };
+
+  /**
+   * §6 companion Send-as identity hides target addressing rows on wire tiers.
+   * Build always shows them (must stamp targets). Payload passes
+   * `hideCompidWhenCompanion: false` — compid addresses a payload device.
+   *
+   * @param {object} opts
+   * @param {boolean} opts.isBuild
+   * @param {string} [opts.identityId='']
+   * @param {boolean} [opts.hideCompidWhenCompanion=true]
+   * @param {string} [opts.combinedTargetRow]  single sysid+compid row (Command)
+   * @param {string} [opts.targetSystemRow]
+   * @param {string} [opts.targetComponentRow]
+   * @returns {{isCompanion: boolean, targetSystem: boolean, targetComponent: boolean}}
+   */
+  RED.mavlink.applyCompanionTargetVisibility = function (opts) {
+    opts = opts || {};
+    var isBuild = !!opts.isBuild;
+    var identityId = opts.identityId != null ? opts.identityId : '';
+    var hideCompid = opts.hideCompidWhenCompanion !== false;
+    var isCompanion = !isBuild && RED.mavlink.identityRole(identityId) === 'companion';
+    var targetSystem = isBuild || !isCompanion;
+    var targetComponent = hideCompid ? (isBuild || !isCompanion) : true;
+    function toggle(selector, shown) {
+      if (!selector) return;
+      var $el = $(selector);
+      if ($el && $el.length) $el.toggle(!!shown);
+    }
+    if (opts.combinedTargetRow) toggle(opts.combinedTargetRow, targetSystem);
+    toggle(opts.targetSystemRow, targetSystem);
+    toggle(opts.targetComponentRow, targetComponent);
+    return {
+      isCompanion: isCompanion,
+      targetSystem: targetSystem,
+      targetComponent: targetComponent,
+    };
   };
 })();
