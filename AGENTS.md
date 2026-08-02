@@ -14,10 +14,11 @@ and update the spec in the same PR. When you find a stale or incorrect statement
 **Session lessons belong in files, not in chat.** Toolkit lessons — every displaced belief,
 measured fact, or working reference that changes how the toolkit must be built — are written
 into the affected `DESIGN.md` section plus a §14 ground-truth entry. MAVLink protocol lessons
-go into `MAVLINK.md` (create it if absent), and **only when sure**: a protocol entry requires
-confirmation against the dialect XML or measured on-wire behavior (§14), never inference from
-reading someone else's code. Write entries before the PR is considered ready. The next agent
-will not see this conversation.
+go into `MAVLINK.md` (create it if absent), and **only when sure**: phone a friend first —
+form the hypothesis from the reference implementations (pymavlink, MAVSDK, the GCS codebases,
+and above all the ArduPilot and PX4 source trees) — then confirm it against the dialect XML or
+measured on-wire behavior (§14) before writing the entry. Write entries before the PR is
+considered ready. The next agent will not see this conversation.
 
 **Reference implementations: trusted starting points, not ground truth.** pymavlink, MAVSDK,
 and the GCS codebases (Mission Planner, QGroundControl, MAVProxy) are established,
