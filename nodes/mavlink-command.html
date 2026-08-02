@@ -562,41 +562,6 @@
         return label;
       }
 
-      function bitmaskTitle(description) {
-        const base = description || 'Bitmask flags';
-        return base + ' (Ctrl/Cmd-click to select multiple flags.)';
-      }
-
-      function booleanEntryLabel(entry) {
-        const name = entry && entry.name ? entry.name : '';
-        if (name === 'FALSE' || name.slice(-6) === '_FALSE') return 'false';
-        if (name === 'TRUE' || name.slice(-5) === '_TRUE') return 'true';
-        return entry.label || name;
-      }
-
-      function selectedBitmaskValues(saved, entries) {
-        if (saved === undefined || saved === null || saved === '') return [];
-        let mask;
-        try {
-          mask = BigInt(String(saved));
-        } catch (_e) {
-          return [];
-        }
-        const selected = [];
-        for (const entry of entries) {
-          let value;
-          try {
-            value = BigInt(String(entry.value));
-          } catch (_e) {
-            continue;
-          }
-          if ((value === 0n && mask === 0n) || (value !== 0n && (mask & value) === value)) {
-            selected.push(String(entry.value));
-          }
-        }
-        return selected;
-      }
-
       /**
        * Build the input control for one Advanced param: enum= → <select>,
        * otherwise a number field with units/range as constraints (§6).
@@ -613,19 +578,19 @@
           const sel = $('<select class="param-input"></select>')
             .attr('data-idx', spec.index)
             .attr('data-kind', falseTrue ? 'enum' : (isBitmask ? 'bitmask' : 'enum'))
-            .attr('title', isBitmask ? bitmaskTitle(spec.description) : (spec.description || ''));
+            .attr('title', isBitmask ? RED.mavlink.bitmaskTitle(spec.description) : (spec.description || ''));
           if (isBitmask) {
             sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
           } else {
             sel.append($('<option></option>').val('').text('\u2014'));
           }
           for (const entry of entries) {
-            const $opt = $('<option></option>').val(String(entry.value)).text(falseTrue ? booleanEntryLabel(entry) : entry.label);
+            const $opt = $('<option></option>').val(String(entry.value)).text(falseTrue ? RED.mavlink.booleanEntryLabel(entry) : entry.label);
             if (entry.description) $opt.attr('title', entry.description);
             sel.append($opt);
           }
           if (isBitmask) {
-            sel.val(selectedBitmaskValues(saved, entries));
+            sel.val(RED.mavlink.selectedBitmaskValues(saved, entries));
           } else if (saved !== undefined && saved !== null && saved !== '') {
             sel.val(String(saved));
           }

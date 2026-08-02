@@ -101,34 +101,6 @@
         );
       }
 
-      RED.mavlink = RED.mavlink || {};
-      if (!RED.mavlink.PAYLOAD_VERBS) {
-        RED.mavlink.PAYLOAD_VERBS = {
-          camera: [
-            { value: 'photo', label: 'Photo' },
-            { value: 'start-video', label: 'Start video' },
-            { value: 'stop-video', label: 'Stop video' },
-            { value: 'set-mode', label: 'Set mode' },
-            { value: 'trigger-distance', label: 'Trigger by distance' }
-          ],
-          gimbal: [
-            { value: 'aim', label: 'Aim' },
-            { value: 'set-mode', label: 'Set mode' },
-            { value: 'roi-set', label: 'ROI set' },
-            { value: 'roi-clear', label: 'ROI clear' }
-          ],
-          servo: [
-            { value: 'set', label: 'Set' },
-            { value: 'repeat', label: 'Repeat' }
-          ],
-          release: [
-            { value: 'gripper', label: 'Gripper' },
-            { value: 'winch', label: 'Winch' },
-            { value: 'parachute', label: 'Parachute' }
-          ]
-        };
-      }
-
       var PAYLOAD_ENUM_NAMES = [
         'CAMERA_MODE',
         'MAV_MOUNT_MODE',
@@ -456,20 +428,6 @@
         });
       }
 
-      function refreshVerbOptions(useSaved) {
-        var topic = $('#node-input-topic').val() || 'camera';
-        var verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
-        var $verb = $('#node-input-verb');
-        var saved = useSaved ? (node.verb || $verb.val()) : $verb.val();
-        $verb.empty();
-        for (var i = 0; i < verbs.length; i++) {
-          var entry = verbs[i];
-          $verb.append($('<option></option>').val(entry.value).text(entry.label));
-        }
-        var valid = verbs.some(function (v) { return v.value === saved; });
-        $verb.val(valid ? saved : (verbs[0] ? verbs[0].value : ''));
-      }
-
       function resetEnumCatalog() {
         enumCatalog = { enums: {} };
         enumCatalogLoaded = false;
@@ -478,7 +436,7 @@
       }
 
       $('#node-input-topic').on('change', function () {
-        refreshVerbOptions(false);
+        RED.mavlink.refreshVerbOptions();
         refreshEnumControls();
       });
       $('#node-input-verb').on('change', refreshEnumControls);
@@ -534,7 +492,7 @@
         saved: node.dialect || '',
         includeVehicleEscape: true
       });
-      refreshVerbOptions(true);
+      RED.mavlink.refreshVerbOptions({ saved: node.verb });
       refreshEnumControls();
       RED.mavlink.reloadTargetCompId(node);
     }

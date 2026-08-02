@@ -42,39 +42,6 @@
       });
     }
 
-    function bitmaskTitle(description) {
-      var base = description || 'Bitmask flags';
-      return base + ' (Ctrl/Cmd-click to select multiple flags.)';
-    }
-
-    function booleanEntryLabel(entry) {
-      var name = entry && entry.name ? entry.name : '';
-      if (name === 'FALSE' || name.slice(-6) === '_FALSE') return 'false';
-      if (name === 'TRUE' || name.slice(-5) === '_TRUE') return 'true';
-      return entry.label || name;
-    }
-
-    function selectedBitmaskValues(saved, entries) {
-      if (saved === undefined || saved === null || saved === '') return [];
-      var mask;
-      try {
-        mask = BigInt(String(saved));
-      } catch (_e) {
-        return [];
-      }
-      return entries.filter(function (entry) {
-        var value;
-        try {
-          value = BigInt(String(entry.value));
-        } catch (_e) {
-          return false;
-        }
-        return (value === 0n && mask === 0n) || (value !== 0n && (mask & value) === value);
-      }).map(function (entry) {
-        return String(entry.value);
-      });
-    }
-
     function selectedNumericMask(raw) {
       var values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
       if (!values.length) return null;
@@ -277,12 +244,12 @@
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', spec.name)
               .attr('data-kind', falseTrue ? 'enum' : (multi ? 'bitmask' : 'enum'))
-              .attr('title', multi ? bitmaskTitle(spec.description) : (spec.description || ''));
+              .attr('title', multi ? RED.mavlink.bitmaskTitle(spec.description) : (spec.description || ''));
             if (multi) sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
             else sel.append($('<option></option>').val('').text('\u2014'));
             entries.forEach(function (entry) {
               var $opt = $('<option></option>').val(entry.name).text(entry.label);
-              if (falseTrue) $opt.val(String(entry.value)).text(booleanEntryLabel(entry));
+              if (falseTrue) $opt.val(String(entry.value)).text(RED.mavlink.booleanEntryLabel(entry));
               if (entry.description) $opt.attr('title', entry.description);
               sel.append($opt);
             });
@@ -368,19 +335,19 @@
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', key)
               .attr('data-kind', falseTrue ? 'enum' : (isBitmask ? 'bitmask-mask' : 'enum'))
-              .attr('title', isBitmask ? bitmaskTitle(spec.description) : (spec.description || ''));
+              .attr('title', isBitmask ? RED.mavlink.bitmaskTitle(spec.description) : (spec.description || ''));
             if (isBitmask) {
               sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
             } else {
               sel.append($('<option></option>').val('').text('\u2014'));
             }
             entries.forEach(function (entry) {
-              var $opt = $('<option></option>').val(String(entry.value)).text(falseTrue ? booleanEntryLabel(entry) : entry.label);
+              var $opt = $('<option></option>').val(String(entry.value)).text(falseTrue ? RED.mavlink.booleanEntryLabel(entry) : entry.label);
               if (entry.description) $opt.attr('title', entry.description);
               sel.append($opt);
             });
             if (isBitmask) {
-              sel.val(selectedBitmaskValues(saved, entries));
+              sel.val(RED.mavlink.selectedBitmaskValues(saved, entries));
             } else if (saved !== undefined && saved !== null && saved !== '') {
               sel.val(String(saved));
             }

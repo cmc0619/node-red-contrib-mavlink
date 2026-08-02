@@ -100,8 +100,8 @@ test('advanced bitmask command params render as multi-select controls', () => {
   assert.match(renderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE command params are detected before bitmask rendering');
   assert.match(renderer, /data-kind['"],\s*falseTrue \? ['"]enum['"] : \(isBitmask \? ['"]bitmask['"] : ['"]enum['"]\)/, 'FALSE/TRUE bitmask params are tagged as enum selects');
   assert.match(renderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'bitmask enum params use native multi-select');
-  assert.match(renderer, /booleanEntryLabel\(entry\)/, 'FALSE/TRUE command param options use boolean labels');
-  assert.match(html, /Ctrl\/Cmd-click/, 'multi-select title/help explains how to select multiple flags');
+  assert.match(renderer, /RED\.mavlink\.booleanEntryLabel\(entry\)/, 'FALSE/TRUE command param options use boolean labels');
+  assert.match(renderer, /RED\.mavlink\.bitmaskTitle/, 'multi-select title comes from the shared helper');
 });
 
 test('advanced bitmask command params save one numeric mask value', () => {

@@ -33,7 +33,7 @@ test('Build message and MAV_CMD selects title from catalog descriptions', () => 
   assert.match(html, /function syncMsgTitle/);
   assert.match(html, /function syncCmdTitle/);
   // Field controls already use spec.description (pre-existing).
-  assert.match(html, /\.attr\('title',\s*(?:multi \? bitmaskTitle\(spec\.description\) : \(spec\.description \|\| ''\))/);
+  assert.match(html, /\.attr\('title',\s*(?:multi \? RED\.mavlink\.bitmaskTitle\(spec\.description\) : \(spec\.description \|\| ''\))/);
 });
 
 test('Command Advanced MAV_CMD select and enum options use catalog descriptions', () => {

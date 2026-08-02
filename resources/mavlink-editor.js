@@ -11,9 +11,11 @@
  * This is the browser (editor) half of the toolkit. It owns the config-node
  * picker, the enum/dialect catalog helpers, the role × tier matrix source
  * (`resolveCatalogTarget`), the shared catalog fetch (`loadCatalog`), Target
- * CompID reload (`reloadTargetCompId`), and the Build-tier dialect/vehicle/
- * firmware default descriptors + validators (`buildTierDialectDefaults`).
- * Local-Identity keeps only its role presets and identity-specific validators.
+ * CompID reload (`reloadTargetCompId`), the payload verb catalog
+ * (`PAYLOAD_VERBS` / `refreshVerbOptions`), bitmask select helpers, and the
+ * Build-tier dialect/vehicle/firmware default descriptors + validators
+ * (`buildTierDialectDefaults`). Local-Identity keeps only its role presets and
+ * identity-specific validators.
  */
 (function () {
   RED.mavlink = RED.mavlink || {};
@@ -81,6 +83,63 @@
   };
 
   /**
+   * Editor-side copy of lib/payload `PAYLOAD_VERBS`. Client HTML cannot
+   * require() the Node module, so the topic→verb catalog lives once here —
+   * Payload and Swarm both read it. Pinned against the lib table by test.
+   */
+  RED.mavlink.PAYLOAD_VERBS = {
+    camera: [
+      { value: 'photo', label: 'Photo' },
+      { value: 'start-video', label: 'Start video' },
+      { value: 'stop-video', label: 'Stop video' },
+      { value: 'set-mode', label: 'Set mode' },
+      { value: 'trigger-distance', label: 'Trigger by distance' }
+    ],
+    gimbal: [
+      { value: 'aim', label: 'Aim' },
+      { value: 'set-mode', label: 'Set mode' },
+      { value: 'roi-set', label: 'ROI set' },
+      { value: 'roi-clear', label: 'ROI clear' }
+    ],
+    servo: [
+      { value: 'set', label: 'Set' },
+      { value: 'repeat', label: 'Repeat' }
+    ],
+    release: [
+      { value: 'gripper', label: 'Gripper' },
+      { value: 'winch', label: 'Winch' },
+      { value: 'parachute', label: 'Parachute' }
+    ]
+  };
+
+  /**
+   * Rebuild `#node-input-verb` options for the selected topic from
+   * `PAYLOAD_VERBS`. When `opts.saved` is provided (dialog open), prefer it
+   * over the live select value; otherwise keep the current selection if still
+   * valid for the new topic.
+   *
+   * @param {{saved?: string, topicSelector?: string, verbSelector?: string}} [opts]
+   */
+  RED.mavlink.refreshVerbOptions = function (opts) {
+    opts = opts || {};
+    var topicSelector = opts.topicSelector || '#node-input-topic';
+    var verbSelector = opts.verbSelector || '#node-input-verb';
+    var topic = $(topicSelector).val() || 'camera';
+    var $verb = $(verbSelector);
+    var verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
+    var saved = Object.prototype.hasOwnProperty.call(opts, 'saved')
+      ? (opts.saved || $verb.val())
+      : $verb.val();
+    $verb.empty();
+    for (var i = 0; i < verbs.length; i++) {
+      var entry = verbs[i];
+      $verb.append($('<option></option>').val(entry.value).text(entry.label));
+    }
+    var valid = verbs.some(function (v) { return v.value === saved; });
+    $verb.val(valid ? saved : (verbs[0] ? verbs[0].value : ''));
+  };
+
+  /**
    * Editor-side copy of lib/payload payloadVerbNeedsCarrier, inverted: true
    * when the selected payload verb is message-kind (never rides a MAV_CMD),
    * so the carrier choice is meaningless and the editor must not demand one
@@ -95,6 +154,60 @@
    */
   RED.mavlink.payloadVerbIgnoresCarrier = function (topic, verb, path) {
     return topic === 'gimbal' && verb === 'aim' && (path || 'legacy') === 'manager';
+  };
+
+  /**
+   * Title text for a multi-select bitmask control (Ctrl/Cmd-click hint).
+   * @param {string} [description]
+   * @returns {string}
+   */
+  RED.mavlink.bitmaskTitle = function (description) {
+    var base = description || 'Bitmask flags';
+    return base + ' (Ctrl/Cmd-click to select multiple flags.)';
+  };
+
+  /**
+   * Display label for a FALSE/TRUE enum entry (`false` / `true`); otherwise
+   * the entry's catalog label or name.
+   * @param {{name?: string, label?: string}} entry
+   * @returns {string}
+   */
+  RED.mavlink.booleanEntryLabel = function (entry) {
+    var name = entry && entry.name ? entry.name : '';
+    if (name === 'FALSE' || name.slice(-6) === '_FALSE') return 'false';
+    if (name === 'TRUE' || name.slice(-5) === '_TRUE') return 'true';
+    return (entry && entry.label) || name;
+  };
+
+  /**
+   * Which bitmask option values are set in `saved` (numeric mask).
+   * @param {string|number|null|undefined} saved
+   * @param {Array<{value: string|number}>} entries
+   * @returns {string[]}
+   */
+  RED.mavlink.selectedBitmaskValues = function (saved, entries) {
+    if (saved === undefined || saved === null || saved === '') return [];
+    var mask;
+    try {
+      mask = BigInt(String(saved));
+    } catch (_e) {
+      return [];
+    }
+    var selected = [];
+    var list = entries || [];
+    for (var i = 0; i < list.length; i++) {
+      var entry = list[i];
+      var value;
+      try {
+        value = BigInt(String(entry.value));
+      } catch (_e2) {
+        continue;
+      }
+      if ((value === 0n && mask === 0n) || (value !== 0n && (mask & value) === value)) {
+        selected.push(String(entry.value));
+      }
+    }
+    return selected;
   };
 
   /**

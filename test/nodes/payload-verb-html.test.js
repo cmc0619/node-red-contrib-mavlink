@@ -36,31 +36,46 @@ function assertVerbSelect(html, label) {
 
 test('mavlink-payload verb is a topic-dependent select', () => {
   assertVerbSelect(payloadHtml, 'mavlink-payload');
-  assert.match(payloadHtml, /PAYLOAD_VERBS/, 'editor mirrors the payload verb catalog');
+  assert.match(
+    payloadHtml,
+    /RED\.mavlink\.refreshVerbOptions/,
+    'verb options come from the shared helper'
+  );
   assert.match(
     payloadHtml,
     /\$\('#node-input-topic'\)\.on\('change'/,
     'topic change refreshes verb options'
   );
-  assert.match(payloadHtml, /function refreshVerbOptions/, 'verb options are rebuilt');
+  assert.doesNotMatch(payloadHtml, /function refreshVerbOptions/, 'no local verb-options copy');
+  assert.doesNotMatch(payloadHtml, /PAYLOAD_VERBS\s*=/, 'no local PAYLOAD_VERBS table');
 });
 
 test('mavlink-swarm verb is a topic-dependent select', () => {
   assertVerbSelect(swarmHtml, 'mavlink-swarm');
-  assert.match(swarmHtml, /PAYLOAD_VERBS/, 'editor mirrors the payload verb catalog');
+  assert.match(
+    swarmHtml,
+    /RED\.mavlink\.refreshVerbOptions/,
+    'verb options come from the shared helper'
+  );
   assert.match(
     swarmHtml,
     /\$\('#node-input-topic'\)\.on\('change'/,
     'topic change refreshes verb options'
   );
-  assert.match(swarmHtml, /function refreshVerbOptions/, 'verb options are rebuilt');
+  assert.doesNotMatch(swarmHtml, /function refreshVerbOptions/, 'no local verb-options copy');
+  assert.doesNotMatch(swarmHtml, /PAYLOAD_VERBS\s*=/, 'no local PAYLOAD_VERBS table');
 });
 
 test('editor catalog includes every lib/payload verb value', () => {
+  // Catalog lives once in resources/mavlink-editor.js — pin it there, not in
+  // each node's HTML (the HTML only calls refreshVerbOptions).
+  const resource = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'),
+    'utf8'
+  );
   for (const [topic, verbs] of Object.entries(PAYLOAD_VERBS)) {
     for (const { value } of verbs) {
-      assert.match(payloadHtml, new RegExp(`value:\\s*'${value}'`), `payload editor missing ${topic}/${value}`);
-      assert.match(swarmHtml, new RegExp(`value:\\s*'${value}'`), `swarm editor missing ${topic}/${value}`);
+      assert.match(resource, new RegExp(`value:\\s*'${value}'`), `editor resource missing ${topic}/${value}`);
     }
   }
 });

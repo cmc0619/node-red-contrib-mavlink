@@ -550,7 +550,9 @@ through the stock change→validate path (never a parallel validation API).
 **Editor helpers are shared, not pasted.** The `RED.mavlink.*` browser helpers — config-node
 pickers, enum/dialect catalog fills, `currentCatalogQuery`, `validateUint8`, the catalog source
 matrix `resolveCatalogTarget`, the shared catalog fetch `loadCatalog(endpoint, cache)`, Target
-CompID reload `reloadTargetCompId`, the Build-tier dialect/vehicle/firmware default descriptors
+CompID reload `reloadTargetCompId`, the payload verb catalog (`PAYLOAD_VERBS` /
+`refreshVerbOptions`), bitmask select helpers (`bitmaskTitle`, `booleanEntryLabel`,
+`selectedBitmaskValues`), the Build-tier dialect/vehicle/firmware default descriptors
 `buildTierDialectDefaults`, and the Build-tier row toggle
 `applyBuildTierRowVisibility` — live once in `resources/mavlink-editor.js`, loaded via the stock
 resource mechanism (a relative `<script src>` in the first-listed node). Node-RED guarantees that
@@ -1990,10 +1992,11 @@ Operator guide: [`sitl/README.md`](sitl/README.md).
 fills, dialect select, `currentCatalogQuery`, `validateUint8`, …), its own `resolveCatalogTarget`
 + dialect/vehicle/firmware `defaults.validate` blocks, its own `reloadTargetCompId` thin wrapper
 over `reloadCompIdSelect`, its own resolve→cache→getJSON→seq-guard catalog loader skeleton,
-and its own Build-tier dialect/vehicle/firmware/connection row toggles, because Node-RED loads
-external `<script src>` asynchronously so helpers might be undefined when a later node's
-`registerType` parses — or because each dialog's coalesce/`onKey` options and remaining
-role/mode rows make the shared implementations "not quite the same."
+its own `PAYLOAD_VERBS` + `refreshVerbOptions`, its own bitmaskTitle/booleanEntryLabel/
+selectedBitmaskValues trio, and its own Build-tier dialect/vehicle/firmware/connection row toggles,
+because Node-RED loads external `<script src>` asynchronously so helpers might be undefined when
+a later node's `registerType` parses — or because each dialog's coalesce/`onKey` options and
+remaining role/mode rows make the shared implementations "not quite the same."
 *Fact:* The helpers live once in [`resources/mavlink-editor.js`](resources/mavlink-editor.js),
 served at `resources/@cmc0619/node-red-contrib-mavlink/mavlink-editor.js` and loaded by a relative
 `<script src>` at the top of `mavlink-local-identity.html` (listed first in `package.json`
@@ -2006,7 +2009,10 @@ is `RED.mavlink.loadCatalog(endpoint, cache, cb, opts)` (caller-owned `{byKey, s
 optional `inflight` enables same-key waiter coalesce for Command Advanced — Greptile #36; seq
 bumps before cache-hit return so a later hit invalidates in-flight responses); Target CompID
 reload is `RED.mavlink.reloadTargetCompId(node, { field? })` (default `targetComponent`; Command
-passes `field:'targetCompid'`); the Build-tier default descriptors are
+passes `field:'targetCompid'`); the payload verb catalog is `RED.mavlink.PAYLOAD_VERBS` +
+`RED.mavlink.refreshVerbOptions({ saved? })` (mirrors `lib/payload`, used by Payload and Swarm);
+bitmask selects share `bitmaskTitle` / `booleanEntryLabel` / `selectedBitmaskValues` (Command +
+Build); the Build-tier default descriptors are
 `RED.mavlink.buildTierDialectDefaults({ modeField, withFirmware })` (`modeField:'tier'` for Build,
 `withFirmware:true` for Param/Mission); the Build-tier row visibility matrix is
 `RED.mavlink.applyBuildTierRowVisibility({ isBuild, dialect, dialectRow, vehicleRow,
@@ -2019,7 +2025,8 @@ visibility helper. `resources` is in `package.json` `files`, and `resources/**/*
 browser script.
 *Check:* `node --test test/nodes/mavlink-editor-resource.test.js`; `rg -n 'function resolveCatalogTarget'
 nodes` returns nothing; `rg -n 'function reloadTargetCompId' nodes` returns nothing;
-`rg -n 'loadCatalog' nodes/mavlink-*.html`; `rg -n 'applyBuildTierRowVisibility' nodes/mavlink-*.html`
+`rg -n 'loadCatalog' nodes/mavlink-*.html`; `rg -n 'function refreshVerbOptions|PAYLOAD_VERBS\s*=' nodes` returns nothing;
+`rg -n 'function bitmaskTitle' nodes` returns nothing; `rg -n 'applyBuildTierRowVisibility' nodes/mavlink-*.html`
 hits every Build-capable palette node; `rg -n 'buildTierDialectDefaults' nodes/mavlink-*.html`.
 
 **Build-tier enum catalogs must see the saved dialect before `/mavlink/dialects` returns.**

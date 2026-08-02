@@ -494,6 +494,107 @@ test('loadCatalog onKey fires for cache hit and empty target', () => {
   assert.deepEqual(keys, ['empty']);
 });
 
+// ── PAYLOAD_VERBS / refreshVerbOptions ───────────────────────────────────────
+
+test('PAYLOAD_VERBS mirrors lib/payload exactly', () => {
+  const { RED } = loadResource();
+  const { PAYLOAD_VERBS } = require('../../lib/payload');
+  assert.deepEqual(plain(RED.mavlink.PAYLOAD_VERBS), plain(PAYLOAD_VERBS));
+});
+
+/**
+ * jQuery stub rich enough for refreshVerbOptions (empty/append/option factory).
+ * @param {object} values
+ * @returns {{RED: object, values: object, options: string[]}}
+ */
+function loadVerbResource(values) {
+  const options = [];
+  function $(selector) {
+    if (typeof selector === 'string' && selector.startsWith('<option')) {
+      const opt = { _val: '', _text: '' };
+      opt.val = function (v) { opt._val = v; return opt; };
+      opt.text = function (t) { opt._text = t; return opt; };
+      return opt;
+    }
+    const has = Object.prototype.hasOwnProperty.call(values, selector);
+    const api = {
+      length: has ? 1 : 0,
+      val(v) {
+        if (arguments.length === 0) return has ? values[selector] : undefined;
+        values[selector] = v;
+        return api;
+      },
+      empty() { options.length = 0; return api; },
+      append($el) { options.push($el._val); return api; },
+    };
+    return api;
+  }
+  $.getJSON = () => ({ fail() { return this; } });
+  const context = {
+    RED: {
+      settings: { httpAdminRoot: '/' },
+      mavlink: {},
+      nodes: { node() { return null; } },
+    },
+    $,
+  };
+  vm.runInNewContext(resourceScript, context);
+  return { RED: context.RED, values, options };
+}
+
+test('refreshVerbOptions rebuilds the verb select for the topic', () => {
+  const { RED, values, options } = loadVerbResource({
+    '#node-input-topic': 'servo',
+    '#node-input-verb': 'set',
+  });
+  RED.mavlink.refreshVerbOptions();
+  assert.deepEqual(options, ['set', 'repeat']);
+  assert.equal(values['#node-input-verb'], 'set');
+});
+
+test('refreshVerbOptions prefers opts.saved when still valid', () => {
+  const { RED, values } = loadVerbResource({
+    '#node-input-topic': 'camera',
+    '#node-input-verb': 'photo',
+  });
+  RED.mavlink.refreshVerbOptions({ saved: 'start-video' });
+  assert.equal(values['#node-input-verb'], 'start-video');
+});
+
+// ── bitmask helpers ──────────────────────────────────────────────────────────
+
+test('bitmaskTitle appends the Ctrl/Cmd-click hint', () => {
+  const { RED } = loadResource();
+  assert.equal(
+    RED.mavlink.bitmaskTitle('Flags'),
+    'Flags (Ctrl/Cmd-click to select multiple flags.)'
+  );
+  assert.match(RED.mavlink.bitmaskTitle(), /Bitmask flags/);
+});
+
+test('booleanEntryLabel maps FALSE/TRUE names to boolean words', () => {
+  const { RED } = loadResource();
+  assert.equal(RED.mavlink.booleanEntryLabel({ name: 'FALSE', label: 'FALSE (0)' }), 'false');
+  assert.equal(RED.mavlink.booleanEntryLabel({ name: 'MAV_BOOL_TRUE', label: 'x' }), 'true');
+  assert.equal(RED.mavlink.booleanEntryLabel({ name: 'OTHER', label: 'Other (2)' }), 'Other (2)');
+});
+
+test('selectedBitmaskValues returns the set flag values', () => {
+  const { RED } = loadResource();
+  const entries = [
+    { value: 1 },
+    { value: 2 },
+    { value: 4 },
+  ];
+  // plain() crosses the vm realm boundary for deepStrictEqual.
+  assert.deepEqual(plain(RED.mavlink.selectedBitmaskValues(5, entries)), ['1', '4']);
+  assert.deepEqual(plain(RED.mavlink.selectedBitmaskValues('', entries)), []);
+  assert.deepEqual(
+    plain(RED.mavlink.selectedBitmaskValues(0, [{ value: 0 }, { value: 1 }])),
+    ['0']
+  );
+});
+
 // ── normalizeIdentityIds — the Connection dialog's extra-identity rules ──────
 
 test('normalizeIdentityIds drops blanks, duplicates, and the primary identity', () => {
