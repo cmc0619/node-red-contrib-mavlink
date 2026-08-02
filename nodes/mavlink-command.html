@@ -221,8 +221,8 @@
         } else {
           $('#row-preset').show();
           $('#row-advanced').hide();
+          refreshParamFields();
         }
-        refreshParamFields();
         refreshDelivery();
       }
 
@@ -247,8 +247,10 @@
         // callback runs after the initial applyMode() left the dialog empty —
         // without this the exposed params stay stale until the user re-picks.
         sel.val(node.preset || 'arm');
-        applyPresetOptionTips(sel);
-        sel.trigger('change');
+        loadCommandsCatalog(function (catalog) {
+          applyPresetOptionTips(sel, catalog);
+          sel.trigger('change');
+        });
       }
 
       /**
@@ -323,7 +325,11 @@
       }
 
       function refreshAdvancedCommands() {
-        loadCommandsCatalog(buildAdvancedDropdown);
+        loadCommandsCatalog(function (catalog) {
+          if ($('#node-input-mode').val() !== 'advanced') return;
+          buildAdvancedDropdown(catalog);
+          refreshParamFields();
+        });
       }
 
       $('#node-input-advancedCommand').on('change', function () {

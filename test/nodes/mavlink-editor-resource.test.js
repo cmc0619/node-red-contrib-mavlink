@@ -383,15 +383,16 @@ test('loadCatalog fetches for every nonempty call', () => {
     isBuild: true,
     listKey: 'messages',
   });
-  pending[0]({ messages: [{ name: 'HEARTBEAT' }], enums: {}, dialect: 'common' });
   RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(c), {
     isBuild: true,
     listKey: 'messages',
   });
   assert.equal(pending.length, 2);
+  pending[0]({ messages: [{ name: 'STALE' }], enums: {}, dialect: 'common' });
+  assert.equal(got.length, 0);
   pending[1]({ messages: [{ name: 'HEARTBEAT' }], enums: {}, dialect: 'common' });
-  assert.equal(got.length, 2);
-  assert.equal(got[1].messages[0].name, 'HEARTBEAT');
+  assert.equal(got.length, 1);
+  assert.equal(got[0].messages[0].name, 'HEARTBEAT');
 });
 
 test('loadCatalog seq-guard drops a stale success', () => {

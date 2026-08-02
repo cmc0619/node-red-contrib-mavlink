@@ -79,6 +79,24 @@ test('advanced catalog load ignores stale responses and keeps the in-progress se
   assert.match(html, /saved:\s*prefer/, 'current-or-saved prefer is passed to fillEnumSelect');
 });
 
+test('Advanced mode populates commands before loading their parameter fields', () => {
+  assert.match(
+    html,
+    /function refreshAdvancedCommands\(\) \{[\s\S]*loadCommandsCatalog\(function \(catalog\) \{[\s\S]*buildAdvancedDropdown\(catalog\);[\s\S]*refreshParamFields\(\);/
+  );
+});
+
+test('initial preset load paints option tips before triggering the parameter refresh', () => {
+  const builder = html.slice(
+    html.indexOf('function buildPresetDropdown(groups)'),
+    html.indexOf('/**\n       * Dialect-sourced titles')
+  );
+  assert.match(
+    builder,
+    /loadCommandsCatalog\(function \(catalog\) \{[\s\S]*applyPresetOptionTips\(sel, catalog\);[\s\S]*sel\.trigger\('change'\);/
+  );
+});
+
 test('preset dropdown re-applies the saved selection and fires change after the async load', () => {
   // The preset list loads asynchronously; the builder must re-select the saved
   // preset and trigger a change so the exposed param fields render on first
