@@ -7,6 +7,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+const canonicalArduPilotPdef = JSON.parse(fs.readFileSync(
+  path.join(__dirname, 'fixtures', 'apm.pdef-canonical.json'),
+  'utf8'
+));
+
 function tempUserDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-param-route-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -200,4 +205,35 @@ test('POST explicitly downloads and returns the validated definition count', asy
     readRes
   );
   assert.deepEqual(Object.keys(readRes.body.defs), ['ONE', 'TWO']);
+});
+
+test('POST accepts and persists the canonical ArduPilot PascalCase document', async (t) => {
+  const userDir = tempUserDir(t);
+  const { routes } = captureRoutes(userDir);
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    async json() { return canonicalArduPilotPdef; },
+  });
+  t.after(() => { globalThis.fetch = previousFetch; });
+  const updateRes = mockRes();
+
+  await routes.get('POST /mavlink/param/defs/update').handler(
+    { body: { vehicle: 'profile-canonical', url: 'https://example.test/apm.pdef.json' } },
+    updateRes
+  );
+
+  assert.equal(updateRes.statusCode, 200);
+  assert.deepEqual(updateRes.body, { ok: true, count: 2 });
+
+  const readRes = mockRes();
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { vehicle: 'profile-canonical' } },
+    readRes
+  );
+  assert.equal(readRes.body.defs.MAV17_RAW_SENS.unit, 'Hz');
+  assert.deepEqual(readRes.body.defs.ALAND_ENABLE.values, [
+    { value: 0, label: 'Disabled' },
+    { value: 1, label: 'Enabled' },
+  ]);
 });

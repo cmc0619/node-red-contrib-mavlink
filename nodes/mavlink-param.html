@@ -116,11 +116,14 @@
           _defsLoaded = true;
           rebuildParamIdDatalist();
           refreshParamInfo();
-        }).fail(function () {
+        }).fail(function (xhr) {
           if (seq !== _defsSeq) return;
           _paramDefs = {};
+          _defsNotice = (xhr && xhr.responseJSON && xhr.responseJSON.error) ||
+            'Parameter definitions unavailable.';
           _defsLoaded = true;
           rebuildParamIdDatalist();
+          refreshParamInfo();
         });
       }
 

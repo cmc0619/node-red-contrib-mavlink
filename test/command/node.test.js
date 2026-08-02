@@ -487,6 +487,99 @@ test('ack-matcher pin: companion target used for COMMAND_ACK matching; ack from 
   node.emit('close', () => {});
 });
 
+test('blank Command timeout keeps the 10000 ms ACK window', async (t) => {
+  const timers = installAckTimerHarness(t);
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '',
+    maxRetries: '3',
+  });
+
+  node.emit('input', { payload: null }, () => {}, () => {});
+  await Promise.resolve();
+
+  assert.equal(timers.delays[0], 10000);
+  conn.injectAck({ command: 400, result: 0 }, 1, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+  node.emit('close', () => {});
+});
+
+test('blank Command maxRetries keeps three temporary-rejection retries', async (t) => {
+  installAckTimerHarness(t);
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '10000',
+    maxRetries: '',
+  });
+  let output;
+
+  node.emit('input', { payload: null }, (messages) => { output = messages; }, () => {});
+  await Promise.resolve();
+  for (let retry = 1; retry <= 3; retry++) {
+    conn.injectAck({ command: 400, result: 1 }, 1, 1);
+    await Promise.resolve();
+    assert.equal(conn.sent.length, retry + 1, `retry ${retry} is sent`);
+  }
+  conn.injectAck({ command: 400, result: 1 }, 1, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(
+    conn.sent.map(({ message }) => message.fields.confirmation),
+    [0, 1, 2, 3]
+  );
+  assert.equal(output[0], null);
+  assert.equal(output[1].retries, 3);
+  node.emit('close', () => {});
+});
+
+function installAckTimerHarness(t) {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const active = new Set();
+  const delays = [];
+
+  globalThis.setTimeout = (fn, delay) => {
+    const handle = {};
+    active.add(handle);
+    delays.push(delay);
+    if (delay === 1000) {
+      queueMicrotask(() => {
+        if (active.delete(handle)) fn();
+      });
+    }
+    return handle;
+  };
+  globalThis.clearTimeout = (handle) => {
+    active.delete(handle);
+  };
+  t.after(() => {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  });
+
+  return { delays };
+}
+
 function connStubWithInject(vehicleOverride) {
   const subs = [];
   const sent = [];

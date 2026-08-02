@@ -46,6 +46,8 @@ const {
   CARRIER,
   intCoordKinds,
   resolveFrame,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
 
 const { loadMetadata } = require('../lib/metadata/load');
@@ -175,8 +177,8 @@ module.exports = function registerMavlinkCommand(RED) {
       return _coordKinds;
     }
 
-    const timeoutMs = Number(config.timeout);
-    const maxRetries = Number(config.maxRetries);
+    const timeoutMs = config.timeout === '' ? DEFAULT_TIMEOUT_MS : Number(config.timeout);
+    const maxRetries = config.maxRetries === '' ? DEFAULT_MAX_RETRIES : Number(config.maxRetries);
     const unconfirmedContinue = !!config.unconfirmedContinue;
 
     // Wire tiers need a Connection — do not silently degrade into Build (§9).

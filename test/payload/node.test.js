@@ -205,6 +205,79 @@ test('mavlink-payload confirm tier halts the chain on a DENIED ack', async () =>
   node.emit('close', () => {});
 });
 
+test('blank Payload timeout keeps the 10000 ms ACK window', async (t) => {
+  const timers = installAckTimerHarness(t);
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    carrier: 'long',
+    delivery: 'confirm',
+    topic: 'servo',
+    verb: 'set',
+    connection: 'conn',
+    targetSystem: 7,
+    targetComponent: 1,
+    timeout: '',
+    maxRetries: 3,
+  });
+
+  node.emit(
+    'input',
+    { payload: { values: { servo: 8, pwm: 1600 } } },
+    () => {},
+    () => {}
+  );
+
+  assert.equal(timers.delays[0], 10000);
+  conn.injectAck({ command: 183, result: 0 }, 7, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+  node.emit('close', () => {});
+});
+
+test('blank Payload maxRetries keeps three temporary-rejection retries', async (t) => {
+  installAckTimerHarness(t);
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    carrier: 'long',
+    delivery: 'confirm',
+    topic: 'servo',
+    verb: 'set',
+    connection: 'conn',
+    targetSystem: 7,
+    targetComponent: 1,
+    timeout: 10000,
+    maxRetries: '',
+  });
+  let output;
+
+  node.emit(
+    'input',
+    { payload: { values: { servo: 8, pwm: 1600 } } },
+    (messages) => { output = messages; },
+    () => {}
+  );
+  for (let retry = 1; retry <= 3; retry++) {
+    conn.injectAck({ command: 183, result: 1 }, 7, 1);
+    await Promise.resolve();
+    assert.equal(conn.sent.length, retry + 1, `retry ${retry} is sent`);
+  }
+  conn.injectAck({ command: 183, result: 1 }, 7, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(
+    conn.sent.map(({ message }) => message.fields.confirmation),
+    [0, 1, 2, 3]
+  );
+  assert.equal(output[0], null);
+  assert.equal(output[1].retries, 3);
+  node.emit('close', () => {});
+});
+
 test('mavlink-payload inherits Vehicle Profile target when config is empty', () => {
   const veh = { defaultTargetSystem: 42, defaultTargetComponent: 191 };
   const RED = redStub({ veh });
@@ -499,6 +572,34 @@ function connStub() {
       for (const { handler } of subs.slice()) handler(decoded);
     },
   };
+}
+
+function installAckTimerHarness(t) {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const active = new Set();
+  const delays = [];
+
+  globalThis.setTimeout = (fn, delay) => {
+    const handle = {};
+    active.add(handle);
+    delays.push(delay);
+    if (delay === 1000) {
+      queueMicrotask(() => {
+        if (active.delete(handle)) fn();
+      });
+    }
+    return handle;
+  };
+  globalThis.clearTimeout = (handle) => {
+    active.delete(handle);
+  };
+  t.after(() => {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  });
+
+  return { delays };
 }
 
 function redStub(nodesById) {

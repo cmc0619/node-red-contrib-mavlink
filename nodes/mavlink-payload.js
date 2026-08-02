@@ -8,6 +8,8 @@ const { BAND } = require('../lib/connection/bands');
 const {
   AckWaiter,
   resolveFrame,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
 const {
   resolveDeliveryContext,
@@ -30,8 +32,8 @@ module.exports = function registerMavlinkPayload(RED) {
 
     // At most one COMMAND_ACK wait in flight per node.
     let activeWaiter = null;
-    const timeoutMs = Number(config.timeout);
-    const maxRetries = Number(config.maxRetries);
+    const timeoutMs = config.timeout === '' ? DEFAULT_TIMEOUT_MS : Number(config.timeout);
+    const maxRetries = config.maxRetries === '' ? DEFAULT_MAX_RETRIES : Number(config.maxRetries);
     const delivery = config.delivery;
     const connAtDeploy = delivery === 'build' ? null : RED.nodes.getNode(config.connection);
     missingConnectionGate(node, delivery, connAtDeploy);

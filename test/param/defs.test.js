@@ -13,6 +13,11 @@ const {
   updateParamDefs,
 } = require('../../lib/param/defs');
 
+const canonicalArduPilotPdef = JSON.parse(fs.readFileSync(
+  path.join(__dirname, 'fixtures', 'apm.pdef-canonical.json'),
+  'utf8'
+));
+
 function tempUserDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-param-defs-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -61,6 +66,25 @@ test('parsePdefJson parses namespaced ArduPilot format', () => {
     ],
   });
   assert.equal(map.get('PILOT_SPEED_UP').unit, 'cm/s');
+});
+
+test('parsePdefJson parses the canonical ArduPilot PascalCase document shape', () => {
+  const map = parsePdefJson(canonicalArduPilotPdef);
+
+  assert.equal(map.size, 2);
+  assert.deepEqual(map.get('MAV17_RAW_SENS'), {
+    description: 'MAVLink Stream rate of RAW_IMU, SCALED_IMU2, SCALED_IMU3, ' +
+      'SCALED_PRESSURE, SCALED_PRESSURE2, SCALED_PRESSURE3 and AIRSPEED',
+    unit: 'Hz',
+    min: 0,
+    max: 50,
+    increment: 1,
+    values: undefined,
+  });
+  assert.deepEqual(map.get('ALAND_ENABLE').values, [
+    { value: 0, label: 'Disabled' },
+    { value: 1, label: 'Enabled' },
+  ]);
 });
 
 test('parsePdefJson parses flat format and normalises IDs', () => {

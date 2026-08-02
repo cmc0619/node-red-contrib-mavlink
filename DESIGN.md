@@ -260,6 +260,8 @@ the node where users face the most opaque data in the system.
 - **ArduPilot** publishes per-vehicle definitions at a stable URL —
   `https://autotest.ardupilot.org/Parameters/<Vehicle>/apm.pdef.json`, with an XML form
   alongside. Vehicle directory follows the frame type: `ArduCopter`, `ArduPlane`, `Rover`, `Sub`.
+  The canonical JSON nests parameters under vehicle/group namespaces and uses inline PascalCase
+  keys: `Description`, `DisplayName`, `Units`, `Range: { low, high }`, `Increment`, and `Values`.
 - **PX4** has no equivalent stable public URL. An operator may configure a release asset, a
   self-hosted copy, or a version pin. Ship no baked-in default that will rot.
 
@@ -274,6 +276,10 @@ enrichment and returns an empty definition map; corrupt or empty local JSON fail
 falls back to the network. Changing or clearing the URL therefore does not hide a previously
 downloaded local copy. A profile with no definition set still reads and writes parameters — it
 just does it without labels, and the node says so rather than pretending.
+
+The supported Update surface is the Vehicle Profile editor button. It stays disabled for the
+duration of its request and is re-enabled on either result, preventing overlapping human updates
+without adding a backend cache, queue, or generation registry.
 
 ## 5. The field codec
 
@@ -1725,6 +1731,22 @@ or cache by URL, and ArduPilot profiles should infer a family URL automatically.
 explicit authenticated Update action uses the profile's optional URL; it validates before atomic
 replacement, preserves the last good file on failure, and never turns corrupt local JSON into a
 network fallback. Clearing or changing the URL leaves the downloaded local copy reachable.
+*Check:* `node --test test/param/defs.test.js test/param/defs-route.test.js`.
+
+**A numeric editor default does not make a cleared optional input nonblank.**
+*Wrong belief:* because Command and Payload declare ACK timeout and retry defaults, runtime always
+receives those values from supported editor-produced flows.
+*Fact:* those number inputs may be cleared (`number(true)` explicitly permits this for Payload).
+Blank preserves the established 10,000 ms timeout and three-retry behavior; an explicit numeric
+value is still honored.
+*Check:* `node --test test/command/node.test.js test/payload/node.test.js`.
+
+**ArduPilot's canonical parameter JSON is PascalCase and inline.**
+*Wrong belief:* the published `apm.pdef.json` uses only lowercase `humanName` / `documentation`
+entries with metadata nested under `fields` / `values`.
+*Fact:* the current document uses vehicle/group namespaces whose entries expose `Description`,
+`DisplayName`, `Units`, `Range: { low, high }`, `Increment`, and `Values` directly. The parser
+accepts that canonical shape while retaining the older compatible shape.
 *Check:* `node --test test/param/defs.test.js test/param/defs-route.test.js`.
 
 **Grep alternation.** `grep -E` uses `|` for alternation; `\|` matches a literal pipe. More than

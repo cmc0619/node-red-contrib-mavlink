@@ -198,11 +198,13 @@
 
         $('#mav-param-defs-update').on('click', function (e) {
           e.preventDefault();
+          const $update = $(this);
           const url = $('#node-config-input-paramDefsUrl').val().trim();
           if (!url) {
             $paramDefsStatus.text('Enter a parameter definitions URL before Update.');
             return;
           }
+          $update.prop('disabled', true);
           $paramDefsStatus.text('Downloading parameter definitions...');
           $.ajax({
             url: mavlinkAdminUrl('/mavlink/param/defs/update'),
@@ -216,6 +218,9 @@
             .fail(function (xhr) {
               const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'update failed';
               $paramDefsStatus.text('Update failed: ' + msg);
+            })
+            .always(function () {
+              $update.prop('disabled', false);
             });
         });
 
