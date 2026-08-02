@@ -24,8 +24,6 @@ const {
   knownDialects,
 } = require('../../lib/vehicle');
 
-const XML = (body) => `<?xml version="1.0"?>\n<mavlink>${body}</mavlink>`;
-
 /* ---------- knownDialects ---------- */
 
 test('knownDialects returns seeded dialect names including the classic ten', () => {
@@ -84,83 +82,58 @@ test('normalizeFamily returns generic for unknown input', () => {
   assert.equal(normalizeFamily(undefined), 'generic');
 });
 
-/* ---------- resolveDialect — bundled ---------- */
+/* ---------- resolveDialect — seed ---------- */
 
-test('resolveDialect bundled + known name → returns DialectBundle', () => {
-  const bundle = resolveDialect({ dialectSource: 'bundled', dialect: 'common' });
+test('resolveDialect seed + known name → returns DialectBundle', () => {
+  const bundle = resolveDialect({ dialect: 'common', dialectRevision: 'seed' });
   assert.equal(bundle.dialect, 'common');
   assert.ok(typeof bundle.enums === 'object');
   assert.ok(typeof bundle.messages === 'object');
 });
 
-test('resolveDialect bundled defaults to ardupilotmega when dialect omitted', () => {
-  const bundle = resolveDialect({ dialectSource: 'bundled' });
+test('resolveDialect defaults to ardupilotmega when dialect omitted', () => {
+  const bundle = resolveDialect({ dialectRevision: 'seed' });
   assert.equal(bundle.dialect, 'ardupilotmega');
 });
 
-test('resolveDialect bundled + unknown name → throws naming the dialect', () => {
+test('resolveDialect seed + unknown name → throws naming the dialect', () => {
   assert.throws(
-    () => resolveDialect({ dialectSource: 'bundled', dialect: 'nonexistent' }),
+    () => resolveDialect({ dialect: 'nonexistent', dialectRevision: 'seed' }),
     /nonexistent/
   );
 });
 
-test('resolveDialect omitted dialectSource → defaults to bundled', () => {
+test('resolveDialect omitted revision → seed, the editor default', () => {
   const bundle = resolveDialect({ dialect: 'minimal' });
   assert.equal(bundle.dialect, 'minimal');
 });
 
-test('resolveDialect bundled bundles are memoized', () => {
-  const a = resolveDialect({ dialectSource: 'bundled', dialect: 'minimal' });
-  const b = resolveDialect({ dialectSource: 'bundled', dialect: 'minimal' });
+test('resolveDialect seed bundles are memoized', () => {
+  const a = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed' });
+  const b = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed' });
   assert.equal(a, b);
 });
 
-/* ---------- resolveDialect — custom ---------- */
+/* ---------- resolveDialect — catalog snapshot ---------- */
 
-test('resolveDialect custom with bundle → returns the supplied bundle', () => {
-  const fakeBundle = { dialect: 'custom-test', enums: {}, messages: {} };
-  const result = resolveDialect({
-    dialectSource: 'custom',
-    customDialectBundle: fakeBundle,
-  });
-  assert.equal(result, fakeBundle);
-});
-
-test('resolveDialect custom with a path → compiles the XML from disk', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-veh-'));
-  const base = path.join(dir, 'base.xml');
-  const entry = path.join(dir, 'entry.xml');
-  fs.writeFileSync(base, XML('<messages><message id="0" name="HEARTBEAT"><field type="uint8_t" name="t">t</field></message></messages>'));
-  fs.writeFileSync(entry, XML('<include>base.xml</include><messages><message id="42" name="ENTRY"><field type="uint8_t" name="e">e</field></message></messages>'));
-
-  const bundle = resolveDialect({ dialectSource: 'custom', customDialectPath: entry });
-  assert.equal(bundle.dialect, 'entry');
-  assert.deepEqual(Object.keys(bundle.messages).sort(), ['ENTRY', 'HEARTBEAT']);
-});
-
-test('resolveDialect custom with a bad path → fails loud (never falls back)', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-veh-'));
+test('resolveDialect snapshot without a catalog base dir fails loud', () => {
   assert.throws(
-    () => resolveDialect({ dialectSource: 'custom', customDialectPath: path.join(dir, 'nope.xml') }),
-    (e) => e.code === 'XML_DIALECT_READ_FAILED'
+    () => resolveDialect({ name: 'My Profile', dialect: 'common', dialectRevision: '2026-01-01' }),
+    /My Profile/
   );
 });
 
-test('resolveDialect custom prefers a supplied bundle over a path', () => {
-  const fakeBundle = { dialect: 'custom-test', enums: {}, messages: {} };
-  const result = resolveDialect({
-    dialectSource: 'custom',
-    customDialectPath: '/does/not/matter.xml',
-    customDialectBundle: fakeBundle,
-  });
-  assert.equal(result, fakeBundle);
-});
-
-test('resolveDialect custom without path or bundle → throws naming the profile', () => {
+test('resolveDialect unknown snapshot id fails loud naming the snapshot', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-veh-'));
   assert.throws(
-    () => resolveDialect({ name: 'My Profile', dialectSource: 'custom' }),
-    /My Profile/
+    () =>
+      resolveDialect({
+        name: 'My Profile',
+        dialect: 'common',
+        dialectRevision: '2026-01-01',
+        catalogBaseDir: dir,
+      }),
+    /2026-01-01/
   );
 });
 

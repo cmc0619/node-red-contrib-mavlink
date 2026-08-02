@@ -313,7 +313,10 @@
         function commandParamInput(msgName, spec, enums) {
           var key = wireFieldForCommandParam(msgName, spec.index);
           var saved = savedFields[key];
-          // COMMAND_INT may also have legacy param5–7 saved from earlier builds.
+          // Switching the carrier message COMMAND_LONG → COMMAND_INT for the same
+          // MAV_CMD resets lastBuildCommandId, so the param wipe is skipped and the
+          // just-synced param5–7 are still the live values for x/y/z. Both forms hold
+          // degrees here (the INT build scales), so the number carries across as-is.
           if ((saved === undefined || saved === null || saved === '') && msgName === 'COMMAND_INT' && spec.index >= 5) {
             saved = savedFields['param' + spec.index];
           }

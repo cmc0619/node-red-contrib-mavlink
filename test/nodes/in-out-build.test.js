@@ -248,7 +248,7 @@ function makeVehicleStub() {
       vehicleFamily: 'generic',
       firmware: 'ardupilot',
       dialect: 'ardupilotmega',
-      dialectSource: 'bundled',
+      dialectRevision: 'seed',
       defaultTargetSystem: 1,
       defaultTargetComponent: 1,
     }),

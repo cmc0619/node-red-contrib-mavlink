@@ -2,22 +2,16 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
 const {
   resolveCatalogSource,
   registerDialectCatalogRoute,
 } = require('../../lib/metadata/admin-catalog');
-const { resolveDialect } = require('../../lib/vehicle');
 
 function apiStub(dialects = ['common', 'ardupilotmega']) {
   return {
     knownDialects: () => dialects,
   };
 }
-
-const XML = (body) => `<?xml version="1.0"?>\n<mavlink>${body}</mavlink>`;
 
 test('resolveCatalogSource prefers a deployed vehicle bundle', () => {
   const bundle = { dialect: 'custom', messages: {} };
@@ -30,36 +24,6 @@ test('resolveCatalogSource prefers a deployed vehicle bundle', () => {
   assert.equal(source.kind, 'bundle');
   assert.equal(source.dialect, 'custom');
   assert.equal(source.bundle, bundle);
-});
-
-test('resolveCatalogSource serves a customDialectPath profile via getDialect()', () => {
-  // Normal operating mode: deployed profile compiled from an absolute XML path.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-catalog-custom-'));
-  const entry = path.join(dir, 'bench.xml');
-  fs.writeFileSync(
-    entry,
-    XML(
-      '<messages><message id="42" name="BENCH_MSG">' +
-        '<field type="uint8_t" name="v">v</field></message></messages>'
-    )
-  );
-  const bundle = resolveDialect({
-    dialectSource: 'custom',
-    customDialectPath: entry,
-    dialectRevision: 'legacy-path',
-  });
-  const RED = {
-    nodes: {
-      getNode: (id) => (id === 'v-custom'
-        ? { dialect: bundle.dialect, getDialect: () => bundle }
-        : null),
-    },
-  };
-  const source = resolveCatalogSource(RED, apiStub(), { vehicle: 'v-custom' });
-  assert.equal(source.kind, 'bundle');
-  assert.equal(source.bundle, bundle);
-  assert.equal(source.dialect, 'bench');
-  assert.ok(source.bundle.messages.BENCH_MSG);
 });
 
 test('resolveCatalogSource refuses missing vehicle without inventing a dialect', () => {

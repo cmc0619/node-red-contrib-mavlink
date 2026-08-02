@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Vehicle Profile editor: dialect + dated revision pulldowns (seed + catalog),
- * no bundled/custom path split. Static assertions against the editor HTML.
+ * Vehicle Profile editor: dialect + dated revision pulldowns (seed + catalog).
+ * Static assertions against the editor HTML.
  */
 
 const test = require('node:test');
@@ -15,11 +15,6 @@ const html = fs.readFileSync(
   'utf8'
 );
 
-test('the old "not yet implemented" custom stub is gone', () => {
-  assert.ok(!/future upload mechanism/i.test(html), 'stub copy must be removed');
-  assert.ok(!/not yet implemented/i.test(html), 'stub copy must be removed');
-});
-
 test('dialect and dialectRevision are the persisted library picks', () => {
   assert.match(html, /dialect:\s*\{\s*value:\s*'ardupilotmega'/);
   assert.match(html, /dialectRevision:\s*\{\s*value:\s*'seed'/);
@@ -27,32 +22,13 @@ test('dialect and dialectRevision are the persisted library picks', () => {
   assert.match(html, /id="node-config-input-dialectRevision"/);
 });
 
-test('there is no custom-path dialect mode in the editor', () => {
-  assert.ok(!/id="node-config-input-dialectSource"/.test(html));
-  assert.ok(!/id="node-config-input-customDialectPath"/.test(html));
+test('dialect and revision are the only dialect inputs the editor offers', () => {
+  assert.ok(!/dialectSource/.test(html));
+  assert.ok(!/customDialectPath/.test(html));
+  assert.ok(!/oneditsave/.test(html));
   assert.ok(!/id="mav-catalog-pick"/.test(html));
-  assert.ok(!/\$path\.val\(p\)/.test(html));
-});
-
-test('custom-path profiles stay selectable until Seed or a catalog date is picked', () => {
-  assert.match(html, /hasLegacyCustomPath/);
-  assert.match(html, /Custom path \(legacy\)/);
-  assert.match(html, /rev === 'legacy-path'/);
-  assert.match(
-    html,
-    /this\.dialectSource = 'custom'/,
-    'oneditsave must keep dialectSource=custom when legacy-path is selected'
-  );
-  const saveHook = html.slice(html.indexOf('oneditsave:'));
-  assert.match(
-    saveHook,
-    /if \(rev === 'legacy-path' && \(this\.customDialectPath \|\| ''\)\.trim\(\)\)/,
-    'oneditsave must branch on legacy-path before clearing the path'
-  );
-  assert.ok(
-    !/oneditsave:\s*function\s*\(\)\s*\{\s*\/\*[\s\S]*?\*\/\s*this\.dialectSource = 'bundled';\s*this\.customDialectPath = '';\s*\}/.test(html),
-    'oneditsave must not unconditionally wipe customDialectPath'
-  );
+  assert.ok(!/not yet implemented/i.test(html));
+  assert.ok(!/future upload mechanism/i.test(html));
 });
 
 test('seed refresh workflow passes dispatch ref via env (no shell interpolation)', () => {

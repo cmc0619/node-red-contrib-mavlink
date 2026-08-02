@@ -65,9 +65,9 @@ module.exports = function registerMavlinkPayload(RED) {
         });
 
         const built = buildPayloadMessage({
-          topic: payload.topic || config.topic || 'camera',
-          verb: payload.verb || config.verb || 'photo',
-          path: payload.path || config.path || 'legacy',
+          topic: payload.topic || config.topic,
+          verb: payload.verb || config.verb,
+          path: payload.path || config.path,
           target,
           values: payload.values || valuesFrom(config),
           // Required for command-backed verbs (§9): the builder throws when a
