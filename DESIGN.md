@@ -87,6 +87,12 @@ try/catch "just in case." A flow referencing a deleted Vehicle Profile is a brok
 it somehow runs, the crash is the correct and most useful signal. A polished error message there
 converts an obvious build error into a runtime mystery.
 
+Resolve a direct Connection reference once in the consuming node's constructor and pass that
+object into shared delivery helpers. Node-RED recreates direct consumers when their configuration
+nodes change; a per-message `RED.nodes.getNode(config.connection)` retry is not recovery, only a
+second binding path. The existing wire-tier missing-Connection terminal failure remains output 1
+plus `done(err)`; it does not justify looking the same static reference up again for every message.
+
 "Fail closed" describes *how to reject bad input* — safely, loudly, with a reason. It is not a
 licence to add checks everywhere. Defensive code written for situations that cannot occur is
 noise, and noise is where real bugs hide.
@@ -254,14 +260,20 @@ the node where users face the most opaque data in the system.
 - **ArduPilot** publishes per-vehicle definitions at a stable URL —
   `https://autotest.ardupilot.org/Parameters/<Vehicle>/apm.pdef.json`, with an XML form
   alongside. Vehicle directory follows the frame type: `ArduCopter`, `ArduPlane`, `Rover`, `Sub`.
-- **PX4** has no equivalent stable public URL. The editor supplies one — a release asset, a
-  self-hosted copy, or a version pin — and the value dropdowns populate once it is given. Ship no
-  baked-in default that will rot.
+- **PX4** has no equivalent stable public URL. An operator may configure a release asset, a
+  self-hosted copy, or a version pin. Ship no baked-in default that will rot.
 
 Parameters are firmware- *and version*-specific, so a definition set is bound to a Vehicle
-Profile, not global. Cache by source URL with the fetch recorded, exactly as dialect XML is
-(above). A profile with no definition set still reads and writes parameters — it just does it
-without labels, and the node says so rather than pretending.
+Profile, not global. Each profile owns one holding file at
+`<userDir>/mavlink/param-defs/<profile-id>.json`; its optional `paramDefsUrl` is an update source,
+not the file's identity. Ordinary authenticated editor GETs read only that local file and parse it
+on demand. The authenticated Update action is the only network path: it requires an explicit
+nonempty URL, downloads and validates a nonempty definition map, then atomically replaces the
+profile's holding file. A failed update leaves the previous file intact. A missing file means no
+enrichment and returns an empty definition map; corrupt or empty local JSON fails loud and never
+falls back to the network. Changing or clearing the URL therefore does not hide a previously
+downloaded local copy. A profile with no definition set still reads and writes parameters — it
+just does it without labels, and the node says so rather than pretending.
 
 ## 5. The field codec
 
@@ -542,6 +554,12 @@ ordinary; five constraints are not, and each is the part a builder skips:
 - Serve compiled bundles from cache. A keystroke must not recompile a dialect.
 - Compile off the event loop. A blocked loop stalls every flow, not just the editor (§2).
 
+The browser does not cache admin-route responses. When a dialog needs a message, command, or enum
+catalog it makes a fresh local admin request. The caller retains only the catalog currently being
+rendered and a monotonically increasing request sequence, so an older response cannot repaint a
+newer selection. There is no per-key result bag, in-flight waiter queue, or duplicate-request
+coalescing. Command presets follow the same fresh-request rule.
+
 **Saved values survive async metadata loads.** A late-arriving dropdown population merges into
 persisted config; it never overwrites a valid saved selection with empty. Derived UI state —
 validity badges, availability — recomputes on every redeploy, not only first load. For
@@ -552,7 +570,8 @@ through the stock change→validate path (never a parallel validation API).
 
 **Editor helpers are shared, not pasted.** The `RED.mavlink.*` browser helpers — config-node
 pickers, enum/dialect catalog fills, `currentCatalogQuery`, `validateUint8`, the catalog source
-matrix `resolveCatalogTarget`, the shared catalog fetch `loadCatalog(endpoint, cache)`, Target
+matrix `resolveCatalogTarget`, the shared catalog fetch `loadCatalog(endpoint, state)` (caller
+state is `{ value: null, seq: 0 }`), Target
 CompID reload `reloadTargetCompId`, identity refresh `refreshIdentitySelect`, select title-sync /
 missing-option helpers (`bindSelectTitleSync`, `ensureSavedEnumOption`), `enumOptionLabel`
 (§6 `NAME (value)`; Node twin in `lib/metadata/commands-list.js`), queue-band picker
@@ -1359,7 +1378,7 @@ by silence. Update this list when an item lands.
 | **Custom dialect upload in the Vehicle editor** | deferred | Superseded by the dialect library (Seed + catalog dates). No path/upload UI. Legacy `customDialectPath` still resolves; private-dialect library ingestion is future work. |
 | **Command node `COMMAND_INT`** | **done** | Carrier is a required operator choice (no default; node reds out unset) and every tier — build included — honours it. Positional params are always degrees; the INT carrier scales ×1e7 per the dialect XML's own classification (`intCoordKinds`: `hasLocation` + not-degE7 → scale; natively-degE7 params carry raw; non-location param5/6 like gimbal flags never scale; unknown command → historical scaling). NaN in param5/6 refuses the INT build loud — the spec routes NaN-meaning commands to COMMAND_LONG, and coercion would aim at null island. On `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns and rebuilds once from the canonical degree params in the other form; second wrong-carrier fails loud (no auto-swap in Swarm/Payload — homogeneous fleets per node, the named result tells the operator which way to flip). Swarm command/payload actions and Payload command-backed verbs share the same required-carrier rule and the same `lib/command` builders; message-kind payload verbs ignore the carrier. |
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
-| **Param definition catalog** | **done** | `lib/param/defs.js` fetches ArduPilot `apm.pdef.json` by family or Vehicle `paramDefsUrl` (PX4/custom); cache; Param editor datalist + units/enums. |
+| **Param definition catalog** | **done** | One profile-keyed local holding file; authenticated GET is local-only; the Vehicle editor's explicit authenticated Update downloads its optional `paramDefsUrl`, validates, and atomically replaces the file. Param editor datalist + units/enums remain optional enrichment. |
 | **Full command-param `enum=` recovery** | **done** | Seed compile carries common.xml `<param enum=`> links into the bundle (e.g. Arm → `MAV_BOOL`). The old `hints.js` overlay is gone. |
 | **Move editor §6 reshape** | **done** | Per-field rows + mode/delivery visibility in the Move dialog. |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
@@ -1401,8 +1420,8 @@ a percentage would only reward testing the parts that were never going to break.
   NaN-aware at float32 precision, plus pinned payload-byte vectors.
 - **Registry load** — all ten bundled dialects assemble from `mavlink-mappings`; include-chain
   merge surfaces `HEARTBEAT` / `MAV_AUTOPILOT` on `common`; unknown dialect fails loud.
-- **`.d.ts` recovery** — a known enum-typed message field resolves to its enum; missing
-  declarations degrade field→enum to empty rather than failing the dialect load.
+- **XML field metadata** — a known enum-typed message field resolves from the compiled seed or
+  catalog XML; the deleted `.d.ts` recovery path is not part of dialect loading.
 - **XML compile (custom only)** — include ordering, missing include, cyclic include, msgid
   collision between files, same-message override precedence.
 - **Param rendering** — the four-case rule, `reserved` and `Empty`/`Reserved` hiding, and the
@@ -1545,7 +1564,10 @@ bundle). Private-dialect library ingestion is deferred (§4, §12 remaining tabl
 *Wrong belief:* because an old path recovered field→enum links from `mavlink-mappings` `.d.ts`,
 that pipeline is still required.
 *Fact:* the seed (and catalog compiles) carry `enum=` from upstream XML into
-{@link DialectBundle}. No `.d.ts` scrape for the dialect library.
+{@link DialectBundle}. The unused `.d.ts` parser has no runtime or test consumer and is deleted;
+there is no declaration-scrape fallback to preserve.
+*Check:* `rg -n 'metadata/dts|parseDtsText|parseModuleDts|numericTag' lib nodes test`
+(expect no matches).
 
 **Command-param `enum=` is in the seed — no `hints.js` overlay.**
 *Wrong belief:* a hand-maintained `lib/metadata/hints.js` table is still required to recover
@@ -1694,7 +1716,16 @@ it has.
 **Parameter definitions: ArduPilot publishes, PX4 does not.**
 *Wrong belief:* both stacks expose parameter metadata at a stable URL.
 *Fact:* ArduPilot serves `https://autotest.ardupilot.org/Parameters/<Vehicle>/apm.pdef.json`.
-PX4 has no equivalent, so the editor supplies a URL and nothing is baked in to rot (§4).
+PX4 has no equivalent, so nothing is baked in to rot (§4).
+
+**A parameter-definition URL is an update source, not a read path or cache key.**
+*Wrong belief:* because the definitions originate remotely, opening the Param editor should fetch
+or cache by URL, and ArduPilot profiles should infer a family URL automatically.
+*Fact:* ordinary reads are local-only from a holding file keyed by Vehicle Profile ID. Only the
+explicit authenticated Update action uses the profile's optional URL; it validates before atomic
+replacement, preserves the last good file on failure, and never turns corrupt local JSON into a
+network fallback. Clearing or changing the URL leaves the downloaded local copy reachable.
+*Check:* `node --test test/param/defs.test.js test/param/defs-route.test.js`.
 
 **Grep alternation.** `grep -E` uses `|` for alternation; `\|` matches a literal pipe. More than
 one measurement in this document was initially wrong because of that, including a count that
@@ -1723,9 +1754,10 @@ items; 5001/5100 do not); PX4 source `parse_mavlink_mission_item`; the four refe
 *Wrong belief:* `GET /mavlink/command/commands?vehicle=<id>` (or `/mavlink/enums` with no
 query) can fall through to `ardupilotmega` when `RED.nodes.getNode(id)` misses or the editor
 has not chosen a dialect yet.
-*Fact:* the editor caches under `vehicle:<id>` / `dialect:<name>`. A silent default would pin
-the wrong MAV_CMD/enum list to that key. A missing profile returns 404 unless the request also
-names an allow-listed bundled `?dialect=`; `custom` without a live profile is never served.
+*Fact:* each editor request names `vehicle:<id>` or `dialect:<name>` as its catalog target. A
+silent default would paint the wrong MAV_CMD/enum list. A missing profile returns 404 unless the
+request also names an allow-listed bundled `?dialect=`; `custom` without a live profile is never
+served.
 An empty catalog query (no `vehicle`, no `dialect`) returns 400 — not a default dialect.
 *Check:* `node --test test/command/commands-route.test.js test/vehicle/enums-route.test.js`
 
@@ -1738,6 +1770,16 @@ hand-built `<select>` of `eachConfig` is an acceptable fallback.
 A buttonless `<select>` is not the standard control. Vehicle/command modules must still
 `registerType` when deps are missing so pickers appear; editors call
 `RED.editor.prepareConfigNodeSelect` via `RED.mavlink.ensureConfigNodePicker` as a safety net.
+
+**Direct Connection references bind once when the consumer deploys.**
+*Wrong belief:* a wire action should repeat `RED.nodes.getNode(config.connection)` for every
+message so it can recover when the referenced Connection is edited or recreated.
+*Fact:* Node-RED recreates direct consumers when their configuration nodes change. Command, Move,
+Param, and Payload resolve the Connection in their constructors and pass that object into shared
+delivery-context resolution; the shared helper has no second lookup path. Missing-Connection
+terminal behavior remains output 1 plus `done(err)`.
+*Check:* `node --test test/addressing/delivery-context.test.js test/command/node.test.js
+test/move/node.test.js test/param/node.test.js test/payload/node.test.js`.
 *Working reference:* Node-RED **5.0.1** / `@node-red/editor-client@5.0.1`
 `prepareConfigNodeSelect` in `public/red/red.js` (builds `#…-btn-{property}-edit` pencil and
 `#…-btn-{property}-add` plus). Measured against that build; re-check the same symbol after
@@ -2016,14 +2058,14 @@ Operator guide: [`sitl/README.md`](sitl/README.md).
 *Wrong belief:* every node's `.html` must inline its own copy of `RED.mavlink.*` helpers (enum
 fills, dialect select, `currentCatalogQuery`, `validateUint8`, …), its own `resolveCatalogTarget`
 + dialect/vehicle/firmware `defaults.validate` blocks, its own `reloadTargetCompId` thin wrapper
-over `reloadCompIdSelect`, its own resolve→cache→getJSON→seq-guard catalog loader skeleton,
+over `reloadCompIdSelect`, its own resolve→getJSON→seq-guard catalog loader skeleton,
 its own `PAYLOAD_VERBS` + `refreshVerbOptions`, its own bitmaskTitle/booleanEntryLabel/
 selectedBitmaskValues trio, its own select title-sync / `#N (not in dialect)` sentinel, its own
 `refreshIdentitySelect` wrapper, its own `BAND_OPTIONS` table, its own `NAME (value)` label
 concat, its own companion target-hiding `if (!isBuild) { identityRole… }` block, and its own
 Build-tier dialect/vehicle/firmware/connection row toggles, because Node-RED loads external
 `<script src>` asynchronously so helpers might be undefined when a later node's
-`registerType` parses — or because each dialog's coalesce/`onKey` / Payload-compid
+`registerType` parses — or because each dialog's request sequencing / Payload-compid
 exception and remaining role/mode rows make the shared implementations "not quite the same."
 *Fact:* The helpers live once in [`resources/mavlink-editor.js`](resources/mavlink-editor.js),
 served at `resources/@cmc0619/node-red-contrib-mavlink/mavlink-editor.js` and loaded by a relative
@@ -2033,11 +2075,11 @@ served at `resources/@cmc0619/node-red-contrib-mavlink/mavlink-editor.js` and lo
 defined before any `registerType` runs — no async race. The catalog source matrix is one function,
 `RED.mavlink.resolveCatalogTarget({ isBuild? })` (Build → Dialect/`__vehicle`; wire → connection
 profile; empty → `{key:'empty', query:null}`, never `ardupilotmega`); the catalog fetch skeleton
-is `RED.mavlink.loadCatalog(endpoint, cache, cb, opts)` (caller-owned `{byKey, seq}` bag for
-the helper; optional `inflight` enables same-key waiter coalesce for Command Advanced —
-Greptile #36). Nodes paint from the catalog the loader hands the callback (or a
-`_current*Catalog` handle set from that callback) — not from a sticky “last key” into
-`byKey`. Target CompID
+is `RED.mavlink.loadCatalog(endpoint, state, cb, opts)` (caller-owned
+`{ value: null, seq: 0 }`). Each invocation makes a fresh local admin request; the sequence
+guard prevents an older response from repainting a newer selection. There is no result cache,
+in-flight waiter queue, or same-key request coalescing. Nodes paint from the catalog the loader
+hands the callback (or a `_current*Catalog` handle set from that callback). Target CompID
 reload is `RED.mavlink.reloadTargetCompId(node, { field? })` (default `targetComponent`; Command
 passes `field:'targetCompid'`); identity refresh is `RED.mavlink.refreshIdentitySelect(node,
 { rolesAllowed? })` (Swarm passes `['gcs','custom']`); catalog-backed selects share
