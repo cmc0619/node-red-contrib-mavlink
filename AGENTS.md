@@ -8,10 +8,20 @@ specification — its code principles (§2), UI rules (§6), build order (§12),
 and ground truth (§14) are binding, not suggestions. When code and spec disagree, the spec wins;
 when the spec and measured reality disagree, re-measure (§14) and update the spec in the same PR.
 
-**Session lessons belong in `DESIGN.md`, not in chat.** Every displaced belief, measured fact,
-or working reference that changes how the toolkit must be built is written into the affected
-section plus a §14 ground-truth entry before the PR is considered ready. The next agent will
-not see this conversation.
+**Session lessons belong in files, not in chat.** Toolkit lessons — every displaced belief,
+measured fact, or working reference that changes how the toolkit must be built — are written
+into the affected `DESIGN.md` section plus a §14 ground-truth entry. MAVLink protocol lessons
+go into `MAVLINK.md` (create it if absent), and **only when sure**: a protocol entry requires
+confirmation against the dialect XML or measured on-wire behavior (§14), never inference from
+reading someone else's code. Write entries before the PR is considered ready. The next agent
+will not see this conversation.
+
+**Reference implementations inform, they don't decide.** Consult pymavlink, MAVSDK, and the
+GCS codebases (Mission Planner, QGroundControl, MAVProxy) for how things are done — framing,
+sequencing, command and parameter protocols, edge cases. They are idea sources, not ground
+truth: they disagree with each other often enough that copying any one of them wholesale
+imports its bugs. Authority stays with `DESIGN.md` and §14 — the dialect XML and measured
+reality.
 
 **PR size cap: 50 files.** Do not push a pull request whose diff touches more than 50 files.
 Split by module boundary (`lib/<module>`, `nodes/<node>`, matching tests) into sequential PRs
@@ -33,7 +43,12 @@ GitHub triggers — for example Claude's GitHub integration, or the Cursor autom
 below — the trigger wakes the agent when CI completes or a review is submitted. Absent
 triggers, set a timer and check the PR periodically for new bot reviews. When feedback
 arrives, collect all open findings and form one plan — apply or decline each against DESIGN.md
-§2, with a §14 note when a belief was displaced — before pushing fixes. Do not treat the
+§2, with a §14 note when a belief was displaced. Agents chronically forget the YAGNI
+constraint when reacting to review findings, so every planned fix must restate the concrete
+problem it solves and the smallest change that solves it; a finding whose fix cannot be
+justified that way is declined, not indulged. Share the plan with the owner before pushing
+whenever a fix grows scope, adds code, or reaches beyond the finding's own lines; trivial
+in-place fixes may be applied directly and reported in the plan. Do not treat the
 implementation as finished until Critical/Important findings are addressed or explicitly
 declined. If a human leaves findings, handle those too.
 
@@ -45,10 +60,11 @@ open for the next passer-by.
 https://cursor.com/automations (or `/automate` in the Agents Window) on this repo with
 triggers: **CI completed** (covers CodeRabbit check completion) and **PR review submitted**
 (covers Codex and human reviews). Prompt should: identify the open PR, collect inline comments
-from CodeRabbit / Codex, form a plan applying or declining each finding against DESIGN.md,
-then push fixes under the 50-file cap and reply on the threads. Without a trigger like this,
-the fallback is the periodic timer check above — agents otherwise only learn reviews finished
-when a human pings them.
+from CodeRabbit / Codex, form a plan that applies or declines each finding against DESIGN.md
+while restating the concrete problem and smallest fix per the YAGNI section, then push fixes
+under the 50-file cap and reply on the threads. Without a trigger like this, the fallback is
+the periodic timer check above — agents otherwise only learn reviews finished when a human
+pings them.
 
 **The draft boundary is absolute.** An agent never flips a PR to ready-for-review — not when
 the work looks done, not when tests are green, not when told to "wrap up." If the owner wants
