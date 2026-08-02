@@ -34,6 +34,72 @@ test('mavlink-payload node builds command-backed payload messages', () => {
   assert.equal(sent[1].confirmation, 'command_ack');
 });
 
+test('mavlink-payload reuses its deploy-resolved Connection during input delivery', () => {
+  const conn = connStub();
+  conn.vehicle = { targetSysid: 7, targetCompid: 1 };
+  const RED = redStub({ conn });
+  const getNode = RED.nodes.getNode.bind(RED.nodes);
+  let connectionLookups = 0;
+  RED.nodes.getNode = (id) => {
+    if (id === 'conn') connectionLookups++;
+    return getNode(id);
+  };
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    carrier: 'long',
+    delivery: 'send',
+    topic: 'servo',
+    verb: 'set',
+    connection: 'conn',
+    targetSystem: 7,
+    targetComponent: 1,
+    timeout: 10000,
+    maxRetries: 3,
+  });
+
+  node.emit(
+    'input',
+    { payload: { values: { servo: 8, pwm: 1600 } } },
+    () => {},
+    () => {}
+  );
+
+  assert.equal(connectionLookups, 1, 'Connection is resolved once at deploy');
+  assert.equal(conn.sent.length, 1);
+});
+
+test('mavlink-payload missing Connection keeps output 1 and done(err) failure delivery', () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    carrier: 'long',
+    delivery: 'send',
+    topic: 'servo',
+    verb: 'set',
+    connection: 'missing',
+    targetSystem: 7,
+    targetComponent: 1,
+    timeout: 10000,
+    maxRetries: 3,
+  });
+  let sent;
+  let doneError;
+
+  node.emit(
+    'input',
+    { payload: { values: { servo: 8, pwm: 1600 } } },
+    (messages) => { sent = messages; },
+    (err) => { doneError = err; }
+  );
+
+  assert.equal(sent[0], null);
+  assert.equal(sent[1].result, 'failed');
+  assert.match(sent[1].detail, /requires a Connection/);
+  assert.match(doneError.message, /requires a Connection/);
+});
+
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 test('mavlink-payload confirm tier waits for COMMAND_ACK and continues only on ACCEPTED', async () => {

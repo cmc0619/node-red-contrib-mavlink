@@ -46,8 +46,6 @@ const {
   CARRIER,
   intCoordKinds,
   resolveFrame,
-  DEFAULT_TIMEOUT_MS,
-  DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
 
 const { loadMetadata } = require('../lib/metadata/load');
@@ -160,27 +158,25 @@ module.exports = function registerMavlinkCommand(RED) {
     let _coordKindsResolved = false;
     function coordKinds() {
       if (_coordKindsResolved) return _coordKinds;
-      _coordKindsResolved = true;
       let bundle = null;
       if (delivery === 'build') {
         if (config.dialect === '__vehicle') {
-          bundle = dialectFromVehicleId(RED, config.vehicle);
+          bundle = dialectFromVehicleId(RED, config.vehicle, { rethrow: true });
         } else if (config.dialect) {
           const api = metadataApi();
-          if (api) {
-            try { bundle = api.loadBundled(config.dialect); } catch { bundle = null; }
-          }
+          if (api) bundle = api.loadBundled(config.dialect);
         }
       } else {
         // Connection snapshot has no bundle — resolve the profile node (§7).
-        bundle = dialectFromConnection(RED, connNode);
+        bundle = dialectFromConnection(RED, connNode, { rethrow: true });
       }
       _coordKinds = bundle ? intCoordKinds(bundle, commandId) : null;
+      _coordKindsResolved = true;
       return _coordKinds;
     }
 
-    const timeoutMs = config.timeout ? Number(config.timeout) : DEFAULT_TIMEOUT_MS;
-    const maxRetries = config.maxRetries !== undefined ? Number(config.maxRetries) : DEFAULT_MAX_RETRIES;
+    const timeoutMs = Number(config.timeout);
+    const maxRetries = Number(config.maxRetries);
     const unconfirmedContinue = !!config.unconfirmedContinue;
 
     // Wire tiers need a Connection — do not silently degrade into Build (§9).

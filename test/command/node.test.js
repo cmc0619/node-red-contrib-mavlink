@@ -166,6 +166,55 @@ test('Async handler contains a throw as a terminal failed status plus done(err)'
   assert.ok(doneErr instanceof Error, 'done(err) was called');
 });
 
+test('two consecutive INT inputs both fail loud when dialect lookup fails', async () => {
+  let dialectLookups = 0;
+  const vehicle = {
+    getDialect() {
+      dialectLookups++;
+      throw new Error('temporary dialect failure');
+    },
+  };
+  const conn = connStub({ id: 'vehicle', targetSysid: 1, targetCompid: 1 });
+  const RED = redStub({ conn, vehicle });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    carrier: 'int',
+    frame: '3',
+    mode: 'preset',
+    preset: 'reposition',
+    delivery: 'send',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '10000',
+    maxRetries: '3',
+  });
+  const outputs = [];
+  const doneErrors = [];
+
+  for (let i = 0; i < 2; i++) {
+    node.emit(
+      'input',
+      { payload: { 5: -35, 6: 149, 7: 50 } },
+      (messages) => { outputs.push(messages); },
+      (err) => { doneErrors.push(err); }
+    );
+    await tick();
+  }
+
+  assert.equal(dialectLookups, 2, 'failed lookup is retried for the next input');
+  assert.equal(conn.sent.length, 0, 'no historically scaled command reaches the wire');
+  assert.equal(outputs.length, 2);
+  assert.equal(doneErrors.length, 2);
+  for (let i = 0; i < 2; i++) {
+    assert.equal(outputs[i][0], null, 'output 0 stays terminally silent');
+    assert.equal(outputs[i][1].result, 'failed');
+    assert.match(outputs[i][1].detail, /temporary dialect failure/);
+    assert.match(doneErrors[i].message, /temporary dialect failure/);
+  }
+});
+
 test('resolveTarget: wire tier empty config inherits Vehicle Profile target from connNode.vehicle', async () => {
   const conn = connStub({ targetSysid: 42, targetCompid: 191 });
   const RED = redStub({ conn });
@@ -221,12 +270,19 @@ test('Send/confirm tier with no connection fails loud instead of silently buildi
   const node = new Node({ carrier: 'long', mode: 'preset', preset: 'arm', delivery: 'confirm' });
 
   let sent;
-  node.emit('input', { payload: { 1: 1 } }, (m) => { sent = m; }, () => {});
+  let doneError;
+  node.emit(
+    'input',
+    { payload: { 1: 1 } },
+    (m) => { sent = m; },
+    (err) => { doneError = err; }
+  );
   await tick();
 
   assert.equal(sent[0], null, 'output 0 must not fire');
   assert.equal(sent[1].result, 'failed');
   assert.ok(/no connection/.test(sent[1].detail));
+  assert.match(doneError.message, /no connection/);
 });
 
 test('resolveTarget: companion identity derives {airframe sysid, 1} as target', async () => {

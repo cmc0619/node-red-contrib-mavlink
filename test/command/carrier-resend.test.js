@@ -18,6 +18,12 @@ const { MAV_RESULT } = require('../../lib/command');
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 25));
 
+function runInput(node, msg, done = () => {}) {
+  return new Promise((resolve) => {
+    node.emit('input', msg, resolve, done);
+  });
+}
+
 /**
  * A connection stub that replies to each send() with the next scripted ACK
  * result (delivered asynchronously so the AckWaiter promise is pending first).
@@ -116,9 +122,7 @@ test('INT_ONLY then ACCEPTED: warns, resends as COMMAND_INT, continues', async (
     MAV_RESULT.ACCEPTED,
   ]);
 
-  let sent;
-  node.emit('input', { payload: { 5: 47.1, 6: -122.5, 7: 100 } }, (m) => { sent = m; }, () => {});
-  await tick();
+  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
 
   assert.equal(conn.sent.length, 2, 'exactly two sends: one LONG then one INT');
   assert.equal(conn.sent[0].message.name, 'COMMAND_LONG');
@@ -143,9 +147,7 @@ test('INT_ONLY twice: fails loud, no third send, output 0 stays silent', async (
     MAV_RESULT.COMMAND_INT_ONLY,
   ]);
 
-  let sent;
-  node.emit('input', { payload: { 5: 47.1, 6: -122.5, 7: 100 } }, (m) => { sent = m; }, () => {});
-  await tick();
+  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
 
   assert.equal(conn.sent.length, 2, 'only one carrier swap — no third attempt');
   assert.equal(warnings.length, 1);
@@ -160,9 +162,7 @@ test('INT_ONLY then DENIED: fails loud, noting the completed swap', async () => 
     MAV_RESULT.DENIED,
   ]);
 
-  let sent;
-  node.emit('input', { payload: { 5: 47.1, 6: -122.5, 7: 100 } }, (m) => { sent = m; }, () => {});
-  await tick();
+  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
 
   assert.equal(conn.sent.length, 2);
   assert.equal(sent[0], null);
@@ -173,9 +173,7 @@ test('INT_ONLY then DENIED: fails loud, noting the completed swap', async () => 
 test('ACCEPTED on the first COMMAND_LONG: no swap, no warn', async () => {
   const { node, conn, warnings } = deploy([MAV_RESULT.ACCEPTED]);
 
-  let sent;
-  node.emit('input', { payload: { 5: 47.1, 6: -122.5, 7: 100 } }, (m) => { sent = m; }, () => {});
-  await tick();
+  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
 
   assert.equal(conn.sent.length, 1, 'a single COMMAND_LONG send');
   assert.equal(conn.sent[0].message.name, 'COMMAND_LONG');
@@ -188,9 +186,7 @@ test('ACCEPTED on the first COMMAND_LONG: no swap, no warn', async () => {
 test('contradictory LONG_ONLY on the first LONG send fails loud without swapping', async () => {
   const { node, conn, warnings } = deploy([MAV_RESULT.COMMAND_LONG_ONLY]);
 
-  let sent;
-  node.emit('input', { payload: { 5: 47.1, 6: -122.5, 7: 100 } }, (m) => { sent = m; }, () => {});
-  await tick();
+  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
 
   assert.equal(conn.sent.length, 1, 'no swap: the demanded carrier was already sent');
   assert.equal(warnings.length, 0);
@@ -202,9 +198,7 @@ test('contradictory LONG_ONLY on the first LONG send fails loud without swapping
 test('INT-first: configured carrier int sends COMMAND_INT with degrees scaled to degE7', async () => {
   const { node, conn, warnings } = deploy([MAV_RESULT.ACCEPTED], { carrier: 'int' });
 
-  let sent;
-  node.emit('input', { payload: { 5: -35, 6: 149, 7: 100 } }, (m) => { sent = m; }, () => {});
-  await tick();
+  const sent = await runInput(node, { payload: { 5: -35, 6: 149, 7: 100 } });
 
   assert.equal(conn.sent.length, 1, 'a single COMMAND_INT send');
   assert.equal(conn.sent[0].message.name, 'COMMAND_INT');
@@ -225,9 +219,7 @@ test('INT-first LONG_ONLY: swaps back to COMMAND_LONG with unscaled degrees', as
     { carrier: 'int' }
   );
 
-  let sent;
-  node.emit('input', { payload: { 5: 47.1, 6: -122.5, 7: 100 } }, (m) => { sent = m; }, () => {});
-  await tick();
+  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
 
   assert.equal(conn.sent.length, 2, 'exactly two sends: one INT then one LONG');
   assert.equal(conn.sent[0].message.name, 'COMMAND_INT');
@@ -251,9 +243,7 @@ test('INT-first contradictory INT_ONLY fails loud without swapping', async () =>
     { carrier: 'int' }
   );
 
-  let sent;
-  node.emit('input', { payload: { 5: 47.1, 6: -122.5, 7: 100 } }, (m) => { sent = m; }, () => {});
-  await tick();
+  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
 
   assert.equal(conn.sent.length, 1, 'no swap: the demanded carrier was already sent');
   assert.equal(warnings.length, 0);
@@ -278,14 +268,10 @@ test('msg.mavFrame selects a non-global frame so INT x/y scale by 1e4, not 1e7',
     [MAV_RESULT.COMMAND_INT_ONLY, MAV_RESULT.ACCEPTED]
   );
 
-  let sent;
-  node.emit(
-    'input',
+  const sent = await runInput(
+    node,
     { payload: { 5: 10.4, 6: -3.6, 7: 12 }, mavFrame: 1 }, // LOCAL_NED
-    (m) => { sent = m; },
-    () => {}
   );
-  await tick();
 
   assert.equal(conn.sent[1].message.name, 'COMMAND_INT');
   assert.equal(conn.sent[1].message.fields.frame, 1);
@@ -318,9 +304,7 @@ test('INT + non-location command: XML kinds keep param5 raw on the wire', async 
   );
   conn.vehicle = Object.freeze({ id: 'veh' });
 
-  let sent;
-  node.emit('input', { payload: { 1: -15, 2: 90, 5: 8 } }, (m) => { sent = m; }, () => {});
-  await tick();
+  const sent = await runInput(node, { payload: { 1: -15, 2: 90, 5: 8 } });
 
   assert.equal(conn.sent[0].message.name, 'COMMAND_INT');
   assert.equal(conn.sent[0].message.fields.x, 8, 'gimbal flags must not be ×1e7-scaled');
@@ -339,10 +323,12 @@ test('INT + NaN lat/lon refuses loud — nothing reaches the wire', async () => 
   );
   conn.vehicle = Object.freeze({ id: 'veh' });
 
-  let sent;
   let doneErr;
-  node.emit('input', { payload: { 5: NaN, 6: 149, 7: 50 } }, (m) => { sent = m; }, (e) => { doneErr = e; });
-  await tick();
+  const sent = await runInput(
+    node,
+    { payload: { 5: NaN, 6: 149, 7: 50 } },
+    (err) => { doneErr = err; }
+  );
 
   assert.equal(conn.sent.length, 0, 'the null-island command must never be sent');
   assert.equal(sent[0], null, 'output 0 must not continue');

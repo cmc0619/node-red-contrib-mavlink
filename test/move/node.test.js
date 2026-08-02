@@ -132,6 +132,62 @@ test('mavlink-move companion identity derives sysid from airframe and pins compi
   assert.equal(sends[0].opts.target.compid, 1, 'compid pinned to 1 (autopilot) for companion');
 });
 
+test('mavlink-move reuses its deploy-resolved Connection during input delivery', () => {
+  const sends = [];
+  const conn = {
+    vehicle: { targetSysid: 10, targetCompid: 2 },
+    send(message, opts) { sends.push({ message, opts }); },
+  };
+  const RED = redStub({ conn });
+  const getNode = RED.nodes.getNode.bind(RED.nodes);
+  let connectionLookups = 0;
+  RED.nodes.getNode = (id) => {
+    if (id === 'conn') connectionLookups++;
+    return getNode(id);
+  };
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'send',
+    mode: 'local-position',
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+  });
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+
+  assert.equal(connectionLookups, 1, 'Connection is resolved once at deploy');
+  assert.equal(sends.length, 1);
+});
+
+test('mavlink-move missing Connection keeps output 1 and done(err) failure delivery', () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'send',
+    mode: 'local-position',
+    connection: 'missing',
+    targetSystem: 1,
+    targetComponent: 1,
+  });
+  let sent;
+  let doneError;
+
+  node.emit(
+    'input',
+    { payload: {} },
+    (messages) => { sent = messages; },
+    (err) => { doneError = err; }
+  );
+
+  assert.equal(sent[0], null);
+  assert.equal(sent[1].result, 'failed');
+  assert.match(sent[1].detail, /requires a Connection/);
+  assert.match(doneError.message, /requires a Connection/);
+});
+
 test('mavlink-move payload.target beats companion derivation', () => {
   const sends = [];
   const conn = {

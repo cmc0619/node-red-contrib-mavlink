@@ -37,6 +37,7 @@ module.exports = function registerMavlinkMove(RED) {
           delivery,
           config,
           payload,
+          connectionNode: connAtDeploy,
         });
 
         const message = buildMoveMessage({
