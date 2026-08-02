@@ -167,9 +167,7 @@
           });
         }
         $tier.on('change', function () {
-          _currentMsgCatalog = null;
-          _msgCatalog.byKey = {};
-          _cmdCatalog.byKey = {};
+          clearCatalogs();
           updateVisibility();
           reloadCatalogs();
         });

@@ -23,10 +23,7 @@
         if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
           RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
         }
-        RED.mavlink.fillBandSelect(
-          $('#node-input-band'),
-          this.band !== undefined ? String(this.band) : '2'
-        );
+        RED.mavlink.fillBandSelect($('#node-input-band'), String(this.band));
       },
     });
   }());
