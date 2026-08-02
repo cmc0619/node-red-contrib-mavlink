@@ -1818,11 +1818,12 @@ owns content and `heartbeatIntervalMs` (default 1000). Connection emits on each 
 using that interval and does not surface HB controls. Peer-table stale/expire stay on Connection
 (inbound freshness). Outbound addressing uses the peer-table primary endpoint (optional Remote
 fallback); `target_system = 0` is a normal message field with no Connection broadcast flag.
-Legacy flows that still store Connection `heartbeatInterval` keep that cadence until the
-identity flow JSON includes `heartbeatIntervalMs` (or the Connection is re-saved and the
-legacy key drops).
+Cadence has exactly one reader: `idNode.heartbeatIntervalMs`. Pre-1.0, a leftover Connection
+`heartbeatInterval` key is not read and does not migrate — the identity's own field (blank =
+1000) is the whole contract, and the scheduler has no constructor-level interval to fall back to.
 *Check:* `node --test test/connection/heartbeat.test.js test/identity/` ;
-Local Identity editor shows HB Interval; Connection editor has no Heartbeat/Broadcast rows.
+Local Identity editor shows HB Interval; Connection editor has no Heartbeat/Broadcast rows;
+`rg -n 'heartbeatInterval\b' nodes lib` (expect no matches).
 
 **Bind-mounted source is not an installed package.**
 *Wrong belief:* `npm install /module` from the Node-RED user directory (or listing
@@ -2041,6 +2042,9 @@ Build-via-`__vehicle` use `firstDefined(payload.firmware, profile.firmware)`; Bu
 concrete dialect uses `firstDefined(payload.firmware, config.firmware)` and must not read
 `profile.firmware` (hidden is not honored). Do not invent `'ardupilot'`. ArduPilot often omits
 the C_CAST bit, so the named-firmware step remains required when capabilities are absent.
+`resolveParamEncoding` is the only place that ladder runs: `encodeParamValue` /
+`decodeParamValue` take a resolved `'bytewise' | 'c-cast'` and must not also accept a firmware
+name — a second reader there re-runs the ladder with the capabilities step missing.
 *Check:* `node --test test/param/param.test.js test/addressing/resolve.test.js` — look for
 `resolveParamEncoding` / unresolved / firstDefined firmware tests.
 

@@ -7,7 +7,13 @@ const { Connection, STATE } = require('../../lib/connection');
 const { BAND } = require('../../lib/connection/bands');
 const { mockDgram, fakeWire, frameBuffer, fakeTimers, fakeClock } = require('./helpers');
 
-const GCS = { id: 'gcs', sysid: 255, compid: 190, heartbeat: { type: 6, autopilot: 8, systemStatus: 4 } };
+const GCS = {
+  id: 'gcs',
+  sysid: 255,
+  compid: 190,
+  heartbeatIntervalMs: 1000,
+  heartbeat: { type: 6, autopilot: 8, systemStatus: 4 },
+};
 
 /** @param {number} ms @returns {Promise<void>} */
 function delay(ms) {

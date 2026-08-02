@@ -82,12 +82,8 @@ module.exports = function registerMavlinkConnection(RED) {
       return idNode;
     });
 
-    // Legacy flows stored cadence on the Connection (`heartbeatInterval`). Prefer
-    // that when an identity still has the default 1000 ms so upgrades do not
-    // silently reset a custom rate. Re-saving the Connection drops the legacy key.
-    const legacyHeartbeatIntervalMs = parseLegacyHeartbeatInterval(config.heartbeatInterval);
     const identities = node._identityNodes.map((idNode) =>
-      identitySnapshot(idNode, defaults, bundle, node.id, legacyHeartbeatIntervalMs)
+      identitySnapshot(idNode, defaults, bundle, node.id)
     );
 
     const config_ = {
@@ -158,46 +154,25 @@ module.exports.buildSigning = buildSigning;
  * @param {object} defaults  Vehicle Profile defaults
  * @param {object} bundle  the dialect bundle (for enum resolution)
  * @param {string} connectionId  this connection's node id (for sysid claims)
- * @param {number|null} [legacyHeartbeatIntervalMs]  Connection-era cadence, if any
  * @returns {{id: string, sysid: number, compid: number, heartbeatIntervalMs: number, heartbeat: object}}
  */
-function identitySnapshot(idNode, defaults, bundle, connectionId, legacyHeartbeatIntervalMs) {
+function identitySnapshot(idNode, defaults, bundle, connectionId) {
   if (idNode.derivesSysidFromVehicle) {
     idNode.bindVehicleSysid(defaults.defaultTargetSystem, idNode.describe(), connectionId);
   }
   const wire = idNode.getIdentity();
   const hb = idNode.getHeartbeatFields();
-  const fromIdentity = Number(idNode.heartbeatIntervalMs);
-  let heartbeatIntervalMs = Number.isFinite(fromIdentity) && fromIdentity > 0 ? fromIdentity : 1000;
-  // Migrate Connection-era cadence only when the identity never saved the new
-  // field (defaults alone look like 1000 and must not override an explicit 1000).
-  if (
-    legacyHeartbeatIntervalMs != null
-    && !idNode.heartbeatIntervalMsConfigured
-  ) {
-    heartbeatIntervalMs = legacyHeartbeatIntervalMs;
-  }
   return {
     id: idNode.id,
     sysid: wire.sysid,
     compid: wire.compid,
-    heartbeatIntervalMs,
+    heartbeatIntervalMs: idNode.heartbeatIntervalMs,
     heartbeat: {
       type: enumValue(bundle, 'MAV_TYPE', hb.type),
       autopilot: enumValue(bundle, 'MAV_AUTOPILOT', hb.autopilot),
       systemStatus: enumValue(bundle, 'MAV_STATE', hb.system_status),
     },
   };
-}
-
-/**
- * @param {unknown} raw
- * @returns {number|null}
- */
-function parseLegacyHeartbeatInterval(raw) {
-  if (raw === undefined || raw === null || raw === '') return null;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**

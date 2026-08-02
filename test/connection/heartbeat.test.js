@@ -5,10 +5,13 @@ const assert = require('node:assert/strict');
 
 const { HeartbeatScheduler } = require('../../lib/connection/heartbeat');
 
+// Shaped like the snapshot nodes/mavlink-connection.js builds: the Local
+// Identity always supplies heartbeatIntervalMs.
 const GCS = {
   id: 'gcs',
   sysid: 255,
   compid: 190,
+  heartbeatIntervalMs: 1000,
   heartbeat: { type: 6, autopilot: 8, systemStatus: 4 },
 };
 
@@ -33,7 +36,13 @@ function build(opts = {}) {
 test('emits one HEARTBEAT per bound identity per tick', () => {
   const { scheduler, emitted } = build();
   scheduler.add(GCS);
-  scheduler.add({ id: 'comp', sysid: 1, compid: 191, heartbeat: { type: 18, autopilot: 8 } });
+  scheduler.add({
+    id: 'comp',
+    sysid: 1,
+    compid: 191,
+    heartbeatIntervalMs: 1000,
+    heartbeat: { type: 18, autopilot: 8 },
+  });
   scheduler.tick();
   assert.equal(emitted.length, 2);
   const gcs = emitted.find((e) => e.identity.id === 'gcs').message;
