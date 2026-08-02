@@ -28,6 +28,7 @@
   },
   "files": [
     "lib",
+    "!lib/**/test/**",
     "nodes",
     "resources",
     "examples",
