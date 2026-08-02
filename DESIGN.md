@@ -221,13 +221,11 @@ library via catalog update under the Node-RED userDir; once it is there it is on
 pulldown entry. Configuration updates happen on a bench with internet; the seed covers the
 boat.
 
-**There is no custom-path mode.** A profile is `dialect` + `dialectRevision`, and nothing
-else: `seed` is the shipped blob, any other revision is a catalog snapshot id. Pre-1.0, the
-`dialectSource` / `customDialectPath` / `legacy-path` keys were deleted rather than migrated —
-no defaults entry, no "Custom path (legacy)" Version option, no `oneditsave` rewriting old
-keys. Absolute XML reaches a profile by being downloaded into the userDir catalog, where it
-becomes an ordinary pulldown entry. Editor AJAX must still never invent a bundled dialect
-under a profile id — a profile that will not compile fails loud.
+**A profile is `dialect` + `dialectRevision`, and nothing else.** `seed` is the shipped blob;
+any other revision is a catalog snapshot id. Absolute XML reaches a profile by being
+downloaded into the userDir catalog, where it becomes an ordinary pulldown entry. Editor AJAX
+never invents a bundled dialect under a profile id — a profile that will not compile fails
+loud.
 
 **Private / vendor dialects (deferred).** Ingesting a private include chain that is not in
 any catalog snapshot is future work. When it lands it must join the same library shape
@@ -1381,7 +1379,7 @@ by silence. Update this list when an item lands.
 
 | Item | Status | Notes |
 |---|---|---|
-| **Custom dialect upload in the Vehicle editor** | deferred | Superseded by the dialect library (Seed + catalog dates). No path/upload UI, and no `customDialectPath` resolution — the key is deleted, not migrated. Private-dialect library ingestion is future work. |
+| **Custom dialect upload in the Vehicle editor** | deferred | Superseded by the dialect library (Seed + catalog dates). No path/upload UI and no path resolution behind it. Private-dialect library ingestion is future work. |
 | **Command node `COMMAND_INT`** | **done** | Carrier defaults to `COMMAND_INT` in the Command, Payload, and Swarm editors; the only other choice is `COMMAND_LONG`, with no blank prompt or conditional editor validator. Runtime still refuses missing/invalid saved carrier data rather than repairing it. Every tier — build included — honours the configured carrier. Positional params are always degrees; the INT carrier scales ×1e7 per the dialect XML's own classification (`intCoordKinds`: `hasLocation` + not-degE7 → scale; natively-degE7 params carry raw; non-location param5/6 like gimbal flags never scale; unknown command → historical scaling). NaN in param5/6 refuses the INT build loud — the spec routes NaN-meaning commands to COMMAND_LONG, and coercion would aim at null island. On `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns and rebuilds once from the canonical degree params in the other form; second wrong-carrier fails loud (no auto-swap in Swarm/Payload — homogeneous fleets per node, the named result tells the operator which way to flip). Swarm command/payload actions and Payload command-backed verbs use the same `lib/command` builders; message-kind payload verbs ignore the carrier. |
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
 | **Param definition catalog** | **done** | One profile-keyed local holding file; authenticated GET is local-only; the Vehicle editor's explicit authenticated Update downloads its optional `paramDefsUrl`, validates, and atomically replaces the file. Param editor datalist + units/enums remain optional enrichment. |
@@ -1560,11 +1558,11 @@ installs.
 from the `mavlink-mappings` npm registry / vendored `dialects/*.xml`.
 *Fact:* shipped dialects come from `seed/mavlink-YYYY-MM-DD-<sha>.seed.gz` (pointer in
 `seed/active.json`). The editor add path is dialect + version (Seed or a catalog date) only —
-there is no free-text path control and no `customDialectPath` resolution behind it. Private
-XML becomes a profile by entering the userDir catalog; library ingestion of private include
-chains is deferred (§4, §12 remaining table).
+there is no free-text path control and nothing resolving one. Private XML becomes a profile by
+entering the userDir catalog; library ingestion of private include chains is deferred
+(§4, §12 remaining table).
 *Check:* `node -e "const {knownDialects,seedStamp}=require('./lib/metadata/bundled'); console.log(seedStamp(), knownDialects().slice(0,3))"`;
-`rg -n 'customDialectPath|dialectSource' lib nodes` (expect no matches).
+`node --test test/vehicle/vehicle.test.js`.
 
 **Message-field `enum=` comes from the compiled seed/catalog XML, not `.d.ts` recovery.**
 *Wrong belief:* because an old path recovered field→enum links from `mavlink-mappings` `.d.ts`,
@@ -1818,12 +1816,10 @@ owns content and `heartbeatIntervalMs` (default 1000). Connection emits on each 
 using that interval and does not surface HB controls. Peer-table stale/expire stay on Connection
 (inbound freshness). Outbound addressing uses the peer-table primary endpoint (optional Remote
 fallback); `target_system = 0` is a normal message field with no Connection broadcast flag.
-Cadence has exactly one reader: `idNode.heartbeatIntervalMs`. Pre-1.0, a leftover Connection
-`heartbeatInterval` key is not read and does not migrate — the identity's own field (blank =
-1000) is the whole contract, and the scheduler has no constructor-level interval to fall back to.
+Cadence has exactly one reader — `idNode.heartbeatIntervalMs`, blank meaning 1000. Every
+identity snapshot carries it, so the scheduler has no interval of its own to fall back to.
 *Check:* `node --test test/connection/heartbeat.test.js test/identity/` ;
-Local Identity editor shows HB Interval; Connection editor has no Heartbeat/Broadcast rows;
-`rg -n 'heartbeatInterval\b' nodes lib` (expect no matches).
+Local Identity editor shows HB Interval; Connection editor has no Heartbeat/Broadcast rows.
 
 **Bind-mounted source is not an installed package.**
 *Wrong belief:* `npm install /module` from the Node-RED user directory (or listing
@@ -2341,21 +2337,16 @@ node — pre-1.0 means canonical keys only, not leftover-key readers or editor �
 test/command/commands-route.test.js test/nodes/command-html.test.js`; `rg -n 'targetSysid'
 nodes/mavlink-command.html lib/addressing/delivery-context.js` (expect no matches).
 
-**A leftover key is not made legitimate by calling it a normal source.**
-*Wrong belief:* (this file, until 2026-08-02) deployed `dialectSource: custom` +
-`customDialectPath` profiles are a *normal* `getDialect()` source, so the reader stays and
-the editor keeps a "Custom path (legacy)" Version option until the user picks Seed or a date.
-Re-labelling a compat path as "normal operating mode" made it exempt from the pre-1.0 rule.
-*Fact:* the editor has no control that can ever *create* those keys — they only arrive from
-flow JSON written by an earlier dev build, which is the definition of a leftover-key reader.
-The label was the whole justification, so the machinery was deleted: `resolveDialect` resolves
-`dialect` + `dialectRevision` only, and the editor carries no `dialectSource`,
-`customDialectPath`, `legacy-path`, or `oneditsave`. Custom XML is not lost — it enters the
-userDir catalog and becomes an ordinary pulldown entry. When a "legacy" reader is defended on
-the grounds that it is actually normal, check whether any editor path produces it.
-*Check:* `rg -n 'dialectSource|customDialectPath|legacy-path' lib nodes resources`
-(expect no matches); `node --test test/vehicle/vehicle.test.js test/nodes/vehicle-html.test.js
-test/metadata/admin-catalog.test.js`.
+**Calling a reader "normal" does not make it one — ask what writes the key.**
+*Wrong belief:* a config key that only deployed flows carry can be reclassified as a normal
+runtime source, and then it is exempt from the pre-1.0 rule against leftover-key readers.
+*Fact:* the test is not what the reader is called, it is whether any editor control can
+produce the key. If nothing in `defaults`, no input, and no lifecycle hook writes it, the
+value can only come from flow JSON written by an earlier dev build — a leftover reader whatever
+the label. Apply this whenever a "legacy" branch is defended as actually being normal.
+*Check:* for the key in question, `rg` it across `nodes/*.html` — no `defaults` entry, no
+`node-config-input-`/`node-input-` control, and no `oneditprepare`/`oneditsave` write means
+nothing creates it.
 
 **Pre-1.0 Command rename does not invent flow compat.**
 *Wrong belief:* renaming an editor field requires `oneditprepare` copy + runtime

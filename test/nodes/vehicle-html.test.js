@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Vehicle Profile editor: dialect + dated revision pulldowns (seed + catalog),
- * no bundled/custom path split. Static assertions against the editor HTML.
+ * Vehicle Profile editor: dialect + dated revision pulldowns (seed + catalog).
+ * Static assertions against the editor HTML.
  */
 
 const test = require('node:test');
@@ -15,11 +15,6 @@ const html = fs.readFileSync(
   'utf8'
 );
 
-test('the old "not yet implemented" custom stub is gone', () => {
-  assert.ok(!/future upload mechanism/i.test(html), 'stub copy must be removed');
-  assert.ok(!/not yet implemented/i.test(html), 'stub copy must be removed');
-});
-
 test('dialect and dialectRevision are the persisted library picks', () => {
   assert.match(html, /dialect:\s*\{\s*value:\s*'ardupilotmega'/);
   assert.match(html, /dialectRevision:\s*\{\s*value:\s*'seed'/);
@@ -27,20 +22,13 @@ test('dialect and dialectRevision are the persisted library picks', () => {
   assert.match(html, /id="node-config-input-dialectRevision"/);
 });
 
-test('there is no custom-path dialect mode in the editor', () => {
-  assert.ok(!/id="node-config-input-dialectSource"/.test(html));
-  assert.ok(!/id="node-config-input-customDialectPath"/.test(html));
-  assert.ok(!/id="mav-catalog-pick"/.test(html));
-  assert.ok(!/\$path\.val\(p\)/.test(html));
-});
-
-test('no leftover custom-path keys survive anywhere in the editor', () => {
-  // Pre-1.0: the path mode is deleted, not migrated — no defaults entry, no
-  // "Custom path (legacy)" Version option, no oneditsave rewriting old keys.
+test('dialect and revision are the only dialect inputs the editor offers', () => {
   assert.ok(!/dialectSource/.test(html));
   assert.ok(!/customDialectPath/.test(html));
-  assert.ok(!/legacy-path/.test(html));
   assert.ok(!/oneditsave/.test(html));
+  assert.ok(!/id="mav-catalog-pick"/.test(html));
+  assert.ok(!/not yet implemented/i.test(html));
+  assert.ok(!/future upload mechanism/i.test(html));
 });
 
 test('seed refresh workflow passes dispatch ref via env (no shell interpolation)', () => {
