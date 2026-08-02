@@ -140,6 +140,37 @@ test('resolveCatalogTarget falls back to the tier selector (Build node uses tier
   assert.deepEqual(plain(RED.mavlink.resolveCatalogTarget().query), { dialect: 'common' });
 });
 
+test('currentCatalogQuery Build tier also reads #node-input-tier (mavlink-build)', () => {
+  // loadEnumsCatalog / CompID fills use currentCatalogQuery — if it only
+  // checked #node-input-delivery, Build's target_component pulldown got no enums
+  // (Codex #118).
+  const { RED } = loadResource({
+    '#node-input-tier': 'build',
+    '#node-input-dialect': 'common',
+  });
+  assert.deepEqual(
+    plain(RED.mavlink.currentCatalogQuery(['MAV_COMPONENT'])),
+    { dialect: 'common', names: 'MAV_COMPONENT' }
+  );
+});
+
+test('currentCatalogQuery prefers delivery over tier when both exist', () => {
+  const { RED } = loadResource({
+    '#node-input-delivery': 'send',
+    '#node-input-tier': 'build',
+    '#node-input-dialect': 'common',
+    '#node-input-connection': 'conn-1',
+  }, {
+    'conn-1': { vehicle: 'vehicle-1' },
+    'vehicle-1': { dialect: 'ardupilotmega' },
+  });
+  // Wire-tier via delivery — not Build dialect from the leftover tier control.
+  assert.deepEqual(
+    plain(RED.mavlink.currentCatalogQuery(['MAV_COMPONENT'])),
+    { vehicle: 'vehicle-1', dialect: 'ardupilotmega', names: 'MAV_COMPONENT' }
+  );
+});
+
 // ── buildTierDialectDefaults ─────────────────────────────────────────────────
 
 test('buildTierDialectDefaults returns dialect + vehicle descriptors (no firmware by default)', () => {

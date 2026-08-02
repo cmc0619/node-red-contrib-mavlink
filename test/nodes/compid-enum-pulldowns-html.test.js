@@ -44,6 +44,21 @@ test('mavlink-vehicle: defaultTargetComponent is a MAV_COMPONENT select', () => 
   assert.match(html, /fillCompIdSelect\(/);
 });
 
+test('mavlink-build: target_component field uses a MAV_COMPONENT select (§6)', () => {
+  const html = readHtml('mavlink-build');
+  assert.match(html, /spec\.name === ['"]target_component['"]/);
+  assert.match(
+    html,
+    /reloadCompIdSelect\(/,
+    'Build reuses the shared CompID reload helper'
+  );
+  assert.doesNotMatch(
+    html,
+    /loadEnumsCatalog\(\['MAV_COMPONENT'\]/,
+    'no parallel local MAV_COMPONENT fetch'
+  );
+});
+
 test('mavlink-command: static targetCompid is a MAV_COMPONENT select only', () => {
   const html = readHtml('mavlink-command');
   assert.match(html, /<select id="node-input-targetCompid"/);

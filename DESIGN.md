@@ -2173,3 +2173,16 @@ helper does exactly that; its `sign()` alone does not). Both facts are why `wire
 directly and computes the HMAC once. A future "simplify back to the library call" change breaks
 the timestamp path and the signed-header bit together.
 *Check:* `node --test test/connection/wire-signing.test.js`
+
+**Build `target_component` is a MAV_COMPONENT pulldown even though the XML has no `enum=`.**
+*Wrong belief:* Build's field form only needs `spec.enum` from the message catalog — if the
+dialect left `target_component` as a bare `uint8_t`, a number input is correct.
+*Fact:* §6 lists target components among the things that are always dropdowns. Upstream leaves
+`enum=` off those fields; every other palette node already uses `reloadCompIdSelect`. Build's
+dynamic `target_component` field calls that same helper (numeric ids — the wire field has no
+enum metadata, so `encodeMessage` cannot resolve `MAV_COMP_ID_*` names). The enum fetch must
+also treat `#node-input-tier === 'build'` as Build tier (`currentCatalogQuery`); checking only
+`#node-input-delivery` left Build on the wire-tier branch with an empty Connection and an empty
+CompID list.
+*Check:* `node --test test/nodes/build-html.test.js test/nodes/compid-enum-pulldowns-html.test.js
+test/nodes/mavlink-editor-resource.test.js`

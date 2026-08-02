@@ -65,6 +65,24 @@ test('Build reshapes fields from message metadata and handles COMMAND_LONG/INT',
   assert.match(html, /oneditsave/);
 });
 
+test('Build target_component is a MAV_COMPONENT pulldown, not a bare number (§6)', () => {
+  assert.match(
+    html,
+    /spec\.name === ['"]target_component['"]/,
+    'XML leaves target_component without enum= — Build special-cases the name'
+  );
+  assert.match(
+    html,
+    /reloadCompIdSelect\(/,
+    'must reuse the shared CompID helper — not a local loadEnumsCatalog path'
+  );
+  assert.doesNotMatch(
+    html,
+    /loadEnumsCatalog\(\['MAV_COMPONENT'\]/,
+    'Build must not hand-roll the MAV_COMPONENT fetch'
+  );
+});
+
 test('Build oneditprepare ensures standard config-node pickers', () => {
   assert.match(html, /ensureConfigNodePicker\(node,\s*'vehicle'/);
   assert.match(html, /ensureConfigNodePicker\(node,\s*'connection'/);
