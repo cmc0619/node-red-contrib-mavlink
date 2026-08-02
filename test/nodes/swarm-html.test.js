@@ -221,6 +221,24 @@ test('sysids field validates each token as a MAVLink sysid (1..255)', () => {
   assert.match(html, /n >= 1 && n <= 255/, 'validator bounds each token to 1..255');
 });
 
+test('params field validates as JSON in the editor (runtime mergeParams trusts it)', () => {
+  const start = html.indexOf("params: { value: '{}', validate: function (v) {");
+  assert.ok(start > 0, 'params declares an inline JSON validator');
+  let i = html.indexOf('{', html.indexOf('function (v)', start));
+  const bodyStart = i + 1;
+  let depth = 1;
+  while (depth > 0) {
+    i += 1;
+    if (html[i] === '{') depth += 1;
+    if (html[i] === '}') depth -= 1;
+  }
+  const body = html.slice(bodyStart, i);
+  const validate = new Function('v', body);
+  assert.equal(validate('{"1":1}'), true, 'valid JSON passes');
+  assert.equal(validate(''), true, 'blank passes (defaults to empty params)');
+  assert.equal(validate('{oops'), false, 'unparseable JSON is refused at the editor');
+});
+
 test('delivery and selectionMode changes reload catalogs and refresh visibility', () => {
   assert.match(
     html,
