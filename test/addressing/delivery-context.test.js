@@ -34,17 +34,6 @@ test('resolveDeliveryContext Build+__vehicle uses the Vehicle Profile', () => {
   assert.equal(ctx.profile.firmware, 'ardupilot');
 });
 
-test('resolveDeliveryContext accepts Command legacy targetSysid keys', () => {
-  const RED = redStub();
-  const ctx = resolveDeliveryContext(RED, {
-    delivery: 'build',
-    config: { dialect: 'common', targetSysid: '9', targetCompid: '2' },
-    payload: {},
-  });
-  assert.equal(ctx.target.sysid, 9);
-  assert.equal(ctx.target.compid, 2);
-});
-
 test('resolveDeliveryContext Param buildFirmwareProfile supplies firmware', () => {
   const RED = redStub();
   const ctx = resolveDeliveryContext(RED, {

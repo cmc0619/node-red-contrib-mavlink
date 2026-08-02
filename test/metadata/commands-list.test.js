@@ -184,3 +184,27 @@ test('catalogFromBundle marks command params backed by bitmask enums', () => {
   assert.equal(flags.bitmask, true);
   assert.ok(Array.isArray(catalog.enums.FIXTURE_FLAGS), 'enum table shape stays an array');
 });
+
+test('catalogFromBundle preserves enum values outside MAX_SAFE_INTEGER as strings', () => {
+  const huge = '9007199254740993';
+  const bundle = {
+    dialect: 'fixture-huge-enum',
+    commands: {
+      MAV_CMD_HUGE_ENUM: {
+        name: 'MAV_CMD_HUGE_ENUM',
+        value: 301,
+        params: [{ index: 1, label: 'Huge', enum: 'HUGE_ENUM' }],
+      },
+    },
+    enums: {
+      HUGE_ENUM: {
+        entries: [{ name: 'HUGE_ENUM_VALUE', value: huge, description: '' }],
+      },
+    },
+  };
+
+  const catalog = catalogFromBundle(bundle, 'fixture-huge-enum');
+
+  assert.equal(catalog.enums.HUGE_ENUM[0].value, huge);
+  assert.equal(typeof catalog.enums.HUGE_ENUM[0].value, 'string');
+});

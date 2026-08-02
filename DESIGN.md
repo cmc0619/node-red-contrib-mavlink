@@ -570,11 +570,13 @@ them (§14 records the load-order fact and the picker API).
 `DEFAULT_TIMEOUT_MS` / `DEFAULT_MAX_RETRIES`), `lib/connection/bands` (`BAND.*`),
 `lib/move` config mappers (`positionFrom` / `velocityFrom` / `valueFrom`), and
 `lib/metadata/admin-catalog` (`loadMetadata`, `registerDialectCatalogRoute`,
-`resolveCatalogSource`) rather than re-declaring `BADGE_MAX = 24`, hand-slicing badge
+`resolveCatalogSource`), `lib/connection/endpoint-key` + `clone.deepCopy`,
+`lib/metadata/xml-catalog.extractIncludes`, `lib/command/lookup.commandByValue`,
+catalog `nameValueLabel` / `mapEnumEntries`, and param `PARAM_TYPE` derived from
+codec `PARAM_TYPES` — rather than re-declaring `BADGE_MAX = 24`, hand-slicing badge
 text, pasting the vehicle/dialect catalog route skeleton, or copying role×tier
 resolution between action nodes. Command's editor target fields are the canonical
-`targetSystem` / `targetComponent` (historical `targetSysid` / `targetCompid` still
-resolve once inside `resolveDeliveryContext`) (§14).
+`targetSystem` / `targetComponent` only (pre-1.0: no leftover-key readers) (§14).
 
 ## 7. Config nodes
 
@@ -2260,18 +2262,35 @@ catalog skeleton; `resolveCatalogSource({ soft: true })` covers Payload field-ti
 `lib/addressing.resolveDeliveryContext` + `missingConnectionGate` own role×tier + the
 send-without-connection deploy badge; `dialectFromConnection` owns the profile `getDialect()`
 hop. Command's editor fields are `targetSystem` / `targetComponent` like every other palette
-node; `resolveDeliveryContext` still accepts historical `targetSysid` / `targetCompid` once.
+node — pre-1.0 means canonical keys only, not leftover-key readers or editor “migrate” paths.
 *Check:* `node --test test/metadata/admin-catalog.test.js test/addressing/delivery-context.test.js
-test/command/commands-route.test.js test/nodes/command-html.test.js`; `rg -n 'targetSysid:'
-nodes/mavlink-command.html` (expect no matches in `defaults`).
+test/command/commands-route.test.js test/nodes/command-html.test.js`; `rg -n 'targetSysid'
+nodes/mavlink-command.html lib/addressing/delivery-context.js` (expect no matches).
 
-**Command editor must migrate `targetSysid` before the form round-trips.**
-*Wrong belief:* a runtime `firstDefined(config.targetSystem, config.targetSysid)` is enough when
-renaming the editor field; old flows keep working without an editor migration.
-*Fact:* Node-RED fills `#node-input-*` from `defaults` *before* `oneditprepare`. A rename-only
-change leaves the new inputs blank, and Done saves `targetSystem:''` — profile inheritance —
-over an explicit legacy target. Shipped examples (e.g. `12-ebony-and-ivory`, SITL INT carrier)
-still carried non-empty `targetSysid`. `oneditprepare` copies legacy → canonical (and the live
-sysid input); `oneditsave` deletes the old keys.
-*Check:* `node --test test/nodes/command-html.test.js` (migration block executes against a stub
-node); `rg -n '"targetSysid"' examples` (expect no Command-node property matches).
+**Pre-1.0 Command rename does not invent flow compat.**
+*Wrong belief:* renaming an editor field requires `oneditprepare` copy + runtime
+`firstDefined(..., config.targetSysid)` so old flows keep working.
+*Fact:* pre-1.0, rewrite shipped assets when needed; do not say “migrate” and do not keep
+dual readers. Editor leftover-key copy/delete and `resolveDeliveryContext` historical
+fallbacks were removed. Example JSON updates are a separate afterthought
+(`docs/superpowers/plans/2026-08-02-examples-afterthought-STASH.md`), not mixed into the
+lib/runtime cleanup.
+*Check:* `rg -n 'targetSysid|targetCompid' nodes/mavlink-command.html lib/addressing/delivery-context.js`
+(expect no matches); `node --test test/addressing/delivery-context.test.js test/nodes/command-html.test.js`.
+
+**Lib holdouts share one owner per concern.**
+*Wrong belief:* peer-table may keep a private `endpointKey`, State may `JSON.stringify` fan-out
+copies, fetch may regex `<include>` without stripping comments, queue may paste the best-item
+scan twice, carrier may re-find commands by value, catalogs may map enum entries three ways, and
+param may hardcode `MAV_PARAM_TYPE` beside codec `PARAM_TYPES`.
+*Fact:* `lib/connection/endpoint-key` and `clone.deepCopy` (NaN-safe) are the shared copies;
+`xml-catalog.extractIncludes` is the include walker (fetch does not re-export a shim);
+`OutboundQueue._bestItem` feeds dequeue/peek; `lib/command/lookup.commandByValue` serves carrier
+and payload; `commands-list` owns `nameValueLabel` + safe-integer `mapEnumEntries`; param
+`PARAM_TYPE` is derived from codec `PARAM_TYPES` (numeric resolver stays in param — different
+return shape than codec’s info+`fail()`). Declined as non-dupes: `numberOr`/`valueOr`/`keepParam`
+family, GLOBAL_FRAMES/DEG_E7 tables, TCP/serial write-drain skeleton.
+*Check:* `node --test test/connection/queue.test.js test/state/state.test.js test/command/lookup.test.js
+test/metadata/commands-list.test.js test/param/ lib/codec/test/param-union.test.js`;
+`rg -n 'function endpointKey|JSON\\.parse\\(JSON\\.stringify|function extractIncludes'
+lib/connection/peer-table.js lib/state lib/metadata/fetch.js` (expect no private copies).
