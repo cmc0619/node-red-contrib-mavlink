@@ -1,15 +1,22 @@
 'use strict';
 
-const { buildMoveMessage, createMoveStream } = require('../lib/move');
+const {
+  buildMoveMessage,
+  createMoveStream,
+  positionFrom,
+  velocityFrom,
+  valueFrom,
+} = require('../lib/move');
+const { BAND } = require('../lib/connection/bands');
 const {
   resolveActionTarget,
   profileFromVehicleNode,
 } = require('../lib/addressing/resolve');
 const {
   shouldSuppress,
+  makeStatusRecord,
+  applyActionStatus,
 } = require('../lib/delivery');
-
-const BADGE_MAX = 24;
 
 module.exports = function registerMavlinkMove(RED) {
   function MavlinkMoveNode(config) {
@@ -79,7 +86,7 @@ module.exports = function registerMavlinkMove(RED) {
             completeResult(node, send, 'succeeded', 'streaming', message);
           } else {
             connectionNode.send(message, {
-              band: require('../lib/connection/bands').BAND.STREAMING,
+              band: BAND.STREAMING,
               target: options.target,
               identityId: options.identityId,
             });
@@ -102,46 +109,21 @@ module.exports = function registerMavlinkMove(RED) {
 };
 
 function completeBuild(node, send, message) {
-  node.status({ fill: 'green', shape: 'dot', text: cap('built move') });
+  applyActionStatus(node, 'ok', 'built move');
   send([{ payload: message }, statusRecord('succeeded', 'built', { message })]);
 }
 
 function completeResult(node, send, result, action, message) {
-  node.status({ fill: 'green', shape: 'dot', text: cap(action) });
+  applyActionStatus(node, 'ok', action);
   send([{ payload: { result, message } }, statusRecord(result, action, { message })]);
 }
 
 function fail(node, send, err, msg, done) {
-  node.status({ fill: 'red', shape: 'ring', text: cap(err.message) });
+  applyActionStatus(node, 'error', err.message);
   send([null, statusRecord('failed', err.message)]);
   done(err);
 }
 
 function statusRecord(result, detail, extra = {}) {
-  return { node: 'mavlink-move', result, detail, ...extra };
-}
-
-function positionFrom(config) {
-  return {
-    north: config.north,
-    east: config.east,
-    up: config.up,
-    lat: config.lat,
-    lon: config.lon,
-    alt: config.alt,
-  };
-}
-
-function velocityFrom(config) {
-  return { north: config.vNorth, east: config.vEast, up: config.vUp };
-}
-
-function valueFrom(payload, config, key) {
-  if (payload[key] !== undefined) return payload[key];
-  return config[key] === '' ? undefined : config[key];
-}
-
-function cap(text) {
-  const s = String(text || '');
-  return s.length > BADGE_MAX ? `${s.slice(0, BADGE_MAX - 1)}…` : s;
+  return makeStatusRecord({ node: 'mavlink-move', result, detail, ...extra });
 }

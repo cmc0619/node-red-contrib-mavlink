@@ -18,6 +18,8 @@
  * dialect access then fails loud with a status badge.
  */
 
+const { capBadge } = require('../lib/delivery');
+
 let vehicleApi = null;
 /** @type {Error|null} */
 let vehicleLoadError = null;
@@ -327,8 +329,7 @@ module.exports = function registerMavlinkVehicle(RED) {
     }
 
     if (problems.length) {
-      const text = problems[0].slice(0, 24);
-      node.status({ fill: 'red', shape: 'ring', text });
+      node.status({ fill: 'red', shape: 'ring', text: capBadge(problems[0]) });
     } else {
       node.status({ fill: 'grey', shape: 'ring', text: 'idle' });
     }

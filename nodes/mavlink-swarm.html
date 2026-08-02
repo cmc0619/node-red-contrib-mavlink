@@ -85,7 +85,12 @@
       frame: { value: '' },
       commandId: { value: 400, validate: RED.validators.number() },
       preset: { value: '' },
-      params: { value: '{}' },
+      // Free-text JSON: the editor is the loud-failure point — the runtime
+      // mergeParams treats unparseable saved JSON as empty (§2 config trust).
+      params: { value: '{}', validate: function (v) {
+        if (!v) return true;
+        try { JSON.parse(v); return true; } catch (_e) { return false; }
+      } },
       moveMode: { value: 'local-position' },
       north: { value: 0, validate: RED.validators.number(true) },
       east: { value: 0, validate: RED.validators.number(true) },

@@ -563,6 +563,14 @@ resource mechanism (a relative `<script src>` in the first-listed node). Node-RE
 file runs before any inline `registerType`, so nodes call the shared helpers rather than copying
 them (§14 records the load-order fact and the picker API).
 
+**Runtime helpers are shared, not pasted.** Palette `nodes/*.js` call `lib/delivery`
+(`capBadge`, `makeStatusRecord`, `applyActionStatus`, `shouldSuppress`), `lib/addressing`
+(`firstDefined`, `resolveActionTarget`), `lib/command` (`mergeParams`,
+`DEFAULT_TIMEOUT_MS` / `DEFAULT_MAX_RETRIES`), `lib/connection/bands` (`BAND.*`), and
+`lib/move` config mappers (`positionFrom` / `velocityFrom` / `valueFrom`) rather than
+re-declaring `BADGE_MAX = 24`, hand-slicing badge text, or copying Move setpoint readers
+between Move and Swarm (§14).
+
 ## 7. Config nodes
 
 | Node | Owns |
@@ -2227,3 +2235,13 @@ also treat `#node-input-tier === 'build'` as Build tier (`currentCatalogQuery`);
 CompID list.
 *Check:* `node --test test/nodes/build-html.test.js test/nodes/compid-enum-pulldowns-html.test.js
 test/nodes/mavlink-editor-resource.test.js`
+
+**Palette runtime nodes must not re-implement delivery badge / status helpers.**
+*Wrong belief:* each action node can keep a local `cap()` / `badge24()` / `statusRecord()` /
+`BADGE_MAX = 24` and hand-write `node.status({fill,shape,text})` matching §6 styles.
+*Fact:* `lib/delivery` already owns `capBadge`, `makeStatusRecord`, `applyActionStatus`, and
+`ACTION_BADGE_STYLES`. Local copies drifted (In double-capped; Vehicle/Connection hand-sliced;
+Command used a raw `BAND_CONTROL = 2`). Move setpoint readers and Swarm's param merge belong in
+`lib/move` / `lib/command.mergeParams` once.
+*Check:* `rg -n 'BADGE_MAX\\s*=\\s*24|function cap\\(|function badge24|BAND_CONTROL\\s*=' nodes`
+(expect no matches); `node --test test/move/from-config.test.js test/delivery/delivery.test.js`

@@ -46,6 +46,8 @@ const {
   CARRIER,
   intCoordKinds,
   resolveFrame,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
 
 /**
@@ -72,16 +74,9 @@ const {
 
 const {
   shouldSuppress,
+  applyActionStatus,
 } = require('../lib/delivery');
-
-/** Band constant for outbound commands (CONTROL = 2). */
-const BAND_CONTROL = 2;
-
-/** Cap badge text at 24 characters with a single-glyph ellipsis (§6). */
-function badge24(text) {
-  if (text.length <= 24) return text;
-  return text.slice(0, 23) + '\u2026';
-}
+const { BAND } = require('../lib/connection/bands');
 
 /**
  * Return the command ID for the current node config (preset or advanced).
@@ -140,7 +135,7 @@ module.exports = function registerMavlinkCommand(RED) {
     // exactly like a missing command.
     const configuredCarrier = resolveCarrier(config);
     if (commandId === null || configuredCarrier === null) {
-      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+      applyActionStatus(node, 'invalid', 'invalid config');
       node.on('input', (_msg, _send, done) => {
         done();
       });
@@ -201,8 +196,8 @@ module.exports = function registerMavlinkCommand(RED) {
       return _coordKinds;
     }
 
-    const timeoutMs = config.timeout ? Number(config.timeout) : 10000;
-    const maxRetries = config.maxRetries !== undefined ? Number(config.maxRetries) : 3;
+    const timeoutMs = config.timeout ? Number(config.timeout) : DEFAULT_TIMEOUT_MS;
+    const maxRetries = config.maxRetries !== undefined ? Number(config.maxRetries) : DEFAULT_MAX_RETRIES;
     const unconfirmedContinue = !!config.unconfirmedContinue;
 
     // A send/confirm/complete tier needs a Connection. When one is not bound
@@ -211,7 +206,7 @@ module.exports = function registerMavlinkCommand(RED) {
     // every trigger with a status record naming the problem.
     const needsConnection = delivery !== 'build';
     if (needsConnection && !connNode) {
-      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+      applyActionStatus(node, 'invalid', 'invalid config');
     } else {
       node.status({});
     }
@@ -318,7 +313,7 @@ module.exports = function registerMavlinkCommand(RED) {
           elapsed: Date.now() - startMs,
           detail: 'safety command requires msg.confirmed = true',
         });
-        node.status({ fill: 'red', shape: 'ring', text: badge24(`confirm ${displayName}`) });
+        applyActionStatus(node, 'error', `confirm ${displayName}`);
         emitStatus(rec, send, false);
         failDone('safety command blocked — set msg.confirmed = true');
         return;
@@ -335,7 +330,7 @@ module.exports = function registerMavlinkCommand(RED) {
           elapsed: Date.now() - startMs,
           detail: `no connection configured for ${delivery} delivery`,
         });
-        node.status({ fill: 'red', shape: 'ring', text: badge24('invalid config') });
+        applyActionStatus(node, 'invalid', 'invalid config');
         emitStatus(rec, send, false);
         failDone(`${displayName} has no connection for ${delivery} delivery`);
         return;
@@ -370,7 +365,7 @@ module.exports = function registerMavlinkCommand(RED) {
       // ── Delivery: Build ───────────────────────────────────────────────────
       if (delivery === 'build') {
         const message = buildCarrierMessage(configuredCarrier, 0);
-        node.status({ fill: 'yellow', shape: 'dot', text: badge24(`build ${displayName}`) });
+        applyActionStatus(node, 'preview', `build ${displayName}`);
         // Output 1 reports every terminal outcome, success included (§9); a
         // successful build emits a 'built' status record for status/debug
         // consumers, consistent with the other action nodes.
@@ -389,10 +384,10 @@ module.exports = function registerMavlinkCommand(RED) {
       // ── Delivery: Send (fire-and-forget) ──────────────────────────────────
       if (delivery === 'send') {
         const message = buildCarrierMessage(configuredCarrier, 0);
-        node.status({ fill: 'blue', shape: 'dot', text: badge24(`sending ${displayName}\u2026`) });
-        connNode.send(message, { band: BAND_CONTROL, target, identityId });
+        applyActionStatus(node, 'sending', `sending ${displayName}\u2026`);
+        connNode.send(message, { band: BAND.CONTROL, target, identityId });
         const rec = makeRecord({ result: 'sent', confirmedBy: 'none', elapsed: 0 });
-        node.status({ fill: 'green', shape: 'dot', text: badge24(`sent ${displayName}`) });
+        applyActionStatus(node, 'ok', `sent ${displayName}`);
         emitStatus(rec, send, true, message);
         done();
         return;
@@ -405,7 +400,7 @@ module.exports = function registerMavlinkCommand(RED) {
         _activeWaiter = null;
       }
 
-      node.status({ fill: 'blue', shape: 'dot', text: badge24(`${displayName}\u2026`) });
+      applyActionStatus(node, 'sending', `${displayName}\u2026`);
 
       /**
        * Run one AckWaiter transaction in the given carrier and resolve with its
@@ -418,7 +413,7 @@ module.exports = function registerMavlinkCommand(RED) {
         const waiter = new AckWaiter({
           subscribe: (filter, handler) => connNode.subscribe(filter, handler),
           sendFn: (confirmation) => {
-            connNode.send(buildCarrierMessage(carrier, confirmation), { band: BAND_CONTROL, target, identityId });
+            connNode.send(buildCarrierMessage(carrier, confirmation), { band: BAND.CONTROL, target, identityId });
           },
           commandId,
           targetSysid: target.sysid,
@@ -454,11 +449,7 @@ module.exports = function registerMavlinkCommand(RED) {
             `${RESULT_NAME[ackOutcome.resultCode]} — resending as ` +
             `COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'} (§9 carrier swap)`
         );
-        node.status({
-          fill: 'blue',
-          shape: 'dot',
-          text: badge24(`retry ${carrier === CARRIER.INT ? 'INT' : 'LONG'} ${displayName}\u2026`),
-        });
+        applyActionStatus(node, 'sending', `retry ${carrier === CARRIER.INT ? 'INT' : 'LONG'} ${displayName}\u2026`);
         ackOutcome = await runWaiter(carrier);
 
         // Second attempt is the last: a repeated wrong-carrier ack cannot be
@@ -474,7 +465,7 @@ module.exports = function registerMavlinkCommand(RED) {
               `carrier swap ${from}\u2192${carrier} still rejected as ` +
               `${RESULT_NAME[ackOutcome.resultCode]} — no carrier satisfies the vehicle`,
           });
-          node.status({ fill: 'red', shape: 'ring', text: badge24(`wrong carrier ${displayName}`) });
+          applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
           emitStatus(rec, send, false);
           failDone(rec.detail);
           return;
@@ -492,7 +483,7 @@ module.exports = function registerMavlinkCommand(RED) {
             `vehicle demands COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'} ` +
             `but that carrier was already sent`,
         });
-        node.status({ fill: 'red', shape: 'ring', text: badge24(`wrong carrier ${displayName}`) });
+        applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
         emitStatus(rec, send, false);
         failDone(rec.detail);
         return;
@@ -531,7 +522,7 @@ module.exports = function registerMavlinkCommand(RED) {
               elapsed: Date.now() - startMs,
               detail: `ack timeout but ${stateCheck.detail}`,
             });
-            node.status({ fill: 'green', shape: 'dot', text: badge24(`${displayName} accepted`) });
+            applyActionStatus(node, 'ok', `${displayName} accepted`);
             emitStatus(rec, send, true, rec);
             done();
             return;
@@ -547,7 +538,7 @@ module.exports = function registerMavlinkCommand(RED) {
           elapsed: Date.now() - startMs,
           detail: ackOutcome.detail,
         });
-        node.status({ fill: 'red', shape: 'ring', text: badge24(`timeout ${displayName}`) });
+        applyActionStatus(node, 'error', `timeout ${displayName}`);
         const cont = unconfirmedContinue;
         emitStatus(rec, send, cont, cont ? rec : undefined);
         failDone(`${displayName} timed out`);
@@ -558,7 +549,7 @@ module.exports = function registerMavlinkCommand(RED) {
       if (ackOutcome.result === 'accepted') {
         // ── Complete tier: poll peer table for actual completion. ──────────
         if (delivery === 'complete' && completionKey && connNode.peerTable) {
-          node.status({ fill: 'blue', shape: 'dot', text: badge24(`${displayName} climbing\u2026`) });
+          applyActionStatus(node, 'sending', `${displayName} climbing\u2026`);
           const compOutcome = await waitForCompletion({
             completionKey,
             params: paramArray,
@@ -578,7 +569,7 @@ module.exports = function registerMavlinkCommand(RED) {
               elapsed: Date.now() - startMs,
               detail: compOutcome.detail,
             });
-            node.status({ fill: 'green', shape: 'dot', text: badge24(`${displayName} done`) });
+            applyActionStatus(node, 'ok', `${displayName} done`);
             emitStatus(rec, send, true, rec);
           } else {
             const rec = makeRecord({
@@ -589,7 +580,7 @@ module.exports = function registerMavlinkCommand(RED) {
               elapsed: Date.now() - startMs,
               detail: compOutcome.detail,
             });
-            node.status({ fill: 'red', shape: 'ring', text: badge24(`${displayName} timeout`) });
+            applyActionStatus(node, 'error', `${displayName} timeout`);
             emitStatus(rec, send, false);
             failDone(`${displayName} completion timeout`);
             return;
@@ -607,7 +598,7 @@ module.exports = function registerMavlinkCommand(RED) {
           elapsed: Date.now() - startMs,
           detail: carrierSwapped ? `accepted after ${carrierLabel} carrier swap (§9)` : null,
         });
-        node.status({ fill: 'green', shape: 'dot', text: badge24(`${displayName} accepted`) });
+        applyActionStatus(node, 'ok', `${displayName} accepted`);
         emitStatus(rec, send, true, rec);
         done();
         return;
@@ -624,7 +615,7 @@ module.exports = function registerMavlinkCommand(RED) {
           ? `${ackOutcome.detail || RESULT_NAME[ackOutcome.resultCode] || 'failed'} (after ${carrierLabel} carrier swap, §9)`
           : ackOutcome.detail,
       });
-      node.status({ fill: 'red', shape: 'ring', text: badge24(`${displayName} ${ackOutcome.result}`) });
+      applyActionStatus(node, 'error', `${displayName} ${ackOutcome.result}`);
       emitStatus(rec, send, false);
       failDone(`${displayName} ${ackOutcome.result}`);
     }
@@ -645,7 +636,7 @@ module.exports = function registerMavlinkCommand(RED) {
             commandId,
             detail: `command handler error: ${err && err.message ? err.message : String(err)}`,
           });
-          node.status({ fill: 'red', shape: 'ring', text: badge24(`error ${displayName}`) });
+          applyActionStatus(node, 'error', `error ${displayName}`);
           try {
             send([null, rec]);
           } catch {
