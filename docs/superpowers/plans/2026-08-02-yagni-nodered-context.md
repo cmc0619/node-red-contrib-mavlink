@@ -60,19 +60,19 @@ loud. Rename/reframed param-defs persistence — no TTL layer to delete.
 - [x] **Step 3:** Missing bind → `done(err)` only (no forged protocol status).
 - [x] **Step 4:** Command/Mission: drop forged “no connection” status records.
 - [x] **Step 5:** Targeted tests green.
-- [ ] **Step 6:** Commit
+- [x] **Step 6:** Commit
 
 ### Task 2: Loud dialect / uncoded soft-nulls
 
 - [x] **Step 1–3:** Command/Swarm rethrow; Build badge = `err.message`.
-- [ ] **Step 4:** Commit
+- [x] **Step 4:** Commit
 
 ### Task 3: Param defs = authoring store
 
 - [x] **Step 1–3:** Framing + `storeDir` + DESIGN §4.
-- [ ] **Step 4:** Commit
+- [x] **Step 4:** Commit
 
 ### Task 4: DESIGN §14 keep/cut + ship
 
 - [x] **Step 1:** §14 entry landed.
-- [ ] **Step 2:** Push; open ready PR.
+- [x] **Step 2:** Push; open ready PR (#125).

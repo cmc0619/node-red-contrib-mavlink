@@ -2260,9 +2260,10 @@ name its target fields `targetSysid` / `targetCompid` forever.
 *Fact:* `lib/metadata/admin-catalog.registerDialectCatalogRoute` owns the Command/Build/Vehicle
 catalog skeleton; `resolveCatalogSource({ soft: true })` covers Payload field-tips notices;
 `lib/addressing.resolveDeliveryContext` + `missingConnectionGate` own role×tier + the
-send-without-connection deploy badge; `dialectFromConnection` owns the profile `getDialect()`
-hop. Command's editor fields are `targetSystem` / `targetComponent` like every other palette
-node; `resolveDeliveryContext` still accepts historical `targetSysid` / `targetCompid` once.
+send-without-connection deploy badge; wire tiers pass a deploy-bound Connection (no silent
+re-`getNode`). `dialectFromConnection` owns the profile `getDialect()` hop. Command's editor
+fields are `targetSystem` / `targetComponent` like every other palette node;
+`resolveDeliveryContext` still accepts historical `targetSysid` / `targetCompid` once.
 *Check:* `node --test test/metadata/admin-catalog.test.js test/addressing/delivery-context.test.js
 test/command/commands-route.test.js test/nodes/command-html.test.js`; `rg -n 'targetSysid:'
 nodes/mavlink-command.html` (expect no matches in `defaults`).
