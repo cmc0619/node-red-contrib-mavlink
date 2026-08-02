@@ -39,6 +39,9 @@ const {
   applyActionStatus,
   capBadge,
 } = require('../lib/delivery');
+const { dialectFromVehicleId, dialectFromConnection } = require('../lib/addressing');
+const { loadMetadata } = require('../lib/metadata/load');
+const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
 /** Module-scope guard — the constructor is recreated each factory call. */
 let messagesRouteRegistered = false;
@@ -97,38 +100,36 @@ module.exports = function registerMavlinkBuild(RED) {
       // Editor requires dialect on Build (§6) — trust config.dialect.
       const dialectName = config.dialect;
       if (dialectName === '__vehicle') {
-        const vehicleNode = RED.nodes.getNode(config.vehicle);
-        if (!vehicleNode || typeof vehicleNode.getDialect !== 'function') {
-          node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
-          return;
-        }
         try {
-          bundle = vehicleNode.getDialect();
+          bundle = dialectFromVehicleId(RED, config.vehicle, { rethrow: true });
         } catch (err) {
           node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
           node.error(`mavlink-build: ${err.message}`);
           return;
         }
+        if (!bundle) {
+          node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+          return;
+        }
       } else {
-        bundle = require('../lib/metadata').loadBundled(dialectName);
+        const { api } = loadMetadata('mavlink-build', RED);
+        if (!api) {
+          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+          return;
+        }
+        bundle = api.loadBundled(dialectName);
       }
     } else {
-      // Wire tier: the connection's bound profile governs — hidden is not
-      // honored, so a stale config.vehicle cannot override it (§6). Resolve the
-      // profile node and call getDialect(): that is the one invocation that
-      // works for bundled and custom XML dialects alike; loadBundled(name)
-      // would break custom profiles.
-      const profileId = connectionNode.vehicle && connectionNode.vehicle.id;
-      const profileNode = profileId ? RED.nodes.getNode(profileId) : null;
-      if (!profileNode || typeof profileNode.getDialect !== 'function') {
-        node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
-        return;
-      }
+      // Wire tier: Connection's bound profile governs (§6 hidden-is-not-honored).
       try {
-        bundle = profileNode.getDialect();
+        bundle = dialectFromConnection(RED, connectionNode, { rethrow: true });
       } catch (err) {
         node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
         node.error(`mavlink-build: ${err.message}`);
+        return;
+      }
+      if (!bundle) {
+        node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
         return;
       }
     }
@@ -307,79 +308,13 @@ module.exports = function registerMavlinkBuild(RED) {
    * node still registers when `mavlink-mappings` is absent.
    */
   if (!messagesRouteRegistered) {
-    let catalogApi = null;
-    let catalogLoadError = null;
-    try {
-      catalogApi = require('../lib/metadata');
-    } catch (err) {
-      catalogLoadError = err;
-      if (RED.log && typeof RED.log.error === 'function') {
-        RED.log.error(`[mavlink-build] message catalog unavailable: ${err.message}`);
-      }
-    }
-
-    RED.httpAdmin.get(
-      '/mavlink/build/messages',
-      RED.auth.needsPermission('mavlink.read'),
-      (req, res) => {
-        if (!catalogApi) {
-          return res.status(503).json({
-            error: catalogLoadError
-              ? catalogLoadError.message
-              : 'message catalog unavailable',
-          });
-        }
-        const {
-          listMessagesCatalog,
-          catalogMessagesFromBundle,
-          knownDialects,
-        } = catalogApi;
-        try {
-          const vehicleId = typeof req.query.vehicle === 'string'
-            ? req.query.vehicle.trim()
-            : '';
-          const requested = typeof req.query.dialect === 'string' && req.query.dialect.trim()
-            ? req.query.dialect.trim()
-            : '';
-
-          if (vehicleId) {
-            const vehicleNode = RED.nodes.getNode(vehicleId);
-            if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
-              const bundle = vehicleNode.getDialect();
-              const dialect = vehicleNode.dialect || bundle.dialect || 'custom';
-              return res.json(catalogMessagesFromBundle(bundle, dialect));
-            }
-            if (!requested || requested === 'custom') {
-              return res.status(404).json({
-                error: 'Vehicle Profile not found or not deployed; Deploy the flow, or pass a bundled ?dialect=',
-                dialects: knownDialects(),
-              });
-            }
-            return res.json(listMessagesCatalog(requested));
-          }
-
-          if (!requested) {
-            return res.status(400).json({
-              error: 'dialect is required',
-              dialects: knownDialects(),
-            });
-          }
-          if (requested === 'custom') {
-            return res.status(400).json({
-              error: 'custom dialect requires a deployed Vehicle Profile (?vehicle=id)',
-              dialects: knownDialects(),
-            });
-          }
-          res.json(listMessagesCatalog(requested));
-        } catch (err) {
-          res.status(400).json({
-            error: err.message,
-            dialects: catalogApi.knownDialects(),
-          });
-        }
-      }
-    );
-
+    registerDialectCatalogRoute(RED, {
+      path: '/mavlink/build/messages',
+      logLabel: 'mavlink-build',
+      unavailableMessage: 'message catalog unavailable',
+      fromBundle: (api, bundle, dialect) => api.catalogMessagesFromBundle(bundle, dialect),
+      fromDialect: (api, dialect) => api.listMessagesCatalog(dialect),
+    });
     messagesRouteRegistered = true;
   }
 

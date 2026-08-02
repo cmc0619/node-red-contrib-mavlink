@@ -59,13 +59,13 @@ test('mavlink-build: target_component field uses a MAV_COMPONENT select (§6)', 
   );
 });
 
-test('mavlink-command: static targetCompid is a MAV_COMPONENT select only', () => {
+test('mavlink-command: static targetComponent is a MAV_COMPONENT select only', () => {
   const html = readHtml('mavlink-command');
-  assert.match(html, /<select id="node-input-targetCompid"/);
-  assert.ok(!html.includes('type="number" id="node-input-targetCompid"'));
+  assert.match(html, /<select id="node-input-targetComponent"/);
+  assert.ok(!html.includes('type="number" id="node-input-targetComponent"'));
   assert.match(
     html,
-    /RED\.mavlink\.reloadTargetCompId\(node,\s*\{\s*field:\s*'targetCompid'\s*\}\)/
+    /RED\.mavlink\.reloadTargetCompId\(node,\s*\{\s*field:\s*'targetComponent'\s*\}\)/
   );
 });
 

@@ -565,11 +565,16 @@ them (§14 records the load-order fact and the picker API).
 
 **Runtime helpers are shared, not pasted.** Palette `nodes/*.js` call `lib/delivery`
 (`capBadge`, `makeStatusRecord`, `applyActionStatus`, `shouldSuppress`), `lib/addressing`
-(`firstDefined`, `resolveActionTarget`), `lib/command` (`mergeParams`,
-`DEFAULT_TIMEOUT_MS` / `DEFAULT_MAX_RETRIES`), `lib/connection/bands` (`BAND.*`), and
-`lib/move` config mappers (`positionFrom` / `velocityFrom` / `valueFrom`) rather than
-re-declaring `BADGE_MAX = 24`, hand-slicing badge text, or copying Move setpoint readers
-between Move and Swarm (§14).
+(`firstDefined`, `resolveActionTarget`, `resolveDeliveryContext`, `missingConnectionGate`,
+`dialectFromVehicleId` / `dialectFromConnection`), `lib/command` (`mergeParams`,
+`DEFAULT_TIMEOUT_MS` / `DEFAULT_MAX_RETRIES`), `lib/connection/bands` (`BAND.*`),
+`lib/move` config mappers (`positionFrom` / `velocityFrom` / `valueFrom`), and
+`lib/metadata/admin-catalog` (`loadMetadata`, `registerDialectCatalogRoute`,
+`resolveCatalogSource`) rather than re-declaring `BADGE_MAX = 24`, hand-slicing badge
+text, pasting the vehicle/dialect catalog route skeleton, or copying role×tier
+resolution between action nodes. Command's editor target fields are the canonical
+`targetSystem` / `targetComponent` (historical `targetSysid` / `targetCompid` still
+resolve once inside `resolveDeliveryContext`) (§14).
 
 ## 7. Config nodes
 
@@ -2245,3 +2250,17 @@ Command used a raw `BAND_CONTROL = 2`). Move setpoint readers and Swarm's param 
 `lib/move` / `lib/command.mergeParams` once.
 *Check:* `rg -n 'BADGE_MAX\\s*=\\s*24|function cap\\(|function badge24|BAND_CONTROL\\s*=' nodes`
 (expect no matches); `node --test test/move/from-config.test.js test/delivery/delivery.test.js`
+
+**Admin dialect catalogs and role×tier resolution are shared modules, not pasted blocks.**
+*Wrong belief:* each node that exposes a `?vehicle=` / `?dialect=` admin dropdown can keep its
+own ~50-line route skeleton and its own Build/wire profile+identity resolution, and Command may
+name its target fields `targetSysid` / `targetCompid` forever.
+*Fact:* `lib/metadata/admin-catalog.registerDialectCatalogRoute` owns the Command/Build/Vehicle
+catalog skeleton; `resolveCatalogSource({ soft: true })` covers Payload field-tips notices;
+`lib/addressing.resolveDeliveryContext` + `missingConnectionGate` own role×tier + the
+send-without-connection deploy badge; `dialectFromConnection` owns the profile `getDialect()`
+hop. Command's editor fields are `targetSystem` / `targetComponent` like every other palette
+node; `resolveDeliveryContext` still accepts historical `targetSysid` / `targetCompid` once.
+*Check:* `node --test test/metadata/admin-catalog.test.js test/addressing/delivery-context.test.js
+test/command/commands-route.test.js`; `rg -n 'targetSysid:' nodes/mavlink-command.html` (expect
+no matches).

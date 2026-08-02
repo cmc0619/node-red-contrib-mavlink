@@ -29,7 +29,7 @@ test('shared validateUint8 helper is two-arg (string return = invalid reason)', 
 });
 
 const TARGET_FILES = [
-  ['mavlink-command.html', 'targetSysid'],
+  ['mavlink-command.html', 'targetSystem'],
   ['mavlink-move.html', 'targetSystem'],
   ['mavlink-param.html', 'targetSystem'],
   ['mavlink-payload.html', 'targetSystem'],

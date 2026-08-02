@@ -4,6 +4,7 @@ const delivery = require('../lib/delivery');
 const { executeSwarm, guardSwarmInput } = require('../lib/swarm');
 const { resolveFrame, mergeParams, DEFAULT_TIMEOUT_MS } = require('../lib/command');
 const { positionFrom, velocityFrom, valueFrom } = require('../lib/move');
+const { dialectFromConnection } = require('../lib/addressing');
 
 module.exports = function registerMavlinkSwarm(RED) {
   function MavlinkSwarmNode(config) {
@@ -191,24 +192,15 @@ function valuesFrom(config) {
 }
 
 /**
- * Compiled dialect bundle for §9 "ask the XML" coordinate kinds. The
- * connection's public vehicle snapshot deliberately carries no bundle — per
- * its own contract, resolve the Vehicle Profile node and call getDialect().
- * Null (no profile, build+list stub, or a throwing profile) keeps the
- * historical treat-as-latlon scaling.
+ * Compiled dialect bundle for §9 "ask the XML" coordinate kinds.
+ * Null keeps the historical treat-as-latlon scaling.
  *
  * @param {object} RED
  * @param {object} connectionNode
  * @returns {object|null}
  */
 function vehicleBundleFrom(RED, connectionNode) {
-  const vehicle = connectionNode && connectionNode.vehicle;
-  if (!vehicle || !vehicle.id) return null;
-  const profileNode = RED.nodes.getNode(vehicle.id);
-  if (profileNode && typeof profileNode.getDialect === 'function') {
-    try { return profileNode.getDialect(); } catch { return null; }
-  }
-  return null;
+  return dialectFromConnection(RED, connectionNode);
 }
 
 function numberOption(payload, config, key, fallback) {

@@ -156,29 +156,29 @@ test('preset rows render through the Advanced catalog path', () => {
 });
 
 test('Command CompID reloads when catalog source changes', () => {
-  assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node, \{\s*field:\s*'targetCompid'\s*\}\)/, 'CompID reload uses shared helper with Command field name');
+  assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node, \{\s*field:\s*'targetComponent'\s*\}\)/, 'CompID reload uses shared helper with Command field name');
   assertChangeHandlerContains(
     html,
     "$('#node-input-connection')",
-    'RED.mavlink.reloadTargetCompId(node, { field: \'targetCompid\' })',
+    'RED.mavlink.reloadTargetCompId(node, { field: \'targetComponent\' })',
     'Connection change refreshes MAV_COMPONENT for the new dialect'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-delivery')",
-    'RED.mavlink.reloadTargetCompId(node, { field: \'targetCompid\' })',
+    'RED.mavlink.reloadTargetCompId(node, { field: \'targetComponent\' })',
     'Delivery tier change refreshes CompID catalog'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-vehicle')",
-    'RED.mavlink.reloadTargetCompId(node, { field: \'targetCompid\' })',
+    'RED.mavlink.reloadTargetCompId(node, { field: \'targetComponent\' })',
     'Build Vehicle Profile change refreshes CompID catalog'
   );
   assertChangeHandlerContains(
     html,
     '$dialect',
-    'RED.mavlink.reloadTargetCompId(node, { field: \'targetCompid\' })',
+    'RED.mavlink.reloadTargetCompId(node, { field: \'targetComponent\' })',
     'Dialect change refreshes CompID catalog'
   );
 });
@@ -191,7 +191,7 @@ test('mavlink-command target sysid/compid use "(profile default)" wording', () =
   );
   assert.match(
     html,
-    /RED\.mavlink\.reloadTargetCompId\(node,\s*\{\s*field:\s*'targetCompid'\s*\}\)/,
+    /RED\.mavlink\.reloadTargetCompId\(node,\s*\{\s*field:\s*'targetComponent'\s*\}\)/,
     'compid uses shared reloadTargetCompId (default emptyLabel is profile default)'
   );
   assert.ok(

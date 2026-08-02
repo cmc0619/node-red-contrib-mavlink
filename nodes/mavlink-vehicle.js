@@ -19,6 +19,8 @@
  */
 
 const { capBadge } = require('../lib/delivery');
+const { loadMetadata } = require('../lib/metadata/load');
+const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
 let vehicleApi = null;
 /** @type {Error|null} */
@@ -108,80 +110,19 @@ module.exports = function registerMavlinkVehicle(RED) {
    * dialect for a missing `?vehicle=`.
    */
   if (!_enumsRouteRegistered) {
-    let catalogApi = null;
-    let catalogLoadError = null;
-    try {
-      catalogApi = require('../lib/metadata');
-    } catch (err) {
-      catalogLoadError = err;
-      if (RED.log && typeof RED.log.error === 'function') {
-        RED.log.error(`[mavlink-vehicle] enum catalog unavailable: ${err.message}`);
-      }
-    }
-
-    RED.httpAdmin.get(
-      ENUMS_ROUTE,
-      RED.auth.needsPermission('mavlink.read'),
-      (req, res) => {
-        if (!catalogApi) {
-          return res.status(503).json({
-            error: catalogLoadError
-              ? catalogLoadError.message
-              : 'enum catalog unavailable',
-          });
-        }
-        const {
-          listEnumsCatalog,
-          catalogEnumsFromBundle,
-          knownDialects,
-        } = catalogApi;
-        try {
-          const vehicleId = typeof req.query.vehicle === 'string'
-            ? req.query.vehicle.trim()
-            : '';
-          const requested = typeof req.query.dialect === 'string' && req.query.dialect.trim()
-            ? req.query.dialect.trim()
-            : '';
-          const names = typeof req.query.names === 'string' ? req.query.names : '';
-
-          if (vehicleId) {
-            const vehicleNode = RED.nodes.getNode(vehicleId);
-            if (vehicleNode && typeof vehicleNode.getDialect === 'function') {
-              const bundle = vehicleNode.getDialect();
-              const dialect = vehicleNode.dialect || bundle.dialect || 'custom';
-              return res.json(catalogEnumsFromBundle(bundle, dialect, names));
-            }
-            if (!requested || requested === 'custom') {
-              return res.status(404).json({
-                error: 'Vehicle Profile not found or not deployed; Deploy the flow, or pass a bundled ?dialect=',
-                dialects: knownDialects(),
-              });
-            }
-            return res.json(listEnumsCatalog(requested, names));
-          }
-
-          if (!requested) {
-            return res.status(400).json({
-              error: 'dialect is required',
-              dialects: knownDialects(),
-            });
-          }
-          if (requested === 'custom') {
-            return res.status(400).json({
-              error: 'custom dialect requires a deployed Vehicle Profile (?vehicle=id)',
-              dialects: knownDialects(),
-            });
-          }
-          res.json(listEnumsCatalog(requested, names));
-        } catch (err) {
-          res.status(400).json({
-            error: err.message,
-            dialects: catalogApi.knownDialects(),
-          });
-        }
-      }
-    );
-
+    registerDialectCatalogRoute(RED, {
+      path: ENUMS_ROUTE,
+      logLabel: 'mavlink-vehicle',
+      unavailableMessage: 'enum catalog unavailable',
+      fromBundle: (api, bundle, dialect, req) => {
+        const names = typeof req.query.names === 'string' ? req.query.names : '';
+        return api.catalogEnumsFromBundle(bundle, dialect, names);
+      },
+      fromDialect: (api, dialect, req) => {
+        const names = typeof req.query.names === 'string' ? req.query.names : '';
+        return api.listEnumsCatalog(dialect, names);
+      },
+    });
     _enumsRouteRegistered = true;
   }
 
@@ -195,16 +136,7 @@ module.exports = function registerMavlinkVehicle(RED) {
    * GET  /mavlink/xml-catalog/compare  informational diff vs the seed dialect
    */
   if (!_xmlCatalogRouteRegistered) {
-    let catalogApi = null;
-    let catalogLoadError = null;
-    try {
-      catalogApi = require('../lib/metadata');
-    } catch (err) {
-      catalogLoadError = err;
-      if (RED.log && typeof RED.log.error === 'function') {
-        RED.log.error(`[mavlink-vehicle] XML catalog unavailable: ${err.message}`);
-      }
-    }
+    const { api: catalogApi, error: catalogLoadError } = loadMetadata('mavlink-vehicle', RED);
 
     const newCatalog = () => new catalogApi.XmlCatalog({ baseDir: xmlCatalogBaseDir(RED) });
     const catalogUnavailable = (res) =>

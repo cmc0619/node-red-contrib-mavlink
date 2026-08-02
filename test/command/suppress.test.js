@@ -81,8 +81,8 @@ test('AckWaiter.start is never called when payload is false', () => {
     subscribe: () => () => {},
     sendFn: () => {},
     commandId: 400,
-    targetSysid: 1,
-    targetCompid: 1,
+    targetSystem: 1,
+    targetComponent: 1,
     timeoutMs: 100,
   });
   const origStart = waiter.start.bind(waiter);
