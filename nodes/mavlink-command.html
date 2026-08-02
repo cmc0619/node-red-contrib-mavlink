@@ -38,17 +38,12 @@
 
   // ── Preset / command caches loaded from server ─────────────────────────────
   let _presetGroups = null;
-  /** @type {Object<string, {commands:Array, enums:Object, dialect:string}>} */
-  const _catalogByKey = {};
-  /** In-flight waiters per catalog key (coalesce concurrent loads). */
-  const _catalogInflight = {};
-  /** Monotonic token bumped on every load (callers / tests observe churn). */
-  let _catalogRequestSeq = 0;
+  /** Commands catalog cache; `inflight` enables same-key waiter coalesce (#36). */
+  const _cmdCatalog = { byKey: {}, seq: 0, inflight: {} };
   /** Cache key for the catalog currently shown in the Advanced dropdown. */
   let _activeCatalogKey = '';
-  /** @type {Object<string, {messages:Array, enums:Object, dialect:string, error?:string}>} */
-  const _messageCatalogByKey = {};
-  let _messageRequestSeq = 0;
+  /** Messages catalog cache (request_message picker). */
+  const _msgCatalog = { byKey: {}, seq: 0 };
 
   function loadPresets(cb) {
     if (_presetGroups) { cb(_presetGroups); return; }
@@ -62,85 +57,21 @@
   }
 
   /**
-   * Load the Advanced catalog (commands + enums). Concurrent callers for the
-   * same target share one in-flight request (Greptile #36 — preset change must
-   * not cancel a pending Connection/Vehicle tip repaint). Responses for a key
-   * the editor no longer targets are dropped.
+   * Load the Advanced catalog (commands + enums). Coalesce is on the cache bag
+   * (`inflight`) so preset-tip and Advanced consumers share one XHR (#36).
    *
-   * @param {function({commands:Array, enums:Object, dialect:string}|null, Error=):void} cb
+   * @param {function({commands:Array, enums:Object, dialect:string}):void} cb
    */
   function loadCommandsCatalog(cb) {
-    const target = RED.mavlink.resolveCatalogTarget();
-    const requestedKey = target.key;
-    ++_catalogRequestSeq;
-    if (_catalogByKey[requestedKey]) {
-      _activeCatalogKey = requestedKey;
-      cb(_catalogByKey[requestedKey]);
-      return;
-    }
-    if (!target.query) {
-      const emptyCatalog = { commands: [], enums: {}, dialect: '' };
-      _catalogByKey[requestedKey] = emptyCatalog;
-      _activeCatalogKey = requestedKey;
-      cb(emptyCatalog);
-      return;
-    }
-    if (!_catalogInflight[requestedKey]) {
-      _catalogInflight[requestedKey] = [];
-      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
-        const waiters = _catalogInflight[requestedKey] || [];
-        delete _catalogInflight[requestedKey];
-        const catalog = {
-          commands: data.commands || [],
-          enums: data.enums || {},
-          dialect: data.dialect || target.dialect,
-        };
-        _catalogByKey[requestedKey] = catalog;
-        if (RED.mavlink.resolveCatalogTarget().key !== requestedKey) return;
-        _activeCatalogKey = requestedKey;
-        for (let i = 0; i < waiters.length; i++) waiters[i](catalog);
-      }).fail(function (_xhr, _status, err) {
-        const waiters = _catalogInflight[requestedKey] || [];
-        delete _catalogInflight[requestedKey];
-        if (RED.mavlink.resolveCatalogTarget().key !== requestedKey) return;
-        _activeCatalogKey = requestedKey;
-        const empty = {
-          commands: [],
-          enums: {},
-          dialect: target.dialect,
-          error: String(err || 'load failed'),
-        };
-        for (let i = 0; i < waiters.length; i++) waiters[i](empty);
-      });
-    }
-    _catalogInflight[requestedKey].push(cb);
+    RED.mavlink.loadCatalog('/mavlink/command/commands', _cmdCatalog, cb, {
+      listKey: 'commands',
+      onKey: function (key) { _activeCatalogKey = key; }
+    });
   }
 
   function loadMessagesCatalog(cb) {
-    const target = RED.mavlink.resolveCatalogTarget();
-    if (_messageCatalogByKey[target.key]) {
-      cb(_messageCatalogByKey[target.key]);
-      return;
-    }
-    if (!target.query) {
-      const emptyCatalog = { messages: [], enums: {}, dialect: '' };
-      _messageCatalogByKey[target.key] = emptyCatalog;
-      cb(emptyCatalog);
-      return;
-    }
-    const seq = ++_messageRequestSeq;
-    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/build/messages'), target.query, function (data) {
-      if (seq !== _messageRequestSeq) return;
-      const catalog = {
-        messages: data.messages || [],
-        enums: data.enums || {},
-        dialect: data.dialect || target.dialect,
-      };
-      _messageCatalogByKey[target.key] = catalog;
-      cb(catalog);
-    }).fail(function (_xhr, _status, err) {
-      if (seq !== _messageRequestSeq) return;
-      cb({ messages: [], enums: {}, dialect: target.dialect, error: String(err || 'load failed') });
+    RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
+      listKey: 'messages'
     });
   }
 
@@ -292,13 +223,7 @@
 
       $('#node-input-identity').on('change', refreshVisibility);
 
-      function reloadTargetCompId() {
-        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
-        RED.mavlink.reloadCompIdSelect($('#node-input-targetCompid'), {
-          initialSaved: node.targetCompid
-        });
-      }
-      // First fill runs after populateDialectSelect pins the saved dialect below.
+      // First CompID fill runs after populateDialectSelect pins the saved dialect.
 
       // ── Mode toggle ────────────────────────────────────────────────────────
       function applyMode(mode) {
@@ -377,8 +302,8 @@
         // Tip titles from cache when possible; otherwise one catalog load that
         // does not gate control rendering (Codex #36).
         const target = RED.mavlink.resolveCatalogTarget();
-        if (_catalogByKey[target.key]) {
-          paint(_catalogByKey[target.key]);
+        if (_cmdCatalog.byKey[target.key]) {
+          paint(_cmdCatalog.byKey[target.key]);
           return;
         }
         loadCommandsCatalog(paint);
@@ -476,7 +401,7 @@
         presetMessagesKey = '';
         refreshDelivery();
         // Connection binds a Vehicle Profile → dialect; CompID + Advanced follow it.
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node, { field: 'targetCompid' });
         // Re-fill the identity dropdown for the newly selected connection.
         refreshIdentitySelect();
         refreshVisibility();
@@ -489,7 +414,7 @@
         if ($('#node-input-delivery').val() === 'build') {
           presetMessagesCatalog = null;
           presetMessagesKey = '';
-          reloadTargetCompId();
+          RED.mavlink.reloadTargetCompId(node, { field: 'targetCompid' });
           if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
           if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
         }
@@ -502,7 +427,7 @@
         // Invalidate all cached dialect data and reload.
         presetMessagesCatalog = null;
         presetMessagesKey = '';
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node, { field: 'targetCompid' });
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
         if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });
@@ -533,7 +458,7 @@
         presetMessagesCatalog = null;
         presetMessagesKey = '';
         refreshVisibility();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node, { field: 'targetCompid' });
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
         if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });
@@ -542,9 +467,9 @@
         includeVehicleEscape: true,
       });
       // Compid catalog must run after the dialect select is pinned (see
-      // populateDialectSelect); the earlier reloadTargetCompId() at prepare
+      // populateDialectSelect); the earlier CompID reload at prepare
       // start raced an empty select on Build.
-      reloadTargetCompId();
+      RED.mavlink.reloadTargetCompId(node, { field: 'targetCompid' });
 
       function loadPresetMessages(cb) {
         const target = RED.mavlink.resolveCatalogTarget();
@@ -746,7 +671,7 @@
         if (mode === 'advanced') {
           // Fields are created by selection (§6 / §9 Advanced): named params
           // from the dialect metadata — never a raw Param 1–7 grid.
-          const catalog = _catalogByKey[_activeCatalogKey];
+          const catalog = _cmdCatalog.byKey[_activeCatalogKey];
           const cmdId = $('#node-input-advancedCommand').val();
           if (!catalog) {
             container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
@@ -810,7 +735,7 @@
           }
           // Resolve the key for THIS node's target — _activeCatalogKey can
           // still point at a previously edited node's dialect.
-          const cached = _catalogByKey[RED.mavlink.resolveCatalogTarget().key];
+          const cached = _cmdCatalog.byKey[RED.mavlink.resolveCatalogTarget().key];
           if (cached) {
             renderPresetRows(cached);
             return;

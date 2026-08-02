@@ -51,12 +51,6 @@
       }
 
       /* ── Target compid enum (after dialect is pinned/populated) ─ */
-      function reloadTargetCompId() {
-        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
-        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
-          initialSaved: node.targetComponent
-        });
-      }
 
       // Mission types offered per firmware (§9 firmware gating, §11). ArduPilot
       // carries mission/fence/rally; PX4 (and unknown stacks) carry mission only.
@@ -161,23 +155,23 @@
 
       $('#node-input-delivery').on('change', function () {
         refreshVisibility();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-connection').on('change', function () {
         refreshIdentitySelect();
         refreshVisibility();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-vehicle').on('change', function () {
         refreshVisibility();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-identity').on('change', function () {
         refreshVisibility();
       });
       $('#node-input-dialect').on('change', function () {
         refreshVisibility();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-firmware').on('change', repopulateTypes);
       $op.on('change', refreshRows);
@@ -187,7 +181,7 @@
           includeVehicleEscape: true
         });
       }
-      reloadTargetCompId();
+      RED.mavlink.reloadTargetCompId(node);
 
       /* Initial state. */
       refreshIdentitySelect();

@@ -111,7 +111,7 @@ test('mavlink-mission target sysid/compid default to empty (inherit profile)', (
   assert.match(html, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
   assert.match(html, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(html, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(html, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
+  assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid uses shared reloadTargetCompId');
 });
 
 test('mavlink-mission confirmClear stays visible for clear on every tier', () => {
@@ -130,25 +130,25 @@ test('mavlink-mission ensureConfigNodePicker called for vehicle', () => {
   );
 });
 
-test('mavlink-mission enum catalog loaded via shared reloadCompIdSelect helper', () => {
-  assert.match(html, /reloadCompIdSelect/, 'compid catalog loaded via shared helper');
+test('mavlink-mission enum catalog loaded via shared reloadTargetCompId helper', () => {
+  assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid catalog loaded via shared helper');
   assert.match(html, /node-input-targetComponent/, 'targetComponent select is filled');
   assertChangeHandlerContains(
     html,
     "$('#node-input-delivery')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'delivery change reloads CompID'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-connection')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'connection change reloads CompID'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-vehicle')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'vehicle change reloads CompID'
   );
 });

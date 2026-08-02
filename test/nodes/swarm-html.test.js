@@ -27,7 +27,11 @@ test('vehicleType is a MAV_TYPE select, not a free-form number (§6)', () => {
 });
 
 test('vehicleType loads MAV_TYPE entries from the build/messages catalog', () => {
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/build\/messages['"]\)/, 'dialect enum catalog is loaded from admin API');
+  assert.match(
+    html,
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/,
+    'dialect enum catalog uses shared loadCatalog'
+  );
   assert.match(html, /enums\.MAV_TYPE/, 'MAV_TYPE table is read from the catalog');
   assert.match(html, /function buildVehicleTypeDropdown/, 'dropdown is rebuilt from catalog entries');
   assert.match(html, /entry\.label/, 'option labels come from the catalog (value in parentheses)');
@@ -38,12 +42,10 @@ test('vehicleType preserves the saved numeric value after async catalog load', (
   assert.match(html, /node\.vehicleType/, 'saved vehicleType is re-applied');
   assert.match(html, /const prefer = current \|\| saved|var prefer = current \|\| saved/, 'in-progress selection wins over saved');
   assert.match(html, /not in dialect/, 'unknown saved values remain selectable');
-  assert.match(html, /_msgRequestSeq/, 'stale catalog responses are ignored');
-  // Cache hits must bump the seq before returning so in-flight requests cannot overwrite.
   assert.match(
     html,
-    /var seq = \+\+_msgRequestSeq;\s*if \(_msgCatalogByKey\[target\.key\]\)/,
-    'cached catalog path invalidates pending requests'
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/,
+    'stale catalog responses are guarded inside shared loadCatalog'
   );
 });
 
@@ -67,11 +69,14 @@ test('commandId is a MAV_CMD <select>, not a free-form number (§6)', () => {
 });
 
 test('commandId loads MAV_CMD entries from command/commands catalog', () => {
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/command\/commands['"]\)/, 'dialect MAV_CMD catalog is loaded from admin API');
+  assert.match(
+    html,
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
+    'dialect MAV_CMD catalog uses shared loadCatalog'
+  );
   assert.match(html, /function buildCommandDropdown/, 'dropdown is rebuilt from catalog entries');
   assert.match(html, /entry\.label/, 'option labels come from the catalog (MAV_CMD_… (n))');
   assert.match(html, /entry\.value/, 'option values are numeric command ids');
-  assert.match(html, /_cmdRequestSeq/, 'stale command catalog responses are ignored');
 });
 
 test('build+list catalog path has an explicit Dialect picker with Vehicle Profile escape', () => {
@@ -86,32 +91,29 @@ test('build+list catalog path has an explicit Dialect picker with Vehicle Profil
   assert.match(html, /__vehicle/, 'Vehicle Profile escape value is recognized');
 });
 
-test('swarm catalog target delegates to the shared resolver with its Build+list isBuild flag', () => {
+test('swarm catalog target delegates to the shared loader with its Build+list isBuild flag', () => {
   // Swarm's Build path is the narrow Build+list case; every other combination
-  // reads the connection profile. It passes that as the isBuild override to the
-  // shared resolver — the matrix behaviour (empty target, __vehicle, connection
-  // profile, no invented ardupilotmega) is proven in
-  // mavlink-editor-resource.test.js.
-  const targetStart = html.indexOf('function swarmCatalogTarget');
-  const messagesStart = html.indexOf('function loadMessagesCatalog');
-  const commandsStart = html.indexOf('function loadCommandsCatalog');
-  const vehicleTypeStart = html.indexOf('function buildVehicleTypeDropdown');
-  const commandDropdownStart = html.indexOf('function buildCommandDropdown');
-  assert.notEqual(targetStart, -1, 'swarmCatalogTarget helper must exist');
-  assert.notEqual(messagesStart, -1, 'loadMessagesCatalog helper must exist');
-  assert.notEqual(commandsStart, -1, 'loadCommandsCatalog helper must exist');
-  const target = html.slice(targetStart, messagesStart);
-  const messagesLoader = html.slice(messagesStart, vehicleTypeStart);
-  const commandsLoader = html.slice(commandsStart, commandDropdownStart);
-
-  assert.match(target, /isBuildList\s*=\s*delivery === ['"]build['"] && selectionMode === ['"]list['"]/,
-    'Build+list determines when the dialect picker governs the catalog');
-  assert.match(target, /RED\.mavlink\.resolveCatalogTarget\(\{\s*isBuild:\s*isBuildList\s*\}\)/,
-    'shared resolver is called with the Build+list isBuild override');
+  // reads the connection profile. It passes that as the isBuild override to
+  // loadCatalog — matrix behaviour proven in mavlink-editor-resource.test.js.
+  assert.match(html, /function swarmIsBuildList/, 'Build+list helper must exist');
+  assert.match(
+    html,
+    /delivery === ['"]build['"] && selectionMode === ['"]list['"]/,
+    'Build+list determines when the dialect picker governs the catalog'
+  );
+  assert.match(
+    html,
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"][\s\S]*isBuild:\s*swarmIsBuildList\(\)/,
+    'messages catalog gets the Build+list isBuild override'
+  );
+  assert.match(
+    html,
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"][\s\S]*isBuild:\s*swarmIsBuildList\(\)/,
+    'commands catalog gets the Build+list isBuild override'
+  );
   assert.doesNotMatch(html, /function resolveCatalogTarget/, 'no local catalog resolver copy');
-  assert.doesNotMatch(target, /ardupilotmega/, 'swarm catalog target resolution must not hardcode ardupilotmega');
-  assert.match(messagesLoader, /if \(!target\.query\)/, 'message catalog loader must not fetch an invented dialect for empty targets');
-  assert.match(commandsLoader, /if \(!target\.query\)/, 'command catalog loader must not fetch an invented dialect for empty targets');
+  assert.doesNotMatch(html, /\$\.getJSON\(\s*RED\.mavlink\.adminApiUrl/, 'no hand-rolled catalog getJSON');
+  assert.doesNotMatch(html, /ardupilotmega/, 'swarm catalog target resolution must not hardcode ardupilotmega');
 });
 
 test('swarm Build visibility delegates shared rows with the Build+list isBuild flag', () => {
@@ -140,8 +142,8 @@ test('commandId preserves the saved numeric value after async catalog load', () 
   assert.match(html, /not in dialect/, 'unknown saved values remain selectable');
 });
 
-test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(/, 'admin fetches must use adminApiUrl');
+test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)', () => {
+  assert.match(html, /RED\.mavlink\.loadCatalog\(/, 'catalog fetches use shared loadCatalog');
   assert.ok(
     !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
     'bare absolute /mavlink getJSON paths must be gone'

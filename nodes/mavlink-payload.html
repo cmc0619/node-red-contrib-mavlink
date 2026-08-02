@@ -501,16 +501,10 @@
       }
       $('#node-input-carrier').on('change', refreshFrameRow);
       refreshFrameRow();
-      function reloadTargetCompId() {
-        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
-        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
-          initialSaved: node.targetComponent
-        });
-      }
       $('#node-input-delivery').on('change', function () {
         resetEnumCatalog();
         refreshEnumControls();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-identity').on('change', refreshVisibility);
       $('#node-input-connection').on('change', function () {
@@ -523,18 +517,18 @@
           );
         }
         refreshEnumControls();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-vehicle').on('change', function () {
         resetEnumCatalog();
         refreshEnumControls();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       var $dialect = $('#node-input-dialect');
       $dialect.on('change', function () {
         resetEnumCatalog();
         refreshEnumControls();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       RED.mavlink.populateDialectSelect($dialect, {
         saved: node.dialect || '',
@@ -542,7 +536,7 @@
       });
       refreshVerbOptions(true);
       refreshEnumControls();
-      reloadTargetCompId();
+      RED.mavlink.reloadTargetCompId(node);
     }
   });
 </script>

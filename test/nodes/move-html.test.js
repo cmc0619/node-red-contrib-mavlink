@@ -41,7 +41,7 @@ test('mavlink-move editor reshapes fields by mode and delivery (§6)', () => {
   assertChangeHandlerContains(
     html,
     "$('#node-input-delivery')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'delivery change refreshes CompID catalog'
   );
   assert.match(html, /refreshVisibility\(\)/, 'visibility is applied on dialog open');
@@ -86,18 +86,18 @@ test('mavlink-move has one labeled row per parameter, not dual local/global rows
 test('mavlink-move keeps target sysid/compid and reloadCompIdSelect catalog', () => {
   assert.match(html, /id="node-input-targetSystem"/, 'target sysid field remains');
   assert.match(html, /id="node-input-targetComponent"/, 'target compid select remains');
-  assert.match(html, /reloadCompIdSelect/, 'compid enum catalog uses shared helper');
+  assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid enum catalog uses shared helper');
   assert.match(html, /ensureConfigNodePicker/, 'connection picker remains');
   assertChangeHandlerContains(
     html,
     "$('#node-input-connection')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'connection change reloads CompID'
   );
   assertChangeHandlerContains(
     html,
     "$('#node-input-vehicle')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'vehicle change reloads CompID'
   );
 });
@@ -107,7 +107,7 @@ test('mavlink-move target sysid/compid default to empty (inherit profile) not 1'
   assert.match(html, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(html, /RED\.validators\.number\(true\)/, 'blank-allowed validator is used');
   assert.match(html, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(html, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
+  assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid uses shared reloadTargetCompId');
 });
 
 test('mavlink-move has vehicle and identity defaults for role × tier matrix (§6)', () => {

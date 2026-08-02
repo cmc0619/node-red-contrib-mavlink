@@ -1,37 +1,15 @@
 <script type="text/javascript">
   (function () {
-    /** @type {Object<string, {messages:Array, enums:Object, dialect:string}>} */
-    var _msgCatalogByKey = {};
-    var _msgRequestSeq = 0;
+    /** Messages catalog cache (DESIGN.md §6 shared loadCatalog). */
+    var _msgCatalog = { byKey: {}, seq: 0 };
 
     function loadMessagesCatalog(cb) {
       // mavlink-in is wire-only (no Build tier): the bound Connection's Vehicle
       // Profile is the sole catalog source (§6). No connection / no profile
       // resolves to an empty catalog — never a silent `ardupilotmega`.
-      var target = RED.mavlink.resolveCatalogTarget({ isBuild: false });
-      var seq = ++_msgRequestSeq;
-      if (_msgCatalogByKey[target.key]) {
-        cb(_msgCatalogByKey[target.key]);
-        return;
-      }
-      if (!target.query) {
-        var emptyCatalog = { messages: [], enums: {}, dialect: '' };
-        _msgCatalogByKey[target.key] = emptyCatalog;
-        cb(emptyCatalog);
-        return;
-      }
-      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/build/messages'), target.query, function (data) {
-        if (seq !== _msgRequestSeq) return;
-        var catalog = {
-          messages: data.messages || [],
-          enums: data.enums || {},
-          dialect: data.dialect || target.dialect,
-        };
-        _msgCatalogByKey[target.key] = catalog;
-        cb(catalog);
-      }).fail(function () {
-        if (seq !== _msgRequestSeq) return;
-        cb({ messages: [], enums: {}, dialect: target.dialect });
+      RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
+        isBuild: false,
+        listKey: 'messages'
       });
     }
 

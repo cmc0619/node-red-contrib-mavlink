@@ -15,13 +15,10 @@
 
     var COMMAND_MESSAGES = { COMMAND_LONG: true, COMMAND_INT: true };
 
-    /** @type {Object<string, {messages:Array, enums:Object, dialect:string, error?:string}>} */
-    var _msgCatalogByKey = {};
+    /** Messages / commands catalog caches (DESIGN.md §6 shared loadCatalog). */
+    var _msgCatalog = { byKey: {}, seq: 0 };
     var _msgCatalogKey = '';
-    var _msgRequestSeq = 0;
-    /** @type {Object<string, {commands:Array, enums:Object}>} */
-    var _cmdCatalogByKey = {};
-    var _cmdRequestSeq = 0;
+    var _cmdCatalog = { byKey: {}, seq: 0 };
 
     // Catalog source follows the shared role × tier matrix (DESIGN.md §6). The
     // Build node's tier field is `tier`; the dialect picker governs on Build,
@@ -31,69 +28,17 @@
     }
 
     function loadMessagesCatalog(cb) {
-      var target = RED.mavlink.resolveCatalogTarget({ isBuild: buildTierIsBuild() });
-      if (_msgCatalogByKey[target.key]) {
-        _msgCatalogKey = target.key;
-        cb(_msgCatalogByKey[target.key]);
-        return;
-      }
-      if (!target.query) {
-        var emptyCatalog = { messages: [], enums: {}, dialect: '' };
-        _msgCatalogByKey[target.key] = emptyCatalog;
-        _msgCatalogKey = target.key;
-        cb(emptyCatalog);
-        return;
-      }
-      var seq = ++_msgRequestSeq;
-      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/build/messages'), target.query, function (data) {
-        if (seq !== _msgRequestSeq) return;
-        var catalog = {
-          messages: data.messages || [],
-          enums: data.enums || {},
-          dialect: data.dialect || target.dialect,
-        };
-        _msgCatalogByKey[target.key] = catalog;
-        _msgCatalogKey = target.key;
-        cb(catalog);
-    }).fail(function (_xhr, _status, err) {
-      if (seq !== _msgRequestSeq) return;
-      var catalog = {
-        messages: [],
-        enums: {},
-        dialect: target.dialect,
-        error: String(err || 'load failed'),
-      };
-      _msgCatalogByKey[target.key] = catalog;
-      _msgCatalogKey = target.key;
-      cb(catalog);
-    });
-  }
+      RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
+        isBuild: buildTierIsBuild(),
+        listKey: 'messages',
+        onKey: function (key) { _msgCatalogKey = key; }
+      });
+    }
 
     function loadCommandsCatalog(cb) {
-      var target = RED.mavlink.resolveCatalogTarget({ isBuild: buildTierIsBuild() });
-      if (_cmdCatalogByKey[target.key]) {
-        cb(_cmdCatalogByKey[target.key]);
-        return;
-      }
-      if (!target.query) {
-        var emptyCatalog = { commands: [], enums: {}, dialect: '' };
-        _cmdCatalogByKey[target.key] = emptyCatalog;
-        cb(emptyCatalog);
-        return;
-      }
-      var seq = ++_cmdRequestSeq;
-      $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
-        if (seq !== _cmdRequestSeq) return;
-        var catalog = {
-          commands: data.commands || [],
-          enums: data.enums || {},
-          dialect: data.dialect || target.dialect,
-        };
-        _cmdCatalogByKey[target.key] = catalog;
-        cb(catalog);
-      }).fail(function (_xhr, _status, err) {
-        if (seq !== _cmdRequestSeq) return;
-        cb({ commands: [], enums: {}, dialect: target.dialect, error: String(err || 'load failed') });
+      RED.mavlink.loadCatalog('/mavlink/command/commands', _cmdCatalog, cb, {
+        isBuild: buildTierIsBuild(),
+        listKey: 'commands'
       });
     }
 
@@ -265,8 +210,8 @@
           });
         }
         $tier.on('change', function () {
-          _msgCatalogByKey = {};
-          _cmdCatalogByKey = {};
+          _msgCatalog.byKey = {};
+          _cmdCatalog.byKey = {};
           updateVisibility();
           reloadCatalogs();
         });
@@ -493,7 +438,7 @@
         function refreshFieldForm() {
           syncSavedFieldsFromDom();
           container.empty();
-          var catalog = _msgCatalogByKey[_msgCatalogKey];
+          var catalog = _msgCatalog.byKey[_msgCatalogKey];
           var msgName = $('#node-input-messageName').val();
           if (!catalog) {
             container.append($('<div class="form-row"><em>Loading message fields\u2026</em></div>'));
@@ -609,16 +554,16 @@
 
         $('#node-input-vehicle').on('change', function () {
           if ($tier.val() === 'build' && $('#node-input-dialect').val() === '__vehicle') {
-            _msgCatalogByKey = {};
-            _cmdCatalogByKey = {};
+            _msgCatalog.byKey = {};
+            _cmdCatalog.byKey = {};
             reloadCatalogs();
           }
         });
 
         $('#node-input-connection').on('change', function () {
           if ($tier.val() !== 'build') {
-            _msgCatalogByKey = {};
-            _cmdCatalogByKey = {};
+            _msgCatalog.byKey = {};
+            _cmdCatalog.byKey = {};
             reloadCatalogs();
           }
         });
@@ -627,8 +572,8 @@
         // validator accepts a concrete dialect or the Vehicle Profile escape.
         var $dialect = $('#node-input-dialect');
         $dialect.on('change', function () {
-          _msgCatalogByKey = {};
-          _cmdCatalogByKey = {};
+          _msgCatalog.byKey = {};
+          _cmdCatalog.byKey = {};
           updateVisibility();
           reloadCatalogs();
         });

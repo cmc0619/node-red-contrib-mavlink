@@ -189,7 +189,7 @@ test('mavlink-payload target sysid/compid default to empty (inherit profile) not
   assert.match(payloadHtml, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
   assert.match(payloadHtml, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(payloadHtml, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(payloadHtml, /reloadCompIdSelect\(/, 'compid uses shared reloadCompIdSelect');
+  assert.match(payloadHtml, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid uses shared reloadTargetCompId');
 });
 
 test('mavlink-payload fractional params use step=any', () => {
@@ -313,25 +313,25 @@ test('mavlink-payload CompID reloads when catalog source changes', () => {
   assertChangeHandlerContains(
     payloadHtml,
     "$('#node-input-delivery')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'delivery change reloads CompID'
   );
   assertChangeHandlerContains(
     payloadHtml,
     "$('#node-input-connection')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'connection change reloads CompID'
   );
   assertChangeHandlerContains(
     payloadHtml,
     "$('#node-input-vehicle')",
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'vehicle change reloads CompID'
   );
   assertChangeHandlerContains(
     payloadHtml,
     '$dialect',
-    'reloadTargetCompId()',
+    'RED.mavlink.reloadTargetCompId(node)',
     'dialect change reloads CompID'
   );
 });

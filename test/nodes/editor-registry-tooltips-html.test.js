@@ -139,7 +139,7 @@ test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
   // scrape a form that never rendered — saved params survive.
   assert.match(html, /_mavParamsRendered = false/, 'render pass starts unrendered');
   assert.match(html, /_mavParamsRendered = true/, 'real renders mark the form scrapable');
-  assert.match(html, /\+\+_catalogRequestSeq;/);
+  assert.match(html, /RED\.mavlink\.loadCatalog\(/, 'catalog loads go through the shared helper');
 
   // Execute the actual oneditsave body, not just its source text: extract it
   // from the registration and run it against a node object (widget
@@ -172,15 +172,14 @@ test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
 
 test('Command catalog loads coalesce waiters per target key', () => {
   const html = readHtml('mavlink-command');
-  assert.match(html, /_catalogInflight/);
-  // Second consumer for the same key joins the in-flight queue (no second HTTP).
-  assert.match(html, /_catalogInflight\[requestedKey\]\.push\(cb\)/);
-  // Both waiters receive the resolved catalog (CodeRabbit #36 concurrent consumers).
+  // Coalesce is the cache bag's `inflight` map — behaviour proven once in
+  // mavlink-editor-resource.test.js against RED.mavlink.loadCatalog.
   assert.match(
     html,
-    /for \(let i = 0; i < waiters\.length; i\+\+\) waiters\[i\]\(catalog\)/
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
+    'commands catalog uses the shared loader'
   );
-  assert.match(html, /resolveCatalogTarget\(\)\.key !== requestedKey/);
+  assert.match(html, /inflight:\s*\{\s*\}/, 'commands cache bag enables coalesce waiters');
 });
 
 test('Command reapplies preset option tips when Connection / Vehicle changes', () => {

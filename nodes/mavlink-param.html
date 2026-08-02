@@ -49,12 +49,6 @@
       }
 
       /* ── Component picker (reload when dialect/connection changes) ─ */
-      function reloadTargetCompId() {
-        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
-        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
-          initialSaved: node.targetComponent
-        });
-      }
 
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
       function refreshVisibility() {
@@ -222,24 +216,24 @@
         clearParamDefs();
         refreshVisibility();
         loadParamDefs();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-connection').on('change', function () {
         clearParamDefs();
         refreshIdentitySelect();
         loadParamDefs();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-dialect').on('change', function () {
         clearParamDefs();
         refreshVisibility();
         loadParamDefs();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-vehicle').on('change', function () {
         clearParamDefs();
         loadParamDefs();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-firmware').on('change', function () {
         clearParamDefs();
@@ -257,7 +251,7 @@
           includeVehicleEscape: true
         });
       }
-      reloadTargetCompId();
+      RED.mavlink.reloadTargetCompId(node);
 
       $('#node-input-paramId').on('input change', refreshParamInfo);
       $('#node-input-action').on('change', refreshParamInfo);

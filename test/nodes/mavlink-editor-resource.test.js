@@ -2,7 +2,8 @@
 
 /**
  * Shared editor helpers (resources/mavlink-editor.js) — the single home for the
- * catalog source matrix (resolveCatalogTarget), the Build-tier dialect /
+ * catalog source matrix (resolveCatalogTarget), catalog fetch (loadCatalog),
+ * Target CompID reload (reloadTargetCompId), the Build-tier dialect /
  * vehicle / firmware default descriptors (buildTierDialectDefaults), and the
  * Build-tier row toggle (applyBuildTierRowVisibility). Every palette node
  * delegates here (DESIGN.md §6), so the matrix behaviour is proven once against
@@ -29,9 +30,14 @@ function plain(value) {
  * given a value, and `.val()` returns it. Absent selectors report length 0 so
  * helpers fall back to the node snapshot (`this`) exactly as they do in the
  * editor before a dialog is open.
+ *
+ * @param {object} [values]
+ * @param {object} [nodeLookup]
+ * @param {{trackToggle?: boolean, getJSON?: Function}} [opts]
  */
-function loadResource(values = {}, nodeLookup = {}, { trackToggle = false } = {}) {
+function loadResource(values = {}, nodeLookup = {}, opts = {}) {
   const toggled = {};
+  const trackToggle = opts.trackToggle === true;
   function $(selector) {
     const has = Object.prototype.hasOwnProperty.call(values, selector);
     return {
@@ -47,6 +53,9 @@ function loadResource(values = {}, nodeLookup = {}, { trackToggle = false } = {}
       },
     };
   }
+  $.getJSON = opts.getJSON || function () {
+    return { fail() { return this; } };
+  };
   const context = {
     RED: {
       settings: { httpAdminRoot: '/' },
@@ -304,6 +313,185 @@ test('applyBuildTierRowVisibility skips absent optional firmwareRow', () => {
   assert.equal(toggled['#row-dialect'], true);
   assert.equal(toggled['#row-connection'], false);
   assert.equal(toggled['#row-firmware'], undefined);
+});
+
+// ── reloadTargetCompId — thin defaulting wrapper over reloadCompIdSelect ─────
+
+test('reloadTargetCompId defaults to #node-input-targetComponent', () => {
+  const { RED } = loadResource({ '#node-input-targetComponent': '' });
+  const calls = [];
+  RED.mavlink.reloadCompIdSelect = ($select, opts) => {
+    calls.push({ length: $select.length, initialSaved: opts.initialSaved });
+  };
+  RED.mavlink.reloadTargetCompId({ targetComponent: 190 });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].length, 1);
+  assert.equal(calls[0].initialSaved, 190);
+});
+
+test('reloadTargetCompId honours Command\'s targetCompid field name', () => {
+  const { RED } = loadResource({ '#node-input-targetCompid': '' });
+  const calls = [];
+  RED.mavlink.reloadCompIdSelect = (_$select, opts) => {
+    calls.push(opts.initialSaved);
+  };
+  RED.mavlink.reloadTargetCompId({ targetCompid: 1 }, { field: 'targetCompid' });
+  assert.deepEqual(calls, [1]);
+});
+
+// ── loadCatalog — resolve → cache → getJSON → race guard ─────────────────────
+
+test('loadCatalog empty target caches and returns without fetching', () => {
+  let fetched = 0;
+  const { RED } = loadResource(
+    { '#node-input-dialect': '' },
+    {},
+    {
+      getJSON() {
+        fetched += 1;
+        return { fail() { return this; } };
+      },
+    }
+  );
+  const cache = { byKey: {}, seq: 0 };
+  const got = [];
+  RED.mavlink.loadCatalog('/mavlink/build/messages', cache, (c) => got.push(c), {
+    isBuild: true,
+    listKey: 'messages',
+  });
+  assert.equal(fetched, 0);
+  assert.equal(cache.seq, 1);
+  assert.deepEqual(plain(got[0]), { messages: [], enums: {}, dialect: '' });
+  assert.deepEqual(plain(cache.byKey.empty), { messages: [], enums: {}, dialect: '' });
+});
+
+test('loadCatalog cache hit bumps seq and skips getJSON', () => {
+  let fetched = 0;
+  const { RED } = loadResource(
+    { '#node-input-dialect': 'common' },
+    {},
+    {
+      getJSON() {
+        fetched += 1;
+        return { fail() { return this; } };
+      },
+    }
+  );
+  const cache = {
+    byKey: { 'dialect:common': { messages: [{ name: 'HEARTBEAT' }], enums: {}, dialect: 'common' } },
+    seq: 0,
+  };
+  const got = [];
+  RED.mavlink.loadCatalog('/mavlink/build/messages', cache, (c) => got.push(c), {
+    isBuild: true,
+    listKey: 'messages',
+  });
+  assert.equal(fetched, 0);
+  assert.equal(cache.seq, 1);
+  assert.equal(got[0].messages[0].name, 'HEARTBEAT');
+});
+
+test('loadCatalog seq-guard drops a stale success', () => {
+  const values = { '#node-input-dialect': 'common' };
+  const pending = [];
+  const { RED } = loadResource(
+    values,
+    {},
+    {
+      getJSON(_url, _query, ok) {
+        pending.push(ok);
+        return { fail() { return this; } };
+      },
+    }
+  );
+  const cache = { byKey: {}, seq: 0 };
+  const got = [];
+  RED.mavlink.loadCatalog('/mavlink/build/messages', cache, (c) => got.push(['a', c]), {
+    isBuild: true,
+    listKey: 'messages',
+  });
+  values['#node-input-dialect'] = 'ardupilotmega';
+  RED.mavlink.loadCatalog('/mavlink/build/messages', cache, (c) => got.push(['b', c]), {
+    isBuild: true,
+    listKey: 'messages',
+  });
+  assert.equal(pending.length, 2);
+  pending[0]({ messages: [{ name: 'STALE' }], enums: {}, dialect: 'common' });
+  assert.equal(got.length, 0);
+  pending[1]({ messages: [{ name: 'OK' }], enums: {}, dialect: 'ardupilotmega' });
+  assert.equal(got.length, 1);
+  assert.equal(got[0][0], 'b');
+  assert.equal(got[0][1].messages[0].name, 'OK');
+});
+
+test('loadCatalog coalesce fans out waiters for the same key', () => {
+  let fetches = 0;
+  let okHandler;
+  const { RED } = loadResource(
+    { '#node-input-dialect': 'common' },
+    {},
+    {
+      getJSON(_url, _query, ok) {
+        fetches += 1;
+        okHandler = ok;
+        return { fail() { return this; } };
+      },
+    }
+  );
+  const cache = { byKey: {}, seq: 0, inflight: {} };
+  const got = [];
+  RED.mavlink.loadCatalog('/mavlink/command/commands', cache, (c) => got.push(c), {
+    isBuild: true,
+    listKey: 'commands',
+  });
+  RED.mavlink.loadCatalog('/mavlink/command/commands', cache, (c) => got.push(c), {
+    isBuild: true,
+    listKey: 'commands',
+  });
+  assert.equal(fetches, 1, 'same-key consumers share one XHR');
+  okHandler({ commands: [{ value: 400 }], enums: {}, dialect: 'common' });
+  assert.equal(got.length, 2);
+  assert.equal(got[0].commands[0].value, 400);
+  assert.equal(Object.keys(cache.inflight).length, 0);
+});
+
+test('loadCatalog coalesce drops waiters when resolve key moved', () => {
+  let okHandler;
+  const values = { '#node-input-dialect': 'common' };
+  const { RED } = loadResource(
+    values,
+    {},
+    {
+      getJSON(_url, _query, ok) {
+        okHandler = ok;
+        return { fail() { return this; } };
+      },
+    }
+  );
+  const cache = { byKey: {}, seq: 0, inflight: {} };
+  const got = [];
+  RED.mavlink.loadCatalog('/mavlink/command/commands', cache, (c) => got.push(c), {
+    isBuild: true,
+    listKey: 'commands',
+  });
+  values['#node-input-dialect'] = 'ardupilotmega';
+  okHandler({ commands: [{ value: 400 }], enums: {}, dialect: 'common' });
+  // Catalog is cached, but waiters are dropped because the live target moved.
+  assert.equal(got.length, 0);
+  assert.ok(cache.byKey['dialect:common']);
+  assert.equal(Object.keys(cache.inflight).length, 0);
+});
+
+test('loadCatalog onKey fires for cache hit and empty target', () => {
+  const { RED } = loadResource({ '#node-input-dialect': '' });
+  const keys = [];
+  const cache = { byKey: {}, seq: 0 };
+  RED.mavlink.loadCatalog('/mavlink/build/messages', cache, () => {}, {
+    isBuild: true,
+    listKey: 'messages',
+    onKey: (k) => keys.push(k),
+  });
+  assert.deepEqual(keys, ['empty']);
 });
 
 // ── normalizeIdentityIds — the Connection dialog's extra-identity rules ──────

@@ -44,7 +44,7 @@ test('Build messageName defaults to HEARTBEAT and is a <select>', () => {
 });
 
 test('Build reshapes fields from message metadata and handles COMMAND_LONG/INT', () => {
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/build\/messages['"]\)/);
+  assert.match(html, /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/);
   assert.match(html, /function refreshFieldForm/);
   assert.match(html, /spec\.enum/);
   assert.match(html, /COMMAND_LONG/);
@@ -122,8 +122,8 @@ test('Build COMMAND_LONG/INT command params render bitmasks as numeric multi-sel
   assert.match(html, /kind === ['"]bitmask-mask['"]/, 'collector stores one numeric mask for command params');
 });
 
-test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(/, 'admin fetches must use adminApiUrl');
+test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)', () => {
+  assert.match(html, /RED\.mavlink\.loadCatalog\(/, 'catalog fetches use shared loadCatalog');
   assert.ok(
     !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
     'bare absolute /mavlink getJSON paths must be gone'
@@ -168,15 +168,19 @@ test('Build visibility delegates the shared four rows to applyBuildTierRowVisibi
   );
 });
 
-test('Build catalog targeting delegates to the shared resolver (no local copy)', () => {
-  // The catalog source matrix — including the wire branch that carries the
-  // connection profile id for custom XML dialects — lives in the shared
-  // resource helper (proven in mavlink-editor-resource.test.js). The Build node
-  // must call it, keyed off its `tier` field, not paste its own copy.
+test('Build catalog targeting delegates to the shared loader (no local copy)', () => {
+  // resolve → cache → getJSON → seq-guard lives in RED.mavlink.loadCatalog
+  // (proven in mavlink-editor-resource.test.js). Build passes its tier-derived
+  // isBuild flag and must not paste the skeleton.
   assert.match(
     html,
-    /RED\.mavlink\.resolveCatalogTarget\(\{\s*isBuild:\s*buildTierIsBuild\(\)\s*\}\)/,
-    'Build node calls the shared resolver with its tier-derived isBuild flag'
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"][\s\S]*isBuild:\s*buildTierIsBuild\(\)/,
+    'Build messages catalog uses shared loadCatalog with tier-derived isBuild'
+  );
+  assert.match(
+    html,
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"][\s\S]*isBuild:\s*buildTierIsBuild\(\)/,
+    'Build commands catalog uses shared loadCatalog with tier-derived isBuild'
   );
   assert.match(
     html,
@@ -184,9 +188,8 @@ test('Build catalog targeting delegates to the shared resolver (no local copy)',
     'isBuild is derived from the Build node tier field'
   );
   assert.doesNotMatch(html, /function resolveCatalogTarget/, 'no local catalog resolver copy');
-  assert.doesNotMatch(html, /function emptyCatalogTarget/, 'no local empty-target helper copy');
+  assert.doesNotMatch(html, /\$\.getJSON\(\s*RED\.mavlink\.adminApiUrl/, 'no hand-rolled catalog getJSON');
   assert.doesNotMatch(html, /ardupilotmega/, 'catalog target resolution must not hardcode ardupilotmega');
-  assert.match(html, /if \(!target\.query\)/, 'empty catalog target must not fetch an invented dialect');
   // "Not configured yet" is the required-field validation's job (red field +
   // node marker) — no bespoke pending mechanism in the dialog.
   assert.doesNotMatch(html, /pending/, 'no hand-rolled pending state');

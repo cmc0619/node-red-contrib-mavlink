@@ -165,49 +165,23 @@
       $('#node-input-path').on('change', refreshCarrierRows);
       refreshVerbOptions(true);
 
-      var _msgCatalogByKey = {};
-      var _msgRequestSeq = 0;
-      var _cmdCatalogByKey = {};
-      var _cmdRequestSeq = 0;
+      var _msgCatalog = { byKey: {}, seq: 0 };
+      var _cmdCatalog = { byKey: {}, seq: 0 };
 
       // Swarm's Build path is narrower than the shared rule: the Dialect picker
       // only governs when Delivery is Build AND Selection is an explicit list;
       // every other combination reads the connection's profile (§6). Feed that
-      // as the isBuild override into the shared resolver.
-      function swarmCatalogTarget() {
+      // as the isBuild override into the shared loadCatalog / resolver.
+      function swarmIsBuildList() {
         var delivery = $('#node-input-delivery').val() || 'build';
         var selectionMode = $('#node-input-selectionMode').val() || 'all';
-        var isBuildList = delivery === 'build' && selectionMode === 'list';
-        return RED.mavlink.resolveCatalogTarget({ isBuild: isBuildList });
+        return delivery === 'build' && selectionMode === 'list';
       }
 
       function loadMessagesCatalog(cb) {
-        var target = swarmCatalogTarget();
-        // Always advance the seq so an in-flight request for another Connection
-        // cannot overwrite this catalog after a cache hit.
-        var seq = ++_msgRequestSeq;
-        if (_msgCatalogByKey[target.key]) {
-          cb(_msgCatalogByKey[target.key]);
-          return;
-        }
-        if (!target.query) {
-          var emptyCatalog = { messages: [], enums: {}, dialect: '' };
-          _msgCatalogByKey[target.key] = emptyCatalog;
-          cb(emptyCatalog);
-          return;
-        }
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/build/messages'), target.query, function (data) {
-          if (seq !== _msgRequestSeq) return;
-          var catalog = {
-            messages: data.messages || [],
-            enums: data.enums || {},
-            dialect: data.dialect || target.dialect,
-          };
-          _msgCatalogByKey[target.key] = catalog;
-          cb(catalog);
-        }).fail(function () {
-          if (seq !== _msgRequestSeq) return;
-          cb({ messages: [], enums: {}, dialect: target.dialect });
+        RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
+          isBuild: swarmIsBuildList(),
+          listKey: 'messages'
         });
       }
 
@@ -243,30 +217,9 @@
       }
 
       function loadCommandsCatalog(cb) {
-        var target = swarmCatalogTarget();
-        var seq = ++_cmdRequestSeq;
-        if (_cmdCatalogByKey[target.key]) {
-          cb(_cmdCatalogByKey[target.key]);
-          return;
-        }
-        if (!target.query) {
-          var emptyCatalog = { commands: [], enums: {}, dialect: '' };
-          _cmdCatalogByKey[target.key] = emptyCatalog;
-          cb(emptyCatalog);
-          return;
-        }
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/commands'), target.query, function (data) {
-          if (seq !== _cmdRequestSeq) return;
-          var catalog = {
-            commands: data.commands || [],
-            enums: data.enums || {},
-            dialect: data.dialect || target.dialect,
-          };
-          _cmdCatalogByKey[target.key] = catalog;
-          cb(catalog);
-        }).fail(function () {
-          if (seq !== _cmdRequestSeq) return;
-          cb({ commands: [], enums: {}, dialect: target.dialect });
+        RED.mavlink.loadCatalog('/mavlink/command/commands', _cmdCatalog, cb, {
+          isBuild: swarmIsBuildList(),
+          listKey: 'commands'
         });
       }
 

@@ -51,12 +51,6 @@
         );
       }
 
-      function reloadTargetCompId() {
-        if (!(RED.mavlink && RED.mavlink.reloadCompIdSelect)) return;
-        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
-          initialSaved: node.targetComponent
-        });
-      }
 
       /**
        * §6: only the fields for the selected mode, delivery, and identity role
@@ -122,16 +116,16 @@
       $('#node-input-mode').on('change', refreshVisibility);
       $('#node-input-delivery').on('change', function () {
         refreshVisibility();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-identity').on('change', refreshVisibility);
       $('#node-input-dialect').on('change', function () {
         refreshVisibility();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-vehicle').on('change', function () {
         refreshVisibility();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-connection').on('change', function () {
         if (RED.mavlink && RED.mavlink.fillIdentitySelect) {
@@ -142,7 +136,7 @@
           );
         }
         refreshVisibility();
-        reloadTargetCompId();
+        RED.mavlink.reloadTargetCompId(node);
       });
       if (RED.mavlink && RED.mavlink.populateDialectSelect) {
         RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
@@ -150,7 +144,7 @@
           includeVehicleEscape: true
         });
       }
-      reloadTargetCompId();
+      RED.mavlink.reloadTargetCompId(node);
       refreshVisibility();
     }
   });
