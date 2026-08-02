@@ -193,18 +193,38 @@ test('two consecutive INT inputs both fail loud when dialect lookup fails', asyn
   const outputs = [];
   const doneErrors = [];
 
-  for (let i = 0; i < 2; i++) {
-    await new Promise((resolve) => {
+  function runFailedInput() {
+    return new Promise((resolve, reject) => {
+      let outputCaptured = false;
+      let doneCalled = false;
+      const finishWhenTerminal = () => {
+        if (outputCaptured && doneCalled) resolve();
+      };
+
       node.emit(
         'input',
         { payload: { 5: -35, 6: 149, 7: 50 } },
-        (messages) => { outputs.push(messages); },
+        (messages) => {
+          outputs.push(messages);
+          outputCaptured = true;
+          finishWhenTerminal();
+        },
         (err) => {
-          doneErrors.push(err);
-          resolve();
+          try {
+            assert.ok(err instanceof Error, 'done(err) receives the dialect failure');
+            doneErrors.push(err);
+            doneCalled = true;
+            finishWhenTerminal();
+          } catch (assertionError) {
+            reject(assertionError);
+          }
         }
       );
     });
+  }
+
+  for (let i = 0; i < 2; i++) {
+    await runFailedInput();
   }
 
   assert.equal(dialectLookups, 2, 'failed lookup is retried for the next input');
