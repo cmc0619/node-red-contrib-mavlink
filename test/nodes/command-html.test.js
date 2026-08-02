@@ -172,7 +172,6 @@ test('oneditprepare migrates legacy targetSysid/targetCompid into canonical fiel
     },
   });
   const node = { targetSysid: '11', targetCompid: '191', targetSystem: '', targetComponent: '' };
-  // eslint-disable-next-line no-new-func
   new Function('node', '$', body)(node, $);
   assert.equal(node.targetSystem, '11');
   assert.equal(node.targetComponent, '191');
