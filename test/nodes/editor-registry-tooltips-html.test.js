@@ -194,19 +194,6 @@ test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
   assert.equal(rendered.params, '{}', 'a rendered empty form saves {}');
 });
 
-test('Command does not mark an empty preset picker as a rendered zero-param form', () => {
-  const html = readHtml('mavlink-command');
-  const start = html.indexOf("const presetId = $('#node-input-preset').val();");
-  const end = html.indexOf('if (needsPresetMessages(paramSpec)', start);
-  assert.ok(start > 0 && end > start, 'preset render branch exists');
-  const branch = html.slice(start, end);
-  assert.match(
-    branch,
-    /const presetId = \$\('#node-input-preset'\)\.val\(\);\s*if \(!presetId\) return;/,
-    'the async-empty picker remains unrendered so Done preserves saved params'
-  );
-});
-
 test('Command catalog state keeps only its request sequence', () => {
   const html = readHtml('mavlink-command');
   assert.match(

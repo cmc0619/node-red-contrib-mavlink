@@ -612,7 +612,6 @@
           node._mavParamsRendered = true;
         } else {
           const presetId = $('#node-input-preset').val();
-          if (!presetId) return;
           const paramSpec = PRESET_PARAMS[presetId] || [];
           if (paramSpec.length === 0) {
             container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
