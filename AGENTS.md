@@ -16,12 +16,16 @@ confirmation against the dialect XML or measured on-wire behavior (§14), never 
 reading someone else's code. Write entries before the PR is considered ready. The next agent
 will not see this conversation.
 
-**Reference implementations inform, they don't decide.** Consult pymavlink, MAVSDK, and the
-GCS codebases (Mission Planner, QGroundControl, MAVProxy) for how things are done — framing,
-sequencing, command and parameter protocols, edge cases. They are idea sources, not ground
-truth: they disagree with each other often enough that copying any one of them wholesale
-imports its bugs. Authority stays with `DESIGN.md` and §14 — the dialect XML and measured
-reality.
+**Reference implementations: trusted starting points, not ground truth.** pymavlink, MAVSDK,
+and the GCS codebases (Mission Planner, QGroundControl, MAVProxy) are established,
+battle-tested ecosystem software — consult them for how things are done: framing, sequencing,
+command and parameter protocols, edge cases. Their behavior is the default hypothesis, almost
+certainly more right than anything reasoned from first principles, LLM or human. The
+ArduPilot and PX4 source trees sit a level higher: they are what real vehicles actually fly,
+the true references for on-wire behavior. But no implementation is this toolkit's ground
+truth — they disagree with each other, and with the spec, often enough that copying any one
+wholesale imports its bugs. Final authority stays with `DESIGN.md` and §14 — the dialect XML
+and measured reality.
 
 **PR size cap: 50 files.** Do not push a pull request whose diff touches more than 50 files.
 Split by module boundary (`lib/<module>`, `nodes/<node>`, matching tests) into sequential PRs
