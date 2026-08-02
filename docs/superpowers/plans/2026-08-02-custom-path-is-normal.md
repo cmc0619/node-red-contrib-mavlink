@@ -60,4 +60,4 @@ justifying catalog/`getDialect` behavior with install-catastrophe stories
 
 - [x] **Step 1:** `npx eslint lib/metadata/admin-catalog.js test/metadata/admin-catalog.test.js`
 - [x] **Step 2:** `node --test test/metadata/admin-catalog.test.js test/vehicle/vehicle.test.js`
-- [ ] **Step 3:** Commit, push, update PR #123 body if needed.
+- [x] **Step 3:** Commit, push, update PR #123 body if needed.
