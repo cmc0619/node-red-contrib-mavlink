@@ -17,25 +17,25 @@ not see this conversation.
 Split by module boundary (`lib/<module>`, `nodes/<node>`, matching tests) into sequential PRs
 when a layer would exceed the cap. Count is `git diff --name-only <base>...HEAD | wc -l`.
 
-**Greenfield: merge liberally to `main`.** This repo is early build-out, not a guarded
-production release train. Once a PR's quorum bots have finished and Critical/Important
-findings are handled (or declined), merge to `main` and keep building — do not stockpile
-long-lived feature branches waiting for perfection or for optional bots.
+**Merges to `main` are human-only.** An agent never merges a pull request — not when checks
+are green, not when the work looks finished, not when reviewers approve. Push the branch, keep
+the PR current, and stop. The repo owner reviews the code and merges when satisfied.
 
 **PRs are opened as drafts — only the repo owner marks them ready.** Bot reviews are a finite
 resource; never spend them on work-in-progress. Open every PR as a draft and keep pushing to it
 while iterating. Do not mark a PR ready for review yourself under any circumstances — the owner
-flips it when they're satisfied, and that flip is what triggers the reviewers. Once the PR is
-ready, wait for a **quorum of finished bots** — enough completed reviews to act on, not every
-configured bot. Today that means **CodeRabbit and Codex** (`chatgpt-codex-connector`) **both
-finished** (check success/failure and read their findings). Greptile is gone — do not wait for
-it. Codex usually does leave inline comments; wait for that review (or a clear no-findings
-pass) before treating the PR as done. If a human leaves findings, handle those too.
+flips it when they're satisfied, and that flip is what triggers the reviewers (today:
+**CodeRabbit and Codex** (`chatgpt-codex-connector`)).
 
-Do not treat the implementation as finished until the quorum's Critical/Important findings
-are addressed or explicitly declined per DESIGN.md §2 (with a §14 note when a belief was
-displaced). Prefer a Cursor Automation on GitHub **CI completed** / **PR review submitted**
-(see below) over busy-polling — this agent cannot create that automation itself.
+**Bot feedback is event-driven or timer-driven, never blocking.** After the owner marks a PR
+ready, do not sit waiting for reviewers and do not busy-poll. If the environment supports
+GitHub triggers — for example Claude's GitHub integration, or the Cursor automation described
+below — the trigger wakes the agent when CI completes or a review is submitted. Absent
+triggers, set a timer and check the PR periodically for new bot reviews. When feedback
+arrives, collect all open findings and form one plan — apply or decline each against DESIGN.md
+§2, with a §14 note when a belief was displaced — before pushing fixes. Do not treat the
+implementation as finished until Critical/Important findings are addressed or explicitly
+declined. If a human leaves findings, handle those too.
 
 **Resolve review threads as they are handled.** When a finding is fixed (or declined with a
 DESIGN.md / §14 reason), mark its GitHub review thread Resolved — do not leave fixed threads
@@ -45,16 +45,14 @@ open for the next passer-by.
 https://cursor.com/automations (or `/automate` in the Agents Window) on this repo with
 triggers: **CI completed** (covers CodeRabbit check completion) and **PR review submitted**
 (covers Codex and human reviews). Prompt should: identify the open PR, collect inline comments
-from CodeRabbit / Codex, apply or decline each finding against DESIGN.md, push fixes under the
-50-file cap, and reply on the threads. Without this, agents only learn reviews finished when a
-human pings them.
+from CodeRabbit / Codex, form a plan applying or declining each finding against DESIGN.md,
+then push fixes under the 50-file cap and reply on the threads. Without a trigger like this,
+the fallback is the periodic timer check above — agents otherwise only learn reviews finished
+when a human pings them.
 
 **The draft boundary is absolute.** An agent never flips a PR to ready-for-review — not when
 the work looks done, not when tests are green, not when told to "wrap up." If the owner wants
-reviews, they say so or flip it themselves. After the owner marks a PR ready, **wait for bot
-reviewers** (CodeRabbit and Codex, and any other configured checks) to finish before treating
-the change as done or stacking more work that depends on their feedback. Address
-Critical/Important findings before moving on.
+reviews, they say so or flip it themselves.
 
 ## Simplicity: YAGNI is a hard constraint
 
@@ -70,6 +68,12 @@ logic.
 
 For every proposed change, state the concrete user-visible problem, why existing code cannot
 handle it, and the smallest possible fix. If that evidence is absent, do not make the change.
+
+**Net code length is a budget.** A change that is not adding a new feature should leave the
+codebase the same size or smaller — deletion and simplification are the default shape of
+maintenance work. If a non-feature change nets positive in code size, the PR must explain
+concretely why the growth is necessary: what it buys, and why the existing code could not
+absorb the change. Without that justification, rework the change to be smaller.
 
 The node-specific application of this rule is the Configuration Trust ruleset further down:
 that section is this principle worked out per configuration-property category, not a separate
