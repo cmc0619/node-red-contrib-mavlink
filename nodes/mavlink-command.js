@@ -164,16 +164,14 @@ module.exports = function registerMavlinkCommand(RED) {
       let bundle = null;
       if (delivery === 'build') {
         if (config.dialect === '__vehicle') {
-          bundle = dialectFromVehicleId(RED, config.vehicle);
+          bundle = dialectFromVehicleId(RED, config.vehicle, { rethrow: true });
         } else if (config.dialect) {
           const api = metadataApi();
-          if (api) {
-            try { bundle = api.loadBundled(config.dialect); } catch { bundle = null; }
-          }
+          if (api) bundle = api.loadBundled(config.dialect);
         }
       } else {
         // Connection snapshot has no bundle — resolve the profile node (§7).
-        bundle = dialectFromConnection(RED, connNode);
+        bundle = dialectFromConnection(RED, connNode, { rethrow: true });
       }
       _coordKinds = bundle ? intCoordKinds(bundle, commandId) : null;
       return _coordKinds;
@@ -272,19 +270,9 @@ module.exports = function registerMavlinkCommand(RED) {
         return;
       }
 
-      // ── Missing connection on a send/confirm/complete tier ────────────────
-      // Do not silently build and pretend success — a chosen send tier with no
-      // connection is a misconfiguration (§9). Fail loud on output 1 only.
+      // Deploy gate already badged a missing Connection. Do not invent a
+      // protocol-shaped status record — Node-RED Catch via done(err) is enough.
       if (delivery !== 'build' && !connNode) {
-        const rec = makeRecord({
-          result: 'failed',
-          resultCode: null,
-          confirmedBy: 'none',
-          elapsed: Date.now() - startMs,
-          detail: `no connection configured for ${delivery} delivery`,
-        });
-        applyActionStatus(node, 'invalid', 'invalid config');
-        emitStatus(rec, send, false);
         failDone(`${displayName} has no connection for ${delivery} delivery`);
         return;
       }

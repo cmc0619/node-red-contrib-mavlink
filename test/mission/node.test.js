@@ -76,19 +76,40 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
   assert.equal(outputs[0][1].result, 'succeeded');
 });
 
-test('confirm tier with no connection fails loud instead of silently building', async () => {
-  const Node = loadNode(new StubConnection());
-  // No connection bound but delivery is confirm — must not degrade to Build (§9).
+test('confirm tier with no connection badges at deploy and does not silently build', async () => {
+  const statuses = [];
+  const nodes = {};
+  const RED = {
+    nodes: {
+      types: {},
+      createNode(node, config) {
+        Object.setPrototypeOf(node, EventEmitter.prototype);
+        EventEmitter.call(node);
+        node.id = config.id || 'mission-node';
+        node.status = (s) => { statuses.push(s); };
+        node.error = () => {};
+        node.send = () => {};
+        node.log = () => {};
+        node.warn = () => {};
+      },
+      registerType(name, ctor) { this.types[name] = ctor; },
+      getNode(id) { return nodes[id]; },
+    },
+  };
+  require('../../nodes/mavlink-mission')(RED);
+  const Node = RED.nodes.types['mavlink-mission'];
+  // No connection bound — deploy gate owns the badge; no per-message re-getNode.
   const node = new Node({ operation: 'download', delivery: 'confirm', missionType: 'mission' });
+  assert.ok(
+    statuses.some((s) => s && s.fill === 'red'),
+    'missingConnectionGate must badge invalid config at deploy'
+  );
+
   const { outputs, err } = await runInput(node, { payload: {} });
-
-  assert.equal(outputs.length, 1);
-  assert.equal(outputs[0][0], null, 'output 0 must not fire');
-  assert.equal(outputs[0][1].result, 'failed');
-  assert.match(outputs[0][1].reason, /no connection/);
-  assert.ok(err, 'done(err) reports the misconfiguration');
+  assert.ok(err, 'done(err) is the loud path');
+  assert.match(String(err.message || err), /no connection/);
+  assert.equal(outputs.length, 0, 'no protocol status record for a missing deploy bind');
 });
-
 test('mission Build concrete dialect uses config firmware and no Vehicle Profile target rung', async () => {
   const conn = new StubConnection();
   const vehicleNode = {

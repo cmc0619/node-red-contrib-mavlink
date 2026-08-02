@@ -32,6 +32,7 @@ const {
 } = require('../lib/delivery');
 const {
   resolveDeliveryContext,
+  missingConnectionGate,
   firstDefined,
 } = require('../lib/addressing');
 const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
@@ -92,10 +93,10 @@ module.exports = function registerMavlinkParam(RED) {
           });
         }
         const userDir = (RED.settings && RED.settings.userDir) || '';
-        const cacheDir = userDir
+        const storeDir = userDir
           ? path.join(userDir, 'mavlink', 'param-defs') : undefined;
         try {
-          const map = await defsApi.fetchParamDefs(url, { cacheDir });
+          const map = await defsApi.fetchParamDefs(url, { storeDir });
           const defs = {};
           for (const [k, v] of map) defs[k] = v;
           return res.json({ defs, url });
@@ -116,6 +117,9 @@ module.exports = function registerMavlinkParam(RED) {
     const node = this;
 
     const timeoutMs = config.timeout ? Number(config.timeout) : DEFAULT_TIMEOUT_MS;
+    const delivery = config.delivery;
+    const connAtDeploy = delivery === 'build' ? null : RED.nodes.getNode(config.connection);
+    missingConnectionGate(node, delivery, connAtDeploy);
 
     /**
      * In-flight transaction, or null. `gen` is the single-flight token: a
@@ -150,9 +154,9 @@ module.exports = function registerMavlinkParam(RED) {
         }
 
         const payload = msg.payload ?? {};
-        const delivery = config.delivery;
 
         // Concrete Build dialects carry firmware from the editor (no target rung).
+        // Connection is the deploy-time bind — do not re-getNode.
         const {
           connectionNode: connNode,
           profile,
@@ -162,6 +166,7 @@ module.exports = function registerMavlinkParam(RED) {
           delivery,
           config,
           payload,
+          connectionNode: connAtDeploy,
           buildFirmwareProfile: true,
         });
 
@@ -178,9 +183,12 @@ module.exports = function registerMavlinkParam(RED) {
           return;
         }
 
-        if (!connNode || typeof connNode.send !== 'function') {
-          throw new Error('mavlink-param requires a Connection');
+        if (!connNode) {
+          // Deploy gate already badged — Node-RED Catch via done(err) only.
+          done(new Error('mavlink-param: no connection for wire delivery'));
+          return;
         }
+
         connNode.send(message, {
           band: request.action === 'request-list' ? BAND.BULK : BAND.CONTROL,
           target: request.target,

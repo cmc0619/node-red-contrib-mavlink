@@ -213,22 +213,34 @@ test('resolveTarget: explicit config value wins over Vehicle Profile', async () 
   assert.equal(sent[0].payload.fields.target_component, 100);
 });
 
-test('Send/confirm tier with no connection fails loud instead of silently building', async () => {
+test('Send/confirm tier with no connection badges at deploy and does not silently build', async () => {
+  const statuses = [];
   const RED = redStub({});
+  const baseCreate = RED.nodes.createNode;
+  RED.nodes.createNode = function createNode(node, config) {
+    baseCreate(node, config);
+    node.status = (s) => { statuses.push(s); };
+  };
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
-  // No connection bound but delivery is confirm — this must not degrade to Build.
+  // No connection bound but delivery is confirm — deploy gate owns the badge;
+  // Node-RED restarts consumers when a config node returns, so no per-message
+  // re-getNode / soft "no connection" status record.
   const node = new Node({ carrier: 'long', mode: 'preset', preset: 'arm', delivery: 'confirm' });
+  assert.ok(
+    statuses.some((s) => s && s.fill === 'red'),
+    'missingConnectionGate must badge invalid config at deploy'
+  );
 
-  let sent;
-  node.emit('input', { payload: { 1: 1 } }, (m) => { sent = m; }, () => {});
+  let sent = null;
+  let doneErr;
+  node.emit('input', { payload: { 1: 1 } }, (m) => { sent = m; }, (err) => { doneErr = err; });
   await tick();
 
-  assert.equal(sent[0], null, 'output 0 must not fire');
-  assert.equal(sent[1].result, 'failed');
-  assert.ok(/no connection/.test(sent[1].detail));
+  assert.ok(doneErr, 'done(err) is the loud path');
+  assert.match(String(doneErr.message || doneErr), /no connection/);
+  assert.equal(sent, null, 'no protocol status record for a missing deploy bind');
 });
-
 test('resolveTarget: companion identity derives {airframe sysid, 1} as target', async () => {
   const identityStub = {
     role: 'companion',

@@ -8,7 +8,7 @@ const {
   valueFrom,
 } = require('../lib/move');
 const { BAND } = require('../lib/connection/bands');
-const { resolveDeliveryContext } = require('../lib/addressing');
+const { resolveDeliveryContext, missingConnectionGate } = require('../lib/addressing');
 const {
   shouldSuppress,
   makeStatusRecord,
@@ -20,6 +20,9 @@ module.exports = function registerMavlinkMove(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
     let stream = null;
+    const delivery = config.delivery;
+    const connAtDeploy = delivery === 'build' ? null : RED.nodes.getNode(config.connection);
+    missingConnectionGate(node, delivery, connAtDeploy);
 
     node.on('input', (msg, send, done) => {
       try {
@@ -28,13 +31,14 @@ module.exports = function registerMavlinkMove(RED) {
           return;
         }
 
-        const delivery = config.delivery;
         const payload = msg.payload ?? {};
         // Move: companion hides both sysid and compid — no compidFromConfig.
+        // Connection is the deploy-time bind — do not re-getNode.
         const { connectionNode, target, identityId } = resolveDeliveryContext(RED, {
           delivery,
           config,
           payload,
+          connectionNode: connAtDeploy,
         });
 
         const message = buildMoveMessage({
@@ -49,10 +53,11 @@ module.exports = function registerMavlinkMove(RED) {
 
         if (delivery === 'build') {
           completeBuild(node, send, message);
+        } else if (!connectionNode) {
+          // Deploy gate already badged — Node-RED Catch via done(err) only.
+          done(new Error('mavlink-move: no connection for wire delivery'));
+          return;
         } else {
-          if (!connectionNode || typeof connectionNode.send !== 'function') {
-            throw new Error('mavlink-move requires a Connection for send/stream delivery');
-          }
           const options = {
             connection: connectionNode,
             message,

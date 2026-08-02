@@ -256,9 +256,11 @@ the node where users face the most opaque data in the system.
   baked-in default that will rot.
 
 Parameters are firmware- *and version*-specific, so a definition set is bound to a Vehicle
-Profile, not global. Cache by source URL with the fetch recorded, exactly as dialect XML is
-(above). A profile with no definition set still reads and writes parameters — it just does it
-without labels, and the node says so rather than pretending.
+Profile, not global. Persist fetched definition JSON under `userDir/mavlink/param-defs`, keyed
+by source URL — the same authoring role as dialect XML under `userDir/mavlink/xml`: download on
+a bench with internet, use later offline. An in-process map only dedupes repeated admin GETs;
+it is not the persistence model. A profile with no definition set still reads and writes
+parameters — it just does it without labels, and the node says so rather than pretending.
 
 ## 5. The field codec
 
@@ -1352,7 +1354,7 @@ by silence. Update this list when an item lands.
 | **Custom dialect upload in the Vehicle editor** | deferred | Superseded by the dialect library (Seed + catalog dates). No path/upload UI. Legacy `customDialectPath` still resolves; private-dialect library ingestion is future work. |
 | **Command node `COMMAND_INT`** | **done** | Carrier is a required operator choice (no default; node reds out unset) and every tier — build included — honours it. Positional params are always degrees; the INT carrier scales ×1e7 per the dialect XML's own classification (`intCoordKinds`: `hasLocation` + not-degE7 → scale; natively-degE7 params carry raw; non-location param5/6 like gimbal flags never scale; unknown command → historical scaling). NaN in param5/6 refuses the INT build loud — the spec routes NaN-meaning commands to COMMAND_LONG, and coercion would aim at null island. On `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns and rebuilds once from the canonical degree params in the other form; second wrong-carrier fails loud (no auto-swap in Swarm/Payload — homogeneous fleets per node, the named result tells the operator which way to flip). Swarm command/payload actions and Payload command-backed verbs share the same required-carrier rule and the same `lib/command` builders; message-kind payload verbs ignore the carrier. |
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
-| **Param definition catalog** | **done** | `lib/param/defs.js` fetches ArduPilot `apm.pdef.json` by family or Vehicle `paramDefsUrl` (PX4/custom); cache; Param editor datalist + units/enums. |
+| **Param definition catalog** | **done** | `lib/param/defs.js` fetches ArduPilot `apm.pdef.json` by family or Vehicle `paramDefsUrl` (PX4/custom); persisted under `userDir/mavlink/param-defs` (authoring/offline store); Param editor datalist + units/enums. |
 | **Full command-param `enum=` recovery** | **done** | Seed compile carries common.xml `<param enum=`> links into the bundle (e.g. Arm → `MAV_BOOL`). The old `hints.js` overlay is gone. |
 | **Move editor §6 reshape** | **done** | Per-field rows + mode/delivery visibility in the Move dialog. |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
@@ -2275,3 +2277,25 @@ still carried non-empty `targetSysid`. `oneditprepare` copies legacy → canonic
 sysid input); `oneditsave` deletes the old keys.
 *Check:* `node --test test/nodes/command-html.test.js` (migration block executes against a stub
 node); `rg -n '"targetSysid"' examples` (expect no Command-node property matches).
+
+**YAGNI in the Node-RED context (keep vs cut).**
+*Wrong belief:* polish every missing config-node ref with per-message `getNode` recovery, invent
+soft protocol status for programming errors, and treat `userDir` param-defs as a speed cache.
+*Fact:*
+- **Keep** operational error outputs, socket teardown, queue bounds, replay/signing state, and
+  offline parameter/XML catalogs under `userDir`.
+- **Cut** false lifecycle recovery for direct config references — Node-RED restarts consumers
+  when a referenced config node restarts. Bind Connection once at deploy; pass that closed-over
+  ref into `resolveDeliveryContext` (no silent re-`getNode` of `config.connection`). A missing
+  wire Connection is a deploy badge + `done(err)`, not a forged protocol status record.
+- **Cut** soft-null wrapping of `getDialect` / `loadBundled` in Command/Swarm (rethrow); Build
+  badges truncate `err.message` rather than inventing `"dialect unavailable"`.
+- **Decline (this pass):** ripping §9 status+`done(err)` for real protocol/queue/timeout
+  outcomes. Narrowing action-node outer catches so TypeError never mints `result: 'failed'`
+  needs an explicit §9 rule in a follow-on.
+- **Param defs** are authoring data (bench download → offline editor), not a hot-path cache.
+*Check:* `node --test test/addressing/delivery-context.test.js test/command/node.test.js
+test/mission/node.test.js test/param/defs.test.js`;
+`rg -n 'getNode\\(config\\.connection\\)' nodes/mavlink-move.js nodes/mavlink-payload.js
+nodes/mavlink-param.js lib/addressing/delivery-context.js` (expect bind-once only in the three
+palette constructors; none inside `resolveDeliveryContext`).

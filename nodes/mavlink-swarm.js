@@ -200,7 +200,7 @@ function valuesFrom(config) {
  * @returns {object|null}
  */
 function vehicleBundleFrom(RED, connectionNode) {
-  return dialectFromConnection(RED, connectionNode);
+  return dialectFromConnection(RED, connectionNode, { rethrow: true });
 }
 
 function numberOption(payload, config, key, fallback) {

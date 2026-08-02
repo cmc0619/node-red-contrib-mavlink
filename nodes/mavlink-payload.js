@@ -13,6 +13,7 @@ const {
 } = require('../lib/command');
 const {
   resolveDeliveryContext,
+  missingConnectionGate,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -35,6 +36,9 @@ module.exports = function registerMavlinkPayload(RED) {
     const maxRetries = config.maxRetries !== undefined && config.maxRetries !== ''
       ? Number(config.maxRetries)
       : DEFAULT_MAX_RETRIES;
+    const delivery = config.delivery;
+    const connAtDeploy = delivery === 'build' ? null : RED.nodes.getNode(config.connection);
+    missingConnectionGate(node, delivery, connAtDeploy);
 
     function cancelWaiter() {
       if (activeWaiter) {
@@ -50,15 +54,16 @@ module.exports = function registerMavlinkPayload(RED) {
           return;
         }
 
-        const delivery = config.delivery;
         const payload = msg.payload ?? {};
         // Payload: compidFromConfig keeps the compid field authoritative even
         // under a companion identity — compid addresses a payload device, not
         // the autopilot (DESIGN.md §6 spec'd exception).
+        // Connection is the deploy-time bind — do not re-getNode.
         const { connectionNode, target, identityId } = resolveDeliveryContext(RED, {
           delivery,
           config,
           payload,
+          connectionNode: connAtDeploy,
           compidFromConfig: true,
         });
 
@@ -80,9 +85,12 @@ module.exports = function registerMavlinkPayload(RED) {
           return;
         }
 
-        if (!connectionNode || typeof connectionNode.send !== 'function') {
-          throw new Error('mavlink-payload requires a Connection');
+        if (!connectionNode) {
+          // Deploy gate already badged — Node-RED Catch via done(err) only.
+          done(new Error('mavlink-payload: no connection for wire delivery'));
+          return;
         }
+
         // Confirm tier for a command-backed verb: send the COMMAND_LONG and
         // wait for its COMMAND_ACK so a later DENIED / TEMPORARILY_REJECTED /
         // timeout can halt the chain (§9). Gimbal-manager setpoints carry no

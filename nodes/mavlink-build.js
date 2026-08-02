@@ -103,7 +103,7 @@ module.exports = function registerMavlinkBuild(RED) {
         try {
           bundle = dialectFromVehicleId(RED, config.vehicle, { rethrow: true });
         } catch (err) {
-          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+          node.status({ fill: 'red', shape: 'ring', text: capBadge(err.message) });
           node.error(`mavlink-build: ${err.message}`);
           return;
         }
@@ -112,9 +112,11 @@ module.exports = function registerMavlinkBuild(RED) {
           return;
         }
       } else {
-        const { api } = loadMetadata('mavlink-build', RED);
+        const { api, error } = loadMetadata('mavlink-build', RED);
         if (!api) {
-          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+          const detail = error ? error.message : 'metadata unavailable';
+          node.status({ fill: 'red', shape: 'ring', text: capBadge(detail) });
+          if (error) node.error(`mavlink-build: ${error.message}`);
           return;
         }
         bundle = api.loadBundled(dialectName);
@@ -124,7 +126,7 @@ module.exports = function registerMavlinkBuild(RED) {
       try {
         bundle = dialectFromConnection(RED, connectionNode, { rethrow: true });
       } catch (err) {
-        node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+        node.status({ fill: 'red', shape: 'ring', text: capBadge(err.message) });
         node.error(`mavlink-build: ${err.message}`);
         return;
       }

@@ -188,7 +188,7 @@ test('fetchParamDefs calls injectable fetch and parses result', async () => {
   assert.equal(map.get('SPEED').unit, 'm/s');
 });
 
-test('fetchParamDefs returns cached result without re-fetching', async () => {
+test('fetchParamDefs dedupes in-process without re-fetching', async () => {
   clearMemCache();
   const fakeJson = { Rover: { SPEED: { humanName: 'Speed', documentation: '', fields: {} } } };
   let fetchCount = 0;
@@ -196,7 +196,7 @@ test('fetchParamDefs returns cached result without re-fetching', async () => {
 
   await fetchParamDefs('https://example.com/cached.json', { fetchFn });
   await fetchParamDefs('https://example.com/cached.json', { fetchFn });
-  assert.equal(fetchCount, 1, 'second call must hit the memory cache');
+  assert.equal(fetchCount, 1, 'second call must hit the in-process map');
 });
 
 test('fetchParamDefs propagates fetch errors', async () => {

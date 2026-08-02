@@ -83,21 +83,6 @@ module.exports = function registerMavlinkMission(RED) {
       const payload = msg.payload ?? {};
       const missionTypeKey = payload.missionType || config.missionType || 'mission';
 
-      // ── Missing connection on confirm ─────────────────────────────────────
-      // Do not silently build and pretend success — confirm with no connection
-      // is a misconfiguration (§9). Fail loud on output 1 only (same as Command).
-      if (delivery !== 'build' && !connNode) {
-        const rec = record(operation, missionTypeKey, { sysid: NaN, compid: NaN }, {
-          result: 'failed',
-          phase: 'gated',
-          reason: `no connection configured for ${delivery} delivery`,
-        });
-        applyActionStatus(node, 'error', 'invalid config');
-        send([null, rec]);
-        done(new Error(`mavlink-mission: ${rec.reason}`));
-        return;
-      }
-
       const { profile, target } = resolveDeliveryContext(RED, {
         delivery,
         config,
@@ -105,6 +90,13 @@ module.exports = function registerMavlinkMission(RED) {
         connectionNode: connNode,
         buildFirmwareProfile: true,
       });
+
+      // Deploy gate already badged a missing Connection. Do not invent a
+      // protocol-shaped status record — Node-RED Catch via done(err) is enough.
+      if (delivery !== 'build' && !connNode) {
+        done(new Error(`mavlink-mission: no connection for ${delivery} delivery`));
+        return;
+      }
 
       // Firmware: dynamic override → selected profile (incl. concrete Build).
       const firmware = firstDefined(payload.firmware, profile && profile.firmware);
