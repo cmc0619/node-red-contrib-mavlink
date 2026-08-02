@@ -116,9 +116,9 @@
         }
 
         /**
-         * Apply role hint visibility and migrate suggested values. A field is
-         * rewritten only when blank or still equal to the previous role's
-         * suggestion — an explicit edit is never reverted.
+         * Apply role hint visibility and re-suggest values for the newly picked
+         * role. A field is rewritten only when blank or still equal to the
+         * previous role's suggestion — an explicit edit is never reverted.
          */
         function applyRole() {
           var role = $role.val();

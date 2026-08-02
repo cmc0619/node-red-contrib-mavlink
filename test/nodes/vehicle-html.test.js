@@ -34,25 +34,13 @@ test('there is no custom-path dialect mode in the editor', () => {
   assert.ok(!/\$path\.val\(p\)/.test(html));
 });
 
-test('custom-path profiles stay selectable until Seed or a catalog date is picked', () => {
-  assert.match(html, /hasLegacyCustomPath/);
-  assert.match(html, /Custom path \(legacy\)/);
-  assert.match(html, /rev === 'legacy-path'/);
-  assert.match(
-    html,
-    /this\.dialectSource = 'custom'/,
-    'oneditsave must keep dialectSource=custom when legacy-path is selected'
-  );
-  const saveHook = html.slice(html.indexOf('oneditsave:'));
-  assert.match(
-    saveHook,
-    /if \(rev === 'legacy-path' && \(this\.customDialectPath \|\| ''\)\.trim\(\)\)/,
-    'oneditsave must branch on legacy-path before clearing the path'
-  );
-  assert.ok(
-    !/oneditsave:\s*function\s*\(\)\s*\{\s*\/\*[\s\S]*?\*\/\s*this\.dialectSource = 'bundled';\s*this\.customDialectPath = '';\s*\}/.test(html),
-    'oneditsave must not unconditionally wipe customDialectPath'
-  );
+test('no leftover custom-path keys survive anywhere in the editor', () => {
+  // Pre-1.0: the path mode is deleted, not migrated — no defaults entry, no
+  // "Custom path (legacy)" Version option, no oneditsave rewriting old keys.
+  assert.ok(!/dialectSource/.test(html));
+  assert.ok(!/customDialectPath/.test(html));
+  assert.ok(!/legacy-path/.test(html));
+  assert.ok(!/oneditsave/.test(html));
 });
 
 test('seed refresh workflow passes dispatch ref via env (no shell interpolation)', () => {

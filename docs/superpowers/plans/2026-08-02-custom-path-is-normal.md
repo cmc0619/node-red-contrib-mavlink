@@ -1,5 +1,12 @@
 # Custom Path Is Normal (YAGNI mop) Implementation Plan
 
+> **SUPERSEDED 2026-08-02 — do not execute.** This plan's premise was wrong. Calling
+> `customDialectPath` a "normal" source did not change the fact that no editor control can
+> create it, so it was a leftover-key reader wearing a different label. The keys, the
+> `legacy-path` Version option, and the `oneditsave` that preserved them were deleted; see
+> DESIGN.md §4 and the §14 entry "A leftover key is not made legitimate by calling it a
+> normal source." Kept as a record of the displaced belief.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: executing-plans / TDD for the test step.
 
 **Goal:** Stop treating `customDialectPath` profiles as exotic edge cases, and stop

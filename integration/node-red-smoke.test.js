@@ -50,7 +50,6 @@ function representativeFlow() {
       vehicleFamily: 'generic',
       firmware: 'ardupilot',
       dialect: 'common',
-      dialectSource: 'bundled',
       dialectRevision: 'seed'
     },
     {

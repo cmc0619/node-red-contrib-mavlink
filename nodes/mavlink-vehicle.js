@@ -146,7 +146,7 @@ module.exports = function registerMavlinkVehicle(RED) {
       });
 
     // GET list: needs read permission (§6). Never discloses the absolute base
-    // dir — only the per-file paths a profile persists into customDialectPath.
+    // dir — only the dialect names and snapshot dates the Version pulldown offers.
     RED.httpAdmin.get(
       XML_CATALOG_ROUTE,
       RED.auth.needsPermission('mavlink.read'),
@@ -228,12 +228,8 @@ module.exports = function registerMavlinkVehicle(RED) {
     node.vehicleFamily = normalizeFamily(config.vehicleFamily);
     node.firmware = normalizeFirmware(config.firmware);
     node.dialect = (config.dialect || 'ardupilotmega').toLowerCase();
-    // `seed`, a catalog snapshot id, or empty when dialectSource is custom
-    // (customDialectPath is a normal getDialect source — resolveDialect compiles it).
-    node.dialectRevision = config.dialectRevision ||
-      (config.dialectSource === 'custom' ? '' : 'seed');
-    node.dialectSource = config.dialectSource === 'custom' ? 'custom' : 'bundled';
-    node.customDialectPath = (config.customDialectPath || '').trim();
+    // `seed` (the editor default) or a catalog snapshot id.
+    node.dialectRevision = config.dialectRevision || 'seed';
     // Optional firmware/custom parameter-definition URL (PX4 / custom stacks).
     node.paramDefsUrl = typeof config.paramDefsUrl === 'string' ? config.paramDefsUrl.trim() : '';
 
@@ -250,10 +246,7 @@ module.exports = function registerMavlinkVehicle(RED) {
       node._bundle = resolveDialect({
         name: config.name,
         dialect: node.dialect,
-        dialectRevision: node.dialectRevision || undefined,
-        dialectSource: node.dialectSource,
-        customDialectPath: node.customDialectPath,
-        customDialectBundle: config.customDialectBundle || null,
+        dialectRevision: node.dialectRevision,
         catalogBaseDir: xmlCatalogBaseDir(RED),
       });
     } catch (err) {
@@ -270,13 +263,13 @@ module.exports = function registerMavlinkVehicle(RED) {
      * The compiled DialectBundle for this profile.
      *
      * @returns {import('../lib/metadata').DialectBundle}
-     * @throws {Error} when no bundle is loaded (custom dialect without files)
+     * @throws {Error} when the configured dialect and revision did not compile
      */
     node.getDialect = () => {
       if (!node._bundle) {
         throw new Error(
           `Vehicle Profile '${config.name || node.id}' has no loaded dialect` +
-            ' (custom source requires a compiled bundle).'
+            ' — check the Dialect and Version picks in the profile.'
         );
       }
       return node._bundle;
@@ -287,16 +280,14 @@ module.exports = function registerMavlinkVehicle(RED) {
      * Contains no local identity fields.
      *
      * @returns {{vehicleFamily: string, firmware: string, dialect: string,
-     *            dialectSource: string, defaultTargetSystem: number,
+     *            dialectRevision: string, defaultTargetSystem: number,
      *            defaultTargetComponent: number}}
      */
     node.getDefaults = () => ({
       vehicleFamily: node.vehicleFamily,
       firmware: node.firmware,
       dialect: node.dialect,
-      dialectRevision: node.dialectRevision || 'seed',
-      dialectSource: node.dialectSource,
-      customDialectPath: node.customDialectPath,
+      dialectRevision: node.dialectRevision,
       paramDefsUrl: node.paramDefsUrl,
       defaultTargetSystem: node.defaultTargetSystem,
       defaultTargetComponent: node.defaultTargetComponent,

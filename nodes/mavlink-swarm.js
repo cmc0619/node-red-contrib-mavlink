@@ -122,9 +122,9 @@ function actionFrom(config, payload) {
   if (type === 'payload') {
     return {
       type,
-      topic: payload.topic || config.topic || 'camera',
-      verb: payload.verb || config.verb || 'photo',
-      path: payload.path || config.path || 'legacy',
+      topic: payload.topic || config.topic,
+      verb: payload.verb || config.verb,
+      path: payload.path || config.path,
       values: payload.values || valuesFrom(config),
       carrier: payload.carrier || config.carrier,
       frame: resolveFrame(payload.mavFrame, config.frame),

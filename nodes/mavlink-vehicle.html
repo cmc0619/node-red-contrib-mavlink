@@ -8,9 +8,6 @@
         firmware:              { value: 'ardupilot', required: true },
         dialect:               { value: 'ardupilotmega', required: true },
         dialectRevision:       { value: 'seed', required: true },
-        /* Legacy fields kept so old flows still load; unused in the editor. */
-        dialectSource:         { value: 'bundled' },
-        customDialectPath:     { value: '' },
         paramDefsUrl:          { value: '' },
         defaultTargetSystem:   { value: 1, validate: RED.mavlink.validateUint8(0) },
         defaultTargetComponent:{ value: 1, validate: RED.mavlink.validateUint8(0) }
@@ -60,34 +57,12 @@
             $('<option>').val(want).text(want).appendTo($dialect);
           }
           $dialect.val(want);
-          populateRevisions(initialRevisionPrefer());
-        }
-
-        /** Path profiles stay selectable until the user picks Seed/a date. */
-        function hasLegacyCustomPath() {
-          return node.dialectSource === 'custom' && !!(node.customDialectPath || '').trim();
-        }
-
-        function initialRevisionPrefer() {
-          if (hasLegacyCustomPath()) {
-            const rev = node.dialectRevision;
-            if (!rev || rev === 'seed' || rev === 'bundled' || rev === 'legacy-path') {
-              return 'legacy-path';
-            }
-          }
-          return node.dialectRevision || 'seed';
+          populateRevisions(node.dialectRevision || 'seed');
         }
 
         function populateRevisions(prefer) {
           const row = dialectRow($dialect.val());
           const versions = (row && row.versions) ? row.versions.slice() : [{ id: 'seed', label: 'Seed (shipped)' }];
-          if (hasLegacyCustomPath()) {
-            versions.unshift({
-              id: 'legacy-path',
-              label: 'Custom path (legacy)',
-              kind: 'legacy'
-            });
-          }
           $revision.empty();
           versions.forEach(function (v) {
             $('<option>').val(v.id).text(v.label)
@@ -159,7 +134,7 @@
           const rev = $revision.val();
           const opt = $revision.find('option:selected');
           const entry = opt.attr('data-entry') || (dialect + '.xml');
-          if (!rev || rev === 'seed' || rev === 'legacy-path') {
+          if (!rev || rev === 'seed') {
             $status.text('Pick a downloaded date to compare against the seed.');
             return;
           }
@@ -236,17 +211,6 @@
               { saved: node.defaultTargetComponent }
             );
           });
-        }
-      },
-      oneditsave: function () {
-        const rev = $('#node-config-input-dialectRevision').val();
-        if (rev === 'legacy-path' && (this.customDialectPath || '').trim()) {
-          /* Keep compiling the existing absolute XML path. */
-          this.dialectSource = 'custom';
-          this.dialectRevision = 'legacy-path';
-        } else {
-          this.dialectSource = 'bundled';
-          this.customDialectPath = '';
         }
       }
     });
