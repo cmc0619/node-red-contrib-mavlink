@@ -2012,9 +2012,11 @@ served at `resources/@cmc0619/node-red-contrib-mavlink/mavlink-editor.js` and lo
 defined before any `registerType` runs — no async race. The catalog source matrix is one function,
 `RED.mavlink.resolveCatalogTarget({ isBuild? })` (Build → Dialect/`__vehicle`; wire → connection
 profile; empty → `{key:'empty', query:null}`, never `ardupilotmega`); the catalog fetch skeleton
-is `RED.mavlink.loadCatalog(endpoint, cache, cb, opts)` (caller-owned `{byKey, seq}` bag;
-optional `inflight` enables same-key waiter coalesce for Command Advanced — Greptile #36; seq
-bumps before cache-hit return so a later hit invalidates in-flight responses); Target CompID
+is `RED.mavlink.loadCatalog(endpoint, cache, cb, opts)` (caller-owned `{byKey, seq}` bag for
+the helper; optional `inflight` enables same-key waiter coalesce for Command Advanced —
+Greptile #36). Nodes paint from the catalog the loader hands the callback (or a
+`_current*Catalog` handle set from that callback) — not from a sticky “last key” into
+`byKey`. Target CompID
 reload is `RED.mavlink.reloadTargetCompId(node, { field? })` (default `targetComponent`; Command
 passes `field:'targetCompid'`); identity refresh is `RED.mavlink.refreshIdentitySelect(node,
 { rolesAllowed? })` (Swarm passes `['gcs','custom']`); catalog-backed selects share

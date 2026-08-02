@@ -9,8 +9,9 @@
 
     /** Messages / commands catalog caches (DESIGN.md §6 shared loadCatalog). */
     var _msgCatalog = { byKey: {}, seq: 0 };
-    var _msgCatalogKey = '';
     var _cmdCatalog = { byKey: {}, seq: 0 };
+    /** Catalog the loader last handed this dialog — paint from this, not byKey. */
+    var _currentMsgCatalog = null;
 
     // Catalog source follows the shared role × tier matrix (DESIGN.md §6). The
     // Build node's tier field is `tier`; the dialect picker governs on Build,
@@ -22,8 +23,7 @@
     function loadMessagesCatalog(cb) {
       RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
         isBuild: buildTierIsBuild(),
-        listKey: 'messages',
-        onKey: function (key) { _msgCatalogKey = key; }
+        listKey: 'messages'
       });
     }
 
@@ -167,6 +167,7 @@
           });
         }
         $tier.on('change', function () {
+          _currentMsgCatalog = null;
           _msgCatalog.byKey = {};
           _cmdCatalog.byKey = {};
           updateVisibility();
@@ -395,7 +396,7 @@
         function refreshFieldForm() {
           syncSavedFieldsFromDom();
           container.empty();
-          var catalog = _msgCatalog.byKey[_msgCatalogKey];
+          var catalog = _currentMsgCatalog;
           var msgName = $('#node-input-messageName').val();
           if (!catalog) {
             container.append($('<div class="form-row"><em>Loading message fields\u2026</em></div>'));
@@ -457,6 +458,7 @@
         }
 
         function buildMessageDropdown(catalog) {
+          _currentMsgCatalog = catalog;
           var sel = $('#node-input-messageName');
           var current = sel.is('select') ? sel.val() : null;
           var prefer = current || node.messageName || 'HEARTBEAT';
@@ -476,24 +478,29 @@
         }
 
         function reloadCatalogs() {
+          _currentMsgCatalog = null;
           container.empty().append($('<div class="form-row"><em>Loading messages\u2026</em></div>'));
           loadMessagesCatalog(function (catalog) {
             buildMessageDropdown(catalog);
           });
         }
 
+        function clearCatalogs() {
+          _currentMsgCatalog = null;
+          _msgCatalog.byKey = {};
+          _cmdCatalog.byKey = {};
+        }
+
         $('#node-input-vehicle').on('change', function () {
           if ($tier.val() === 'build' && $('#node-input-dialect').val() === '__vehicle') {
-            _msgCatalog.byKey = {};
-            _cmdCatalog.byKey = {};
+            clearCatalogs();
             reloadCatalogs();
           }
         });
 
         $('#node-input-connection').on('change', function () {
           if ($tier.val() !== 'build') {
-            _msgCatalog.byKey = {};
-            _cmdCatalog.byKey = {};
+            clearCatalogs();
             reloadCatalogs();
           }
         });
@@ -502,8 +509,7 @@
         // validator accepts a concrete dialect or the Vehicle Profile escape.
         var $dialect = $('#node-input-dialect');
         $dialect.on('change', function () {
-          _msgCatalog.byKey = {};
-          _cmdCatalog.byKey = {};
+          clearCatalogs();
           updateVisibility();
           reloadCatalogs();
         });
