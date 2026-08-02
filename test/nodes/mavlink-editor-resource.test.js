@@ -2,10 +2,11 @@
 
 /**
  * Shared editor helpers (resources/mavlink-editor.js) — the single home for the
- * catalog source matrix (resolveCatalogTarget) and the Build-tier dialect /
- * vehicle / firmware default descriptors (buildTierDialectDefaults). Every
- * palette node delegates here (DESIGN.md §6), so the matrix behaviour is proven
- * once against the shared implementation rather than per node.
+ * catalog source matrix (resolveCatalogTarget), the Build-tier dialect /
+ * vehicle / firmware default descriptors (buildTierDialectDefaults), and the
+ * Build-tier row toggle (applyBuildTierRowVisibility). Every palette node
+ * delegates here (DESIGN.md §6), so the matrix behaviour is proven once against
+ * the shared implementation rather than per node.
  */
 
 const test = require('node:test');
@@ -29,13 +30,20 @@ function plain(value) {
  * helpers fall back to the node snapshot (`this`) exactly as they do in the
  * editor before a dialog is open.
  */
-function loadResource(values = {}, nodeLookup = {}) {
+function loadResource(values = {}, nodeLookup = {}, { trackToggle = false } = {}) {
+  const toggled = {};
   function $(selector) {
     const has = Object.prototype.hasOwnProperty.call(values, selector);
     return {
-      length: has ? 1 : 0,
+      // Toggle tracking registers the selector so applyBuildTierRowVisibility
+      // sees a live row even when no .val() was seeded.
+      length: has || trackToggle ? 1 : 0,
       val() {
         return has ? values[selector] : undefined;
+      },
+      toggle(shown) {
+        toggled[selector] = !!shown;
+        return this;
       },
     };
   }
@@ -50,6 +58,7 @@ function loadResource(values = {}, nodeLookup = {}) {
       },
     },
     $,
+    toggled,
   };
   vm.runInNewContext(resourceScript, context);
   return context;
@@ -189,6 +198,81 @@ test('buildTierDialectDefaults honours modeField:tier for the Build node', () =>
   const { dialect } = RED.mavlink.buildTierDialectDefaults({ modeField: 'tier' });
   assert.equal(dialect.validate.call({ tier: 'build' }, ''), false);
   assert.equal(dialect.validate.call({ tier: 'send' }, ''), true);
+});
+
+// ── applyBuildTierRowVisibility — the shared Build-tier row matrix ───────────
+
+const VIS_ROWS = {
+  dialectRow: '#row-dialect',
+  vehicleRow: '#row-vehicle',
+  firmwareRow: '#row-firmware',
+  connectionRow: '#row-connection',
+};
+
+test('applyBuildTierRowVisibility Build + empty dialect: dialect only', () => {
+  const { RED, toggled } = loadResource({}, {}, { trackToggle: true });
+  RED.mavlink.applyBuildTierRowVisibility({
+    isBuild: true,
+    dialect: '',
+    ...VIS_ROWS,
+  });
+  assert.equal(toggled['#row-dialect'], true);
+  assert.equal(toggled['#row-vehicle'], false);
+  assert.equal(toggled['#row-firmware'], false);
+  assert.equal(toggled['#row-connection'], false);
+});
+
+test('applyBuildTierRowVisibility Build + __vehicle: dialect + vehicle', () => {
+  const { RED, toggled } = loadResource({}, {}, { trackToggle: true });
+  RED.mavlink.applyBuildTierRowVisibility({
+    isBuild: true,
+    dialect: '__vehicle',
+    ...VIS_ROWS,
+  });
+  assert.equal(toggled['#row-dialect'], true);
+  assert.equal(toggled['#row-vehicle'], true);
+  assert.equal(toggled['#row-firmware'], false);
+  assert.equal(toggled['#row-connection'], false);
+});
+
+test('applyBuildTierRowVisibility Build + concrete dialect: dialect + firmware', () => {
+  const { RED, toggled } = loadResource({}, {}, { trackToggle: true });
+  RED.mavlink.applyBuildTierRowVisibility({
+    isBuild: true,
+    dialect: 'common',
+    ...VIS_ROWS,
+  });
+  assert.equal(toggled['#row-dialect'], true);
+  assert.equal(toggled['#row-vehicle'], false);
+  assert.equal(toggled['#row-firmware'], true);
+  assert.equal(toggled['#row-connection'], false);
+});
+
+test('applyBuildTierRowVisibility wire tier: connection only', () => {
+  const { RED, toggled } = loadResource({}, {}, { trackToggle: true });
+  RED.mavlink.applyBuildTierRowVisibility({
+    isBuild: false,
+    dialect: 'common',
+    ...VIS_ROWS,
+  });
+  assert.equal(toggled['#row-dialect'], false);
+  assert.equal(toggled['#row-vehicle'], false);
+  assert.equal(toggled['#row-firmware'], false);
+  assert.equal(toggled['#row-connection'], true);
+});
+
+test('applyBuildTierRowVisibility skips absent optional firmwareRow', () => {
+  const { RED, toggled } = loadResource({}, {}, { trackToggle: true });
+  RED.mavlink.applyBuildTierRowVisibility({
+    isBuild: true,
+    dialect: 'common',
+    dialectRow: '#row-dialect',
+    vehicleRow: '#row-vehicle',
+    connectionRow: '#row-connection',
+  });
+  assert.equal(toggled['#row-dialect'], true);
+  assert.equal(toggled['#row-connection'], false);
+  assert.equal(toggled['#row-firmware'], undefined);
 });
 
 // ── normalizeIdentityIds — the Connection dialog's extra-identity rules ──────

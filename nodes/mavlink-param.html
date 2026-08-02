@@ -62,11 +62,15 @@
         var isBuild = (delivery === 'build');
         var dialect = $('#node-input-dialect').val() || node.dialect || '';
 
-        /* tier-driven rows */
-        $('#row-dialect').toggle(isBuild);
-        $('#row-vehicle').toggle(isBuild && dialect === '__vehicle');
-        $('#row-firmware').toggle(isBuild && dialect !== '__vehicle' && dialect !== '');
-        $('#row-connection').toggle(!isBuild);
+        RED.mavlink.applyBuildTierRowVisibility({
+          isBuild: isBuild,
+          dialect: dialect,
+          dialectRow: '#row-dialect',
+          vehicleRow: '#row-vehicle',
+          firmwareRow: '#row-firmware',
+          connectionRow: '#row-connection'
+        });
+        /* Param-owned wire rows stay local */
         $('#row-identity').toggle(!isBuild);
         $('#row-timeout').toggle(!isBuild);
 

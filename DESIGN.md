@@ -549,8 +549,9 @@ through the stock change→validate path (never a parallel validation API).
 
 **Editor helpers are shared, not pasted.** The `RED.mavlink.*` browser helpers — config-node
 pickers, enum/dialect catalog fills, `currentCatalogQuery`, `validateUint8`, the catalog source
-matrix `resolveCatalogTarget`, and the Build-tier dialect/vehicle/firmware default descriptors
-`buildTierDialectDefaults` — live once in `resources/mavlink-editor.js`, loaded via the stock
+matrix `resolveCatalogTarget`, the Build-tier dialect/vehicle/firmware default descriptors
+`buildTierDialectDefaults`, and the Build-tier row toggle
+`applyBuildTierRowVisibility` — live once in `resources/mavlink-editor.js`, loaded via the stock
 resource mechanism (a relative `<script src>` in the first-listed node). Node-RED guarantees that
 file runs before any inline `registerType`, so nodes call the shared helpers rather than copying
 them (§14 records the load-order fact and the picker API).
@@ -1986,8 +1987,10 @@ Operator guide: [`sitl/README.md`](sitl/README.md).
 **Shared editor helpers are one resource file, and the Build-tier picker glue is one shared API.**
 *Wrong belief:* every node's `.html` must inline its own copy of `RED.mavlink.*` helpers (enum
 fills, dialect select, `currentCatalogQuery`, `validateUint8`, …) and its own `resolveCatalogTarget`
-+ dialect/vehicle/firmware `defaults.validate` blocks, because Node-RED loads external `<script src>`
-asynchronously so helpers might be undefined when a later node's `registerType` parses.
++ dialect/vehicle/firmware `defaults.validate` blocks + Build-tier dialect/vehicle/firmware/connection
+row toggles, because Node-RED loads external `<script src>` asynchronously so helpers might be
+undefined when a later node's `registerType` parses — or because each dialog's remaining
+role/mode rows make the shared four "not quite the same."
 *Fact:* The helpers live once in [`resources/mavlink-editor.js`](resources/mavlink-editor.js),
 served at `resources/@cmc0619/node-red-contrib-mavlink/mavlink-editor.js` and loaded by a relative
 `<script src>` at the top of `mavlink-local-identity.html` (listed first in `package.json`
@@ -1997,12 +2000,18 @@ defined before any `registerType` runs — no async race. The catalog source mat
 `RED.mavlink.resolveCatalogTarget({ isBuild? })` (Build → Dialect/`__vehicle`; wire → connection
 profile; empty → `{key:'empty', query:null}`, never `ardupilotmega`); the Build-tier default
 descriptors are `RED.mavlink.buildTierDialectDefaults({ modeField, withFirmware })`
-(`modeField:'tier'` for Build, `withFirmware:true` for Param/Mission). Each palette node merges
-that into its `defaults` with `Object.assign` and calls the shared resolver; Swarm passes its
-narrower Build+list case as the `isBuild` override. `resources` is in `package.json` `files`, and
+(`modeField:'tier'` for Build, `withFirmware:true` for Param/Mission); the Build-tier row
+visibility matrix is `RED.mavlink.applyBuildTierRowVisibility({ isBuild, dialect, dialectRow,
+vehicleRow, firmwareRow?, connectionRow })` (dialect on Build; vehicle on Build+`__vehicle`;
+firmware on Build+concrete dialect; connection on wire). Each palette node merges the defaults
+into `defaults` with `Object.assign`, calls the shared resolver, and calls the shared visibility
+helper for those four rows — node-owned rows (identity, timeout, mode fields, verb fields, …)
+stay local. Swarm passes its narrower Build+list case as the `isBuild` override to both the
+resolver and the visibility helper. `resources` is in `package.json` `files`, and
 `resources/**/*.js` lints as a browser script.
 *Check:* `node --test test/nodes/mavlink-editor-resource.test.js`; `rg -n 'function resolveCatalogTarget'
-nodes` returns nothing; `rg -n 'buildTierDialectDefaults' nodes/mavlink-*.html`.
+nodes` returns nothing; `rg -n 'applyBuildTierRowVisibility' nodes/mavlink-*.html` hits every
+Build-capable palette node; `rg -n 'buildTierDialectDefaults' nodes/mavlink-*.html`.
 
 **Build-tier enum catalogs must see the saved dialect before `/mavlink/dialects` returns.**
 *Wrong belief:* calling `loadEnumsCatalog` at the start of `oneditprepare` is fine because the

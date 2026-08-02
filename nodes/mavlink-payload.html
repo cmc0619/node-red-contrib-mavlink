@@ -319,11 +319,17 @@
         var identityId = isWire ? $('#node-input-identity').val() : '';
         var isCompanion = isWire && RED.mavlink.identityRole(identityId) === 'companion';
         var isManager = topic === 'gimbal' && verb === 'aim' && path === 'manager';
+
+        RED.mavlink.applyBuildTierRowVisibility({
+          isBuild: isBuild,
+          dialect: dialectVal,
+          dialectRow: '#row-payload-dialect',
+          vehicleRow: '#row-payload-vehicle',
+          connectionRow: '#row-payload-connection'
+        });
+
         var show = {
-          /* tier-driven rows */
-          dialect: isBuild,
-          vehicle: isBuild && dialectVal === '__vehicle',
-          connection: isWire,
+          /* Payload-owned wire rows */
           identity: isWire,
           timeout: isWire,
           maxRetries: isWire,
@@ -367,9 +373,6 @@
           rate:            topic === 'release' && verb === 'winch'
         };
 
-        $('#row-payload-dialect').toggle(!!show.dialect);
-        $('#row-payload-vehicle').toggle(!!show.vehicle);
-        $('#row-payload-connection').toggle(!!show.connection);
         $('#row-payload-identity').toggle(!!show.identity);
         $('#row-payload-timeout').toggle(!!show.timeout);
         $('#row-payload-maxRetries').toggle(!!show.maxRetries);

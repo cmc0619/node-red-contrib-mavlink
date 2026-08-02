@@ -318,11 +318,17 @@
       function refreshVisibility() {
         var d = $('#node-input-delivery').val() || 'build';
         var sel = $('#node-input-selectionMode').val() || 'all';
+        // Swarm's Build path for this matrix is the narrow Build+list case
+        // (same isBuild override resolveCatalogTarget already takes).
         var isBuildList = d === 'build' && sel === 'list';
         var dialect = $('#node-input-dialect').val() || node.dialect || '';
-        $('#row-swarm-connection').toggle(!isBuildList);
-        $('#row-swarm-dialect').toggle(isBuildList);
-        $('#row-swarm-vehicle').toggle(isBuildList && dialect === '__vehicle');
+        RED.mavlink.applyBuildTierRowVisibility({
+          isBuild: isBuildList,
+          dialect: dialect,
+          dialectRow: '#row-swarm-dialect',
+          vehicleRow: '#row-swarm-vehicle',
+          connectionRow: '#row-swarm-connection'
+        });
         $('#row-swarm-identity').toggle(d !== 'build');
       }
 

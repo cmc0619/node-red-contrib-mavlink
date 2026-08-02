@@ -131,11 +131,23 @@ test('Build vehicle default no longer has required: true', () => {
   );
 });
 
-test('Build visibility logic references the dialect and vehicle rows', () => {
+test('Build visibility delegates the shared four rows to applyBuildTierRowVisibility', () => {
   assert.match(html, /mav-dialect-row/, 'template must have a mav-dialect-row element');
   assert.match(html, /mav-vehicle-row/, 'template must have a mav-vehicle-row element');
   assert.match(html, /updateVisibility/, 'oneditprepare must call updateVisibility');
-  assert.match(html, /node-input-dialect/, 'visibility logic must reference the dialect select');
+  assert.match(
+    html,
+    /RED\.mavlink\.applyBuildTierRowVisibility\(\{/,
+    'Build must call the shared visibility helper'
+  );
+  assert.match(html, /dialectRow:\s*'#mav-dialect-row'/, 'dialect row selector passed');
+  assert.match(html, /vehicleRow:\s*'#mav-vehicle-row'/, 'vehicle row selector passed');
+  assert.match(html, /connectionRow:\s*'#mav-connection-row'/, 'connection row selector passed');
+  assert.doesNotMatch(
+    html,
+    /\$\('#mav-dialect-row'\)\.(show|hide|toggle)/,
+    'no hand-rolled dialect row toggle'
+  );
 });
 
 test('Build catalog targeting delegates to the shared resolver (no local copy)', () => {

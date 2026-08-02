@@ -262,10 +262,15 @@
         const isBuild = tier === 'build';
         const dialectVal = $('#node-input-dialect').val() || node.dialect || '';
 
-        // Build tier: show dialect row; Vehicle Profile appears only for __vehicle.
-        $('#row-cmd-dialect')[isBuild ? 'show' : 'hide']();
-        $('#row-cmd-vehicle')[isBuild && dialectVal === '__vehicle' ? 'show' : 'hide']();
-        $('#row-cmd-connection')[isBuild ? 'hide' : 'show']();
+        // Shared Build-tier rows (dialect / vehicle / connection).
+        RED.mavlink.applyBuildTierRowVisibility({
+          isBuild: isBuild,
+          dialect: dialectVal,
+          dialectRow: '#row-cmd-dialect',
+          vehicleRow: '#row-cmd-vehicle',
+          connectionRow: '#row-cmd-connection'
+        });
+        // Command-owned wire rows stay local.
         $('#row-cmd-identity')[isBuild ? 'hide' : 'show']();
         $('#row-cmd-timeout')[isBuild ? 'hide' : 'show']();
         $('#row-cmd-maxRetries')[isBuild ? 'hide' : 'show']();

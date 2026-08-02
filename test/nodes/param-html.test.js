@@ -71,10 +71,12 @@ test('mavlink-param Build shows Dialect and concrete dialects require Firmware',
   assert.match(html, /value="ardupilot"/, 'ArduPilot firmware option exists');
   assert.match(html, /value="px4"/, 'PX4 firmware option exists');
   assert.match(html, /value="custom"/, 'custom firmware option exists');
+  // Firmware XOR validator lives in buildTierDialectDefaults({ withFirmware: true })
+  // — proven in mavlink-editor-resource.test.js. Param pins the merge, not a paste.
   assert.match(
     html,
-    /dialect\s*!==\s*'__vehicle'.*dialect\s*!==\s*''/s,
-    'firmware validation is required only for concrete non-empty dialects'
+    /buildTierDialectDefaults\(\{\s*withFirmware:\s*true\s*\}\)/,
+    'firmware XOR validator comes from the shared Build-tier helper'
   );
 });
 
@@ -90,13 +92,17 @@ test('mavlink-param has refreshVisibility and companion row hiding', () => {
   assert.match(html, /row-firmware/, 'row-firmware present for concrete build dialects');
   assert.match(
     html,
-    /row-vehicle['"]\)\.toggle\(isBuild\s*&&\s*dialect\s*===\s*'__vehicle'\)/,
-    'vehicle row is shown only for the Vehicle Profile dialect escape'
+    /RED\.mavlink\.applyBuildTierRowVisibility\(\{/,
+    'Param must call the shared visibility helper'
   );
-  assert.match(
+  assert.match(html, /dialectRow:\s*'#row-dialect'/, 'dialect row selector passed');
+  assert.match(html, /vehicleRow:\s*'#row-vehicle'/, 'vehicle row selector passed');
+  assert.match(html, /firmwareRow:\s*'#row-firmware'/, 'firmware row selector passed');
+  assert.match(html, /connectionRow:\s*'#row-connection'/, 'connection row selector passed');
+  assert.doesNotMatch(
     html,
-    /row-firmware['"]\)\.toggle\(isBuild\s*&&\s*dialect\s*!==\s*'__vehicle'\s*&&\s*dialect\s*!==\s*''\)/,
-    'firmware row is shown only for concrete build dialects'
+    /\$\('#row-dialect'\)\.toggle/,
+    'no hand-rolled dialect row toggle'
   );
 });
 
