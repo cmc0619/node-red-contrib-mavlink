@@ -3,36 +3,63 @@
 ## Mission
 
 This repository is the build target for `DESIGN.md`: implement the complete
-**"MAVLink for Node-RED"** toolkit described there. `DESIGN.md` is the authoritative
-specification — its code principles (§2), UI rules (§6), build order (§12), testing plan (§13),
-and ground truth (§14) are binding, not suggestions. When code and spec disagree, the spec wins;
-when the spec and measured reality disagree, re-measure (§14) and update the spec in the same PR.
+**"MAVLink for Node-RED"** toolkit described there. `DESIGN.md` is the working specification —
+a direction, not a bible. It has had many hands in it and may contain incorrect information.
+Its code principles (§2), UI rules (§6), build order (§12), testing plan (§13), and ground
+truth (§14) are the default authority, not infallible law: when code and spec disagree, the
+spec wins until proven wrong; when the spec and measured reality disagree, re-measure (§14)
+and update the spec in the same PR. When you find a stale or incorrect statement in
+`DESIGN.md`, fix it there rather than working around it.
 
-**Session lessons belong in `DESIGN.md`, not in chat.** Every displaced belief, measured fact,
-or working reference that changes how the toolkit must be built is written into the affected
-section plus a §14 ground-truth entry before the PR is considered ready. The next agent will
-not see this conversation.
+**Session lessons belong in files, not in chat.** Toolkit lessons — every displaced belief,
+measured fact, or working reference that changes how the toolkit must be built — are written
+into the affected `DESIGN.md` section plus a §14 ground-truth entry. MAVLink protocol lessons
+go into `MAVLINK.md` (create it if absent), and **only when sure**: phone a friend first —
+form the hypothesis from the reference implementations (pymavlink, MAVSDK, the GCS codebases,
+and above all the ArduPilot and PX4 source trees) — then confirm it against the dialect XML or
+measured on-wire behavior (§14) before writing the entry. Write entries before the PR is
+considered ready. The next agent will not see this conversation.
+
+**Reference implementations: trusted starting points, not ground truth.** pymavlink, MAVSDK,
+and the GCS codebases (Mission Planner, QGroundControl, MAVProxy) are established,
+battle-tested ecosystem software — consult them for how things are done: framing, sequencing,
+command and parameter protocols, edge cases. Their behavior is the default hypothesis, almost
+certainly more right than anything reasoned from first principles, LLM or human. The
+ArduPilot and PX4 source trees sit a level higher: they are what real vehicles actually fly,
+the true references for on-wire behavior. But no implementation is this toolkit's ground
+truth — they disagree with each other, and with the spec, often enough that copying any one
+wholesale imports its bugs. Final authority stays with `DESIGN.md` and §14 — the dialect XML
+and measured reality.
 
 **PR size cap: 50 files.** Do not push a pull request whose diff touches more than 50 files.
 Split by module boundary (`lib/<module>`, `nodes/<node>`, matching tests) into sequential PRs
 when a layer would exceed the cap. Count is `git diff --name-only <base>...HEAD | wc -l`.
 
-**Greenfield: merge liberally to `main`.** This repo is early build-out, not a guarded
-production release train. Once a PR's quorum bots have finished and Critical/Important
-findings are handled (or declined), merge to `main` and keep building — do not stockpile
-long-lived feature branches waiting for perfection or for optional bots.
+**Merges to `main` are human-only.** An agent never merges a pull request — not when checks
+are green, not when the work looks finished, not when reviewers approve. Push the branch, keep
+the PR current, and stop. The repo owner reviews the code and merges when satisfied.
 
-**PRs are opened ready for review (not draft)** so bot reviewers run immediately. After push,
-wait for a **quorum of finished bots** — enough completed reviews to act on, not every
-configured bot. Today that means **CodeRabbit and Codex** (`chatgpt-codex-connector`) **both
-finished** (check success/failure and read their findings). Greptile is gone — do not wait for
-it. Codex usually does leave inline comments; wait for that review (or a clear no-findings
-pass) before treating the PR as done. If a human leaves findings, handle those too.
+**PRs are opened as drafts — only the repo owner marks them ready.** Bot reviews are a finite
+resource; never spend them on work-in-progress. Open every PR as a draft and keep pushing to
+it while iterating. The boundary is absolute: an agent never flips a PR to ready-for-review —
+not when the work looks done, not when tests are green, not when told to "wrap up." The owner
+flips it when they're satisfied, and that flip is what triggers the reviewers (today:
+**CodeRabbit and Codex** (`chatgpt-codex-connector`)).
 
-Do not treat the implementation as finished until the quorum's Critical/Important findings
-are addressed or explicitly declined per DESIGN.md §2 (with a §14 note when a belief was
-displaced). Prefer a Cursor Automation on GitHub **CI completed** / **PR review submitted**
-(see below) over busy-polling — this agent cannot create that automation itself.
+**Bot feedback is event-driven or timer-driven, never blocking.** After the owner marks a PR
+ready, do not sit waiting for reviewers and do not busy-poll. If the environment supports
+GitHub triggers — for example Claude's GitHub integration, or the Cursor automation described
+below — the trigger wakes the agent when CI completes or a review is submitted. Absent
+triggers, set a timer and check the PR periodically for new bot reviews. When feedback
+arrives, collect all open findings and form one plan — apply or decline each against DESIGN.md
+§2, with a §14 note when a belief was displaced. Agents chronically forget the YAGNI
+constraint when reacting to review findings, so every planned fix must restate the concrete
+problem it solves and the smallest change that solves it; a finding whose fix cannot be
+justified that way is declined, not indulged. Share the plan with the owner before pushing
+whenever a fix grows scope, adds code, or reaches beyond the finding's own lines; trivial
+in-place fixes may be applied directly and reported in the plan. Do not treat the
+implementation as finished until Critical/Important findings are addressed or explicitly
+declined. If a human leaves findings, handle those too.
 
 **Resolve review threads as they are handled.** When a finding is fixed (or declined with a
 DESIGN.md / §14 reason), mark its GitHub review thread Resolved — do not leave fixed threads
@@ -42,14 +69,36 @@ open for the next passer-by.
 https://cursor.com/automations (or `/automate` in the Agents Window) on this repo with
 triggers: **CI completed** (covers CodeRabbit check completion) and **PR review submitted**
 (covers Codex and human reviews). Prompt should: identify the open PR, collect inline comments
-from CodeRabbit / Codex, apply or decline each finding against DESIGN.md, push fixes under the
-50-file cap, and reply on the threads. Without this, agents only learn reviews finished when a
-human pings them.
+from CodeRabbit / Codex, form a plan that applies or declines each finding against DESIGN.md
+while restating the concrete problem and smallest fix per the YAGNI section, then push fixes
+under the 50-file cap and reply on the threads. Without a trigger like this, the fallback is
+the periodic timer check above — agents otherwise only learn reviews finished when a human
+pings them.
 
-**PRs are opened ready for review, not as drafts.** After push, mark the PR ready and **wait
-for bot reviewers** (CodeRabbit and Codex, and any other configured checks) to finish before
-treating the change as done or stacking more work that depends on their feedback. Address
-Critical/Important findings before moving on.
+## Simplicity: YAGNI is a hard constraint
+
+Favor the simplest code that directly serves the real Node-RED workflow. Treat YAGNI as a hard
+constraint: do not add caching, retries, fallbacks, migrations, compatibility shims, extra
+validation, abstractions, or defensive handling unless there is a demonstrated failure in this
+deployment.
+
+This UI builds flows; collect correct data in the editor, deploy it, and let the core runtime
+fail loudly when inputs or environment are wrong. Do not silently repair bad data or hide
+operational errors. Prefer deleting dead code and duplicate state over adding "just in case"
+logic.
+
+For every proposed change, state the concrete user-visible problem, why existing code cannot
+handle it, and the smallest possible fix. If that evidence is absent, do not make the change.
+
+**Net code length is a budget.** A change that is not adding a new feature should leave the
+codebase the same size or smaller — deletion and simplification are the default shape of
+maintenance work. If a non-feature change nets positive in code size, the PR must explain
+concretely why the growth is necessary: what it buys, and why the existing code could not
+absorb the change. Without that justification, rework the change to be smaller.
+
+The node-specific application of this rule is the Configuration Trust ruleset further down:
+that section is this principle worked out per configuration-property category, not a separate
+policy.
 
 ## Implementation workflow: use sub-agents (repo-owner directive)
 
