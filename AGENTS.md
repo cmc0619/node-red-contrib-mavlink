@@ -22,8 +22,11 @@ production release train. Once a PR's quorum bots have finished and Critical/Imp
 findings are handled (or declined), merge to `main` and keep building — do not stockpile
 long-lived feature branches waiting for perfection or for optional bots.
 
-**PRs are opened ready for review (not draft)** so bot reviewers run immediately. After push,
-wait for a **quorum of finished bots** — enough completed reviews to act on, not every
+**PRs are opened as drafts — only the repo owner marks them ready.** Bot reviews are a finite
+resource; never spend them on work-in-progress. Open every PR as a draft and keep pushing to it
+while iterating. Do not mark a PR ready for review yourself under any circumstances — the owner
+flips it when they're satisfied, and that flip is what triggers the reviewers. Once the PR is
+ready, wait for a **quorum of finished bots** — enough completed reviews to act on, not every
 configured bot. Today that means **CodeRabbit and Codex** (`chatgpt-codex-connector`) **both
 finished** (check success/failure and read their findings). Greptile is gone — do not wait for
 it. Codex usually does leave inline comments; wait for that review (or a clear no-findings
@@ -46,10 +49,31 @@ from CodeRabbit / Codex, apply or decline each finding against DESIGN.md, push f
 50-file cap, and reply on the threads. Without this, agents only learn reviews finished when a
 human pings them.
 
-**PRs are opened ready for review, not as drafts.** After push, mark the PR ready and **wait
-for bot reviewers** (CodeRabbit and Codex, and any other configured checks) to finish before
-treating the change as done or stacking more work that depends on their feedback. Address
+**The draft boundary is absolute.** An agent never flips a PR to ready-for-review — not when
+the work looks done, not when tests are green, not when told to "wrap up." If the owner wants
+reviews, they say so or flip it themselves. After the owner marks a PR ready, **wait for bot
+reviewers** (CodeRabbit and Codex, and any other configured checks) to finish before treating
+the change as done or stacking more work that depends on their feedback. Address
 Critical/Important findings before moving on.
+
+## Simplicity: YAGNI is a hard constraint
+
+Favor the simplest code that directly serves the real Node-RED workflow. Treat YAGNI as a hard
+constraint: do not add caching, retries, fallbacks, migrations, compatibility shims, extra
+validation, abstractions, or defensive handling unless there is a demonstrated failure in this
+deployment.
+
+This UI builds flows; collect correct data in the editor, deploy it, and let the core runtime
+fail loudly when inputs or environment are wrong. Do not silently repair bad data or hide
+operational errors. Prefer deleting dead code and duplicate state over adding "just in case"
+logic.
+
+For every proposed change, state the concrete user-visible problem, why existing code cannot
+handle it, and the smallest possible fix. If that evidence is absent, do not make the change.
+
+The node-specific application of this rule is the Configuration Trust ruleset further down:
+that section is this principle worked out per configuration-property category, not a separate
+policy.
 
 ## Implementation workflow: use sub-agents (repo-owner directive)
 
