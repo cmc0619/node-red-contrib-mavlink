@@ -34,7 +34,7 @@ test('there is no custom-path dialect mode in the editor', () => {
   assert.ok(!/\$path\.val\(p\)/.test(html));
 });
 
-test('legacy custom-path profiles are preserved until the user migrates', () => {
+test('custom-path profiles stay selectable until Seed or a catalog date is picked', () => {
   assert.match(html, /hasLegacyCustomPath/);
   assert.match(html, /Custom path \(legacy\)/);
   assert.match(html, /rev === 'legacy-path'/);

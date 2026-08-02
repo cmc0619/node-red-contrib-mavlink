@@ -215,10 +215,13 @@ library via catalog update under the Node-RED userDir; once it is there it is on
 pulldown entry. Configuration updates happen on a bench with internet; the seed covers the
 boat.
 
-**Legacy custom path.** Old flows that still persist `dialectSource: custom` +
-`customDialectPath` keep compiling at runtime. The editor surfaces them as Version =
-"Custom path (legacy)" until the user picks Seed or a catalog date (which clears the path).
-Do not treat that escape as a supported way to add new dialects.
+**Custom path profiles (normal runtime source).** Deployed profiles that persist
+`dialectSource: custom` + `customDialectPath` are a first-class `getDialect()` source:
+`resolveDialect` compiles the absolute XML path, Connection / admin catalogs consume that
+bundle, and editor AJAX must not invent a bundled dialect under the profile id. The editor
+no longer offers a free-text path control for *new* dialects (library pulldown is the add
+path); existing path profiles surface as Version = "Custom path (legacy)" until the user
+picks Seed or a catalog date (which clears the path).
 
 **Private / vendor dialects (deferred).** Ingesting a private include chain that is not in
 any catalog snapshot is future work. When it lands it must join the same library shape
@@ -1531,11 +1534,12 @@ installs.
 *Wrong belief:* §4 still requires a Vehicle-editor custom XML path/upload, or loading dialects
 from the `mavlink-mappings` npm registry / vendored `dialects/*.xml`.
 *Fact:* shipped dialects come from `seed/mavlink-YYYY-MM-DD-<sha>.seed.gz` (pointer in
-`seed/active.json`). The editor is dialect + version (Seed or a catalog date) only. Catalog
-refresh overlays newer official XML under the Node-RED userDir. Legacy `customDialectPath`
-is a migration escape, not a supported add-dialect path. Private-dialect library ingestion
-is deferred (§4, §12 remaining table).
-*Check:* `node -e "const {knownDialects,seedStamp}=require('./lib/metadata/bundled'); console.log(seedStamp(), knownDialects().slice(0,3))"`
+`seed/active.json`). The editor add path is dialect + version (Seed or a catalog date) only —
+no free-text path control for *new* dialects. Deployed `customDialectPath` profiles remain a
+normal `getDialect()` source (compile the absolute XML; catalogs/Connection must consume that
+bundle). Private-dialect library ingestion is deferred (§4, §12 remaining table).
+*Check:* `node -e "const {knownDialects,seedStamp}=require('./lib/metadata/bundled'); console.log(seedStamp(), knownDialects().slice(0,3))"`;
+`node --test test/metadata/admin-catalog.test.js` (customDialectPath case).
 
 **Message-field `enum=` comes from the compiled seed/catalog XML, not `.d.ts` recovery.**
 *Wrong belief:* because an old path recovered field→enum links from `mavlink-mappings` `.d.ts`,
@@ -2291,8 +2295,11 @@ param may hardcode `MAV_PARAM_TYPE` beside codec `PARAM_TYPES`.
 (payload imports it; does not re-export); `commands-list` owns `commandLabel` + safe-integer
 `mapEnumEntries`; param `PARAM_TYPE` is derived from codec `PARAM_TYPES`;
 `admin-catalog` does not re-export `loadMetadata`; catalog `?vehicle=` calls
-`getDialect()` and lets failures propagate (no catch that invents a generic
-"dialect unavailable" body — that was planning for gravity to fail). Firmware↔autopilot
+`getDialect()` and surfaces `err.message` (no invented soft `"dialect unavailable"`
+body). **Custom path is the proof point** — a deployed `customDialectPath` profile must
+round-trip through `resolveDialect` → `getDialect` → `resolveCatalogSource` as a real
+bundle. Do not design that path around install catastrophes (snapshot vanished,
+`BrokenVehicleNode`, “path gone”); those mean the checkout is already broken. Firmware↔autopilot
 is `lib/vehicle/firmware-autopilot`; Swarm uses `DEFAULT_TIMEOUT_MS` from command;
 Param/Move/Payload call `missingConnectionGate` at deploy. Declined as non-dupes:
 `numberOr`/`valueOr`/`keepParam` family, GLOBAL_FRAMES/DEG_E7 tables, TCP/serial
@@ -2300,6 +2307,5 @@ write-drain skeleton, move/swarm `sendOptions`, `sanitize` vs `urlToFilename`.
 *Check:* `node --test test/connection/queue.test.js test/state/state.test.js
 test/metadata/admin-catalog.test.js test/metadata/enums-list.test.js test/param/
 lib/codec/test/param-union.test.js`;
-`rg -n 'loadMetadata,|commandByValue,|AUTOPILOT_FIRMWARE|firmwareAutopilot|DEFAULT_TIMEOUT_MS = 10000|dialect unavailable'
-lib/metadata/admin-catalog.js lib/payload/index.js lib/swarm nodes/mavlink-connection.js`
-(expect no matches in admin-catalog for the invent-a-body pattern).
+`rg -n 'loadMetadata,|dialect unavailable' lib/metadata/admin-catalog.js`
+(expect no matches); custom-path case in `test/metadata/admin-catalog.test.js` must pass.
