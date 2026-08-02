@@ -58,6 +58,18 @@ test('a clamped aged item wins an age tie-break against fresh control', () => {
   assert.equal(q.dequeue(clock.now()).message.name, 'freshControl');
 });
 
+test('peek returns the next item without removing it', () => {
+  const q = new OutboundQueue({ now: () => 0 });
+  q.enqueue({ band: BAND.BULK, message: msg('B'), identityId: 'a' });
+  q.enqueue({ band: BAND.CONTROL, message: msg('C'), identityId: 'a' });
+
+  const next = q.peek();
+
+  assert.equal(next.message.name, 'C');
+  assert.equal(q.size(), 2);
+  assert.equal(q.dequeue(), next);
+});
+
 test('Streaming coalescing key includes identity — two identities do not collapse', () => {
   const q = new OutboundQueue({ now: () => 0 });
   q.enqueue({ band: BAND.STREAMING, message: msg('SETPOINT'), identityId: 'gcs', target: '1.1' });

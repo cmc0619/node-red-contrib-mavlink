@@ -37,8 +37,6 @@
         RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
 
-      /* ── Component picker (reload when dialect/connection changes) ─ */
-
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
       function refreshVisibility() {
         var delivery = $('#node-input-delivery').val() || 'build';

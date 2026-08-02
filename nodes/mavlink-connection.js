@@ -20,6 +20,7 @@
 
 const { Connection, STATE } = require('../lib/connection');
 const { resolveIdentity } = require('../lib/identity');
+const { autopilotForFirmware } = require('../lib/vehicle');
 const { capBadge } = require('../lib/delivery');
 
 module.exports = function registerMavlinkConnection(RED) {
@@ -65,7 +66,7 @@ module.exports = function registerMavlinkConnection(RED) {
       targetCompid: defaults.defaultTargetComponent,
       firmware: defaults.firmware,
       dialect: defaults.dialect,
-      autopilot: firmwareAutopilot(defaults.firmware),
+      autopilot: autopilotForFirmware(defaults.firmware),
     });
 
     const identityIds = [config.localIdentity, ...(config.additionalIdentities || [])].filter(
@@ -97,7 +98,7 @@ module.exports = function registerMavlinkConnection(RED) {
         targetCompid: defaults.defaultTargetComponent,
         bundle,
         firmware: defaults.firmware,
-        autopilot: firmwareAutopilot(defaults.firmware),
+        autopilot: autopilotForFirmware(defaults.firmware),
       },
       identities,
       defaultIdentityId: config.localIdentity,
@@ -278,19 +279,6 @@ function buildSigning(config, credentials) {
     signing.key = MavLinkPacketSignature.key(passphrase);
   }
   return signing;
-}
-
-/**
- * Map a firmware identifier to its MAV_AUTOPILOT value for peer-table binding
- * verification (§7 "HEARTBEAT verifies the binding").
- *
- * @param {string} firmware
- * @returns {number|null}
- */
-function firmwareAutopilot(firmware) {
-  if (firmware === 'ardupilot') return 3; // MAV_AUTOPILOT_ARDUPILOTMEGA
-  if (firmware === 'px4') return 12; // MAV_AUTOPILOT_PX4
-  return null;
 }
 
 /**

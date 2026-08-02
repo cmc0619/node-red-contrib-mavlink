@@ -228,8 +228,8 @@ module.exports = function registerMavlinkVehicle(RED) {
     node.vehicleFamily = normalizeFamily(config.vehicleFamily);
     node.firmware = normalizeFirmware(config.firmware);
     node.dialect = (config.dialect || 'ardupilotmega').toLowerCase();
-    // `seed` or a catalog snapshot id. Legacy flows may omit this and use
-    // dialectSource/customDialectPath — resolveDialect still understands them.
+    // `seed`, a catalog snapshot id, or empty when dialectSource is custom
+    // (customDialectPath is a normal getDialect source — resolveDialect compiles it).
     node.dialectRevision = config.dialectRevision ||
       (config.dialectSource === 'custom' ? '' : 'seed');
     node.dialectSource = config.dialectSource === 'custom' ? 'custom' : 'bundled';

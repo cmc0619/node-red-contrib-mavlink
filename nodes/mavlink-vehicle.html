@@ -62,7 +62,7 @@
           populateRevisions(initialRevisionPrefer());
         }
 
-        /** Legacy custom-path profiles keep working until the user picks Seed/a date. */
+        /** Path profiles stay selectable until the user picks Seed/a date. */
         function hasLegacyCustomPath() {
           return node.dialectSource === 'custom' && !!(node.customDialectPath || '').trim();
         }

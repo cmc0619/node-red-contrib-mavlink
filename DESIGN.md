@@ -215,10 +215,13 @@ library via catalog update under the Node-RED userDir; once it is there it is on
 pulldown entry. Configuration updates happen on a bench with internet; the seed covers the
 boat.
 
-**Legacy custom path.** Old flows that still persist `dialectSource: custom` +
-`customDialectPath` keep compiling at runtime. The editor surfaces them as Version =
-"Custom path (legacy)" until the user picks Seed or a catalog date (which clears the path).
-Do not treat that escape as a supported way to add new dialects.
+**Custom path profiles (normal runtime source).** Deployed profiles that persist
+`dialectSource: custom` + `customDialectPath` are a first-class `getDialect()` source:
+`resolveDialect` compiles the absolute XML path, Connection / admin catalogs consume that
+bundle, and editor AJAX must not invent a bundled dialect under the profile id. The editor
+no longer offers a free-text path control for *new* dialects (library pulldown is the add
+path); existing path profiles surface as Version = "Custom path (legacy)" until the user
+picks Seed or a catalog date (which clears the path).
 
 **Private / vendor dialects (deferred).** Ingesting a private include chain that is not in
 any catalog snapshot is future work. When it lands it must join the same library shape
@@ -569,12 +572,16 @@ them (§14 records the load-order fact and the picker API).
 `dialectFromVehicleId` / `dialectFromConnection`), `lib/command` (`mergeParams`,
 `DEFAULT_TIMEOUT_MS` / `DEFAULT_MAX_RETRIES`), `lib/connection/bands` (`BAND.*`),
 `lib/move` config mappers (`positionFrom` / `velocityFrom` / `valueFrom`), and
-`lib/metadata/admin-catalog` (`loadMetadata`, `registerDialectCatalogRoute`,
-`resolveCatalogSource`) rather than re-declaring `BADGE_MAX = 24`, hand-slicing badge
+`lib/metadata/loadMetadata`, `lib/metadata/admin-catalog`
+(`registerDialectCatalogRoute`, `resolveCatalogSource`),
+`lib/connection/endpoint-key` + `clone.deepCopy`,
+`lib/metadata/xml-catalog.extractIncludes`, `lib/command.commandByValue` (on
+carrier), catalog `mapEnumEntries` / `commandLabel`,
+`lib/vehicle/firmware-autopilot`, and param `PARAM_TYPE` derived from codec
+`PARAM_TYPES` — rather than re-declaring `BADGE_MAX = 24`, hand-slicing badge
 text, pasting the vehicle/dialect catalog route skeleton, or copying role×tier
 resolution between action nodes. Command's editor target fields are the canonical
-`targetSystem` / `targetComponent` (historical `targetSysid` / `targetCompid` still
-resolve once inside `resolveDeliveryContext`) (§14).
+`targetSystem` / `targetComponent` only (pre-1.0: no leftover-key readers) (§14).
 
 ## 7. Config nodes
 
@@ -1527,11 +1534,12 @@ installs.
 *Wrong belief:* §4 still requires a Vehicle-editor custom XML path/upload, or loading dialects
 from the `mavlink-mappings` npm registry / vendored `dialects/*.xml`.
 *Fact:* shipped dialects come from `seed/mavlink-YYYY-MM-DD-<sha>.seed.gz` (pointer in
-`seed/active.json`). The editor is dialect + version (Seed or a catalog date) only. Catalog
-refresh overlays newer official XML under the Node-RED userDir. Legacy `customDialectPath`
-is a migration escape, not a supported add-dialect path. Private-dialect library ingestion
-is deferred (§4, §12 remaining table).
-*Check:* `node -e "const {knownDialects,seedStamp}=require('./lib/metadata/bundled'); console.log(seedStamp(), knownDialects().slice(0,3))"`
+`seed/active.json`). The editor add path is dialect + version (Seed or a catalog date) only —
+no free-text path control for *new* dialects. Deployed `customDialectPath` profiles remain a
+normal `getDialect()` source (compile the absolute XML; catalogs/Connection must consume that
+bundle). Private-dialect library ingestion is deferred (§4, §12 remaining table).
+*Check:* `node -e "const {knownDialects,seedStamp}=require('./lib/metadata/bundled'); console.log(seedStamp(), knownDialects().slice(0,3))"`;
+`node --test test/metadata/admin-catalog.test.js` (customDialectPath case).
 
 **Message-field `enum=` comes from the compiled seed/catalog XML, not `.d.ts` recovery.**
 *Wrong belief:* because an old path recovered field→enum links from `mavlink-mappings` `.d.ts`,
@@ -2260,18 +2268,44 @@ catalog skeleton; `resolveCatalogSource({ soft: true })` covers Payload field-ti
 `lib/addressing.resolveDeliveryContext` + `missingConnectionGate` own role×tier + the
 send-without-connection deploy badge; `dialectFromConnection` owns the profile `getDialect()`
 hop. Command's editor fields are `targetSystem` / `targetComponent` like every other palette
-node; `resolveDeliveryContext` still accepts historical `targetSysid` / `targetCompid` once.
+node — pre-1.0 means canonical keys only, not leftover-key readers or editor “migrate” paths.
 *Check:* `node --test test/metadata/admin-catalog.test.js test/addressing/delivery-context.test.js
-test/command/commands-route.test.js test/nodes/command-html.test.js`; `rg -n 'targetSysid:'
-nodes/mavlink-command.html` (expect no matches in `defaults`).
+test/command/commands-route.test.js test/nodes/command-html.test.js`; `rg -n 'targetSysid'
+nodes/mavlink-command.html lib/addressing/delivery-context.js` (expect no matches).
 
-**Command editor must migrate `targetSysid` before the form round-trips.**
-*Wrong belief:* a runtime `firstDefined(config.targetSystem, config.targetSysid)` is enough when
-renaming the editor field; old flows keep working without an editor migration.
-*Fact:* Node-RED fills `#node-input-*` from `defaults` *before* `oneditprepare`. A rename-only
-change leaves the new inputs blank, and Done saves `targetSystem:''` — profile inheritance —
-over an explicit legacy target. Shipped examples (e.g. `12-ebony-and-ivory`, SITL INT carrier)
-still carried non-empty `targetSysid`. `oneditprepare` copies legacy → canonical (and the live
-sysid input); `oneditsave` deletes the old keys.
-*Check:* `node --test test/nodes/command-html.test.js` (migration block executes against a stub
-node); `rg -n '"targetSysid"' examples` (expect no Command-node property matches).
+**Pre-1.0 Command rename does not invent flow compat.**
+*Wrong belief:* renaming an editor field requires `oneditprepare` copy + runtime
+`firstDefined(..., config.targetSysid)` so old flows keep working.
+*Fact:* pre-1.0, rewrite shipped assets when needed; do not say “migrate” and do not keep
+dual readers. Editor leftover-key copy/delete and `resolveDeliveryContext` historical
+fallbacks were removed. Example JSON updates are a separate afterthought
+(`docs/superpowers/plans/2026-08-02-examples-afterthought-STASH.md`), not mixed into the
+lib/runtime cleanup.
+*Check:* `rg -n 'targetSysid|targetCompid' nodes/mavlink-command.html lib/addressing/delivery-context.js`
+(expect no matches); `node --test test/addressing/delivery-context.test.js test/nodes/command-html.test.js`.
+
+**Lib holdouts share one owner per concern.**
+*Wrong belief:* peer-table may keep a private `endpointKey`, State may `JSON.stringify` fan-out
+copies, fetch may regex `<include>` without stripping comments, queue may paste the best-item
+scan twice, carrier may re-find commands by value, catalogs may map enum entries three ways, and
+param may hardcode `MAV_PARAM_TYPE` beside codec `PARAM_TYPES`.
+*Fact:* `lib/connection/endpoint-key` and `clone.deepCopy` (NaN-safe) are the shared copies;
+`xml-catalog.extractIncludes` is the include walker (fetch does not re-export a shim);
+`OutboundQueue._bestItem` feeds dequeue/peek; `commandByValue` lives on `lib/command/carrier`
+(payload imports it; does not re-export); `commands-list` owns `commandLabel` + safe-integer
+`mapEnumEntries`; param `PARAM_TYPE` is derived from codec `PARAM_TYPES`;
+`admin-catalog` does not re-export `loadMetadata`; catalog `?vehicle=` calls
+`getDialect()` and surfaces `err.message` (no invented soft `"dialect unavailable"`
+body). **Custom path is the proof point** — a deployed `customDialectPath` profile must
+round-trip through `resolveDialect` → `getDialect` → `resolveCatalogSource` as a real
+bundle. Do not design that path around install catastrophes (snapshot vanished,
+`BrokenVehicleNode`, “path gone”); those mean the checkout is already broken. Firmware↔autopilot
+is `lib/vehicle/firmware-autopilot`; Swarm uses `DEFAULT_TIMEOUT_MS` from command;
+Param/Move/Payload call `missingConnectionGate` at deploy. Declined as non-dupes:
+`numberOr`/`valueOr`/`keepParam` family, GLOBAL_FRAMES/DEG_E7 tables, TCP/serial
+write-drain skeleton, move/swarm `sendOptions`, `sanitize` vs `urlToFilename`.
+*Check:* `node --test test/connection/queue.test.js test/state/state.test.js
+test/metadata/admin-catalog.test.js test/metadata/enums-list.test.js test/param/
+lib/codec/test/param-union.test.js`;
+`rg -n 'loadMetadata,|dialect unavailable' lib/metadata/admin-catalog.js`
+(expect no matches); custom-path case in `test/metadata/admin-catalog.test.js` must pass.

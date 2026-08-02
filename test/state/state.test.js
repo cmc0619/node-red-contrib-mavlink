@@ -22,6 +22,18 @@ test('snapshotPeers returns a filtered deep-copy snapshot from the peer table', 
   assert.equal(table.snapshot()[1].components[1].armed, null);
 });
 
+test('snapshotPeers preserves NaN values from peer state', () => {
+  const table = {
+    snapshot() {
+      return [{ sysid: 1, components: [{ compid: 1, heading: NaN }] }];
+    },
+  };
+
+  const snap = snapshotPeers(table);
+
+  assert.equal(Number.isNaN(snap[0].components[0].heading), true);
+});
+
 test('State feed emits transition records and live statustext records', () => {
   const table = new EventEmitter();
   const records = [];
