@@ -9,6 +9,7 @@ const { BAND } = require('../lib/connection/bands');
 const {
   AckWaiter,
   resolveFrame,
+  carrierWantedBy,
   DEFAULT_TIMEOUT_MS,
   DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
@@ -84,17 +85,24 @@ module.exports = function registerMavlinkPayload(RED) {
           compidFromConfig: true,
         });
 
-        const built = buildPayloadMessage({
-          topic: payload.topic || config.topic,
-          verb: payload.verb || config.verb,
-          path: payload.path || config.path,
-          target,
-          values: payload.values || config.values || {},
-          // Required for command-backed verbs (§9): the builder throws when a
-          // MAV_CMD verb arrives without a carrier choice.
-          carrier: payload.carrier || config.carrier,
-          frame: resolveFrame(payload.mavFrame, config.frame),
-        });
+        /** The recipe rendered for one carrier. Carrier is an input to the
+         *  builder, so a swap re-runs this rather than converting by hand. */
+        function buildFor(carrier) {
+          return buildPayloadMessage({
+            topic: payload.topic || config.topic,
+            verb: payload.verb || config.verb,
+            path: payload.path || config.path,
+            target,
+            values: payload.values || config.values || {},
+            // Required for command-backed verbs (§9): the builder throws when a
+            // MAV_CMD verb arrives without a carrier choice.
+            carrier,
+            frame: resolveFrame(payload.mavFrame, config.frame),
+          });
+        }
+
+        const carrierChosen = payload.carrier || config.carrier;
+        const built = buildFor(carrierChosen);
 
         if (delivery === 'build') {
           completeBuild(node, send, built);
@@ -105,18 +113,29 @@ module.exports = function registerMavlinkPayload(RED) {
         if (!connectionNode) {
           throw new Error('mavlink-payload requires a Connection');
         }
-        // Confirm tier for a command-backed verb: send the COMMAND_LONG and
-        // wait for its COMMAND_ACK so a later DENIED / TEMPORARILY_REJECTED /
-        // timeout can halt the chain (§9). Gimbal-manager setpoints carry no
-        // acknowledgement, so they can only ever be sent unconfirmed.
-        if (delivery === 'confirm' && built.confirmation === 'command_ack') {
+        /**
+         * Send a command-backed verb and wait for its COMMAND_ACK, resending once
+         * in the other carrier if the vehicle answers COMMAND_INT_ONLY (8) or
+         * COMMAND_LONG_ONLY (7) — §9 "resend in the other form", the same rule
+         * mavlink-command follows, via the same `carrierWantedBy`.
+         *
+         * This matters more than it looks: the editor shows the Carrier control
+         * only for a verb whose command carries a location (gimbal ROI-set), and
+         * pins the other 13 command verbs to COMMAND_INT. An operator has no way
+         * to pick LONG for those, so on a LONG-only vehicle the swap is the only
+         * thing standing between them and a flat refusal.
+         *
+         * At most one swap per message. A second wrong-carrier ack — the same code
+         * again or a contradictory one — fails loud rather than ping-ponging.
+         */
+        function awaitAck(built, carrierUsed, swapped) {
           applyActionStatus(node, 'sending', `${built.message.name}…`);
           cancelWaiter();
           const waiter = new AckWaiter({
             subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
             sendFn: (confirmation) => {
-              // Only the LONG carrier has a confirmation byte; COMMAND_INT
-              // must not grow one on retries (§9).
+              // Only the LONG carrier has a confirmation byte; COMMAND_INT must
+              // not grow one on retries (§9).
               const fields = built.message.name === 'COMMAND_LONG'
                 ? { ...built.message.fields, confirmation }
                 : built.message.fields;
@@ -136,6 +155,16 @@ module.exports = function registerMavlinkPayload(RED) {
             .start()
             .then((outcome) => {
               if (activeWaiter === waiter) activeWaiter = null;
+              const wanted = carrierWantedBy(outcome.resultCode);
+              if (wanted && wanted !== carrierUsed && !swapped) {
+                node.warn(
+                  `mavlink-payload: ${built.message.name} rejected as ` +
+                    `${outcome.result} — resending as COMMAND_${wanted.toUpperCase()} ` +
+                    '(§9 carrier swap)'
+                );
+                awaitAck(buildFor(wanted), wanted, true);
+                return;
+              }
               if (outcome.result === 'accepted') {
                 completeAck(node, send, built, outcome);
                 done();
@@ -147,6 +176,14 @@ module.exports = function registerMavlinkPayload(RED) {
               if (activeWaiter === waiter) activeWaiter = null;
               fail(node, send, err, msg, done);
             });
+        }
+
+        // Confirm tier for a command-backed verb: wait for the COMMAND_ACK so
+        // a DENIED / TEMPORARILY_REJECTED / timeout can halt the chain (§9).
+        // Gimbal-manager setpoints carry no acknowledgement, so they can only
+        // ever be sent unconfirmed and fall through below.
+        if (delivery === 'confirm' && built.confirmation === 'command_ack') {
+          awaitAck(built, carrierChosen);
           return;
         }
 
