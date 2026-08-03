@@ -234,8 +234,19 @@ library via catalog update under the Node-RED userDir; once it is there it is on
 pulldown entry. Configuration updates happen on a bench with internet; the seed covers the
 boat.
 
-**A profile is `dialect` + `dialectRevision`, and nothing else.** `seed` is the shipped blob;
-any other revision is a catalog snapshot id. Absolute XML reaches a profile by being
+**A profile is `dialect` + `dialectRevision`, plus optional component dialects.** `seed` is the
+shipped blob; any other revision is a catalog snapshot id.
+
+A vehicle carrying components whose messages the airframe dialect does not define adds them in
+the Vehicle editor's **Components** multi-select — one entry per (dialect, version), so a newly
+fitted component can sit on a newer snapshot than the airframe. The list offers only dialects
+the primary does not already contain: `ardupilotmega` includes `uAvionix`, `icarous`,
+`loweheiser`, `cubepilot` and `csAirLink`, and `storm32` includes `ardupilotmega`, so those
+never appear as additions. They compile together through one synthetic entry that includes each
+root in turn, so the include chain decides — shared files appear once, a later root wins —
+rather than any merge rule of ours. A genuine msgid collision fails loud at deploy naming both
+messages; `ardupilotmega` + `paparazzi` (ids 180–184) is the only such pair in the shipped set,
+which is why upstream's `all.xml` comments paparazzi out. Absolute XML reaches a profile by being
 downloaded into the userDir catalog, where it becomes an ordinary pulldown entry. Editor AJAX
 never invents a bundled dialect under a profile id — a profile that will not compile fails
 loud.

@@ -103,3 +103,45 @@ test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
     'bare relative mavlink ajax url paths must be gone'
   );
 });
+
+test('the component-dialect picker is a plain multi-select synced to a hidden field', () => {
+  assert.match(html, /additionalDialects:\s*\{\s*value:\s*''/);
+  assert.match(html, /id="mav-component-dialects"[^>]*multiple="multiple"/);
+  assert.match(html, /id="node-config-input-additionalDialects"/);
+  // No editableList and no oneditsave: the hidden input is an ordinary
+  // node-config-input-* field, so Node-RED serializes it.
+  assert.ok(!/editableList/.test(html));
+  assert.ok(!/oneditsave/.test(html));
+});
+
+test('the picker hides dialects the primary already includes', () => {
+  // ardupilotmega pulls in uAvionix/icarous/loweheiser/cubepilot/csAirLink;
+  // storm32 pulls in ardupilotmega. Offering those would offer nothing new.
+  assert.match(html, /chain\.indexOf\(d\.entry\)/);
+  assert.match(html, /populateComponents/);
+});
+
+test('dialect, version and components sit above Advanced, not inside it', () => {
+  // The dialect is what the vehicle speaks — as core as Firmware, which has
+  // always been top-level. Advanced keeps the maintenance actions only.
+  const advanced = html.slice(html.indexOf('class="mav-advanced"'));
+  assert.ok(!/id="node-config-input-dialect"/.test(advanced), 'Dialect is not advanced');
+  assert.ok(!/id="node-config-input-dialectRevision"/.test(advanced), 'Version is not advanced');
+  assert.ok(!/id="mav-component-dialects"/.test(advanced), 'Components is not advanced');
+  assert.match(advanced, /id="mav-catalog-update"/, 'catalog actions stay advanced');
+  assert.match(advanced, /id="node-config-input-paramDefsUrl"/, 'param defs stays advanced');
+});
+
+test('CompID options load after the dialect select is populated', () => {
+  // MAV_COMPONENT is fetched for the dialect this profile selects, so the
+  // query needs #node-config-input-dialect already filled. Loading it before
+  // loadLibrary() resolves sends an empty query and the list collapses to the
+  // saved value alone — the operator can then pick nothing else.
+  const prepare = html.slice(html.indexOf('oneditprepare'));
+  const loadCall = prepare.indexOf('loadEnumsCatalog');
+  const inCallback = prepare.indexOf('populateDialects(node.dialect);\n          reloadCompIds();');
+  assert.ok(inCallback !== -1, 'CompID reload runs inside the loadLibrary callback');
+  assert.ok(loadCall !== -1);
+  assert.match(prepare, /\$dialect\.on\('change'[\s\S]{0,200}reloadCompIds\(\)/);
+  assert.match(prepare, /\$revision\.on\('change', reloadCompIds\)/);
+});
