@@ -84,8 +84,8 @@
   // from the commands catalog, exactly like Advanced mode.
   // Keys here OVERRIDE the catalog param spec; omit a key to inherit it.
   const PRESET_PARAMS = {
-    arm:           [{ index: 2 }],
-    disarm:        [{ index: 2 }],
+    arm:           [{ index: 2, label: 'Force Arm' }],
+    disarm:        [{ index: 2, label: 'Force Disarm' }],
     set_mode:      [{ index: 1, label: 'Mode (base_mode)' },
                     { index: 2 }],
     takeoff:       [{ index: 1 }, { index: 7 }],

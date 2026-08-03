@@ -1158,8 +1158,8 @@ field with units and range. Pinned params are hidden.
 
 | Preset | Command | Pinned | Exposed |
 |---|---|---|---|
-| Arm | `COMPONENT_ARM_DISARM` (400) | Arm = 1 | Force |
-| Disarm | `COMPONENT_ARM_DISARM` (400) | Arm = 0 | Force |
+| Arm | `COMPONENT_ARM_DISARM` (400) | Arm = 1 | Force Arm |
+| Disarm | `COMPONENT_ARM_DISARM` (400) | Arm = 0 | Force Disarm |
 | Set Mode | `DO_SET_MODE` (176) | — | Mode, from the profile's firmware table |
 | Takeoff | `NAV_TAKEOFF` (22) | — | Altitude, pitch, yaw |
 | Land | `NAV_LAND` (21) | — | Abort altitude, latitude, longitude, altitude |

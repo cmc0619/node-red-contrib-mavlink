@@ -1,0 +1,412 @@
+<script type="text/javascript">
+  // THROWAWAY — two Payload dialog designs side by side. Delete this file, its
+  // .js, and the package.json entry once the design is settled.
+  //
+  //   tmp1  Topic → Verb → Gimbal path (the shipped picker)
+  //   tmp2  one grouped Action select
+  //
+  // Everything below the picker is shared, so the dialogs differ in exactly
+  // the thing under evaluation. Both generate the form body from
+  // /mavlink/payload/field-tips: labels, units, ranges, enums and bitmask-ness
+  // come from the dialect the vehicle actually speaks, never a table in here.
+  (function () {
+    var payloadTmpDefaults = Object.assign(
+      {
+        name: { value: '' },
+        connection: { value: '', type: 'mavlink-connection' },
+        identity: { value: '' },
+        delivery: { value: 'build' },
+        carrier: { value: 'int' },
+        frame: { value: '' },
+        timeout: { value: 10000, validate: RED.validators.number(true) },
+        maxRetries: { value: 3, validate: RED.validators.number(true) },
+        topic: { value: 'camera' },
+        verb: { value: 'photo' },
+        path: { value: 'legacy' },
+        targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
+        targetComponent: { value: '', validate: RED.validators.number(true) },
+        // One object, not a field per slot: rows are generated per verb, so
+        // there is no #node-input-<slot> for Node-RED to read at save time.
+        values: { value: {} }
+      },
+      RED.mavlink.buildTierDialectDefaults()
+    );
+
+    /** Fold a multi-select bitmask's selected values into one number. */
+    function maskOf(raw) {
+      var values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+      if (!values.length) return '';
+      var mask = 0n;
+      values.forEach(function (value) { mask = mask | BigInt(String(value)); });
+      return Number(mask);
+    }
+
+    /**
+     * Label for a field the dialect does not name. Command params carry a
+     * `label`; message fields (gimbal manager aiming) do not, so the recipe's
+     * own key is all there is. Spacing and case only — nothing invented.
+     */
+    function humanize(key) {
+      return key
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        .replace(/^./, function (c) { return c.toUpperCase(); });
+    }
+
+    /** Read the generated rows back into a plain values object. */
+    function collectValues() {
+      var values = {};
+      $('#payload-tmp-fields .mav-payload-field').each(function () {
+        var $input = $(this);
+        var key = $input.attr('data-field');
+        if (!key) return;
+        var kind = $input.attr('data-kind') || 'number';
+        if (kind === 'boolean') {
+          values[key] = RED.mavlink.booleanEnumValue($input);
+          return;
+        }
+        if (kind === 'bitmask') {
+          values[key] = maskOf($input.val());
+          return;
+        }
+        values[key] = $input.val();
+      });
+      return values;
+    }
+
+    function preparePayloadTmp(node, picker) {
+      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+      RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
+      RED.mavlink.refreshIdentitySelect(node);
+
+      // Generated rows are destroyed on every repaint, so what is on screen is
+      // harvested before repainting and merged back when a row returns. That
+      // is what the shipped dialog gets for free by hiding rows instead.
+      var stash = Object.assign({}, node.values);
+      node._payloadTmpStash = stash;
+      var seq = 0;
+
+      function selection() {
+        return {
+          topic: $('#node-input-topic').val() || 'camera',
+          verb: $('#node-input-verb').val() || '',
+          path: $('#node-input-path').val() || 'legacy'
+        };
+      }
+
+      function isBuild() {
+        return ($('#node-input-delivery').val() || 'build') === 'build';
+      }
+
+      function harvest() {
+        Object.assign(stash, collectValues());
+      }
+
+      function notice(text) {
+        $('#payload-tmp-fields').empty()
+          .append($('<div class="form-row"></div>').append($('<em></em>').text(text)));
+      }
+
+      /** One control, shaped by the metadata (§6): enum → select, FALSE/TRUE →
+       *  checkbox, bitmask → multi-select, everything else → number. */
+      function fieldInput(key, meta, entries) {
+        var saved = stash[key];
+        var $input;
+        if (entries && entries.length) {
+          if (RED.mavlink.isFalseTrueEnum(entries)) {
+            $input = RED.mavlink.booleanEnumInput(entries, {
+              saved: saved,
+              title: meta.description || ''
+            });
+          } else if (meta.bitmask) {
+            $input = $('<select style="width:70%"></select>')
+              .attr('data-kind', 'bitmask')
+              .attr('multiple', 'multiple')
+              .attr('size', Math.min(6, entries.length))
+              .attr('title', RED.mavlink.bitmaskTitle(meta.description));
+            entries.forEach(function (entry) {
+              $input.append($('<option></option>')
+                .val(String(entry.value))
+                .text(entry.label || entry.name));
+            });
+            $input.val(RED.mavlink.selectedBitmaskValues(saved, entries));
+          } else {
+            $input = $('<select style="width:70%"></select>').attr('data-kind', 'enum');
+            RED.mavlink.fillEnumSelect($input, entries, {
+              allowEmpty: true,
+              emptyLabel: '—',
+              saved: saved
+            });
+          }
+        } else {
+          $input = $('<input type="number" style="width:110px">')
+            .attr('step', meta.increment !== null && meta.increment !== undefined ? meta.increment : 'any')
+            .attr('title', meta.description || '')
+            .val(saved !== undefined && saved !== null ? saved : '');
+          if (meta.minValue !== null && meta.minValue !== undefined) $input.attr('min', meta.minValue);
+          if (meta.maxValue !== null && meta.maxValue !== undefined) $input.attr('max', meta.maxValue);
+        }
+        return $input.addClass('mav-payload-field').attr('data-field', key);
+      }
+
+      function renderFields(data) {
+        var $box = $('#payload-tmp-fields').empty();
+        var fields = (data && data.fields) || {};
+        var enums = (data && data.enums) || {};
+        var keys = Object.keys(fields).sort();
+        if (!keys.length) {
+          notice('No parameters for this action.');
+          return;
+        }
+        keys.forEach(function (key) {
+          var meta = fields[key] || {};
+          var $row = $('<div class="form-row"></div>');
+          $row.append($('<label></label>').text(meta.label || humanize(key)));
+          $row.append(fieldInput(key, meta, meta.enum ? enums[meta.enum] : null));
+          if (meta.units) $row.append($('<span></span>').text(' ' + meta.units));
+          $box.append($row);
+        });
+      }
+
+      // Carrier is observable only when the command carries a location; for
+      // everything else COMMAND_INT and COMMAND_LONG are byte-identical in
+      // params 1–4. Pin the hidden control to what is actually sent so §6's
+      // "hidden is not honored" holds without a runtime branch.
+      function applyCarrier(data) {
+        var sel = selection();
+        var matters = !RED.mavlink.payloadVerbIgnoresCarrier(sel.topic, sel.verb, sel.path)
+          && !!(data && data.carrierMatters);
+        if (!matters) $('#node-input-carrier').val('int');
+        $('#row-payload-carrier').toggle(matters);
+        $('#row-payload-frame').toggle(matters && $('#node-input-carrier').val() === 'int');
+      }
+
+      function refreshFields() {
+        var sel = selection();
+        if (!sel.verb) {
+          notice('Pick an action.');
+          return;
+        }
+        var query = RED.mavlink.currentCatalogQuery() || {};
+        if (isBuild() && !(query.dialect || query.vehicle)) {
+          notice('Pick a Dialect or Vehicle Profile to load this action’s parameters.');
+          return;
+        }
+        query.topic = sel.topic;
+        query.verb = sel.verb;
+        query.path = sel.path;
+        var mine = ++seq;
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, function (data) {
+          if (mine !== seq) return;
+          renderFields(data);
+          applyCarrier(data);
+        }).fail(function () {
+          if (mine !== seq) return;
+          notice('Could not load parameters for this action.');
+        });
+      }
+
+      function refreshVisibility() {
+        var build = isBuild();
+        var isWire = !build;
+        RED.mavlink.applyCompanionTargetVisibility({
+          isBuild: build,
+          identityId: isWire ? $('#node-input-identity').val() : '',
+          hideCompidWhenCompanion: false,
+          targetSystemRow: '#row-payload-targetSystem',
+          targetComponentRow: '#row-payload-targetComponent'
+        });
+        RED.mavlink.applyBuildTierRowVisibility({
+          isBuild: build,
+          dialect: $('#node-input-dialect').val() || '',
+          dialectRow: '#row-payload-dialect',
+          vehicleRow: '#row-payload-vehicle',
+          connectionRow: '#row-payload-connection'
+        });
+        $('#row-payload-identity').toggle(isWire);
+        $('#row-payload-timeout').toggle(isWire);
+        $('#row-payload-maxRetries').toggle(isWire);
+        if (picker === 'cascade') {
+          var sel = selection();
+          $('#row-payload-path').toggle(sel.topic === 'gimbal' && sel.verb === 'aim');
+        }
+      }
+
+      function reselect() {
+        harvest();
+        refreshVisibility();
+        refreshFields();
+      }
+
+      // ── Picker 1: Topic → Verb → Gimbal path ─────────────────────────────
+      function setupCascade() {
+        $('#node-input-topic').on('change', function () {
+          harvest();
+          RED.mavlink.refreshVerbOptions();
+          refreshVisibility();
+          refreshFields();
+        });
+        $('#node-input-verb').on('change', reselect);
+        $('#node-input-path').on('change', reselect);
+        RED.mavlink.refreshVerbOptions({ saved: node.verb });
+      }
+
+      // ── Picker 2: one grouped Action select ──────────────────────────────
+      // The gimbal path stops being a hidden third question and becomes two
+      // named actions. Topic labels are its keys capitalized — no new table.
+      function pathsFor(topic, verb) {
+        if (topic === 'gimbal' && verb === 'aim') {
+          return [
+            { value: 'legacy', suffix: ' — DO_MOUNT_CONTROL' },
+            { value: 'manager', suffix: ' — GIMBAL_MANAGER_SET_PITCHYAW' }
+          ];
+        }
+        return [{ value: 'legacy', suffix: '' }];
+      }
+
+      function writeSelection() {
+        var parts = String($('#payload-tmp-action').val() || '').split('|');
+        $('#node-input-topic').val(parts[0] || 'camera');
+        $('#node-input-verb').val(parts[1] || '');
+        $('#node-input-path').val(parts[2] || 'legacy');
+      }
+
+      function setupGrouped() {
+        var $sel = $('#payload-tmp-action').empty();
+        Object.keys(RED.mavlink.PAYLOAD_VERBS).forEach(function (topic) {
+          var $group = $('<optgroup></optgroup>')
+            .attr('label', topic.charAt(0).toUpperCase() + topic.slice(1));
+          RED.mavlink.PAYLOAD_VERBS[topic].forEach(function (verb) {
+            pathsFor(topic, verb.value).forEach(function (path) {
+              $group.append($('<option></option>')
+                .val(topic + '|' + verb.value + '|' + path.value)
+                .text(verb.label + path.suffix));
+            });
+          });
+          $sel.append($group);
+        });
+        $sel.val([node.topic, node.verb, node.path || 'legacy'].join('|'));
+        if (!$sel.val()) $sel.val($sel.find('option').first().val());
+        writeSelection();
+        $sel.on('change', function () {
+          harvest();
+          writeSelection();
+          refreshVisibility();
+          refreshFields();
+        });
+      }
+
+      $('#node-input-carrier').on('change', function () {
+        $('#row-payload-frame').toggle(
+          $('#row-payload-carrier').is(':visible') && $('#node-input-carrier').val() === 'int'
+        );
+      });
+      $('#node-input-delivery').on('change', function () {
+        refreshVisibility();
+        refreshFields();
+        RED.mavlink.reloadTargetCompId(node);
+      });
+      $('#node-input-identity').on('change', refreshVisibility);
+      $('#node-input-connection').on('change', function () {
+        RED.mavlink.refreshIdentitySelect(node);
+        refreshVisibility();
+        refreshFields();
+        RED.mavlink.reloadTargetCompId(node);
+      });
+      $('#node-input-vehicle').on('change', function () {
+        refreshFields();
+        RED.mavlink.reloadTargetCompId(node);
+      });
+      var $dialect = $('#node-input-dialect');
+      $dialect.on('change', function () {
+        refreshVisibility();
+        refreshFields();
+        RED.mavlink.reloadTargetCompId(node);
+      });
+      RED.mavlink.populateDialectSelect($dialect, {
+        saved: node.dialect || '',
+        includeVehicleEscape: true
+      });
+
+      if (picker === 'cascade') setupCascade(); else setupGrouped();
+      refreshVisibility();
+      refreshFields();
+      RED.mavlink.reloadTargetCompId(node);
+    }
+
+    function savePayloadTmp(node) {
+      node.values = Object.assign({}, node._payloadTmpStash || {}, collectValues());
+    }
+
+    function tmpType(picker, label) {
+      return {
+        category: 'mavlink',
+        color: '#ffe8d8',
+        defaults: payloadTmpDefaults,
+        inputs: 1,
+        outputs: 2,
+        outputLabels: ['continue', 'status'],
+        icon: 'font-awesome/fa-camera',
+        label: function () { return this.name || label; },
+        oneditprepare: function () { preparePayloadTmp(this, picker); },
+        oneditsave: function () { savePayloadTmp(this); }
+      };
+    }
+
+    RED.nodes.registerType('mavlink-payload-tmp1', tmpType('cascade', 'payload tmp1 (cascade)'));
+    RED.nodes.registerType('mavlink-payload-tmp2', tmpType('grouped', 'payload tmp2 (grouped)'));
+  }());
+</script>
+
+<script type="text/html" data-template-name="mavlink-payload-tmp1">
+  <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+  <div class="form-row" id="row-payload-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-payload-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
+  <div class="form-row" id="row-payload-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
+  <div class="form-row" id="row-payload-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
+  <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option></select></div>
+  <div class="form-row" id="row-payload-carrier"><label for="node-input-carrier">Carrier</label><select id="node-input-carrier" style="width:70%"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
+  <div class="form-row" id="row-payload-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="">Global, absolute alt (default)</option><option value="3">Global, relative alt</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
+  <div class="form-row" id="row-payload-timeout"><label for="node-input-timeout">ACK timeout</label><input type="number" id="node-input-timeout" style="width:80px"> ms</div>
+  <div class="form-row" id="row-payload-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
+  <div class="form-row"><label for="node-input-topic">Topic</label><select id="node-input-topic"><option value="camera">Camera</option><option value="gimbal">Gimbal</option><option value="servo">Servo</option><option value="release">Release</option></select></div>
+  <div class="form-row"><label for="node-input-verb">Verb</label><select id="node-input-verb"></select></div>
+  <div class="form-row" id="row-payload-path"><label for="node-input-path">Gimbal path</label><select id="node-input-path"><option value="legacy">DO_MOUNT_CONTROL</option><option value="manager">GIMBAL_MANAGER_SET_PITCHYAW</option></select></div>
+  <div class="form-row" id="row-payload-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
+  <div class="form-row" id="row-payload-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
+  <div id="payload-tmp-fields"></div>
+</script>
+
+<script type="text/html" data-template-name="mavlink-payload-tmp2">
+  <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+  <div class="form-row" id="row-payload-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-payload-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
+  <div class="form-row" id="row-payload-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
+  <div class="form-row" id="row-payload-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
+  <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option></select></div>
+  <div class="form-row" id="row-payload-carrier"><label for="node-input-carrier">Carrier</label><select id="node-input-carrier" style="width:70%"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
+  <div class="form-row" id="row-payload-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="">Global, absolute alt (default)</option><option value="3">Global, relative alt</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
+  <div class="form-row" id="row-payload-timeout"><label for="node-input-timeout">ACK timeout</label><input type="number" id="node-input-timeout" style="width:80px"> ms</div>
+  <div class="form-row" id="row-payload-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
+  <div class="form-row"><label for="payload-tmp-action">Action</label><select id="payload-tmp-action" style="width:70%"></select></div>
+  <input type="hidden" id="node-input-topic">
+  <input type="hidden" id="node-input-verb">
+  <input type="hidden" id="node-input-path">
+  <div class="form-row" id="row-payload-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
+  <div class="form-row" id="row-payload-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
+  <div id="payload-tmp-fields"></div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-payload-tmp1">
+  <p><b>Throwaway.</b> Same node as <code>mavlink payload</code>, with the form body
+  generated from the dialect instead of hand-written rows. Picker under test:
+  <b>Topic → Verb → Gimbal path</b>, three cascading selects.</p>
+  <p>Compare against <code>mavlink payload tmp2</code>, which differs only in the picker.</p>
+</script>
+
+<script type="text/html" data-help-name="mavlink-payload-tmp2">
+  <p><b>Throwaway.</b> Same node as <code>mavlink payload</code>, with the form body
+  generated from the dialect instead of hand-written rows. Picker under test: a single
+  <b>Action</b> select grouped by topic, with the two gimbal aim paths as named actions
+  rather than a hidden third question.</p>
+  <p>Compare against <code>mavlink payload tmp1</code>, which differs only in the picker.</p>
+</script>

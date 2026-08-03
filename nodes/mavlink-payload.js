@@ -45,7 +45,19 @@ function enumsForFields(bundle, fields) {
   return out;
 }
 
-module.exports = function registerMavlinkPayload(RED) {
+/**
+ * @param {object} RED
+ * @param {object} [opts]
+ * @param {string} [opts.type='mavlink-payload']  registered type name
+ * @param {function} [opts.readValues]  config → recipe values; defaults to the
+ *   one-field-per-slot reader. The `-tmp` editors store a single `values`
+ *   object instead, because their rows are generated per verb rather than
+ *   hidden, so there is no `#node-input-<slot>` to read at save time.
+ */
+module.exports = function registerMavlinkPayload(RED, opts = {}) {
+  const typeName = opts.type || 'mavlink-payload';
+  const readValues = opts.readValues || valuesFrom;
+
   function MavlinkPayloadNode(config) {
     RED.nodes.createNode(this, config);
     const node = this;
@@ -89,7 +101,7 @@ module.exports = function registerMavlinkPayload(RED) {
           verb: payload.verb || config.verb,
           path: payload.path || config.path,
           target,
-          values: payload.values || valuesFrom(config),
+          values: payload.values || readValues(config),
           // Required for command-backed verbs (§9): the builder throws when a
           // MAV_CMD verb arrives without a carrier choice.
           carrier: payload.carrier || config.carrier,
@@ -103,7 +115,7 @@ module.exports = function registerMavlinkPayload(RED) {
         }
 
         if (!connectionNode) {
-          throw new Error('mavlink-payload requires a Connection');
+          throw new Error(`${typeName} requires a Connection`);
         }
         // Confirm tier for a command-backed verb: send the COMMAND_LONG and
         // wait for its COMMAND_ACK so a later DENIED / TEMPORARILY_REJECTED /
@@ -166,7 +178,8 @@ module.exports = function registerMavlinkPayload(RED) {
     });
   }
 
-  if (!MavlinkPayloadNode._fieldTipsRouteRegistered && RED.httpAdmin && RED.auth) {
+  // The `-tmp` editors call the same route; only the shipped node serves it.
+  if (!opts.type && RED.httpAdmin && RED.auth) {
     const { api: metadataApi } = loadMetadata('mavlink-payload', RED);
 
     /**
@@ -254,10 +267,9 @@ module.exports = function registerMavlinkPayload(RED) {
       }
     );
 
-    MavlinkPayloadNode._fieldTipsRouteRegistered = true;
   }
 
-  RED.nodes.registerType('mavlink-payload', MavlinkPayloadNode);
+  RED.nodes.registerType(typeName, MavlinkPayloadNode);
 };
 
 function completeAck(node, send, built, outcome) {
