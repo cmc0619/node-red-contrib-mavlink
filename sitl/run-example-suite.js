@@ -77,19 +77,25 @@ const PROFILE = {
   '08-fanout-sequential-five': {
     waitMs: 25000,
     expect: 'dry-run then live sequential arm ×5',
+    // confirm-arm needs EKF; fleet restart alone is not enough (see ap-arm-ready-fleet).
+    prep: 'ap-arm-ready-fleet',
   },
   '09-fanout-member-expires': {
     waitMs: 20000,
     expect: 'aggregate reports one failed after mid-run kill',
-    prep: 'kill-ap-3-mid',
+    // Mid-run kill is afterInjectHook; prep only waits for armable AP 1–5.
+    prep: 'ap-arm-ready-fleet',
   },
   '10-dual-stack-ten': {
     waitMs: 25000,
     expect: 'broadcast arm AP 1–5 and PX4 11–15',
+    // delivery=send does not wait for arm ACKs; still wait so the story is not a no-op.
+    prep: 'ap-arm-ready-fleet',
   },
   '11-broadcast-vs-sequential': {
     waitMs: 30000,
     expect: 'sequential + broadcast arm confirmed',
+    prep: 'ap-arm-ready-fleet',
   },
   '12-signing': {
     waitMs: 5000,
@@ -524,11 +530,44 @@ const FLEET_SETTLE_MS = Number(process.env.SITL_FLEET_SETTLE_MS) > 0
   ? Number(process.env.SITL_FLEET_SETTLE_MS)
   : 8000;
 
+/**
+ * After fleet restart, arm stays DENIED until EKF/IMU settle (STATUSTEXT:
+ * "Gyros inconsistent" / "Need Position Estimate"). Poll — do not blind-sleep.
+ * Force-disarm after the probe so the example's own arm step still runs.
+ */
+async function waitApArmReady(sysids, timeoutMs = 120000) {
+  const list = Array.isArray(sysids) ? sysids : [sysids];
+  console.log(`  waiting for AP ${list.join(',')} arm-ready…`);
+  runApControlScript(
+    `
+      const sysids = ${JSON.stringify(list)};
+      const deadline = Date.now() + ${timeoutMs};
+      const compOf = (id) => conn.peerTable.getComponent(id, 1);
+      for (const sysid of sysids) {
+        const t = { sysid, compid: 1 };
+        let armedOk = false;
+        while (Date.now() < deadline) {
+          const comp = compOf(sysid);
+          if (comp?.primaryEndpoint) {
+            if (comp.armed) { armedOk = true; break; }
+            conn.send(buildCommandLong(400, sysid, 1, [1, 0, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+          }
+          await sleep(2000);
+          if (compOf(sysid)?.armed) { armedOk = true; break; }
+        }
+        if (!armedOk) throw new Error('AP-' + sysid + ' did not become armable after fleet restart');
+        conn.send(buildCommandLong(400, sysid, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+        await sleep(400);
+      }
+    `,
+    timeoutMs + 30000
+  );
+}
+
 async function setApGuided(sysid = 1) {
   // After fleet restart:
   // 1) SET_MODE needs a learned peer endpoint (pre-peer fallback never arrives).
-  // 2) GUIDED while disarmed succeeds in seconds; arm stays DENIED until EKF
-  //    has a position estimate (~30–40 s cold — "Need Position Estimate").
+  // 2) GUIDED while disarmed succeeds in seconds; arm stays DENIED until EKF ready.
   // 3) Prove arm works, then force-disarm so the example's own arm step runs.
   console.log(`  waiting for AP-${sysid} GUIDED + arm-ready…`);
   runApControlScript(
@@ -552,24 +591,20 @@ async function setApGuided(sysid = 1) {
       if (!guided && compOf()?.flightMode !== 4) {
         throw new Error('AP-${sysid} did not enter GUIDED after fleet restart');
       }
-      let armedOk = false;
-      while (Date.now() < deadline) {
-        const comp = compOf();
-        if (comp?.primaryEndpoint) {
-          conn.send(buildCommandLong(400, ${sysid}, 1, [1, 0, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
-        }
-        await sleep(2000);
-        if (compOf()?.armed) { armedOk = true; break; }
-      }
-      if (!armedOk) throw new Error('AP-${sysid} did not become armable after fleet restart');
-      conn.send(buildCommandLong(400, ${sysid}, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
-      await sleep(800);
+    `,
+    150000
+  );
+  await waitApArmReady([sysid], 120000);
+  runApControlScript(
+    `
+      const t = { sysid: ${sysid}, compid: 1 };
+      const compOf = () => conn.peerTable.getComponent(${sysid}, 1);
       if (compOf()?.flightMode !== 4) {
         conn.send(buildCommandLong(176, ${sysid}, 1, [1, 4, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
         await sleep(800);
       }
     `,
-    150000
+    20000
   );
 }
 
@@ -607,6 +642,9 @@ async function restartVehicleFleet() {
 async function prep(kind) {
   if (kind === 'ap-guided-1') {
     await setApGuided(1);
+  }
+  if (kind === 'ap-arm-ready-fleet') {
+    await waitApArmReady([1, 2, 3, 4, 5], 150000);
   }
   if (kind === 'px4-home-ready' || kind === 'px4-mode-ready') {
     // Fleet restart already applied helpers to all PX4; refresh sysid 11 once more
