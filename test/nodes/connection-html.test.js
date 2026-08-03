@@ -97,12 +97,31 @@ test('additionalIdentities has an editor row (issue #94 — feature must be reac
   );
 });
 
-test('Connection editor does not expose heartbeat interval or UDP broadcast controls', () => {
+test('Connection editor keeps swarm delivery separate from MAVLink addressing', () => {
   assert.ok(!html.includes('heartbeatInterval'), 'heartbeat interval belongs to Local Identity');
-  assert.ok(!html.includes('node-config-input-broadcast'), 'SO_BROADCAST is not a Connection option');
+  // The Swarm address is a *delivery* option — where a `target_system = 0`
+  // frame is written. It is not what makes a frame a broadcast; the message
+  // field is. The form must offer no control for it, while the help text is
+  // the right place to say so out loud.
+  const [form, help] = html.split(/<script type="text\/html" data-help-name=/);
+  assert.ok(help, 'help block is present');
   assert.ok(
-    !/target_system\s*[=:]\s*0/.test(html),
-    'UDP broadcast must not be conflated with MAVLink broadcast'
+    !/target_system\s*[=:]\s*0/.test(form),
+    'no form control may present MAVLink broadcast addressing as a Connection setting'
+  );
+  assert.match(
+    help,
+    /target_system = 0[\s\S]{0,200}not a setting here/,
+    'help must say plainly that addressing is a frame field, not this dialog'
+  );
+  assert.ok(
+    !/SO_BROADCAST/.test(html),
+    'the socket flag is an implementation detail of the address, not a user control'
+  );
+  assert.match(
+    html,
+    /row-conn-broadcastHost[\s\S]*toggle\(mode === 'udp'\)/,
+    'swarm address is UDP-only — TCP has no broadcast at all'
   );
 });
 

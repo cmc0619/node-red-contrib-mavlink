@@ -77,19 +77,32 @@ const PROFILE = {
   '08-fanout-sequential-five': {
     waitMs: 25000,
     expect: 'dry-run then live sequential arm ×5',
+    // delivery=confirm: the first DENIED fails the aggregate, so every one of
+    // the five has to be armable before the example runs.
+    prep: 'ap-arm-ready-fleet',
   },
   '09-fanout-member-expires': {
     waitMs: 20000,
     expect: 'aggregate reports one failed after mid-run kill',
-    prep: 'kill-ap-3-mid',
+    // The mid-run kill is afterInjectHook, keyed on the file — `kill-ap-3-mid`
+    // was a label prep() never handled. The story needs four to arm and one to
+    // fail; an unsettled EKF fails all five and the verdict means nothing.
+    prep: 'ap-arm-ready-fleet',
   },
   '10-dual-stack-ten': {
     waitMs: 25000,
     expect: 'broadcast arm AP 1–5 and PX4 11–15',
+    // No prep: delivery=send, so no ACK is waited on and no verdict turns on
+    // whether anyone armed. Arm-ready here would cost ~40 s and change nothing.
   },
   '11-broadcast-vs-sequential': {
     waitMs: 30000,
     expect: 'sequential + broadcast arm confirmed',
+    prep: 'ap-arm-ready-fleet',
+    // The sequential half is five confirm-arms; POST /inject returns as soon as
+    // the inject fires, not when the fan-out finishes. At the default 1.5 s gap
+    // the broadcast half lands on top of it.
+    injectGapMs: 12000,
   },
   '12-signing': {
     waitMs: 5000,
@@ -524,6 +537,60 @@ const FLEET_SETTLE_MS = Number(process.env.SITL_FLEET_SETTLE_MS) > 0
   ? Number(process.env.SITL_FLEET_SETTLE_MS)
   : 8000;
 
+/**
+ * Source for a probe-arm sweep over `sysids`, spliced into a control script.
+ *
+ * After a fleet restart an AP heartbeats within seconds but answers arm with
+ * DENIED — STATUSTEXT reads "Gyros inconsistent", later "Need Position
+ * Estimate" — until the IMUs and EKF settle. That took 20–40 s in this lab and
+ * is not a constant, so this polls: a bigger `SITL_FLEET_SETTLE_MS` is a guess
+ * that loses on a slow day. Each vehicle is force-disarmed once it proves
+ * armable, so the example's own arm step is still the thing under test.
+ *
+ * One shared budget rather than one per vehicle. The fleet restarts together
+ * and settles concurrently, so by the time the sweep reaches sysid 5 it has
+ * already had four vehicles' worth of wall clock — it needs less of the
+ * budget, not its own.
+ *
+ * Emitted inside a bare block so the names cannot collide with the script body
+ * it is spliced into.
+ *
+ * @param {number[]} sysids
+ * @param {number} budgetMs  wall clock for the whole sweep
+ * @returns {string} JavaScript source
+ */
+function armReadySource(sysids, budgetMs) {
+  return `
+      {
+        const deadline = Date.now() + ${budgetMs};
+        for (const sysid of ${JSON.stringify(sysids)}) {
+          const t = { sysid, compid: 1 };
+          const compOf = () => conn.peerTable.getComponent(sysid, 1);
+          while (!compOf()?.armed && Date.now() < deadline) {
+            if (compOf()?.primaryEndpoint) {
+              conn.send(buildCommandLong(400, sysid, 1, [1, 0, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+            }
+            await sleep(2000);
+          }
+          if (!compOf()?.armed) {
+            throw new Error('AP-' + sysid + ' did not become armable after fleet restart');
+          }
+          conn.send(buildCommandLong(400, sysid, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+          await sleep(800);
+        }
+      }
+  `;
+}
+
+/**
+ * Prep for the fan-out arm examples: prove AP 1–5 can arm, then leave them
+ * disarmed. One control script, so the peer table is learned once.
+ */
+async function waitApArmReady(sysids, budgetMs = 120000) {
+  console.log(`  waiting for AP ${sysids.join(',')} arm-ready…`);
+  runApControlScript(armReadySource(sysids, budgetMs), budgetMs + 30000);
+}
+
 async function setApGuided(sysid = 1) {
   // After fleet restart:
   // 1) SET_MODE needs a learned peer endpoint (pre-peer fallback never arrives).
@@ -552,24 +619,16 @@ async function setApGuided(sysid = 1) {
       if (!guided && compOf()?.flightMode !== 4) {
         throw new Error('AP-${sysid} did not enter GUIDED after fleet restart');
       }
-      let armedOk = false;
-      while (Date.now() < deadline) {
-        const comp = compOf();
-        if (comp?.primaryEndpoint) {
-          conn.send(buildCommandLong(400, ${sysid}, 1, [1, 0, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
-        }
-        await sleep(2000);
-        if (compOf()?.armed) { armedOk = true; break; }
-      }
-      if (!armedOk) throw new Error('AP-${sysid} did not become armable after fleet restart');
-      conn.send(buildCommandLong(400, ${sysid}, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
-      await sleep(800);
+      ${armReadySource([sysid], 120000)}
       if (compOf()?.flightMode !== 4) {
         conn.send(buildCommandLong(176, ${sysid}, 1, [1, 4, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
         await sleep(800);
       }
     `,
-    150000
+    // Two 120 s budgets back to back (GUIDED, then the arm sweep). The process
+    // timeout has to sit above their sum, or a slow-but-recoverable vehicle is
+    // killed instead of reporting which of the two it failed.
+    270000
   );
 }
 
@@ -607,6 +666,9 @@ async function restartVehicleFleet() {
 async function prep(kind) {
   if (kind === 'ap-guided-1') {
     await setApGuided(1);
+  }
+  if (kind === 'ap-arm-ready-fleet') {
+    await waitApArmReady([1, 2, 3, 4, 5]);
   }
   if (kind === 'px4-home-ready' || kind === 'px4-mode-ready') {
     // Fleet restart already applied helpers to all PX4; refresh sysid 11 once more
