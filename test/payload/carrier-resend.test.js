@@ -119,6 +119,34 @@ test('LONG_ONLY on a pinned-INT verb resends as COMMAND_LONG and continues', asy
   assert.match(warnings[0], /carrier swap/);
 });
 
+test('INT_ONLY on a LONG-carrier verb resends as COMMAND_INT', async () => {
+  // The other direction. gimbal roi-set is the one verb whose Carrier control
+  // the editor still shows, so `long` here is an operator choice rather than
+  // the pin — and it is the verb where the carrier is observable at all.
+  const { node, conn, warnings } = deploy(
+    [MAV_RESULT.COMMAND_INT_ONLY, MAV_RESULT.ACCEPTED],
+    {
+      topic: 'gimbal',
+      verb: 'roi-set',
+      carrier: 'long',
+      values: { lat: 47.397742, lon: 8.545594, alt: 30 },
+    }
+  );
+  await runInput(node, {}, () => {});
+  await tick();
+  await tick();
+
+  assert.equal(conn.sent.length, 2);
+  assert.equal(conn.sent[0].message.name, 'COMMAND_LONG', 'first attempt is the configured carrier');
+  assert.equal(conn.sent[1].message.name, 'COMMAND_INT', 'resent in the form the vehicle asked for');
+  // The rebuild re-runs the recipe, so INT scaling is applied to the resend
+  // rather than the LONG floats being copied across.
+  assert.equal(conn.sent[1].message.fields.x, Math.round(47.397742 * 1e7), 'lat rebuilt as degE7');
+  assert.equal(conn.sent[1].message.fields.y, Math.round(8.545594 * 1e7), 'lon rebuilt as degE7');
+  assert.equal(conn.sent[0].message.fields.param5, 47.397742, 'the LONG attempt carried raw degrees');
+  assert.equal(warnings.length, 1);
+});
+
 test('a second wrong-carrier ack fails loud rather than ping-ponging', async () => {
   const { node, conn } = deploy([
     MAV_RESULT.COMMAND_LONG_ONLY,

@@ -2468,7 +2468,8 @@ snapshot, the fan-out members and every palette node. The Vehicle Profile keeps 
 describes an aircraft *class*, so the sysid is which member of the class you mean when a node
 does not say. `defaultTargetComponent` is a class fact in its own right (the autopilot is
 compid 1 on every vehicle of the class).
-*Check:* `rg -n 'targetSysid|targetCompid'` (expect no matches).
+*Check:* `rg -n 'targetSysid|targetCompid' lib nodes resources test` (expect no matches — DESIGN.md
+and the plan docs quote the old names on purpose, describing the rename itself).
 
 **A `$('#id')` that matches nothing is silent, and unit-testing the helper does not catch it.**
 *Wrong belief:* if the helper has tests and the renderer calls it, the feature works.

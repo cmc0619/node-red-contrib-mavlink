@@ -28,7 +28,7 @@
 | Path | Role |
 |---|---|
 | `nodes/mavlink-command.html` | Remove oneditprepare/oneditsave legacy target copy/delete |
-| `lib/addressing/delivery-context.js` | Drop `config.targetSystem` / `targetComponent` fallbacks |
+| `lib/addressing/delivery-context.js` | Drop `config.targetSysid` / `targetCompid` fallbacks |
 | `test/addressing/delivery-context.test.js` | Drop legacy-key test |
 | `test/nodes/command-html.test.js` | Drop migration test |
 | `DESIGN.md` | Rewrite migrate §14; note shared helpers |
@@ -53,7 +53,7 @@
 
 **Files:**
 - Modify: `nodes/mavlink-command.html` (oneditprepare block ~180–193, oneditsave deletes ~690–692)
-- Modify: `lib/addressing/delivery-context.js` (header + `firstDefined(..., config.targetSystem)`)
+- Modify: `lib/addressing/delivery-context.js` (header + `firstDefined(..., config.targetSysid)`)
 - Modify: `test/addressing/delivery-context.test.js`
 - Modify: `test/nodes/command-html.test.js` (remove migration test)
 - Modify: `DESIGN.md` §6 Command field note + §14 migrate entries → pre-1.0 rename-only
@@ -64,13 +64,13 @@
 
 - [ ] **Step 1:** Delete editor leftover-key copy/delete blocks (`oneditprepare` / `oneditsave`).
 - [ ] **Step 2:** In `resolveDeliveryContext`, pass only `config.targetSystem` /
-  `config.targetComponent` (no `targetSystem` / `targetComponent` fallbacks; drop
+  `config.targetComponent` (no `targetSysid` / `targetCompid` fallbacks; drop
   unnecessary `firstDefined` around those two config fields).
 - [ ] **Step 3:** Remove tests that assert leftover-key acceptance / editor copy.
 - [ ] **Step 4:** Rewrite DESIGN §6/§14: pre-1.0 means rename shipped assets later
   if needed — **no** flow compat, **do not say migrate**.
 - [ ] **Step 5:** `node --test test/addressing/delivery-context.test.js test/nodes/command-html.test.js test/command/node.test.js`
-- [ ] **Step 6:** Commit `fix(command): drop leftover targetSystem readers`
+- [ ] **Step 6:** Commit `fix(command): drop leftover targetSysid readers`
 
 ---
 

@@ -7,13 +7,13 @@
 ## Why parked
 
 Example JSON churn drowns the real diff (shared helpers, strip leftover
-`targetSystem` readers). Necessary later for SITL / demo flows; not part of
+`targetSysid` / `targetCompid` readers). Necessary later for SITL / demo flows; not part of
 proving the dedupe.
 
 ## Follow-up checklist (when unstashed)
 
 - [ ] Audit `examples/**` and `examples/sitl/**` for Command (and any other)
-      nodes still persisting `targetSystem` / `targetComponent` vs canonical
+      nodes still persisting `targetSysid` / `targetCompid` vs canonical
       `targetSystem` / `targetComponent`.
 - [ ] Rename flow JSON property keys only — **no** editor “migrate” path, **no**
       runtime legacy readers (pre-1.0: rewrite the files).
