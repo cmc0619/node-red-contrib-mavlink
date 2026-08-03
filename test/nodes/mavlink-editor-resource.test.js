@@ -857,3 +857,22 @@ test('booleanEnumInput accepts an explicit true value for a no-enum param', () =
   const off = RED.mavlink.booleanEnumInput([], { saved: 0, trueValue: 21196 });
   assert.equal(RED.mavlink.booleanEnumValue(off), null, 'unchecked omits → 0 on the wire');
 });
+
+test('PAYLOAD_FIELDS mirrors the lib recipes exactly', () => {
+  const RED = loadResourceWithElements();
+  const { payloadFormFields, PAYLOAD_TOPICS, verbsForTopic } = require('../../lib/payload');
+  // A mirror, not a fetch — visibility must survive a failed field-tips call.
+  // This pin is what stops it drifting from the recipes it copies.
+  for (const topic of PAYLOAD_TOPICS) {
+    for (const verb of verbsForTopic(topic)) {
+      const paths = topic === 'gimbal' && verb.value === 'aim' ? ['legacy', 'manager'] : [''];
+      for (const path of paths) {
+        assert.deepEqual(
+          plain(RED.mavlink.payloadFormFields(topic, verb.value, path)),
+          plain(payloadFormFields(topic, verb.value, path)),
+          `${topic}|${verb.value}|${path}`
+        );
+      }
+    }
+  }
+});

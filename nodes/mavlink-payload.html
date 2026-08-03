@@ -141,6 +141,19 @@
         'instance', 'length', 'rate'
       ];
 
+      /**
+       * Every row a recipe can own. The union of PAYLOAD_FIELDS' values —
+       * hiding all of them before showing the wanted set is what makes the
+       * form correct without a condition per row.
+       */
+      var RECIPE_ROWS = (function () {
+        var seen = {};
+        Object.keys(RED.mavlink.PAYLOAD_FIELDS).forEach(function (key) {
+          RED.mavlink.PAYLOAD_FIELDS[key].forEach(function (f) { seen[f] = true; });
+        });
+        return Object.keys(seen);
+      }());
+
       function isBuildDelivery() {
         return ($('#node-input-delivery').val() || 'build') === 'build';
       }
@@ -256,15 +269,14 @@
         var isWire = !isBuild;
         var dialectVal = $('#node-input-dialect').val() || '';
         // Companion hides sysid; payload compid stays visible (compidFromConfig).
-        var tgt = RED.mavlink.applyCompanionTargetVisibility({
+        // The helper toggles both rows itself — nothing to re-apply here.
+        RED.mavlink.applyCompanionTargetVisibility({
           isBuild: isBuild,
           identityId: isWire ? $('#node-input-identity').val() : '',
           hideCompidWhenCompanion: false,
           targetSystemRow: '#row-payload-targetSystem',
           targetComponentRow: '#row-payload-targetComponent',
         });
-        var isManager = topic === 'gimbal' && verb === 'aim' && path === 'manager';
-
         RED.mavlink.applyBuildTierRowVisibility({
           isBuild: isBuild,
           dialect: dialectVal,
@@ -273,84 +285,20 @@
           connectionRow: '#row-payload-connection'
         });
 
-        var show = {
-          /* Payload-owned wire rows */
-          identity: isWire,
-          timeout: isWire,
-          maxRetries: isWire,
-          targetSystem: tgt.targetSystem,
-          targetComponent: tgt.targetComponent,
-          /* camera */
-          cameraId:        (topic === 'camera' && (verb === 'photo' || verb === 'set-mode')),
-          count:           (topic === 'camera' && verb === 'photo') || (topic === 'servo' && verb === 'repeat'),
-          interval:        topic === 'camera' && verb === 'photo',
-          sequence:        topic === 'camera' && verb === 'photo',
-          streamId:        topic === 'camera' && (verb === 'start-video' || verb === 'stop-video'),
-          statusFrequency: topic === 'camera' && verb === 'start-video',
-          distance:        topic === 'camera' && verb === 'trigger-distance',
-          shutter:         topic === 'camera' && verb === 'trigger-distance',
-          trigger:         topic === 'camera' && verb === 'trigger-distance',
-          /* gimbal */
-          path:            topic === 'gimbal' && verb === 'aim',
-          pitch:           topic === 'gimbal' && verb === 'aim',
-          roll:            topic === 'gimbal' && verb === 'aim' && !isManager,
-          yaw:             topic === 'gimbal' && verb === 'aim',
-          pitchRate:       isManager,
-          yawRate:         isManager,
-          flags:           isManager,
-          gimbalDeviceId:  isManager,
-          mode:            verb === 'set-mode' && (topic === 'camera' || topic === 'gimbal'),
-          stabilizeRoll:   topic === 'gimbal' && verb === 'set-mode',
-          stabilizePitch:  topic === 'gimbal' && verb === 'set-mode',
-          stabilizeYaw:    topic === 'gimbal' && verb === 'set-mode',
-          lat:             topic === 'gimbal' && verb === 'roi-set',
-          lon:             topic === 'gimbal' && verb === 'roi-set',
-          alt:             topic === 'gimbal' && verb === 'roi-set',
-          /* servo */
-          servo:           topic === 'servo',
-          pwm:             topic === 'servo',
-          period:          topic === 'servo' && verb === 'repeat',
-          /* release */
-          instance:        topic === 'release' && (verb === 'gripper' || verb === 'winch'),
-          action:          topic === 'release',
-          length:          topic === 'release' && verb === 'winch',
-          rate:            topic === 'release' && verb === 'winch'
-        };
+        // Recipe-owned rows come from the shared field table; the node-owned
+        // ones (identity, timeout, target) are delivery-tier concerns the
+        // recipes know nothing about. Hide every recipe row, then show the
+        // ones this verb actually uses — no per-row condition to keep in sync.
+        $('#row-payload-identity').toggle(isWire);
+        $('#row-payload-timeout').toggle(isWire);
+        $('#row-payload-maxRetries').toggle(isWire);
+        $('#row-payload-path').toggle(topic === 'gimbal' && verb === 'aim');
 
-        $('#row-payload-identity').toggle(!!show.identity);
-        $('#row-payload-timeout').toggle(!!show.timeout);
-        $('#row-payload-maxRetries').toggle(!!show.maxRetries);
-        $('#row-payload-cameraId').toggle(!!show.cameraId);
-        $('#row-payload-count').toggle(!!show.count);
-        $('#row-payload-interval').toggle(!!show.interval);
-        $('#row-payload-sequence').toggle(!!show.sequence);
-        $('#row-payload-streamId').toggle(!!show.streamId);
-        $('#row-payload-statusFrequency').toggle(!!show.statusFrequency);
-        $('#row-payload-distance').toggle(!!show.distance);
-        $('#row-payload-shutter').toggle(!!show.shutter);
-        $('#row-payload-trigger').toggle(!!show.trigger);
-        $('#row-payload-path').toggle(!!show.path);
-        $('#row-payload-pitch').toggle(!!show.pitch);
-        $('#row-payload-roll').toggle(!!show.roll);
-        $('#row-payload-yaw').toggle(!!show.yaw);
-        $('#row-payload-pitchRate').toggle(!!show.pitchRate);
-        $('#row-payload-yawRate').toggle(!!show.yawRate);
-        $('#row-payload-flags').toggle(!!show.flags);
-        $('#row-payload-gimbalDeviceId').toggle(!!show.gimbalDeviceId);
-        $('#row-payload-mode').toggle(!!show.mode);
-        $('#row-payload-stabilizeRoll').toggle(!!show.stabilizeRoll);
-        $('#row-payload-stabilizePitch').toggle(!!show.stabilizePitch);
-        $('#row-payload-stabilizeYaw').toggle(!!show.stabilizeYaw);
-        $('#row-payload-lat').toggle(!!show.lat);
-        $('#row-payload-lon').toggle(!!show.lon);
-        $('#row-payload-alt').toggle(!!show.alt);
-        $('#row-payload-servo').toggle(!!show.servo);
-        $('#row-payload-pwm').toggle(!!show.pwm);
-        $('#row-payload-period').toggle(!!show.period);
-        $('#row-payload-instance').toggle(!!show.instance);
-        $('#row-payload-action').toggle(!!show.action);
-        $('#row-payload-length').toggle(!!show.length);
-        $('#row-payload-rate').toggle(!!show.rate);
+        var wanted = RED.mavlink.payloadFormFields(topic, verb, path);
+        RECIPE_ROWS.forEach(function (key) {
+          $('#row-payload-' + key).toggle(wanted.indexOf(key) !== -1);
+        });
+
         refreshFrameRow();
         refreshPayloadFieldTips();
       }

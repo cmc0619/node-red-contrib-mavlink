@@ -128,69 +128,6 @@ test('mavlink-payload shows one labeled field row per parameter (§6)', () => {
   );
 });
 
-test('mavlink-payload has rows for camera video stream parameters (§B)', () => {
-  assert.match(payloadHtml, /id="row-payload-streamId"/, 'streamId row for start/stop video');
-  assert.match(payloadHtml, /id="row-payload-statusFrequency"/, 'statusFrequency row for start-video');
-  assert.match(
-    payloadHtml,
-    /topic === 'camera' && \(verb === 'start-video' \|\| verb === 'stop-video'\)/,
-    'streamId shown for both start-video and stop-video'
-  );
-  assert.match(
-    payloadHtml,
-    /topic === 'camera' && verb === 'start-video'/,
-    'statusFrequency shown for start-video only'
-  );
-});
-
-test('mavlink-payload has rows for camera photo cameraId and sequence (§B)', () => {
-  assert.match(payloadHtml, /id="row-payload-cameraId"/, 'cameraId row for photo');
-  assert.match(payloadHtml, /id="row-payload-sequence"/, 'sequence row for photo');
-  assert.match(
-    payloadHtml,
-    /\(verb === 'photo' \|\| verb === 'set-mode'\)/,
-    'cameraId shown for photo and set-mode'
-  );
-});
-
-test('mavlink-payload has rows for camera trigger-distance shutter and trigger (§B)', () => {
-  assert.match(payloadHtml, /id="row-payload-shutter"/, 'shutter row for trigger-distance');
-  assert.match(payloadHtml, /id="row-payload-trigger"/, 'trigger row for trigger-distance');
-  assert.match(
-    payloadHtml,
-    /topic === 'camera' && verb === 'trigger-distance'/,
-    'shutter/trigger visibility gated on trigger-distance verb'
-  );
-});
-
-test('mavlink-payload has rows for gimbal set-mode stabilize flags (§B)', () => {
-  assert.match(payloadHtml, /id="row-payload-stabilizeRoll"/, 'stabilizeRoll row');
-  assert.match(payloadHtml, /id="row-payload-stabilizePitch"/, 'stabilizePitch row');
-  assert.match(payloadHtml, /id="row-payload-stabilizeYaw"/, 'stabilizeYaw row');
-  assert.match(
-    payloadHtml,
-    /topic === 'gimbal' && verb === 'set-mode'/,
-    'stabilize fields shown for gimbal set-mode'
-  );
-});
-
-test('mavlink-payload has rows for gimbal roi-set lat/lon/alt (§B)', () => {
-  assert.match(payloadHtml, /id="row-payload-lat"/, 'lat row for roi-set');
-  assert.match(payloadHtml, /id="row-payload-lon"/, 'lon row for roi-set');
-  assert.match(payloadHtml, /id="row-payload-alt"/, 'alt row for roi-set');
-  assert.match(
-    payloadHtml,
-    /topic === 'gimbal' && verb === 'roi-set'/,
-    'lat/lon/alt visibility gated on roi-set verb'
-  );
-});
-
-test('mavlink-payload has rows for gimbal manager aim flags and gimbalDeviceId (§B)', () => {
-  assert.match(payloadHtml, /id="row-payload-flags"/, 'flags row for manager aim');
-  assert.match(payloadHtml, /id="row-payload-gimbalDeviceId"/, 'gimbalDeviceId row for manager aim');
-  assert.match(payloadHtml, /isManager/, 'flags and gimbalDeviceId tied to manager path');
-});
-
 test('mavlink-payload does not leak action ids across release enum families', () => {
   assert.match(payloadHtml, /function savedForEnum/, 'enum family switches reset saved values');
   assert.match(
@@ -273,9 +210,9 @@ test('mavlink-payload build tier shows vehicle, hides connection/identity/timeou
   assert.match(payloadHtml, /dialectRow:\s*'#row-payload-dialect'/, 'dialect row selector passed');
   assert.match(payloadHtml, /vehicleRow:\s*'#row-payload-vehicle'/, 'vehicle row selector passed');
   assert.match(payloadHtml, /connectionRow:\s*'#row-payload-connection'/, 'connection row selector passed');
-  assert.match(payloadHtml, /identity:\s*isWire/, 'identity row shown only for wire tiers (local)');
-  assert.match(payloadHtml, /timeout:\s*isWire/, 'timeout row shown only for wire tiers');
-  assert.match(payloadHtml, /maxRetries:\s*isWire/, 'maxRetries row shown only for wire tiers');
+  assert.match(payloadHtml, /#row-payload-identity'\)\.toggle\(isWire\)/, 'identity row shown only for wire tiers');
+  assert.match(payloadHtml, /#row-payload-timeout'\)\.toggle\(isWire\)/, 'timeout row shown only for wire tiers');
+  assert.match(payloadHtml, /#row-payload-maxRetries'\)\.toggle\(isWire\)/, 'maxRetries row shown only for wire tiers');
   assert.match(payloadHtml, /id="row-payload-dialect"/, 'dialect row has ID for toggling');
   assert.match(payloadHtml, /id="row-payload-timeout"/, 'timeout row has ID for toggling');
   assert.match(payloadHtml, /id="row-payload-maxRetries"/, 'maxRetries row has ID for toggling');
@@ -384,4 +321,36 @@ test('payload frame row binds to the frame property and follows the INT carrier 
     /\$\('#node-input-carrier'\)\.on\('change', refreshFrameRow\);/,
     'carrier change re-evaluates the frame row'
   );
+});
+
+
+test('every field the recipe table can name has a row to render into', () => {
+  // Replaces six regex-on-source tests that asserted the shape of a `show` map
+  // that no longer exists. This catches the failure that actually matters: a
+  // table entry with no matching row renders nothing, silently.
+  const { payloadFormFields, PAYLOAD_TOPICS, verbsForTopic } = require('../../lib/payload');
+  const seen = new Set();
+  for (const topic of PAYLOAD_TOPICS) {
+    for (const verb of verbsForTopic(topic)) {
+      const paths = topic === 'gimbal' && verb.value === 'aim' ? ['legacy', 'manager'] : [''];
+      for (const path of paths) {
+        for (const field of payloadFormFields(topic, verb.value, path)) seen.add(field);
+      }
+    }
+  }
+  assert.ok(seen.size > 20, 'sanity: the table names a real number of fields');
+  for (const field of seen) {
+    assert.ok(
+      payloadHtml.includes(`id="row-payload-${field}"`),
+      `no #row-payload-${field} row for a field the recipes name`
+    );
+  }
+});
+
+test('payload row visibility is driven by the shared table, not per-row conditions', () => {
+  assert.match(payloadHtml, /RED\.mavlink\.payloadFormFields\(topic, verb, path\)/);
+  assert.match(payloadHtml, /RECIPE_ROWS\.forEach/);
+  // The boolean soup is gone: no `topic === 'camera' && verb === ...` visibility.
+  assert.doesNotMatch(payloadHtml, /var show = \{/);
+  assert.doesNotMatch(payloadHtml, /show\.stabilizeRoll/);
 });
