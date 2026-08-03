@@ -2021,6 +2021,28 @@ example prep asks for it. That is the altitude reset; force-disarm cleanup was
 removed as ineffective for this path.
 *Check:* `sitl/run-example-suite.js` (`restartVehicleFleet`), `sitl/AGENTS.md`.
 
+**The default COMMAND_INT frame is 3, and a wrong frame has no safety net.**
+*Wrong belief:* `MAV_FRAME_GLOBAL` (0) is the safest default because a wrong frame
+earns `COMMAND_UNSUPPORTED_MAV_FRAME`, which the carrier swap can recover from.
+*Fact:* both halves were wrong. ArduPilot Copter checks the frame on a COMMAND_INT
+takeoff with a **strict equality**, not a range —
+`if (packet.frame != MAV_FRAME_GLOBAL_RELATIVE_ALT) return MAV_RESULT_DENIED;`
+(`ArduCopter/GCS_MAVLink_Copter.cpp`, `handle_MAV_CMD_NAV_TAKEOFF`) — so 0 is
+refused outright. And `MAV_RESULT_DENIED` is 4, while only ack codes 7 and 8 arm
+the carrier swap (§9), so nothing retries: the command simply fails. The default
+*is* the mechanism.
+`GLOBAL_RELATIVE_ALT_INT` (6) is not a substitute despite naming the same altitude
+reference; the check is on the value and 6 fails it. The `_INT` frame variants
+describe a message's lat/lon encoding, not the operator's altitude datum.
+The value to use is not a guess: the same file shows what ArduPilot fills in when
+it upconverts a COMMAND_LONG takeoff to its internal int form
+(`mav_frame_for_command_long` → `MAV_FRAME_GLOBAL_RELATIVE_ALT`). A default answers
+that same question, so it gives the same answer. PX4 accepts either frame, which is
+why PX4-first SITL validation never caught this.
+*Check:* `lib/command/carrier.js` (`DEFAULT_FRAME`), `node --test
+test/command/carrier.test.js` — pinned to the literal `3`, because the previous
+assertion compared the constant to itself and passed at any value.
+
 **`target_system = 0` is one frame to N addresses, not one datagram.**
 *Wrong belief:* a broadcast needs no endpoint — “no endpoint is the definition of
 correct there” — so `_pump` can let it ride the configured-remote fallback.
