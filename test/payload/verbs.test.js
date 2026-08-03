@@ -8,6 +8,7 @@ const {
   PAYLOAD_VERBS,
   verbsForTopic,
   buildPayloadMessage,
+  fieldMetaFromBundle,
 } = require('../../lib/payload');
 
 /** Verbs accepted by buildPayloadMessage per topic (gimbal aim uses legacy path). */
@@ -54,5 +55,49 @@ test('every catalog verb builds without error', () => {
       }
       assert.doesNotThrow(() => buildPayloadMessage(input), `${topic}/${verb}`);
     }
+  }
+});
+
+test('shared field keys map to colliding enum families, so a stashed id must not cross verbs', () => {
+  // `mode` and `action` are one row key each, reused across verbs that resolve
+  // to different enums — and every one of those enums starts at 0. A dialog
+  // that carries a stashed id across a verb switch silently reinterprets it:
+  // gripper HOLD (2) arrives preselected as PARACHUTE_RELEASE (2).
+  //
+  // This is why `mavlink-payload.html` keys its saved-value lookup on the enum
+  // family (`savedForEnum`) rather than the field name. Any replacement dialog
+  // has to do the same; the shape of the form is not enough.
+  const metadata = require('../../lib/metadata');
+  const bundle = metadata.loadBundled('ardupilotmega');
+  const catalog = metadata.catalogFromBundle(bundle);
+
+  const sharedKeys = {
+    mode: ['camera|set-mode|', 'gimbal|set-mode|'],
+    action: ['release|gripper|', 'release|winch|', 'release|parachute|'],
+  };
+
+  for (const [key, recipeKeys] of Object.entries(sharedKeys)) {
+    const families = recipeKeys.map((recipeKey) => {
+      const meta = fieldMetaFromBundle(bundle, ...recipeKey.split('|'));
+      assert.ok(meta[key], `${recipeKey} renders a ${key} row`);
+      assert.ok(meta[key].enum, `${recipeKey} ${key} is enum-backed`);
+      return meta[key].enum;
+    });
+
+    assert.equal(
+      new Set(families).size,
+      families.length,
+      `${key} resolves to a distinct enum per verb: ${families.join(', ')}`
+    );
+
+    // The collision that makes carrying a value across them unsafe.
+    const zeroBased = families.filter((name) =>
+      (catalog.enums[name] || []).some((entry) => Number(entry.value) === 0)
+    );
+    assert.equal(
+      zeroBased.length,
+      families.length,
+      `every ${key} family starts at 0, so ids overlap: ${families.join(', ')}`
+    );
   }
 });
