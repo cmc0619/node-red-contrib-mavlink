@@ -111,8 +111,13 @@ that matters for transport code:
 
 So on a shared medium, one write serves a broadcast; on a star — where each
 vehicle dials in and owns its own return path, which is what this project's
-UDP labs use — "all channels" is every learned peer endpoint, and a single
-datagram to the configured remote reaches nobody. See `DESIGN.md` §14.
+UDP labs use — "all channels" is every learned peer endpoint.
+
+The configured remote is a legitimate *pre-peer* path and is still used when no
+peer has been heard from. What it cannot do is stand in for the fan-out: in the
+lab it reached zero vehicles, because `udpclient` vehicles send from ephemeral
+source ports and nothing listens on the configured port at all. See
+`DESIGN.md` §14.
 
 ## 8. Voice
 

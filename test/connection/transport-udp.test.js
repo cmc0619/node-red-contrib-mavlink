@@ -104,6 +104,10 @@ test('a group that cannot be joined fails the deploy loudly', async () => {
     'silently degrading to unicast would look like swarm delivery that reaches one'
   );
   assert.equal(sockets.length, 1);
+  // The bind already succeeded, and Connection.start() rethrows without closing
+  // the transport — a leaked socket would hold the port and make the *next*
+  // deploy fail with EADDRINUSE, reporting the wrong cause entirely.
+  assert.equal(sockets[0].closed, true, 'the port is released on the way out');
 });
 
 test('multicast is decided by the address, across both families', () => {
