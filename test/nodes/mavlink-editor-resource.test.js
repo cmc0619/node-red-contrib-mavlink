@@ -864,3 +864,31 @@ test('a checkbox always writes a value — unchecked is false, not missing', () 
   );
 });
 
+
+test('splitCompIdsByTopic suggests components the dialect names after the device', () => {
+  const { RED } = loadResource();
+  const { loadBundled } = require('../../lib/metadata');
+  const entries = loadBundled('ardupilotmega').enums.MAV_COMPONENT.entries;
+
+  // No table: payload topics are device names, so upstream's own naming does
+  // the work. Counts are the dialect's, not ours.
+  const counts = {};
+  for (const topic of ['camera', 'gimbal', 'winch', 'parachute', 'gripper']) {
+    counts[topic] = RED.mavlink.splitCompIdsByTopic(entries, topic).suggested.length;
+  }
+  assert.deepEqual(counts, { camera: 6, gimbal: 7, winch: 1, parachute: 1, gripper: 0 });
+
+  // Suggesting is not filtering — every component stays reachable.
+  for (const topic of ['camera', 'gripper', '']) {
+    const split = RED.mavlink.splitCompIdsByTopic(entries, topic);
+    assert.equal(
+      split.suggested.length + split.others.length,
+      entries.length,
+      `${topic || '(none)'} must not drop components`
+    );
+  }
+
+  // A topic the dialect knows nothing about suggests nothing rather than
+  // collapsing the list to zero choices.
+  assert.deepEqual(RED.mavlink.splitCompIdsByTopic(entries, 'gripper').others, entries);
+});

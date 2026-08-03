@@ -736,12 +736,25 @@
     if (opts.allowEmpty) {
       $select.append($('<option></option>').val('').text(opts.emptyLabel || '\u2014'));
     }
+    // `groupOf` puts an entry under an <optgroup>; entries it returns nothing
+    // for stay top level. Used to float the components a payload topic
+    // plausibly means above the rest of MAV_COMPONENT.
+    var groups = {};
     (entries || []).forEach(function (entry) {
       var value = String(entry[valueKey]);
       var label = entry.label || RED.mavlink.enumOptionLabel(entry);
       var $opt = $('<option></option>').val(value).text(label);
       if (entry.description) $opt.attr('title', entry.description);
-      $select.append($opt);
+      var group = typeof opts.groupOf === 'function' ? opts.groupOf(entry) : '';
+      if (!group) {
+        $select.append($opt);
+        return;
+      }
+      if (!groups[group]) {
+        groups[group] = $('<optgroup></optgroup>').attr('label', group);
+        $select.append(groups[group]);
+      }
+      groups[group].append($opt);
     });
     RED.mavlink.ensureSavedEnumOption($select, saved);
     if (saved || opts.allowEmpty) {
@@ -822,7 +835,22 @@
    * choice through the same options object.
    */
   RED.mavlink.fillCompIdSelect = function ($select, entries, opts) {
-    RED.mavlink.fillEnumSelect($select, entries, opts || {});
+    opts = opts || {};
+    if (!opts.suggest) {
+      RED.mavlink.fillEnumSelect($select, entries, opts);
+      return;
+    }
+    var split = RED.mavlink.splitCompIdsByTopic(entries, opts.suggest);
+    if (!split.suggested.length) {
+      RED.mavlink.fillEnumSelect($select, entries, opts);
+      return;
+    }
+    var suggested = split.suggested;
+    RED.mavlink.fillEnumSelect($select, suggested.concat(split.others), Object.assign({}, opts, {
+      groupOf: function (entry) {
+        return suggested.indexOf(entry) !== -1 ? 'Suggested' : 'Other components';
+      },
+    }));
   };
 
   /**
@@ -866,9 +894,38 @@
           allowEmpty: true,
           emptyLabel: opts.emptyLabel || '(profile default)',
           saved: saved,
+          suggest: opts.suggest,
         }
       );
     });
+  };
+
+  /**
+   * Split MAV_COMPONENT entries into the ones a device topic plausibly means
+   * and the rest. Payload topics are device names, so the dialect's own naming
+   * does the work: `camera` finds MAV_COMP_ID_CAMERA..CAMERA6, `gimbal` finds
+   * seven gimbals, `winch` and `parachute` one each. No table.
+   *
+   * A suggestion, never a filter — `gripper` matches nothing upstream (its
+   * command is autopilot-executed), and a smart servo is not the same thing as
+   * the autopilot that drives servo outputs. Everything stays reachable.
+   *
+   * @param {Array} entries  MAV_COMPONENT catalog entries
+   * @param {string} topic   payload topic, e.g. 'gimbal'
+   * @returns {{suggested: Array, others: Array}}
+   */
+  RED.mavlink.splitCompIdsByTopic = function (entries, topic) {
+    var all = entries || [];
+    var name = String(topic || '').toUpperCase();
+    if (!name) return { suggested: [], others: all };
+    var suggested = all.filter(function (entry) {
+      return String(entry.name || '').toUpperCase().indexOf(name) !== -1;
+    });
+    if (!suggested.length) return { suggested: [], others: all };
+    return {
+      suggested: suggested,
+      others: all.filter(function (entry) { return suggested.indexOf(entry) === -1; }),
+    };
   };
 
   /**
@@ -877,7 +934,9 @@
    * including Command).
    *
    * @param {object} node
-   * @param {{field?: string, selector?: string, emptyLabel?: string}} [opts]
+   * @param {{field?: string, selector?: string, emptyLabel?: string,
+   *   suggest?: string}} [opts]  `suggest` floats the components a payload
+   *   topic plausibly means to the top of the list.
    */
   RED.mavlink.reloadTargetCompId = function (node, opts) {
     opts = opts || {};
@@ -886,6 +945,7 @@
     RED.mavlink.reloadCompIdSelect($(selector), {
       initialSaved: node[field],
       emptyLabel: opts.emptyLabel,
+      suggest: opts.suggest,
     });
   };
 

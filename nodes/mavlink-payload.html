@@ -72,8 +72,11 @@
       RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       RED.mavlink.refreshIdentitySelect(node);
 
-      // Generated rows are destroyed on every repaint, so what is on screen is
-      // harvested before repainting and merged back when a row returns.
+      // The saved values, used to paint the verb this node was saved on.
+      // Nothing is carried across a selection change: a value typed into one
+      // verb's field has no meaning in the next verb's, and `mode` / `action`
+      // are shared keys whose enums differ per device. Pick a new verb and you
+      // get that verb's defaults.
       var stash = Object.assign({}, node.values);
       var seq = 0;
 
@@ -89,17 +92,6 @@
         return ($('#node-input-delivery').val() || 'build') === 'build';
       }
 
-      function harvest() {
-        Object.assign(stash, collectValues());
-      }
-
-      // Carrying a typed value to the next verb is useful inside a topic —
-      // servo set → repeat keeps the PWM — and safe, because no field key
-      // resolves to two enum families within one topic (pinned by
-      // test/payload/verbs.test.js). Across topics it is neither: `mode` and
-      // `action` mean different things per device and every one of those enums
-      // starts at 0, so gripper HOLD (2) would land as PARACHUTE_RELEASE (2).
-      // Changing the device starts from that device's defaults.
       function forgetValues() {
         Object.keys(stash).forEach(function (k) { delete stash[k]; });
       }
@@ -248,8 +240,16 @@
         $('#row-payload-path').toggle(sel.topic === 'gimbal' && sel.verb === 'aim');
       }
 
+      // Target compid addresses the payload device, so the topic names it:
+      // MAV_COMP_ID_CAMERA.., GIMBAL.., WINCH, PARACHUTE. Suggested, not
+      // filtered — a gripper has no component of its own and servo outputs
+      // belong to the autopilot.
+      function reloadCompIds() {
+        RED.mavlink.reloadTargetCompId(node, { suggest: selection().topic });
+      }
+
       function reselect() {
-        harvest();
+        forgetValues();
         refreshVisibility();
         refreshFields();
       }
@@ -264,10 +264,9 @@
       if (!$topic.val()) $topic.val('camera');
 
       $topic.on('change', function () {
-        forgetValues();
         RED.mavlink.refreshVerbOptions();
-        refreshVisibility();
-        refreshFields();
+        reselect();
+        reloadCompIds();
       });
       $('#node-input-verb').on('change', reselect);
       $('#node-input-path').on('change', reselect);
@@ -280,24 +279,24 @@
       $('#node-input-delivery').on('change', function () {
         refreshVisibility();
         refreshFields();
-        RED.mavlink.reloadTargetCompId(node);
+        reloadCompIds();
       });
       $('#node-input-identity').on('change', refreshVisibility);
       $('#node-input-connection').on('change', function () {
         RED.mavlink.refreshIdentitySelect(node);
         refreshVisibility();
         refreshFields();
-        RED.mavlink.reloadTargetCompId(node);
+        reloadCompIds();
       });
       $('#node-input-vehicle').on('change', function () {
         refreshFields();
-        RED.mavlink.reloadTargetCompId(node);
+        reloadCompIds();
       });
       var $dialect = $('#node-input-dialect');
       $dialect.on('change', function () {
         refreshVisibility();
         refreshFields();
-        RED.mavlink.reloadTargetCompId(node);
+        reloadCompIds();
       });
       RED.mavlink.populateDialectSelect($dialect, {
         saved: node.dialect || '',
@@ -311,7 +310,7 @@
       RED.mavlink.refreshVerbOptions({ saved: node.verb });
       refreshVisibility();
       refreshFields();
-      RED.mavlink.reloadTargetCompId(node);
+      reloadCompIds();
     }
 
     RED.nodes.registerType('mavlink-payload', {

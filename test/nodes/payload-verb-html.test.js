@@ -118,24 +118,25 @@ test('payload rows are generated, with dialect labels, units, ranges and default
   assert.match(payloadHtml, /PAYLOAD_VERBS\[sel\.topic\] \|\| \[\]\)\.length > 1/);
 });
 
-test('payload does not leak values across topics', () => {
-  // `mode` and `action` are shared row keys, and every enum they resolve to
-  // starts at 0 — gripper HOLD (2) would land as PARACHUTE_RELEASE (2). Those
-  // are the only collisions and they are all cross-topic (pinned by
-  // test/payload/verbs.test.js), so changing device forgets, and changing verb
-  // inside a device keeps.
+test('payload carries nothing across a selection change', () => {
+  // A value typed into one verb's field has no meaning in the next verb's, and
+  // `mode` / `action` are shared keys whose enums differ per device — gripper
+  // HOLD (2) would read as PARACHUTE_RELEASE (2). Pick a new topic, verb or
+  // path and you get that verb's recipe defaults.
   assert.match(payloadHtml, /function forgetValues/);
-  assert.match(payloadHtml, /\$topic\.on\('change', function \(\) \{\s*forgetValues\(\);/);
-  assert.doesNotMatch(payloadHtml, /\$\('#node-input-verb'\)\.on\('change', function[\s\S]{0,80}forgetValues/);
-
-
+  assert.match(payloadHtml, /function reselect\(\) \{\s*forgetValues\(\);/);
+  assert.match(payloadHtml, /\$\('#node-input-verb'\)\.on\('change', reselect\)/);
+  assert.match(payloadHtml, /\$\('#node-input-path'\)\.on\('change', reselect\)/);
+  assert.match(payloadHtml, /\$topic\.on\('change'[\s\S]{0,120}reselect\(\)/);
+  assert.ok(!/function harvest/.test(payloadHtml), 'nothing is harvested forward');
 });
+
 
 test('mavlink-payload target sysid/compid default to empty (inherit profile) not 1', () => {
   assert.match(payloadHtml, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
   assert.match(payloadHtml, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(payloadHtml, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(payloadHtml, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid uses shared reloadTargetCompId');
+  assert.match(payloadHtml, /RED\.mavlink\.reloadTargetCompId\(node, \{ suggest: selection\(\)\.topic \}\)/, 'compid uses shared reloadTargetCompId with the topic hint');
 });
 
 test('payload number inputs take step from the dialect increment', () => {
@@ -250,26 +251,32 @@ test('mavlink-payload fills identity select and re-fills on connection change (�
 test('mavlink-payload CompID reloads when catalog source changes', () => {
   assertChangeHandlerContains(
     payloadHtml,
+    '$topic',
+    'reloadCompIds()',
+    'topic change re-suggests components for the new device'
+  );
+  assertChangeHandlerContains(
+    payloadHtml,
     "$('#node-input-delivery')",
-    'RED.mavlink.reloadTargetCompId(node)',
+    'reloadCompIds()',
     'delivery change reloads CompID'
   );
   assertChangeHandlerContains(
     payloadHtml,
     "$('#node-input-connection')",
-    'RED.mavlink.reloadTargetCompId(node)',
+    'reloadCompIds()',
     'connection change reloads CompID'
   );
   assertChangeHandlerContains(
     payloadHtml,
     "$('#node-input-vehicle')",
-    'RED.mavlink.reloadTargetCompId(node)',
+    'reloadCompIds()',
     'vehicle change reloads CompID'
   );
   assertChangeHandlerContains(
     payloadHtml,
     '$dialect',
-    'RED.mavlink.reloadTargetCompId(node)',
+    'reloadCompIds()',
     'dialect change reloads CompID'
   );
 });
