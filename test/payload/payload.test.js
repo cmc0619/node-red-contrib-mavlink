@@ -100,7 +100,7 @@ test('gimbal manager angle aim NaN-s the rate pair when the fields are omitted e
   assert.ok(Number.isNaN(f.yaw_rate), 'omitted yaw rate must default to NaN');
 });
 
-test('servo repeat and release verbs map to their MAV_CMD command values', () => {
+test('servo repeat and gripper verbs map to their MAV_CMD command values', () => {
   const servo = buildPayloadMessage({
     carrier: 'long',
     topic: 'servo',
@@ -110,8 +110,8 @@ test('servo repeat and release verbs map to their MAV_CMD command values', () =>
   });
   const gripper = buildPayloadMessage({
     carrier: 'long',
-    topic: 'release',
-    verb: 'gripper',
+    topic: 'gripper',
+    verb: 'operate',
     target: { sysid: 1, compid: 1 },
     values: { instance: 2, action: 1 },
   });

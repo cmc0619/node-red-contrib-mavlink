@@ -1,414 +1,344 @@
 <script type="text/javascript">
-  // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
-  // Payload's mode field is `delivery` and it has no Firmware field.
-  var payloadDefaults = Object.assign(
-    {
-      name: { value: '' },
-      connection: { value: '', type: 'mavlink-connection' },
-      identity: { value: '' },
-      delivery: { value: 'build' },
-      carrier: { value: 'int' },
-      frame: { value: '' },
-      timeout: { value: 10000, validate: RED.validators.number(true) },
-      maxRetries: { value: 3, validate: RED.validators.number(true) },
-      topic: { value: 'camera' },
-      verb: { value: 'photo' },
-      path: { value: 'legacy' },
-      targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
-      targetComponent: { value: '', validate: RED.validators.number(true) },
-      /* camera photo */
-      cameraId: { value: 0, validate: RED.validators.number(true) },
-      count: { value: 1, validate: RED.validators.number(true) },
-      interval: { value: 0, validate: RED.validators.number(true) },
-      sequence: { value: 0, validate: RED.validators.number(true) },
-      /* camera start/stop video */
-      streamId: { value: 0, validate: RED.validators.number(true) },
-      statusFrequency: { value: 0, validate: RED.validators.number(true) },
-      /* camera trigger-distance */
-      distance: { value: 0, validate: RED.validators.number(true) },
-      shutter: { value: 0, validate: RED.validators.number(true) },
-      trigger: { value: 1, validate: RED.validators.number(true) },
-      /* gimbal aim */
-      pitch: { value: 0, validate: RED.validators.number(true) },
-      roll: { value: 0, validate: RED.validators.number(true) },
-      yaw: { value: 0, validate: RED.validators.number(true) },
-      /* Blank by default: the manager recipe reads a blank rate as NaN (axis
-         not rate-controlled), so an angle aim does not also command zero rate. */
-      pitchRate: { value: '', validate: RED.validators.number(true) },
-      yawRate: { value: '', validate: RED.validators.number(true) },
-      flags: { value: 0, validate: RED.validators.number(true) },
-      gimbalDeviceId: { value: 0, validate: RED.validators.number(true) },
-      /* gimbal set-mode */
-      modeValue: { value: 0, validate: RED.validators.number(true) },
-      stabilizeRoll: { value: 0, validate: RED.validators.number(true) },
-      stabilizePitch: { value: 0, validate: RED.validators.number(true) },
-      stabilizeYaw: { value: 0, validate: RED.validators.number(true) },
-      /* gimbal roi-set */
-      lat: { value: 0, validate: RED.validators.number(true) },
-      lon: { value: 0, validate: RED.validators.number(true) },
-      alt: { value: 0, validate: RED.validators.number(true) },
-      /* servo */
-      servo: { value: 0, validate: RED.validators.number(true) },
-      pwm: { value: 0, validate: RED.validators.number(true) },
-      period: { value: 0, validate: RED.validators.number(true) },
-      /* release */
-      instance: { value: 0, validate: RED.validators.number(true) },
-      actionValue: { value: 0, validate: RED.validators.number(true) },
-      length: { value: 0, validate: RED.validators.number(true) },
-      rate: { value: 0, validate: RED.validators.number(true) }
-    },
-    RED.mavlink.buildTierDialectDefaults()
-  );
+  // The form body is generated from /mavlink/payload/field-tips: labels, units,
+  // ranges, defaults, enums and bitmask-ness come from the dialect the vehicle
+  // actually speaks (§6 — no baked protocol copy in editor HTML). Topic and
+  // Verb pick the recipe; everything below them is painted from the answer.
+  (function () {
+    var payloadDefaults = Object.assign(
+      {
+        name: { value: '' },
+        connection: { value: '', type: 'mavlink-connection' },
+        identity: { value: '' },
+        delivery: { value: 'build' },
+        carrier: { value: 'int' },
+        frame: { value: '' },
+        timeout: { value: 10000, validate: RED.validators.number(true) },
+        maxRetries: { value: 3, validate: RED.validators.number(true) },
+        topic: { value: 'camera' },
+        verb: { value: 'photo' },
+        path: { value: 'legacy' },
+        targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
+        targetComponent: { value: '', validate: RED.validators.number(true) },
+        // One object, not a field per slot: rows are generated per verb, so
+        // there is no #node-input-<slot> for Node-RED to read at save time.
+        values: { value: {} }
+      },
+      RED.mavlink.buildTierDialectDefaults()
+    );
 
-  RED.nodes.registerType('mavlink-payload', {
-    category: 'mavlink',
-    color: '#ffe8d8',
-    defaults: payloadDefaults,
-    inputs: 1,
-    outputs: 2,
-    outputLabels: ['continue', 'status'],
-    icon: 'font-awesome/fa-camera',
-    label: function () { return this.name || 'mavlink payload'; },
-    oneditprepare: function () {
-      var node = this;
-      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
-      }
+    /** Fold a multi-select bitmask's selected values into one number. */
+    function maskOf(raw) {
+      var values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+      if (!values.length) return '';
+      var mask = 0n;
+      values.forEach(function (value) { mask = mask | BigInt(String(value)); });
+      return Number(mask);
+    }
 
+    /**
+     * Label for a field the dialect does not name. Command params carry a
+     * `label`; message fields (gimbal manager aiming) do not, so the recipe's
+     * own key is all there is. Spacing and case only — nothing invented.
+     */
+    function humanize(key) {
+      return key
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        .replace(/^./, function (c) { return c.toUpperCase(); });
+    }
+
+    /** Read the generated rows back into a plain values object. */
+    function collectValues() {
+      var values = {};
+      $('#payload-fields .mav-payload-field').each(function () {
+        var $input = $(this);
+        var key = $input.attr('data-field');
+        if (!key) return;
+        var kind = $input.attr('data-kind') || 'number';
+        if (kind === 'boolean') {
+          values[key] = RED.mavlink.booleanEnumValue($input);
+          return;
+        }
+        if (kind === 'bitmask') {
+          values[key] = maskOf($input.val());
+          return;
+        }
+        values[key] = $input.val();
+      });
+      return values;
+    }
+
+    function preparePayload(node) {
+      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+      RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       RED.mavlink.refreshIdentitySelect(node);
 
-      var PAYLOAD_ENUM_NAMES = [
-        'CAMERA_MODE',
-        'MAV_MOUNT_MODE',
-        'GRIPPER_ACTIONS',
-        'WINCH_ACTIONS',
-        'PARACHUTE_ACTION'
-      ];
-      var RELEASE_ACTION_ENUMS = {
-        gripper: 'GRIPPER_ACTIONS',
-        winch: 'WINCH_ACTIONS',
-        parachute: 'PARACHUTE_ACTION'
-      };
-      var MODE_ENUMS = {
-        camera: 'CAMERA_MODE',
-        gimbal: 'MAV_MOUNT_MODE'
-      };
-      var FALLBACK_ENUMS = {
-        GRIPPER_ACTIONS: [
-          { name: 'GRIPPER_ACTIONS_RELEASE', value: 0, label: 'GRIPPER_ACTIONS_RELEASE (0)' },
-          { name: 'GRIPPER_ACTIONS_GRAB', value: 1, label: 'GRIPPER_ACTIONS_GRAB (1)' },
-          { name: 'GRIPPER_ACTIONS_HOLD', value: 2, label: 'GRIPPER_ACTIONS_HOLD (2)' }
-        ],
-        WINCH_ACTIONS: [
-          { name: 'WINCH_ACTIONS_RELAXED', value: 0, label: 'WINCH_ACTIONS_RELAXED (0)' },
-          { name: 'WINCH_ACTIONS_RELATIVE_LENGTH_CONTROL', value: 1, label: 'WINCH_ACTIONS_RELATIVE_LENGTH_CONTROL (1)' },
-          { name: 'WINCH_ACTIONS_RATE_CONTROL', value: 2, label: 'WINCH_ACTIONS_RATE_CONTROL (2)' },
-          { name: 'WINCH_ACTIONS_LOCK', value: 3, label: 'WINCH_ACTIONS_LOCK (3)' },
-          { name: 'WINCH_ACTIONS_DELIVER', value: 4, label: 'WINCH_ACTIONS_DELIVER (4)' },
-          { name: 'WINCH_ACTIONS_HOLD', value: 5, label: 'WINCH_ACTIONS_HOLD (5)' },
-          { name: 'WINCH_ACTIONS_RETRACT', value: 6, label: 'WINCH_ACTIONS_RETRACT (6)' },
-          { name: 'WINCH_ACTIONS_LOAD_LINE', value: 7, label: 'WINCH_ACTIONS_LOAD_LINE (7)' },
-          { name: 'WINCH_ACTIONS_ABANDON_LINE', value: 8, label: 'WINCH_ACTIONS_ABANDON_LINE (8)' },
-          { name: 'WINCH_ACTIONS_LOAD_PAYLOAD', value: 9, label: 'WINCH_ACTIONS_LOAD_PAYLOAD (9)' }
-        ],
-        PARACHUTE_ACTION: [
-          { name: 'PARACHUTE_ACTION_DISABLE', value: 0, label: 'PARACHUTE_ACTION_DISABLE (0)' },
-          { name: 'PARACHUTE_ACTION_ENABLE', value: 1, label: 'PARACHUTE_ACTION_ENABLE (1)' },
-          { name: 'PARACHUTE_ACTION_RELEASE', value: 2, label: 'PARACHUTE_ACTION_RELEASE (2)' }
-        ]
-      };
-      var enumCatalog = { enums: {} };
-      var enumCatalogLoaded = false;
-      var enumRequestSeq = 0;
-      var tipRequestSeq = 0;
-      var paintedModeEnum = null;
-      var paintedReleaseEnum = null;
-      /**
-       * Numeric / text payload fields that take command/message param tips.
-       * Enum <select>s (modeValue, actionValue) keep fillEnumSelect titles —
-       * do not clear/overwrite them here (CodeRabbit #36).
-       */
-      var TIP_FIELDS = [
-        'cameraId', 'count', 'interval', 'sequence',
-        'streamId', 'statusFrequency',
-        'distance', 'shutter', 'trigger',
-        'pitch', 'roll', 'yaw', 'pitchRate', 'yawRate',
-        'flags', 'gimbalDeviceId',
-        'stabilizeRoll', 'stabilizePitch', 'stabilizeYaw',
-        'lat', 'lon', 'alt',
-        'servo', 'pwm', 'period',
-        'instance', 'length', 'rate'
-      ];
+      // The saved values, used to paint the verb this node was saved on.
+      // Nothing is carried across a selection change: a value typed into one
+      // verb's field has no meaning in the next verb's, and `mode` / `action`
+      // are shared keys whose enums differ per device. Pick a new verb and you
+      // get that verb's defaults.
+      var stash = Object.assign({}, node.values);
+      var seq = 0;
 
-      /**
-       * Every row a recipe can own. The union of PAYLOAD_FIELDS' values —
-       * hiding all of them before showing the wanted set is what makes the
-       * form correct without a condition per row.
-       */
-      var RECIPE_ROWS = (function () {
-        var seen = {};
-        Object.keys(RED.mavlink.PAYLOAD_FIELDS).forEach(function (key) {
-          RED.mavlink.PAYLOAD_FIELDS[key].forEach(function (f) { seen[f] = true; });
-        });
-        return Object.keys(seen);
-      }());
+      function selection() {
+        return {
+          topic: $('#node-input-topic').val() || 'camera',
+          verb: $('#node-input-verb').val() || '',
+          path: $('#node-input-path').val() || 'legacy'
+        };
+      }
 
-      function isBuildDelivery() {
+      function isBuild() {
         return ($('#node-input-delivery').val() || 'build') === 'build';
       }
 
-      function hasCatalogTarget(query) {
-        return !!(query && (query.dialect || query.vehicle));
+      function forgetValues() {
+        Object.keys(stash).forEach(function (k) { delete stash[k]; });
       }
 
-      function catalogQuery() {
-        if (RED.mavlink && typeof RED.mavlink.currentCatalogQuery === 'function') {
-          return RED.mavlink.currentCatalogQuery();
-        }
-        return {};
+      function notice(text) {
+        $('#payload-fields').empty()
+          .append($('<div class="form-row"></div>').append($('<em></em>').text(text)));
       }
 
-      function clearPayloadFieldTips() {
-        if (!(RED.mavlink && typeof RED.mavlink.applyFieldMeta === 'function')) return;
-        for (var i = 0; i < TIP_FIELDS.length; i++) {
-          RED.mavlink.applyFieldMeta('node-input-' + TIP_FIELDS[i], null);
+      /** One control, shaped by the metadata (§6): enum → select, FALSE/TRUE →
+       *  checkbox, bitmask → multi-select, everything else → number. */
+      function fieldInput(key, meta, entries) {
+        // The recipe's default is what the builder sends for a blank field, so
+        // it is what the control shows — never an empty box hiding a 1.
+        var saved = stash[key];
+        if (saved === undefined || saved === null || saved === '') {
+          saved = meta.default === null || meta.default === undefined ? '' : meta.default;
         }
-      }
-
-      /**
-       * Join PAYLOAD_RECIPES to dialect description + units via
-       * /mavlink/payload/field-tips — never bake protocol copy into HTML (§6).
-       */
-      function refreshPayloadFieldTips() {
-        if (!(RED.mavlink && typeof RED.mavlink.adminApiUrl === 'function')) return;
-        if (typeof RED.mavlink.applyFieldMeta !== 'function') return;
-        var topic = $('#node-input-topic').val() || 'camera';
-        var verb = $('#node-input-verb').val() || '';
-        var path = $('#node-input-path').val() || 'legacy';
-        if (!verb) {
-          clearPayloadFieldTips();
-          return;
-        }
-        var query = catalogQuery();
-        if (isBuildDelivery() && !hasCatalogTarget(query)) {
-          clearPayloadFieldTips();
-          return;
-        }
-        query.topic = topic;
-        query.verb = verb;
-        query.path = path;
-        var seq = ++tipRequestSeq;
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, function (data) {
-          if (seq !== tipRequestSeq) return;
-          clearPayloadFieldTips();
-          var fields = (data && data.fields) || {};
-          for (var i = 0; i < TIP_FIELDS.length; i++) {
-            var name = TIP_FIELDS[i];
-            var meta = fields[name];
-            if (meta) RED.mavlink.applyFieldMeta('node-input-' + name, meta);
+        var $input;
+        if (entries && entries.length) {
+          if (RED.mavlink.isFalseTrueEnum(entries)) {
+            $input = RED.mavlink.booleanEnumInput(entries, {
+              saved: saved,
+              title: meta.description || ''
+            });
+          } else if (meta.bitmask) {
+            $input = $('<select style="width:70%"></select>')
+              .attr('data-kind', 'bitmask')
+              .attr('multiple', 'multiple')
+              .attr('size', Math.min(6, entries.length))
+              .attr('title', RED.mavlink.bitmaskTitle(meta.description));
+            entries.forEach(function (entry) {
+              $input.append($('<option></option>')
+                .val(String(entry.value))
+                .text(entry.label || entry.name));
+            });
+            $input.val(RED.mavlink.selectedBitmaskValues(saved, entries));
+          } else {
+            // No blank option: every slot has a recipe default, so blank would
+            // only be a second spelling of it.
+            $input = $('<select style="width:70%"></select>').attr('data-kind', 'enum');
+            RED.mavlink.fillEnumSelect($input, entries, { saved: saved });
           }
+        } else {
+          $input = $('<input type="number" style="width:110px">')
+            .attr('step', meta.increment !== null && meta.increment !== undefined ? meta.increment : 'any')
+            .attr('title', meta.description || '')
+            .val(saved);
+          if (meta.minValue !== null && meta.minValue !== undefined) $input.attr('min', meta.minValue);
+          if (meta.maxValue !== null && meta.maxValue !== undefined) $input.attr('max', meta.maxValue);
+        }
+        return $input.addClass('mav-payload-field').attr('data-field', key);
+      }
+
+      function renderFields(data) {
+        var $box = $('#payload-fields').empty();
+        var fields = (data && data.fields) || {};
+        var enums = (data && data.enums) || {};
+        // The route emits the recipe's own slot order (param1..param7), which
+        // is how the protocol reads: lat, lon, alt — not alphabetically.
+        var keys = Object.keys(fields);
+        if (!keys.length) {
+          notice('No parameters for this verb.');
+          return;
+        }
+        keys.forEach(function (key) {
+          var meta = fields[key] || {};
+          var $row = $('<div class="form-row"></div>');
+          $row.append($('<label></label>').text(meta.label || humanize(key)));
+          $row.append(fieldInput(key, meta, meta.enum ? enums[meta.enum] : null));
+          if (meta.units) $row.append($('<span></span>').text(' ' + meta.units));
+          $box.append($row);
+        });
+      }
+
+      // §6 hidden is not honored: a control the operator cannot see must not
+      // put anything on the wire, so the frame row clears itself on the way
+      // out rather than saving whatever was left in it.
+      function applyFrameRow(carrierShown) {
+        var shown = carrierShown && $('#node-input-carrier').val() === 'int';
+        if (!shown) $('#node-input-frame').val('');
+        $('#row-payload-frame').toggle(shown);
+      }
+
+      // Carrier is observable only when the command carries a location; for
+      // everything else COMMAND_INT and COMMAND_LONG are byte-identical in
+      // params 1–4. Pin the hidden control to what is actually sent so §6's
+      // "hidden is not honored" holds without a runtime branch.
+      function applyCarrier(data) {
+        var sel = selection();
+        var matters = !RED.mavlink.payloadVerbIgnoresCarrier(sel.topic, sel.verb, sel.path)
+          && !!(data && data.carrierMatters);
+        if (!matters) $('#node-input-carrier').val('int');
+        $('#row-payload-carrier').toggle(matters);
+        applyFrameRow(matters);
+      }
+
+      function refreshFields() {
+        var sel = selection();
+        if (!sel.verb) {
+          notice('Pick a verb.');
+          return;
+        }
+        var query = RED.mavlink.currentCatalogQuery() || {};
+        if (isBuild() && !(query.dialect || query.vehicle)) {
+          notice('Pick a Dialect or Vehicle Profile to load this verb’s parameters.');
+          return;
+        }
+        query.topic = sel.topic;
+        query.verb = sel.verb;
+        query.path = sel.path;
+        var mine = ++seq;
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, function (data) {
+          if (mine !== seq) return;
+          renderFields(data);
+          applyCarrier(data);
         }).fail(function () {
-          if (seq !== tipRequestSeq) return;
-          clearPayloadFieldTips();
-        });
-      }
-
-      function loadPayloadEnums(cb) {
-        if (enumCatalogLoaded) {
-          cb();
-          return;
-        }
-        if (isBuildDelivery() && !hasCatalogTarget(catalogQuery())) {
-          enumCatalogLoaded = true;
-          enumCatalog = { enums: {} };
-          cb();
-          return;
-        }
-        if (!(RED.mavlink && typeof RED.mavlink.loadEnumsCatalog === 'function')) {
-          enumCatalogLoaded = true;
-          enumCatalog = { enums: {} };
-          cb();
-          return;
-        }
-        var seq = ++enumRequestSeq;
-        RED.mavlink.loadEnumsCatalog(PAYLOAD_ENUM_NAMES, function (catalog) {
-          if (seq !== enumRequestSeq) return;
-          enumCatalog = catalog || { enums: {} };
-          enumCatalogLoaded = true;
-          cb();
-        });
-      }
-
-      function enumEntries(name) {
-        var enums = (enumCatalog && enumCatalog.enums) || {};
-        return enums[name] || FALLBACK_ENUMS[name] || [];
-      }
-
-      function fillSelect($select, entries, saved, emptyLabel) {
-        RED.mavlink.fillEnumSelect($select, entries, {
-          allowEmpty: true,
-          emptyLabel: emptyLabel || '\u2014',
-          saved: saved
+          if (mine !== seq) return;
+          notice('Could not load parameters for this verb.');
         });
       }
 
       /**
-       * §6: only the fields for the selected topic/verb, delivery tier, and
-       * identity role exist. Everything else is hidden.
-       * Build → vehicle shown; connection/identity/timeout/retry hidden.
-       * Wire → reverse.
-       * Companion (wire) → target sysid hidden; compid stays visible (spec exception).
+       * §6: only the rows for the selected verb, delivery tier and identity
+       * role exist. Build → vehicle shown, connection/identity/timeout hidden;
+       * wire tiers the reverse. Companion (wire) hides target sysid; compid
+       * stays visible because it addresses a payload device, not the autopilot.
        */
       function refreshVisibility() {
-        var topic = $('#node-input-topic').val() || 'camera';
-        var verb = $('#node-input-verb').val() || '';
-        var path = $('#node-input-path').val() || 'legacy';
-        var delivery = $('#node-input-delivery').val() || 'build';
-        var isBuild = delivery === 'build';
-        var isWire = !isBuild;
-        var dialectVal = $('#node-input-dialect').val() || '';
-        // Companion hides sysid; payload compid stays visible (compidFromConfig).
-        // The helper toggles both rows itself — nothing to re-apply here.
+        var build = isBuild();
+        var isWire = !build;
         RED.mavlink.applyCompanionTargetVisibility({
-          isBuild: isBuild,
+          isBuild: build,
           identityId: isWire ? $('#node-input-identity').val() : '',
           hideCompidWhenCompanion: false,
           targetSystemRow: '#row-payload-targetSystem',
-          targetComponentRow: '#row-payload-targetComponent',
+          targetComponentRow: '#row-payload-targetComponent'
         });
         RED.mavlink.applyBuildTierRowVisibility({
-          isBuild: isBuild,
-          dialect: dialectVal,
+          isBuild: build,
+          dialect: $('#node-input-dialect').val() || '',
           dialectRow: '#row-payload-dialect',
           vehicleRow: '#row-payload-vehicle',
           connectionRow: '#row-payload-connection'
         });
-
-        // Recipe-owned rows come from the shared field table; the node-owned
-        // ones (identity, timeout, target) are delivery-tier concerns the
-        // recipes know nothing about. Hide every recipe row, then show the
-        // ones this verb actually uses — no per-row condition to keep in sync.
         $('#row-payload-identity').toggle(isWire);
         $('#row-payload-timeout').toggle(isWire);
         $('#row-payload-maxRetries').toggle(isWire);
-        $('#row-payload-path').toggle(topic === 'gimbal' && verb === 'aim');
 
-        var wanted = RED.mavlink.payloadFormFields(topic, verb, path);
-        RECIPE_ROWS.forEach(function (key) {
-          $('#row-payload-' + key).toggle(wanted.indexOf(key) !== -1);
-        });
-
-        refreshFrameRow();
-        refreshPayloadFieldTips();
-      }
-
-      function savedForEnum(painted, enumName, currentVal, nodeVal) {
-        if (!enumName) return '';
-        if (painted === null) return nodeVal;
-        if (painted === enumName) {
-          return currentVal !== undefined && currentVal !== null && currentVal !== ''
-            ? currentVal
-            : nodeVal;
-        }
-        // Enum family changed (e.g. gripper → parachute): do not leak the old id.
-        return '';
-      }
-
-      function refreshEnumControls() {
-        loadPayloadEnums(function () {
-          var topic = $('#node-input-topic').val() || 'camera';
-          var verb = $('#node-input-verb').val() || '';
-          var releaseEnum = topic === 'release' ? RELEASE_ACTION_ENUMS[verb] : null;
-          var modeEnum = verb === 'set-mode' ? MODE_ENUMS[topic] : null;
-
-          if (modeEnum) {
-            fillSelect(
-              $('#node-input-modeValue'),
-              enumEntries(modeEnum),
-              savedForEnum(paintedModeEnum, modeEnum, $('#node-input-modeValue').val(), node.modeValue),
-              '\u2014 mode \u2014'
-            );
-            paintedModeEnum = modeEnum;
-          }
-
-          if (releaseEnum) {
-            fillSelect(
-              $('#node-input-actionValue'),
-              enumEntries(releaseEnum),
-              savedForEnum(paintedReleaseEnum, releaseEnum, $('#node-input-actionValue').val(), node.actionValue),
-              '\u2014 action \u2014'
-            );
-            paintedReleaseEnum = releaseEnum;
-          }
-
-          refreshVisibility();
-        });
-      }
-
-      function resetEnumCatalog() {
-        enumCatalog = { enums: {} };
-        enumCatalogLoaded = false;
-        paintedModeEnum = null;
-        paintedReleaseEnum = null;
-      }
-
-      $('#node-input-topic').on('change', function () {
-        RED.mavlink.refreshVerbOptions();
-        refreshEnumControls();
-      });
-      $('#node-input-verb').on('change', refreshEnumControls);
-      $('#node-input-path').on('change', refreshVisibility);
-
-      // ── Carrier (§9) ─────────────────────────────────────────────────────
-      // Both rows follow the selected verb: a message-kind verb (gimbal
-      // manager aiming) ignores the carrier entirely, so neither row shows.
-      // Frame only exists on the COMMAND_INT wire message, so it also follows
-      // the carrier choice. An empty carrier keeps command-verb nodes invalid.
-      function refreshFrameRow() {
-        const ignores = RED.mavlink.payloadVerbIgnoresCarrier(
-          $('#node-input-topic').val() || 'camera',
-          $('#node-input-verb').val() || '',
-          $('#node-input-path').val() || 'legacy'
+        var sel = selection();
+        // Gripper, winch and parachute have one command each, so their verb
+        // select would offer a single choice. A control with nothing to decide
+        // is noise; the value is still stamped by refreshVerbOptions.
+        $('#row-payload-verb').toggle(
+          (RED.mavlink.PAYLOAD_VERBS[sel.topic] || []).length > 1
         );
-        const isInt = $('#node-input-carrier').val() === 'int';
-        $('#row-payload-carrier').toggle(!ignores);
-        $('#row-payload-frame').toggle(!ignores && isInt);
+        $('#row-payload-path').toggle(sel.topic === 'gimbal' && sel.verb === 'aim');
       }
-      $('#node-input-carrier').on('change', refreshFrameRow);
-      refreshFrameRow();
+
+      // Target compid addresses the payload device, so the topic names it:
+      // MAV_COMP_ID_CAMERA.., GIMBAL.., WINCH, PARACHUTE. Suggested, not
+      // filtered — a gripper has no component of its own and servo outputs
+      // belong to the autopilot.
+      function reloadCompIds() {
+        RED.mavlink.reloadTargetCompId(node, { suggest: selection().topic });
+      }
+
+      function reselect() {
+        forgetValues();
+        refreshVisibility();
+        refreshFields();
+      }
+
+      // Topics come from the shared verb table, not a baked <option> list (§6).
+      // A topic is a device: camera, gimbal, servo, gripper, winch, parachute.
+      var $topic = $('#node-input-topic');
+      Object.keys(RED.mavlink.PAYLOAD_VERBS).forEach(function (topic) {
+        $topic.append($('<option></option>').val(topic).text(humanize(topic)));
+      });
+      $topic.val(node.topic || 'camera');
+      if (!$topic.val()) $topic.val('camera');
+
+      $topic.on('change', function () {
+        RED.mavlink.refreshVerbOptions();
+        reselect();
+        reloadCompIds();
+      });
+      $('#node-input-verb').on('change', reselect);
+      $('#node-input-path').on('change', reselect);
+
+      $('#node-input-carrier').on('change', function () {
+        applyFrameRow($('#row-payload-carrier').is(':visible'));
+      });
       $('#node-input-delivery').on('change', function () {
-        resetEnumCatalog();
-        refreshEnumControls();
-        RED.mavlink.reloadTargetCompId(node);
+        refreshVisibility();
+        refreshFields();
+        reloadCompIds();
       });
       $('#node-input-identity').on('change', refreshVisibility);
       $('#node-input-connection').on('change', function () {
-        resetEnumCatalog();
         RED.mavlink.refreshIdentitySelect(node);
-        refreshEnumControls();
-        RED.mavlink.reloadTargetCompId(node);
+        refreshVisibility();
+        refreshFields();
+        reloadCompIds();
       });
       $('#node-input-vehicle').on('change', function () {
-        resetEnumCatalog();
-        refreshEnumControls();
-        RED.mavlink.reloadTargetCompId(node);
+        refreshFields();
+        reloadCompIds();
       });
       var $dialect = $('#node-input-dialect');
       $dialect.on('change', function () {
-        resetEnumCatalog();
-        refreshEnumControls();
-        RED.mavlink.reloadTargetCompId(node);
+        refreshVisibility();
+        refreshFields();
+        reloadCompIds();
       });
       RED.mavlink.populateDialectSelect($dialect, {
         saved: node.dialect || '',
         includeVehicleEscape: true
       });
+
+      node._payloadSave = function () {
+        return Object.assign({}, stash, collectValues());
+      };
+
       RED.mavlink.refreshVerbOptions({ saved: node.verb });
-      refreshEnumControls();
-      RED.mavlink.reloadTargetCompId(node);
+      refreshVisibility();
+      refreshFields();
+      reloadCompIds();
     }
-  });
+
+    RED.nodes.registerType('mavlink-payload', {
+      category: 'mavlink',
+      color: '#ffe8d8',
+      defaults: payloadDefaults,
+      inputs: 1,
+      outputs: 2,
+      outputLabels: ['continue', 'status'],
+      icon: 'font-awesome/fa-camera',
+      label: function () { return this.name || 'mavlink payload'; },
+      oneditprepare: function () { preparePayload(this); },
+      oneditsave: function () {
+        // Only the prepared closure knows whether the mounted rows belong to
+        // the current selection; without it there is nothing safe to scrape.
+        if (typeof this._payloadSave === 'function') this.values = this._payloadSave();
+      }
+    });
+  }());
 </script>
 
 <script type="text/html" data-template-name="mavlink-payload">
@@ -422,64 +352,18 @@
   <div class="form-row" id="row-payload-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="">Global, absolute alt (default)</option><option value="3">Global, relative alt</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
   <div class="form-row" id="row-payload-timeout"><label for="node-input-timeout">ACK timeout</label><input type="number" id="node-input-timeout" style="width:80px"> ms</div>
   <div class="form-row" id="row-payload-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
-  <div class="form-row"><label for="node-input-topic">Topic</label><select id="node-input-topic"><option value="camera">Camera</option><option value="gimbal">Gimbal</option><option value="servo">Servo</option><option value="release">Release</option></select></div>
-  <div class="form-row"><label for="node-input-verb">Verb</label><select id="node-input-verb"></select></div>
+  <div class="form-row"><label for="node-input-topic">Topic</label><select id="node-input-topic"></select></div>
+  <div class="form-row" id="row-payload-verb"><label for="node-input-verb">Verb</label><select id="node-input-verb"></select></div>
   <div class="form-row" id="row-payload-path"><label for="node-input-path">Gimbal path</label><select id="node-input-path"><option value="legacy">DO_MOUNT_CONTROL</option><option value="manager">GIMBAL_MANAGER_SET_PITCHYAW</option></select></div>
   <div class="form-row" id="row-payload-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
   <div class="form-row" id="row-payload-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
-  <!-- camera photo -->
-  <div class="form-row" id="row-payload-cameraId"><label for="node-input-cameraId">Camera ID</label><input type="number" id="node-input-cameraId" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-count"><label for="node-input-count">Count</label><input type="number" id="node-input-count" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-interval"><label for="node-input-interval">Interval</label><input type="number" id="node-input-interval" step="any" style="width:80px"></div>
-  <div class="form-row" id="row-payload-sequence"><label for="node-input-sequence">Sequence</label><input type="number" id="node-input-sequence" step="1" style="width:80px"></div>
-  <!-- camera start/stop video -->
-  <div class="form-row" id="row-payload-streamId"><label for="node-input-streamId">Stream ID</label><input type="number" id="node-input-streamId" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-statusFrequency"><label for="node-input-statusFrequency">Status Hz</label><input type="number" id="node-input-statusFrequency" step="any" style="width:80px"></div>
-  <!-- camera trigger-distance -->
-  <div class="form-row" id="row-payload-distance"><label for="node-input-distance">Distance</label><input type="number" id="node-input-distance" step="any" style="width:80px"></div>
-  <div class="form-row" id="row-payload-shutter"><label for="node-input-shutter">Shutter</label><input type="number" id="node-input-shutter" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-trigger"><label for="node-input-trigger">Trigger</label><input type="number" id="node-input-trigger" step="1" style="width:80px"></div>
-  <!-- camera/gimbal set-mode -->
-  <div class="form-row" id="row-payload-mode"><label for="node-input-modeValue">Mode</label><select id="node-input-modeValue" style="width:70%"></select></div>
-  <!-- gimbal set-mode stabilize -->
-  <div class="form-row" id="row-payload-stabilizeRoll"><label for="node-input-stabilizeRoll">Stabilize roll</label><input type="number" id="node-input-stabilizeRoll" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-stabilizePitch"><label for="node-input-stabilizePitch">Stabilize pitch</label><input type="number" id="node-input-stabilizePitch" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-stabilizeYaw"><label for="node-input-stabilizeYaw">Stabilize yaw</label><input type="number" id="node-input-stabilizeYaw" step="1" style="width:80px"></div>
-  <!-- gimbal roi-set -->
-  <div class="form-row" id="row-payload-lat"><label for="node-input-lat">Latitude</label><input type="number" id="node-input-lat" step="any" style="width:120px"></div>
-  <div class="form-row" id="row-payload-lon"><label for="node-input-lon">Longitude</label><input type="number" id="node-input-lon" step="any" style="width:120px"></div>
-  <div class="form-row" id="row-payload-alt"><label for="node-input-alt">Altitude</label><input type="number" id="node-input-alt" step="any" style="width:80px"></div>
-  <!-- gimbal aim (both paths) -->
-  <div class="form-row" id="row-payload-pitch"><label for="node-input-pitch">Pitch</label><input type="number" id="node-input-pitch" step="any" style="width:80px"></div>
-  <div class="form-row" id="row-payload-roll"><label for="node-input-roll">Roll</label><input type="number" id="node-input-roll" step="any" style="width:80px"></div>
-  <div class="form-row" id="row-payload-yaw"><label for="node-input-yaw">Yaw</label><input type="number" id="node-input-yaw" step="any" style="width:80px"></div>
-  <div class="form-row" id="row-payload-pitchRate"><label for="node-input-pitchRate">Pitch rate</label><input type="number" id="node-input-pitchRate" step="any" style="width:80px"></div>
-  <div class="form-row" id="row-payload-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="number" id="node-input-yawRate" step="any" style="width:80px"></div>
-  <!-- gimbal manager aim extras -->
-  <div class="form-row" id="row-payload-flags"><label for="node-input-flags">Flags</label><input type="number" id="node-input-flags" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-gimbalDeviceId"><label for="node-input-gimbalDeviceId">Gimbal device</label><input type="number" id="node-input-gimbalDeviceId" step="1" style="width:80px"></div>
-  <!-- servo -->
-  <div class="form-row" id="row-payload-servo"><label for="node-input-servo">Servo</label><input type="number" id="node-input-servo" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-pwm"><label for="node-input-pwm">PWM</label><input type="number" id="node-input-pwm" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-period"><label for="node-input-period">Period</label><input type="number" id="node-input-period" step="any" style="width:80px"></div>
-  <!-- release -->
-  <div class="form-row" id="row-payload-instance"><label for="node-input-instance">Instance</label><input type="number" id="node-input-instance" step="1" style="width:80px"></div>
-  <div class="form-row" id="row-payload-action"><label for="node-input-actionValue">Action</label><select id="node-input-actionValue" style="width:70%"></select></div>
-  <div class="form-row" id="row-payload-length"><label for="node-input-length">Length</label><input type="number" id="node-input-length" step="any" style="width:80px"></div>
-  <div class="form-row" id="row-payload-rate"><label for="node-input-rate">Rate</label><input type="number" id="node-input-rate" step="any" style="width:80px"></div>
+  <div id="payload-fields"></div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-payload">
-  <p>Controls camera, gimbal, servo, and release payload verbs. Command-backed verbs report command acknowledgement as their confirmation mode.</p>
-  <p>Topic and verb reshape the form (§6): only the parameters for the selected verb are shown.</p>
-  <p>The <b>Carrier</b> field is required for command-backed verbs: they travel as
-  <code>COMMAND_INT</code> (positional values scaled to <code>degE7</code>
-  integers, explicit <b>Frame</b>) or <code>COMMAND_LONG</code> (float params).
-  Positional values — e.g. ROI latitude / longitude — are always entered in
-  decimal degrees regardless of carrier. <code>msg.payload.carrier</code> and
-  <code>msg.payload.mavFrame</code> override per message. Message-kind verbs
-  (gimbal manager aiming) never ride a MAV_CMD — the carrier and frame rows
-  hide and no carrier is demanded for them.</p>
+  <p>Controls camera, gimbal, servo, gripper, winch and parachute payload verbs. Command-backed verbs report command acknowledgement as their confirmation mode.</p>
+  <p>A <b>Topic</b> is a device on the airframe; a <b>Verb</b> is what to do with it. Topic and verb reshape the form (§6): only the parameters for the selected verb are shown, and their labels, units, ranges, defaults and enum choices come from the Vehicle's dialect rather than this page. Gripper, winch and parachute have a single verb each, so their Verb row is hidden.</p>
+  <p>The <b>Carrier</b> field appears only when the choice is observable — a command the dialect marks as carrying a location, i.e. gimbal ROI-set. Elsewhere <code>COMMAND_INT</code> and <code>COMMAND_LONG</code> pass params 1–4 identically, so the node sends <code>COMMAND_INT</code>. Positional values — e.g. ROI latitude / longitude — are always entered in decimal degrees regardless of carrier. <code>msg.payload.carrier</code> and <code>msg.payload.mavFrame</code> override per message. Message-kind verbs (gimbal manager aiming) never ride a MAV_CMD.</p>
   <p>On <b>Build</b> delivery the Dialect picker supplies editor catalogs. Choose <i>from Vehicle Profile…</i> to use a profile dialect and target defaults; a concrete dialect has no profile target rung. On <b>Send</b> or <b>Send &amp; confirm</b> delivery a Connection is required. The Send-as identity drives target addressing: a companion identity derives the target sysid from its airframe; the target compid remains visible and config-resolved because it addresses a payload device (camera or gimbal), not the autopilot.</p>
   <p>On the <b>Send &amp; confirm</b> tier a command-backed verb waits for its <code>COMMAND_ACK</code>: output 0 (continue) fires only on <code>ACCEPTED</code>, and a <code>DENIED</code>, <code>TEMPORARILY_REJECTED</code>, or timeout halts the chain and reports on output 1.</p>
   <p>Gimbal manager aiming uses GIMBAL_MANAGER_SET_PITCHYAW and has no MAVLink acknowledgement, so it is always sent unconfirmed.</p>

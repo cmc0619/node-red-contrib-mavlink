@@ -16,7 +16,9 @@ const KNOWN_VERBS = {
   camera: ['photo', 'start-video', 'stop-video', 'set-mode', 'trigger-distance'],
   gimbal: ['aim', 'set-mode', 'roi-set', 'roi-clear'],
   servo: ['set', 'repeat'],
-  release: ['gripper', 'winch', 'parachute'],
+  gripper: ['operate'],
+  winch: ['operate'],
+  parachute: ['operate'],
 };
 
 test('PAYLOAD_TOPICS lists every payload topic', () => {
@@ -73,7 +75,7 @@ test('shared field keys map to colliding enum families, so a stashed id must not
 
   const sharedKeys = {
     mode: ['camera|set-mode|', 'gimbal|set-mode|'],
-    action: ['release|gripper|', 'release|winch|', 'release|parachute|'],
+    action: ['gripper|operate|', 'winch|operate|', 'parachute|operate|'],
   };
 
   for (const [key, recipeKeys] of Object.entries(sharedKeys)) {

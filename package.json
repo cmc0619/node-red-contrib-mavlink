@@ -77,8 +77,7 @@
       "mavlink-payload": "nodes/mavlink-payload.js",
       "mavlink-state": "nodes/mavlink-state.js",
       "mavlink-mission": "nodes/mavlink-mission.js",
-      "mavlink-fanout": "nodes/mavlink-fanout.js",
-      "mavlink-payload-tmp": "nodes/mavlink-payload-tmp.js"
+      "mavlink-fanout": "nodes/mavlink-fanout.js"
     }
   }
 }

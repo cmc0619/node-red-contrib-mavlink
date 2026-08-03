@@ -30,8 +30,10 @@ for (const name of TARGET_COMP_NODES) {
       !html.includes('type="number" id="node-input-targetComponent"'),
       'numeric targetComponent input must be gone'
     );
-    // Build-tier senders use the shared reloadTargetCompId (pin-safe + sequenced).
-    assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node\)/);
+    // Build-tier senders use the shared reloadTargetCompId (pin-safe +
+    // sequenced). Payload reaches it through reloadCompIds(), which adds the
+    // topic hint that floats the matching components to the top.
+    assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node[),]/);
     assert.match(html, /node-input-targetComponent/);
   });
 }

@@ -184,7 +184,7 @@ makes unreachable.
 | `mavlink-move` | `SET_POSITION_TARGET_*`, streamed, with TTL and stop |
 | `mavlink-mission` | download / upload / clear × mission / fence / rally |
 | `mavlink-param` | read one, set one, request list |
-| `mavlink-payload` | camera, gimbal, servo, release |
+| `mavlink-payload` | camera, gimbal, servo, gripper, winch, parachute |
 | `mavlink-state` | peer table reads, transitions, snapshots |
 | `mavlink-fanout` | group fan-out with aggregation |
 
@@ -1272,8 +1272,31 @@ Rules across all three:
 Camera: photo, start video, stop video, set mode, trigger by distance.
 Gimbal: aim, set mode, ROI set/clear — and aim has two message paths
 (`DO_MOUNT_CONTROL` vs `GIMBAL_MANAGER_SET_PITCHYAW`) chosen by gimbal generation, so that is a
-per-verb choice inside the topic, not a node-level setting. Servo: set, repeat. Release:
-gripper, winch, parachute.
+per-verb choice inside the topic, not a node-level setting. Servo: set, repeat. Gripper, winch
+and parachute: operate.
+
+A topic is a device on the airframe, always. Gripper, winch and parachute are three separate
+`MAV_TYPE`s upstream (48 / 42 / 37) with nothing grouping them, so each is its own topic rather
+than sitting under an invented "release" heading — a word `WINCH_ACTIONS` does not even contain,
+since a winch spools line back in. One command each means one verb each: `operate`, upstream's
+own word (`DO_GRIPPER` is "operate a gripper", `DO_WINCH` is "operate winch"). What the device
+does is the action enum, not the verb, so their Verb row is hidden — a control with a single
+option decides nothing.
+
+**Target compid suggests by topic.** A payload topic is a device name, so the dialect's own
+naming finds the components it plausibly means — `camera` matches `MAV_COMP_ID_CAMERA..CAMERA6`,
+`gimbal` seven gimbals, `winch` and `parachute` one each. Those float to the top under
+**Suggested**, the rest sit under **Other components**. No table: the match is a substring of the
+enum entry name. It is a suggestion and never a filter — `gripper` matches nothing upstream
+(`DO_GRIPPER` is autopilot-executed) and a smart servo is not the autopilot that drives servo
+outputs, so every component stays reachable and a topic with no matches renders as a flat list.
+
+**The Payload form is generated from the recipe plus the dialect.** `GET
+/mavlink/payload/field-tips` returns one descriptor per recipe slot — label, description, units,
+min/max, increment, enum name, bitmask-ness, and the recipe's default — plus the entries for
+every enum referenced. The dialog paints rows from that answer and keeps no field table, enum
+table or per-row markup of its own (§6). Values are saved as a single `values` object, because
+rows are generated per verb and there is no `#node-input-<slot>` to read at save time.
 
 ## 10. Fan-out
 
@@ -2405,6 +2428,32 @@ come from the dialect. Parsing prose was declined — it would fire on the 17 ca
 Adding a second entry means re-checking that the param really is two-state.
 *Check:* `rg -n 'MAGIC_BOOLEAN_PARAMS' resources/mavlink-editor.js`; open Command → Advanced →
 `MAV_CMD_COMPONENT_ARM_DISARM` and confirm `Force` is a checkbox.
+
+**The Payload form repaint is 3ms, so guarding a save against it is dead code.**
+*Wrong belief:* Node-RED writes `topic`/`verb` the moment the select changes while the rows behind
+them are a `field-tips` round trip behind, so a Done pressed in that window files the old verb's
+answers under the new selection — worth a `renderedFor` guard on `oneditsave`.
+*Fact:* measured against a live Node-RED, the route answers in **2–4ms** warm. The one cold call
+(373ms, first dialect load) lands on dialog open, not on a selection change, so by the time an
+operator touches a select the dialect is loaded. No hand beats 3ms. The code path is real and the
+consequence would be real — `action` is a shared key whose enum differs per device — but nothing
+reaches it, which makes a guard three lines and a state variable of dead code. This was written,
+measured, and reverted; reviewers re-flag it because static analysis cannot see the timing.
+*Check:* boot Node-RED, `curl -w '%{time_total}'` the field-tips route twice.
+*If you are a reviewer or an agent reading this:* the finding is correct and declined on
+reachability. Do not re-raise it without a new measurement.
+
+**Nothing carries across a payload selection change.**
+*Wrong belief:* a value typed into one verb's field should survive picking another verb, the way
+the old dialog's hidden rows did.
+*Fact:* it has no meaning there. `mode` and `action` are single row keys shared by verbs that
+resolve to different enums — `CAMERA_MODE` vs `MAV_MOUNT_MODE`, and one of `GRIPPER_ACTIONS` /
+`WINCH_ACTIONS` / `PARACHUTE_ACTION` — and every one of those enums starts at 0, so a carried id
+is silently reinterpreted: gripper `HOLD` (2) arrives as `PARACHUTE_RELEASE` (2). Changing topic,
+verb or path clears the saved values and the form paints that verb's recipe defaults. Type them
+again; there is nothing to migrate forward and no per-key family tracking to maintain.
+*Check:* `node --test test/nodes/payload-verb-html.test.js` — "payload carries nothing across a
+selection change".
 
 **A `$('#id')` that matches nothing is silent, and unit-testing the helper does not catch it.**
 *Wrong belief:* if the helper has tests and the renderer calls it, the feature works.

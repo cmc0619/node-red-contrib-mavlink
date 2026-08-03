@@ -43,8 +43,13 @@ test('mavlink-payload verb is a topic-dependent select', () => {
   );
   assert.match(
     payloadHtml,
-    /\$\('#node-input-topic'\)\.on\('change'/,
+    /\$topic\.on\('change'/,
     'topic change refreshes verb options'
+  );
+  assert.match(
+    payloadHtml,
+    /Object\.keys\(RED\.mavlink\.PAYLOAD_VERBS\)\.forEach/,
+    'topic options come from the shared table, not baked <option> markup'
   );
   assert.doesNotMatch(payloadHtml, /function refreshVerbOptions/, 'no local verb-options copy');
   assert.doesNotMatch(payloadHtml, /PAYLOAD_VERBS\s*=/, 'no local PAYLOAD_VERBS table');
@@ -80,90 +85,71 @@ test('editor catalog includes every lib/payload verb value', () => {
   }
 });
 
-test('mavlink-payload release actionValue is an enum select by verb', () => {
-  assert.match(
-    payloadHtml,
-    /<select id="node-input-actionValue"/,
-    'release actionValue must be a select'
-  );
-  assert.match(payloadHtml, /GRIPPER_ACTIONS/, 'gripper release uses GRIPPER_ACTIONS');
-  assert.match(payloadHtml, /WINCH_ACTIONS/, 'winch release uses WINCH_ACTIONS');
-  assert.match(payloadHtml, /PARACHUTE_ACTION/, 'parachute release uses PARACHUTE_ACTION');
-  assert.match(payloadHtml, /RED\.mavlink\.fillEnumSelect/, 'release options use shared select helper');
-  assert.match(payloadHtml, /row-payload-action/, 'action row is toggled for release topics');
+test('payload controls take their shape from the field metadata (§6)', () => {
+  // A two-state enum is a checkbox, a bitmask is a multi-select, any other
+  // enum is a pulldown, everything else is a number. None of it is a list of
+  // field names in here — the route says which is which.
+  assert.match(payloadHtml, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE → checkbox');
+  assert.match(payloadHtml, /meta\.bitmask/, 'bitmask → multi-select');
+  assert.match(payloadHtml, /RED\.mavlink\.fillEnumSelect/, 'other enums → pulldown');
+  assert.match(payloadHtml, /input type="number"/, 'no enum → number');
+  // The enum families the old dialog named by hand.
+  for (const name of ['GRIPPER_ACTIONS', 'WINCH_ACTIONS', 'PARACHUTE_ACTION',
+    'CAMERA_MODE', 'MAV_MOUNT_MODE']) {
+    assert.ok(!payloadHtml.includes(name), `${name} must come from the dialect, not the HTML`);
+  }
 });
 
-test('mavlink-payload exposes camera and gimbal mode enum controls', () => {
+test('payload rows are generated, with dialect labels, units, ranges and defaults', () => {
+  assert.match(payloadHtml, /function renderFields/);
+  assert.match(payloadHtml, /meta\.label \|\| humanize\(key\)/);
+  assert.match(payloadHtml, /meta\.units/);
+  assert.match(payloadHtml, /meta\.minValue/);
+  assert.match(payloadHtml, /meta\.maxValue/);
+  // Recipe order, not alphabetical: gimbal roi-set reads lat, lon, alt.
+  assert.match(payloadHtml, /var keys = Object\.keys\(fields\);/);
+  assert.ok(!/Object\.keys\(fields\)\.sort\(\)/.test(payloadHtml));
+  // A blank box that silently sends 1 is the bug this closes.
+  assert.match(payloadHtml, /saved = meta\.default === null/, 'blank falls back to the recipe default');
   assert.match(
     payloadHtml,
-    /<select id="node-input-modeValue"/,
-    'modeValue must be a select so camera/gimbal set-mode is not hidden numeric state'
-  );
-  assert.match(payloadHtml, /CAMERA_MODE/, 'camera set-mode uses CAMERA_MODE');
-  assert.match(payloadHtml, /MAV_MOUNT_MODE/, 'gimbal set-mode uses MAV_MOUNT_MODE');
-  assert.match(payloadHtml, /row-payload-mode/, 'mode row is shown only for set-mode verbs');
-});
-
-test('mavlink-payload shows one labeled field row per parameter (§6)', () => {
-  assert.match(payloadHtml, /id="row-payload-count"/);
-  assert.match(payloadHtml, /id="row-payload-interval"/);
-  assert.match(payloadHtml, /id="row-payload-pitch"/);
-  assert.match(payloadHtml, /id="row-payload-roll"/);
-  assert.match(payloadHtml, /id="row-payload-yaw"/);
-  assert.match(payloadHtml, /id="row-payload-servo"/);
-  assert.match(payloadHtml, /id="row-payload-pwm"/);
-  assert.match(payloadHtml, /function refreshVisibility/, 'topic/verb drive row visibility');
-  assert.match(
-    payloadHtml,
-    /topic === 'gimbal' && verb === 'aim'/,
+    /sel\.topic === 'gimbal' && sel\.verb === 'aim'/,
     'gimbal path is limited to aim'
   );
-  assert.ok(
-    !payloadHtml.includes('label for="node-input-count">Camera</label>'),
-    'topic names must not label unrelated parameter rows'
-  );
-  assert.ok(
-    !payloadHtml.includes('placeholder="count"'),
-    'crammed dual-input rows with placeholders are gone'
-  );
+  // Gripper, winch and parachute each have one verb; the select would be a
+  // control with nothing to decide.
+  assert.match(payloadHtml, /PAYLOAD_VERBS\[sel\.topic\] \|\| \[\]\)\.length > 1/);
 });
 
-test('mavlink-payload does not leak action ids across release enum families', () => {
-  assert.match(payloadHtml, /function savedForEnum/, 'enum family switches reset saved values');
-  assert.match(
-    payloadHtml,
-    /Enum family changed/,
-    'gripper → parachute must not keep the old numeric action id'
-  );
+test('payload carries nothing across a selection change', () => {
+  // A value typed into one verb's field has no meaning in the next verb's, and
+  // `mode` / `action` are shared keys whose enums differ per device — gripper
+  // HOLD (2) would read as PARACHUTE_RELEASE (2). Pick a new topic, verb or
+  // path and you get that verb's recipe defaults.
+  assert.match(payloadHtml, /function forgetValues/);
+  assert.match(payloadHtml, /function reselect\(\) \{\s*forgetValues\(\);/);
+  assert.match(payloadHtml, /\$\('#node-input-verb'\)\.on\('change', reselect\)/);
+  assert.match(payloadHtml, /\$\('#node-input-path'\)\.on\('change', reselect\)/);
+  assert.match(payloadHtml, /\$topic\.on\('change'[\s\S]{0,120}reselect\(\)/);
+  assert.ok(!/function harvest/.test(payloadHtml), 'nothing is harvested forward');
 });
+
 
 test('mavlink-payload target sysid/compid default to empty (inherit profile) not 1', () => {
   assert.match(payloadHtml, /targetSystem:\s*\{\s*value:\s*''/, 'sysid default is empty string');
   assert.match(payloadHtml, /targetComponent:\s*\{\s*value:\s*''/, 'compid default is empty string');
   assert.match(payloadHtml, /placeholder="[^"]*profile default[^"]*"/, 'sysid has profile default placeholder');
-  assert.match(payloadHtml, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid uses shared reloadTargetCompId');
+  assert.match(payloadHtml, /RED\.mavlink\.reloadTargetCompId\(node, \{ suggest: selection\(\)\.topic \}\)/, 'compid uses shared reloadTargetCompId with the topic hint');
 });
 
-test('mavlink-payload fractional params use step=any', () => {
-  for (const id of [
-    'node-input-interval',
-    'node-input-distance',
-    'node-input-pitch',
-    'node-input-roll',
-    'node-input-yaw',
-    'node-input-pitchRate',
-    'node-input-yawRate',
-    'node-input-period',
-    'node-input-length',
-    'node-input-rate',
-  ]) {
-    assert.match(
-      payloadHtml,
-      new RegExp(`id="${id}"[^>]*step="any"|step="any"[^>]*id="${id}"`),
-      `${id} must accept fractional values`
-    );
-  }
+test('payload number inputs take step from the dialect increment', () => {
+  assert.match(
+    payloadHtml,
+    /\.attr\('step', meta\.increment !== null && meta\.increment !== undefined \? meta\.increment : 'any'\)/,
+    'increment when the dialect gives one, otherwise fractional-safe'
+  );
 });
+
 
 test('mavlink-payload has vehicle and identity defaults for role × tier matrix (§6)', () => {
   // The vehicle (mavlink-vehicle) descriptor is contributed by the shared
@@ -237,18 +223,14 @@ test('mavlink-payload Build dialect picker keeps empty invalid and offers Vehicl
 });
 
 test('mavlink-payload Build catalog calls do not invent a dialect while dialect is empty', () => {
-  assert.match(payloadHtml, /function hasCatalogTarget/, 'catalog target helper must exist');
   assert.match(
     payloadHtml,
-    /if \(isBuildDelivery\(\) && !hasCatalogTarget\(query\)\)/,
-    'Build with empty dialect must skip catalog calls'
+    /if \(isBuild\(\) && !\(query\.dialect \|\| query\.vehicle\)\)/,
+    'Build with empty dialect must skip the field-tips call'
   );
-  const catalogBlock = payloadHtml.slice(
-    payloadHtml.indexOf('function catalogQuery'),
-    payloadHtml.indexOf('function loadPayloadEnums')
-  );
-  assert.doesNotMatch(catalogBlock, /ardupilotmega/, 'payload editor must not hardcode an invented dialect');
+  assert.doesNotMatch(payloadHtml, /ardupilotmega/, 'payload editor must not hardcode an invented dialect');
 });
+
 
 test('mavlink-payload fills identity select and re-fills on connection change (§6)', () => {
   assert.match(
@@ -272,26 +254,32 @@ test('mavlink-payload fills identity select and re-fills on connection change (�
 test('mavlink-payload CompID reloads when catalog source changes', () => {
   assertChangeHandlerContains(
     payloadHtml,
+    '$topic',
+    'reloadCompIds()',
+    'topic change re-suggests components for the new device'
+  );
+  assertChangeHandlerContains(
+    payloadHtml,
     "$('#node-input-delivery')",
-    'RED.mavlink.reloadTargetCompId(node)',
+    'reloadCompIds()',
     'delivery change reloads CompID'
   );
   assertChangeHandlerContains(
     payloadHtml,
     "$('#node-input-connection')",
-    'RED.mavlink.reloadTargetCompId(node)',
+    'reloadCompIds()',
     'connection change reloads CompID'
   );
   assertChangeHandlerContains(
     payloadHtml,
     "$('#node-input-vehicle')",
-    'RED.mavlink.reloadTargetCompId(node)',
+    'reloadCompIds()',
     'vehicle change reloads CompID'
   );
   assertChangeHandlerContains(
     payloadHtml,
     '$dialect',
-    'RED.mavlink.reloadTargetCompId(node)',
+    'reloadCompIds()',
     'dialect change reloads CompID'
   );
 });
@@ -316,41 +304,19 @@ test('payload frame row binds to the frame property and follows the INT carrier 
     'frame is declared in defaults (blank = builder default GLOBAL) so the selection persists'
   );
   assert.match(payloadHtml, /row-payload-frame/, 'frame row id must exist');
-  assert.match(
-    payloadHtml,
-    /\$\('#node-input-carrier'\)\.on\('change', refreshFrameRow\);/,
-    'carrier change re-evaluates the frame row'
+  assert.match(payloadHtml, /\$\('#node-input-carrier'\)\.on\('change'/, 'carrier change re-evaluates the frame row');
+  // §6 hidden is not honored, both halves: carrier is pinned to what is sent
+  // when its row hides, and frame clears rather than saving a stale value the
+  // operator can no longer see. One helper, so the two cannot drift.
+  assert.match(payloadHtml, /data\.carrierMatters/);
+  assert.match(payloadHtml, /if \(!matters\) \$\('#node-input-carrier'\)\.val\('int'\);/);
+  assert.match(payloadHtml, /if \(!shown\) \$\('#node-input-frame'\)\.val\(''\);/);
+  assert.equal(
+    (payloadHtml.match(/#row-payload-frame'\)\.toggle/g) || []).length,
+    1,
+    'the frame-row rule is written once'
   );
 });
 
 
-test('every field the recipe table can name has a row to render into', () => {
-  // Replaces six regex-on-source tests that asserted the shape of a `show` map
-  // that no longer exists. This catches the failure that actually matters: a
-  // table entry with no matching row renders nothing, silently.
-  const { payloadFormFields, PAYLOAD_TOPICS, verbsForTopic } = require('../../lib/payload');
-  const seen = new Set();
-  for (const topic of PAYLOAD_TOPICS) {
-    for (const verb of verbsForTopic(topic)) {
-      const paths = topic === 'gimbal' && verb.value === 'aim' ? ['legacy', 'manager'] : [''];
-      for (const path of paths) {
-        for (const field of payloadFormFields(topic, verb.value, path)) seen.add(field);
-      }
-    }
-  }
-  assert.ok(seen.size > 20, 'sanity: the table names a real number of fields');
-  for (const field of seen) {
-    assert.ok(
-      payloadHtml.includes(`id="row-payload-${field}"`),
-      `no #row-payload-${field} row for a field the recipes name`
-    );
-  }
-});
 
-test('payload row visibility is driven by the shared table, not per-row conditions', () => {
-  assert.match(payloadHtml, /RED\.mavlink\.payloadFormFields\(topic, verb, path\)/);
-  assert.match(payloadHtml, /RECIPE_ROWS\.forEach/);
-  // The boolean soup is gone: no `topic === 'camera' && verb === ...` visibility.
-  assert.doesNotMatch(payloadHtml, /var show = \{/);
-  assert.doesNotMatch(payloadHtml, /show\.stabilizeRoll/);
-});

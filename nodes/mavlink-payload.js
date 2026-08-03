@@ -45,19 +45,7 @@ function enumsForFields(bundle, fields) {
   return out;
 }
 
-/**
- * @param {object} RED
- * @param {object} [opts]
- * @param {string} [opts.type='mavlink-payload']  registered type name
- * @param {function} [opts.readValues]  config → recipe values; defaults to the
- *   one-field-per-slot reader. The `-tmp` editors store a single `values`
- *   object instead, because their rows are generated per verb rather than
- *   hidden, so there is no `#node-input-<slot>` to read at save time.
- */
-module.exports = function registerMavlinkPayload(RED, opts = {}) {
-  const typeName = opts.type || 'mavlink-payload';
-  const readValues = opts.readValues || valuesFrom;
-
+module.exports = function registerMavlinkPayload(RED) {
   function MavlinkPayloadNode(config) {
     RED.nodes.createNode(this, config);
     const node = this;
@@ -101,7 +89,7 @@ module.exports = function registerMavlinkPayload(RED, opts = {}) {
           verb: payload.verb || config.verb,
           path: payload.path || config.path,
           target,
-          values: payload.values || readValues(config),
+          values: payload.values || config.values || {},
           // Required for command-backed verbs (§9): the builder throws when a
           // MAV_CMD verb arrives without a carrier choice.
           carrier: payload.carrier || config.carrier,
@@ -115,7 +103,7 @@ module.exports = function registerMavlinkPayload(RED, opts = {}) {
         }
 
         if (!connectionNode) {
-          throw new Error(`${typeName} requires a Connection`);
+          throw new Error('mavlink-payload requires a Connection');
         }
         // Confirm tier for a command-backed verb: send the COMMAND_LONG and
         // wait for its COMMAND_ACK so a later DENIED / TEMPORARILY_REJECTED /
@@ -178,8 +166,7 @@ module.exports = function registerMavlinkPayload(RED, opts = {}) {
     });
   }
 
-  // The `-tmp` editors call the same route; only the shipped node serves it.
-  if (!opts.type && RED.httpAdmin && RED.auth) {
+  if (RED.httpAdmin && RED.auth) {
     const { api: metadataApi } = loadMetadata('mavlink-payload', RED);
 
     /**
@@ -269,7 +256,7 @@ module.exports = function registerMavlinkPayload(RED, opts = {}) {
 
   }
 
-  RED.nodes.registerType(typeName, MavlinkPayloadNode);
+  RED.nodes.registerType('mavlink-payload', MavlinkPayloadNode);
 };
 
 function completeAck(node, send, built, outcome) {
@@ -299,50 +286,6 @@ function failAck(node, send, built, outcome, msg, done) {
     }),
   ]);
   done(new Error(`mavlink-payload: ${built.message.name} ${outcome.result}`));
-}
-
-function valuesFrom(config) {
-  return {
-    /* camera photo */
-    cameraId: config.cameraId,
-    count: config.count,
-    interval: config.interval,
-    sequence: config.sequence,
-    /* camera start/stop video */
-    streamId: config.streamId,
-    statusFrequency: config.statusFrequency,
-    /* camera trigger-distance */
-    distance: config.distance,
-    shutter: config.shutter,
-    trigger: config.trigger,
-    /* camera/gimbal set-mode */
-    mode: config.modeValue,
-    /* gimbal set-mode stabilize */
-    stabilizeRoll: config.stabilizeRoll,
-    stabilizePitch: config.stabilizePitch,
-    stabilizeYaw: config.stabilizeYaw,
-    /* gimbal roi-set */
-    lat: config.lat,
-    lon: config.lon,
-    alt: config.alt,
-    /* gimbal aim */
-    pitch: config.pitch,
-    roll: config.roll,
-    yaw: config.yaw,
-    pitchRate: config.pitchRate,
-    yawRate: config.yawRate,
-    flags: config.flags,
-    gimbalDeviceId: config.gimbalDeviceId,
-    /* servo */
-    servo: config.servo,
-    pwm: config.pwm,
-    period: config.period,
-    /* release */
-    instance: config.instance,
-    action: config.actionValue,
-    length: config.length,
-    rate: config.rate,
-  };
 }
 
 function completeBuild(node, send, built) {
