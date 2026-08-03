@@ -44,6 +44,7 @@ const {
   buildCommandLong,
   buildCommandInt,
   CARRIER,
+  carrierWantedBy,
   intCoordKinds,
   resolveFrame,
   DEFAULT_TIMEOUT_MS,
@@ -100,18 +101,6 @@ function resolveCarrier(config) {
   return null;
 }
 
-/**
- * Given a wrong-carrier MAV_RESULT, return the carrier the vehicle is asking
- * for, or null when the code is not a carrier-mismatch (§9).
- *
- * @param {number} resultCode
- * @returns {'long'|'int'|null}
- */
-function carrierWantedBy(resultCode) {
-  if (resultCode === MAV_RESULT.COMMAND_INT_ONLY) return CARRIER.INT;
-  if (resultCode === MAV_RESULT.COMMAND_LONG_ONLY) return CARRIER.LONG;
-  return null;
-}
 
 module.exports = function registerMavlinkCommand(RED) {
   function MavlinkCommandNode(config) {
@@ -366,8 +355,8 @@ module.exports = function registerMavlinkCommand(RED) {
             connNode.send(buildCarrierMessage(carrier, confirmation), { band: BAND.CONTROL, target, identityId });
           },
           commandId,
-          targetSysid: target.sysid,
-          targetCompid: target.compid,
+          targetSystem: target.sysid,
+          targetComponent: target.compid,
           timeoutMs,
           maxRetries: noAutoRetry ? 0 : maxRetries,
           noAutoRetry,

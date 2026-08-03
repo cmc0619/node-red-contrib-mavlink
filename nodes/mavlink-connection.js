@@ -69,8 +69,8 @@ module.exports = function registerMavlinkConnection(RED) {
     // knows bundled dialects and would break custom XML profiles.
     node.vehicle = Object.freeze({
       id: config.vehicle,
-      targetSysid: defaults.defaultTargetSystem,
-      targetCompid: defaults.defaultTargetComponent,
+      targetSystem: defaults.defaultTargetSystem,
+      targetComponent: defaults.defaultTargetComponent,
       firmware: defaults.firmware,
       dialect: defaults.dialect,
       autopilot: autopilotForFirmware(defaults.firmware),
@@ -97,8 +97,8 @@ module.exports = function registerMavlinkConnection(RED) {
       disabled: false,
       transport: buildTransportConfig(config),
       vehicle: {
-        targetSysid: defaults.defaultTargetSystem,
-        targetCompid: defaults.defaultTargetComponent,
+        targetSystem: defaults.defaultTargetSystem,
+        targetComponent: defaults.defaultTargetComponent,
         bundle,
         firmware: defaults.firmware,
         autopilot: autopilotForFirmware(defaults.firmware),

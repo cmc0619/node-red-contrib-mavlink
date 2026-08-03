@@ -46,9 +46,9 @@ test('resolveDeliveryContext Param buildFirmwareProfile supplies firmware', () =
 });
 
 test('resolveDeliveryContext wire tiers use only the deploy-bound Connection', () => {
-  const bound = { vehicle: { targetSysid: 3, targetCompid: 1 } };
+  const bound = { vehicle: { targetSystem: 3, targetComponent: 1 } };
   const RED = redStub({
-    conn: { vehicle: { targetSysid: 99, targetCompid: 99 } },
+    conn: { vehicle: { targetSystem: 99, targetComponent: 99 } },
   });
   const ctx = resolveDeliveryContext(RED, {
     delivery: 'send',
@@ -67,7 +67,7 @@ test('resolveDeliveryContext wire tiers use only the deploy-bound Connection', (
 
 test('resolveDeliveryContext does not re-resolve a missing deploy-time Connection', () => {
   const RED = redStub({
-    conn: { vehicle: { targetSysid: 1, targetCompid: 1 } },
+    conn: { vehicle: { targetSystem: 1, targetComponent: 1 } },
   });
   const ctx = resolveDeliveryContext(RED, {
     delivery: 'send',

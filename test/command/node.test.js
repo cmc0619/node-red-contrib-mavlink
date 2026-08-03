@@ -174,7 +174,7 @@ test('two consecutive INT inputs both fail loud when dialect lookup fails', asyn
       throw new Error('temporary dialect failure');
     },
   };
-  const conn = connStub({ id: 'vehicle', targetSysid: 1, targetCompid: 1 });
+  const conn = connStub({ id: 'vehicle', targetSystem: 1, targetComponent: 1 });
   const RED = redStub({ conn, vehicle });
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
@@ -240,7 +240,7 @@ test('two consecutive INT inputs both fail loud when dialect lookup fails', asyn
 });
 
 test('resolveTarget: wire tier empty config inherits Vehicle Profile target from connNode.vehicle', async () => {
-  const conn = connStub({ targetSysid: 42, targetCompid: 191 });
+  const conn = connStub({ targetSystem: 42, targetComponent: 191 });
   const RED = redStub({ conn });
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
@@ -264,7 +264,7 @@ test('resolveTarget: wire tier empty config inherits Vehicle Profile target from
 });
 
 test('resolveTarget: explicit config value wins over Vehicle Profile', async () => {
-  const conn = connStub({ targetSysid: 42, targetCompid: 191 });
+  const conn = connStub({ targetSystem: 42, targetComponent: 191 });
   const RED = redStub({ conn });
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
@@ -315,7 +315,7 @@ test('resolveTarget: companion identity derives {airframe sysid, 1} as target', 
     derivesSysidFromVehicle: true,
     getIdentity: () => ({ sysid: 42, compid: 191 }),
   };
-  const conn = connStub({ targetSysid: 99, targetCompid: 99 });
+  const conn = connStub({ targetSystem: 99, targetComponent: 99 });
   const RED = redStub({ conn, identity: identityStub });
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
@@ -344,7 +344,7 @@ test('resolveTarget: msg.payload.target overrides companion derivation', async (
     derivesSysidFromVehicle: true,
     getIdentity: () => ({ sysid: 42, compid: 191 }),
   };
-  const conn = connStub({ targetSysid: 99, targetCompid: 99 });
+  const conn = connStub({ targetSystem: 99, targetComponent: 99 });
   const RED = redStub({ conn, identity: identityStub });
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
@@ -368,7 +368,7 @@ test('resolveTarget: msg.payload.target overrides companion derivation', async (
 });
 
 test('resolveTarget: config 0 is broadcast and survives (new semantics)', async () => {
-  const conn = connStub({ targetSysid: 42, targetCompid: 191 });
+  const conn = connStub({ targetSystem: 42, targetComponent: 191 });
   const RED = redStub({ conn });
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
@@ -452,7 +452,7 @@ test('ack-matcher pin: companion target used for COMMAND_ACK matching; ack from 
     derivesSysidFromVehicle: true,
     getIdentity: () => ({ sysid: 42, compid: 191 }),
   };
-  const conn = connStubWithInject({ targetSysid: 1, targetCompid: 1 });
+  const conn = connStubWithInject({ targetSystem: 1, targetComponent: 1 });
   const RED = redStub({ conn, identity: identityStub });
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
@@ -589,7 +589,7 @@ function connStubWithInject(vehicleOverride) {
     peerTable: null,
     vehicle: vehicleOverride !== undefined
       ? vehicleOverride
-      : { targetSysid: 1, targetCompid: 1 },
+      : { targetSystem: 1, targetComponent: 1 },
     send(message, opts) { sent.push({ message, opts }); },
     subscribe(filter, handler) {
       const entry = { filter, handler };
@@ -615,7 +615,7 @@ function connStub(vehicleOverride) {
     peerTable: null,
     vehicle: vehicleOverride !== undefined
       ? vehicleOverride
-      : { targetSysid: 1, targetCompid: 1 },
+      : { targetSystem: 1, targetComponent: 1 },
     send(message, opts) { sent.push({ message, opts }); },
     subscribe(filter, handler) {
       const entry = { filter, handler };

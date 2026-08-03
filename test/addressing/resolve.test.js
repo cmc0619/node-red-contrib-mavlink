@@ -9,7 +9,7 @@ const {
   firstDefined,
 } = require('../../lib/addressing');
 
-const PROFILE = { targetSysid: 42, targetCompid: 191, firmware: 'px4' };
+const PROFILE = { targetSystem: 42, targetComponent: 191, firmware: 'px4' };
 
 function companionIdentity(sysid) {
   return {
@@ -111,6 +111,6 @@ test('profileFromVehicleNode maps defaults and firmware, null-safe', () => {
   assert.equal(profileFromVehicleNode(null), null);
   assert.deepEqual(
     profileFromVehicleNode({ defaultTargetSystem: 3, defaultTargetComponent: 4, firmware: 'px4' }),
-    { targetSysid: 3, targetCompid: 4, firmware: 'px4' }
+    { targetSystem: 3, targetComponent: 4, firmware: 'px4' }
   );
 });

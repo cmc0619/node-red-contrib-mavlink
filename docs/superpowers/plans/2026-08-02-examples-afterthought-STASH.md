@@ -7,7 +7,7 @@
 ## Why parked
 
 Example JSON churn drowns the real diff (shared helpers, strip leftover
-`targetSysid` readers). Necessary later for SITL / demo flows; not part of
+`targetSysid` / `targetCompid` readers). Necessary later for SITL / demo flows; not part of
 proving the dedupe.
 
 ## Follow-up checklist (when unstashed)

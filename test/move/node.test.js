@@ -106,7 +106,7 @@ test('mavlink-move config 0 (broadcast) wins over Vehicle Profile', () => {
 test('mavlink-move companion identity derives sysid from airframe and pins compid to 1', () => {
   const sends = [];
   const conn = {
-    vehicle: { targetSysid: 10, targetCompid: 2 },
+    vehicle: { targetSystem: 10, targetComponent: 2 },
     send(message, opts) { sends.push({ message, opts }); },
   };
   const comp1 = {
@@ -135,7 +135,7 @@ test('mavlink-move companion identity derives sysid from airframe and pins compi
 test('mavlink-move reuses its deploy-resolved Connection during input delivery', () => {
   const sends = [];
   const conn = {
-    vehicle: { targetSysid: 10, targetCompid: 2 },
+    vehicle: { targetSystem: 10, targetComponent: 2 },
     send(message, opts) { sends.push({ message, opts }); },
   };
   const RED = redStub({ conn });
@@ -191,7 +191,7 @@ test('mavlink-move missing Connection keeps output 1 and done(err) failure deliv
 test('mavlink-move payload.target beats companion derivation', () => {
   const sends = [];
   const conn = {
-    vehicle: { targetSysid: 10, targetCompid: 2 },
+    vehicle: { targetSystem: 10, targetComponent: 2 },
     send(message, opts) { sends.push({ message, opts }); },
   };
   const comp1 = {
@@ -249,7 +249,7 @@ test('mavlink-move build tier inherits from config.vehicle stub only with Vehicl
 
 test('mavlink-move build tier ignores connection vehicle when vehicle field is set', () => {
   const veh1 = { defaultTargetSystem: 77, defaultTargetComponent: 78 };
-  const conn = { vehicle: { targetSysid: 99, targetCompid: 99 } };
+  const conn = { vehicle: { targetSystem: 99, targetComponent: 99 } };
   const RED = redStub({ veh1, conn });
   require('../../nodes/mavlink-move')(RED);
   const Node = RED.nodes.types['mavlink-move'];

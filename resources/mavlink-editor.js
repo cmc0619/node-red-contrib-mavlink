@@ -378,7 +378,7 @@
 
   /**
    * Config-node id from an editor property or a deployed Connection's frozen
-   * `vehicle` snapshot (`{ id, targetSysid, … }`).
+   * `vehicle` snapshot (`{ id, targetSystem, … }`).
    *
    * @param {string|{id?: string}|null|undefined} ref
    * @returns {string}

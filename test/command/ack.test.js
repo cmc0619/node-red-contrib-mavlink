@@ -49,7 +49,7 @@ function makeWaiter(conn, opts) {
 
 test('ack from a different sysid does not settle the transaction; the addressed one does', async () => {
   const conn = stubConn();
-  const waiter = makeWaiter(conn, { commandId: 400, targetSysid: 2, targetCompid: 1 });
+  const waiter = makeWaiter(conn, { commandId: 400, targetSystem: 2, targetComponent: 1 });
   const p = waiter.start();
 
   // Another vehicle (sysid 1) acks DENIED — must be ignored (not settle).
@@ -64,7 +64,7 @@ test('ack from a different sysid does not settle the transaction; the addressed 
 
 test('ack for a different command id is ignored', async () => {
   const conn = stubConn();
-  const waiter = makeWaiter(conn, { commandId: 400, targetSysid: 1, targetCompid: 1 });
+  const waiter = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 });
   const p = waiter.start();
 
   conn.injectAck({ command: 22, result: MAV_RESULT.ACCEPTED }, 1, 1);
@@ -76,7 +76,7 @@ test('ack for a different command id is ignored', async () => {
 
 test('ack from a different component is ignored when a specific compid is addressed', async () => {
   const conn = stubConn();
-  const waiter = makeWaiter(conn, { commandId: 176, targetSysid: 3, targetCompid: 1 });
+  const waiter = makeWaiter(conn, { commandId: 176, targetSystem: 3, targetComponent: 1 });
   const p = waiter.start();
 
   // Camera component (100) on the same system replies DENIED — wrong component.
@@ -90,7 +90,7 @@ test('ack from a different component is ignored when a specific compid is addres
 
 test('broadcast target sysid 0 accepts an ack from any source system', async () => {
   const conn = stubConn();
-  const waiter = makeWaiter(conn, { commandId: 400, targetSysid: 0, targetCompid: 0 });
+  const waiter = makeWaiter(conn, { commandId: 400, targetSystem: 0, targetComponent: 0 });
   const p = waiter.start();
 
   conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 7, 42);

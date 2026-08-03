@@ -193,7 +193,7 @@ test('Connection pump marks each dequeued band immediately before transport send
         remoteAddress: '10.0.0.9',
         remotePort: 14555,
       },
-      vehicle: { targetSysid: 1, targetCompid: 1, autopilot: 3 },
+      vehicle: { targetSystem: 1, targetComponent: 1, autopilot: 3 },
       identities: [GCS],
       defaultIdentityId: 'gcs',
       boundIdentityIds: ['gcs'],

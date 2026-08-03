@@ -100,17 +100,24 @@ test('payload controls take their shape from the field metadata (§6)', () => {
   }
 });
 
-test('payload rows are generated, with dialect labels, units, ranges and defaults', () => {
+test('payload rows are generated, with dialect labels, units and real ceilings', () => {
   assert.match(payloadHtml, /function renderFields/);
   assert.match(payloadHtml, /meta\.label \|\| humanize\(key\)/);
   assert.match(payloadHtml, /meta\.units/);
-  assert.match(payloadHtml, /meta\.minValue/);
-  assert.match(payloadHtml, /meta\.maxValue/);
+  assert.match(payloadHtml, /meta\.maxValue/, 'a real uint8 ceiling still constrains the box');
+  // Upstream minimums are advisory and sometimes contradict their own prose —
+  // IMAGE_START_CAPTURE sequence is min=1 with a description telling you to set
+  // 0 — and three recipe defaults sit below their param's stated min. The
+  // editor does not assert them.
+  assert.ok(!/meta\.minValue/.test(payloadHtml), 'no min attribute on generated numbers');
   // Recipe order, not alphabetical: gimbal roi-set reads lat, lon, alt.
   assert.match(payloadHtml, /var keys = Object\.keys\(fields\);/);
   assert.ok(!/Object\.keys\(fields\)\.sort\(\)/.test(payloadHtml));
-  // A blank box that silently sends 1 is the bug this closes.
-  assert.match(payloadHtml, /saved = meta\.default === null/, 'blank falls back to the recipe default');
+  // Numbers stay blank when unset; a pulldown has to land on something, so it
+  // takes the recipe default. Either way buildPayloadMessage resolves a blank
+  // slot to that same default, so the wire is identical.
+  assert.match(payloadHtml, /\.val\(blank \? '' : stashed\)/, 'numbers stay blank when unset');
+  assert.match(payloadHtml, /var saved = blank[\s\S]{0,140}meta\.default/, 'enums take the recipe default');
   assert.match(
     payloadHtml,
     /sel\.topic === 'gimbal' && sel\.verb === 'aim'/,
