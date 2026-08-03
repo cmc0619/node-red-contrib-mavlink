@@ -118,13 +118,26 @@ test('payload rows are generated, with dialect labels, units, ranges and default
   assert.match(payloadHtml, /PAYLOAD_VERBS\[sel\.topic\] \|\| \[\]\)\.length > 1/);
 });
 
-test('payload does not leak action ids across colliding enum families', () => {
-  // `mode` and `action` are shared row keys whose enums all start at 0 — see
-  // test/payload/verbs.test.js. Repainting must not hand the old id to a new
-  // family: gripper HOLD (2) arriving as PARACHUTE_RELEASE (2).
-  assert.match(payloadHtml, /var stashEnum = \{\};/);
-  assert.match(payloadHtml, /stashEnum\[key\] !== family/);
-  assert.match(payloadHtml, /var saved = stale \? undefined : stash\[key\]/);
+test('payload does not leak values across topics, and never scrapes a stale form', () => {
+  // `mode` and `action` are shared row keys, and every enum they resolve to
+  // starts at 0 — gripper HOLD (2) would land as PARACHUTE_RELEASE (2). Those
+  // are the only collisions and they are all cross-topic (pinned by
+  // test/payload/verbs.test.js), so changing device forgets, and changing verb
+  // inside a device keeps.
+  assert.match(payloadHtml, /function forgetValues/);
+  assert.match(payloadHtml, /\$topic\.on\('change', function \(\) \{\s*forgetValues\(\);/);
+  assert.doesNotMatch(payloadHtml, /\$\('#node-input-verb'\)\.on\('change', function[\s\S]{0,80}forgetValues/);
+
+  // Node-RED writes topic/verb as soon as the select changes, but the rows are
+  // a round trip behind. Done pressed in that window must not file the old
+  // verb's answers under the new one.
+  assert.match(payloadHtml, /renderedFor = null;/, 'a repaint in flight speaks for nothing');
+  assert.match(payloadHtml, /renderedFor = key\(sel\);/, 'a landed answer claims its selection');
+  assert.match(
+    payloadHtml,
+    /renderedFor === key\(selection\(\)\)\s*\?\s*Object\.assign\(\{\}, stash, collectValues\(\)\)/,
+    'the DOM is only scraped when it belongs to the current selection'
+  );
 });
 
 test('mavlink-payload target sysid/compid default to empty (inherit profile) not 1', () => {

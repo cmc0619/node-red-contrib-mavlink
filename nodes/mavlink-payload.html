@@ -75,15 +75,16 @@
       // Generated rows are destroyed on every repaint, so what is on screen is
       // harvested before repainting and merged back when a row returns.
       var stash = Object.assign({}, node.values);
-      node._payloadStash = stash;
-      // Which enum family each stashed value belongs to. `mode` and `action`
-      // are shared keys across unrelated families that all start at 0, so a
-      // stashed id means something else after a verb switch: gripper HOLD (2)
-      // would arrive preselected as PARACHUTE_RELEASE (2). No record means the
-      // value came from the saved flow for its own verb, which is correct by
-      // construction — only a recorded mismatch drops it.
-      var stashEnum = {};
       var seq = 0;
+      // The selection the mounted form was painted for, or null while a
+      // repaint is in flight. Node-RED writes topic/verb the moment the select
+      // changes, but the rows behind them are a round trip behind — scraping
+      // them then would file the old verb's answers under the new one.
+      var renderedFor = null;
+
+      function key(sel) {
+        return sel.topic + '|' + sel.verb + '|' + sel.path;
+      }
 
       function selection() {
         return {
@@ -101,6 +102,17 @@
         Object.assign(stash, collectValues());
       }
 
+      // Carrying a typed value to the next verb is useful inside a topic —
+      // servo set → repeat keeps the PWM — and safe, because no field key
+      // resolves to two enum families within one topic (pinned by
+      // test/payload/verbs.test.js). Across topics it is neither: `mode` and
+      // `action` mean different things per device and every one of those enums
+      // starts at 0, so gripper HOLD (2) would land as PARACHUTE_RELEASE (2).
+      // Changing the device starts from that device's defaults.
+      function forgetValues() {
+        Object.keys(stash).forEach(function (k) { delete stash[k]; });
+      }
+
       function notice(text) {
         $('#payload-fields').empty()
           .append($('<div class="form-row"></div>').append($('<em></em>').text(text)));
@@ -109,13 +121,9 @@
       /** One control, shaped by the metadata (§6): enum → select, FALSE/TRUE →
        *  checkbox, bitmask → multi-select, everything else → number. */
       function fieldInput(key, meta, entries) {
-        var family = meta.enum || '';
-        var stale = Object.prototype.hasOwnProperty.call(stashEnum, key)
-          && stashEnum[key] !== family;
-        stashEnum[key] = family;
         // The recipe's default is what the builder sends for a blank field, so
         // it is what the control shows — never an empty box hiding a 1.
-        var saved = stale ? undefined : stash[key];
+        var saved = stash[key];
         if (saved === undefined || saved === null || saved === '') {
           saved = meta.default === null || meta.default === undefined ? '' : meta.default;
         }
@@ -189,6 +197,8 @@
 
       function refreshFields() {
         var sel = selection();
+        // Nothing on screen speaks for this selection until the answer lands.
+        renderedFor = null;
         if (!sel.verb) {
           notice('Pick a verb.');
           return;
@@ -205,6 +215,7 @@
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, function (data) {
           if (mine !== seq) return;
           renderFields(data);
+          renderedFor = key(sel);
           applyCarrier(data);
         }).fail(function () {
           if (mine !== seq) return;
@@ -265,7 +276,7 @@
       if (!$topic.val()) $topic.val('camera');
 
       $topic.on('change', function () {
-        harvest();
+        forgetValues();
         RED.mavlink.refreshVerbOptions();
         refreshVisibility();
         refreshFields();
@@ -305,6 +316,12 @@
         includeVehicleEscape: true
       });
 
+      node._payloadSave = function () {
+        return renderedFor === key(selection())
+          ? Object.assign({}, stash, collectValues())
+          : Object.assign({}, stash);
+      };
+
       RED.mavlink.refreshVerbOptions({ saved: node.verb });
       refreshVisibility();
       refreshFields();
@@ -322,7 +339,9 @@
       label: function () { return this.name || 'mavlink payload'; },
       oneditprepare: function () { preparePayload(this); },
       oneditsave: function () {
-        this.values = Object.assign({}, this._payloadStash || {}, collectValues());
+        // Only the prepared closure knows whether the mounted rows belong to
+        // the current selection; without it there is nothing safe to scrape.
+        if (typeof this._payloadSave === 'function') this.values = this._payloadSave();
       }
     });
   }());

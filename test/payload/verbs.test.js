@@ -103,3 +103,36 @@ test('shared field keys map to colliding enum families, so a stashed id must not
     );
   }
 });
+
+test('no field key resolves to two enum families within one topic', () => {
+  // This is what lets the editor forget values on a topic change and keep them
+  // on a verb change, rather than tracking a family per key. It holds because
+  // gripper, winch and parachute are topics now: `action` used to collide with
+  // itself inside the old `release` topic.
+  const metadata = require('../../lib/metadata');
+  const bundle = metadata.loadBundled('ardupilotmega');
+  const { PAYLOAD_RECIPES } = require('../../lib/payload');
+
+  const byTopic = {};
+  for (const recipeKey of Object.keys(PAYLOAD_RECIPES)) {
+    const [topic] = recipeKey.split('|');
+    const meta = fieldMetaFromBundle(bundle, ...recipeKey.split('|'));
+    byTopic[topic] = byTopic[topic] || {};
+    for (const [field, descriptor] of Object.entries(meta)) {
+      const family = descriptor.enum || '';
+      const seen = (byTopic[topic][field] = byTopic[topic][field] || new Set());
+      seen.add(family);
+    }
+  }
+
+  for (const [topic, fields] of Object.entries(byTopic)) {
+    for (const [field, families] of Object.entries(fields)) {
+      assert.equal(
+        families.size,
+        1,
+        `${topic}|${field} resolves to ${[...families].join(' and ')} — a value kept across ` +
+          'verbs inside this topic would change meaning'
+      );
+    }
+  }
+});
