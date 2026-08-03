@@ -2374,6 +2374,32 @@ the label. Apply this whenever a "legacy" branch is defended as actually being n
 `node-config-input-`/`node-input-` control, and no `oneditprepare`/`oneditsave` write means
 nothing creates it.
 
+**A two-state param is a checkbox; `—` on a boolean pulldown was a fiction.**
+*Wrong belief:* a param carrying a FALSE/TRUE enum needs a three-entry pulldown
+(`—` / `false` / `true`) so the operator can leave it unset, and unset is distinct from false.
+*Fact:* `COMMAND_LONG` carries all seven params as floats in a fixed struct — there is no absent
+on the wire. Advanced mode fills unset params with 0 (`nodes/mavlink-command.js`), the preset
+path starts from `[0,0,0,0,0,0,0]`, and 0 *is* `MAV_BOOL_FALSE`. So `—` and `false` built
+byte-identical messages: three choices for two outcomes. Two-state enum params render as a
+checkbox (`RED.mavlink.booleanEnumInput`), true value read from the dialect entry, unchecked
+omitting the param exactly as blank did. 33 params in ardupilotmega qualify. Two-option enums
+that are not FALSE/TRUE (frames, carriers) keep their pulldown — `isFalseTrueEnum` is the gate.
+*Check:* `node --test test/nodes/mavlink-editor-resource.test.js`; open Command → Advanced →
+`MAV_CMD_COMPONENT_ARM_DISARM` and confirm `Arm` is a checkbox.
+
+**One command param is a boolean upstream forgot to model — the table is audited, not a pattern.**
+*Wrong belief:* magic-value params (`21196` = force arm) are common enough to deserve a general
+rule, or should be recovered by parsing values out of description prose.
+*Fact:* of 1110 no-enum command params in ardupilotmega, 18 mention a magic value and 17 of
+those are `Target Camera ID`, where 255 means "all cameras" — a sentinel on a numeric id, not
+on/off. `MAV_CMD_COMPONENT_ARM_DISARM` param2 is the only genuine two-state one. It is listed
+in `RED.mavlink.MAGIC_BOOLEAN_PARAMS` keyed `<commandId>:<paramIndex>`, a deliberate exception
+to §6's no-baked-protocol-copy rule: only the *value* is baked, the label and hover text still
+come from the dialect. Parsing prose was declined — it would fire on the 17 camera-id params.
+Adding a second entry means re-checking that the param really is two-state.
+*Check:* `rg -n 'MAGIC_BOOLEAN_PARAMS' resources/mavlink-editor.js`; open Command → Advanced →
+`MAV_CMD_COMPONENT_ARM_DISARM` and confirm `Force` is a checkbox.
+
 **Pre-1.0 Command rename does not invent flow compat.**
 *Wrong belief:* renaming an editor field requires `oneditprepare` copy + runtime
 `firstDefined(..., config.targetSysid)` so old flows keep working.

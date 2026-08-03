@@ -225,12 +225,15 @@
    */
   RED.mavlink.booleanEnumInput = function (entries, opts) {
     opts = opts || {};
-    var trueEntry = null;
-    for (var i = 0; i < entries.length; i++) {
-      var name = entries[i] && entries[i].name ? entries[i].name : '';
-      if (name === 'TRUE' || name.slice(-5) === '_TRUE') trueEntry = entries[i];
+    var trueValue = opts.trueValue !== undefined ? String(opts.trueValue) : null;
+    if (trueValue === null) {
+      var trueEntry = null;
+      for (var i = 0; i < entries.length; i++) {
+        var name = entries[i] && entries[i].name ? entries[i].name : '';
+        if (name === 'TRUE' || name.slice(-5) === '_TRUE') trueEntry = entries[i];
+      }
+      trueValue = trueEntry ? String(trueEntry.value) : '1';
     }
-    var trueValue = trueEntry ? String(trueEntry.value) : '1';
     var saved = opts.saved;
     var checked = saved !== undefined && saved !== null && saved !== ''
       && String(saved) === trueValue;
@@ -241,6 +244,41 @@
       .attr('title', opts.title || '')
       .css({ display: 'inline-block', width: 'auto' })
       .prop('checked', checked);
+  };
+
+  /**
+   * Command params that are booleans in everything but their XML: no `enum=`,
+   * just a magic number the description explains in prose. Keyed
+   * `<commandId>:<paramIndex>`.
+   *
+   * This is a deliberate, audited exception to §6's "no baked protocol copy in
+   * editor HTML" — see DESIGN.md §14. Only the *value* lives here; the label
+   * and hover text still come from the dialect. A survey of all 1110 no-enum
+   * command params found exactly one boolean of this shape (the other 17
+   * magic-value params are `Target Camera ID`, where 255 means "all cameras" —
+   * a sentinel on a numeric id, not an on/off). Adding a second entry here
+   * means re-checking that the param really is two-state.
+   *
+   * @type {Object<string, number>}
+   */
+  RED.mavlink.MAGIC_BOOLEAN_PARAMS = {
+    // MAV_CMD_COMPONENT_ARM_DISARM param2: 0 = respect pre-arm checks,
+    // 21196 = force. Upstream never gave it an enum.
+    '400:2': 21196,
+  };
+
+  /**
+   * The magic true value for a no-enum boolean param, or null when the param
+   * is an ordinary number.
+   *
+   * @param {string|number} commandId
+   * @param {string|number} paramIndex
+   * @returns {?number}
+   */
+  RED.mavlink.magicBooleanValue = function (commandId, paramIndex) {
+    var key = String(commandId) + ':' + String(paramIndex);
+    var value = RED.mavlink.MAGIC_BOOLEAN_PARAMS[key];
+    return value === undefined ? null : value;
   };
 
   /**

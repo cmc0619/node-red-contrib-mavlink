@@ -836,3 +836,24 @@ test('a non-boolean enum is not turned into a checkbox', () => {
     { name: 'MAV_FRAME_LOCAL_NED', value: 1 },
   ]), false);
 });
+
+test('the magic-boolean table is audited, not a general prose parser', () => {
+  const RED = loadResourceWithElements();
+  // Only MAV_CMD_COMPONENT_ARM_DISARM param2 qualifies (DESIGN.md §14).
+  assert.equal(RED.mavlink.magicBooleanValue(400, 2), 21196);
+  assert.equal(RED.mavlink.magicBooleanValue(400, 1), null, 'param1 has a real enum');
+  // Target Camera ID params mention 255 in prose but are sentinels on a
+  // numeric id, not booleans — they must not be swept in.
+  assert.equal(RED.mavlink.magicBooleanValue(2000, 1), null);
+  assert.equal(Object.keys(RED.mavlink.MAGIC_BOOLEAN_PARAMS).length, 1);
+});
+
+test('booleanEnumInput accepts an explicit true value for a no-enum param', () => {
+  const RED = loadResourceWithElements();
+  const forced = RED.mavlink.booleanEnumInput([], { saved: 21196, trueValue: 21196 });
+  assert.equal(forced.attr('data-true'), '21196');
+  assert.equal(forced.prop('checked'), true);
+  assert.equal(RED.mavlink.booleanEnumValue(forced), 21196);
+  const off = RED.mavlink.booleanEnumInput([], { saved: 0, trueValue: 21196 });
+  assert.equal(RED.mavlink.booleanEnumValue(off), null, 'unchecked omits → 0 on the wire');
+});

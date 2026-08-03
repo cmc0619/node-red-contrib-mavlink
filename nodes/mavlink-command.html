@@ -538,6 +538,18 @@
           }
           return sel;
         }
+        // No enum, but upstream models this param as a magic number that is
+        // really on/off (DESIGN.md §14). Value from the audited table; label
+        // and hover text still come from the dialect.
+        const magic = RED.mavlink.magicBooleanValue($('#node-input-commandId').val(), spec.index);
+        if (magic !== null) {
+          return RED.mavlink.booleanEnumInput([], {
+            saved,
+            trueValue: magic,
+            title: spec.description || '',
+            className: 'param-input',
+          }).attr('data-idx', spec.index);
+        }
         const input = $('<input type="number" class="param-input">')
           .attr('data-idx', spec.index)
           .attr('title', spec.description || '')
