@@ -82,13 +82,13 @@
         "y": 160,
         "wires": [
             [
-                "sitl11-swarm-seq"
+                "sitl11-fanout-seq"
             ]
         ]
     },
     {
-        "id": "sitl11-swarm-seq",
-        "type": "mavlink-swarm",
+        "id": "sitl11-fanout-seq",
+        "type": "mavlink-fanout",
         "z": "sitl11-tab",
         "name": "Arm sequential (confirm)",
         "connection": "sitl11-connection",
@@ -141,13 +141,13 @@
         "y": 300,
         "wires": [
             [
-                "sitl11-swarm-bcast"
+                "sitl11-fanout-bcast"
             ]
         ]
     },
     {
-        "id": "sitl11-swarm-bcast",
-        "type": "mavlink-swarm",
+        "id": "sitl11-fanout-bcast",
+        "type": "mavlink-fanout",
         "z": "sitl11-tab",
         "name": "Arm broadcast (confirm)",
         "connection": "sitl11-connection",

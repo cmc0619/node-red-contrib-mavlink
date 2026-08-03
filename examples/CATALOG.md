@@ -30,7 +30,7 @@ reference these by name rather than re-explaining them each time.
 | `mavlink-param` | `build` \| `send` \| `confirm` (set echo) \| `collect` (list) |
 | `mavlink-payload` | `build` \| `send` \| `confirm` |
 | `mavlink-build` | `build` \| `send` (config key is `tier`) |
-| `mavlink-swarm` | `build` \| `send` \| `confirm` |
+| `mavlink-fanout` | `build` \| `send` \| `confirm` |
 
 **Command presets** (`mode: "preset"`, `preset: <id>`): `arm`, `disarm`, `set_mode`,
 `takeoff`, `land`, `rtl`, `set_home`, `reposition`, `change_speed`, `yaw`, `rotate`,
@@ -60,7 +60,7 @@ curved path is either many setpoints from a Function node, `DO_ORBIT`, or a miss
 
 **In** filters: `message`, `sysid`, `compid`, `changedOnly`, `rateLimit` (Hz).
 
-**Swarm** `selectionMode`: `all` \| `list` (`sysids: "1,2,3"`) \| `filter`
+**Fan-out** `selectionMode`: `all` \| `list` (`sysids: "1,2,3"`) \| `filter`
 (`vehicleType`/`firmwareFilter`/`armedFilter`); `executionMode`: `sequential`
 (`intervalMs`) \| `broadcast` (`target_system=0`); `dryRun` bool.
 
@@ -343,15 +343,15 @@ importable tab per file with shared config nodes inline.
 - **Inject buttons:** **`Fwd 2 m/s`**, **`Back 2 m/s`**, **`Left`**, **`Right`**,
   **`Up 1 m/s`**, **`■ Stop`**.
 
-### 24 — Formation nudge (Swarm + Move)
+### 24 — Formation nudge (Fan-out + Move)
 
 - **File:** `examples/24-formation-nudge.json`
 - **Tab label:** `24 Formation nudge`
-- **Story:** Push a whole group the same direction at once: a Swarm node fans a Move
+- **Story:** Push a whole group the same direction at once: a Fan-out node fans a Move
   velocity setpoint across a sysid list, first sequentially (paced) then as a single
-  broadcast, showing when simultaneity beats pacing. Move carries no ack, so the swarm
+  broadcast, showing when simultaneity beats pacing. Move carries no ack, so the fan-out
   reports per-vehicle send outcomes, not confirmations.
-- **Nodes:** config triplet, 2× `swarm` (`actionType`/`topic` = move; one
+- **Nodes:** config triplet, 2× `fanout` (`actionType`/`topic` = move; one
   `executionMode: "sequential"` `intervalMs: 150`, one `broadcast`), `inject`, `debug`.
 - **Key config:** selection `list` `sysids: "1,2,3,4,5"`; move velocity
   `{north:1,east:0,up:0}`; broadcast pins `target_system=0`, single-stack only. Dry-run
@@ -415,7 +415,7 @@ importable tab per file with shared config nodes inline.
 
 Flows that only make sense against the live five-ArduPilot + five-PX4 rig (§13): they
 exercise real firmware behaviour — completion timing, mode tables, the PX4 param union,
-mission/fence/rally per stack, swarm pacing across five vehicles, and signing against a
+mission/fence/rally per stack, fan-out pacing across five vehicles, and signing against a
 verifier. Each flow's tab comment carries the **exact launch command(s)** for the
 instances it needs. Filenames restart at `01` inside the folder.
 
@@ -495,23 +495,23 @@ instances it needs. Filenames restart at `01` inside the folder.
 - **Config/launch:** single ArduCopter; comment: the bad item is rejected by the per-type
   validator before or during transfer; the download after proves the good plan survived.
 
-### sitl/08 — Five-vehicle swarm pacing  *(moved from 07)*
+### sitl/08 — Five-vehicle fan-out pacing  *(moved from 07)*
 
-- **File:** `examples/sitl/08-swarm-sequential-five.json` · **Tab:** `SITL 08 Swarm ×5 pacing`
+- **File:** `examples/sitl/08-fanout-sequential-five.json` · **Tab:** `SITL 08 Fan-out ×5 pacing`
 - **Story:** Sequential arm across ArduPilot sysids 1–5 on one connection with 200 ms
-  pacing, dry-run first; exercises the peer table, queue pacing, and swarm aggregation
+  pacing, dry-run first; exercises the peer table, queue pacing, and fan-out aggregation
   across the full five-instance rig.
-- **Nodes:** config triplet, 2× `swarm` (dry-run + live, `list` 1–5, `sequential`
+- **Nodes:** config triplet, 2× `fanout` (dry-run + live, `list` 1–5, `sequential`
   `intervalMs: 200`), `inject`, `debug`.
 - **Config/launch:** the five-ArduCopter loop (see README); bind `14550`→`14551`.
 
-### sitl/09 — Swarm member expires mid-fan-out
+### sitl/09 — Fan-out member expires mid-fan-out
 
-- **File:** `examples/sitl/09-swarm-member-expires.json` · **Tab:** `SITL 09 Swarm member expires`
+- **File:** `examples/sitl/09-fanout-member-expires.json` · **Tab:** `SITL 09 Fan-out member expires`
 - **Story:** Start a sequential fan-out across five, then kill one SITL instance partway;
   the run continues, and the aggregate reports the dropped member as failed rather than
   aborting or silently re-resolving the group (§10).
-- **Nodes:** config triplet, `swarm` (`sequential`, `confirm`, `intervalMs: 500` to give a
+- **Nodes:** config triplet, `fanout` (`sequential`, `confirm`, `intervalMs: 500` to give a
   human time to kill one), `state` feed (watch the `expired` event), `inject`, `debug`.
 - **Config/launch:** five ArduCopters; comment: `kill` one instance's PID after the run
   starts; expect one `failed` entry in the aggregate, four succeeded.
@@ -522,7 +522,7 @@ instances it needs. Filenames restart at `01` inside the folder.
 - **Story:** Both connections live at once — five ArduPilot (1–5) + five PX4 (11–15) — with
   a State feed showing all ten peers and a per-stack broadcast arm (two broadcasts, one per
   connection, because a broadcast is single-stack). The whole-rig integration demo.
-- **Nodes:** 1 identity, 2 vehicles, 2 connections, 2× `swarm` (`broadcast` arm per stack),
+- **Nodes:** 1 identity, 2 vehicles, 2 connections, 2× `fanout` (`broadcast` arm per stack),
   `state` feed, `inject`, `debug`.
 - **Config/launch:** prefer `sitl/docker-compose.yml` (`--profile sitl`); AP bind
   `14550`→`14551`, PX4 bind `14560`→`14561`.
@@ -546,7 +546,7 @@ instances it needs. Filenames restart at `01` inside the folder.
 - **Story:** Arm the five-ArduPilot group two ways and compare: sequential fan-out (paced,
   per-vehicle acks) versus a single `target_system=0` broadcast confirmed by polling the
   peer-table armed state rather than counting the ack storm (§10).
-- **Nodes:** config triplet, 2× `swarm` (sequential confirm; broadcast + `confirm` waiting
+- **Nodes:** config triplet, 2× `fanout` (sequential confirm; broadcast + `confirm` waiting
   on the resolved set), `state` snapshot, `inject`, `debug`.
 - **Config/launch:** five ArduCopters; comment on the inbound ack-burst congestion note.
 
@@ -594,7 +594,7 @@ Short README to drop into the folder. Suggested sections:
 
 1. **What this folder is** — one paragraph: flows that require the live SITL rig because
    they test firmware behaviour that cannot be faked with fixtures (completion timing, mode
-   tables, the PX4 param union, mission/fence/rally per stack, swarm pacing, signing).
+   tables, the PX4 param union, mission/fence/rally per stack, fan-out pacing, signing).
    Top-level `examples/` demos work against any link; these need real firmware.
 2. **The rig (§13)** — five ArduPilot at sysids 1–5, five PX4 at sysids 11–15, on
    **separate connections**, one Vehicle Profile per stack. Note the deliberate 1–5 / 11–15
@@ -614,13 +614,13 @@ Short README to drop into the folder. Suggested sections:
    PX4 emits its GCS MAVLink on a different port set than ArduPilot; point the PX4
    Connection at the port your build uses (commonly `14550` broadcast or `14570`/`14580`)
    and **verify against your PX4 version** — do not assume ArduPilot's ports.
-5. **One vs five** — most flows use one instance; swarm/dual-stack flows use five per stack.
+5. **One vs five** — most flows use one instance; fan-out/dual-stack flows use five per stack.
    Each flow's tab comment names exactly which instances it needs.
 6. **Signing** — extra setup: a matching key on the SITL side; sitl/12 documents the
    dry-run procedure. Off by default everywhere else.
 7. **What is *not* provisioned** — SITL itself is the operator's local rig; nothing here
    launches it for you, and the fixture test suite (`node --test`) covers everything that
-   doesn't need firmware. Cross-connection swarm is out of scope (§10).
+   doesn't need firmware. Cross-connection fan-out is out of scope (§10).
 8. **Safety** — SITL only; several flows arm, fly, flip, terminate, or force-disarm. Never
    point these at a real vehicle without understanding each step.
 
@@ -640,9 +640,9 @@ what `sitl/` is for.
 | `02-arm-takeoff-chain.json` | **keep** | `examples/02-arm-takeoff-chain.json` | general chain-model demo |
 | `03-param-read-set.json` | **keep** | `examples/03-param-read-set.json` | general Param demo |
 | `04-mission-upload-download.json` | **keep** | `examples/04-mission-upload-download.json` | general Mission demo |
-| `05-swarm-arm.json` | **keep** | `examples/05-swarm-arm.json` | general Swarm demo (small list) |
+| `05-fanout-arm.json` | **keep** | `examples/05-fanout-arm.json` | general Fan-out demo (small list) |
 | `06-sitl-completion-takeoff.json` | **move + renumber** | `examples/sitl/01-completion-takeoff.json` | completion timing is firmware behaviour (§13) |
-| `07-ardupilot-swarm-sequential.json` | **move + renumber** | `examples/sitl/08-swarm-sequential-five.json` | needs the five-instance rig |
+| `07-ardupilot-swarm-sequential.json` | **move + renumber** | `examples/sitl/08-fanout-sequential-five.json` | needs the five-instance rig |
 | `08-param-read-set-defs.json` | **move + renumber** | `examples/sitl/13-param-defs-live.json` | live param read/set + defs against real firmware |
 | `09-command-mission.json` | **move + renumber** | `examples/sitl/14-command-mission-basics.json` | assumes two SITL instances / rig routing |
 

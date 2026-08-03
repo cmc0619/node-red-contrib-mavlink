@@ -20,4 +20,4 @@ Captured from a live Node-RED 4 editor with `node-red-contrib-mavlink` installed
 | `10-payload-gimbal.png` | `mavlink-payload` (gimbal topic) |
 | `11-state.png` | `mavlink-state` |
 | `12-mission.png` | `mavlink-mission` |
-| `13-swarm.png` | `mavlink-swarm` |
+| `13-fanout.png` | `mavlink-fanout` |

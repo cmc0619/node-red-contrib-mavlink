@@ -19,7 +19,7 @@ const NODES = [
   'mavlink-payload',
   'mavlink-mission',
   'mavlink-state',
-  'mavlink-swarm',
+  'mavlink-fanout',
 ];
 
 for (const name of NODES) {

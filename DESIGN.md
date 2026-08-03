@@ -186,7 +186,7 @@ makes unreachable.
 | `mavlink-param` | read one, set one, request list |
 | `mavlink-payload` | camera, gimbal, servo, release |
 | `mavlink-state` | peer table reads, transitions, snapshots |
-| `mavlink-swarm` | group fan-out with aggregation |
+| `mavlink-fanout` | group fan-out with aggregation |
 
 **Dependencies.** `node-mavlink` for framing/CRC/signing primitives, a shipped MAVLink XML
 seed (`seed/mavlink`) for dialect definitions, an XML parser, and `serialport` as an
@@ -498,7 +498,7 @@ or mixed enums; keep multi-select and caveat emptor outside that binary exceptio
   `from Vehicle Profile…` pattern as the senders; no connection or identity on Build. On wire
   tiers the connection's profile governs the catalogs, because that dialect is what the wire
   will encode.
-- **Swarm** — gcs-paradigm by nature. Its send-as dropdown offers only gcs-enabled identities
+- **Fan-out** — gcs-paradigm by nature. Its send-as dropdown offers only gcs-enabled identities
   (`gcs` or `custom`, first one preselected); selection modes replace the single-target rows.
   Build tier with `all`/`filter` selection still shows the connection — the live peer table is
   the only place those selections can resolve. Build + explicit `list` needs no connection; when
@@ -1094,7 +1094,7 @@ With this, the chain is `Arm → Takeoff → Move`, three nodes, each set to awa
 Three rules, each of which encodes a wrong message if missed:
 
 - **Wire lat/lon are `degE7` integers, and unit conversion belongs to exactly one of two
-  surfaces.** The **typed operator surfaces** — command/swarm/payload/mission builders — take
+  surfaces.** The **typed operator surfaces** — command/fanout/payload/mission builders — take
   degrees and scale (×1e7 global, ×1e4 local, §14-measured), deciding *whether* from static
   schema (command identity, frame), never from the value. The **raw surface** — mavlink-build's
   codec — performs **no unit conversion in either direction**: a field labelled `degE7` takes
@@ -1116,7 +1116,7 @@ Three rules, each of which encodes a wrong message if missed:
 - **NED is down-positive.** Every UI and every operator says altitude up-positive, so the sign
   flips exactly once, at encode, in Move — never in the UI and never twice.
 - **A metre offset scales longitude by latitude.** North is metres ÷ 111,320 in degrees;
-  east divides further by cos(latitude), or offsets shrink toward the poles. Used by Swarm
+  east divides further by cos(latitude), or offsets shrink toward the poles. Used by Fan-out
   expansion and anything computing relative positions.
 
 ### Command presets
@@ -1251,9 +1251,9 @@ Gimbal: aim, set mode, ROI set/clear — and aim has two message paths
 per-verb choice inside the topic, not a node-level setting. Servo: set, repeat. Release:
 gripper, winch, parachute.
 
-## 10. Swarm
+## 10. Fan-out
 
-`mavlink-swarm` fans one action out across a selected group.
+`mavlink-fanout` fans one action out across a selected group.
 
 **Selection** comes from the peer table: all vehicles, an explicit sysid list, or a filter on
 type, firmware, or armed state. Groups resolve at execution, not deploy — a vehicle that went
@@ -1308,7 +1308,7 @@ failed in the aggregate status. Aborting leaves the fleet half-commanded, which 
 than either end state; re-resolving silently adds vehicles the operator never approved. Continue
 is the only option that ends in a state the operator can reason about.
 
-**Swarm wraps single-message actions, never multi-message transactions.**
+**Fan-out wraps single-message actions, never multi-message transactions.**
 
 | Action | Fan-out | Why |
 |---|---|---|
@@ -1325,11 +1325,11 @@ hundred interleaved conversations on one socket, and doing it sequentially seria
 per-connection lock anyway, turning a hundred vehicles into a hundred multi-second transactions
 end to end.
 
-A swarm also rarely wants the *same* mission. Giving each vehicle its own area is N distinct
+A fleet also rarely wants the *same* mission. Giving each vehicle its own area is N distinct
 payloads — a loop over the Mission node, not one action fanned out. If that loop ever becomes a
 first-class feature it is a different node with a different shape, not an option here.
 
-Swarm is single-connection. Cross-connection fleets are out of scope for this pass.
+Fan-out is single-connection. Cross-connection fleets are out of scope for this pass.
 
 ## 11. Firmware support
 
@@ -1368,7 +1368,7 @@ to know the mode table.
 5. **In, Out, Build.** First end-to-end traffic.
 6. **Command, Move, Param, Payload, State.**
 7. **Mission.**
-8. **Swarm.**
+8. **Fan-out.**
 9. **Examples**, once node contracts are stable. Examples are a product surface, not a test
    directory.
 
@@ -1380,17 +1380,17 @@ by silence. Update this list when an item lands.
 | Item | Status | Notes |
 |---|---|---|
 | **Custom dialect upload in the Vehicle editor** | deferred | Superseded by the dialect library (Seed + catalog dates). No path/upload UI and no path resolution behind it. Private-dialect library ingestion is future work. |
-| **Command node `COMMAND_INT`** | **done** | Carrier defaults to `COMMAND_INT` in the Command, Payload, and Swarm editors; the only other choice is `COMMAND_LONG`, with no blank prompt or conditional editor validator. Runtime still refuses missing/invalid saved carrier data rather than repairing it. Every tier — build included — honours the configured carrier. Positional params are always degrees; the INT carrier scales ×1e7 per the dialect XML's own classification (`intCoordKinds`: `hasLocation` + not-degE7 → scale; natively-degE7 params carry raw; non-location param5/6 like gimbal flags never scale; unknown command → historical scaling). NaN in param5/6 refuses the INT build loud — the spec routes NaN-meaning commands to COMMAND_LONG, and coercion would aim at null island. On `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns and rebuilds once from the canonical degree params in the other form; second wrong-carrier fails loud (no auto-swap in Swarm/Payload — homogeneous fleets per node, the named result tells the operator which way to flip). Swarm command/payload actions and Payload command-backed verbs use the same `lib/command` builders; message-kind payload verbs ignore the carrier. |
+| **Command node `COMMAND_INT`** | **done** | Carrier defaults to `COMMAND_INT` in the Command, Payload, and Fan-out editors; the only other choice is `COMMAND_LONG`, with no blank prompt or conditional editor validator. Runtime still refuses missing/invalid saved carrier data rather than repairing it. Every tier — build included — honours the configured carrier. Positional params are always degrees; the INT carrier scales ×1e7 per the dialect XML's own classification (`intCoordKinds`: `hasLocation` + not-degE7 → scale; natively-degE7 params carry raw; non-location param5/6 like gimbal flags never scale; unknown command → historical scaling). NaN in param5/6 refuses the INT build loud — the spec routes NaN-meaning commands to COMMAND_LONG, and coercion would aim at null island. On `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns and rebuilds once from the canonical degree params in the other form; second wrong-carrier fails loud (no auto-swap in Fan-out/Payload — homogeneous fleets per node, the named result tells the operator which way to flip). Fan-out command/payload actions and Payload command-backed verbs use the same `lib/command` builders; message-kind payload verbs ignore the carrier. |
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
 | **Param definition catalog** | **done** | One profile-keyed local holding file; authenticated GET is local-only; the Vehicle editor's explicit authenticated Update downloads its optional `paramDefsUrl`, validates, and atomically replaces the file. Param editor datalist + units/enums remain optional enrichment. |
 | **Full command-param `enum=` recovery** | **done** | Seed compile carries common.xml `<param enum=`> links into the bundle (e.g. Arm → `MAV_BOOL`). The old `hints.js` overlay is gone. |
 | **Move editor §6 reshape** | **done** | Per-field rows + mode/delivery visibility in the Move dialog. |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
-| **`httpAdminRoot` on non-enum admin routes** | **done** | Command/Build/In/Swarm/Param/Vehicle editor catalogs use `RED.mavlink.adminApiUrl('/mavlink/…')`. |
+| **`httpAdminRoot` on non-enum admin routes** | **done** | Command/Build/In/Fan-out/Param/Vehicle editor catalogs use `RED.mavlink.adminApiUrl('/mavlink/…')`. |
 | **SITL example flows** | **done** | `examples/sitl/` 01–25 (companion, INT matrix, Move, param echo, In/Build/Out, inherit, TCP template) + README; regular demos in `examples/` (see `CATALOG.md`). |
 | **SITL Docker lab** | **done** | Compose under [`sitl/`](sitl/README.md): 5× AP + 5× PX4 + companions 20/21; arm-only logs; optional `nodered` profile. |
 | **SITL-backed tests (§13)** | open | Fixture suite in CI; firmware behaviour still needs the live five+five rig (local Docker lab). Live suite results are logged as GitHub Issues (`sitl-results`), not in-repo `testing.md` churn. |
-| **Cross-connection swarm** | out of scope | As designed (§10): two Connections → two Swarm nodes. |
+| **Cross-connection fan-out** | out of scope | As designed (§10): two Connections → two Fan-out nodes. |
 
 ## 13. Testing and SITL
 
@@ -1398,7 +1398,7 @@ by silence. Update this list when an item lands.
 PX4 11–15. The gap is deliberate: a mistyped sysid lands nowhere rather than on the wrong stack.
 The two stacks sit on separate connections with one profile each, which is the arrangement the
 design expects rather than a testing convenience. Five vehicles per connection is what exercises
-the peer table, queue pacing, and swarm fan-out. Examples use one instance or five.
+the peer table, queue pacing, and fan-out. Examples use one instance or five.
 GCS ports for examples and the Docker lab: ArduPilot **14550→14551**, PX4 **14560→14561**.
 Companion-mode vehicles (sysid **20** AP / **21** PX4) use **14540→14541** and
 **14542→14543**.
@@ -1446,7 +1446,7 @@ a percentage would only reward testing the parts that were never going to break.
 - **Parameter int/float union** on PX4 specifically.
 - **Mission, fence, and rally** per firmware, request-format handling, and a malformed upload
   failing rather than degrading into a clear.
-- **Multi-vehicle handling and swarm pacing** across five instances, including a member expiring
+- **Multi-vehicle handling and fan-out pacing** across five instances, including a member expiring
   mid-fan-out.
 - **Signing against a stack that actually verifies.**
 
@@ -1876,7 +1876,7 @@ topic/verb pattern.
 **Editor catalog fetches must honour `httpAdminRoot`.**
 *Wrong belief:* absolute `$.getJSON('/mavlink/…')` is fine because the admin API is always at `/`.
 *Fact:* Node-RED can mount the editor under `httpAdminRoot` (e.g. `/red`); bare `/mavlink/…`
-then 404s. Enums already used `RED.mavlink.adminApiUrl`; Command/Build/In/Swarm/Param/Vehicle
+then 404s. Enums already used `RED.mavlink.adminApiUrl`; Command/Build/In/Fan-out/Param/Vehicle
 must too. Server route registration stays `/mavlink/…` — only the browser URL is prefixed.
 *Check:* `node --test test/nodes/local-identity-html.test.js test/nodes/command-html.test.js
 test/nodes/param-html.test.js` — `adminApiUrl('/mavlink/enums')` under `/red` →
@@ -1987,7 +1987,7 @@ catalog target) may fall through to `ardupilotmega`; the Build node is a special
 picker while senders always bind a profile; Param/Mission never show Firmware because it is
 always inherited.
 *Fact:* §6 Build column is Dialect (bundled list + `from Vehicle Profile…`) for Build, Command,
-Move, Param, Payload, Mission, and Swarm-when-catalog-without-connection. Vehicle Profile is
+Move, Param, Payload, Mission, and Fan-out-when-catalog-without-connection. Vehicle Profile is
 visible only for that escape; empty dialect or empty escape-vehicle is editor-invalid — no
 auto-pick, no silent `ardupilotmega`, and no inventing `__vehicle` from a leftover vehicle id
 (pre-1.0: no flow migration). Param/Mission Build require Firmware when not using a profile
@@ -2023,7 +2023,7 @@ report with a successful finish. Call `done(err)` directly — the runtime alway
 A throw that escapes the handler is contained by Node-RED (§2) but is not the preferred path —
 catch and `done(err)`.
 *Check:* `node --test test/delivery/catch-path-scan.test.js` (source scan of `nodes/mavlink-*.js`);
-`node --test test/delivery/delivery.test.js test/swarm/node.test.js`.
+`node --test test/delivery/delivery.test.js test/fanout/node.test.js`.
 
 **Param encoding follows override → capabilities → known firmware, not invented ArduPilot.**
 *Wrong belief:* `firmware === 'px4'` is the only signal for bytewise int/float union encoding;
@@ -2061,7 +2061,7 @@ downstream `numberOr(..., 1)`) must invent `{sysid: 1, compid: 1}` so a message 
 yielding non-finite ids fails at encode (`lib/codec/numeric` rejects non-finite integers) or
 leaves an unusable Build object — safer than a silent command to system 1. On Build with a
 concrete dialect there is no profile inherit rung at all — targets must be stamped or stay
-unresolved. Companion compid `1` and swarm broadcast `{sysid: 0, compid: 1}` remain
+unresolved. Companion compid `1` and fan-out broadcast `{sysid: 0, compid: 1}` remain
 matrix/spec addresses, not null-guards. Do not reintroduce target→`1` fallbacks in builders or
 stream-stop helpers.
 *Check:* `rg -n 'numberOr\\([^,]+,\\s*1\\)|firstDefined\\([^)]*,\\s*1\\)' lib nodes` — only
@@ -2104,7 +2104,7 @@ in-flight waiter queue, or same-key request coalescing. Nodes paint from the cat
 hands the callback (or a `_current*Catalog` handle set from that callback). Target CompID
 reload is `RED.mavlink.reloadTargetCompId(node, { field? })` (default `targetComponent`; Command
 passes `field:'targetCompid'`); identity refresh is `RED.mavlink.refreshIdentitySelect(node,
-{ rolesAllowed? })` (Swarm passes `['gcs','custom']`); catalog-backed selects share
+{ rolesAllowed? })` (Fan-out passes `['gcs','custom']`); catalog-backed selects share
 `fillEnumSelect` plus `bindSelectTitleSync` / `ensureSavedEnumOption` (one `#N (not in dialect)`
 wording — Build's old `(missing)` is gone) and `enumOptionLabel` for the §6 `NAME (value)` format
 (browser mirror of `lib/metadata/commands-list.js`); queue-band pickers share
@@ -2112,7 +2112,7 @@ wording — Build's old `(missing)` is gone) and `enumOptionLabel` for the §6 `
 `applyCompanionTargetVisibility({ isBuild, identityId, hideCompidWhenCompanion?, …Rows })`
 (Command / Mission / Param / Move; Payload passes `hideCompidWhenCompanion:false`); the payload
 verb catalog is `RED.mavlink.PAYLOAD_VERBS` + `RED.mavlink.refreshVerbOptions({ saved? })`
-(mirrors `lib/payload`, used by Payload and Swarm); bitmask selects share `bitmaskTitle` /
+(mirrors `lib/payload`, used by Payload and Fan-out); bitmask selects share `bitmaskTitle` /
 `booleanEntryLabel` / `selectedBitmaskValues` (Command + Build); the Build-tier default
 descriptors are `RED.mavlink.buildTierDialectDefaults({ modeField, withFirmware })`
 (`modeField:'tier'` for Build, `withFirmware:true` for Param/Mission); the Build-tier row
@@ -2120,7 +2120,7 @@ visibility matrix is `RED.mavlink.applyBuildTierRowVisibility({ isBuild, dialect
 vehicleRow, firmwareRow?, connectionRow })` (dialect on Build; vehicle on Build+`__vehicle`;
 firmware on Build+concrete dialect; connection on wire). Each palette node merges the defaults
 into `defaults` with `Object.assign`, calls the shared resolver, visibility helper, and catalog/reload
-helpers — node-owned rows (identity, timeout, mode fields, verb fields, …) stay local. Swarm
+helpers — node-owned rows (identity, timeout, mode fields, verb fields, …) stay local. Fan-out
 passes its narrower Build+list case as the `isBuild` override to both the resolver and the
 visibility helper. `resources` is in `package.json` `files`, and `resources/**/*.js` lints as a
 browser script.
@@ -2191,7 +2191,7 @@ the wrong comparison class for a raw builder.
 *Fact:* every reference **raw** message layer is unit-blind — pymavlink's generated `*_send`
 functions (no unit math in `mavgen_python.py`), node-mavlink's message classes (zero scaling in
 `lib/`), MAVSDK's `mavlink_passthrough` (raw `mavlink_message_t`). Scaling lives one layer up,
-exactly where #61/#52 put ours (command/swarm/payload/mission builders, ×1e7/×1e4 measured
+exactly where #61/#52 put ours (command/fanout/payload/mission builders, ×1e7/×1e4 measured
 against SITL). Locally decisive: `mavlink-in` emits raw wire fields (`extractFields` copies off
 the node-mavlink instance, no codec decode), so a scaling Build cannot consume mavlink-in's own
 output — the always-scale version rejected `lat: 473977420` from a received GLOBAL_POSITION_INT
@@ -2318,7 +2318,7 @@ test/nodes/mavlink-editor-resource.test.js`
 `BADGE_MAX = 24` and hand-write `node.status({fill,shape,text})` matching §6 styles.
 *Fact:* `lib/delivery` already owns `capBadge`, `makeStatusRecord`, `applyActionStatus`, and
 `ACTION_BADGE_STYLES`. Local copies drifted (In double-capped; Vehicle/Connection hand-sliced;
-Command used a raw `BAND_CONTROL = 2`). Move setpoint readers and Swarm's param merge belong in
+Command used a raw `BAND_CONTROL = 2`). Move setpoint readers and Fan-out's param merge belong in
 `lib/move` / `lib/command.mergeParams` once.
 *Check:* `rg -n 'BADGE_MAX\\s*=\\s*24|function cap\\(|function badge24|BAND_CONTROL\\s*=' nodes`
 (expect no matches); `node --test test/move/from-config.test.js test/delivery/delivery.test.js`
@@ -2375,10 +2375,10 @@ body). A profile whose dialect is not a bundled name — any catalog snapshot �
 round-trip through `resolveDialect` → `getDialect` → `resolveCatalogSource` as a real
 bundle. Do not design that path around install catastrophes (snapshot vanished,
 `BrokenVehicleNode`); those mean the checkout is already broken. Firmware↔autopilot
-is `lib/vehicle/firmware-autopilot`; Swarm uses `DEFAULT_TIMEOUT_MS` from command;
+is `lib/vehicle/firmware-autopilot`; Fan-out uses `DEFAULT_TIMEOUT_MS` from command;
 Param/Move/Payload call `missingConnectionGate` at deploy. Declined as non-dupes:
 `numberOr`/`valueOr`/`keepParam` family, GLOBAL_FRAMES/DEG_E7 tables, TCP/serial
-write-drain skeleton, move/swarm `sendOptions`, `sanitize` vs `urlToFilename`.
+write-drain skeleton, move/fanout `sendOptions`, `sanitize` vs `urlToFilename`.
 *Check:* `node --test test/connection/queue.test.js test/state/state.test.js
 test/metadata/admin-catalog.test.js test/metadata/enums-list.test.js test/param/
 lib/codec/test/param-union.test.js`;

@@ -26,7 +26,7 @@ const nodeIds = [
   'node-payload',
   'node-state',
   'node-mission',
-  'node-swarm'
+  'node-fanout'
 ];
 
 function representativeFlow() {
@@ -148,9 +148,9 @@ function representativeFlow() {
       wires: [[], []]
     },
     {
-      id: 'node-swarm',
+      id: 'node-fanout',
       z: 'flow',
-      type: 'mavlink-swarm',
+      type: 'mavlink-fanout',
       delivery: 'build',
       dialect: '__vehicle',
       selectionMode: 'all',

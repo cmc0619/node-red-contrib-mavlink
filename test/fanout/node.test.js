@@ -4,11 +4,11 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-test('mavlink-swarm node emits continue only for all-success aggregate', async () => {
+test('mavlink-fanout node emits continue only for all-success aggregate', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
   const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-swarm')(RED);
-  const Node = RED.nodes.types['mavlink-swarm'];
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: 'conn',
     actionType: 'command',
@@ -31,8 +31,8 @@ test('mavlink-swarm node emits continue only for all-success aggregate', async (
 
 test('build+list with no connection succeeds — peer table not needed for explicit sysid list (§6)', async () => {
   const RED = redStub({});  // no connection registered
-  require('../../nodes/mavlink-swarm')(RED);
-  const Node = RED.nodes.types['mavlink-swarm'];
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: '',
     actionType: 'command',
@@ -54,8 +54,8 @@ test('build+list with no connection succeeds — peer table not needed for expli
 
 test('sysid list rejects values outside 1..255 (config and payload)', async () => {
   const RED = redStub({});
-  require('../../nodes/mavlink-swarm')(RED);
-  const Node = RED.nodes.types['mavlink-swarm'];
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
 
   const fromConfig = new Node({
     connection: '',
@@ -103,8 +103,8 @@ test('sysid list rejects values outside 1..255 (config and payload)', async () =
 
 test('build+all without connection fails loudly naming the rule (§6)', async () => {
   const RED = redStub({});
-  require('../../nodes/mavlink-swarm')(RED);
-  const Node = RED.nodes.types['mavlink-swarm'];
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: '',
     actionType: 'command',
@@ -131,8 +131,8 @@ test('build+all without connection fails loudly naming the rule (§6)', async ()
 test('identityId from payload is passed through to connection.send options', async () => {
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-swarm')(RED);
-  const Node = RED.nodes.types['mavlink-swarm'];
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: 'conn',
     actionType: 'command',
@@ -151,8 +151,8 @@ test('identityId from payload is passed through to connection.send options', asy
 test('config.identity is used as identityId when payload does not override', async () => {
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-swarm')(RED);
-  const Node = RED.nodes.types['mavlink-swarm'];
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: 'conn',
     actionType: 'command',
@@ -169,10 +169,10 @@ test('config.identity is used as identityId when payload does not override', asy
     'config.identity must reach connection.send options as identityId');
 });
 
-test('mavlink-swarm node gates a safety preset on msg.confirmed / node confirm (§10)', async () => {
+test('mavlink-fanout node gates a safety preset on msg.confirmed / node confirm (§10)', async () => {
   const RED = redStub({ conn: connectionStub([peer(1)]) });
-  require('../../nodes/mavlink-swarm')(RED);
-  const Node = RED.nodes.types['mavlink-swarm'];
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
 
   // No confirmation anywhere → refused, nothing sent.
   const gated = new Node({ connection: 'conn', carrier: 'long', actionType: 'command',
@@ -183,7 +183,7 @@ test('mavlink-swarm node gates a safety preset on msg.confirmed / node confirm (
     (e) => e
   );
   assert.ok(err, 'refused safety preset is passed to done(err)');
-  assert.match(err.message, /mavlink-swarm: refused/);
+  assert.match(err.message, /mavlink-fanout: refused/);
   assert.ok(sent, 'status output is emitted before done(err)');
   assert.equal(sent[0], null);
   assert.equal(sent[1].result, 'refused');
@@ -192,8 +192,8 @@ test('mavlink-swarm node gates a safety preset on msg.confirmed / node confirm (
   // msg.confirmed === true clears the gate.
   const conn2 = connectionStub([peer(1)]);
   const RED2 = redStub({ conn: conn2 });
-  require('../../nodes/mavlink-swarm')(RED2);
-  const okNode = new (RED2.nodes.types['mavlink-swarm'])({
+  require('../../nodes/mavlink-fanout')(RED2);
+  const okNode = new (RED2.nodes.types['mavlink-fanout'])({
     connection: 'conn', actionType: 'command',
     carrier: 'long', preset: 'flight_termination', delivery: 'send',
   });

@@ -1,13 +1,13 @@
 'use strict';
 
 const delivery = require('../lib/delivery');
-const { executeSwarm, guardSwarmInput } = require('../lib/swarm');
+const { executeFanout, guardFanoutInput } = require('../lib/fanout');
 const { resolveFrame, mergeParams, DEFAULT_TIMEOUT_MS } = require('../lib/command');
 const { positionFrom, velocityFrom, valueFrom } = require('../lib/move');
 const { dialectFromConnection } = require('../lib/addressing');
 
-module.exports = function registerMavlinkSwarm(RED) {
-  function MavlinkSwarmNode(config) {
+module.exports = function registerMavlinkFanout(RED) {
+  function MavlinkFanoutNode(config) {
     RED.nodes.createNode(this, config);
     const node = this;
     const connectionNode = config.connection ? RED.nodes.getNode(config.connection) : null;
@@ -23,7 +23,7 @@ module.exports = function registerMavlinkSwarm(RED) {
     }
 
     node.on('input', async (msg, send, done) => {
-      const guard = guardSwarmInput(msg);
+      const guard = guardFanoutInput(msg);
       if (guard.action === 'suppress') {
         done();
         return;
@@ -39,18 +39,18 @@ module.exports = function registerMavlinkSwarm(RED) {
         if (!connectionNode || !connectionNode.peerTable) {
           if (effectiveDelivery === 'build' && effectiveSelectionMode === 'list') {
             // No connection needed: build messages for the explicit sysid list
-            // without consulting a live peer table (§6 Swarm exception).
+            // without consulting a live peer table (§6 Fan-out exception).
             effectiveConnection = buildListStub(selection.sysids);
           } else {
             const rule = effectiveDelivery === 'build'
               ? `build+${effectiveSelectionMode} selection requires a Connection — ` +
                 `the live peer table is the only place ${effectiveSelectionMode} selection can resolve`
               : 'requires a Connection with a peer table';
-            throw new Error(`mavlink-swarm: ${rule}`);
+            throw new Error(`mavlink-fanout: ${rule}`);
           }
         }
 
-        const aggregate = await executeSwarm({
+        const aggregate = await executeFanout({
           connection: effectiveConnection,
           vehicleBundle: dialectFromConnection(RED, effectiveConnection),
           action: actionFrom(config, payload),
@@ -73,13 +73,13 @@ module.exports = function registerMavlinkSwarm(RED) {
           ? [{ payload: aggregate }, aggregate]
           : [null, aggregate]);
         if (!aggregate.success && aggregate.result !== 'dry_run') {
-          done(new Error(`mavlink-swarm: ${aggregate.result}`));
+          done(new Error(`mavlink-fanout: ${aggregate.result}`));
         } else {
           done();
         }
       } catch (err) {
         const record = delivery.makeStatusRecord({
-          node: 'mavlink-swarm',
+          node: 'mavlink-fanout',
           result: 'failed',
           success: false,
           continue: false,
@@ -92,7 +92,7 @@ module.exports = function registerMavlinkSwarm(RED) {
     });
   }
 
-  RED.nodes.registerType('mavlink-swarm', MavlinkSwarmNode);
+  RED.nodes.registerType('mavlink-fanout', MavlinkFanoutNode);
 };
 
 function actionFrom(config, payload) {
@@ -200,8 +200,8 @@ function numberOption(payload, config, key, fallback) {
 /**
  * Synthetic connection used when delivery=build and selectionMode=list with no
  * real Connection configured. Peer table returns one active autopilot entry per
- * listed sysid so executeSwarm can build targeted messages without needing a
- * live peer table (§6 Swarm exception).
+ * listed sysid so executeFanout can build targeted messages without needing a
+ * live peer table (§6 Fan-out exception).
  *
  * @param {string|string[]} sysids  Raw sysids value from config or payload.
  * @returns {object}
@@ -222,7 +222,7 @@ function buildListStub(sysids) {
       },
     },
     send() {
-      throw new Error('mavlink-swarm: build-mode list stub does not send — output goes to mavlink-out');
+      throw new Error('mavlink-fanout: build-mode list stub does not send — output goes to mavlink-out');
     },
     subscribe() {
       return () => {};
@@ -232,8 +232,8 @@ function buildListStub(sysids) {
 
 /**
  * Parse a comma-separated sysid list. Each id must be an integer in 1..255
- * (MAVLink system id is a uint8; 0 is broadcast and not a swarm member).
- * Bad tokens fail loudly — silently dropping `256` would send a partial swarm.
+ * (MAVLink system id is a uint8; 0 is broadcast and not a member).
+ * Bad tokens fail loudly — silently dropping `256` would send a partial fan-out.
  *
  * @param {string|string[]} value
  * @returns {number[]}
@@ -248,7 +248,7 @@ function parseSysidList(value) {
     const n = Number(part);
     if (!Number.isInteger(n) || n < 1 || n > 255) {
       throw new Error(
-        `mavlink-swarm: sysid must be an integer in 1..255 (got ${JSON.stringify(part)})`
+        `mavlink-fanout: sysid must be an integer in 1..255 (got ${JSON.stringify(part)})`
       );
     }
     ids.push(n);

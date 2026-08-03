@@ -1,5 +1,5 @@
 <script type="text/javascript">
-  RED.nodes.registerType('mavlink-swarm', {
+  RED.nodes.registerType('mavlink-fanout', {
     category: 'mavlink',
     color: '#ffe6cc',
     defaults: {
@@ -91,7 +91,7 @@
     outputs: 2,
     outputLabels: ['continue', 'status'],
     icon: 'font-awesome/fa-sitemap',
-    label: function () { return this.name || 'mavlink swarm'; },
+    label: function () { return this.name || 'mavlink fanout'; },
     oneditprepare: function () {
       var node = this;
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
@@ -110,11 +110,11 @@
       var _msgCatalog = { seq: 0 };
       var _cmdCatalog = { seq: 0 };
 
-      // Swarm's Build path is narrower than the shared rule: the Dialect picker
+      // Fan-out's Build path is narrower than the shared rule: the Dialect picker
       // only governs when Delivery is Build AND Selection is an explicit list;
       // every other combination reads the connection's profile (§6). Feed that
       // as the isBuild override into the shared loadCatalog / resolver.
-      function swarmIsBuildList() {
+      function fanoutIsBuildList() {
         var delivery = $('#node-input-delivery').val() || 'build';
         var selectionMode = $('#node-input-selectionMode').val() || 'all';
         return delivery === 'build' && selectionMode === 'list';
@@ -122,7 +122,7 @@
 
       function loadMessagesCatalog(cb) {
         RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
-          isBuild: swarmIsBuildList(),
+          isBuild: fanoutIsBuildList(),
           listKey: 'messages'
         });
       }
@@ -146,7 +146,7 @@
 
       function loadCommandsCatalog(cb) {
         RED.mavlink.loadCatalog('/mavlink/command/commands', _cmdCatalog, cb, {
-          isBuild: swarmIsBuildList(),
+          isBuild: fanoutIsBuildList(),
           listKey: 'commands'
         });
       }
@@ -176,18 +176,18 @@
       function refreshVisibility() {
         var d = $('#node-input-delivery').val() || 'build';
         var sel = $('#node-input-selectionMode').val() || 'all';
-        // Swarm's Build path for this matrix is the narrow Build+list case
+        // Fan-out's Build path for this matrix is the narrow Build+list case
         // (same isBuild override resolveCatalogTarget already takes).
         var isBuildList = d === 'build' && sel === 'list';
         var dialect = $('#node-input-dialect').val() || node.dialect || '';
         RED.mavlink.applyBuildTierRowVisibility({
           isBuild: isBuildList,
           dialect: dialect,
-          dialectRow: '#row-swarm-dialect',
-          vehicleRow: '#row-swarm-vehicle',
-          connectionRow: '#row-swarm-connection'
+          dialectRow: '#row-fanout-dialect',
+          vehicleRow: '#row-fanout-vehicle',
+          connectionRow: '#row-fanout-connection'
         });
-        $('#row-swarm-identity').toggle(d !== 'build');
+        $('#row-fanout-identity').toggle(d !== 'build');
       }
 
       function refreshCatalogsAndVisibility() {
@@ -229,8 +229,8 @@
             $('#node-input-verb').val() || '',
             $('#node-input-path').val() || 'legacy'
           ));
-        $('#row-swarm-carrier').toggle(usesCarrier);
-        $('#row-swarm-frame').toggle(usesCarrier && $('#node-input-carrier').val() === 'int');
+        $('#row-fanout-carrier').toggle(usesCarrier);
+        $('#row-fanout-frame').toggle(usesCarrier && $('#node-input-carrier').val() === 'int');
       }
       $('#node-input-carrier').on('change', refreshCarrierRows);
       $('#node-input-actionType').on('change', refreshCarrierRows);
@@ -243,12 +243,12 @@
   });
 </script>
 
-<script type="text/html" data-template-name="mavlink-swarm">
+<script type="text/html" data-template-name="mavlink-fanout">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
-  <div class="form-row" id="row-swarm-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
-  <div class="form-row" id="row-swarm-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
-  <div class="form-row" id="row-swarm-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
-  <div class="form-row" id="row-swarm-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
+  <div class="form-row" id="row-fanout-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-fanout-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
+  <div class="form-row" id="row-fanout-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
+  <div class="form-row" id="row-fanout-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-selectionMode">Selection</label><select id="node-input-selectionMode"><option value="all">All active vehicles</option><option value="list">Explicit sysid list</option><option value="filter">Filter</option></select></div>
   <div class="form-row"><label for="node-input-sysids">Sysids</label><input type="text" id="node-input-sysids" placeholder="1,2,3"></div>
   <div class="form-row"><label for="node-input-vehicleType">Type filter</label><select id="node-input-vehicleType"></select></div>
@@ -262,8 +262,8 @@
   <div class="form-row"><label for="node-input-actionType">Action</label><select id="node-input-actionType"><option value="command">Command</option><option value="move">Move</option><option value="payload">Payload</option><option value="param">Param set</option><option value="mission">Mission (refused)</option></select></div>
   <div class="form-row"><label for="node-input-commandId">Command</label><select id="node-input-commandId" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-params">Params JSON</label><input type="text" id="node-input-params" placeholder='{"1":1}'></div>
-  <div class="form-row" id="row-swarm-carrier"><label for="node-input-carrier">Carrier</label><select id="node-input-carrier" style="width:70%"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
-  <div class="form-row" id="row-swarm-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="">Global, absolute alt (default)</option><option value="3">Global, relative alt</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
+  <div class="form-row" id="row-fanout-carrier"><label for="node-input-carrier">Carrier</label><select id="node-input-carrier" style="width:70%"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
+  <div class="form-row" id="row-fanout-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="">Global, absolute alt (default)</option><option value="3">Global, relative alt</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
   <div class="form-row"><label for="node-input-moveMode">Move mode</label><select id="node-input-moveMode"><option value="local-position">Local position</option><option value="local-velocity">Local velocity</option><option value="global-position">Global position</option></select></div>
   <div class="form-row"><label for="node-input-north">North</label><input type="number" id="node-input-north"></div>
   <div class="form-row"><label for="node-input-east">East</label><input type="number" id="node-input-east"></div>
@@ -280,7 +280,7 @@
   <div class="form-row"><label for="node-input-timeoutMs">Timeout ms</label><input type="number" id="node-input-timeoutMs" min="1"></div>
 </script>
 
-<script type="text/html" data-help-name="mavlink-swarm">
+<script type="text/html" data-help-name="mavlink-fanout">
   <p>Fans one single-message MAVLink action out across the active vehicles selected from a Connection peer table.</p>
   <p>Sequential mode sends one targeted message per member at the configured interval. Broadcast mode sends one packet with target_system 0 and target_component 1.</p>
   <p>Output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail. Mission actions and parameter list requests are refused.</p>

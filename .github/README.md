@@ -73,7 +73,7 @@ the user directory with `--install-links` or a tarball (above) so the palette lo
 | `mavlink-payload` | Camera, gimbal, servo, release |
 | `mavlink-state` | Peer table reads and transitions |
 | `mavlink-mission` | Upload, download, or clear mission/fence/rally |
-| `mavlink-swarm` | Fan-out one action across selected vehicles |
+| `mavlink-fanout` | Fan-out one action across selected vehicles |
 
 ## SITL lab
 
@@ -98,14 +98,14 @@ entries appear under the package examples folder).
 | `02-arm-takeoff-chain.json` | Command arm (confirm) chained to takeoff (await completion) |
 | `03-param-read-set.json` | Param read (MAV_SYSID) and set (FS_GCS_ENABLE) as separate injects |
 | `04-mission-upload-download.json` | Mission upload then download |
-| `05-swarm-arm.json` | Swarm sequential arm — dry-run then live |
+| `05-fanout-arm.json` | Fan-out sequential arm — dry-run then live |
 | `sitl/01-completion-takeoff.json` | Arm + completion-tier takeoff against ArduPilot Copter SITL |
-| `sitl/08-swarm-sequential-five.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
+| `sitl/08-fanout-sequential-five.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
 | `sitl/13-param-defs-live.json` | Param read, set, and list — with live definition catalog |
 | `sitl/14-command-mission-basics.json` | Command presets, advanced `SET_MESSAGE_INTERVAL`, mission upload/download |
 
 The `examples/sitl/` folder contains flows covering completion timing, mode tables,
-PX4 param union, mission/fence/rally gating, swarm pacing, signing, and companion mode.
+PX4 param union, mission/fence/rally gating, fan-out pacing, signing, and companion mode.
 See [`examples/sitl/README.md`](../examples/sitl/README.md) for the full index.
 
 Before deploying against a vehicle or SITL, set each example's **Connection** endpoints (`bind` is where traffic arrives — typically `127.0.0.1:14550`; `remote` is the vehicle/SITL input — often `14551`) and match the **Vehicle** dialect and default target system id to your link.

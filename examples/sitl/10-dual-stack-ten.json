@@ -12,7 +12,7 @@
         "type": "comment",
         "z": "sitl10-tab",
         "name": "Ten-vehicle rig \u2014 two connections, two broadcast arms",
-        "info": "ArduPilot sysids 1\u20135 on one connection; PX4 sysids 11\u201315 on another. Broadcast arm must be issued per connection \u2014 target_system=0 is single-stack only.\n\nPrefer Docker lab:\n  cd sitl && docker compose --profile sitl up -d --build\n\nManual ArduPilot five (telemetry to bind 14550):\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nArduPilot Connection: bind 0.0.0.0:14550 \u2192 remote 127.0.0.1:14551.\nPX4 Connection: bind 0.0.0.0:14560 \u2192 remote 127.0.0.1:14561.\n\nSelection is \"all\" on both broadcast nodes, deliberately: broadcast sends one target_system=0 frame that every vehicle on the link acts on, so it cannot honour a subset \u2014 a swarm node configured broadcast + list selection is refused before anything is sent. Each connection here already carries exactly one stack, so \"all\" resolves to that stack's five vehicles from the live peer table. To command a genuine subset, use sequential fan-out instead (see SITL 11).",
+        "info": "ArduPilot sysids 1\u20135 on one connection; PX4 sysids 11\u201315 on another. Broadcast arm must be issued per connection \u2014 target_system=0 is single-stack only.\n\nPrefer Docker lab:\n  cd sitl && docker compose --profile sitl up -d --build\n\nManual ArduPilot five (telemetry to bind 14550):\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nArduPilot Connection: bind 0.0.0.0:14550 \u2192 remote 127.0.0.1:14551.\nPX4 Connection: bind 0.0.0.0:14560 \u2192 remote 127.0.0.1:14561.\n\nSelection is \"all\" on both broadcast nodes, deliberately: broadcast sends one target_system=0 frame that every vehicle on the link acts on, so it cannot honour a subset \u2014 a fan-out node configured broadcast + list selection is refused before anything is sent. Each connection here already carries exactly one stack, so \"all\" resolves to that stack's five vehicles from the live peer table. To command a genuine subset, use sequential fan-out instead (see SITL 11).",
         "x": 300,
         "y": 40,
         "wires": []
@@ -152,13 +152,13 @@
         "y": 160,
         "wires": [
             [
-                "sitl10-swarm-ap"
+                "sitl10-fanout-ap"
             ]
         ]
     },
     {
-        "id": "sitl10-swarm-ap",
-        "type": "mavlink-swarm",
+        "id": "sitl10-fanout-ap",
+        "type": "mavlink-fanout",
         "z": "sitl10-tab",
         "name": "Arm broadcast (AP)",
         "connection": "sitl10-connection-ap",
@@ -211,13 +211,13 @@
         "y": 280,
         "wires": [
             [
-                "sitl10-swarm-px4"
+                "sitl10-fanout-px4"
             ]
         ]
     },
     {
-        "id": "sitl10-swarm-px4",
-        "type": "mavlink-swarm",
+        "id": "sitl10-fanout-px4",
+        "type": "mavlink-fanout",
         "z": "sitl10-tab",
         "name": "Arm broadcast (PX4)",
         "connection": "sitl10-connection-px4",

@@ -4,10 +4,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  executeSwarm,
-  guardSwarmInput,
-  selectSwarmMembers,
-} = require('../../lib/swarm');
+  executeFanout,
+  guardFanoutInput,
+  selectFanoutMembers,
+} = require('../../lib/fanout');
 
 test('selection resolves all, explicit list, and filters while excluding stale peers', () => {
   const peerTable = peerTableStub([
@@ -17,10 +17,10 @@ test('selection resolves all, explicit list, and filters while excluding stale p
     { sysid: 4, components: [{ compid: 154, state: 'active', type: 26 }] },
   ]);
 
-  assert.deepEqual(selectSwarmMembers(peerTable, { mode: 'all' }).map((m) => m.sysid), [1, 2]);
-  assert.deepEqual(selectSwarmMembers(peerTable, { mode: 'list', sysids: '2, 3' }).map((m) => m.sysid), [2]);
+  assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'all' }).map((m) => m.sysid), [1, 2]);
+  assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'list', sysids: '2, 3' }).map((m) => m.sysid), [2]);
   assert.deepEqual(
-    selectSwarmMembers(peerTable, {
+    selectFanoutMembers(peerTable, {
       mode: 'filter',
       filter: { type: 2, firmware: 'ardupilot', armed: true },
     }).map((m) => m.sysid),
@@ -32,7 +32,7 @@ test('sequential execution paces targeted sends between members', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(3)]);
   const waits = [];
 
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     action: commandAction(),
     mode: 'sequential',
@@ -49,7 +49,7 @@ test('sequential execution paces targeted sends between members', async () => {
 test('broadcast sends one autopilot-pinned packet with target_system zero', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     action: commandAction(),
     mode: 'broadcast',
@@ -63,14 +63,14 @@ test('broadcast sends one autopilot-pinned packet with target_system zero', asyn
 });
 
 test('aggregation continues only when every selected member succeeds', async () => {
-  const allOk = await executeSwarm({
+  const allOk = await executeFanout({
     connection: connectionStub([peer(1), peer(2)]),
     action: commandAction(),
     mode: 'sequential',
     delivery: 'send',
   });
 
-  const partial = await executeSwarm({
+  const partial = await executeFanout({
     connection: connectionStub([peer(1), peer(2)], { failSysids: new Set([2]) }),
     action: commandAction(),
     mode: 'sequential',
@@ -87,7 +87,7 @@ test('aggregation continues only when every selected member succeeds', async () 
 test('dry run expands members and builds messages without sending', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     action: commandAction(),
     mode: 'sequential',
@@ -104,12 +104,12 @@ test('dry run expands members and builds messages without sending', async () => 
 test('mission actions and param request-list are refused', async () => {
   const connection = connectionStub([peer(1)]);
 
-  const mission = await executeSwarm({
+  const mission = await executeFanout({
     connection,
     action: { type: 'mission', action: 'upload' },
     delivery: 'send',
   });
-  const paramList = await executeSwarm({
+  const paramList = await executeFanout({
     connection,
     action: { type: 'param', action: 'request-list' },
     delivery: 'send',
@@ -124,7 +124,7 @@ test('mission actions and param request-list are refused', async () => {
 test('param set is sequential-only and rejects broadcast config', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     action: {
       type: 'param',
@@ -152,7 +152,7 @@ test('member expiring mid-run is reported failed while later members continue', 
     },
   });
 
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     action: commandAction(),
     mode: 'sequential',
@@ -166,7 +166,7 @@ test('member expiring mid-run is reported failed while later members continue', 
 });
 
 test('suppress does nothing', () => {
-  assert.deepEqual(guardSwarmInput({ payload: false }), { action: 'suppress' });
+  assert.deepEqual(guardFanoutInput({ payload: false }), { action: 'suppress' });
 });
 
 test('broadcast aggregate warns about mixed firmware for uniform commands', async () => {
@@ -175,7 +175,7 @@ test('broadcast aggregate warns about mixed firmware for uniform commands', asyn
     peer(2, { firmware: 'px4', flightMode: 4 }),
   ]);
 
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     action: commandAction({ params: { 1: 1 } }),
     mode: 'broadcast',
@@ -189,14 +189,14 @@ test('broadcast aggregate warns about mixed firmware for uniform commands', asyn
 test('broadcast refuses a filtered or explicit-list selection and sends nothing (§10)', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
-  const list = await executeSwarm({
+  const list = await executeFanout({
     connection,
     action: commandAction(),
     mode: 'broadcast',
     delivery: 'send',
     selection: { mode: 'list', sysids: '1' },
   });
-  const filter = await executeSwarm({
+  const filter = await executeFanout({
     connection,
     action: commandAction(),
     mode: 'broadcast',
@@ -215,7 +215,7 @@ test('broadcast refuses a filtered or explicit-list selection and sends nothing 
 test('broadcast still allows an explicit all-vehicles selection', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     action: commandAction(),
     mode: 'broadcast',
@@ -234,7 +234,7 @@ test('broadcast refuses when stale peers exist even under all-vehicles selection
     peer(2, { state: 'stale' }),
   ]);
 
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     action: commandAction(),
     mode: 'broadcast',
@@ -249,7 +249,7 @@ test('broadcast refuses when stale peers exist even under all-vehicles selection
 
 test('command without preset or numeric commandId is refused', async () => {
   const connection = connectionStub([peer(1)]);
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     action: { type: 'command', carrier: 'long', params: { 1: 1 } },
     mode: 'sequential',
@@ -261,7 +261,7 @@ test('command without preset or numeric commandId is refused', async () => {
 
 test('global move with blank lat/lon is refused (must not become 0,0)', async () => {
   const connection = connectionStub([peer(1)]);
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     action: {
       type: 'move',
@@ -278,7 +278,7 @@ test('global move with blank lat/lon is refused (must not become 0,0)', async ()
 test('a safety preset (Flight Termination) is refused without confirmation and runs with it (§10)', async () => {
   const action = { type: 'command', carrier: 'long', preset: 'flight_termination', params: { 1: 1 } };
 
-  const refused = await executeSwarm({
+  const refused = await executeFanout({
     connection: connectionStub([peer(1)]),
     action,
     mode: 'sequential',
@@ -288,7 +288,7 @@ test('a safety preset (Flight Termination) is refused without confirmation and r
   assert.match(refused.detail, /confirm/i);
 
   const confirmedConnection = connectionStub([peer(1)]);
-  const confirmed = await executeSwarm({
+  const confirmed = await executeFanout({
     connection: confirmedConnection,
     action,
     mode: 'sequential',
@@ -300,7 +300,7 @@ test('a safety preset (Flight Termination) is refused without confirmation and r
 });
 
 test('a raw DO_FLIGHTTERMINATION command id is gated the same as the preset (§10)', async () => {
-  const refused = await executeSwarm({
+  const refused = await executeFanout({
     connection: connectionStub([peer(1)]),
     action: { type: 'command', carrier: 'long', commandId: 185, params: { 1: 1 } },
     mode: 'broadcast',
@@ -313,7 +313,7 @@ test('a raw DO_FLIGHTTERMINATION command id is gated the same as the preset (§1
 test('a preset resolves its own command id, ignoring a leftover default (§9/§10)', async () => {
   const connection = connectionStub([peer(1)]);
 
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     // Editor left commandId at its 400 default while a preset was selected.
     action: { type: 'command', carrier: 'long', preset: 'takeoff', commandId: 400, params: {} },
@@ -328,7 +328,7 @@ test('a preset resolves its own command id, ignoring a leftover default (§9/§1
 test('advanced command params preserve NaN instead of coercing it to 0 (§9)', async () => {
   const connection = connectionStub([peer(1)]);
 
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     action: { type: 'command', carrier: 'long', commandId: 115, params: { 1: 90, 4: NaN } },
     mode: 'sequential',
@@ -344,7 +344,7 @@ test('advanced command params preserve NaN instead of coercing it to 0 (§9)', a
 test('command action with carrier int builds COMMAND_INT with degE7 coords and frame (§9)', async () => {
   const connection = connectionStub([peer(1)]);
 
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     // DO_REPOSITION with whole-degree lat/lon — canonical degrees, scaled by
     // the shared INT builder, not passed through.
@@ -366,7 +366,7 @@ test('command action with carrier int builds COMMAND_INT with degE7 coords and f
 test('command action without a carrier is refused — no default wire form (§9)', async () => {
   const connection = connectionStub([peer(1)]);
 
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     action: { type: 'command', commandId: 400, params: {} },
     mode: 'sequential',
@@ -393,7 +393,7 @@ test('broadcast confirm matches COMMAND_ACK on sysid AND component (§10)', asyn
   };
   const deliver = (decoded) => handlers.forEach((h) => h(decoded));
 
-  const promise = executeSwarm({
+  const promise = executeFanout({
     connection,
     action: commandAction({ params: { 1: 1 } }),
     mode: 'broadcast',
@@ -465,16 +465,16 @@ function connectionStub(rows, options = {}) {
   };
 }
 
-// ── Ask-the-XML kinds and the NaN refusal through the swarm path (§9) ────────
+// ── Ask-the-XML kinds and the NaN refusal through the fan-out path (§9) ────────
 
 const { loadBundled } = require('../../lib/metadata');
 
-test('swarm INT command asks the XML: gimbal flags stay raw on the wire', async () => {
+test('fanout INT command asks the XML: gimbal flags stay raw on the wire', async () => {
   const connection = connectionStub([peer(1)]);
 
-  // The bundle arrives as an explicit option — the swarm node resolves it
+  // The bundle arrives as an explicit option — the fanout node resolves it
   // from the Vehicle Profile (the connection snapshot carries none, Codex #61).
-  const result = await executeSwarm({
+  const result = await executeFanout({
     connection,
     vehicleBundle: loadBundled('common'),
     action: { type: 'command', carrier: 'int', commandId: 1000, params: { 1: -15, 2: 90, 5: 8 } },
@@ -488,13 +488,13 @@ test('swarm INT command asks the XML: gimbal flags stay raw on the wire', async 
   assert.equal(message.fields.x, 8, 'gimbal manager flags must not be ×1e7-scaled');
 });
 
-test('swarm INT command with NaN lat/lon fails loud — nothing sent', async () => {
+test('fanout INT command with NaN lat/lon fails loud — nothing sent', async () => {
   const connection = connectionStub([peer(1)]);
 
   // NaN means "leave unchanged" on the LONG carrier; on INT it must refuse,
   // not silently become 0,0 (§9/§10 "blank coordinates must not become 0,0").
   await assert.rejects(
-    executeSwarm({
+    executeFanout({
       connection,
       vehicleBundle: loadBundled('common'),
       action: { type: 'command', carrier: 'int', commandId: 192, params: { 5: NaN, 6: 149, 7: 50 } },
@@ -509,7 +509,7 @@ test('swarm INT command with NaN lat/lon fails loud — nothing sent', async () 
 test('message-kind payload actions need no carrier; command-backed ones still do (§9)', async () => {
   // Gimbal manager aiming is a plain message — the carrier is meaningless and
   // must not be demanded (Codex #61).
-  const managerAim = await executeSwarm({
+  const managerAim = await executeFanout({
     connection: connectionStub([peer(1)]),
     action: { type: 'payload', topic: 'gimbal', verb: 'aim', path: 'manager', values: { pitch: -10, yaw: 45 } },
     mode: 'sequential',
@@ -519,7 +519,7 @@ test('message-kind payload actions need no carrier; command-backed ones still do
 
   // A command-backed verb without a carrier is still refused with nothing sent.
   const conn2 = connectionStub([peer(1)]);
-  const photo = await executeSwarm({
+  const photo = await executeFanout({
     connection: conn2,
     action: { type: 'payload', topic: 'camera', verb: 'photo', path: 'legacy', values: {} },
     mode: 'sequential',

@@ -51,17 +51,17 @@ test('Command Advanced MAV_CMD select and enum options use catalog descriptions'
   assert.match(html, /spec\.description \|\| ''/);
 });
 
-test('In / Swarm message and command selects use shared fillEnumSelect', () => {
+test('In / Fan-out message and command selects use shared fillEnumSelect', () => {
   const inn = readHtml('mavlink-in');
   assert.match(inn, /RED\.mavlink\.fillEnumSelect\(sel,/);
   assert.match(inn, /titleNamespace:\s*'mavMsgTip'/);
   assert.doesNotMatch(inn, /function syncMessageTitle/);
 
-  const swarm = readHtml('mavlink-swarm');
-  assert.match(swarm, /RED\.mavlink\.fillEnumSelect\(sel,/);
-  assert.match(swarm, /titleNamespace:\s*'mavCmdTip'/);
-  assert.match(swarm, /titleNamespace:\s*'mavTypeTip'/);
-  assert.doesNotMatch(swarm, /function syncCmdTitle|function syncTypeTitle/);
+  const fanout = readHtml('mavlink-fanout');
+  assert.match(fanout, /RED\.mavlink\.fillEnumSelect\(sel,/);
+  assert.match(fanout, /titleNamespace:\s*'mavCmdTip'/);
+  assert.match(fanout, /titleNamespace:\s*'mavTypeTip'/);
+  assert.doesNotMatch(fanout, /function syncCmdTitle|function syncTypeTitle/);
 });
 
 test('select title-sync and missing-option sentinel live once in the resource', () => {

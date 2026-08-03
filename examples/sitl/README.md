@@ -1,7 +1,7 @@
 # SITL example flows
 
 These flows need live firmware behaviour (completion timing, mode tables, PX4 param
-union, mission/fence/rally, swarm pacing, signing). Prefer the **Docker lab** in
+union, mission/fence/rally, fan-out pacing, signing). Prefer the **Docker lab** in
 [`sitl/README.md`](../../sitl/README.md) over hand-built trees.
 
 ## The rig
@@ -47,8 +47,8 @@ without understanding each step.
 | `05-px4-param-union.json` | SITL 05 PX4 param union | 1× PX4 |
 | `06-mission-fence-rally.json` | SITL 06 Mission/fence/rally | 1× ArduPilot + 1× PX4 |
 | `07-mission-failloud.json` | SITL 07 Mission fail-loud | 1× ArduPilot |
-| `08-swarm-sequential-five.json` | SITL 08 Swarm ×5 pacing | 5× ArduPilot |
-| `09-swarm-member-expires.json` | SITL 09 Swarm member expires | 5× ArduPilot |
+| `08-fanout-sequential-five.json` | SITL 08 Fan-out ×5 pacing | 5× ArduPilot |
+| `09-fanout-member-expires.json` | SITL 09 Fan-out member expires | 5× ArduPilot |
 | `10-dual-stack-ten.json` | SITL 10 Dual-stack ×10 | 5× ArduPilot + 5× PX4 |
 | `11-broadcast-vs-sequential.json` | SITL 11 Broadcast vs sequential | 5× ArduPilot |
 | `12-signing.json` | SITL 12 Signing | 1× ArduPilot (+ signing setup) |

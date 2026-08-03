@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Swarm editor: vehicleType is a MAV_TYPE enum <select> (DESIGN.md §6).
+ * Fan-out editor: vehicleType is a MAV_TYPE enum <select> (DESIGN.md §6).
  */
 
 const test = require('node:test');
@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const html = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'nodes', 'mavlink-swarm.html'),
+  path.join(__dirname, '..', '..', 'nodes', 'mavlink-fanout.html'),
   'utf8'
 );
 
@@ -82,20 +82,20 @@ test('commandId loads MAV_CMD entries from command/commands catalog', () => {
 test('build+list catalog path has an explicit Dialect picker with Vehicle Profile escape', () => {
   assert.match(html, /dialect:\s*\{\s*value:\s*''/, 'dialect defaults empty until the user chooses one');
   assert.match(html, /vehicle:\s*\{[\s\S]*type:\s*['"]mavlink-vehicle['"]/, 'Vehicle Profile escape is a vehicle config-node reference');
-  assert.match(html, /id="row-swarm-dialect"/, 'template must have a dialect row');
+  assert.match(html, /id="row-fanout-dialect"/, 'template must have a dialect row');
   assert.match(html, /id="node-input-dialect"/, 'template must have the dialect select');
-  assert.match(html, /id="row-swarm-vehicle"/, 'template must have a Vehicle Profile row');
+  assert.match(html, /id="row-fanout-vehicle"/, 'template must have a Vehicle Profile row');
   assert.match(html, /id="node-input-vehicle"/, 'template must have the Vehicle Profile picker');
   assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'shared dialect selector helper is used');
   assert.match(html, /includeVehicleEscape:\s*true/, 'Dialect picker includes the from Vehicle Profile escape');
   assert.match(html, /__vehicle/, 'Vehicle Profile escape value is recognized');
 });
 
-test('swarm catalog target delegates to the shared loader with its Build+list isBuild flag', () => {
-  // Swarm's Build path is the narrow Build+list case; every other combination
+test('fanout catalog target delegates to the shared loader with its Build+list isBuild flag', () => {
+  // Fan-out's Build path is the narrow Build+list case; every other combination
   // reads the connection profile. It passes that as the isBuild override to
   // loadCatalog — matrix behaviour proven in mavlink-editor-resource.test.js.
-  assert.match(html, /function swarmIsBuildList/, 'Build+list helper must exist');
+  assert.match(html, /function fanoutIsBuildList/, 'Build+list helper must exist');
   assert.match(
     html,
     /delivery === ['"]build['"] && selectionMode === ['"]list['"]/,
@@ -103,20 +103,20 @@ test('swarm catalog target delegates to the shared loader with its Build+list is
   );
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"][\s\S]*isBuild:\s*swarmIsBuildList\(\)/,
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"][\s\S]*isBuild:\s*fanoutIsBuildList\(\)/,
     'messages catalog gets the Build+list isBuild override'
   );
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"][\s\S]*isBuild:\s*swarmIsBuildList\(\)/,
+    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"][\s\S]*isBuild:\s*fanoutIsBuildList\(\)/,
     'commands catalog gets the Build+list isBuild override'
   );
   assert.doesNotMatch(html, /function resolveCatalogTarget/, 'no local catalog resolver copy');
   assert.doesNotMatch(html, /\$\.getJSON\(\s*RED\.mavlink\.adminApiUrl/, 'no hand-rolled catalog getJSON');
-  assert.doesNotMatch(html, /ardupilotmega/, 'swarm catalog target resolution must not hardcode ardupilotmega');
+  assert.doesNotMatch(html, /ardupilotmega/, 'fanout catalog target resolution must not hardcode ardupilotmega');
 });
 
-test('swarm Build visibility delegates shared rows with the Build+list isBuild flag', () => {
+test('fanout Build visibility delegates shared rows with the Build+list isBuild flag', () => {
   // Same isBuildList override resolveCatalogTarget already takes — the matrix
   // behaviour is proven once in mavlink-editor-resource.test.js.
   const visStart = html.indexOf('function refreshVisibility');
@@ -130,10 +130,10 @@ test('swarm Build visibility delegates shared rows with the Build+list isBuild f
     'shared visibility helper is called');
   assert.match(vis, /isBuild:\s*isBuildList/,
     'Build+list is passed as the isBuild override');
-  assert.match(vis, /dialectRow:\s*'#row-swarm-dialect'/, 'dialect row selector passed');
-  assert.match(vis, /vehicleRow:\s*'#row-swarm-vehicle'/, 'vehicle row selector passed');
-  assert.match(vis, /connectionRow:\s*'#row-swarm-connection'/, 'connection row selector passed');
-  assert.doesNotMatch(vis, /\$\('#row-swarm-dialect'\)\.toggle/,
+  assert.match(vis, /dialectRow:\s*'#row-fanout-dialect'/, 'dialect row selector passed');
+  assert.match(vis, /vehicleRow:\s*'#row-fanout-vehicle'/, 'vehicle row selector passed');
+  assert.match(vis, /connectionRow:\s*'#row-fanout-connection'/, 'connection row selector passed');
+  assert.doesNotMatch(vis, /\$\('#row-fanout-dialect'\)\.toggle/,
     'no hand-rolled dialect row toggle');
 });
 
@@ -175,8 +175,8 @@ test('connection row hidden only for build+list; identity row hidden for build d
     /d === 'build' && sel === 'list'/,
     'build+list condition governs connection-row visibility'
   );
-  assert.match(html, /row-swarm-connection/, 'connection row has an id for visibility toggling');
-  assert.match(html, /row-swarm-identity/, 'identity row has an id for visibility toggling');
+  assert.match(html, /row-fanout-connection/, 'connection row has an id for visibility toggling');
+  assert.match(html, /row-fanout-identity/, 'identity row has an id for visibility toggling');
   assert.match(
     html,
     /d !== 'build'/,
@@ -267,7 +267,7 @@ test('carrier defaults to the first valid option with no blank prompt', () => {
   assert.match(
     html,
     /carrier:\s*\{ value: 'int' \}/,
-    'new swarm nodes default to COMMAND_INT'
+    'new fanout nodes default to COMMAND_INT'
   );
   assert.doesNotMatch(html, /select carrier/, 'carrier select has no meaningless blank prompt');
 });
@@ -279,6 +279,6 @@ test('frame row binds to the frame property and follows the INT carrier (§9)', 
     /frame:\s*\{ value: '' \}/,
     'frame is declared in defaults (blank = builder default GLOBAL) so the selection persists'
   );
-  assert.match(html, /row-swarm-frame/, 'frame row id must exist');
+  assert.match(html, /row-fanout-frame/, 'frame row id must exist');
   assert.match(html, /refreshCarrierRows/, 'carrier/frame visibility is wired');
 });

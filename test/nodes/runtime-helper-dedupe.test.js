@@ -35,13 +35,13 @@ test('In does not double-cap badge text', () => {
   assert.doesNotMatch(text, /capBadge\([^)]+\)\.slice\(/);
 });
 
-test('Move and Swarm share lib/move config mappers and Swarm uses mergeParams', () => {
+test('Move and Fan-out share lib/move config mappers and Fan-out uses mergeParams', () => {
   const move = fs.readFileSync(path.join(nodesDir, 'mavlink-move.js'), 'utf8');
-  const swarm = fs.readFileSync(path.join(nodesDir, 'mavlink-swarm.js'), 'utf8');
+  const fanout = fs.readFileSync(path.join(nodesDir, 'mavlink-fanout.js'), 'utf8');
   assert.match(move, /positionFrom,\s*\n\s*velocityFrom,\s*\n\s*valueFrom/);
   assert.match(move, /require\('\.\.\/lib\/move'\)/);
-  assert.match(swarm, /require\('\.\.\/lib\/move'\)/);
-  assert.match(swarm, /mergeParams\(/);
-  assert.doesNotMatch(swarm, /function\s+positionFrom\s*\(/);
-  assert.doesNotMatch(swarm, /function\s+numericPayloadParams\s*\(/);
+  assert.match(fanout, /require\('\.\.\/lib\/move'\)/);
+  assert.match(fanout, /mergeParams\(/);
+  assert.doesNotMatch(fanout, /function\s+positionFrom\s*\(/);
+  assert.doesNotMatch(fanout, /function\s+numericPayloadParams\s*\(/);
 });

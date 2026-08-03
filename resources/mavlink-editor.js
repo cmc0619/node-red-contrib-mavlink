@@ -113,7 +113,7 @@
   /**
    * Editor-side copy of lib/payload `PAYLOAD_VERBS`. Client HTML cannot
    * require() the Node module, so the topic→verb catalog lives once here —
-   * Payload and Swarm both read it. Pinned against the lib table by test.
+   * Payload and Fan-out both read it. Pinned against the lib table by test.
    */
   RED.mavlink.PAYLOAD_VERBS = {
     camera: [
@@ -892,7 +892,7 @@
 
   /**
    * Identities bound to a Connection (default first, then additionals),
-   * optionally filtered by role (§6 matrix: swarm passes ['gcs','custom']).
+   * optionally filtered by role (§6 matrix: fanout passes ['gcs','custom']).
    *
    * @param {string} connectionId
    * @param {string[]} [rolesAllowed]
@@ -943,7 +943,7 @@
 
   /**
    * Reload the send-as identity select from the live Connection picker.
-   * Thin defaulting wrapper over `fillIdentitySelect` — Swarm passes
+   * Thin defaulting wrapper over `fillIdentitySelect` — Fan-out passes
    * `rolesAllowed: ['gcs','custom']`; everyone else keeps the full set.
    *
    * @param {object} node
