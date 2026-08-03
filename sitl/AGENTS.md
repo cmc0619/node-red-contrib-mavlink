@@ -124,16 +124,29 @@ local or paste a collapsed `<details>` block — do not land it in git.
 Directed commands use the Connection peer table (reply to HEARTBEAT source).
 `remotePort` 14551/14561 is pre-peer fallback only.
 
-## Takeoff / GUIDED
+This is a **star, not a bus**: every AP vehicle dials in and owns its own return
+path. `target_system = 0` therefore has to be written once per learned peer —
+Connection does that — and a single send to `remotePort` reaches nobody.
+
+## Takeoff / GUIDED / fan-out arm
 
 AP `NAV_TAKEOFF` needs GUIDED **and** a vehicle on the ground. Examples **01/02**
 set GUIDED **before** arm (cold SITL often DENYs armed STABILIZE→GUIDED).
 Harness prep `ap-guided-1` polls until HEARTBEAT shows GUIDED **and** a
 probe arm succeeds (EKF position — often ~30–40 s after docker restart), then
-force-disarms for the example’s own arm step. If takeoff is still DENIED
-(`resultCode: 4`), check that the fleet restart ran and arm-ready prep
-confirmed — do not reintroduce a source build, and do not rely on force-disarm
-to clear altitude.
+force-disarms for the example’s own arm step.
+
+Examples **08/09/11** arm sysids 1–5 with `delivery=confirm`, where the first
+`DENIED` fails the aggregate, so they use prep `ap-arm-ready-fleet`: probe-arm
+each in turn until it succeeds, then force-disarm. Do **not** reach for a bigger
+`SITL_FLEET_SETTLE_MS` instead — peers come back within seconds while arm stays
+`DENIED` (“Gyros inconsistent”) for another 20–40 s, and that interval is not a
+constant. Example **10** deliberately has no prep: it is `delivery=send`, so
+nothing waits on an ACK and no verdict depends on anyone arming.
+
+If takeoff or arm is still DENIED (`resultCode: 4`), check that the fleet
+restart ran and the matching arm-ready prep confirmed — do not reintroduce a
+source build, and do not rely on force-disarm to clear altitude.
 
 ## Param echo types
 

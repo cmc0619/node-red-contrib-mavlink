@@ -1985,6 +1985,36 @@ example prep asks for it. That is the altitude reset; force-disarm cleanup was
 removed as ineffective for this path.
 *Check:* `sitl/run-example-suite.js` (`restartVehicleFleet`), `sitl/AGENTS.md`.
 
+**`target_system = 0` is one frame to N addresses, not one datagram.**
+*Wrong belief:* a broadcast needs no endpoint — “no endpoint is the definition of
+correct there” — so `_pump` can let it ride the configured-remote fallback.
+*Fact:* that holds only on a shared medium. The lab’s ArduPilot vehicles are
+`udpclient`: each dials the GCS and owns its own return path, so “everyone” is N
+addresses the peer table already learned from their heartbeats. The single
+datagram to `remotePort` 14551 reached nobody — broadcast arm drew zero
+`COMMAND_ACK`s and left all five disarmed, while a directed arm to the same
+peers worked. `_pump` now serializes the frame once and writes it to every
+`peerTable.endpointsForBroadcast(compid)` primary; an empty table still means
+the configured remote, which is the pre-peer path. A failed write does not
+demote a primary on this path — one unreachable vehicle must not cost the others
+their addresses.
+*Check:* `lib/connection/runtime.js` (`_pump`), `lib/connection/peer-table.js`
+(`endpointsForBroadcast`), `node --test test/connection/runtime.test.js`.
+
+**Fan-out arm examples need a probe-arm, not a longer settle sleep.**
+*Wrong belief:* raise `SITL_FLEET_SETTLE_MS` until examples 08/11 stop failing;
+example 10 passes, so the fleet must be arming fine.
+*Fact:* peers reappear within seconds of a `docker restart`, but arm answers
+`DENIED` (STATUSTEXT “Gyros inconsistent”, then “Need Position Estimate”) for
+another 20–40 s while the IMUs and EKF settle. 08/09/11 use `delivery=confirm`,
+so the first `DENIED` fails the whole aggregate; 10 uses `delivery=send` and
+passes whether or not anything armed, which is why it was not evidence. Prep
+`ap-arm-ready-fleet` probe-arms sysids 1–5 until each succeeds and force-disarms
+after each — the same poll `ap-guided-1` already used, extracted rather than
+re-invented. The settle time is not a constant, so a bigger sleep is a guess.
+*Check:* `sitl/run-example-suite.js` (`armReadySource`, `waitApArmReady`,
+profiles 08/09/11), `sitl/AGENTS.md`.
+
 **Param set echo-confirm must use a live param id and the vehicle’s type.**
 *Wrong belief:* example 13 can keep `ARMING_CHECK` as `MAV_PARAM_TYPE_REAL32` forever.
 *Fact:* Copter-4.7.0 SITL (`stable-4.7.0` prebuilt above) answers `PARAM_ERROR` for

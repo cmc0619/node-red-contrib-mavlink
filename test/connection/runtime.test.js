@@ -663,7 +663,114 @@ test('broadcast target (sysid 0) never triggers the missing-endpoint warning (#9
   assert.equal(
     warns.filter((m) => /no known endpoint/.test(m)).length,
     0,
-    'no endpoint is the definition of correct for broadcast'
+    'before any peer is heard, the configured remote is the only path'
   );
+  connection.close();
+});
+
+/**
+ * `target_system = 0` reaches everyone by itself only on a shared medium. The
+ * SITL lab's ArduPilot `udpclient` topology is a star — every vehicle dials in
+ * and owns a return path — so one datagram to the configured remote reached
+ * nobody: measured zero COMMAND_ACKs with all five vehicles left disarmed,
+ * while directed arms to the same peers worked.
+ */
+function hearFrom(socket, peers) {
+  for (const [sysid, port, compid = 1] of peers) {
+    socket.receive(
+      frameBuffer({
+        name: 'HEARTBEAT',
+        sysid,
+        compid,
+        fields: { type: 2, autopilot: 3, base_mode: 0, custom_mode: 0, system_status: 3 },
+      }),
+      { address: '10.0.0.5', port }
+    );
+  }
+}
+
+function commandDatagrams(socket) {
+  return socket.sent.filter((entry) => {
+    try {
+      return JSON.parse(entry.buffer.toString()).name === 'COMMAND_LONG';
+    } catch {
+      return false;
+    }
+  });
+}
+
+function broadcastArm(connection) {
+  connection.send(
+    { name: 'COMMAND_LONG', fields: { target_system: 0, command: 400 } },
+    { band: BAND.CONTROL, target: { sysid: 0, compid: 1 } }
+  );
+}
+
+test('a broadcast is written once per learned peer endpoint', async () => {
+  const { connection, dg } = build();
+  await connection.start();
+  const socket = dg.sockets[0];
+  hearFrom(socket, [[1, 40001], [2, 40002], [3, 40003]]);
+
+  broadcastArm(connection);
+  await delay(40);
+
+  const sends = commandDatagrams(socket);
+  assert.equal(sends.length, 3, 'one datagram per vehicle, not one to the configured remote');
+  assert.deepEqual(sends.map((s) => s.port).sort((a, b) => a - b), [40001, 40002, 40003]);
+  // One frame, many envelopes: every copy still says target_system 0, so a
+  // vehicle that also sees a neighbour's copy treats it as addressed to it.
+  for (const send of sends) {
+    assert.equal(JSON.parse(send.buffer.toString()).fields.target_system, 0);
+  }
+  connection.close();
+});
+
+test('a broadcast crosses the wire once per endpoint, not once per component', async () => {
+  // A gimbal and an autopilot on one airframe answer from the same UDP return
+  // path. The broadcast addresses compid 1, and the endpoint is deduped
+  // regardless, so the vehicle gets one datagram.
+  const { connection, dg } = build();
+  await connection.start();
+  const socket = dg.sockets[0];
+  hearFrom(socket, [[7, 40007, 1], [7, 40007, 154], [8, 40008, 1]]);
+
+  broadcastArm(connection);
+  await delay(40);
+
+  const sends = commandDatagrams(socket);
+  assert.deepEqual(sends.map((s) => s.port).sort((a, b) => a - b), [40007, 40008]);
+  connection.close();
+});
+
+test('a broadcast with no peers still rides the configured remote', async () => {
+  // The pre-peer path has to survive: a fan-out issued before any heartbeat
+  // arrives must not silently write to nowhere.
+  const { connection, dg } = build();
+  await connection.start();
+  const socket = dg.sockets[0];
+
+  broadcastArm(connection);
+  await delay(40);
+
+  const sends = commandDatagrams(socket);
+  assert.equal(sends.length, 1, 'exactly one send, to the transport default');
+  assert.equal(sends[0].port, 14555, 'the configured remotePort');
+  connection.close();
+});
+
+test('the queue keeps draining after a broadcast fans out', async () => {
+  // Every destination reports before the item is done. Miscounting would leave
+  // _draining stuck true and wedge the queue — heartbeats included.
+  const { connection, dg } = build();
+  await connection.start();
+  const socket = dg.sockets[0];
+  hearFrom(socket, [[1, 40001], [2, 40002]]);
+
+  broadcastArm(connection);
+  broadcastArm(connection);
+  await delay(60);
+
+  assert.equal(commandDatagrams(socket).length, 4, 'both broadcasts fanned out');
   connection.close();
 });
