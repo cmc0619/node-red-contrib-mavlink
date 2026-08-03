@@ -1,9 +1,9 @@
 {
-  "file": "mavlink-2026-07-29-de1e078.seed.gz",
-  "stamp": "2026-07-29-de1e078",
+  "file": "mavlink-2026-08-03-44a1229.seed.gz",
+  "stamp": "2026-08-03-44a1229",
   "repo": "mavlink/mavlink",
   "ref": "master",
-  "commit": "de1e078a3a7c53c9262a95b7417959a0f8bf4150",
-  "commitDate": "2026-07-21T23:58:06Z",
-  "fetchedAt": "2026-07-29T00:14:13.000Z"
+  "commit": "44a1229ece43cfc3ce1640451ad5aaba52a28459",
+  "commitDate": "2026-08-02T00:15:52Z",
+  "fetchedAt": "2026-08-03T10:09:23.164Z"
 }
