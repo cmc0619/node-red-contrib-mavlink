@@ -102,3 +102,22 @@ test('the -tmp editors do not register a second field-tips route', () => {
   assert.equal(afterShipped, 1, 'the shipped node serves the route');
   assert.equal(routes.length, 1, 'both -tmp types reuse it');
 });
+
+test('the -tmp editors drop a stashed value when its enum family changes', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const html = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'nodes', 'mavlink-payload-tmp.html'),
+    'utf8'
+  );
+  // Rows are destroyed on repaint and refilled from a stash keyed by field
+  // name, so the stash has to remember which enum the value belonged to.
+  // See test/payload/verbs.test.js for why: mode and action collide.
+  assert.match(html, /var stashEnum = \{\};/, 'the stash records an enum family');
+  assert.match(
+    html,
+    /hasOwnProperty\.call\(stashEnum, key\)\s*&&\s*stashEnum\[key\] !== family/,
+    'a recorded family mismatch marks the stashed value stale'
+  );
+  assert.match(html, /var saved = stale \? undefined : stash\[key\]/, 'a stale value is not painted');
+});
