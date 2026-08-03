@@ -96,6 +96,9 @@ const PROFILE = {
     waitMs: 30000,
     expect: 'sequential + broadcast arm confirmed',
     prep: 'ap-arm-ready-fleet',
+    // Sequential confirm ×5 needs more than the default 1.5 s inject gap before
+    // the broadcast inject fires (inject HTTP returns before fan-out finishes).
+    injectGapMs: 12000,
   },
   '12-signing': {
     waitMs: 5000,

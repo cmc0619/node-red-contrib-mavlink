@@ -663,7 +663,51 @@ test('broadcast target (sysid 0) never triggers the missing-endpoint warning (#9
   assert.equal(
     warns.filter((m) => /no known endpoint/.test(m)).length,
     0,
-    'no endpoint is the definition of correct for broadcast'
+    'pre-peer broadcast may use the configured remote; it must not warn'
   );
+  connection.close();
+});
+
+test('broadcast target (sysid 0) writes the same frame to every learned peer endpoint', async () => {
+  // udpclient SITL: each vehicle has its own return path. One send to the
+  // configured remote (14551) reaches nobody — fan the datagram out.
+  const { connection, dg } = build();
+  await connection.start();
+  const sock = dg.sockets[0];
+  for (const [sysid, port] of [
+    [1, 40001],
+    [2, 40002],
+    [3, 40003],
+  ]) {
+    sock.receive(
+      frameBuffer({
+        name: 'HEARTBEAT',
+        sysid,
+        compid: 1,
+        fields: { type: 2, autopilot: 3, base_mode: 0, custom_mode: 0, system_status: 3 },
+      }),
+      { address: '10.0.0.5', port }
+    );
+  }
+  connection.send(
+    { name: 'COMMAND_LONG', fields: { target_system: 0, command: 400 } },
+    { band: BAND.CONTROL, target: { sysid: 0, compid: 1 } }
+  );
+  await delay(40);
+  const cmdSends = sock.sent.filter((s) => {
+    try {
+      return JSON.parse(s.buffer.toString()).name === 'COMMAND_LONG';
+    } catch {
+      return false;
+    }
+  });
+  assert.equal(cmdSends.length, 3, 'one datagram per learned peer endpoint');
+  assert.deepEqual(
+    cmdSends.map((s) => s.port).sort((a, b) => a - b),
+    [40001, 40002, 40003]
+  );
+  for (const s of cmdSends) {
+    assert.equal(JSON.parse(s.buffer.toString()).fields.target_system, 0);
+  }
   connection.close();
 });

@@ -1995,6 +1995,18 @@ Harness prep `ap-arm-ready-fleet` probe-arms sysids 1–5 until each succeeds, t
 force-disarms — same poll pattern as `ap-guided-1`, not a blind wait.
 *Check:* `sitl/run-example-suite.js` (`waitApArmReady`, profiles 08/09/10/11).
 
+**`target_system = 0` must be written to every learned peer endpoint on UDP.**
+*Wrong belief:* Connection can send a broadcast (`target.sysid === 0`) once via the
+configured remote fallback; “no endpoint is the definition of correct” for bus media.
+*Fact:* the lab’s ArduPilot `udpclient` topology is a star — each vehicle has its own
+UDP return path to `bindPort`. One datagram to `remotePort` 14551 reaches nobody.
+Measured: broadcast arm produced zero `COMMAND_ACK`s and left all five disarmed;
+directed arm to the same peers succeeded. Connection now serializes the frame once
+and writes it to every `peerTable.endpointsForBroadcast(compid)` primary; pre-peer
+(empty table) still uses the configured remote.
+*Check:* `node --test test/connection/runtime.test.js` (broadcast multi-endpoint),
+`lib/connection/runtime.js` (`_pump`), `lib/connection/peer-table.js`.
+
 **Param set echo-confirm must use a live param id and the vehicle’s type.**
 *Wrong belief:* example 13 can keep `ARMING_CHECK` as `MAV_PARAM_TYPE_REAL32` forever.
 *Fact:* Copter-4.7.0 SITL (`stable-4.7.0` prebuilt above) answers `PARAM_ERROR` for
