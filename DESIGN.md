@@ -1979,11 +1979,21 @@ arm example.
 after example 01). ArduCopter then accepts arm + GUIDED but returns
 `MAV_RESULT_DENIED` (resultCode 4) on `MAV_CMD_NAV_TAKEOFF` because the vehicle
 is not on the ground. The harness `docker restart`s AP 1–5, PX4 11–15, and
-companions 20/21 before each non-SKIP example (not `nrc-nodered`), waits for
-GPS/EKF settle, re-applies PX4 lab helpers, and confirms GUIDED on AP-1 when the
-example prep asks for it. That is the altitude reset; force-disarm cleanup was
-removed as ineffective for this path.
+companions 20/21 before each non-SKIP example (not `nrc-nodered`), waits briefly,
+re-applies PX4 lab helpers, and runs example-specific readiness polls. That is the
+altitude reset; force-disarm cleanup was removed as ineffective for this path.
 *Check:* `sitl/run-example-suite.js` (`restartVehicleFleet`), `sitl/AGENTS.md`.
+
+**Fan-out arm examples need AP fleet arm-ready after docker restart — not a longer sleep.**
+*Wrong belief:* bump `FLEET_SETTLE_MS` until examples 08/11 stop failing, or treat
+example 10’s PASS as proof the five AP vehicles armed.
+*Fact:* after restart, peers 1–5 appear within seconds but arm ACKs are `DENIED`
+with STATUSTEXT `Arm: Gyros inconsistent` / `Accels inconsistent` until EKF settles
+(~20–40 s). Examples 08/11 use `delivery=confirm`, so the first DENIED fails the
+aggregate. Example 10 uses `delivery=send` and can PASS without anyone arming.
+Harness prep `ap-arm-ready-fleet` probe-arms sysids 1–5 until each succeeds, then
+force-disarms — same poll pattern as `ap-guided-1`, not a blind wait.
+*Check:* `sitl/run-example-suite.js` (`waitApArmReady`, profiles 08/09/10/11).
 
 **Param set echo-confirm must use a live param id and the vehicle’s type.**
 *Wrong belief:* example 13 can keep `ARMING_CHECK` as `MAV_PARAM_TYPE_REAL32` forever.
