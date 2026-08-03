@@ -8,6 +8,7 @@
         firmware:              { value: 'ardupilot', required: true },
         dialect:               { value: 'ardupilotmega', required: true },
         dialectRevision:       { value: 'seed', required: true },
+        additionalDialects:    { value: '' },
         paramDefsUrl:          { value: '' },
         defaultTargetSystem:   { value: 1, validate: RED.mavlink.validateUint8(0) },
         defaultTargetComponent:{ value: 1, validate: RED.mavlink.validateUint8(0) }
@@ -27,6 +28,7 @@
 
         const $dialect = $('#node-config-input-dialect');
         const $revision = $('#node-config-input-dialectRevision');
+        const $components = $('#mav-component-dialects');
         const $firmware = $('#node-config-input-firmware');
         const $status = $('#mav-catalog-status');
         const $paramDefsStatus = $('#mav-param-defs-status');
@@ -58,6 +60,48 @@
           }
           $dialect.val(want);
           populateRevisions(node.dialectRevision || 'seed');
+          populateComponents();
+        }
+
+        /**
+         * Component dialects: everything the airframe does not already contain.
+         * ardupilotmega pulls in uAvionix, icarous, loweheiser, cubepilot and
+         * csAirLink; storm32 pulls in ardupilotmega. Offering those would be
+         * offering something already loaded, so a dialect is listed only when
+         * its own entry file is absent from the primary's include chain.
+         *
+         * One option per (dialect, version), so a newly fitted component can
+         * sit on a newer snapshot than the airframe.
+         */
+        function populateComponents() {
+          const primary = dialectRow($dialect.val());
+          const chain = (primary && primary.files) || [];
+          const saved = String($('#node-config-input-additionalDialects').val() || '')
+            .split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+          $components.empty();
+          library.forEach(function (d) {
+            if (primary && d.name === primary.name) return;
+            if (chain.indexOf(d.entry) !== -1) return;
+            (d.versions || []).forEach(function (v) {
+              const value = d.name + '@' + v.id;
+              $('<option>').val(value).text(d.name + ' · ' + v.label).appendTo($components);
+            });
+          });
+          // A saved pick the library no longer offers stays selectable rather
+          // than vanishing silently from a deployed profile.
+          saved.forEach(function (value) {
+            if (!$components.find('option[value="' + value + '"]').length) {
+              $('<option>').val(value).text(value + ' (not in library)').appendTo($components);
+            }
+          });
+          $components.val(saved);
+          syncComponentsHidden();
+        }
+
+        function syncComponentsHidden() {
+          const raw = $components.val();
+          const values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+          $('#node-config-input-additionalDialects').val(values.join(','));
         }
 
         function populateRevisions(prefer) {
@@ -94,7 +138,10 @@
 
         $dialect.on('change', function () {
           populateRevisions('seed');
+          populateComponents();
         });
+
+        $components.on('change', syncComponentsHidden);
 
         $firmware.on('change', function () {
           const want = FIRMWARE_DIALECT[$firmware.val()];
@@ -297,6 +344,15 @@
       <button id="mav-catalog-update" class="red-ui-button">Update catalog</button>
       <button id="mav-catalog-compare" class="red-ui-button">Compare with seed</button>
       <button id="mav-dialect-rebuild" class="red-ui-button">Rebuild dialect</button>
+    </div>
+    <div class="form-row">
+      <label for="mav-component-dialects">Components</label>
+      <select id="mav-component-dialects" multiple="multiple" size="6" style="width:70%"></select>
+      <input type="hidden" id="node-config-input-additionalDialects">
+    </div>
+    <div class="form-tips">
+      Optional. Ctrl/Cmd-click to load extra dialects for components on this vehicle.
+      Only dialects the selected Dialect does not already include are listed.
     </div>
     <div class="form-tips" id="mav-catalog-status" style="min-height:1em;"></div>
     <div class="form-row">

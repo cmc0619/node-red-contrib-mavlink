@@ -103,3 +103,20 @@ test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
     'bare relative mavlink ajax url paths must be gone'
   );
 });
+
+test('the component-dialect picker is a plain multi-select synced to a hidden field', () => {
+  assert.match(html, /additionalDialects:\s*\{\s*value:\s*''/);
+  assert.match(html, /id="mav-component-dialects"[^>]*multiple="multiple"/);
+  assert.match(html, /id="node-config-input-additionalDialects"/);
+  // No editableList and no oneditsave: the hidden input is an ordinary
+  // node-config-input-* field, so Node-RED serializes it.
+  assert.ok(!/editableList/.test(html));
+  assert.ok(!/oneditsave/.test(html));
+});
+
+test('the picker hides dialects the primary already includes', () => {
+  // ardupilotmega pulls in uAvionix/icarous/loweheiser/cubepilot/csAirLink;
+  // storm32 pulls in ardupilotmega. Offering those would offer nothing new.
+  assert.match(html, /chain\.indexOf\(d\.entry\)/);
+  assert.match(html, /populateComponents/);
+});

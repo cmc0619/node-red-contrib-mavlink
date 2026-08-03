@@ -265,6 +265,8 @@ module.exports = function registerMavlinkVehicle(RED) {
     node.dialect = (config.dialect || 'ardupilotmega').toLowerCase();
     // `seed` (the editor default) or a catalog snapshot id.
     node.dialectRevision = config.dialectRevision || 'seed';
+    // Component dialects, comma-joined `dialect@revision` from the editor.
+    node.additionalDialects = config.additionalDialects || '';
     // Optional firmware/custom parameter-definition URL (PX4 / custom stacks).
     node.paramDefsUrl = typeof config.paramDefsUrl === 'string' ? config.paramDefsUrl.trim() : '';
 
@@ -282,6 +284,7 @@ module.exports = function registerMavlinkVehicle(RED) {
         name: config.name,
         dialect: node.dialect,
         dialectRevision: node.dialectRevision,
+        additionalDialects: node.additionalDialects,
         catalogBaseDir: xmlCatalogBaseDir(RED),
       });
     } catch (err) {
@@ -323,6 +326,7 @@ module.exports = function registerMavlinkVehicle(RED) {
       firmware: node.firmware,
       dialect: node.dialect,
       dialectRevision: node.dialectRevision,
+      additionalDialects: node.additionalDialects,
       paramDefsUrl: node.paramDefsUrl,
       defaultTargetSystem: node.defaultTargetSystem,
       defaultTargetComponent: node.defaultTargetComponent,

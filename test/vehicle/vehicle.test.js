@@ -142,3 +142,44 @@ test('resolveDialect dialectRevision seed loads the shipped dialect', () => {
   assert.equal(bundle.dialect, 'icarous');
   assert.ok(bundle.messages.ICAROUS_HEARTBEAT);
 });
+
+/* ---------- resolveDialect — component dialects ---------- */
+
+test('a profile with component dialects compiles them into one bundle', () => {
+  const px4 = resolveDialect({ dialect: 'development', dialectRevision: 'seed' });
+  const withGimbal = resolveDialect({
+    dialect: 'development',
+    dialectRevision: 'seed',
+    additionalDialects: 'storm32@seed',
+  });
+
+  assert.equal(withGimbal.dialect, 'development+storm32');
+  const added = Object.keys(withGimbal.messages).filter((m) => !px4.messages[m]);
+  assert.ok(added.length > 0, 'the component dialect contributes messages');
+  // The include chain resolves it: shared files appear once, so nothing is
+  // shadowed and there is no merge rule of our own.
+  assert.deepEqual(withGimbal.overrides, []);
+  // Everything the airframe had survives.
+  for (const name of Object.keys(px4.messages)) {
+    assert.ok(withGimbal.messages[name], `${name} survives`);
+  }
+});
+
+test('component dialects are order-independent for a clean set', () => {
+  const a = resolveDialect({ dialect: 'common', additionalDialects: 'icarous@seed' });
+  assert.ok(a.messages.ICAROUS_HEARTBEAT);
+  assert.ok(a.messages.HEARTBEAT);
+});
+
+test('a blank additionalDialects field resolves exactly like no field at all', () => {
+  const plain = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed' });
+  const blank = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed', additionalDialects: '' });
+  assert.equal(blank, plain, 'same cached bundle, not a recompile');
+});
+
+test('a component dialect that collides on a msgid fails loud naming both', () => {
+  assert.throws(
+    () => resolveDialect({ dialect: 'ardupilotmega', additionalDialects: 'paparazzi@seed' }),
+    /Message id 180 is claimed by both/
+  );
+});
