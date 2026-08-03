@@ -131,3 +131,17 @@ test('dialect, version and components sit above Advanced, not inside it', () => 
   assert.match(advanced, /id="mav-catalog-update"/, 'catalog actions stay advanced');
   assert.match(advanced, /id="node-config-input-paramDefsUrl"/, 'param defs stays advanced');
 });
+
+test('CompID options load after the dialect select is populated', () => {
+  // MAV_COMPONENT is fetched for the dialect this profile selects, so the
+  // query needs #node-config-input-dialect already filled. Loading it before
+  // loadLibrary() resolves sends an empty query and the list collapses to the
+  // saved value alone — the operator can then pick nothing else.
+  const prepare = html.slice(html.indexOf('oneditprepare'));
+  const loadCall = prepare.indexOf('loadEnumsCatalog');
+  const inCallback = prepare.indexOf('populateDialects(node.dialect);\n          reloadCompIds();');
+  assert.ok(inCallback !== -1, 'CompID reload runs inside the loadLibrary callback');
+  assert.ok(loadCall !== -1);
+  assert.match(prepare, /\$dialect\.on\('change'[\s\S]{0,200}reloadCompIds\(\)/);
+  assert.match(prepare, /\$revision\.on\('change', reloadCompIds\)/);
+});

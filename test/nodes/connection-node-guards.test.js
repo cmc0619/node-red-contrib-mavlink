@@ -82,3 +82,16 @@ test('a dangling Local Identity reference fails loud naming the id', () => {
     'the error names which reference is dangling'
   );
 });
+
+test('a disabled Connection still exposes an empty peer table', () => {
+  const { ctor } = makeRED({});
+  const node = Object.create(null);
+  ctor.call(node, { ...BASE_CONFIG, disabled: true });
+
+  // Disabled is a valid choice, not a broken reference. Action nodes gate on
+  // the peer table existing, so without this they report "invalid config"
+  // when the truth is "the link is switched off and nobody is on it".
+  assert.ok(node.peerTable, 'peer table is present');
+  assert.equal(typeof node.subscribe, 'function');
+  assert.equal(typeof node.send, 'function');
+});

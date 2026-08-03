@@ -139,7 +139,10 @@
         $dialect.on('change', function () {
           populateRevisions('seed');
           populateComponents();
+          reloadCompIds();
         });
+
+        $revision.on('change', reloadCompIds);
 
         $components.on('change', syncComponentsHidden);
 
@@ -267,19 +270,27 @@
             });
         });
 
-        loadLibrary(function () {
-          populateDialects(node.dialect);
-        });
-
-        if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
+        /* MAV_COMPONENT comes from the dialect this profile selects, so the
+           query needs #node-config-input-dialect already populated — running
+           this before loadLibrary resolves sends an empty query, and the list
+           collapses to just the saved value marked "not in dialect". Reload on
+           every catalog-source change, same rule the other dialogs follow. */
+        function reloadCompIds() {
+          if (!(RED.mavlink && RED.mavlink.loadEnumsCatalog)) return;
+          const $compid = $('#node-config-input-defaultTargetComponent');
           RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
             RED.mavlink.fillCompIdSelect(
-              $('#node-config-input-defaultTargetComponent'),
+              $compid,
               (catalog.enums || {}).MAV_COMPONENT || [],
-              { saved: node.defaultTargetComponent }
+              { saved: $compid.val() || node.defaultTargetComponent }
             );
           });
         }
+
+        loadLibrary(function () {
+          populateDialects(node.dialect);
+          reloadCompIds();
+        });
       }
     });
   })();
