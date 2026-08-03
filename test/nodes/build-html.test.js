@@ -199,3 +199,26 @@ test('Build catalog targeting delegates to the shared loader (no local copy)', (
   // node marker) — no bespoke pending mechanism in the dialog.
   assert.doesNotMatch(html, /pending/, 'no hand-rolled pending state');
 });
+
+test('build command-param pulldowns drop the blank; message fields keep it', () => {
+  // Different meanings, so different treatment. An unset *command param*
+  // resolves to 0 (the builder fills the slot), so blank duplicated an enum
+  // entry. An unset *message field* is skipped entirely by
+  // lib/codec/message.js, so blank there is the only way to leave a field off
+  // the wire — removing it would change what gets sent, not just what shows.
+  const commandParams = html.slice(
+    html.indexOf('function commandParamInput'),
+    html.indexOf('function refreshCommandParams')
+  );
+  assert.ok(commandParams.length > 0, 'located the command-param renderer');
+  assert.match(commandParams, /data-kind['"], falseTrue \? ['"]enum['"]/, 'slice really is the renderer');
+  assert.ok(!/\\u2014/.test(commandParams), 'command params have no blank option');
+
+  const messageFields = html.slice(
+    html.indexOf('function fieldInput'),
+    html.indexOf('function commandParamInput')
+  );
+  assert.ok(messageFields.length > 0, 'located the message-field renderer');
+  assert.match(messageFields, /spec\.display === 'bitmask'/, 'slice really is the message-field renderer');
+  assert.match(messageFields, /\\u2014/, 'message fields keep blank = omit the field');
+});

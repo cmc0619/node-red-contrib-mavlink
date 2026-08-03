@@ -346,10 +346,15 @@
               .attr('data-field', key)
               .attr('data-kind', falseTrue ? 'enum' : (isBitmask ? 'bitmask-mask' : 'enum'))
               .attr('title', isBitmask ? RED.mavlink.bitmaskTitle(spec.description) : (spec.description || ''));
+            // No blank option. An unset command param resolves to 0, and where
+            // 0 is a real choice the dialect already enumerates it — MAV_ROI_NONE,
+            // PARACHUTE_DISABLE, FAILURE_TYPE_OK. So blank was either a second
+            // spelling of an entry that exists, or (ACCELCAL_VEHICLE_POS, which
+            // starts at 1) a way to send a value the enum does not define.
+            // Upstream marks genuinely unused params `Empty`/`reserved`, and
+            // isHiddenParam drops those before they reach a control.
             if (isBitmask) {
               sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
-            } else {
-              sel.append($('<option></option>').val('').text('\u2014'));
             }
             entries.forEach(function (entry) {
               var $opt = $('<option></option>').val(String(entry.value)).text(falseTrue ? RED.mavlink.booleanEntryLabel(entry) : entry.label);

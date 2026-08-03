@@ -442,3 +442,20 @@ test('preset positional params are labelled degrees, not degE7 (§9 canonical un
     'no preset param may advertise degE7 — operator input is always degrees'
   );
 });
+
+test('command param enum pulldowns carry no blank option', () => {
+  // An unset param resolves to 0, and where 0 means something the dialect
+  // enumerates it — so blank was a second spelling of an entry that exists, or
+  // (ACCELCAL_VEHICLE_POS) a value the enum never defined. See
+  // test/metadata/enum-param-blank.test.js for the numbers.
+  const renderer = html.slice(
+    html.indexOf('function advancedParamInput'),
+    html.indexOf('function presetParamInput')
+  );
+  assert.ok(!/\\u2014/.test(renderer), 'no em-dash placeholder option');
+  assert.ok(
+    !/sel\.append\(\$\('<option><\/option>'\)\.val\(''\)/.test(renderer),
+    'no empty-valued option'
+  );
+  assert.match(renderer, /isBitmask\) \{\s*sel\.attr\('multiple'/, 'bitmask branch keeps its multi-select');
+});
