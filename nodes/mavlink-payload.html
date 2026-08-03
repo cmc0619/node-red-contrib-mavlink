@@ -104,12 +104,14 @@
       /** One control, shaped by the metadata (§6): enum → select, FALSE/TRUE →
        *  checkbox, bitmask → multi-select, everything else → number. */
       function fieldInput(key, meta, entries) {
-        // The recipe's default is what the builder sends for a blank field, so
-        // it is what the control shows — never an empty box hiding a 1.
-        var saved = stash[key];
-        if (saved === undefined || saved === null || saved === '') {
-          saved = meta.default === null || meta.default === undefined ? '' : meta.default;
-        }
+        var stashed = stash[key];
+        var blank = stashed === undefined || stashed === null || stashed === '';
+        // A control that must land on something — a pulldown, a checkbox, a
+        // bitmask — takes the recipe default when unset. A number box does
+        // not: see below.
+        var saved = blank
+          ? (meta.default === null || meta.default === undefined ? '' : meta.default)
+          : stashed;
         var $input;
         if (entries && entries.length) {
           if (RED.mavlink.isFalseTrueEnum(entries)) {
@@ -136,11 +138,20 @@
             RED.mavlink.fillEnumSelect($input, entries, { saved: saved });
           }
         } else {
+          // Numbers stay blank when unset. buildPayloadMessage resolves a blank
+          // slot to the recipe default, so the wire is identical either way,
+          // and an empty box does not assert a number the dialect may disagree
+          // with — three recipe defaults sit below their param's stated `min`.
+          //
+          // No `min` attribute for the same reason: upstream's minimums are
+          // advisory and sometimes contradict their own prose
+          // (IMAGE_START_CAPTURE sequence is min=1 with a description that says
+          // to set 0). `max` stays — the only two are cameraId=255, a real
+          // uint8 ceiling.
           $input = $('<input type="number" style="width:110px">')
             .attr('step', meta.increment !== null && meta.increment !== undefined ? meta.increment : 'any')
             .attr('title', meta.description || '')
-            .val(saved);
-          if (meta.minValue !== null && meta.minValue !== undefined) $input.attr('min', meta.minValue);
+            .val(blank ? '' : stashed);
           if (meta.maxValue !== null && meta.maxValue !== undefined) $input.attr('max', meta.maxValue);
         }
         return $input.addClass('mav-payload-field').attr('data-field', key);
