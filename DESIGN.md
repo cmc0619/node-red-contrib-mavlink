@@ -204,10 +204,23 @@ Both npm packages are already the ArduPilot line — install nothing else (§14)
 not from `mavlink-mappings`. `scripts/generate-seed.js` pins a commit, walks `<include>`
 for each selectable root, and writes a **single** gzipped JSON file named with the stamp —
 `seed/mavlink-YYYY-MM-DD-<shortsha>.seed.gz` — plus `seed/active.json` pointing at it
-(NOTICE + manifest + every precompiled {@link DialectBundle}). Runtime resolves the
-pointer and gunzips once into memory. A weekly GitHub Action refreshes the blob and
-opens a PR when upstream moves. Catalog updates still overlay newer XML under the
-Node-RED userDir when internet is available.
+(NOTICE + manifest + the upstream XML sources). Runtime resolves the pointer, gunzips
+once, and compiles the dialects a profile asks for. The blob carries XML rather than
+compiled bundles because it is ~10x smaller — every bundle would otherwise embed its own
+copy of `common.xml` — and compiling one dialect (~110 ms) costs less than parsing all of
+them (~243 ms). The generator still compiles every selectable root: that is the gate, and
+a root that will not compile fails the run and leaves the previous seed untouched. A
+weekly GitHub Action refreshes the blob and opens a PR when upstream moves. Catalog
+updates still overlay newer XML under the Node-RED userDir when internet is available.
+
+**A compiled dialect is cached, and never expires on its own.** `loadBundled` memoizes in
+process — a keystroke must not recompile (§6) — behind
+`<userDir>/mavlink/compiled/<dialect>@seed.json`, which survives restarts. The entry is
+keyed by what was selected, never by content, so shipping a newer seed does not silently
+change a deployed profile: it records the `stamp`, `commit` and upstream `commitDate` it
+was built from and leaves them for an operator to read. **Rebuild dialect** in the Vehicle
+editor (`POST /mavlink/dialect-cache/rebuild`) is the only thing that replaces an entry —
+local and offline, unlike **Update catalog**, which downloads.
 
 **One bundle shape.** Seeded dialects and catalog downloads compile to the same
 {@link DialectBundle}. Field `enum=`, command-param enums, descriptions, and the real
@@ -1584,9 +1597,11 @@ seed/XML, do not resurrect a parallel hint table.
 **Seed bundles already carry the include chain.**
 *Wrong belief:* runtime must merge `mavlink-mappings` modules (`minimal` → `standard` →
 `common`, …) or force MSC under every dialect.
-*Fact:* `scripts/generate-seed.js` walks `<include>` per selectable root into
-`bundle.files`; wire registries follow that list and start empty otherwise. Unknown dialect
-fails loud — never silent-fallback to `common`.
+*Fact:* `compileXml` walks `<include>` per selectable root into `bundle.files`; wire
+registries follow that list and start empty otherwise. Unknown dialect fails loud — never
+silent-fallback to `common`. Five component dialects (`uAvionix`, `icarous`, `loweheiser`,
+`cubepilot`, `csAirLink`) are already inside `ardupilotmega`'s chain, and `storm32` includes
+`ardupilotmega` whole — so those combinations need no multi-dialect selection.
 *Check:* `node --test test/connection/wire-registry.test.js`
 
 **Params without `enum=` are scalars, not gaps.**

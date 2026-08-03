@@ -64,8 +64,14 @@ test('writeSeed emits a stamp-named gzip blob + active.json pointer', () => {
 
   const payload = JSON.parse(zlib.gunzipSync(fs.readFileSync(seedFile)).toString('utf8'));
   assert.equal(payload.stamp, stamp);
-  assert.ok(payload.bundles.minimal);
-  assert.ok(payload.bundles.icarous);
+  // The blob ships XML; the runtime compiles it. Dialect rows still come from
+  // the generator's compile pass, which is what makes a bad root fail the run.
+  assert.ok(payload.sources['minimal.xml']);
+  assert.ok(payload.sources['icarous.xml']);
+  assert.ok(!payload.bundles, 'precompiled bundles are not shipped');
+  const names = payload.manifest.dialects.map((d) => d.name);
+  assert.ok(names.includes('minimal'));
+  assert.ok(names.includes('icarous'));
 });
 
 test('writeSeed leaves the previous blob untouched when any selectable root fails', () => {
