@@ -1,0 +1,15 @@
+# CodeRabbit reads the same review rules as Greptile.
+#
+# The rules live at `.greptile/rules.md` only because that is the path Greptile
+# requires. Nothing in the file is Greptile-specific — it is the house review
+# policy, and both bots are held to it. Edit the rules there, not here.
+#
+# `path_instructions` cannot reference a file, so this uses Code Guidelines,
+# which scans documents by pattern. Patterns listed here are added to the
+# defaults rather than replacing them, so AGENTS.md and CLAUDE.md keep being
+# picked up without being named.
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/.greptile/rules.md"

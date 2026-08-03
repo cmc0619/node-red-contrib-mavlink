@@ -4,6 +4,11 @@ Standing context for automated review. These are not style preferences — they 
 the rules this codebase is actually held to, and a finding that ignores them costs
 more to decline than it would have cost to skip.
 
+**Both review bots read this file.** The path is `.greptile/` only because that is
+where Greptile looks; nothing here is Greptile-specific. CodeRabbit is pointed at
+the same file by `.coderabbit.yaml`. Edit the rules here — there is one copy on
+purpose, so the two reviewers cannot drift apart.
+
 The long-form versions live in `AGENTS.md` and `DESIGN.md` §2 (code principles),
 §6 (UI rules) and §14 (ground truth). Where this file and those disagree, they win.
 
