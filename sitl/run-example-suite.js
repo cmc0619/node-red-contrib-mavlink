@@ -463,7 +463,7 @@ function runApControlScript(body, timeoutMs = 20000) {
       const bundle = loadBundled('ardupilotmega');
       const conn = new Connection({
         transport: { mode: 'udp', bindAddress: '0.0.0.0', bindPort: 14550, remoteAddress: '127.0.0.1', remotePort: 14551 },
-        vehicle: { targetSysid: 1, targetCompid: 1, bundle, firmware: 'ardupilot', autopilot: 3 },
+        vehicle: { targetSystem: 1, targetComponent: 1, bundle, firmware: 'ardupilot', autopilot: 3 },
         identities: [{ id: 'gcs', sysid: 255, compid: 190, heartbeat: { type: 6, autopilot: 8, systemStatus: 4, baseMode: 0, customMode: 0, mavlinkVersion: 3 }, heartbeatIntervalMs: 500 }],
         defaultIdentityId: 'gcs', boundIdentityIds: ['gcs'],
         signing: { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },

@@ -145,8 +145,8 @@ module.exports = function registerMavlinkPayload(RED) {
               );
             },
             commandId: built.message.fields.command,
-            targetSysid: target.sysid,
-            targetCompid: target.compid,
+            targetSystem: target.sysid,
+            targetComponent: target.compid,
             timeoutMs,
             maxRetries,
           });

@@ -120,7 +120,7 @@ test('mission Build concrete dialect uses config firmware and no Vehicle Profile
 test('firmware gating: PX4 refuses a fence transfer at the node (§11)', async () => {
   const conn = new StubConnection();
   // Vehicle profile with px4 firmware — the node must consult the profile, not config.firmware.
-  conn.vehicle = { firmware: 'px4', targetSysid: 1, targetCompid: 1 };
+  conn.vehicle = { firmware: 'px4', targetSystem: 1, targetComponent: 1 };
   const Node = loadNode(conn);
   const node = new Node({
     operation: 'download',
@@ -136,7 +136,7 @@ test('firmware gating: PX4 refuses a fence transfer at the node (§11)', async (
 
 test('clear is refused without confirmation and runs once confirmed', async () => {
   const conn = new StubConnection();
-  conn.vehicle = { firmware: 'ardupilot', targetSysid: 1, targetCompid: 1 };
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
   conn.onSend((message, deliver) => {
     if (message.name === 'MISSION_CLEAR_ALL') {
       deliver({ name: 'MISSION_ACK', fields: { type: 0, mission_type: 0 } });
@@ -179,7 +179,7 @@ test('clear Build tier is gated before the plan is built (§9 destructive gate)'
 test('firmware gate follows the Connection Vehicle Profile, not stale node config (§11)', async () => {
   const conn = new StubConnection();
   // Bound profile is PX4; the node config independently (and stalely) says ardupilot.
-  conn.vehicle = { firmware: 'px4', targetSysid: 1, targetCompid: 1 };
+  conn.vehicle = { firmware: 'px4', targetSystem: 1, targetComponent: 1 };
   const Node = loadNode(conn);
   const node = new Node({
     operation: 'download',
@@ -197,7 +197,7 @@ test('firmware gate follows the Connection Vehicle Profile, not stale node confi
 test('payload.firmware overrides profile firmware', async () => {
   const conn = new StubConnection();
   // Profile is ardupilot (allows fence), but payload overrides to px4 (blocks fence).
-  conn.vehicle = { firmware: 'ardupilot', targetSysid: 1, targetCompid: 1 };
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
   const Node = loadNode(conn);
   const node = new Node({
     operation: 'download',
@@ -212,7 +212,7 @@ test('payload.firmware overrides profile firmware', async () => {
 
 test('download end-to-end: progress on output 1, success on both ports', async () => {
   const conn = new StubConnection();
-  conn.vehicle = { firmware: 'ardupilot', targetSysid: 1, targetCompid: 1 };
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
   conn.onSend((message, deliver) => {
     if (message.name === 'MISSION_REQUEST_LIST') {
       deliver({ name: 'MISSION_COUNT', fields: { count: 2, mission_type: 0 } });
@@ -241,7 +241,7 @@ test('download end-to-end: progress on output 1, success on both ports', async (
 
 test('mission resolveTarget inherits Vehicle Profile target when config is empty', async () => {
   const conn = new StubConnection();
-  conn.vehicle = { targetSysid: 42, targetCompid: 191, firmware: 'ardupilot' };
+  conn.vehicle = { targetSystem: 42, targetComponent: 191, firmware: 'ardupilot' };
   conn.onSend((message, deliver) => {
     if (message.name === 'MISSION_REQUEST_LIST') {
       deliver({ name: 'MISSION_COUNT', fields: { count: 0, mission_type: 0 } });
@@ -265,7 +265,7 @@ test('mission resolveTarget inherits Vehicle Profile target when config is empty
 
 test('mission resolveTarget explicit config wins over Vehicle Profile', async () => {
   const conn = new StubConnection();
-  conn.vehicle = { targetSysid: 42, targetCompid: 191, firmware: 'ardupilot' };
+  conn.vehicle = { targetSystem: 42, targetComponent: 191, firmware: 'ardupilot' };
   conn.onSend((message, deliver) => {
     if (message.name === 'MISSION_REQUEST_LIST') {
       deliver({ name: 'MISSION_COUNT', fields: { count: 0, mission_type: 0 } });
@@ -309,7 +309,7 @@ test('a busy lock refuses a second same-type transfer on the node', async () => 
 
 test('mission companion identity: target derived from airframe sysid, compid pinned to 1', async () => {
   const conn = new StubConnection();
-  conn.vehicle = { targetSysid: 1, targetCompid: 1, firmware: 'ardupilot' };
+  conn.vehicle = { targetSystem: 1, targetComponent: 1, firmware: 'ardupilot' };
   conn.onSend((message, deliver) => {
     if (message.name === 'MISSION_REQUEST_LIST') {
       // Deliver MISSION_COUNT from the companion-derived sysid 42.
@@ -338,7 +338,7 @@ test('mission companion identity: target derived from airframe sysid, compid pin
 
 test('mission companion: payload.target overrides companion derivation', async () => {
   const conn = new StubConnection();
-  conn.vehicle = { targetSysid: 1, targetCompid: 1, firmware: 'ardupilot' };
+  conn.vehicle = { targetSystem: 1, targetComponent: 1, firmware: 'ardupilot' };
   conn.onSend((message, deliver) => {
     if (message.name === 'MISSION_REQUEST_LIST') {
       deliver({ name: 'MISSION_COUNT', sysid: 50, compid: 1, fields: { count: 0, mission_type: 0 } });
@@ -386,7 +386,7 @@ test('mission protocol subscription keyed on resolved target (companion sysid 42
   // Verify that when companion derives sysid=42, the machine subscribes to sysid=42
   // and responses from sysid=1 are not accepted.
   const conn = new StubConnection();
-  conn.vehicle = { targetSysid: 1, targetCompid: 1, firmware: 'ardupilot' };
+  conn.vehicle = { targetSystem: 1, targetComponent: 1, firmware: 'ardupilot' };
 
   // Deliver MISSION_COUNT from sysid=1 first (should be ignored since subscription is sysid=42).
   // Then deliver from sysid=42 (should be accepted).

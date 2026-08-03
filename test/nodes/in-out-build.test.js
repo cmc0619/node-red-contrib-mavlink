@@ -141,8 +141,8 @@ function makeConnectionStub() {
     // profile node id the wire tier resolves for its dialect bundle.
     vehicle: Object.freeze({
       id: 'v1',
-      targetSysid: 1,
-      targetCompid: 1,
+      targetSystem: 1,
+      targetComponent: 1,
       firmware: 'ardupilot',
       dialect: 'test',
       autopilot: 3,

@@ -355,8 +355,8 @@ module.exports = function registerMavlinkCommand(RED) {
             connNode.send(buildCarrierMessage(carrier, confirmation), { band: BAND.CONTROL, target, identityId });
           },
           commandId,
-          targetSysid: target.sysid,
-          targetCompid: target.compid,
+          targetSystem: target.sysid,
+          targetComponent: target.compid,
           timeoutMs,
           maxRetries: noAutoRetry ? 0 : maxRetries,
           noAutoRetry,

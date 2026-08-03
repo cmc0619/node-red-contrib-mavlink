@@ -171,7 +171,7 @@ makes unreachable.
 |---|---|
 | `mavlink-local-identity` | Who is Node-RED on the wire? Owns source sysid and compid, the role preset, heartbeat content and interval, and the signing credential reference |
 | `mavlink-vehicle` | Who is being addressed, in what dialect? Owns the **dialect library** pickers (dialect name + version: Seed or a catalog date) and the catalog refresh/compare actions |
-| `mavlink-connection` | How does traffic move, and stay channel-correct? Owns the transport (UDP, TCP, serial), the peer table, its bound Vehicle Profile, the outbound queue and its bands, signing switches and channel state, the default identity plus opt-in additional ones, and the disable switch. Palette nodes reach the runtime through `node.subscribe`, `node.send`, `node.peerTable`, and `node.vehicle` — a frozen snapshot `{id, targetSysid, targetCompid, firmware, dialect, autopilot}` that palette nodes use to inherit the profile's target defaults; explicit node config wins, empty editor fields mean inherit. `id` is the profile node id: anything needing the compiled bundle resolves that node and calls `getDialect()` — never a bundled-registry lookup by name, which breaks custom XML dialects |
+| `mavlink-connection` | How does traffic move, and stay channel-correct? Owns the transport (UDP, TCP, serial), the peer table, its bound Vehicle Profile, the outbound queue and its bands, signing switches and channel state, the default identity plus opt-in additional ones, and the disable switch. Palette nodes reach the runtime through `node.subscribe`, `node.send`, `node.peerTable`, and `node.vehicle` — a frozen snapshot `{id, targetSystem, targetComponent, firmware, dialect, autopilot}` that palette nodes use to inherit the profile's target defaults; explicit node config wins, empty editor fields mean inherit. `id` is the profile node id: anything needing the compiled bundle resolves that node and calls `getDialect()` — never a bundled-registry lookup by name, which breaks custom XML dialects |
 
 **Palette nodes**
 
@@ -2152,7 +2152,7 @@ guard prevents an older response from repainting a newer selection. There is no 
 in-flight waiter queue, or same-key request coalescing. Nodes paint from the catalog the loader
 hands the callback (or a `_current*Catalog` handle set from that callback). Target CompID
 reload is `RED.mavlink.reloadTargetCompId(node, { field? })` (default `targetComponent`; Command
-passes `field:'targetCompid'`); identity refresh is `RED.mavlink.refreshIdentitySelect(node,
+passes `field:'targetComponent'`); identity refresh is `RED.mavlink.refreshIdentitySelect(node,
 { rolesAllowed? })` (Fan-out passes `['gcs','custom']`); catalog-backed selects share
 `fillEnumSelect` plus `bindSelectTitleSync` / `ensureSavedEnumOption` (one `#N (not in dialect)`
 wording — Build's old `(missing)` is gone) and `enumOptionLabel` for the §6 `NAME (value)` format
@@ -2454,6 +2454,21 @@ verb or path clears the saved values and the form paints that verb's recipe defa
 again; there is nothing to migrate forward and no per-key family tracking to maintain.
 *Check:* `node --test test/nodes/payload-verb-html.test.js` — "payload carries nothing across a
 selection change".
+
+**One spelling of target sysid/compid, everywhere a human can follow it.**
+*Wrong belief:* the layer boundaries justify their own vocabulary — the Vehicle Profile can say
+`defaultTargetSystem`, the connection snapshot `targetSysid`, the palette nodes `targetSystem`,
+because each one maps correctly to the next.
+*Fact:* mapping correctly is not the same as reading correctly. Tracing one number from a
+profile through `node.vehicle` into a node's config crossed three spellings of the same idea, so
+a reader had to re-derive at every hop that they were still looking at the same value. It is now
+`targetSystem` / `targetComponent` from `lib/command` through `lib/addressing`, the connection
+snapshot, the fan-out members and every palette node. The Vehicle Profile keeps its
+`default` prefix — `defaultTargetSystem` — because there it genuinely is a default: a profile
+describes an aircraft *class*, so the sysid is which member of the class you mean when a node
+does not say. `defaultTargetComponent` is a class fact in its own right (the autopilot is
+compid 1 on every vehicle of the class).
+*Check:* `rg -n 'targetSysid|targetCompid'` (expect no matches).
 
 **A `$('#id')` that matches nothing is silent, and unit-testing the helper does not catch it.**
 *Wrong belief:* if the helper has tests and the renderer calls it, the feature works.

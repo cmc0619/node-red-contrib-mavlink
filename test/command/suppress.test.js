@@ -82,8 +82,8 @@ test('AckWaiter.start is never called when payload is false', () => {
     sendFn: () => {},
     commandId: 400,
     // AckWaiter option names are wire-side, not Command editor property names.
-    targetSysid: 1,
-    targetCompid: 1,
+    targetSystem: 1,
+    targetComponent: 1,
     timeoutMs: 100,
   });
   const origStart = waiter.start.bind(waiter);
