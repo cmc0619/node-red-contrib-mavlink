@@ -509,6 +509,13 @@
         if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
           const entries = enums[spec.enum];
           const falseTrue = RED.mavlink.isFalseTrueEnum(entries);
+          if (falseTrue) {
+            return RED.mavlink.booleanEnumInput(entries, {
+              saved,
+              title: spec.description || '',
+              className: 'param-input',
+            }).attr('data-idx', spec.index);
+          }
           const isBitmask = !!spec.bitmask && !falseTrue;
           const sel = $('<select class="param-input"></select>')
             .attr('data-idx', spec.index)
@@ -680,6 +687,11 @@
       $('.param-input').each(function () {
         const $input = $(this);
         const idx = Number($input.attr('data-idx'));
+        if ($input.attr('data-kind') === 'boolean') {
+          const on = RED.mavlink.booleanEnumValue($input);
+          if (on !== null) params[idx] = on;
+          return;
+        }
         const raw = $input.val();
         if ($input.attr('data-kind') === 'bitmask') {
           const values = Array.isArray(raw) ? raw : (raw ? [raw] : []);

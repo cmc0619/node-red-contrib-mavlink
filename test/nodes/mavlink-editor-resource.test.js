@@ -763,3 +763,76 @@ test('payloadVerbIgnoresCarrier mirrors the lib recipe table exactly', () => {
     );
   }
 });
+
+/**
+ * `loadResource`'s `$` answers selectors only — booleanEnumInput builds an
+ * element and chains against it, so these tests supply a recording element.
+ * Deliberately local: the shared stub stays minimal for everything else.
+ */
+function loadResourceWithElements() {
+  function element() {
+    const attrs = {};
+    const props = {};
+    const api = {
+      addClass() { return api; },
+      css() { return api; },
+      attr(k, v) {
+        if (v === undefined) return attrs[k];
+        attrs[k] = String(v);
+        return api;
+      },
+      prop(k, v) {
+        if (v === undefined) return props[k];
+        props[k] = v;
+        return api;
+      },
+      is(sel) { return sel === ':checked' ? !!props.checked : false; },
+    };
+    return api;
+  }
+  const $ = () => element();
+  $.getJSON = () => ({ fail() { return this; } });
+  const context = { RED: { settings: {}, mavlink: {}, nodes: { node: () => null } }, $ };
+  vm.runInNewContext(resourceScript, context);
+  return context.RED;
+}
+
+test('booleanEnumInput renders a checkbox carrying the dialect true value', () => {
+  const RED = loadResourceWithElements();
+  const entries = [
+    { name: 'MAV_BOOL_FALSE', value: 0 },
+    { name: 'MAV_BOOL_TRUE', value: 1 },
+  ];
+
+  const off = RED.mavlink.booleanEnumInput(entries, { saved: 0, className: 'param-input' });
+  const on = RED.mavlink.booleanEnumInput(entries, { saved: 1, className: 'param-input' });
+  const unset = RED.mavlink.booleanEnumInput(entries, { saved: '', className: 'param-input' });
+
+  assert.equal(off.attr('data-kind'), 'boolean');
+  // The true value comes from the entry, never a baked 1.
+  assert.equal(off.attr('data-true'), '1');
+  assert.equal(off.prop('checked'), false);
+  assert.equal(on.prop('checked'), true);
+  assert.equal(unset.prop('checked'), false, 'a never-set param reads as off');
+});
+
+test('booleanEnumValue omits an unchecked param, matching a blank pulldown', () => {
+  const RED = loadResourceWithElements();
+  const entries = [
+    { name: 'MAV_BOOL_FALSE', value: 0 },
+    { name: 'MAV_BOOL_TRUE', value: 1 },
+  ];
+  // Unchecked returns null so the collector skips the key entirely — the
+  // builder resolves an absent param to 0, exactly as blank did before.
+  assert.equal(RED.mavlink.booleanEnumValue(RED.mavlink.booleanEnumInput(entries, { saved: 0 })), null);
+  assert.equal(RED.mavlink.booleanEnumValue(RED.mavlink.booleanEnumInput(entries, { saved: 1 })), 1);
+});
+
+test('a non-boolean enum is not turned into a checkbox', () => {
+  const RED = loadResourceWithElements();
+  // Two entries, but not the FALSE/TRUE pair — must stay a pulldown.
+  assert.equal(RED.mavlink.isFalseTrueEnum([
+    { name: 'MAV_FRAME_GLOBAL', value: 0 },
+    { name: 'MAV_FRAME_LOCAL_NED', value: 1 },
+  ]), false);
+});

@@ -208,6 +208,54 @@
   };
 
   /**
+   * Checkbox for a FALSE/TRUE enum param (§6: everything enumerable is a
+   * control that matches its shape — a two-state enum is a checkbox, not a
+   * two-option pulldown the operator has to read before ticking).
+   *
+   * The true value comes from the dialect entry, never a baked `1`. Unchecked
+   * omits the param, exactly as a blank pulldown did, and the builder resolves
+   * an absent param to 0.
+   *
+   * @param {Array<{name: string, value: string|number, description?: string}>} entries
+   * @param {object} [opts]
+   * @param {string|number|null} [opts.saved]  saved wire value
+   * @param {string} [opts.title]  hover text (the XML description)
+   * @param {string} [opts.className]  class the collector scrapes
+   * @returns {jQuery} an `<input type="checkbox">` carrying data-kind="boolean"
+   */
+  RED.mavlink.booleanEnumInput = function (entries, opts) {
+    opts = opts || {};
+    var trueEntry = null;
+    for (var i = 0; i < entries.length; i++) {
+      var name = entries[i] && entries[i].name ? entries[i].name : '';
+      if (name === 'TRUE' || name.slice(-5) === '_TRUE') trueEntry = entries[i];
+    }
+    var trueValue = trueEntry ? String(trueEntry.value) : '1';
+    var saved = opts.saved;
+    var checked = saved !== undefined && saved !== null && saved !== ''
+      && String(saved) === trueValue;
+    return $('<input type="checkbox">')
+      .addClass(opts.className || '')
+      .attr('data-kind', 'boolean')
+      .attr('data-true', trueValue)
+      .attr('title', opts.title || '')
+      .css({ display: 'inline-block', width: 'auto' })
+      .prop('checked', checked);
+  };
+
+  /**
+   * Wire value for a checkbox built by {@link RED.mavlink.booleanEnumInput},
+   * or null when unchecked (the caller omits the param).
+   *
+   * @param {jQuery} $input
+   * @returns {number|null}
+   */
+  RED.mavlink.booleanEnumValue = function ($input) {
+    if (!$input.is(':checked')) return null;
+    return Number($input.attr('data-true'));
+  };
+
+  /**
    * Which bitmask option values are set in `saved` (numeric mask).
    * @param {string|number|null|undefined} saved
    * @param {Array<{value: string|number}>} entries
