@@ -67,8 +67,15 @@ test('/mavlink/enums is registered once with mavlink.read auth', () => {
   assert.ok(handlers.has('/mavlink/enums'));
   assert.ok(handlers.has('/mavlink/dialects'));
   // dialects + enums are read-guarded; the xml-catalog routes add three more
-  // mavlink.read guards (list GET, update POST, compare GET).
-  assert.equal(permissions.filter((p) => p === 'mavlink.read').length, 5);
+  // (list GET, update POST, compare GET) and the compiled-dialect cache one
+  // (rebuild POST).
+  assert.equal(permissions.filter((p) => p === 'mavlink.read').length, 6);
+});
+
+test('the compiled-dialect cache exposes a rebuild route', () => {
+  const { handlers } = captureRoutes({});
+
+  assert.equal(handlers.get('/mavlink/dialect-cache/rebuild').method, 'post');
 });
 
 test('the XML-catalog admin routes register under /mavlink/xml-catalog', () => {

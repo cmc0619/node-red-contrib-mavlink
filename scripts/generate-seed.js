@@ -7,8 +7,13 @@
  * Output is a **single** gzipped JSON blob named with the stamp:
  *   seed/mavlink-YYYY-MM-DD-<shortsha>.seed.gz
  * plus a tiny pointer `seed/active.json` so the runtime can find it.
- * The blob holds NOTICE, provenance manifest, and every precompiled
- * DialectBundle. Runtime gunzips once — no tree of XML/JSON files in git.
+ * The blob holds NOTICE, provenance manifest, and the upstream XML sources.
+ * Runtime gunzips once and compiles the dialects a profile actually uses —
+ * XML is ~10x smaller than the bundles it compiles to, because every dialect
+ * embeds its own copy of common.xml.
+ *
+ * Every selectable root is still compiled here. That is the gate: a root that
+ * will not compile fails the run and leaves the previous seed untouched.
  *
  *   node scripts/generate-seed.js
  *   node scripts/generate-seed.js --source-dir /path/to/mavlink
@@ -92,18 +97,23 @@ function sha256(text) {
 }
 
 /**
+ * Pin a ref to its commit, and record when that commit landed upstream. The
+ * commit date is the XML's own version date — distinct from `fetchedAt`, which
+ * is only when this generator ran.
+ *
  * @param {string} repo
  * @param {string} ref
- * @returns {Promise<string>}
+ * @returns {Promise<{commit: string, commitDate: ?string}>}
  */
 async function resolveCommit(repo, ref) {
   const res = await fetch(`https://api.github.com/repos/${repo}/commits/${ref}`, {
-    headers: { Accept: 'application/vnd.github.sha' },
+    headers: { Accept: 'application/vnd.github+json' },
   });
   if (!res.ok) {
     throw new Error(`Cannot resolve ${repo}@${ref} (${res.status})`);
   }
-  return (await res.text()).trim();
+  const body = await res.json();
+  return { commit: body.sha, commitDate: body.commit.committer.date };
 }
 
 /**
@@ -161,7 +171,15 @@ function loadFromSourceDir(sourceDir) {
   for (const name of fs.readdirSync(defDir).filter((f) => f.endsWith('.xml'))) {
     files[name] = fs.readFileSync(path.join(defDir, name), 'utf8');
   }
-  return { commit, files };
+  let commitDate = null;
+  try {
+    commitDate = require('child_process')
+      .execFileSync('git', ['-C', sourceDir, 'log', '-1', '--format=%cI', commit], { encoding: 'utf8' })
+      .trim();
+  } catch {
+    // plain checkout without .git, or a commit this clone does not have
+  }
+  return { commit, commitDate, files };
 }
 
 /**
@@ -170,16 +188,16 @@ function loadFromSourceDir(sourceDir) {
  */
 async function collectXml(opts) {
   if (opts.sourceDir) {
-    const { commit, files } = loadFromSourceDir(opts.sourceDir);
-    return { repo: opts.repo, ref: opts.ref, commit, files };
+    const { commit, commitDate, files } = loadFromSourceDir(opts.sourceDir);
+    return { repo: opts.repo, ref: opts.ref, commit, commitDate, files };
   }
-  const commit = await resolveCommit(opts.repo, opts.ref);
+  const { commit, commitDate } = await resolveCommit(opts.repo, opts.ref);
   const names = await listRemoteXml(opts.repo, commit);
   const files = {};
   for (const name of names) {
     files[name] = await fetchRemoteFile(opts.repo, commit, name);
   }
-  return { repo: opts.repo, ref: opts.ref, commit, files };
+  return { repo: opts.repo, ref: opts.ref, commit, commitDate, files };
 }
 
 /**
@@ -223,6 +241,7 @@ function writeSeed(opts) {
   const repo = opts.repo;
   const ref = opts.ref;
   const commit = opts.commit;
+  const commitDate = opts.commitDate || null;
   const fetchedAt = opts.fetchedAt || new Date().toISOString();
   const stamp = makeStamp(fetchedAt, commit);
   const baseName = seedFileName(stamp);
@@ -234,27 +253,24 @@ function writeSeed(opts) {
 
   const dialects = [];
   const compileErrors = [];
-  /** @type {Object<string, object>} */
-  const bundles = {};
 
+  // The blob ships XML, not bundles — runtime compiles per profile. This loop
+  // stays as the gate: every selectable root must compile here, or the seed is
+  // not written at all. It also yields the per-dialect manifest rows the editor
+  // dialect library reads.
   for (const name of Object.keys(files).sort()) {
     if (SKIP_ROOTS.has(name)) continue;
     const key = dialectKey(name);
     try {
       const bundle = compileXml(files, name);
-      const persisted = Object.assign({}, bundle, {
-        dialect: key,
-        fetched: { repo, commit, fetchedAt },
-      });
-      bundles[key] = persisted;
       dialects.push({
         name: key,
         entry: name,
-        files: persisted.files,
-        messageCount: Object.keys(persisted.messages).length,
-        enumCount: Object.keys(persisted.enums).length,
+        files: bundle.files,
+        messageCount: Object.keys(bundle.messages).length,
+        enumCount: Object.keys(bundle.enums).length,
       });
-      log(`compiled ${key} (${persisted.files.length} files, ${dialects[dialects.length - 1].messageCount} messages)`);
+      log(`compiled ${key} (${bundle.files.length} files, ${dialects[dialects.length - 1].messageCount} messages)`);
     } catch (err) {
       compileErrors.push({ entry: name, error: err.message });
       errLog(`FAIL ${name}: ${err.message}`);
@@ -281,15 +297,16 @@ function writeSeed(opts) {
     }));
 
   const payload = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     stamp,
     notice: MIT_NOTICE,
     manifest: {
-      schemaVersion: 2,
+      schemaVersion: 3,
       stamp,
       repo,
       ref,
       commit,
+      commitDate,
       fetchedAt,
       license: 'MIT',
       licenseNote: 'MAVLink message definition XML — see NOTICE and https://mavlink.io/en/#license',
@@ -297,7 +314,7 @@ function writeSeed(opts) {
       dialects,
       compileErrors: [],
     },
-    bundles,
+    sources: files,
   };
 
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(payload), 'utf8'), { level: 9 });
@@ -315,6 +332,7 @@ function writeSeed(opts) {
     repo,
     ref,
     commit,
+    commitDate,
     fetchedAt,
   };
   const activeStaging = `${activeFile}.staging-${process.pid}`;
@@ -335,8 +353,8 @@ function writeSeed(opts) {
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
-  const { repo, ref, commit, files } = await collectXml(opts);
-  writeSeed({ files, repo, ref, commit });
+  const { repo, ref, commit, commitDate, files } = await collectXml(opts);
+  writeSeed({ files, repo, ref, commit, commitDate });
 }
 
 if (require.main === module) {

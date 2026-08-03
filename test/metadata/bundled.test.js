@@ -5,11 +5,15 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
+const os = require('os');
+
 const {
   knownDialects,
   loadBundled,
   resolveSeedFile,
   readManifest,
+  setCompiledCacheDir,
+  clearCompiledCache,
   seedStamp,
 } = require('../../lib/metadata/bundled');
 
@@ -159,4 +163,30 @@ test('ardupilotmega extends MAV_CMD with entries common does not carry', () => {
 
 test('a seeded bundle is plain JSON-serializable data', () => {
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(loadBundled('ardupilotmega'))));
+});
+
+test('a compiled dialect is cached on disk and records the XML it came from', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-compiled-'));
+  setCompiledCacheDir(dir);
+  clearCompiledCache();
+  try {
+    const bundle = loadBundled('icarous');
+    const file = path.join(dir, 'icarous@seed.json');
+    assert.ok(fs.existsSync(file), 'compiling writes a cache entry');
+
+    const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const manifest = readManifest();
+    assert.equal(entry.stamp, manifest.stamp);
+    assert.equal(entry.commit, manifest.commit);
+    assert.equal(entry.commitDate, manifest.commitDate);
+    assert.deepEqual(entry.bundle, bundle);
+
+    // A second process would read the entry rather than recompile. Nothing
+    // invalidates it — only clearCompiledCache() removes an entry.
+    clearCompiledCache();
+    assert.ok(!fs.existsSync(file));
+  } finally {
+    setCompiledCacheDir(null);
+    clearCompiledCache();
+  }
 });

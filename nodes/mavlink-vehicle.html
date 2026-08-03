@@ -128,6 +128,27 @@
             });
         });
 
+        /* Local and offline, unlike Update catalog: recompiles the dialects
+           this install has cached. Nothing expires on its own, so this is the
+           only way a compiled dialect is replaced after the seed moves. */
+        $('#mav-dialect-rebuild').on('click', function (e) {
+          e.preventDefault();
+          $status.text('Rebuilding compiled dialects...');
+          $.ajax({
+            url: mavlinkAdminUrl('/mavlink/dialect-cache/rebuild'),
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({})
+          })
+            .done(function (data) {
+              $status.text('Rebuilt — ' + ((data && data.cleared) || 0) + ' cached dialect(s) dropped. Redeploy to recompile.');
+            })
+            .fail(function (xhr) {
+              const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'rebuild failed';
+              $status.text('Rebuild failed: ' + msg);
+            });
+        });
+
         $('#mav-catalog-compare').on('click', function (e) {
           e.preventDefault();
           const dialect = $dialect.val();
@@ -275,6 +296,7 @@
     <div class="form-row" style="margin-left:104px;">
       <button id="mav-catalog-update" class="red-ui-button">Update catalog</button>
       <button id="mav-catalog-compare" class="red-ui-button">Compare with seed</button>
+      <button id="mav-dialect-rebuild" class="red-ui-button">Rebuild dialect</button>
     </div>
     <div class="form-tips" id="mav-catalog-status" style="min-height:1em;"></div>
     <div class="form-row">

@@ -37,6 +37,8 @@ const DIALECTS_ROUTE = '/mavlink/dialects';
 const ENUMS_ROUTE = '/mavlink/enums';
 /** Admin endpoint base path for the downloadable XML dialect catalog (§4). */
 const XML_CATALOG_ROUTE = '/mavlink/xml-catalog';
+/** Admin endpoint base path for the compiled-dialect cache. */
+const DIALECT_CACHE_ROUTE = '/mavlink/dialect-cache';
 
 /** Whether the admin dialects route has been registered (once per process). */
 let _dialectsRouteRegistered = false;
@@ -56,6 +58,23 @@ function xmlCatalogBaseDir(RED) {
   const path = require('path');
   const userDir = (RED && RED.settings && RED.settings.userDir) || process.cwd();
   return path.join(userDir, 'mavlink', 'xml');
+}
+
+/**
+ * Compiled-dialect cache directory (`<userDir>/mavlink/compiled`). `lib/metadata`
+ * never sees `RED`, so this node hands it the path once at registration.
+ *
+ * No user dir means no persistent home for it — null keeps the cache in memory
+ * rather than scattering compiled bundles through whatever the cwd happens to
+ * be. Unlike the XML catalog, this writes on every first dialect load.
+ *
+ * @param {object} RED
+ * @returns {?string}
+ */
+function compiledCacheDir(RED) {
+  const path = require('path');
+  const userDir = RED && RED.settings && RED.settings.userDir;
+  return userDir ? path.join(userDir, 'mavlink', 'compiled') : null;
 }
 
 module.exports = function registerMavlinkVehicle(RED) {
@@ -137,6 +156,7 @@ module.exports = function registerMavlinkVehicle(RED) {
    */
   if (!_xmlCatalogRouteRegistered) {
     const { api: catalogApi, error: catalogLoadError } = loadMetadata('mavlink-vehicle', RED);
+    if (catalogApi) catalogApi.setCompiledCacheDir(compiledCacheDir(RED));
 
     const newCatalog = () => new catalogApi.XmlCatalog({ baseDir: xmlCatalogBaseDir(RED) });
     const catalogUnavailable = (res) =>
@@ -212,6 +232,21 @@ module.exports = function registerMavlinkVehicle(RED) {
           const status = err.code === 'XML_CATALOG_FILE_NOT_FOUND' ? 404 : 500;
           res.status(status).json({ ok: false, error: err.message, code: err.code });
         }
+      }
+    );
+
+    // POST rebuild: drop every compiled dialect so the next deploy recompiles
+    // from the current seed. Nothing invalidates the cache on its own — an
+    // upgraded seed must not silently change a deployed profile — so this is
+    // the only way an entry is replaced. Local and offline, unlike /update.
+    RED.httpAdmin.post(
+      `${DIALECT_CACHE_ROUTE}/rebuild`,
+      RED.auth.needsPermission('mavlink.read'),
+      (_req, res) => {
+        if (!catalogApi) {
+          return catalogUnavailable(res);
+        }
+        res.json({ ok: true, cleared: catalogApi.clearCompiledCache() });
       }
     );
 
