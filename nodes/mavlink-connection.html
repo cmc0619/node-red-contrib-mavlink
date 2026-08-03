@@ -20,6 +20,8 @@
       } },
       remoteHost: { value: '' },
       remotePort: { value: '', validate: RED.validators.number(true) },
+      broadcastHost: { value: '' },
+      broadcastPort: { value: '', validate: RED.validators.number(true) },
       serialPath: { value: '', validate: function (v) {
         var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
         if (mode !== 'serial') return true;
@@ -110,6 +112,9 @@
         var mode = $('#node-config-input-mode').val() || 'udp';
         var ip = mode === 'udp' || mode === 'tcp';
         $('#row-conn-bindHost, #row-conn-bindPort, #row-conn-remoteHost, #row-conn-remotePort').toggle(ip);
+        // UDP only: TCP is connection-oriented unicast and has no broadcast at
+        // all, and a TCP server reaches every client through the peer table.
+        $('#row-conn-broadcastHost, #row-conn-broadcastPort').toggle(mode === 'udp');
         $('#row-conn-serialPath, #row-conn-baudRate').toggle(mode === 'serial');
         $('#mav-conn-tcp-tip').toggle(mode === 'tcp');
         $('#mav-conn-serial-tip').toggle(mode === 'serial');
@@ -169,6 +174,16 @@
   <div class="form-row" id="row-conn-remotePort">
     <label for="node-config-input-remotePort"><i class="fa fa-sign-out"></i> Remote port</label>
     <input type="text" id="node-config-input-remotePort" placeholder="(optional)" />
+  </div>
+
+  <div class="form-row" id="row-conn-broadcastHost">
+    <label for="node-config-input-broadcastHost"><i class="fa fa-bullhorn"></i> Swarm address</label>
+    <input type="text" id="node-config-input-broadcastHost"
+      placeholder="(optional) 255.255.255.255 or a multicast group" />
+  </div>
+  <div class="form-row" id="row-conn-broadcastPort">
+    <label for="node-config-input-broadcastPort"><i class="fa fa-bullhorn"></i> Swarm port</label>
+    <input type="text" id="node-config-input-broadcastPort" placeholder="(optional, defaults to bind port)" />
   </div>
 
   <div class="form-row" id="row-conn-serialPath">
@@ -264,6 +279,29 @@
   TCP with a remote host/port is a client; with only bind settings it is a server.
   Serial opens a device path (optional <code>serialport</code> dependency) at the
   configured baud; peer-table endpoints are that path.</p>
+
+  <h3>Swarm address (UDP)</h3>
+  <p>Optional, and only about <i>delivery</i>. A message reaches every vehicle
+  because it carries <code>target_system = 0</code> — that is a field in the
+  frame, not a setting here. Without a swarm address such a message is still
+  delivered to everyone, by writing it once to each learned peer.</p>
+  <p>Setting a swarm address collapses that to a single write, for media that
+  can carry one. Two kinds work, and the address itself decides which:</p>
+  <ul>
+    <li><b>Multicast</b> (<code>224.0.0.0/4</code>, e.g. ArduPilot's
+    <code>239.255.145.50</code>) — the group is joined on bind. Only vehicles
+    that joined it hear the traffic, and each one must join explicitly;
+    listening passively never works.</li>
+    <li><b>Broadcast</b> (anything else, e.g. <code>255.255.255.255</code>) —
+    every host on the link hears it. Vehicles must be bound as UDP servers on
+    <code>0.0.0.0</code>; binding to a specific interface address does not
+    receive broadcast traffic.</li>
+  </ul>
+  <p><b>Swarm port</b> defaults to the bind port, which is the right answer for
+  multicast — members join one group <i>and</i> port. Set it only when the
+  vehicles listen somewhere else.</p>
+  <p>Directed traffic never uses this address. TCP has no broadcast of any kind
+  and does not need one: a TCP server writes to every connected vehicle already.</p>
 
   <h3>Identities</h3>
   <p><b>Identity</b> is the connection's default source identity. <b>Extra

@@ -579,3 +579,40 @@ test('close() during a server bind settles the pending open()', async () => {
   await assert.rejects(opening, (err) => err.code === TCP_CLOSED_DURING_OPEN);
   await tick(); // the late 'listening' on the already-settled promise must be harmless
 });
+
+test('a TCP server reaches every connected vehicle without a broadcast mechanism', () => {
+  // TCP is connection-oriented unicast: there is no TCP broadcast, and none is
+  // needed. Each accepted client is its own learned endpoint, so `_pump`'s
+  // per-peer fan-out (DESIGN.md §14) already writes to all of them. This pins
+  // that a server routes N distinct endpoints to N distinct sockets — the
+  // property the fan-out relies on.
+  const net = mockNet();
+  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+
+  return transport.open().then(() => {
+    assert.equal(
+      typeof transport.broadcastDestination,
+      'undefined',
+      'TCP offers no single reaches-everyone address, so the fan-out stays in charge'
+    );
+
+    const vehicles = [
+      new MockSocket({ address: '10.0.0.21', port: 49001 }),
+      new MockSocket({ address: '10.0.0.22', port: 49002 }),
+      new MockSocket({ address: '10.0.0.23', port: 49003 }),
+    ];
+    for (const vehicle of vehicles) net.servers[0].accept(vehicle);
+
+    for (const vehicle of vehicles) {
+      const endpoint = { address: vehicle.remoteAddress, port: vehicle.remotePort };
+      transport.send(Buffer.from('arm'), endpoint, (err) => {
+        assert.ifError(err);
+      });
+    }
+
+    for (const vehicle of vehicles) {
+      assert.equal(vehicle.writes.length, 1, 'each client gets the frame exactly once');
+      assert.equal(vehicle.writes[0].toString(), 'arm');
+    }
+  });
+});

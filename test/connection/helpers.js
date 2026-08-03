@@ -49,6 +49,14 @@ function mockDgram() {
         }, 0);
       };
       socket.setSendBufferSize = () => {};
+      // Swarm-delivery socket options, recorded rather than performed so tests
+      // can assert which mechanism an address selected.
+      socket.broadcastFlag = null;
+      socket.memberships = [];
+      socket.multicastLoopback = null;
+      socket.setBroadcast = (on) => { socket.broadcastFlag = on; };
+      socket.addMembership = (group) => { socket.memberships.push(group); };
+      socket.setMulticastLoopback = (on) => { socket.multicastLoopback = on; };
       socket.address = () => socket.boundTo || {};
       // Inject an inbound datagram, as though a peer sent it.
       socket.receive = (buffer, rinfo) => socket.emit('message', buffer, rinfo);

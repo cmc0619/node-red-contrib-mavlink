@@ -774,3 +774,71 @@ test('the queue keeps draining after a broadcast fans out', async () => {
   assert.equal(commandDatagrams(socket).length, 4, 'both broadcasts fanned out');
   connection.close();
 });
+
+/**
+ * Swarm delivery (DESIGN.md §14 "A swarm address is delivery, not addressing").
+ *
+ * A configured multicast group or broadcast address means the network itself
+ * does the fan-out, so one write is both correct and the entire reason to
+ * configure one. It outranks the per-peer fan-out; it never touches directed
+ * traffic.
+ */
+function swarmBuild(broadcast) {
+  return build({
+    transport: {
+      mode: 'udp',
+      bindAddress: '0.0.0.0',
+      bindPort: 14550,
+      remoteAddress: '10.0.0.9',
+      remotePort: 14555,
+      ...broadcast,
+    },
+  });
+}
+
+test('a configured swarm address collapses the fan-out to one write', async () => {
+  const { connection, dg } = swarmBuild({ broadcastAddress: '239.255.145.50' });
+  await connection.start();
+  const socket = dg.sockets[0];
+  hearFrom(socket, [[1, 40001], [2, 40002], [3, 40003]]);
+
+  broadcastArm(connection);
+  await delay(40);
+
+  const sends = commandDatagrams(socket);
+  assert.equal(sends.length, 1, 'three peers, one datagram — the group does the fan-out');
+  assert.equal(sends[0].address, '239.255.145.50');
+  assert.equal(sends[0].port, 14550, 'the group speaks on the port we joined');
+});
+
+test('a swarm address never captures directed traffic', async () => {
+  const { connection, dg } = swarmBuild({ broadcastAddress: '255.255.255.255' });
+  await connection.start();
+  const socket = dg.sockets[0];
+  hearFrom(socket, [[1, 40001], [2, 40002]]);
+
+  connection.send(
+    { name: 'COMMAND_LONG', fields: { target_system: 2, command: 400 } },
+    { band: BAND.CONTROL, target: { sysid: 2, compid: 1 } }
+  );
+  await delay(40);
+
+  const sends = commandDatagrams(socket);
+  assert.equal(sends.length, 1);
+  assert.equal(sends[0].port, 40002, 'addressed to sysid 2 means sysid 2, not the whole swarm');
+  assert.notEqual(sends[0].address, '255.255.255.255');
+});
+
+test('a swarm address works before any peer is heard', async () => {
+  // The fan-out has nothing to fan to yet; the group does not care.
+  const { connection, dg } = swarmBuild({ broadcastAddress: '239.255.145.50' });
+  await connection.start();
+  const socket = dg.sockets[0];
+
+  broadcastArm(connection);
+  await delay(40);
+
+  const sends = commandDatagrams(socket);
+  assert.equal(sends.length, 1);
+  assert.equal(sends[0].address, '239.255.145.50', 'not the configured remote');
+});

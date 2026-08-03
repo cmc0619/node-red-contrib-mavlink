@@ -772,6 +772,40 @@ message as a **copy per subscriber**, or one Function node mutating a payload co
 other subscriber sees. A subscription is unregistered in the subscriber's own `close`, or a
 redeployed flow leaves the old node still receiving.
 
+### Speaking to the swarm
+
+`target_system = 0` means every vehicle acts on the message. That is addressing, and it lives in
+the frame. Getting the frame *to* everyone is a separate problem, and its answer depends entirely
+on the medium.
+
+On a shared medium one write reaches everyone: a serial telemetry radio, a multicast group, a
+broadcast address. On a star it does not — where each vehicle dials in and owns its own return
+path (ArduPilot `udpclient`, a TCP server with N accepted clients), "everyone" is N writes to N
+addresses learned from their heartbeats. The MAVLink routing rules say the same thing from the
+router's side: *broadcast messages are forwarded to all channels that haven't seen the message,*
+while addressed messages go only to the channel the target was seen on.
+
+So Connection resolves a broadcast in three steps, and a directed message never touches any of
+them:
+
+1. **A configured Swarm address**, when there is one — one write, because the network does the
+   fan-out and that is the entire reason to configure it.
+2. **Every learned peer endpoint**, deduplicated by address and port.
+3. **The configured remote**, which is the pre-peer path before any heartbeat has arrived.
+
+The Swarm address is UDP-only and carries both mechanisms in one field, because the address
+already says which it is: `224.0.0.0/4` is a multicast group and must be *joined* to be received
+at all, anything else is a broadcast address and needs `SO_BROADCAST` or the OS refuses the send.
+A separate mode field could only ever disagree with the address.
+
+Neither other transport needs one. TCP is connection-oriented unicast — there is no TCP broadcast
+— but a TCP server reaches every vehicle through step 2, since each accepted client is its own
+endpoint. Serial is a genuine bus: every peer on the wire records the same endpoint, so step 2's
+deduplication collapses to the single write the wire was always going to carry.
+
+The frame is serialized once regardless. N datagrams carry one sequence number; they are one
+message sent N times, not N messages.
+
 ### Heartbeat
 
 The spec is explicit: components **must** regularly broadcast HEARTBEAT and monitor for the
@@ -1864,11 +1898,13 @@ registers).
 owns content and `heartbeatIntervalMs` (default 1000). Connection emits on each bound identity
 using that interval and does not surface HB controls. Peer-table stale/expire stay on Connection
 (inbound freshness). Outbound addressing uses the peer-table primary endpoint (optional Remote
-fallback); `target_system = 0` is a normal message field with no Connection broadcast flag.
+fallback); `target_system = 0` is a normal message field, and no socket flag makes a frame a
+broadcast. Connection *does* carry a Swarm address, but that is delivery — where a broadcast
+frame is written — never addressing; see “A swarm address is delivery, not addressing” below.
 Cadence has exactly one reader — `idNode.heartbeatIntervalMs`, blank meaning 1000. Every
 identity snapshot carries it, so the scheduler has no interval of its own to fall back to.
 *Check:* `node --test test/connection/heartbeat.test.js test/identity/` ;
-Local Identity editor shows HB Interval; Connection editor has no Heartbeat/Broadcast rows.
+Local Identity editor shows HB Interval; Connection editor has no Heartbeat rows.
 
 **Bind-mounted source is not an installed package.**
 *Wrong belief:* `npm install /module` from the Node-RED user directory (or listing
@@ -2000,6 +2036,30 @@ demote a primary on this path — one unreachable vehicle must not cost the othe
 their addresses.
 *Check:* `lib/connection/runtime.js` (`_pump`), `lib/connection/peer-table.js`
 (`endpointsForBroadcast`), `node --test test/connection/runtime.test.js`.
+
+**A swarm address is delivery, not addressing.**
+*Wrong belief:* configuring a multicast group or `255.255.255.255` is how a message
+is made a broadcast — the two are the same switch.
+*Fact:* they are separate layers and both are required. `target_system = 0` in the
+frame is what makes every vehicle *act* on a message; it is a field, and the vehicle
+checks it. The Swarm address is where the datagram is *written* — nothing more. A
+broadcast frame with no swarm address configured is still a broadcast and still
+reaches everyone, by fan-out to each learned peer; a swarm address only collapses
+that to the single write the medium can already do. Conversely a directed frame is
+never sent to the swarm address, whatever is configured.
+Precedence in `_pump` is: configured swarm address → learned peers → configured
+remote. The mechanism is read from the address itself (224.0.0.0/4 means multicast,
+join the group; anything else means broadcast, set `SO_BROADCAST`) so there is no
+mode field that can contradict the address. Multicast also turns loopback off — we
+send to a group we joined, and left on, the peer table learns our own GCS as a
+vehicle.
+UDP only. TCP is connection-oriented unicast and has no broadcast of any kind, but
+needs none: each accepted client is its own learned endpoint, so the fan-out already
+writes to all of them. Serial needs none either — every peer on the wire records the
+same endpoint, so the fan-out dedupes to one write.
+*Check:* `lib/connection/transport/udp.js` (`broadcastDestination`,
+`_enableBroadcast`), `lib/connection/runtime.js` (`_broadcastDestination`),
+`node --test test/connection/`.
 
 **Fan-out arm examples need a probe-arm, not a longer settle sleep.**
 *Wrong belief:* raise `SITL_FLEET_SETTLE_MS` until examples 08/11 stop failing;

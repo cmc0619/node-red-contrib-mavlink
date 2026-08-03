@@ -204,6 +204,13 @@ function buildTransportConfig(config) {
     bindPort: Number(config.bindPort),
     remoteAddress: config.remoteHost || undefined,
     remotePort: config.remotePort ? Number(config.remotePort) : undefined,
+    // UDP only — TCP has no broadcast, and the editor hides the row for it.
+    broadcastAddress: mode === 'udp' && config.broadcastHost
+      ? config.broadcastHost
+      : undefined,
+    broadcastPort: mode === 'udp' && config.broadcastPort
+      ? Number(config.broadcastPort)
+      : undefined,
   };
 }
 
