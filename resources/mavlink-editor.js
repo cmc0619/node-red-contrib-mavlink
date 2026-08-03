@@ -168,6 +168,51 @@
   };
 
   /**
+   * Editor-side copy of the fields each payload verb renders, derived from
+   * `PAYLOAD_RECIPES` (pinned against `payloadFormFields` by test). Keyed
+   * `topic|verb|path`; values are `#row-payload-<key>` suffixes.
+   *
+   * This is a mirror rather than a fetch on purpose: row visibility must not
+   * depend on a network call. The field-tips route enriches these rows with
+   * labels, units and enum entries, but an undeployed profile or a failed
+   * request must still leave the operator looking at the right form.
+   *
+   * Slots the recipe pins (legacy gimbal aim's mount mode) are absent here —
+   * they are sent, not asked.
+   */
+  RED.mavlink.PAYLOAD_FIELDS = {
+    'camera|photo|': ['cameraId', 'count', 'interval', 'sequence'],
+    'camera|start-video|': ['statusFrequency', 'streamId'],
+    'camera|stop-video|': ['streamId'],
+    'camera|set-mode|': ['cameraId', 'mode'],
+    'camera|trigger-distance|': ['distance', 'shutter', 'trigger'],
+    'gimbal|aim|legacy': ['pitch', 'roll', 'yaw'],
+    'gimbal|aim|manager': ['flags', 'gimbalDeviceId', 'pitch', 'pitchRate', 'yaw', 'yawRate'],
+    'gimbal|set-mode|': ['mode', 'stabilizePitch', 'stabilizeRoll', 'stabilizeYaw'],
+    'gimbal|roi-set|': ['alt', 'lat', 'lon'],
+    'gimbal|roi-clear|': [],
+    'servo|set|': ['pwm', 'servo'],
+    'servo|repeat|': ['count', 'period', 'pwm', 'servo'],
+    'release|gripper|': ['action', 'instance'],
+    'release|winch|': ['action', 'instance', 'length', 'rate'],
+    'release|parachute|': ['action'],
+  };
+
+  /**
+   * Fields for the selected verb. Mirrors `recipeFor`'s path defaulting: only
+   * gimbal aim has a path dimension.
+   *
+   * @param {string} topic
+   * @param {string} verb
+   * @param {string} [path]
+   * @returns {string[]}
+   */
+  RED.mavlink.payloadFormFields = function (topic, verb, path) {
+    var pathKey = topic === 'gimbal' && verb === 'aim' ? (path || 'legacy') : '';
+    return RED.mavlink.PAYLOAD_FIELDS[topic + '|' + verb + '|' + pathKey] || [];
+  };
+
+  /**
    * Editor-side copy of lib/payload payloadVerbNeedsCarrier, inverted: true
    * when the selected payload verb is message-kind (never rides a MAV_CMD),
    * so the carrier choice is meaningless and the editor must not demand one
@@ -205,6 +250,97 @@
     if (name === 'FALSE' || name.slice(-6) === '_FALSE') return 'false';
     if (name === 'TRUE' || name.slice(-5) === '_TRUE') return 'true';
     return (entry && entry.label) || name;
+  };
+
+  /**
+   * Checkbox for a FALSE/TRUE enum param (§6: everything enumerable is a
+   * control that matches its shape — a two-state enum is a checkbox, not a
+   * two-option pulldown the operator has to read before ticking).
+   *
+   * The true value comes from the dialect entry, never a baked `1`. The box
+   * always writes a value: ticked sends the true value, unticked sends 0. A
+   * checkbox has two states, so it produces two wire values — never a third
+   * "absent" one that means something different again.
+   *
+   * @param {Array<{name: string, value: string|number, description?: string}>} entries
+   * @param {object} [opts]
+   * @param {string|number|null} [opts.saved]  saved wire value
+   * @param {string} [opts.title]  hover text (the XML description)
+   * @param {string} [opts.className]  class the collector scrapes
+   * @returns {jQuery} an `<input type="checkbox">` carrying data-kind="boolean"
+   */
+  RED.mavlink.booleanEnumInput = function (entries, opts) {
+    opts = opts || {};
+    var trueValue = opts.trueValue !== undefined ? String(opts.trueValue) : null;
+    if (trueValue === null) {
+      var trueEntry = null;
+      for (var i = 0; i < entries.length; i++) {
+        var name = entries[i] && entries[i].name ? entries[i].name : '';
+        if (name === 'TRUE' || name.slice(-5) === '_TRUE') trueEntry = entries[i];
+      }
+      trueValue = trueEntry ? String(trueEntry.value) : '1';
+    }
+    var saved = opts.saved;
+    var checked = saved !== undefined && saved !== null && saved !== ''
+      && String(saved) === trueValue;
+    return $('<input type="checkbox">')
+      .addClass(opts.className || '')
+      .attr('data-kind', 'boolean')
+      .attr('data-true', trueValue)
+      .attr('title', opts.title || '')
+      .css({ display: 'inline-block', width: 'auto' })
+      .prop('checked', checked);
+  };
+
+  /**
+   * Command params that are booleans in everything but their XML: no `enum=`,
+   * just a magic number the description explains in prose. Keyed
+   * `<commandId>:<paramIndex>`.
+   *
+   * This is a deliberate, audited exception to §6's "no baked protocol copy in
+   * editor HTML" — see DESIGN.md §14. Only the *value* lives here; the label
+   * and hover text still come from the dialect. A survey of all 1110 no-enum
+   * command params found exactly one boolean of this shape (the other 17
+   * magic-value params are `Target Camera ID`, where 255 means "all cameras" —
+   * a sentinel on a numeric id, not an on/off). Adding a second entry here
+   * means re-checking that the param really is two-state.
+   *
+   * @type {Object<string, number>}
+   */
+  RED.mavlink.MAGIC_BOOLEAN_PARAMS = {
+    // MAV_CMD_COMPONENT_ARM_DISARM param2: 0 = respect pre-arm checks,
+    // 21196 = force. Upstream never gave it an enum.
+    '400:2': 21196,
+  };
+
+  /**
+   * The magic true value for a no-enum boolean param, or null when the param
+   * is an ordinary number.
+   *
+   * @param {string|number} commandId
+   * @param {string|number} paramIndex
+   * @returns {?number}
+   */
+  RED.mavlink.magicBooleanValue = function (commandId, paramIndex) {
+    var key = String(commandId) + ':' + String(paramIndex);
+    var value = RED.mavlink.MAGIC_BOOLEAN_PARAMS[key];
+    return value === undefined ? null : value;
+  };
+
+  /**
+   * Wire value for a checkbox built by {@link RED.mavlink.booleanEnumInput}.
+   *
+   * Unchecked is 0, not "omit": `isFalseTrueEnum` only accepts FALSE=0/TRUE=1,
+   * and the one magic boolean is 0/21196, so 0 *is* false on both paths. A
+   * command param resolves absent to 0 anyway, but a generic message field
+   * does not — `lib/codec/message.js` skips names the values object lacks, so
+   * omitting would drop the field off the wire entirely.
+   *
+   * @param {jQuery} $input
+   * @returns {number}
+   */
+  RED.mavlink.booleanEnumValue = function ($input) {
+    return $input.is(':checked') ? Number($input.attr('data-true')) : 0;
   };
 
   /**

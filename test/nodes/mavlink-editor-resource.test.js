@@ -763,3 +763,122 @@ test('payloadVerbIgnoresCarrier mirrors the lib recipe table exactly', () => {
     );
   }
 });
+
+/**
+ * `loadResource`'s `$` answers selectors only — booleanEnumInput builds an
+ * element and chains against it, so these tests supply a recording element.
+ * Deliberately local: the shared stub stays minimal for everything else.
+ */
+function loadResourceWithElements() {
+  function element() {
+    const attrs = {};
+    const props = {};
+    const api = {
+      addClass() { return api; },
+      css() { return api; },
+      attr(k, v) {
+        if (v === undefined) return attrs[k];
+        attrs[k] = String(v);
+        return api;
+      },
+      prop(k, v) {
+        if (v === undefined) return props[k];
+        props[k] = v;
+        return api;
+      },
+      is(sel) { return sel === ':checked' ? !!props.checked : false; },
+    };
+    return api;
+  }
+  const $ = () => element();
+  $.getJSON = () => ({ fail() { return this; } });
+  const context = { RED: { settings: {}, mavlink: {}, nodes: { node: () => null } }, $ };
+  vm.runInNewContext(resourceScript, context);
+  return context.RED;
+}
+
+test('booleanEnumInput renders a checkbox carrying the dialect true value', () => {
+  const RED = loadResourceWithElements();
+  const entries = [
+    { name: 'MAV_BOOL_FALSE', value: 0 },
+    { name: 'MAV_BOOL_TRUE', value: 1 },
+  ];
+
+  const off = RED.mavlink.booleanEnumInput(entries, { saved: 0, className: 'param-input' });
+  const on = RED.mavlink.booleanEnumInput(entries, { saved: 1, className: 'param-input' });
+  const unset = RED.mavlink.booleanEnumInput(entries, { saved: '', className: 'param-input' });
+
+  assert.equal(off.attr('data-kind'), 'boolean');
+  // The true value comes from the entry, never a baked 1.
+  assert.equal(off.attr('data-true'), '1');
+  assert.equal(off.prop('checked'), false);
+  assert.equal(on.prop('checked'), true);
+  assert.equal(unset.prop('checked'), false, 'a never-set param reads as off');
+});
+
+test('a non-boolean enum is not turned into a checkbox', () => {
+  const RED = loadResourceWithElements();
+  // Two entries, but not the FALSE/TRUE pair — must stay a pulldown.
+  assert.equal(RED.mavlink.isFalseTrueEnum([
+    { name: 'MAV_FRAME_GLOBAL', value: 0 },
+    { name: 'MAV_FRAME_LOCAL_NED', value: 1 },
+  ]), false);
+});
+
+test('the magic-boolean table is audited, not a general prose parser', () => {
+  const RED = loadResourceWithElements();
+  // Only MAV_CMD_COMPONENT_ARM_DISARM param2 qualifies (DESIGN.md §14).
+  assert.equal(RED.mavlink.magicBooleanValue(400, 2), 21196);
+  assert.equal(RED.mavlink.magicBooleanValue(400, 1), null, 'param1 has a real enum');
+  // Target Camera ID params mention 255 in prose but are sentinels on a
+  // numeric id, not booleans — they must not be swept in.
+  assert.equal(RED.mavlink.magicBooleanValue(2000, 1), null);
+  assert.equal(Object.keys(RED.mavlink.MAGIC_BOOLEAN_PARAMS).length, 1);
+});
+
+test('booleanEnumInput accepts an explicit true value for a no-enum param', () => {
+  const RED = loadResourceWithElements();
+  const forced = RED.mavlink.booleanEnumInput([], { saved: 21196, trueValue: 21196 });
+  assert.equal(forced.attr('data-true'), '21196');
+  assert.equal(forced.prop('checked'), true);
+  assert.equal(RED.mavlink.booleanEnumValue(forced), 21196);
+  const off = RED.mavlink.booleanEnumInput([], { saved: 0, trueValue: 21196 });
+  assert.equal(RED.mavlink.booleanEnumValue(off), 0, 'unchecked is 0, never absent');
+});
+
+test('a checkbox always writes a value — unchecked is false, not missing', () => {
+  const RED = loadResourceWithElements();
+  // A command param resolves absent to 0, but a generic message field does
+  // not: lib/codec/message.js skips names the values object lacks, so an
+  // omitted field leaves the wire entirely. One behaviour for both.
+  const entries = [
+    { name: 'MAV_BOOL_FALSE', value: 0 },
+    { name: 'MAV_BOOL_TRUE', value: 1 },
+  ];
+  assert.equal(RED.mavlink.booleanEnumValue(RED.mavlink.booleanEnumInput(entries, { saved: 1 })), 1);
+  assert.equal(RED.mavlink.booleanEnumValue(RED.mavlink.booleanEnumInput(entries, { saved: 0 })), 0);
+  assert.equal(
+    RED.mavlink.booleanEnumValue(RED.mavlink.booleanEnumInput(entries, {})),
+    0,
+    'never rendered before → still false, not absent'
+  );
+});
+
+test('PAYLOAD_FIELDS mirrors the lib recipes exactly', () => {
+  const RED = loadResourceWithElements();
+  const { payloadFormFields, PAYLOAD_TOPICS, verbsForTopic } = require('../../lib/payload');
+  // A mirror, not a fetch — visibility must survive a failed field-tips call.
+  // This pin is what stops it drifting from the recipes it copies.
+  for (const topic of PAYLOAD_TOPICS) {
+    for (const verb of verbsForTopic(topic)) {
+      const paths = topic === 'gimbal' && verb.value === 'aim' ? ['legacy', 'manager'] : [''];
+      for (const path of paths) {
+        assert.deepEqual(
+          plain(RED.mavlink.payloadFormFields(topic, verb.value, path)),
+          plain(payloadFormFields(topic, verb.value, path)),
+          `${topic}|${verb.value}|${path}`
+        );
+      }
+    }
+  }
+});

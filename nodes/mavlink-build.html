@@ -51,6 +51,10 @@
         var name = $(this).attr('data-field');
         if (!name) return;
         var kind = $(this).attr('data-kind') || 'number';
+        if (kind === 'boolean') {
+          fields[name] = RED.mavlink.booleanEnumValue($(this));
+          return;
+        }
         var raw = $(this).val();
         if (kind === 'bitmask') {
           fields[name] = Array.isArray(raw) ? raw : (raw ? [raw] : []);
@@ -229,6 +233,13 @@
           if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
             var entries = enums[spec.enum];
             var falseTrue = RED.mavlink.isFalseTrueEnum(entries);
+            if (falseTrue) {
+              return RED.mavlink.booleanEnumInput(entries, {
+                saved: saved,
+                title: spec.description || '',
+                className: 'mav-field-input',
+              }).attr('data-field', spec.name);
+            }
             var multi = !falseTrue && spec.display === 'bitmask';
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', spec.name)
@@ -323,6 +334,13 @@
           if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
             var entries = enums[spec.enum];
             var falseTrue = RED.mavlink.isFalseTrueEnum(entries);
+            if (falseTrue) {
+              return RED.mavlink.booleanEnumInput(entries, {
+                saved: saved,
+                title: spec.description || '',
+                className: 'mav-field-input',
+              }).attr('data-field', key);
+            }
             var isBitmask = !!spec.bitmask && !falseTrue;
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', key)
@@ -344,6 +362,15 @@
               sel.val(String(saved));
             }
             return sel;
+          }
+          var magic = RED.mavlink.magicBooleanValue($('#mav-build-command-select').val(), spec.index);
+          if (magic !== null) {
+            return RED.mavlink.booleanEnumInput([], {
+              saved: saved,
+              trueValue: magic,
+              title: spec.description || '',
+              className: 'mav-field-input',
+            }).attr('data-field', key);
           }
           var input = $('<input type="number" class="mav-field-input">')
             .attr('data-field', key)

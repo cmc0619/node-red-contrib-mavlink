@@ -135,3 +135,40 @@ test('field-tip resolution errors remain generic', () => {
     'client body must not leak filesystem paths'
   );
 });
+
+/** Serve the route for one verb against a deployed ardupilotmega profile. */
+function tipsFor(query) {
+  const handlers = captureRoutes({
+    veh1: {
+      dialect: 'ardupilotmega',
+      getDialect: () => require('../../lib/metadata').loadBundled('ardupilotmega'),
+    },
+  });
+  const res = mockRes();
+  handlers.get('/mavlink/payload/field-tips')({ query: { vehicle: 'veh1', ...query } }, res);
+  return res;
+}
+
+test('the route returns everything the form needs: fields, enums and carrierMatters', () => {
+  const res = tipsFor({ topic: 'release', verb: 'winch', path: '' });
+
+  // Field set is the row set.
+  assert.deepEqual(Object.keys(res.body.fields).sort(), ['action', 'instance', 'length', 'rate']);
+
+  // Descriptors carry what the dialog would otherwise hardcode.
+  assert.equal(res.body.fields.action.enum, 'WINCH_ACTIONS');
+  assert.ok(res.body.fields.action.label, 'label comes from the dialect');
+
+  // Enum entries ride along, so no baked fallback table is needed.
+  assert.ok(Array.isArray(res.body.enums.WINCH_ACTIONS));
+  assert.ok(res.body.enums.WINCH_ACTIONS.length > 1);
+
+  // Winch is not positional, so the carrier is not a real choice.
+  assert.equal(res.body.carrierMatters, false);
+});
+
+test('carrierMatters is true for the one positional payload verb', () => {
+  const res = tipsFor({ topic: 'gimbal', verb: 'roi-set', path: '' });
+  assert.equal(res.body.carrierMatters, true);
+  assert.deepEqual(Object.keys(res.body.fields).sort(), ['alt', 'lat', 'lon']);
+});

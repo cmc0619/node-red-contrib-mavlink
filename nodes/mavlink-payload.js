@@ -3,6 +3,7 @@
 const {
   buildPayloadMessage,
   fieldMetaFromBundle,
+  carrierMattersFor,
 } = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
 const {
@@ -24,6 +25,25 @@ const { loadMetadata } = require('../lib/metadata/load');
 const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
 
 const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';
+
+/**
+ * Entries for every enum the form's fields reference, so the dialog can build
+ * its selects from the dialect instead of a baked table (§6).
+ *
+ * @param {object} bundle  DialectBundle
+ * @param {Object<string, {enum?: string}>} fields
+ * @returns {Object<string, Array>}
+ */
+function enumsForFields(bundle, fields) {
+  const out = {};
+  for (const meta of Object.values(fields)) {
+    const name = meta && meta.enum;
+    if (!name || out[name]) continue;
+    const found = bundle.enums && bundle.enums[name];
+    if (found) out[name] = found.entries || [];
+  }
+  return out;
+}
 
 module.exports = function registerMavlinkPayload(RED) {
   function MavlinkPayloadNode(config) {
@@ -207,9 +227,16 @@ module.exports = function registerMavlinkPayload(RED) {
             bundle = metadataApi.loadBundled(source.dialect);
             dialect = source.dialect;
           }
+          // The field set IS the form: keys are the rows the dialog renders,
+          // values carry label/units/range/enum so nothing is baked into the
+          // editor. `carrierMatters` is false unless the command carries a
+          // location, in which case COMMAND_INT vs COMMAND_LONG is invisible.
+          const fields = fieldMetaFromBundle(bundle, topic, verb, path);
           return res.json({
             dialect,
-            fields: fieldMetaFromBundle(bundle, topic, verb, path),
+            fields,
+            carrierMatters: carrierMattersFor(bundle, topic, verb, path),
+            enums: enumsForFields(bundle, fields),
           });
         } catch (err) {
           // Bundled load errors can include filesystem paths — log server-side
