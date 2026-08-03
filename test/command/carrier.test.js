@@ -34,7 +34,7 @@ test('longToIntFields maps params, scales global lat/lon to degE7, keeps z float
   assert.equal(int.param2, 2);
   assert.equal(int.param3, 3);
   assert.equal(int.param4, 4);
-  // Default frame is GLOBAL → x/y scaled by 1e7.
+  // Default frame is a global frame → x/y scaled by 1e7.
   assert.equal(int.x, 471234567);
   assert.equal(int.y, -1225000000);
   // z is float altitude, untouched.
@@ -42,6 +42,25 @@ test('longToIntFields maps params, scales global lat/lon to degE7, keeps z float
   assert.equal(int.frame, DEFAULT_FRAME);
   assert.equal(int.current, 0);
   assert.equal(int.autocontinue, 0);
+});
+
+test('the default COMMAND_INT frame is 3, the only one ArduPilot takes (#89)', () => {
+  // Pinned to the literal, not to DEFAULT_FRAME — asserting a constant equals
+  // itself is what let this sit at GLOBAL (0) while every test passed.
+  //
+  // ArduCopter/GCS_MAVLink_Copter.cpp, handle_MAV_CMD_NAV_TAKEOFF:
+  //     if (packet.frame != MAV_FRAME_GLOBAL_RELATIVE_ALT) {
+  //         return MAV_RESULT_DENIED;
+  //     }
+  // A strict equality, so 0 is DENIED — and DENIED (4) is not one of the ack
+  // codes that arm the carrier swap (7, 8), so there is no retry behind it.
+  assert.equal(DEFAULT_FRAME, 3);
+
+  // 6 means the same altitude reference but fails that check on its value.
+  assert.notEqual(DEFAULT_FRAME, 6, 'GLOBAL_RELATIVE_ALT_INT is not a substitute');
+
+  const int = buildCommandInt(22, 1, 1, [0, 0, 0, 0, 47.1234567, -122.5, 100.5]);
+  assert.equal(int.fields.frame, 3, 'a takeoff built with no frame is accepted as-is');
 });
 
 test('longToIntFields scales every degrees value — no pass-through heuristic', () => {
