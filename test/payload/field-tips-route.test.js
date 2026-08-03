@@ -150,7 +150,7 @@ function tipsFor(query) {
 }
 
 test('the route returns everything the form needs: fields, enums and carrierMatters', () => {
-  const res = tipsFor({ topic: 'release', verb: 'winch', path: '' });
+  const res = tipsFor({ topic: 'winch', verb: 'operate', path: '' });
 
   // Field set is the row set.
   assert.deepEqual(Object.keys(res.body.fields).sort(), ['action', 'instance', 'length', 'rate']);

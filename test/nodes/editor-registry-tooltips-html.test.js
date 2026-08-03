@@ -124,14 +124,16 @@ test('Payload template does not bake protocol unit suffixes on value fields', ()
   );
 });
 
-test('Payload editor loads field tips from /mavlink/payload/field-tips', () => {
+test('Payload editor generates its form from /mavlink/payload/field-tips', () => {
   const html = readHtml('mavlink-payload');
   assert.match(html, /\/mavlink\/payload\/field-tips/);
-  assert.match(html, /refreshPayloadFieldTips/);
-  assert.match(html, /RED\.mavlink\.applyFieldMeta/);
-  // Sequence is a tip target — description comes from the dialect join, not HTML.
-  assert.match(html, /['"]sequence['"]/);
-  assert.match(html, /node-input-sequence/);
+  assert.match(html, /function renderFields/, 'rows are painted from the response');
+  assert.match(html, /meta\.label \|\| humanize\(key\)/, 'labels come from the dialect');
+  assert.match(html, /meta\.units/, 'units come from the dialect');
+  assert.match(html, /meta\.default/, 'defaults come from the recipe, via the route');
+  // The verb's parameters have no markup of their own — that is the point.
+  assert.ok(!/node-input-sequence/.test(html), 'no static row per recipe slot');
+  assert.ok(!/id="row-payload-lat"/.test(html));
 });
 
 test('shared applyFieldTitle / applyFieldUnits / applyFieldMeta helpers live on RED.mavlink', () => {
@@ -147,13 +149,23 @@ test('Payload catalogQuery reuses shared currentCatalogQuery', () => {
   assert.match(resourceScript, /RED\.mavlink\.vehicleIdFrom\s*=\s*function/);
 });
 
-test('Payload TIP_FIELDS excludes enum selects driven by fillEnumSelect', () => {
+test('Payload editor keeps no field or enum table of its own (§6)', () => {
   const html = readHtml('mavlink-payload');
-  const tipBlock = html.match(/var TIP_FIELDS = \[([\s\S]*?)\];/);
-  assert.ok(tipBlock, 'TIP_FIELDS declaration');
-  assert.ok(!/['"]modeValue['"]/.test(tipBlock[1]), 'modeValue stays on fillEnumSelect');
-  assert.ok(!/['"]actionValue['"]/.test(tipBlock[1]), 'actionValue stays on fillEnumSelect');
-  assert.match(tipBlock[1], /['"]sequence['"]/);
+  // Every one of these was a parallel copy of something the dialect already
+  // knows. The route is the single source now; re-adding any of them puts the
+  // editor back in the business of restating the protocol.
+  for (const gone of [
+    'TIP_FIELDS',
+    'FALLBACK_ENUMS',
+    'MODE_ENUMS',
+    'RELEASE_ACTION_ENUMS',
+    'PAYLOAD_ENUM_NAMES',
+    'RECIPE_ROWS',
+  ]) {
+    assert.ok(!html.includes(gone), `${gone} must not come back`);
+  }
+  assert.ok(!/GRIPPER_ACTIONS_|WINCH_ACTIONS_|PARACHUTE_ACTION_/.test(html),
+    'no baked enum entry names');
 });
 
 test('Command params cannot be wiped by a premature Done (Codex #36)', () => {

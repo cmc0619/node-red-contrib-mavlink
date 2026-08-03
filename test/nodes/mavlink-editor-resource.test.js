@@ -864,21 +864,3 @@ test('a checkbox always writes a value — unchecked is false, not missing', () 
   );
 });
 
-test('PAYLOAD_FIELDS mirrors the lib recipes exactly', () => {
-  const RED = loadResourceWithElements();
-  const { payloadFormFields, PAYLOAD_TOPICS, verbsForTopic } = require('../../lib/payload');
-  // A mirror, not a fetch — visibility must survive a failed field-tips call.
-  // This pin is what stops it drifting from the recipes it copies.
-  for (const topic of PAYLOAD_TOPICS) {
-    for (const verb of verbsForTopic(topic)) {
-      const paths = topic === 'gimbal' && verb.value === 'aim' ? ['legacy', 'manager'] : [''];
-      for (const path of paths) {
-        assert.deepEqual(
-          plain(RED.mavlink.payloadFormFields(topic, verb.value, path)),
-          plain(payloadFormFields(topic, verb.value, path)),
-          `${topic}|${verb.value}|${path}`
-        );
-      }
-    }
-  }
-});

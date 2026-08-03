@@ -168,9 +168,9 @@ test('every recipe derives exactly the fields the dialog shows', () => {
     'gimbal|roi-clear|': [],
     'servo|set|': ['pwm', 'servo'],
     'servo|repeat|': ['count', 'period', 'pwm', 'servo'],
-    'release|gripper|': ['action', 'instance'],
-    'release|winch|': ['action', 'instance', 'length', 'rate'],
-    'release|parachute|': ['action'],
+    'gripper|operate|': ['action', 'instance'],
+    'winch|operate|': ['action', 'instance', 'length', 'rate'],
+    'parachute|operate|': ['action'],
   };
   for (const [key, fields] of Object.entries(expected)) {
     const [topic, verb, path] = key.split('|');
@@ -200,7 +200,7 @@ test('the carrier is only a real choice where the command carries a location', (
   assert.equal(carrierMattersFor(bundle, 'gimbal', 'roi-set', ''), true);
   for (const [topic, verb, path] of [
     ['camera', 'photo', ''], ['camera', 'set-mode', ''], ['gimbal', 'aim', 'legacy'],
-    ['gimbal', 'aim', 'manager'], ['servo', 'set', ''], ['release', 'winch', ''],
+    ['gimbal', 'aim', 'manager'], ['servo', 'set', ''], ['winch', 'operate', ''],
   ]) {
     assert.equal(carrierMattersFor(bundle, topic, verb, path), false, `${topic}/${verb}/${path}`);
   }

@@ -133,11 +133,9 @@
       { value: 'set', label: 'Set' },
       { value: 'repeat', label: 'Repeat' }
     ],
-    release: [
-      { value: 'gripper', label: 'Gripper' },
-      { value: 'winch', label: 'Winch' },
-      { value: 'parachute', label: 'Parachute' }
-    ]
+    gripper: [{ value: 'operate', label: 'Operate' }],
+    winch: [{ value: 'operate', label: 'Operate' }],
+    parachute: [{ value: 'operate', label: 'Operate' }]
   };
 
   /**
@@ -167,64 +165,6 @@
     $verb.val(valid ? saved : (verbs[0] ? verbs[0].value : ''));
   };
 
-  /**
-   * Editor-side copy of the fields each payload verb renders, derived from
-   * `PAYLOAD_RECIPES` (pinned against `payloadFormFields` by test). Keyed
-   * `topic|verb|path`; values are `#row-payload-<key>` suffixes.
-   *
-   * This is a mirror rather than a fetch on purpose: row visibility must not
-   * depend on a network call. The field-tips route enriches these rows with
-   * labels, units and enum entries, but an undeployed profile or a failed
-   * request must still leave the operator looking at the right form.
-   *
-   * Slots the recipe pins (legacy gimbal aim's mount mode) are absent here —
-   * they are sent, not asked.
-   */
-  RED.mavlink.PAYLOAD_FIELDS = {
-    'camera|photo|': ['cameraId', 'count', 'interval', 'sequence'],
-    'camera|start-video|': ['statusFrequency', 'streamId'],
-    'camera|stop-video|': ['streamId'],
-    'camera|set-mode|': ['cameraId', 'mode'],
-    'camera|trigger-distance|': ['distance', 'shutter', 'trigger'],
-    'gimbal|aim|legacy': ['pitch', 'roll', 'yaw'],
-    'gimbal|aim|manager': ['flags', 'gimbalDeviceId', 'pitch', 'pitchRate', 'yaw', 'yawRate'],
-    'gimbal|set-mode|': ['mode', 'stabilizePitch', 'stabilizeRoll', 'stabilizeYaw'],
-    'gimbal|roi-set|': ['alt', 'lat', 'lon'],
-    'gimbal|roi-clear|': [],
-    'servo|set|': ['pwm', 'servo'],
-    'servo|repeat|': ['count', 'period', 'pwm', 'servo'],
-    'release|gripper|': ['action', 'instance'],
-    'release|winch|': ['action', 'instance', 'length', 'rate'],
-    'release|parachute|': ['action'],
-  };
-
-  /**
-   * Fields for the selected verb. Mirrors `recipeFor`'s path defaulting: only
-   * gimbal aim has a path dimension.
-   *
-   * @param {string} topic
-   * @param {string} verb
-   * @param {string} [path]
-   * @returns {string[]}
-   */
-  RED.mavlink.payloadFormFields = function (topic, verb, path) {
-    var pathKey = topic === 'gimbal' && verb === 'aim' ? (path || 'legacy') : '';
-    return RED.mavlink.PAYLOAD_FIELDS[topic + '|' + verb + '|' + pathKey] || [];
-  };
-
-  /**
-   * Editor-side copy of lib/payload payloadVerbNeedsCarrier, inverted: true
-   * when the selected payload verb is message-kind (never rides a MAV_CMD),
-   * so the carrier choice is meaningless and the editor must not demand one
-   * (§9; Codex review on #61). Client HTML cannot require() the Node module,
-   * so this mirrors PAYLOAD_RECIPES kind === 'message' — pinned against the
-   * lib table by test so it cannot drift.
-   *
-   * @param {string} topic
-   * @param {string} verb
-   * @param {string} [path]
-   * @returns {boolean}
-   */
   RED.mavlink.payloadVerbIgnoresCarrier = function (topic, verb, path) {
     return topic === 'gimbal' && verb === 'aim' && (path || 'legacy') === 'manager';
   };

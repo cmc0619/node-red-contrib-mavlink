@@ -184,7 +184,7 @@ makes unreachable.
 | `mavlink-move` | `SET_POSITION_TARGET_*`, streamed, with TTL and stop |
 | `mavlink-mission` | download / upload / clear × mission / fence / rally |
 | `mavlink-param` | read one, set one, request list |
-| `mavlink-payload` | camera, gimbal, servo, release |
+| `mavlink-payload` | camera, gimbal, servo, gripper, winch, parachute |
 | `mavlink-state` | peer table reads, transitions, snapshots |
 | `mavlink-fanout` | group fan-out with aggregation |
 
@@ -1272,8 +1272,23 @@ Rules across all three:
 Camera: photo, start video, stop video, set mode, trigger by distance.
 Gimbal: aim, set mode, ROI set/clear — and aim has two message paths
 (`DO_MOUNT_CONTROL` vs `GIMBAL_MANAGER_SET_PITCHYAW`) chosen by gimbal generation, so that is a
-per-verb choice inside the topic, not a node-level setting. Servo: set, repeat. Release:
-gripper, winch, parachute.
+per-verb choice inside the topic, not a node-level setting. Servo: set, repeat. Gripper, winch
+and parachute: operate.
+
+A topic is a device on the airframe, always. Gripper, winch and parachute are three separate
+`MAV_TYPE`s upstream (48 / 42 / 37) with nothing grouping them, so each is its own topic rather
+than sitting under an invented "release" heading — a word `WINCH_ACTIONS` does not even contain,
+since a winch spools line back in. One command each means one verb each: `operate`, upstream's
+own word (`DO_GRIPPER` is "operate a gripper", `DO_WINCH` is "operate winch"). What the device
+does is the action enum, not the verb, so their Verb row is hidden — a control with a single
+option decides nothing.
+
+**The Payload form is generated from the recipe plus the dialect.** `GET
+/mavlink/payload/field-tips` returns one descriptor per recipe slot — label, description, units,
+min/max, increment, enum name, bitmask-ness, and the recipe's default — plus the entries for
+every enum referenced. The dialog paints rows from that answer and keeps no field table, enum
+table or per-row markup of its own (§6). Values are saved as a single `values` object, because
+rows are generated per verb and there is no `#node-input-<slot>` to read at save time.
 
 ## 10. Fan-out
 
