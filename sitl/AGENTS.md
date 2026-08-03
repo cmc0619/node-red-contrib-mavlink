@@ -135,8 +135,11 @@ force-disarms for the example’s own arm step.
 Fan-out arm stories (**08 / 09 / 10 / 11**, sysids 1–5) use prep
 `ap-arm-ready-fleet`: probe-arm each AP until it succeeds, then force-disarm.
 Do **not** “fix” these by only raising `SITL_FLEET_SETTLE_MS` — peers appear
-early; arm stays DENIED (`Gyros inconsistent`) until EKF is ready. Example 10’s
-`delivery=send` can PASS without arms completing; confirm-tier 08/11 cannot.
+early; arm stays DENIED (`Gyros inconsistent`) until EKF is ready.
+
+Broadcast (`target_system = 0`) on this lab’s **udpclient** star must be written
+to every learned peer endpoint (Connection does this). A single send to
+`remotePort` 14551 reaches nobody.
 
 If takeoff/arm is still DENIED (`resultCode: 4`), check that the fleet restart
 ran and the matching arm-ready prep confirmed — do not reintroduce a source
