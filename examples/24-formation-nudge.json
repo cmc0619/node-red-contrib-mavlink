@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "24 Formation nudge",
     "disabled": false,
-    "info": "Swarm Move velocity across sysids — dry-run, sequential, broadcast.",
+    "info": "Fan-out Move velocity across sysids — dry-run, sequential, broadcast.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex24-tab",
     "name": "Formation nudge",
-    "info": "Swarm fans Move local-velocity north=1 m/s across sysids 1–5. Broadcast pins target_system=0 (single-stack only). Bind 14550→14551.",
+    "info": "Fan-out fans Move local-velocity north=1 m/s across sysids 1–5. Broadcast pins target_system=0 (single-stack only). Bind 14550→14551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -81,13 +81,13 @@
     "y": 160,
     "wires": [
       [
-        "ex24-swarm-dry"
+        "ex24-fanout-dry"
       ]
     ]
   },
   {
-    "id": "ex24-swarm-dry",
-    "type": "mavlink-swarm",
+    "id": "ex24-fanout-dry",
+    "type": "mavlink-fanout",
     "z": "ex24-tab",
     "name": "Nudge (dry run)",
     "connection": "ex24-connection",
@@ -155,13 +155,13 @@
     "y": 280,
     "wires": [
       [
-        "ex24-swarm-seq"
+        "ex24-fanout-seq"
       ]
     ]
   },
   {
-    "id": "ex24-swarm-seq",
-    "type": "mavlink-swarm",
+    "id": "ex24-fanout-seq",
+    "type": "mavlink-fanout",
     "z": "ex24-tab",
     "name": "Nudge (sequential)",
     "connection": "ex24-connection",
@@ -229,13 +229,13 @@
     "y": 400,
     "wires": [
       [
-        "ex24-swarm-bcast"
+        "ex24-fanout-bcast"
       ]
     ]
   },
   {
-    "id": "ex24-swarm-bcast",
-    "type": "mavlink-swarm",
+    "id": "ex24-fanout-bcast",
+    "type": "mavlink-fanout",
     "z": "ex24-tab",
     "name": "Nudge (broadcast)",
     "connection": "ex24-connection",

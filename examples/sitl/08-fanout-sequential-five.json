@@ -2,9 +2,9 @@
     {
         "id": "ex07-tab",
         "type": "tab",
-        "label": "SITL 08 Swarm \u00d75 pacing",
+        "label": "SITL 08 Fan-out \u00d75 pacing",
         "disabled": false,
-        "info": "Sequential arm across five ArduPilot SITL instances (sysids 1\u20135) on one connection with 200 ms inter-vehicle pacing. Dry-run verifies fan-out targets before the live run commits. Demonstrates multi-vehicle peer table use, queue pacing, and swarm partial-failure handling.",
+        "info": "Sequential arm across five ArduPilot SITL instances (sysids 1\u20135) on one connection with 200 ms inter-vehicle pacing. Dry-run verifies fan-out targets before the live run commits. Demonstrates multi-vehicle peer table use, queue pacing, and fan-out partial-failure handling.",
         "env": []
     },
     {
@@ -82,13 +82,13 @@
         "y": 160,
         "wires": [
             [
-                "ex07-swarm-dry"
+                "ex07-fanout-dry"
             ]
         ]
     },
     {
-        "id": "ex07-swarm-dry",
-        "type": "mavlink-swarm",
+        "id": "ex07-fanout-dry",
+        "type": "mavlink-fanout",
         "z": "ex07-tab",
         "name": "Arm (dry run)",
         "connection": "ex07-connection",
@@ -141,13 +141,13 @@
         "y": 280,
         "wires": [
             [
-                "ex07-swarm-live"
+                "ex07-fanout-live"
             ]
         ]
     },
     {
-        "id": "ex07-swarm-live",
-        "type": "mavlink-swarm",
+        "id": "ex07-fanout-live",
+        "type": "mavlink-fanout",
         "z": "ex07-tab",
         "name": "Arm (live, confirm)",
         "connection": "ex07-connection",

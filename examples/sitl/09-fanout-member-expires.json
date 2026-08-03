@@ -2,7 +2,7 @@
     {
         "id": "sitl09-tab",
         "type": "tab",
-        "label": "SITL 09 Swarm member expires",
+        "label": "SITL 09 Fan-out member expires",
         "disabled": false,
         "info": "Sequential fan-out across five ArduPilot sysids; kill one SITL mid-run. Aggregate reports the dropped member as failed without aborting the rest.",
         "env": []
@@ -100,13 +100,13 @@
         "y": 160,
         "wires": [
             [
-                "sitl09-swarm"
+                "sitl09-fanout"
             ]
         ]
     },
     {
-        "id": "sitl09-swarm",
-        "type": "mavlink-swarm",
+        "id": "sitl09-fanout",
+        "type": "mavlink-fanout",
         "z": "sitl09-tab",
         "name": "Arm sequential (confirm)",
         "connection": "sitl09-connection",
@@ -159,7 +159,7 @@
         "id": "sitl09-status",
         "type": "debug",
         "z": "sitl09-tab",
-        "name": "swarm status",
+        "name": "fan-out status",
         "active": true,
         "tosidebar": true,
         "console": false,

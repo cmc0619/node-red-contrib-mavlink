@@ -2,7 +2,7 @@
 
 /**
  * Payload verb editor: topic-dependent <select> on mavlink-payload and
- * mavlink-swarm (DESIGN.md §6 / §9).
+ * mavlink-fanout (DESIGN.md §6 / §9).
  */
 
 const test = require('node:test');
@@ -17,8 +17,8 @@ const payloadHtml = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-payload.html'),
   'utf8'
 );
-const swarmHtml = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'nodes', 'mavlink-swarm.html'),
+const fanoutHtml = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'nodes', 'mavlink-fanout.html'),
   'utf8'
 );
 
@@ -50,20 +50,20 @@ test('mavlink-payload verb is a topic-dependent select', () => {
   assert.doesNotMatch(payloadHtml, /PAYLOAD_VERBS\s*=/, 'no local PAYLOAD_VERBS table');
 });
 
-test('mavlink-swarm verb is a topic-dependent select', () => {
-  assertVerbSelect(swarmHtml, 'mavlink-swarm');
+test('mavlink-fanout verb is a topic-dependent select', () => {
+  assertVerbSelect(fanoutHtml, 'mavlink-fanout');
   assert.match(
-    swarmHtml,
+    fanoutHtml,
     /RED\.mavlink\.refreshVerbOptions/,
     'verb options come from the shared helper'
   );
   assert.match(
-    swarmHtml,
+    fanoutHtml,
     /\$\('#node-input-topic'\)\.on\('change'/,
     'topic change refreshes verb options'
   );
-  assert.doesNotMatch(swarmHtml, /function refreshVerbOptions/, 'no local verb-options copy');
-  assert.doesNotMatch(swarmHtml, /PAYLOAD_VERBS\s*=/, 'no local PAYLOAD_VERBS table');
+  assert.doesNotMatch(fanoutHtml, /function refreshVerbOptions/, 'no local verb-options copy');
+  assert.doesNotMatch(fanoutHtml, /PAYLOAD_VERBS\s*=/, 'no local PAYLOAD_VERBS table');
 });
 
 test('editor catalog includes every lib/payload verb value', () => {

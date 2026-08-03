@@ -74,11 +74,11 @@ const PROFILE = {
     waitMs: 45000,
     expect: 'good upload ok; bad upload fails; good plan survives',
   },
-  '08-swarm-sequential-five': {
+  '08-fanout-sequential-five': {
     waitMs: 25000,
     expect: 'dry-run then live sequential arm ×5',
   },
-  '09-swarm-member-expires': {
+  '09-fanout-member-expires': {
     waitMs: 20000,
     expect: 'aggregate reports one failed after mid-run kill',
     prep: 'kill-ap-3-mid',
@@ -333,14 +333,14 @@ function verdictFrom(profile, summary, log) {
   }
   if (/one failed|member expires/i.test(expect)) {
     const aggregateFailed = summary.debug.some((d) =>
-      d.result === 'failed' && /mavlink-swarm|aggregate|swarm/i.test(d.excerpt)
+      d.result === 'failed' && /mavlink-fanout|aggregate|fanout/i.test(d.excerpt)
     );
     const memberFailed = /members:\s*\[[\s\S]*?(?:result:\s*'(?:failed|timed-out|unconfirmed)'|detail:\s*'[^']*(?:timeout|expired|failed))/i.test(log) ||
       /"members"\s*:\s*\[[\s\S]*?(?:"result"\s*:\s*"(?:failed|timed-out|unconfirmed)"|"detail"\s*:\s*"[^"]*(?:timeout|expired|failed))/i.test(log);
     if (aggregateFailed || memberFailed) {
-      return { status: 'PASS', reason: 'swarm aggregate/member failure observed' };
+      return { status: 'PASS', reason: 'fan-out aggregate/member failure observed' };
     }
-    return { status: 'UNKNOWN', reason: 'swarm member failure not observed' };
+    return { status: 'UNKNOWN', reason: 'fan-out member failure not observed' };
   }
   if (/GLOBAL_INT|LOCAL_NED/i.test(expect)) {
     const apGlobal = summary.debug.some(
@@ -617,7 +617,7 @@ async function prep(kind) {
 }
 
 async function afterInjectHook(fileBase, startedAt) {
-  if (fileBase === '09-swarm-member-expires') {
+  if (fileBase === '09-fanout-member-expires') {
     await sleep(200);
     console.log('  killing nrc-ap-3 mid-run…');
     sh('docker stop nrc-ap-3 >/dev/null');
@@ -627,7 +627,7 @@ async function afterInjectHook(fileBase, startedAt) {
 async function cleanupAfter(fileBase) {
   // Next example's fleet restart is the real altitude/arm reset. Only recover
   // containers the example intentionally stopped so docker restart can proceed.
-  if (fileBase === '09-swarm-member-expires') {
+  if (fileBase === '09-fanout-member-expires') {
     console.log('  ensuring nrc-ap-3 is startable for next fleet restart…');
     sh('docker start nrc-ap-3 >/dev/null 2>&1 || true');
     await sleep(2000);
@@ -657,7 +657,7 @@ async function runOne(file) {
     };
   }
   // Isolation: docker-restart vehicles so AGL/EKF/arm from prior examples cannot
-  // DENY takeoff or poison swarm members. Node-RED stays up (UDP binds cleared later).
+  // DENY takeoff or poison fan-out members. Node-RED stays up (UDP binds cleared later).
   await restartVehicleFleet();
   if (profile.prep) await prep(profile.prep);
 

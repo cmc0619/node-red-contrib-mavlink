@@ -2,7 +2,7 @@
   {
     "id": "ex05-tab",
     "type": "tab",
-    "label": "05 Swarm arm",
+    "label": "05 Fan-out arm",
     "disabled": false,
     "info": "Sequential arm across multiple vehicles \u2014 dry-run first, then live send.",
     "env": []
@@ -11,7 +11,7 @@
     "id": "ex05-comment",
     "type": "comment",
     "z": "ex05-tab",
-    "name": "Swarm sequential arm",
+    "name": "Fan-out sequential arm",
     "info": "Dry-run then live sequential arm across ArduPilot SITL sysids 1\u20135. Live node has confirm=true. Bind 127.0.0.1:14550, remote 14551.",
     "x": 160,
     "y": 40,
@@ -41,7 +41,7 @@
   {
     "id": "ex05-connection",
     "type": "mavlink-connection",
-    "name": "UDP swarm",
+    "name": "UDP fan-out",
     "mode": "udp",
     "bindHost": "127.0.0.1",
     "bindPort": 14550,
@@ -81,13 +81,13 @@
     "y": 160,
     "wires": [
       [
-        "ex05-swarm-dry"
+        "ex05-fanout-dry"
       ]
     ]
   },
   {
-    "id": "ex05-swarm-dry",
-    "type": "mavlink-swarm",
+    "id": "ex05-fanout-dry",
+    "type": "mavlink-fanout",
     "z": "ex05-tab",
     "name": "Arm (dry run)",
     "connection": "ex05-connection",
@@ -158,13 +158,13 @@
     "y": 280,
     "wires": [
       [
-        "ex05-swarm-live"
+        "ex05-fanout-live"
       ]
     ]
   },
   {
-    "id": "ex05-swarm-live",
-    "type": "mavlink-swarm",
+    "id": "ex05-fanout-live",
+    "type": "mavlink-fanout",
     "z": "ex05-tab",
     "name": "Arm (live)",
     "connection": "ex05-connection",
