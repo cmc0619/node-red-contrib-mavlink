@@ -120,3 +120,14 @@ test('the picker hides dialects the primary already includes', () => {
   assert.match(html, /chain\.indexOf\(d\.entry\)/);
   assert.match(html, /populateComponents/);
 });
+
+test('dialect, version and components sit above Advanced, not inside it', () => {
+  // The dialect is what the vehicle speaks — as core as Firmware, which has
+  // always been top-level. Advanced keeps the maintenance actions only.
+  const advanced = html.slice(html.indexOf('class="mav-advanced"'));
+  assert.ok(!/id="node-config-input-dialect"/.test(advanced), 'Dialect is not advanced');
+  assert.ok(!/id="node-config-input-dialectRevision"/.test(advanced), 'Version is not advanced');
+  assert.ok(!/id="mav-component-dialects"/.test(advanced), 'Components is not advanced');
+  assert.match(advanced, /id="mav-catalog-update"/, 'catalog actions stay advanced');
+  assert.match(advanced, /id="node-config-input-paramDefsUrl"/, 'param defs stays advanced');
+});
