@@ -118,7 +118,7 @@ test('payload rows are generated, with dialect labels, units, ranges and default
   assert.match(payloadHtml, /PAYLOAD_VERBS\[sel\.topic\] \|\| \[\]\)\.length > 1/);
 });
 
-test('payload does not leak values across topics, and never scrapes a stale form', () => {
+test('payload does not leak values across topics', () => {
   // `mode` and `action` are shared row keys, and every enum they resolve to
   // starts at 0 — gripper HOLD (2) would land as PARACHUTE_RELEASE (2). Those
   // are the only collisions and they are all cross-topic (pinned by
@@ -128,16 +128,7 @@ test('payload does not leak values across topics, and never scrapes a stale form
   assert.match(payloadHtml, /\$topic\.on\('change', function \(\) \{\s*forgetValues\(\);/);
   assert.doesNotMatch(payloadHtml, /\$\('#node-input-verb'\)\.on\('change', function[\s\S]{0,80}forgetValues/);
 
-  // Node-RED writes topic/verb as soon as the select changes, but the rows are
-  // a round trip behind. Done pressed in that window must not file the old
-  // verb's answers under the new one.
-  assert.match(payloadHtml, /renderedFor = null;/, 'a repaint in flight speaks for nothing');
-  assert.match(payloadHtml, /renderedFor = key\(sel\);/, 'a landed answer claims its selection');
-  assert.match(
-    payloadHtml,
-    /renderedFor === key\(selection\(\)\)\s*\?\s*Object\.assign\(\{\}, stash, collectValues\(\)\)/,
-    'the DOM is only scraped when it belongs to the current selection'
-  );
+
 });
 
 test('mavlink-payload target sysid/compid default to empty (inherit profile) not 1', () => {

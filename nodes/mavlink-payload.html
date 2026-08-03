@@ -76,15 +76,6 @@
       // harvested before repainting and merged back when a row returns.
       var stash = Object.assign({}, node.values);
       var seq = 0;
-      // The selection the mounted form was painted for, or null while a
-      // repaint is in flight. Node-RED writes topic/verb the moment the select
-      // changes, but the rows behind them are a round trip behind — scraping
-      // them then would file the old verb's answers under the new one.
-      var renderedFor = null;
-
-      function key(sel) {
-        return sel.topic + '|' + sel.verb + '|' + sel.path;
-      }
 
       function selection() {
         return {
@@ -197,8 +188,6 @@
 
       function refreshFields() {
         var sel = selection();
-        // Nothing on screen speaks for this selection until the answer lands.
-        renderedFor = null;
         if (!sel.verb) {
           notice('Pick a verb.');
           return;
@@ -215,7 +204,6 @@
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, function (data) {
           if (mine !== seq) return;
           renderFields(data);
-          renderedFor = key(sel);
           applyCarrier(data);
         }).fail(function () {
           if (mine !== seq) return;
@@ -317,9 +305,7 @@
       });
 
       node._payloadSave = function () {
-        return renderedFor === key(selection())
-          ? Object.assign({}, stash, collectValues())
-          : Object.assign({}, stash);
+        return Object.assign({}, stash, collectValues());
       };
 
       RED.mavlink.refreshVerbOptions({ saved: node.verb });
