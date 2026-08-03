@@ -52,8 +52,7 @@
         if (!name) return;
         var kind = $(this).attr('data-kind') || 'number';
         if (kind === 'boolean') {
-          var on = RED.mavlink.booleanEnumValue($(this));
-          if (on !== null) fields[name] = on;
+          fields[name] = RED.mavlink.booleanEnumValue($(this));
           return;
         }
         var raw = $(this).val();

@@ -816,18 +816,6 @@ test('booleanEnumInput renders a checkbox carrying the dialect true value', () =
   assert.equal(unset.prop('checked'), false, 'a never-set param reads as off');
 });
 
-test('booleanEnumValue omits an unchecked param, matching a blank pulldown', () => {
-  const RED = loadResourceWithElements();
-  const entries = [
-    { name: 'MAV_BOOL_FALSE', value: 0 },
-    { name: 'MAV_BOOL_TRUE', value: 1 },
-  ];
-  // Unchecked returns null so the collector skips the key entirely — the
-  // builder resolves an absent param to 0, exactly as blank did before.
-  assert.equal(RED.mavlink.booleanEnumValue(RED.mavlink.booleanEnumInput(entries, { saved: 0 })), null);
-  assert.equal(RED.mavlink.booleanEnumValue(RED.mavlink.booleanEnumInput(entries, { saved: 1 })), 1);
-});
-
 test('a non-boolean enum is not turned into a checkbox', () => {
   const RED = loadResourceWithElements();
   // Two entries, but not the FALSE/TRUE pair — must stay a pulldown.
@@ -855,7 +843,25 @@ test('booleanEnumInput accepts an explicit true value for a no-enum param', () =
   assert.equal(forced.prop('checked'), true);
   assert.equal(RED.mavlink.booleanEnumValue(forced), 21196);
   const off = RED.mavlink.booleanEnumInput([], { saved: 0, trueValue: 21196 });
-  assert.equal(RED.mavlink.booleanEnumValue(off), null, 'unchecked omits → 0 on the wire');
+  assert.equal(RED.mavlink.booleanEnumValue(off), 0, 'unchecked is 0, never absent');
+});
+
+test('a checkbox always writes a value — unchecked is false, not missing', () => {
+  const RED = loadResourceWithElements();
+  // A command param resolves absent to 0, but a generic message field does
+  // not: lib/codec/message.js skips names the values object lacks, so an
+  // omitted field leaves the wire entirely. One behaviour for both.
+  const entries = [
+    { name: 'MAV_BOOL_FALSE', value: 0 },
+    { name: 'MAV_BOOL_TRUE', value: 1 },
+  ];
+  assert.equal(RED.mavlink.booleanEnumValue(RED.mavlink.booleanEnumInput(entries, { saved: 1 })), 1);
+  assert.equal(RED.mavlink.booleanEnumValue(RED.mavlink.booleanEnumInput(entries, { saved: 0 })), 0);
+  assert.equal(
+    RED.mavlink.booleanEnumValue(RED.mavlink.booleanEnumInput(entries, {})),
+    0,
+    'never rendered before → still false, not absent'
+  );
 });
 
 test('PAYLOAD_FIELDS mirrors the lib recipes exactly', () => {

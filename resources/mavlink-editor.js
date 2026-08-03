@@ -257,9 +257,10 @@
    * control that matches its shape — a two-state enum is a checkbox, not a
    * two-option pulldown the operator has to read before ticking).
    *
-   * The true value comes from the dialect entry, never a baked `1`. Unchecked
-   * omits the param, exactly as a blank pulldown did, and the builder resolves
-   * an absent param to 0.
+   * The true value comes from the dialect entry, never a baked `1`. The box
+   * always writes a value: ticked sends the true value, unticked sends 0. A
+   * checkbox has two states, so it produces two wire values — never a third
+   * "absent" one that means something different again.
    *
    * @param {Array<{name: string, value: string|number, description?: string}>} entries
    * @param {object} [opts]
@@ -327,15 +328,19 @@
   };
 
   /**
-   * Wire value for a checkbox built by {@link RED.mavlink.booleanEnumInput},
-   * or null when unchecked (the caller omits the param).
+   * Wire value for a checkbox built by {@link RED.mavlink.booleanEnumInput}.
+   *
+   * Unchecked is 0, not "omit": `isFalseTrueEnum` only accepts FALSE=0/TRUE=1,
+   * and the one magic boolean is 0/21196, so 0 *is* false on both paths. A
+   * command param resolves absent to 0 anyway, but a generic message field
+   * does not — `lib/codec/message.js` skips names the values object lacks, so
+   * omitting would drop the field off the wire entirely.
    *
    * @param {jQuery} $input
-   * @returns {number|null}
+   * @returns {number}
    */
   RED.mavlink.booleanEnumValue = function ($input) {
-    if (!$input.is(':checked')) return null;
-    return Number($input.attr('data-true'));
+    return $input.is(':checked') ? Number($input.attr('data-true')) : 0;
   };
 
   /**

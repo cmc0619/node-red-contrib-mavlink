@@ -1158,7 +1158,7 @@ field with units and range. Pinned params are hidden.
 
 | Preset | Command | Pinned | Exposed |
 |---|---|---|---|
-| Arm | `COMPONENT_ARM_DISARM` (400) | Arm = 1 | Force (0 or 21196) |
+| Arm | `COMPONENT_ARM_DISARM` (400) | Arm = 1 | Force |
 | Disarm | `COMPONENT_ARM_DISARM` (400) | Arm = 0 | Force |
 | Set Mode | `DO_SET_MODE` (176) | — | Mode, from the profile's firmware table |
 | Takeoff | `NAV_TAKEOFF` (22) | — | Altitude, pitch, yaw |
@@ -2381,9 +2381,15 @@ nothing creates it.
 on the wire. Advanced mode fills unset params with 0 (`nodes/mavlink-command.js`), the preset
 path starts from `[0,0,0,0,0,0,0]`, and 0 *is* `MAV_BOOL_FALSE`. So `—` and `false` built
 byte-identical messages: three choices for two outcomes. Two-state enum params render as a
-checkbox (`RED.mavlink.booleanEnumInput`), true value read from the dialect entry, unchecked
-omitting the param exactly as blank did. 33 params in ardupilotmega qualify. Two-option enums
-that are not FALSE/TRUE (frames, carriers) keep their pulldown — `isFalseTrueEnum` is the gate.
+checkbox (`RED.mavlink.booleanEnumInput`), true value read from the dialect entry. A checkbox
+has two states, so it writes two values: ticked sends the dialect's true value, unticked sends
+0. It never omits. Omitting is safe for a command param — the builder fills unset slots — but a
+generic message field has no such fill: `lib/codec/message.js` skips any name the values object
+lacks, so `base_mode = 0` and `base_mode` absent are different messages on the wire. One
+behaviour for both rather than a rule that holds on one path. 33 params in ardupilotmega
+qualify. Two-option enums that are not FALSE/TRUE (frames, carriers) keep their pulldown —
+`isFalseTrueEnum` is the gate, and it accepts only FALSE=0/TRUE=1, which is what makes 0 the
+provably correct unchecked value.
 *Check:* `node --test test/nodes/mavlink-editor-resource.test.js`; open Command → Advanced →
 `MAV_CMD_COMPONENT_ARM_DISARM` and confirm `Arm` is a checkbox.
 
@@ -2399,6 +2405,19 @@ come from the dialect. Parsing prose was declined — it would fire on the 17 ca
 Adding a second entry means re-checking that the param really is two-state.
 *Check:* `rg -n 'MAGIC_BOOLEAN_PARAMS' resources/mavlink-editor.js`; open Command → Advanced →
 `MAV_CMD_COMPONENT_ARM_DISARM` and confirm `Force` is a checkbox.
+
+**A `$('#id')` that matches nothing is silent, and unit-testing the helper does not catch it.**
+*Wrong belief:* if the helper has tests and the renderer calls it, the feature works.
+*Fact:* the Force checkbox shipped dead. `advancedParamInput` read the MAV_CMD from
+`$('#node-input-commandId')` — an id no template defines (Advanced uses
+`#node-input-advancedCommand`, Preset resolves via `presetCommandId`). jQuery returned an empty
+set, `.val()` returned `undefined`, the lookup keyed `"undefined:2"` and missed, so a number
+input rendered instead. Every test passed: they exercised `magicBooleanValue(400, 2)` directly
+and never the call site. The fix is to thread the value in as an argument — both callers already
+had it — rather than re-reading the DOM from a nested helper. The guard is structural, not
+per-feature: `test/nodes/editor-selectors-resolve.test.js` asserts that in each of the 14 editor
+HTML files, every `$('#id')` selector names an id that file also defines.
+*Check:* `node --test test/nodes/editor-selectors-resolve.test.js`.
 
 **Pre-1.0 Command rename does not invent flow compat.**
 *Wrong belief:* renaming an editor field requires `oneditprepare` copy + runtime

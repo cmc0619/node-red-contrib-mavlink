@@ -152,7 +152,12 @@ test('PRESET_PARAMS is curation-only — the dialect catalog is the data source'
     'the only curated units are lat/lon deg — the XML leaves those unitless (carrier-dependent)');
   // Curation that XML cannot know stays.
   assert.match(table, /request_message:[\s\S]*messages:\s*true/, 'message-picker flags are curation');
-  assert.match(table, /label:\s*'Force \(0 or 21196\)'/, 'operator-guidance labels are curation');
+  assert.match(table, /label:\s*'Direction \(-1=CCW 0=CW\)'/, 'operator-guidance labels are curation');
+  // Guidance that only made sense on a number box goes when the control does:
+  // Force and Use Current render as checkboxes now, and the XML already calls
+  // them 'Force' and 'Use Current'.
+  assert.ok(!/21196/.test(table), 'no type-this-number hint next to a checkbox');
+  assert.ok(!/Use current \(1 = yes\)/.test(table));
 });
 
 test('preset rows render through the Advanced catalog path', () => {
@@ -169,8 +174,11 @@ test('preset rows render through the Advanced catalog path', () => {
   assert.match(html, /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/, 'message ids load via shared loadCatalog');
   assert.match(presetBlock, /catalogParamByIndex\(catalog, commandId, spec\.index\)/, 'each row merges the catalog param spec');
   assert.match(presetBlock, /Object\.assign\(\{\}, catalogParamByIndex/, 'curation keys override, omitted keys inherit');
-  assert.match(presetBlock, /presetParamInput\(merged, catalog\.enums \|\| \{\}\)/, 'rows render with catalog enums');
-  assert.match(renderer, /return advancedParamInput\(spec, enums \|\| \{\}\);/, 'one input builder for preset and Advanced');
+  assert.match(presetBlock, /presetParamInput\(merged, catalog\.enums \|\| \{\}, commandId\)/, 'rows render with catalog enums');
+  // The command id is threaded in, not re-read from the DOM: Preset resolves
+  // it from the preset, Advanced from #node-input-advancedCommand, and the
+  // magic-boolean lookup needs whichever one applies.
+  assert.match(renderer, /return advancedParamInput\(spec, enums \|\| \{\}, commandId\);/, 'one input builder for preset and Advanced');
   assert.match(renderer, /spec\.messages/, 'message-backed preset params keep their picker');
 });
 
