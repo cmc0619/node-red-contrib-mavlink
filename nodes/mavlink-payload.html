@@ -150,7 +150,9 @@
         var $box = $('#payload-fields').empty();
         var fields = (data && data.fields) || {};
         var enums = (data && data.enums) || {};
-        var keys = Object.keys(fields).sort();
+        // The route emits the recipe's own slot order (param1..param7), which
+        // is how the protocol reads: lat, lon, alt — not alphabetically.
+        var keys = Object.keys(fields);
         if (!keys.length) {
           notice('No parameters for this verb.');
           return;
@@ -165,6 +167,15 @@
         });
       }
 
+      // §6 hidden is not honored: a control the operator cannot see must not
+      // put anything on the wire, so the frame row clears itself on the way
+      // out rather than saving whatever was left in it.
+      function applyFrameRow(carrierShown) {
+        var shown = carrierShown && $('#node-input-carrier').val() === 'int';
+        if (!shown) $('#node-input-frame').val('');
+        $('#row-payload-frame').toggle(shown);
+      }
+
       // Carrier is observable only when the command carries a location; for
       // everything else COMMAND_INT and COMMAND_LONG are byte-identical in
       // params 1–4. Pin the hidden control to what is actually sent so §6's
@@ -175,7 +186,7 @@
           && !!(data && data.carrierMatters);
         if (!matters) $('#node-input-carrier').val('int');
         $('#row-payload-carrier').toggle(matters);
-        $('#row-payload-frame').toggle(matters && $('#node-input-carrier').val() === 'int');
+        applyFrameRow(matters);
       }
 
       function refreshFields() {
@@ -272,9 +283,7 @@
       $('#node-input-path').on('change', reselect);
 
       $('#node-input-carrier').on('change', function () {
-        $('#row-payload-frame').toggle(
-          $('#row-payload-carrier').is(':visible') && $('#node-input-carrier').val() === 'int'
-        );
+        applyFrameRow($('#row-payload-carrier').is(':visible'));
       });
       $('#node-input-delivery').on('change', function () {
         refreshVisibility();

@@ -106,6 +106,9 @@ test('payload rows are generated, with dialect labels, units, ranges and default
   assert.match(payloadHtml, /meta\.units/);
   assert.match(payloadHtml, /meta\.minValue/);
   assert.match(payloadHtml, /meta\.maxValue/);
+  // Recipe order, not alphabetical: gimbal roi-set reads lat, lon, alt.
+  assert.match(payloadHtml, /var keys = Object\.keys\(fields\);/);
+  assert.ok(!/Object\.keys\(fields\)\.sort\(\)/.test(payloadHtml));
   // A blank box that silently sends 1 is the bug this closes.
   assert.match(payloadHtml, /saved = meta\.default === null/, 'blank falls back to the recipe default');
   assert.match(
@@ -302,10 +305,17 @@ test('payload frame row binds to the frame property and follows the INT carrier 
   );
   assert.match(payloadHtml, /row-payload-frame/, 'frame row id must exist');
   assert.match(payloadHtml, /\$\('#node-input-carrier'\)\.on\('change'/, 'carrier change re-evaluates the frame row');
-  // Carrier only shows where it is observable, and is pinned to what is sent
-  // when it is not — §6 hidden is not honored, without a runtime branch.
+  // §6 hidden is not honored, both halves: carrier is pinned to what is sent
+  // when its row hides, and frame clears rather than saving a stale value the
+  // operator can no longer see. One helper, so the two cannot drift.
   assert.match(payloadHtml, /data\.carrierMatters/);
   assert.match(payloadHtml, /if \(!matters\) \$\('#node-input-carrier'\)\.val\('int'\);/);
+  assert.match(payloadHtml, /if \(!shown\) \$\('#node-input-frame'\)\.val\(''\);/);
+  assert.equal(
+    (payloadHtml.match(/#row-payload-frame'\)\.toggle/g) || []).length,
+    1,
+    'the frame-row rule is written once'
+  );
 });
 
 
