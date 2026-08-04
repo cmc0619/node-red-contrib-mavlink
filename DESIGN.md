@@ -2021,6 +2021,47 @@ example prep asks for it. That is the altitude reset; force-disarm cleanup was
 removed as ineffective for this path.
 *Check:* `sitl/run-example-suite.js` (`restartVehicleFleet`), `sitl/AGENTS.md`.
 
+**Blank coordinates are refused per preset, because the dialect cannot tell you.**
+*Wrong belief:* the guard against blank lat/lon becoming `0,0` can be driven from
+the bundle — refuse whenever the command's entry has `hasLocation`.
+*Fact:* `hasLocation` does not mean "the operator must supply a position". The
+dialect marks `MAV_CMD_NAV_TAKEOFF` (22) and `MAV_CMD_NAV_LAND` (21) as
+`hasLocation` **and** `isDestination`, yet blank coordinates on both are the
+ordinary "here" case — ArduPilot's takeoff handler documents param5/6 as "not
+supported", and landing at the current position is routine. Neither flag
+separates "blank means here" from "blank means the Gulf of Guinea", and no other
+field in the entry does either. Measured across `common.xml`: 26 commands are
+`hasLocation && isDestination`, and they include takeoff, land and every VTOL
+variant alongside `DO_REPOSITION`.
+So the rule lives on the preset that expresses the intent — `requireLocation` on
+Go To / Reposition and Orbit, and `{ unless: { param: 1, equals: 1 } }` on Set
+Home, whose "use current position" flag makes the vehicle ignore the coordinates
+outright. This is a column on a table that already exists, not a new protocol
+copy (§6).
+The check runs on the operator's input, *before* `buildParamArray` fills absent
+params with 0 — after that, blank and a deliberate `0` are the same value. An
+explicit `0` still sends: the guard is against silence, not against the equator.
+Payload's `gimbal|roi-set` gets the same treatment through `required: true` slots
+rather than `default: 0`.
+Blank has to survive the trip to the guard, which means three doors, not one.
+The editor already omits an empty param key, so that path was safe — but
+`mergeParams` ran `Number()` over `msg.payload` overrides, turning `''` into a
+legal 0 before the guard ever saw it; `hasValue` counted whitespace as present
+for the same reason; and fan-out builds preset params itself, so the command
+node's guard never ran for a fleet-wide Go To at all. All three now treat blank
+and whitespace as absent.
+*Ruled, not pending:* advanced mode is **deliberately unguarded** and stays that
+way. The operator picks a raw MAV_CMD and types its params by number — that is
+the escape hatch, and its whole contract is that you have read the command's
+definition. No preset exists there to carry the intent, and the `hasLocation`
+objection above applies just as much, so any guard would have to invent a rule
+the protocol does not supply. Do not re-raise this as a gap.
+*Check:* `lib/command/presets.js` (`blankLocationRefusal`, `requireLocationFor`),
+`lib/command/merge-params.js` (`isBlank`), `lib/payload/index.js` (`hasValue`,
+`slotValue`), `lib/fanout/index.js` (`validateWrap`), `node --test
+test/command/presets.test.js test/fanout/fanout.test.js
+test/payload/verbs.test.js` — every guard sabotage-verified.
+
 **Closing a node does not stop a promise chain it started.**
 *Wrong belief:* Node-RED's `close` tears the node down, so an in-flight async run
 stops with it — and a cancelled run is a kind of failure, so the generic failure
