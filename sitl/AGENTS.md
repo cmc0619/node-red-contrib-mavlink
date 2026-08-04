@@ -120,6 +120,9 @@ local or paste a collapsed `<details>` block — do not land it in git.
 - Example **18**: needs `ap-home-ready` (HOME_POSITION) or AP GLOBAL_INT home FAILs.
 - Example **21**: AP param is `LOIT_SPEED_MS` (no `WPNAV_SPEED` on Copter 4.7.0).
 - Example **23**: inherit PASS is resolved `target.sysid === 2` (prep `ap-arm-ready-2`).
+- Examples **26/27**: formation + takeoff need `ap-arm-ready-fleet`; **27** wait is long
+  (sphere pitch steps + peel land). Verdict keys on named debug tags (`line status`,
+  `s0 status`…`land status`), not a generic succeeded count.
 
 ## Port / sysid map (quick)
 

@@ -23,6 +23,7 @@ test('line formation fans DO_REPOSITION out with each member\'s own lat/lon/alt 
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
     headingDeg: 0,
+    pitchDeg: 0,
     carrier: 'long',
     delivery: 'send',
     intervalMs: 0,
@@ -75,6 +76,7 @@ test('leader anchor reads position, relative altitude and heading from the peer 
     sysids: '1,2',
     anchorMode: 'leader',
     leader: 7,
+    pitchDeg: 0,
     carrier: 'long',
     delivery: 'send',
     intervalMs: 0,
@@ -104,6 +106,7 @@ test('leader with no reported position is refused, not defaulted', async () => {
     sysids: '1,2',
     anchorMode: 'leader',
     leader: 7,
+    pitchDeg: 0,
     carrier: 'long',
     delivery: 'send',
     intervalMs: 0,
@@ -132,6 +135,7 @@ test('leader without a finite relative altitude is refused (altitude must not de
     sysids: '1',
     anchorMode: 'leader',
     leader: 7,
+    pitchDeg: 0,
     carrier: 'long',
     delivery: 'send',
     intervalMs: 0,
@@ -155,6 +159,7 @@ test('unknown leader heading defaults the pattern to north (0), documented safe 
     sysids: '1,2',
     anchorMode: 'leader',
     leader: 7,
+    pitchDeg: 0,
     carrier: 'long',
     delivery: 'send',
     intervalMs: 0,
@@ -180,6 +185,7 @@ test('geometry refusal propagates: fixed anchor with a blank altitude fails the 
     lat: 47.4,
     lon: 8.5,
     alt: '',
+    pitchDeg: 0,
     carrier: 'long',
     delivery: 'send',
     intervalMs: 0,
@@ -206,6 +212,7 @@ test('bad config sysid tokens fail loudly as node errors', async () => {
     lat: 47.4,
     lon: 8.5,
     alt: 30,
+    pitchDeg: 0,
     carrier: 'long',
     delivery: 'send',
     intervalMs: 0,
@@ -232,6 +239,7 @@ test('msg.payload.anchor and headingDeg override the configured leader anchor', 
     sysids: '1,2',
     anchorMode: 'leader',
     leader: 7,
+    pitchDeg: 0,
     carrier: 'long',
     delivery: 'send',
     intervalMs: 0,
@@ -264,6 +272,7 @@ test('non-numeric msg.payload.headingDeg is refused with the raw value named', a
     lat: ANCHOR.lat,
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
+    pitchDeg: 0,
     carrier: 'long',
     delivery: 'send',
     intervalMs: 0,
@@ -293,6 +302,7 @@ test('default carrier int builds COMMAND_INT with per-member degE7 coords (§9)'
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
     headingDeg: 0,
+    pitchDeg: 0,
     carrier: 'int',
     delivery: 'send',
     intervalMs: 0,
@@ -335,6 +345,7 @@ test('close aborts an in-flight formation run and waits for it to unwind', async
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
     headingDeg: 0,
+    pitchDeg: 0,
     carrier: 'long',
     delivery: 'send',
     intervalMs: 60000,
@@ -377,6 +388,7 @@ test('msg.payload.sysids overrides the configured member list', async () => {
     lat: 47.4,
     lon: 8.5,
     alt: 30,
+    pitchDeg: 0,
     carrier: 'long',
     delivery: 'send',
     intervalMs: 0,
@@ -391,6 +403,52 @@ test('msg.payload.sysids overrides the configured member list', async () => {
     connection.sends.map((s) => s.message.fields.target_system).sort(),
     [2, 3]
   );
+});
+
+test('sphere with pitchDeg override fans distinct altitudes via DO_REPOSITION', async () => {
+  const connection = connectionStub([peer(1), peer(2), peer(3), peer(4), peer(5)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-formation')(RED);
+  const node = new (RED.nodes.types['mavlink-formation'])({
+    connection: 'conn',
+    shape: 'sphere',
+    spacing: 12,
+    sysids: '1,2,3,4,5',
+    anchorMode: 'fixed',
+    lat: ANCHOR.lat,
+    lon: ANCHOR.lon,
+    alt: ANCHOR.alt,
+    headingDeg: 0,
+    pitchDeg: 0,
+    carrier: 'long',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  let sent;
+
+  await emitInput(node, { payload: { pitchDeg: 45 } }, (m) => { sent = m; });
+
+  assert.equal(sent[1].result, 'succeeded');
+  assert.equal(sent[1].count, 5);
+  const expected = new Map(
+    formationTargets({
+      shape: 'sphere',
+      spacing: 12,
+      anchor: ANCHOR,
+      headingDeg: 0,
+      pitchDeg: 45,
+      sysids: [1, 2, 3, 4, 5],
+    }).map((t) => [t.sysid, t])
+  );
+  const alts = [];
+  for (const { message } of connection.sends) {
+    const want = expected.get(message.fields.target_system);
+    assert.equal(message.fields.param5, want.lat);
+    assert.equal(message.fields.param6, want.lon);
+    assert.equal(message.fields.param7, want.alt);
+    alts.push(message.fields.param7);
+  }
+  assert.ok(new Set(alts).size > 1, 'sphere pitch leaves vehicles at more than one altitude');
 });
 
 function emitInput(node, msg, send) {

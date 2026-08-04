@@ -174,6 +174,18 @@ const PROFILE = {
     notes: 'default Compose lab is UDP-only; skip without published :5760',
     skip: true,
   },
+  '26-formation-basics': {
+    waitMs: 140000,
+    expect: 'formation line then circle succeeded ×5',
+    prep: 'ap-arm-ready-fleet',
+    notes: 'GUIDED→arm→takeoff→line→circle on AP 1–5; mavlink-formation confirm aggregates',
+  },
+  '27-lucy-in-the-sky': {
+    waitMs: 260000,
+    expect: 'Lucy sphere tumble then peel land',
+    prep: 'ap-arm-ready-fleet',
+    notes: 'takeoff→line spread→sphere→pitch 0/45/90/135/180→sequential land',
+  },
 };
 
 function req(method, urlPath, body, headers = {}) {
@@ -473,6 +485,49 @@ function verdictFrom(profile, summary, log) {
     if (rx) {
       return { status: 'PASS', reason: 'companion receive traffic observed (sysid 20)' };
     }
+  }
+  if (/formation line then circle/i.test(expect)) {
+    const lineOk = summary.debug.some(
+      (d) => /line status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    const circleOk = summary.debug.some(
+      (d) => /circle status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    if (lineOk && circleOk) {
+      return { status: 'PASS', reason: 'line + circle formation aggregates succeeded' };
+    }
+    if (lineOk || circleOk) {
+      return {
+        status: 'PARTIAL',
+        reason: `formation incomplete: line=${lineOk} circle=${circleOk}`,
+      };
+    }
+    return { status: 'FAIL', reason: 'no line/circle formation succeeded status' };
+  }
+  if (/Lucy sphere|peel land/i.test(expect)) {
+    // Debug node names: "spread status", "s0 status" … "s180 status", "land status".
+    const sphereSteps = ['s0', 's45', 's90', 's135', 's180'].filter((k) =>
+      summary.debug.some((d) => new RegExp(`${k} status`, 'i').test(d.tag) && d.result === 'succeeded')
+    );
+    const spreadOk = summary.debug.some(
+      (d) => /spread status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    const landOk = summary.debug.some(
+      (d) => /land status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    if (spreadOk && sphereSteps.length === 5 && landOk) {
+      return {
+        status: 'PASS',
+        reason: 'Lucy: spread + sphere pitch steps + peel land succeeded',
+      };
+    }
+    if (spreadOk || sphereSteps.length || landOk) {
+      return {
+        status: 'PARTIAL',
+        reason: `Lucy incomplete: spread=${spreadOk} pitches=${sphereSteps.length}/5 land=${landOk}`,
+      };
+    }
+    return { status: 'FAIL', reason: 'Lucy formation/land path not observed' };
   }
 
   const bad = results.filter((r) =>
