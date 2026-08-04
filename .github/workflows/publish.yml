@@ -35,6 +35,11 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
 
+      # Node 22.13.0 bundles npm 10.9.2; OIDC trusted publishing landed in
+      # 11.5.1. Without this the tokenless publish below has no credential.
+      - name: Install an npm that can do trusted publishing
+        run: npm install --global npm@^11.5.1
+
       - name: Install
         run: npm ci
 

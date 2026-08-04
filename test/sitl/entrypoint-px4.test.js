@@ -37,7 +37,13 @@ test('entrypoint rewrites early MAV_SYS_ID and asserts before commander start', 
   assert.match(src, /nrc_lab_params_pre_mavlink/, 'must still assert before mavlink');
 });
 
-test('fixture rcS gets lab SYSID before commander start', () => {
+// The entrypoint runs inside the PX4 Linux container: it resolves OUT_HOST via
+// `getent` and /proc/net/route, neither of which exists under Git Bash on
+// Windows, so it exits FATAL before it ever patches rcS. Running it there
+// tests the runner, not the script.
+const containerOnly = process.platform === 'win32' && 'Linux-only container entrypoint';
+
+test('fixture rcS gets lab SYSID before commander start', { skip: containerOnly }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-px4-rcs-'));
   const prefix = path.join(dir, 'opt', 'px4');
   const posix = path.join(prefix, 'etc', 'init.d-posix');
