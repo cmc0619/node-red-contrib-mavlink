@@ -105,10 +105,11 @@ const PROFILE = {
     injectGapMs: 12000,
   },
   '12-signing': {
-    waitMs: 5000,
-    expect: 'signed arm attempt (needs Admin signing passphrase)',
-    notes: 'Admin API deploy cannot supply signing credentials; skip in default lab',
-    skip: true,
+    waitMs: 15000,
+    expect: 'signed arm accepted; trusted HEARTBEAT on companion 20',
+    prep: 'ap-signing-companion-20',
+    notes:
+      'Lab passphrase hunter11 injected via Admin API credentials; harness SETUP_SIGNING on companion AP sysid 20',
   },
   '13-param-defs-live': {
     waitMs: 20000,
@@ -331,13 +332,29 @@ function verdictFrom(profile, summary, log) {
       return { status: hasFail || /does not support fence/i.test(log) ? 'PASS' : 'PARTIAL', reason: 'mixed AP ok / PX4 fail expected' };
     }
   }
-  if (/signing/i.test(expect) || /setup-dependent/i.test(profile.notes || '')) {
-    if (results.length || summary.errors.length || /sign/i.test(log)) {
+  if (/signed arm accepted|trusted HEARTBEAT/i.test(expect)) {
+    const armAccepted = summary.debug.some(
+      (d) => d.result === 'accepted' && (/arm/i.test(d.tag) || /arm/i.test(d.excerpt || ''))
+    );
+    // debug node complete:"trusted" logs a bare true/false line under [debug:trusted flag]
+    const trustedHb =
+      /\[debug:trusted flag\]\s*\n?\s*true\b/i.test(log) ||
+      summary.debug.some(
+        (d) => /trusted flag/i.test(d.tag) && /^\s*true\s*$/m.test(d.excerpt || '')
+      );
+    if (armAccepted && trustedHb) {
       return {
-        status: summary.errors.length && !results.includes('accepted') ? 'SKIP/FAIL' : 'PARTIAL',
-        reason: 'signing template against unsigned SITL',
+        status: 'PASS',
+        reason: 'signed arm accepted + trusted HEARTBEAT on companion 20',
       };
     }
+    if (armAccepted || trustedHb) {
+      return {
+        status: 'PARTIAL',
+        reason: `armAccepted=${armAccepted}; trustedHb=${trustedHb}`,
+      };
+    }
+    return { status: 'FAIL', reason: 'signed arm / trusted HEARTBEAT not observed' };
   }
   if (/INT goto|150 m/i.test(expect)) {
     if (results.includes('accepted') && /DO_REPOSITION|INT goto/i.test(log)) {
@@ -461,11 +478,30 @@ function verdictFrom(profile, summary, log) {
   };
 }
 
-function runApControlScript(body, timeoutMs = 20000) {
-  // Run out-of-band so Node-RED is not holding 14550.
-  // Pass the source as node argv (not bash -c + JSON.stringify): bash double
-  // quotes leave `\\n` literal, so `node -e` used to SyntaxError and the old
-  // harness ignored the exit code — GUIDED prep never actually ran.
+/**
+ * Joke lab signing passphrase for example 12. Intentionally not a secret —
+ * Admin API deploy injects it as Connection credentials; harness also pushes
+ * SETUP_SIGNING with sha256(passphrase) onto companion AP sysid 20.
+ */
+const SITL_SIGNING_PASSPHRASE = 'hunter11';
+
+/**
+ * Run an out-of-band Connection script against one AP UDP pair.
+ * Defaults: GCS fleet bind 14550 → remote 14551, target sysid 1.
+ * Companion AP uses bind 14540 → remote 14541, target sysid 20.
+ *
+ * Pass the source as node argv (not bash -c + JSON.stringify): bash double
+ * quotes leave `\\n` literal, so `node -e` used to SyntaxError and the old
+ * harness ignored the exit code — GUIDED prep never actually ran.
+ *
+ * @param {string} body
+ * @param {number} [timeoutMs]
+ * @param {{bindPort?: number, remotePort?: number, targetSystem?: number}} [opts]
+ */
+function runApControlScript(body, timeoutMs = 20000, opts = {}) {
+  const bindPort = Number(opts.bindPort) > 0 ? Number(opts.bindPort) : 14550;
+  const remotePort = Number(opts.remotePort) > 0 ? Number(opts.remotePort) : 14551;
+  const targetSystem = Number(opts.targetSystem) > 0 ? Number(opts.targetSystem) : 1;
   const script = `
     const { Connection, BAND } = require(${JSON.stringify(path.join(ROOT, 'lib/connection'))});
     const { loadBundled } = require(${JSON.stringify(path.join(ROOT, 'lib/metadata'))});
@@ -475,8 +511,8 @@ function runApControlScript(body, timeoutMs = 20000) {
     (async () => {
       const bundle = loadBundled('ardupilotmega');
       const conn = new Connection({
-        transport: { mode: 'udp', bindAddress: '0.0.0.0', bindPort: 14550, remoteAddress: '127.0.0.1', remotePort: 14551 },
-        vehicle: { targetSystem: 1, targetComponent: 1, bundle, firmware: 'ardupilot', autopilot: 3 },
+        transport: { mode: 'udp', bindAddress: '0.0.0.0', bindPort: ${bindPort}, remoteAddress: '127.0.0.1', remotePort: ${remotePort} },
+        vehicle: { targetSystem: ${targetSystem}, targetComponent: 1, bundle, firmware: 'ardupilot', autopilot: 3 },
         identities: [{ id: 'gcs', sysid: 255, compid: 190, heartbeat: { type: 6, autopilot: 8, systemStatus: 4, baseMode: 0, customMode: 0, mavlinkVersion: 3 }, heartbeatIntervalMs: 500 }],
         defaultIdentityId: 'gcs', boundIdentityIds: ['gcs'],
         signing: { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
@@ -502,6 +538,26 @@ function runApControlScript(body, timeoutMs = 20000) {
     throw new Error(`AP control script failed (exit ${r.status}): ${out.slice(0, 300)}`);
   }
   return { code: r.status, out };
+}
+
+/**
+ * Attach signingPassphrase credentials for every Connection that enables
+ * signOutbound or requireSigned. Node-RED's Admin API accepts a top-level
+ * `credentials` map on POST /flows (flow JSON never embeds the secret).
+ *
+ * @param {object[]} flows
+ * @returns {Record<string, {signingPassphrase: string}>}
+ */
+function signingCredentialsForFlows(flows) {
+  /** @type {Record<string, {signingPassphrase: string}>} */
+  const credentials = {};
+  for (const n of flows) {
+    if (!n || n.type !== 'mavlink-connection') continue;
+    if (n.signOutbound || n.requireSigned) {
+      credentials[n.id] = { signingPassphrase: SITL_SIGNING_PASSPHRASE };
+    }
+  }
+  return credentials;
 }
 
 /** Vehicle containers only — never restart nrc-nodered between examples. */
@@ -591,6 +647,49 @@ async function waitApArmReady(sysids, budgetMs = 120000) {
   runApControlScript(armReadySource(sysids, budgetMs), budgetMs + 30000);
 }
 
+/**
+ * Provision MAVLink2 signing on the standalone companion ArduCopter (sysid 20)
+ * and prove it can arm before example 12 deploys. Uses the same sha256(passphrase)
+ * key Mission Planner / node-mavlink derive from SITL_SIGNING_PASSPHRASE.
+ *
+ * Vehicle must be disarmed (ArduPilot refuses SETUP_SIGNING while armed).
+ * Message shape is { name, fields } — flat fields serialize as an empty payload.
+ */
+async function setupCompanionSigning() {
+  console.log('  SETUP_SIGNING + arm-ready on companion AP sysid 20…');
+  // Compute key in-process so the spliced script only carries hex.
+  const { MavLinkPacketSignature } = require('node-mavlink');
+  const keyHex = MavLinkPacketSignature.key(SITL_SIGNING_PASSPHRASE).toString('hex');
+  runApControlScript(
+    `
+      const { timestampFromMs } = require(${JSON.stringify(path.join(ROOT, 'lib/connection'))});
+      const key = Buffer.from(${JSON.stringify(keyHex)}, 'hex');
+      const t = { sysid: 20, compid: 1 };
+      const deadline = Date.now() + 90000;
+      const compOf = () => conn.peerTable.getComponent(20, 1);
+      while (!compOf()?.primaryEndpoint && Date.now() < deadline) await sleep(500);
+      if (!compOf()?.primaryEndpoint) throw new Error('companion AP-20 peer not learned');
+      if (compOf()?.armed) {
+        conn.send(buildCommandLong(400, 20, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+        await sleep(800);
+      }
+      conn.send({
+        name: 'SETUP_SIGNING',
+        fields: {
+          target_system: 20,
+          target_component: 1,
+          secret_key: Array.from(key),
+          initial_timestamp: BigInt(timestampFromMs(Date.now())),
+        },
+      }, { band: BAND.CONTROL, target: t });
+      await sleep(1500);
+      ${armReadySource([20], 90000)}
+    `,
+    130000,
+    { bindPort: 14540, remotePort: 14541, targetSystem: 20 }
+  );
+}
+
 async function setApGuided(sysid = 1) {
   // After fleet restart:
   // 1) SET_MODE needs a learned peer endpoint (pre-peer fallback never arrives).
@@ -670,6 +769,9 @@ async function prep(kind) {
   if (kind === 'ap-arm-ready-fleet') {
     await waitApArmReady([1, 2, 3, 4, 5]);
   }
+  if (kind === 'ap-signing-companion-20') {
+    await setupCompanionSigning();
+  }
   if (kind === 'px4-home-ready' || kind === 'px4-mode-ready') {
     // Fleet restart already applied helpers to all PX4; refresh sysid 11 once more
     // immediately before deploy (params can race early HEARTBEAT).
@@ -724,7 +826,10 @@ async function runOne(file) {
   if (profile.prep) await prep(profile.prep);
 
   const mark = Math.floor(Date.now() / 1000);
-  const deploy = await req('POST', '/flows', { flows }, { 'Node-RED-Deployment-Type': 'full' });
+  const credentials = signingCredentialsForFlows(flows);
+  const deployBody =
+    Object.keys(credentials).length > 0 ? { flows, credentials } : { flows };
+  const deploy = await req('POST', '/flows', deployBody, { 'Node-RED-Deployment-Type': 'full' });
   if (deploy.status >= 300) {
     return {
       file,

@@ -81,7 +81,10 @@ Harness: **docker-restarts the vehicle fleet** (AP 1–5, PX4 11–15, companion
 settle (`SITL_FLEET_SETTLE_MS`, default 8s), re-applies PX4 lab helpers, then
 deploys one `examples/sitl/*.json` → enable debug→console → fire injects →
 scrape `docker logs nrc-nodered` → write JSON under `/tmp/` (default). Example
-**25** (TCP) is **SKIP** unless Compose exposes SITL TCP.
+**12** (signing) targets companion AP sysid 20: harness sends `SETUP_SIGNING` with
+`sha256(hunter11)` and injects `{ signingPassphrase: "hunter11" }` on Admin API
+deploy (`hunter11` is a joke lab passphrase, not a secret). Example **25** (TCP)
+is **SKIP** unless Compose exposes SITL TCP.
 
 Force-disarm alone does **not** reset AGL; without the fleet restart, a prior
 takeoff leaves sysid 1 airborne and the next `NAV_TAKEOFF` returns
@@ -111,6 +114,8 @@ local or paste a collapsed `<details>` block — do not land it in git.
 - Examples **15/16**: many `sent` lines → look for `NAMED_VALUE_FLOAT` specifically.
 - Example **07**: bad upload must fail validation; empty success is not fail-loud.
 - Example **03**: `TEMPORARILY_REJECTED` needs a fresh AP boot race — often PARTIAL.
+- Example **12**: needs `SETUP_SIGNING` + Admin credentials before deploy; verdict
+  wants arm `accepted` and debug `trusted flag` → `true` (not merely “sign” in the log).
 
 ## Port / sysid map (quick)
 

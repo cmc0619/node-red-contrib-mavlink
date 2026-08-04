@@ -51,7 +51,7 @@ without understanding each step.
 | `09-fanout-member-expires.json` | SITL 09 Fan-out member expires | 5× ArduPilot |
 | `10-dual-stack-ten.json` | SITL 10 Dual-stack ×10 | 5× ArduPilot + 5× PX4 |
 | `11-broadcast-vs-sequential.json` | SITL 11 Broadcast vs sequential | 5× ArduPilot |
-| `12-signing.json` | SITL 12 Signing | 1× ArduPilot (+ signing setup) |
+| `12-signing.json` | SITL 12 Signing | companion AP sysid 20 (`hunter11` via harness) |
 | `13-param-defs-live.json` | SITL 13 Param defs (live) | 1× ArduPilot |
 | `14-command-mission-basics.json` | SITL 14 Command & mission basics | 2× ArduPilot |
 | `15-companion-ap.json` | SITL 15 Companion AP | companion AP sysid 20 |
