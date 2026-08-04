@@ -35,6 +35,21 @@ and measured reality.
 Split by module boundary (`lib/<module>`, `nodes/<node>`, matching tests) into sequential PRs
 when a layer would exceed the cap. Count is `git diff --name-only <base>...HEAD | wc -l`.
 
+**`DESIGN.md` and `AGENTS.md` are written straight to `main`, never through a PR.** A PR
+carries code and its tests. Docs in the branch re-churn the diff on every review round — a
+§14 entry gets rewritten each time a finding lands, and reviewers re-read a file that was
+never the thing under review. Commit them directly instead, in their own commit, with the
+reasoning in the message.
+
+This also lands the ruling immediately, which is the point: §14 is what the review bots read,
+so a decision recorded there stops the next bot re-raising it *during* the PR rather than
+after it merges.
+
+Two consequences to accept. A §14 entry on `main` can briefly describe behaviour whose code is
+still in flight — that self-corrects on merge, and needs pulling back out if the PR is
+abandoned. And if the branch already touched those files before you noticed, leave the history
+alone: a force-push to tidy a doc nobody reviews commit-by-commit is worse than the untidiness.
+
 **Merges to `main` are human-only.** An agent never merges a pull request — not when checks
 are green, not when the work looks finished, not when reviewers approve. Push the branch, keep
 the PR current, and stop. The repo owner reviews the code and merges when satisfied.
