@@ -2030,11 +2030,13 @@ a running `await` chain. `mavlink-fanout` had no `close` handler at all, so a
 redeploy mid-fan-out left the member loop walking its list and sending **live
 arm/mode commands to real vehicles** from a node that no longer existed, for up to
 members × (timeout + interval). Cancellation needs three things and all three are
-load-bearing: a flag the loop checks between members, a hold on the in-flight
-`AckWaiter` so the current member is cut short rather than timing out, and a pause
-that clears its own timer — an orphaned `setTimeout` keeps the event loop alive for
-the rest of the interval, so `close` cannot settle until a pause nobody awaits
-finally fires. `close` then waits on the run to unwind before calling `done`, or
+load-bearing: a signal the loop checks between members, an abort listener on the
+in-flight `AckWaiter` so the current member is cut short rather than timing out,
+and a pause that disposes its own timer — an orphaned `setTimeout` keeps the event
+loop alive for the rest of the interval, so `close` cannot settle until a pause
+nobody awaits finally fires. All three ride a plain `AbortController`: a
+hand-rolled handle reimplements it, and `timers/promises` already disposes the
+timer on abort, which is the part easiest to get wrong. `close` then waits on the run to unwind before calling `done`, or
 the tail emits onto a node Node-RED has already removed.
 Second half: a cancelled run is **not** a failed one. `AckWaiter.cancel()` settles
 as `'cancelled'`, and command and payload routed that into the terminal-failure
@@ -2045,8 +2047,8 @@ Four waits have to answer the cancel, and each needed its own hook: the
 inter-member pause, the sequential `AckWaiter`, the param-echo confirm, and the
 broadcast confirm. The last two are hand-rolled promises with their own timers,
 not `AckWaiter`s, so nothing reached them by default.
-*Check:* `lib/fanout/index.js` (`createFanoutCancel`, `executeSequential`,
-`sleep`, `confirmParamMember`, `confirmBroadcast`), `nodes/mavlink-fanout.js`
+*Check:* `lib/fanout/index.js` (`executeSequential`, `sleep`,
+`confirmParamMember`, `confirmBroadcast`), `nodes/mavlink-fanout.js`
 close handler, `node --test test/fanout/ test/command/node.test.js
 test/payload/carrier-resend.test.js`. Eight tests were added; the six that
 assert cancellation are sabotage-verified against the unfixed code — four of

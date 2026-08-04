@@ -7,7 +7,6 @@ const {
   executeFanout,
   guardFanoutInput,
   selectFanoutMembers,
-  createFanoutCancel,
 } = require('../../lib/fanout');
 
 test('selection resolves all, explicit list, and filters while excluding stale peers', () => {
@@ -536,18 +535,18 @@ test('cancelling a sequential run stops it between members (#54/#57)', async () 
   // the member loop keeps walking its list — arming real vehicles from a node
   // that no longer exists — for up to members × (timeout + interval).
   const connection = connectionStub([peer(1), peer(2), peer(3)]);
-  const cancel = createFanoutCancel();
+  const controller = new AbortController();
 
   const result = await executeFanout({
     connection,
-    cancel,
+    signal: controller.signal,
     action: commandAction(),
     mode: 'sequential',
     delivery: 'send',
     intervalMs: 25,
     // Cancel during the first inter-member pause, which is what a redeploy
     // landing mid-fan-out looks like.
-    wait: async () => { cancel.cancel(); },
+    wait: async () => { controller.abort(); },
   });
 
   assert.deepEqual(
@@ -563,13 +562,13 @@ test('cancelling a sequential run stops it between members (#54/#57)', async () 
   assert.match(result.detail, /cancelled after 1 of 3 members/);
 });
 
-test('an uncancelled run is untouched by the cancel handle', async () => {
+test('an uncancelled run is untouched by the abort signal', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(3)]);
-  const cancel = createFanoutCancel();
+  const controller = new AbortController();
 
   const result = await executeFanout({
     connection,
-    cancel,
+    signal: controller.signal,
     action: commandAction(),
     mode: 'sequential',
     delivery: 'send',
@@ -583,7 +582,7 @@ test('an uncancelled run is untouched by the cancel handle', async () => {
 
 test('cancel settles a param-echo wait instead of blocking on its timeout (CodeRabbit #140)', async () => {
   // confirmParamMember is a hand-rolled promise with its own timer, not an
-  // AckWaiter, so cancel.hold() never sees it. Without an explicit hook, close
+  // AckWaiter, so the abort listener on the waiter never sees it. Without its own
   // blocks until the echo arrives or the timeout fires.
   let unsubscribed = 0;
   const connection = {
@@ -593,12 +592,12 @@ test('cancel settles a param-echo wait instead of blocking on its timeout (CodeR
     // Never echoes: only the cancel can end this wait.
     subscribe() { return () => { unsubscribed += 1; }; },
   };
-  const cancel = createFanoutCancel();
+  const controller = new AbortController();
 
   const started = Date.now();
   const run = executeFanout({
     connection,
-    cancel,
+    signal: controller.signal,
     action: { type: 'param', action: 'set', paramId: 'FOO', value: 7, paramType: 'MAV_PARAM_TYPE_REAL32' },
     mode: 'sequential',
     delivery: 'confirm',
@@ -607,7 +606,7 @@ test('cancel settles a param-echo wait instead of blocking on its timeout (CodeR
   });
 
   await new Promise((resolve) => setTimeout(resolve, 20));
-  cancel.cancel();
+  controller.abort();
   const result = await run;
 
   assert.ok(Date.now() - started < 5000, 'settled on cancel, not after the 60 s echo timeout');
@@ -624,12 +623,12 @@ test('cancel settles a broadcast confirm instead of blocking on its timeout (Cod
     send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
     subscribe() { return () => { unsubscribed += 1; }; },
   };
-  const cancel = createFanoutCancel();
+  const controller = new AbortController();
 
   const started = Date.now();
   const run = executeFanout({
     connection,
-    cancel,
+    signal: controller.signal,
     action: commandAction(),
     mode: 'broadcast',
     delivery: 'confirm',
@@ -637,7 +636,7 @@ test('cancel settles a broadcast confirm instead of blocking on its timeout (Cod
   });
 
   await new Promise((resolve) => setTimeout(resolve, 20));
-  cancel.cancel();
+  controller.abort();
   const result = await run;
 
   assert.ok(Date.now() - started < 5000, 'settled on cancel, not after the 60 s ack timeout');

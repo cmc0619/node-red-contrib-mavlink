@@ -1,7 +1,7 @@
 'use strict';
 
 const delivery = require('../lib/delivery');
-const { executeFanout, guardFanoutInput, createFanoutCancel } = require('../lib/fanout');
+const { executeFanout, guardFanoutInput } = require('../lib/fanout');
 const { resolveFrame, mergeParams, DEFAULT_TIMEOUT_MS } = require('../lib/command');
 const { positionFrom, velocityFrom, valueFrom } = require('../lib/move');
 const { dialectFromConnection } = require('../lib/addressing');
@@ -61,9 +61,9 @@ module.exports = function registerMavlinkFanout(RED) {
           }
         }
 
-        const cancel = createFanoutCancel();
+        const controller = new AbortController();
         const run = executeFanout({
-          cancel,
+          signal: controller.signal,
           connection: effectiveConnection,
           vehicleBundle: dialectFromConnection(RED, effectiveConnection),
           action: actionFrom(config, payload),
@@ -77,7 +77,7 @@ module.exports = function registerMavlinkFanout(RED) {
           identityId: payload.identityId || config.identity,
           confirmed: msg.confirmed === true || config.confirm === true,
         });
-        const entry = { run, cancel };
+        const entry = { run, controller };
         inFlight.add(entry);
         let aggregate;
         try {
@@ -130,7 +130,7 @@ module.exports = function registerMavlinkFanout(RED) {
       // immediately would let the tail of a cancelled run emit onto a node
       // Node-RED has already torn down.
       const running = [...inFlight];
-      for (const entry of running) entry.cancel.cancel();
+      for (const entry of running) entry.controller.abort();
       Promise.allSettled(running.map((entry) => entry.run)).then(() => done());
     });
   }
