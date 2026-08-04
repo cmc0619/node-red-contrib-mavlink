@@ -113,9 +113,13 @@ local or paste a collapsed `<details>` block — do not land it in git.
 - Example **09**: kill must land mid-run; late kill → all-accepted aggregate.
 - Examples **15/16**: many `sent` lines → look for `NAMED_VALUE_FLOAT` specifically.
 - Example **07**: bad upload must fail validation; empty success is not fail-loud.
-- Example **03**: `TEMPORARILY_REJECTED` needs a fresh AP boot race — often PARTIAL.
+- Example **03**: PX4 packed `DO_SET_MODE` (196608) — expect `temporarily_rejected`
+  with `retries >= 1` (AP arm never returns result `(1)` on this firmware).
 - Example **12**: needs `SETUP_SIGNING` + Admin credentials before deploy; verdict
   wants arm `accepted` and debug `trusted flag` → `true` (not merely “sign” in the log).
+- Example **18**: needs `ap-home-ready` (HOME_POSITION) or AP GLOBAL_INT home FAILs.
+- Example **21**: AP param is `LOIT_SPEED_MS` (no `WPNAV_SPEED` on Copter 4.7.0).
+- Example **23**: inherit PASS is resolved `target.sysid === 2` (prep `ap-arm-ready-2`).
 
 ## Port / sysid map (quick)
 
