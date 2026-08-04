@@ -428,6 +428,15 @@ module.exports = function registerMavlinkCommand(RED) {
         return;
       }
 
+      // A redeploy cancelled the wait (close() calls _activeWaiter.cancel()).
+      // The node is being torn down, so finish quietly: emitting or raising
+      // here would trip a Catch node wired for "command failed → failsafe" on
+      // a mere deploy, which is the same rule mavlink-mission already follows.
+      if (ackOutcome.result === 'cancelled') {
+        done();
+        return;
+      }
+
       // From here the outcome may be from either the configured or swapped
       // carrier; note a completed swap in the success/failure detail below.
       const carrierSwapped = carrier !== configuredCarrier;

@@ -165,7 +165,13 @@ module.exports = function registerMavlinkPayload(RED) {
                 awaitAck(buildFor(wanted), wanted, true);
                 return;
               }
-              if (outcome.result === 'accepted') {
+              if (outcome.result === 'cancelled') {
+                // A redeploy cancelled the wait (see the close handler). Finish
+                // quietly on a node that is going away — raising here would
+                // trip a Catch node wired for "payload failed → failsafe" on a
+                // mere deploy, the rule mavlink-mission already follows.
+                done();
+              } else if (outcome.result === 'accepted') {
                 completeAck(node, send, built, outcome);
                 done();
               } else {

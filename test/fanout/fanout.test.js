@@ -7,6 +7,7 @@ const {
   executeFanout,
   guardFanoutInput,
   selectFanoutMembers,
+  createFanoutCancel,
 } = require('../../lib/fanout');
 
 test('selection resolves all, explicit list, and filters while excluding stale peers', () => {
@@ -528,4 +529,54 @@ test('message-kind payload actions need no carrier; command-backed ones still do
   assert.equal(photo.result, 'refused');
   assert.match(photo.detail, /carrier/);
   assert.equal(conn2.sends.length, 0);
+});
+
+test('cancelling a sequential run stops it between members (#54/#57)', async () => {
+  // Node-RED's close does not abort a running promise chain. Without a cancel
+  // the member loop keeps walking its list — arming real vehicles from a node
+  // that no longer exists — for up to members × (timeout + interval).
+  const connection = connectionStub([peer(1), peer(2), peer(3)]);
+  const cancel = createFanoutCancel();
+
+  const result = await executeFanout({
+    connection,
+    cancel,
+    action: commandAction(),
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 25,
+    // Cancel during the first inter-member pause, which is what a redeploy
+    // landing mid-fan-out looks like.
+    wait: async () => { cancel.cancel(); },
+  });
+
+  assert.deepEqual(
+    connection.sends.map((s) => s.message.fields.target_system),
+    [1],
+    'members after the cancellation never receive a command'
+  );
+  // A cancelled run is not a failed one: the node reports it quietly, so a
+  // redeploy cannot trip a Catch node wired for "fan-out failed → failsafe".
+  assert.equal(result.result, 'cancelled');
+  assert.equal(result.success, false);
+  assert.equal(result.continue, false);
+  assert.match(result.detail, /cancelled after 1 of 3 members/);
+});
+
+test('an uncancelled run is untouched by the cancel handle', async () => {
+  const connection = connectionStub([peer(1), peer(2), peer(3)]);
+  const cancel = createFanoutCancel();
+
+  const result = await executeFanout({
+    connection,
+    cancel,
+    action: commandAction(),
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  assert.equal(result.result, 'succeeded');
+  assert.equal(result.success, true);
+  assert.equal(connection.sends.length, 3, 'every member still gets its command');
 });

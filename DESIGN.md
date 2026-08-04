@@ -2021,6 +2021,31 @@ example prep asks for it. That is the altitude reset; force-disarm cleanup was
 removed as ineffective for this path.
 *Check:* `sitl/run-example-suite.js` (`restartVehicleFleet`), `sitl/AGENTS.md`.
 
+**Closing a node does not stop a promise chain it started.**
+*Wrong belief:* Node-RED's `close` tears the node down, so an in-flight async run
+stops with it — and a cancelled run is a kind of failure, so the generic failure
+branch handles it.
+*Fact:* both wrong, and they compound. `close` removes the node; it does not abort
+a running `await` chain. `mavlink-fanout` had no `close` handler at all, so a
+redeploy mid-fan-out left the member loop walking its list and sending **live
+arm/mode commands to real vehicles** from a node that no longer existed, for up to
+members × (timeout + interval). Cancellation needs three things and all three are
+load-bearing: a flag the loop checks between members, a hold on the in-flight
+`AckWaiter` so the current member is cut short rather than timing out, and a pause
+that clears its own timer — an orphaned `setTimeout` keeps the event loop alive for
+the rest of the interval, so `close` cannot settle until a pause nobody awaits
+finally fires. `close` then waits on the run to unwind before calling `done`, or
+the tail emits onto a node Node-RED has already removed.
+Second half: a cancelled run is **not** a failed one. `AckWaiter.cancel()` settles
+as `'cancelled'`, and command and payload routed that into the terminal-failure
+branch — status plus `done(err)` — so a Catch node wired for “command failed →
+failsafe” fired on a mere redeploy. `mavlink-mission` already had the quiet branch;
+the other two now match it.
+*Check:* `lib/fanout/index.js` (`createFanoutCancel`, `executeSequential`,
+`sleep`), `nodes/mavlink-fanout.js` close handler, `node --test test/fanout/
+test/command/node.test.js test/payload/carrier-resend.test.js` — every one of the
+four tests sabotage-verified against the unfixed code.
+
 **The default COMMAND_INT frame is 3, and a wrong frame has no safety net.**
 *Wrong belief:* `MAV_FRAME_GLOBAL` (0) is the safest default because a wrong frame
 earns `COMMAND_UNSUPPORTED_MAV_FRAME`, which the carrier swap can recover from.
