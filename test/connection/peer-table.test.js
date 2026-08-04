@@ -172,6 +172,127 @@ test('a GCS/companion heartbeat (autopilot INVALID) is not a mismatch', () => {
   assert.equal(fired, false);
 });
 
+test('snapshot projects position into canonical units, hdg sentinel to null', () => {
+  const table = new PeerTable({ now: () => 0 });
+  table.update(
+    {
+      name: 'GLOBAL_POSITION_INT',
+      sysid: 1,
+      compid: 1,
+      fields: { lat: -353632621, lon: 1491652374, alt: 584000, relative_alt: 10000, hdg: 65535 },
+    },
+    EP1
+  );
+  assert.deepEqual(table.snapshot()[0].components[0].position, {
+    lat: -35.3632621,
+    lon: 149.1652374,
+    alt: 584,
+    relativeAlt: 10,
+    heading: null,
+  });
+});
+
+test('snapshot converts a real heading from centidegrees to degrees', () => {
+  const table = new PeerTable({ now: () => 0 });
+  table.update(
+    {
+      name: 'GLOBAL_POSITION_INT',
+      sysid: 1,
+      compid: 1,
+      fields: { lat: 0, lon: 0, alt: 0, relative_alt: 0, hdg: 9000 },
+    },
+    EP1
+  );
+  assert.equal(table.snapshot()[0].components[0].position.heading, 90);
+});
+
+test('snapshot battery from SYS_STATUS: millivolts to volts, -1 remaining to null', () => {
+  const table = new PeerTable({ now: () => 0 });
+  table.update(
+    { name: 'SYS_STATUS', sysid: 1, compid: 1, fields: { voltage_battery: 12600, battery_remaining: -1 } },
+    EP1
+  );
+  assert.deepEqual(table.snapshot()[0].components[0].battery, {
+    id: null,
+    voltage: 12.6,
+    remaining: null,
+    current: null,
+  });
+});
+
+test('snapshot battery from BATTERY_STATUS: id kept, centiamps to amps', () => {
+  const table = new PeerTable({ now: () => 0 });
+  table.update(
+    {
+      name: 'BATTERY_STATUS',
+      sysid: 1,
+      compid: 1,
+      fields: { id: 0, battery_remaining: 55, current_battery: 1230 },
+    },
+    EP1
+  );
+  assert.deepEqual(table.snapshot()[0].components[0].battery, {
+    id: 0,
+    voltage: null,
+    remaining: 55,
+    current: 12.3,
+  });
+});
+
+test('snapshot gps passes fix type through, satellite sentinel to null', () => {
+  const table = new PeerTable({ now: () => 0 });
+  table.update(
+    { name: 'GPS_RAW_INT', sysid: 1, compid: 1, fields: { fix_type: 3, satellites_visible: 255 } },
+    EP1
+  );
+  assert.deepEqual(table.snapshot()[0].components[0].gps, { fixType: 3, satellites: null });
+  table.update(
+    { name: 'GPS_RAW_INT', sysid: 1, compid: 1, fields: { fix_type: 4, satellites_visible: 11 } },
+    EP1
+  );
+  assert.deepEqual(table.snapshot()[0].components[0].gps, { fixType: 4, satellites: 11 });
+});
+
+test('snapshot home converts degE7 to degrees and millimetres to metres', () => {
+  const table = new PeerTable({ now: () => 0 });
+  table.update(
+    {
+      name: 'HOME_POSITION',
+      sysid: 1,
+      compid: 1,
+      fields: { latitude: -353632621, longitude: 1491652374, altitude: 584000 },
+    },
+    EP1
+  );
+  assert.deepEqual(table.snapshot()[0].components[0].home, {
+    lat: -35.3632621,
+    lon: 149.1652374,
+    alt: 584,
+  });
+});
+
+test('a component that has only heartbeated snapshots null telemetry', () => {
+  const table = new PeerTable({ now: () => 0 });
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP1);
+  const component = table.snapshot()[0].components[0];
+  assert.equal(component.position, null);
+  assert.equal(component.gps, null);
+  assert.equal(component.battery, null);
+  assert.equal(component.home, null);
+});
+
+test('projected sentinels match the seed dialect invalid markers', () => {
+  const { loadBundled } = require('../../lib/metadata/bundled');
+  const { messages } = loadBundled('common');
+  const invalid = (msg, field) => messages[msg].fields.find((f) => f.name === field).invalid;
+  assert.equal(invalid('GLOBAL_POSITION_INT', 'hdg'), 'UINT16_MAX');
+  assert.equal(invalid('SYS_STATUS', 'voltage_battery'), 'UINT16_MAX');
+  assert.equal(invalid('SYS_STATUS', 'battery_remaining'), '-1');
+  assert.equal(invalid('GPS_RAW_INT', 'satellites_visible'), 'UINT8_MAX');
+  assert.equal(invalid('BATTERY_STATUS', 'battery_remaining'), '-1');
+  assert.equal(invalid('BATTERY_STATUS', 'current_battery'), '-1');
+});
+
 test('snapshot is plain JSON-serializable data', () => {
   const table = new PeerTable({ now: () => 0 });
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 128 }), EP1);
