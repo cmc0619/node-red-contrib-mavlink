@@ -213,7 +213,7 @@ function resolveAnchor(config, payload, peerTable) {
 
 /**
  * Pitch for this formation run. Payload override is runtime-boundary input
- * (finite()); config.pitchDeg is editor-validated (Number() only). Absent → 0.
+ * (finite()); config.pitchDeg is editor-validated (Number() only; default 0).
  *
  * @param {object} config
  * @param {object} payload
