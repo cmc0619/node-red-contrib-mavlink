@@ -1468,7 +1468,7 @@ by silence. Update this list when an item lands.
 | **Move editor §6 reshape** | **done** | Per-field rows + mode/delivery visibility in the Move dialog. |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
 | **`httpAdminRoot` on non-enum admin routes** | **done** | Command/Build/In/Fan-out/Param/Vehicle editor catalogs use `RED.mavlink.adminApiUrl('/mavlink/…')`. |
-| **SITL example flows** | **done** | `examples/sitl/` 01–25 (companion, INT matrix, Move, param echo, In/Build/Out, inherit, TCP template) + README; regular demos in `examples/` (see `CATALOG.md`). |
+| **SITL example flows** | **done** | `examples/sitl/` 01–27 (companion, INT matrix, Move, param echo, In/Build/Out, inherit, TCP template, formation basics, Lucy in the Sky) + README; regular demos in `examples/` (see `CATALOG.md`). |
 | **SITL Docker lab** | **done** | Compose under [`sitl/`](sitl/README.md): 5× AP + 5× PX4 + companions 20/21; arm-only logs; optional `nodered` profile. |
 | **SITL-backed tests (§13)** | open | Fixture suite in CI; firmware behaviour still needs the live five+five rig (local Docker lab). Live suite results are logged as GitHub Issues (`sitl-results`), not in-repo `testing.md` churn. |
 | **Cross-connection fan-out** | out of scope | As designed (§10): two Connections → two Fan-out nodes. |
@@ -2794,3 +2794,14 @@ test/metadata/admin-catalog.test.js test/metadata/enums-list.test.js test/param/
 lib/codec/test/param-union.test.js`;
 `rg -n 'loadMetadata,|dialect unavailable' lib/metadata/admin-catalog.js`
 (expect no matches).
+
+**Formation sphere is 3-D; pitch tumbles the pattern around body +Y.**
+*Wrong belief:* every formation shape is planar at the anchor altitude, and orientation is
+heading-only — a "rotate the group" story would need per-vehicle Move yaw or a custom script.
+*Fact:* `sphere` lays followers on a Fibonacci lattice of radius=`spacing` with varying
+`down`, so altitudes are `anchor.alt − ned.down`. `pitchDeg` (config + `msg.payload.pitchDeg`)
+rotates body offsets around +right before heading yaws around down — that is the rigid-group
+tumble around Y used by SITL 27 (Lucy in the Sky). Planar shapes still keep `down: 0`. Slot 0
+remains on the anchor. Vehicle noses are still not commanded (reposition yaw `NaN`).
+*Check:* `node --test test/formation/formation.test.js test/formation/node.test.js`; SITL
+`examples/sitl/27-lucy-in-the-sky.json` (harness `--only 27`).

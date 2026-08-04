@@ -393,6 +393,52 @@ test('msg.payload.sysids overrides the configured member list', async () => {
   );
 });
 
+test('sphere with pitchDeg override fans distinct altitudes via DO_REPOSITION', async () => {
+  const connection = connectionStub([peer(1), peer(2), peer(3), peer(4), peer(5)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-formation')(RED);
+  const node = new (RED.nodes.types['mavlink-formation'])({
+    connection: 'conn',
+    shape: 'sphere',
+    spacing: 12,
+    sysids: '1,2,3,4,5',
+    anchorMode: 'fixed',
+    lat: ANCHOR.lat,
+    lon: ANCHOR.lon,
+    alt: ANCHOR.alt,
+    headingDeg: 0,
+    pitchDeg: 0,
+    carrier: 'long',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  let sent;
+
+  await emitInput(node, { payload: { pitchDeg: 45 } }, (m) => { sent = m; });
+
+  assert.equal(sent[1].result, 'succeeded');
+  assert.equal(sent[1].count, 5);
+  const expected = new Map(
+    formationTargets({
+      shape: 'sphere',
+      spacing: 12,
+      anchor: ANCHOR,
+      headingDeg: 0,
+      pitchDeg: 45,
+      sysids: [1, 2, 3, 4, 5],
+    }).map((t) => [t.sysid, t])
+  );
+  const alts = [];
+  for (const { message } of connection.sends) {
+    const want = expected.get(message.fields.target_system);
+    assert.equal(message.fields.param5, want.lat);
+    assert.equal(message.fields.param6, want.lon);
+    assert.equal(message.fields.param7, want.alt);
+    alts.push(message.fields.param7);
+  }
+  assert.ok(new Set(alts).size > 1, 'sphere pitch leaves vehicles at more than one altitude');
+});
+
 function emitInput(node, msg, send) {
   return new Promise((resolve, reject) => {
     node.emit('input', msg, send, (err) => {

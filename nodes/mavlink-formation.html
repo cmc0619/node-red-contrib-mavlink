@@ -57,6 +57,7 @@
       // must not become 0 — that commands a descent to home level.
       alt: { value: '', validate: whenAnchorMode('fixed', finiteRequired) },
       headingDeg: { value: '', validate: RED.validators.number(true) },
+      pitchDeg: { value: 0, validate: RED.validators.number() },
       carrier: { value: 'int' },
       delivery: { value: 'build' },
       intervalMs: { value: 100, validate: RED.validators.number() },
@@ -89,7 +90,7 @@
 <script type="text/html" data-template-name="mavlink-formation">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
-  <div class="form-row"><label for="node-input-shape">Shape</label><select id="node-input-shape"><option value="line">Line (abreast)</option><option value="column">Column (single file)</option><option value="grid">Grid</option><option value="wedge">Wedge (V)</option><option value="circle">Circle</option></select></div>
+  <div class="form-row"><label for="node-input-shape">Shape</label><select id="node-input-shape"><option value="line">Line (abreast)</option><option value="column">Column (single file)</option><option value="grid">Grid</option><option value="wedge">Wedge (V)</option><option value="circle">Circle</option><option value="sphere">Sphere</option></select></div>
   <div class="form-row"><label for="node-input-spacing">Spacing m</label><input type="number" id="node-input-spacing" min="0.1" step="any"></div>
   <div class="form-row"><label for="node-input-sysids">Sysids</label><input type="text" id="node-input-sysids" placeholder="1,2,3"></div>
   <div class="form-row"><label for="node-input-anchorMode">Anchor</label><select id="node-input-anchorMode"><option value="leader">Leader vehicle position</option><option value="fixed">Fixed position</option></select></div>
@@ -98,6 +99,7 @@
   <div class="form-row" id="row-formation-lon"><label for="node-input-lon">Longitude</label><input type="number" id="node-input-lon"></div>
   <div class="form-row" id="row-formation-alt"><label for="node-input-alt">Altitude m</label><input type="number" id="node-input-alt"></div>
   <div class="form-row"><label for="node-input-headingDeg">Heading deg</label><input type="number" id="node-input-headingDeg" placeholder="leader heading / 0"></div>
+  <div class="form-row"><label for="node-input-pitchDeg">Pitch deg</label><input type="number" id="node-input-pitchDeg" step="any"></div>
   <div class="form-row"><label for="node-input-carrier">Carrier</label><select id="node-input-carrier"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
   <div class="form-row"><label for="node-input-intervalMs">Interval ms</label><input type="number" id="node-input-intervalMs" min="0"></div>
@@ -119,21 +121,28 @@
   <code>msg.payload.anchor</code>, which overrides either mode).</p>
   <p>Altitudes are metres above home (<code>MAV_FRAME_GLOBAL_RELATIVE_ALT</code>,
   the carrier's default frame): a leader anchor uses the leader's relative
-  altitude, and every target inherits the anchor altitude so the formation is
-  level.</p>
-  <h3>Heading</h3>
-  <p>The heading rotates the pattern (0 = north). If blank, a leader anchor uses
-  the leader's reported heading; if that is unknown too, the pattern faces north
-  (0). Unlike a coordinate or altitude, an unknown heading is safe to default:
-  any heading yields a fully separated formation — it orients the pattern, it
-  cannot collapse it. Vehicle noses are not commanded: reposition yaw is sent as
-  <code>NaN</code> (hold current heading), and speed as −1 (default) — the
-  zero-fill for either would command yaw-to-north / zero ground speed.</p>
+  altitude. Slot 0 sits on the anchor altitude; planar shapes keep every
+  follower level with it. <b>Sphere</b> places followers on a Fibonacci lattice
+  of radius = spacing, so their altitudes differ (<code>alt − ned.down</code>).
+  Pick an anchor high enough that the lowest sphere slot stays clear of the
+  ground.</p>
+  <h3>Heading and pitch</h3>
+  <p>Heading yaws the pattern in the horizontal plane (0 = north). If blank, a
+  leader anchor uses the leader's reported heading; if that is unknown too, the
+  pattern faces north (0). Unlike a coordinate or altitude, an unknown heading
+  is safe to default: any heading yields a fully separated formation — it
+  orients the pattern, it cannot collapse it. <b>Pitch</b> tumbles the whole
+  pattern around body +Y (right): positive pitch lifts the nose (forward toward
+  −down). Use pitch steps to rotate a 3-D formation as a rigid group. Vehicle
+  noses are not commanded: reposition yaw is sent as <code>NaN</code> (hold
+  current heading), and speed as −1 (default) — the zero-fill for either would
+  command yaw-to-north / zero ground speed.</p>
   <h3>Input overrides</h3>
   <p><code>msg.payload.sysids</code> (comma list or array),
-  <code>msg.payload.anchor</code> (<code>{lat, lon, alt}</code>) and
-  <code>msg.payload.headingDeg</code> override the configured values per
-  message. Shape and spacing are design-time choices.</p>
+  <code>msg.payload.anchor</code> (<code>{lat, lon, alt}</code>),
+  <code>msg.payload.headingDeg</code> and <code>msg.payload.pitchDeg</code>
+  override the configured values per message. Shape and spacing are design-time
+  choices.</p>
   <h3>Outputs</h3>
   <p>Output 0 fires only when every member succeeded, carrying the fan-out
   aggregate under <code>msg.payload</code>. Output 1 always carries the

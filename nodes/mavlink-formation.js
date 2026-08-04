@@ -69,11 +69,13 @@ module.exports = function registerMavlinkFormation(RED) {
           payload.sysids !== undefined ? payload.sysids : config.sysids
         );
         const { anchor, headingDeg } = resolveAnchor(config, payload, connectionNode.peerTable);
+        const pitchDeg = resolvePitch(config, payload);
         const targets = formationTargets({
           shape: config.shape,
           spacing: config.spacing,
           anchor,
           headingDeg,
+          pitchDeg,
           sysids,
         });
 
@@ -158,6 +160,10 @@ module.exports = function registerMavlinkFormation(RED) {
  * heading that is present but not numeric is a refusal, not a default — absent
  * means "don't care", garbage means the flow is wired wrong.
  *
+ * Pitch follows the same payload-then-config rule via {@link resolvePitch}
+ * (default 0 = level). Pitch tumbles the pattern around body +Y; it is not
+ * taken from telemetry.
+ *
  * @param {object} config node config
  * @param {object} payload msg.payload
  * @param {{snapshot: Function}} peerTable connection peer table
@@ -203,6 +209,21 @@ function resolveAnchor(config, payload, peerTable) {
     anchor: { lat: position.lat, lon: position.lon, alt: position.relativeAlt },
     headingDeg: heading ?? 0,
   };
+}
+
+/**
+ * Pitch for this formation run. Payload override is runtime-boundary input
+ * (finite()); config.pitchDeg is editor-validated (Number() only). Absent → 0.
+ *
+ * @param {object} config
+ * @param {object} payload
+ * @returns {number}
+ */
+function resolvePitch(config, payload) {
+  const payloadPitch = firstNonBlank(payload.pitchDeg);
+  if (payloadPitch !== null) return finite(payloadPitch, 'payload.pitchDeg');
+  const configPitch = firstNonBlank(config.pitchDeg);
+  return configPitch === null ? 0 : Number(configPitch);
 }
 
 /**

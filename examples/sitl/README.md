@@ -65,6 +65,8 @@ without understanding each step.
 | `23-profile-target-inherit.json` | SITL 23 Profile target inherit | 1× ArduPilot (sysid 2) |
 | `24-companion-receive.json` | SITL 24 Companion receive | companion AP sysid 20 |
 | `25-tcp-connection.json` | SITL 25 TCP connection (template) | TCP SITL on `:5760` (not in default Compose) |
+| `26-formation-basics.json` | SITL 26 Formation basics | 5× ArduPilot (line then circle) |
+| `27-lucy-in-the-sky.json` | SITL 27 Lucy in the Sky | 5× ArduPilot (sphere tumble + peel land) |
 
 ## Running the suite
 
