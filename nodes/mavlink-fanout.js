@@ -3,7 +3,7 @@
 const delivery = require('../lib/delivery');
 const { executeFanout, guardFanoutInput, parseSysidList } = require('../lib/fanout');
 const { resolveFrame, mergeParams, DEFAULT_TIMEOUT_MS } = require('../lib/command');
-const { positionFrom, velocityFrom, valueFrom } = require('../lib/move');
+const { positionFrom, velocityFrom, accelFrom, valueFrom } = require('../lib/move');
 const { dialectFromConnection } = require('../lib/addressing');
 
 module.exports = function registerMavlinkFanout(RED) {
@@ -127,9 +127,11 @@ function actionFrom(config, payload) {
   if (type === 'move') {
     return {
       type,
-      mode: payload.moveMode || config.moveMode || 'local-position',
+      mode: payload.moveMode || config.moveMode || 'position',
+      frame: payload.moveFrame || config.moveFrame,
       position: payload.position || positionFrom(config),
       velocity: payload.velocity || velocityFrom(config),
+      accel: payload.accel || accelFrom(config),
       yaw: valueFrom(payload, config, 'yaw'),
       yawRate: valueFrom(payload, config, 'yawRate'),
       timeBootMs: payload.timeBootMs || config.timeBootMs || 0,

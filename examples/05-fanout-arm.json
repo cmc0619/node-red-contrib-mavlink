@@ -104,7 +104,7 @@
     "commandId": 400,
     "preset": "",
     "params": "{\"1\":1}",
-    "moveMode": "local-position",
+    "moveMode": "position",
     "north": 0,
     "east": 0,
     "up": 0,
@@ -130,7 +130,8 @@
         "ex05-dry-status"
       ]
     ],
-    "carrier": "long"
+    "carrier": "long",
+    "moveFrame": "LOCAL_NED"
   },
   {
     "id": "ex05-inject-live",
@@ -181,7 +182,7 @@
     "commandId": 400,
     "preset": "",
     "params": "{\"1\":1}",
-    "moveMode": "local-position",
+    "moveMode": "position",
     "north": 0,
     "east": 0,
     "up": 0,
@@ -208,7 +209,8 @@
       ]
     ],
     "confirm": true,
-    "carrier": "long"
+    "carrier": "long",
+    "moveFrame": "LOCAL_NED"
   },
   {
     "id": "ex05-dry-status",

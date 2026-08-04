@@ -50,22 +50,6 @@
 
       RED.mavlink.refreshIdentitySelect(node);
 
-      // Legacy mode migration: pre-frame flows stored the frame inside the
-      // mode name. Map on open; the runtime accepts both spellings either way.
-      var legacyModes = {
-        'local-position': 'position',
-        'local-velocity': 'velocity',
-        'global-position': 'position'
-      };
-      if (legacyModes[node.mode]) {
-        $('#node-input-mode').val(legacyModes[node.mode]);
-        if (!node.frame) {
-          $('#node-input-frame').val(
-            node.mode === 'global-position' ? 'GLOBAL_RELATIVE_ALT_INT' : 'LOCAL_NED'
-          );
-        }
-      }
-
 
       /**
        * §6: only the fields for the selected mode, delivery, and identity role

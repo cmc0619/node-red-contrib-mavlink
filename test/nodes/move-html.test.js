@@ -85,15 +85,10 @@ test('mavlink-move offers the full mode and frame matrix', () => {
   assert.doesNotMatch(html, /type_?[mM]ask"|node-input-typeMask/, 'no raw type_mask field');
 });
 
-test('mavlink-move migrates legacy mode names and labels body frames forward/right', () => {
-  assert.match(html, /'local-position':\s*'position'/, 'local-position migrates to position');
-  assert.match(html, /'local-velocity':\s*'velocity'/, 'local-velocity migrates to velocity');
-  assert.match(html, /'global-position':\s*'position'/, 'global-position migrates to position');
-  assert.match(
-    html,
-    /node\.mode === 'global-position' \? 'GLOBAL_RELATIVE_ALT_INT' : 'LOCAL_NED'/,
-    'legacy global mode maps to the relative-alt frame'
-  );
+test('mavlink-move speaks one canonical vocabulary and labels body frames forward/right', () => {
+  // Pre-1.0, no aliases (AGENTS.md "no migrations, no compatibility shims"):
+  // the pre-frame mode names must not appear anywhere in the editor.
+  assert.doesNotMatch(html, /local-position|local-velocity|global-position/, 'no legacy mode names');
   assert.match(html, /isBodyFrame \? 'Metres forward' : 'Metres north'/, 'body frames relabel north to forward');
   assert.match(html, /'Force' : 'Accel'/, 'force mode relabels the accel vector');
   assert.match(html, /'N' : 'm\/s²'/, 'force mode swaps the accel unit to newtons');

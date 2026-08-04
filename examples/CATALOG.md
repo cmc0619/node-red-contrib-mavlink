@@ -39,8 +39,9 @@ reference these by name rather than re-explaining them each time.
 `mode: "advanced"`, `advancedCommand: "<MAV_CMD numeric>"`. `params` is a JSON string
 keyed by param index (`"{\"7\":20}"` = param7 = 20).
 
-**Move** `mode`: `local-position` (N/E/Up metres), `local-velocity` (vN/vE/vUp m/s),
-`global-position` (`lat`/`lon` deg, `alt` m). `intervalMs`, `ttlMs` govern the stream.
+**Move** `mode`: `position`, `velocity`, `position-velocity`, `acceleration`, `force`,
+`yaw-only`; `frame` picks local (N/E/Up metres) vs global (`lat`/`lon` deg, `alt` m)
+and the body/offset/altitude-datum variants. `intervalMs`, `ttlMs` govern the stream.
 Up is up-positive in the UI; the node flips to NED at encode. **No arc primitive** — a
 curved path is either many setpoints from a Function node, `DO_ORBIT`, or a mission ring.
 
@@ -75,8 +76,8 @@ curved path is either many setpoints from a Function node, `DO_ORBIT`, or a miss
 - **A circle, honest options** (pick per flow): (a) `DO_ORBIT` (Orbit preset) — one
   command, ArduCopter 4.x and PX4 both implement it; center defaults to current position
   on ArduPilot when lat/lon are 0. (b) ArduCopter **CIRCLE mode (7)** after setting the
-  `CIRCLE_RADIUS` param — firmware-native, ArduPilot-only. (c) A **Move global-position
-  stream** of setpoints computed around a ring in a Function node — shows the toolkit's
+  `CIRCLE_RADIUS` param — firmware-native, ArduPilot-only. (c) A **Move global position
+  stream** (`mode: "position"`, global frame) of setpoints computed around a ring in a Function node — shows the toolkit's
   streaming path but the arc is your maths, not the vehicle's. The stroll flow uses
   `DO_ORBIT`; a sibling flow shows the Move-stream ring for contrast.
 - PX4 `DO_SET_MODE` custom_mode is an encoded main/sub-mode bitfield, **not** a small
@@ -135,11 +136,11 @@ importable tab per file with shared config nodes inline.
   go stops the vehicle. It exists to contrast honest streaming against `DO_ORBIT` and to
   show Move's freshness/stop behaviour.
 - **Nodes:** config triplet, `command` (arm/set_mode/takeoff/land), `inject`, one
-  `function` (ring generator — the only computed part), `move` (`mode:
-  "global-position"`, `delivery: "stream"`, `intervalMs: 200`, `ttlMs: 1500`), `debug`.
+  `function` (ring generator — the only computed part), `move` (`mode: "position"`,
+  `frame: "GLOBAL_RELATIVE_ALT_INT"`, `delivery: "stream"`, `intervalMs: 200`, `ttlMs: 1500`), `debug`.
 - **Key config:** Function computes `lat = c_lat + (R·sinθ)/111320`,
   `lon = c_lon + (R·cosθ)/(111320·cos c_lat)` per §"Coordinate frames"; emits
-  `{payload:{mode:"global-position",position:{lat,lon,alt}}}`. Move TTL means the stream
+  `{payload:{mode:"position",frame:"GLOBAL_RELATIVE_ALT_INT",position:{lat,lon,alt}}}`. Move TTL means the stream
   self-stops if injects stop arriving. Comment states plainly: no arc primitive exists;
   the ring is the flow author's maths.
 - **Inject buttons:** **`Arm+GUIDED+Takeoff`**, **`◯ Fly circle`** (repeat inject at 5 Hz
@@ -333,7 +334,7 @@ importable tab per file with shared config nodes inline.
   N/E/Up velocity through a Move node with a short TTL, so releasing a button lets the
   stream lapse and the vehicle stops — the freshness-and-stop contract that keeps a
   streamed control from running away.
-- **Nodes:** config triplet, `command` arm→GUIDED, `move` (`mode: "local-velocity"`,
+- **Nodes:** config triplet, `command` arm→GUIDED, `move` (`mode: "velocity"`, `frame: "LOCAL_NED"`,
   `delivery: "stream"`, `intervalMs: 100`, `ttlMs: 500`), `inject` (velocity presets),
   `debug`.
 - **Key config:** e.g. Forward `{velocity:{north:2,east:0,up:0}}`; Up

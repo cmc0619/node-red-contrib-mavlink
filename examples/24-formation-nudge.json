@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "24 Formation nudge",
     "disabled": false,
-    "info": "Fan-out Move velocity across sysids — dry-run, sequential, broadcast.",
+    "info": "Fan-out Move velocity across sysids \u2014 dry-run, sequential, broadcast.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex24-tab",
     "name": "Formation nudge",
-    "info": "Fan-out fans Move local-velocity north=1 m/s across sysids 1–5. Broadcast pins target_system=0 (single-stack only). Bind 14550→14551.",
+    "info": "Fan-out fans a Move velocity setpoint (Local NED) north=1 m/s across sysids 1\u20135. Broadcast pins target_system=0 (single-stack only). Bind 14550\u219214551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -104,7 +104,7 @@
     "commandId": 400,
     "preset": "",
     "params": "{}",
-    "moveMode": "local-velocity",
+    "moveMode": "velocity",
     "north": 0,
     "east": 0,
     "up": 0,
@@ -132,7 +132,8 @@
       [
         "ex24-debug-dry-status"
       ]
-    ]
+    ],
+    "moveFrame": "LOCAL_NED"
   },
   {
     "id": "ex24-inject-seq",
@@ -178,7 +179,7 @@
     "commandId": 400,
     "preset": "",
     "params": "{}",
-    "moveMode": "local-velocity",
+    "moveMode": "velocity",
     "north": 0,
     "east": 0,
     "up": 0,
@@ -206,7 +207,8 @@
       [
         "ex24-debug-seq-status"
       ]
-    ]
+    ],
+    "moveFrame": "LOCAL_NED"
   },
   {
     "id": "ex24-inject-bcast",
@@ -252,7 +254,7 @@
     "commandId": 400,
     "preset": "",
     "params": "{}",
-    "moveMode": "local-velocity",
+    "moveMode": "velocity",
     "north": 0,
     "east": 0,
     "up": 0,
@@ -280,7 +282,8 @@
       [
         "ex24-debug-bcast-status"
       ]
-    ]
+    ],
+    "moveFrame": "LOCAL_NED"
   },
   {
     "id": "ex24-debug-dry-status",

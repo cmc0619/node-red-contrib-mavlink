@@ -20,10 +20,13 @@ see AGENTS.md "no migrations, no compatibility shims".
   inputs stay up-positive everywhere, and there is still no raw `type_mask` —
   named concepts only. Combinations firmware is known to silently drop (Force
   anywhere, acceleration-only on ArduPilot, terrain/OFFSET frames on PX4) still
-  send but raise a node warning. Legacy `local-position` / `local-velocity` /
-  `global-position` configs keep working and migrate in the editor; a
-  global-frame position with blank lat/lon now refuses instead of flying
-  to 0,0.
+  send but raise a node warning. A global-frame position with blank lat/lon now
+  refuses instead of flying to 0,0. Fan-out move actions speak the same
+  vocabulary (`moveMode` + new `moveFrame`, plus velocity/accel fields its
+  editor previously lacked). The pre-frame mode names (`local-position`,
+  `local-velocity`, `global-position`) are removed, not aliased — pre-1.0, no
+  migrations; re-pick mode + frame in the affected Move/Fan-out nodes (bundled
+  examples updated).
 
 ### Fixed
 

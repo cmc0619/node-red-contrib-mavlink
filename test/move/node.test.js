@@ -4,11 +4,11 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-test('mavlink-move node builds a local-position message and emits status on output 1', () => {
+test('mavlink-move node builds a position message and emits status on output 1', () => {
   const RED = redStub({});
   require('../../nodes/mavlink-move')(RED);
   const Node = RED.nodes.types['mavlink-move'];
-  const node = new Node({ delivery: 'build', dialect: 'common', mode: 'local-position', targetSystem: 5, targetComponent: 1 });
+  const node = new Node({ delivery: 'build', dialect: 'common', mode: 'position', targetSystem: 5, targetComponent: 1 });
   let sent;
 
   node.emit(
@@ -33,7 +33,7 @@ test('mavlink-move inherits Vehicle Profile target when Build dialect uses Vehic
   const node = new Node({
     delivery: 'build',
     dialect: '__vehicle',
-    mode: 'local-position',
+    mode: 'position',
     targetSystem: '',
     targetComponent: '',
     vehicle: 'veh',
@@ -59,7 +59,7 @@ test('mavlink-move explicit config value wins over Vehicle Profile', () => {
   const node = new Node({
     delivery: 'build',
     dialect: '__vehicle',
-    mode: 'local-position',
+    mode: 'position',
     targetSystem: 7,
     targetComponent: 100,
     vehicle: 'veh',
@@ -85,7 +85,7 @@ test('mavlink-move config 0 (broadcast) wins over Vehicle Profile', () => {
   const node = new Node({
     delivery: 'build',
     dialect: '__vehicle',
-    mode: 'local-position',
+    mode: 'position',
     targetSystem: 0,
     targetComponent: 0,
     vehicle: 'veh',
@@ -118,7 +118,7 @@ test('mavlink-move companion identity derives sysid from airframe and pins compi
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'send',
-    mode: 'local-position',
+    mode: 'position',
     identity: 'comp1',
     connection: 'conn',
     targetSystem: '',
@@ -149,7 +149,7 @@ test('mavlink-move reuses its deploy-resolved Connection during input delivery',
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'send',
-    mode: 'local-position',
+    mode: 'position',
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
@@ -167,7 +167,7 @@ test('mavlink-move missing Connection keeps output 1 and done(err) failure deliv
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'send',
-    mode: 'local-position',
+    mode: 'position',
     connection: 'missing',
     targetSystem: 1,
     targetComponent: 1,
@@ -203,7 +203,7 @@ test('mavlink-move payload.target beats companion derivation', () => {
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'send',
-    mode: 'local-position',
+    mode: 'position',
     identity: 'comp1',
     connection: 'conn',
     targetSystem: '',
@@ -229,7 +229,7 @@ test('mavlink-move build tier inherits from config.vehicle stub only with Vehicl
   const node = new Node({
     delivery: 'build',
     dialect: '__vehicle',
-    mode: 'local-position',
+    mode: 'position',
     vehicle: 'veh1',
     targetSystem: '',
     targetComponent: '',
@@ -256,7 +256,7 @@ test('mavlink-move build tier ignores connection vehicle when vehicle field is s
   const node = new Node({
     delivery: 'build',
     dialect: '__vehicle',
-    mode: 'local-position',
+    mode: 'position',
     vehicle: 'veh1',
     connection: 'conn',
     targetSystem: '',
@@ -283,7 +283,7 @@ test('mavlink-move concrete Build dialect does not inherit stale Vehicle Profile
   const node = new Node({
     delivery: 'build',
     dialect: 'common',
-    mode: 'local-position',
+    mode: 'position',
     vehicle: 'veh1',
     targetSystem: '',
     targetComponent: '',

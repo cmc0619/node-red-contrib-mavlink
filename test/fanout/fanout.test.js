@@ -265,7 +265,8 @@ test('global move with blank lat/lon is refused (must not become 0,0)', async ()
     connection,
     action: {
       type: 'move',
-      mode: 'global-position',
+      mode: 'position',
+      frame: 'GLOBAL_RELATIVE_ALT_INT',
       position: { lat: '', lon: '', alt: 10 },
     },
     mode: 'sequential',
@@ -778,7 +779,8 @@ test('memberParams on a non-command action is refused', async () => {
     connection,
     action: {
       type: 'move',
-      mode: 'global-position',
+      mode: 'position',
+      frame: 'GLOBAL_RELATIVE_ALT_INT',
       position: { lat: -35, lon: 149, alt: 10 },
       memberParams: { 1: { 5: -35 } },
     },
@@ -925,7 +927,12 @@ test('fan-out move refuses a whitespace coordinate too (#141 duplicate-helper bu
   for (const blank of ['', ' ', '\t']) {
     const refused = await executeFanout({
       connection,
-      action: { type: 'move', mode: 'global-position', position: { lat: blank, lon: 8.5, alt: 30 } },
+      action: {
+        type: 'move',
+        mode: 'position',
+        frame: 'GLOBAL_RELATIVE_ALT_INT',
+        position: { lat: blank, lon: 8.5, alt: 30 },
+      },
       mode: 'sequential',
       delivery: 'send',
     });

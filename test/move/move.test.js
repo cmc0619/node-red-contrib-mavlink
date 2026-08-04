@@ -6,9 +6,9 @@ const assert = require('node:assert/strict');
 const { BAND } = require('../../lib/connection/bands');
 const { buildMoveMessage, createMoveStream } = require('../../lib/move');
 
-test('local-position Move flips operator up-positive altitude to NED down-positive exactly once', () => {
+test('position Move flips operator up-positive altitude to NED down-positive exactly once', () => {
   const message = buildMoveMessage({
-    mode: 'local-position',
+    mode: 'position',
     target: { sysid: 2, compid: 1 },
     position: { north: 4, east: -3, up: 12 },
     yaw: 1.25,
@@ -25,9 +25,10 @@ test('local-position Move flips operator up-positive altitude to NED down-positi
   assert.equal(message.fields.type_mask, 2552);
 });
 
-test('global-position Move encodes degrees to degE7 and keeps altitude up-positive', () => {
+test('global position Move encodes degrees to degE7 and keeps altitude up-positive', () => {
   const message = buildMoveMessage({
-    mode: 'global-position',
+    mode: 'position',
+    frame: 'GLOBAL_RELATIVE_ALT_INT',
     target: { sysid: 3, compid: 1 },
     position: { lat: 47.397742, lon: 8.545594, alt: 25 },
     timeBootMs: 42,
@@ -39,9 +40,10 @@ test('global-position Move encodes degrees to degE7 and keeps altitude up-positi
   assert.equal(message.fields.alt, 25);
 });
 
-test('global-position Move encodes whole-number degrees as degE7, not as raw wire values', () => {
+test('global position Move encodes whole-number degrees as degE7, not as raw wire values', () => {
   const message = buildMoveMessage({
-    mode: 'global-position',
+    mode: 'position',
+    frame: 'GLOBAL_RELATIVE_ALT_INT',
     target: { sysid: 3, compid: 1 },
     // Integer degrees must still scale by 1e7 — treating 47 as an already
     // encoded degE7 value would place the point at 47e-7 degrees.
@@ -154,26 +156,21 @@ test('frame names select the carrier message and coordinate_frame value', () => 
   );
 });
 
-test('legacy mode aliases keep their historical frame defaults', () => {
-  const local = buildMoveMessage({
-    mode: 'local-position',
+test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw', () => {
+  const defaulted = buildMoveMessage({
     target: { sysid: 2, compid: 1 },
     position: { north: 1, east: 2, up: 3 },
   });
-  assert.equal(local.fields.coordinate_frame, 1);
+  assert.equal(defaulted.name, 'SET_POSITION_TARGET_LOCAL_NED');
+  assert.equal(defaulted.fields.coordinate_frame, 1);
 
-  const global = buildMoveMessage({
-    mode: 'global-position',
-    target: { sysid: 2, compid: 1 },
-    position: { lat: 47, lon: 8, alt: 10 },
-  });
-  assert.equal(global.name, 'SET_POSITION_TARGET_GLOBAL_INT');
-  assert.equal(global.fields.coordinate_frame, 6);
-
-  assert.throws(
-    () => buildMoveMessage({ mode: 'sideways', target: { sysid: 2, compid: 1 } }),
-    /unknown Move mode/
-  );
+  // Pre-1.0, no aliases: the pre-frame mode names are gone, not mapped.
+  for (const legacy of ['local-position', 'local-velocity', 'global-position', 'sideways']) {
+    assert.throws(
+      () => buildMoveMessage({ mode: legacy, target: { sysid: 2, compid: 1 } }),
+      /unknown Move mode/
+    );
+  }
 });
 
 test('global position with blank lat or lon refuses — never 0,0 (§10)', () => {
@@ -235,7 +232,7 @@ test('buildStopMessage is zero-velocity (mask 3527), not all-ignore (3583)', () 
     fields: { time_boot_ms: 0, target_system: 1, target_component: 1 },
   });
   const vel = buildMoveMessage({
-    mode: 'local-velocity',
+    mode: 'velocity',
     target: { sysid: 1, compid: 1 },
     velocity: { north: 1, east: 0, up: 0 },
   });
@@ -259,7 +256,7 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
       },
     },
     message: buildMoveMessage({
-      mode: 'local-velocity',
+      mode: 'velocity',
       target: { sysid: 4, compid: 1 },
       velocity: { north: 1, east: 2, up: 3 },
       timeBootMs: 0,

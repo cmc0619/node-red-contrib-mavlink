@@ -43,7 +43,7 @@ module.exports = function registerMavlinkMove(RED) {
         });
 
         const moveInput = {
-          mode: payload.mode || config.mode || 'local-position',
+          mode: payload.mode || config.mode || 'position',
           frame: payload.frame !== undefined ? payload.frame : config.frame,
           target,
           position: payload.position || positionFrom(config),

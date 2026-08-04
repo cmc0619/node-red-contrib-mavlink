@@ -71,13 +71,20 @@
         if (!v) return true;
         try { JSON.parse(v); return true; } catch (_e) { return false; }
       } },
-      moveMode: { value: 'local-position' },
+      moveMode: { value: 'position' },
+      moveFrame: { value: 'LOCAL_NED' },
       north: { value: 0, validate: RED.validators.number(true) },
       east: { value: 0, validate: RED.validators.number(true) },
       up: { value: 0, validate: RED.validators.number(true) },
       lat: { value: '', validate: RED.validators.number(true) },
       lon: { value: '', validate: RED.validators.number(true) },
       alt: { value: '', validate: RED.validators.number(true) },
+      vNorth: { value: 0, validate: RED.validators.number(true) },
+      vEast: { value: 0, validate: RED.validators.number(true) },
+      vUp: { value: 0, validate: RED.validators.number(true) },
+      aNorth: { value: 0, validate: RED.validators.number(true) },
+      aEast: { value: 0, validate: RED.validators.number(true) },
+      aUp: { value: 0, validate: RED.validators.number(true) },
       topic: { value: 'camera' },
       verb: { value: 'photo' },
       path: { value: 'legacy' },
@@ -265,13 +272,39 @@
   <div class="form-row"><label for="node-input-params">Params JSON</label><input type="text" id="node-input-params" placeholder='{"1":1}'></div>
   <div class="form-row" id="row-fanout-carrier"><label for="node-input-carrier">Carrier</label><select id="node-input-carrier" style="width:70%"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
   <div class="form-row" id="row-fanout-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="">Global, relative alt (default)</option><option value="3">Global, relative alt</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
-  <div class="form-row"><label for="node-input-moveMode">Move mode</label><select id="node-input-moveMode"><option value="local-position">Local position</option><option value="local-velocity">Local velocity</option><option value="global-position">Global position</option></select></div>
+  <div class="form-row"><label for="node-input-moveMode">Move mode</label><select id="node-input-moveMode">
+    <option value="position">Position</option>
+    <option value="velocity">Velocity</option>
+    <option value="position-velocity">Position + Velocity</option>
+    <option value="acceleration">Acceleration</option>
+    <option value="force">Force</option>
+    <option value="yaw-only">Yaw only</option>
+  </select></div>
+  <div class="form-row"><label for="node-input-moveFrame">Move frame</label><select id="node-input-moveFrame">
+    <optgroup label="Local">
+      <option value="LOCAL_NED">Local NED (world origin)</option>
+      <option value="LOCAL_OFFSET_NED">Offset from current position</option>
+      <option value="BODY_OFFSET_NED">Body offset — ArduPilot GUIDED</option>
+      <option value="BODY_NED">Body NED — PX4 OFFBOARD</option>
+    </optgroup>
+    <optgroup label="Global">
+      <option value="GLOBAL_RELATIVE_ALT_INT">Global, altitude above home</option>
+      <option value="GLOBAL_INT">Global, absolute altitude (MSL)</option>
+      <option value="GLOBAL_TERRAIN_ALT_INT">Global, terrain altitude</option>
+    </optgroup>
+  </select></div>
   <div class="form-row"><label for="node-input-north">North</label><input type="number" id="node-input-north"></div>
   <div class="form-row"><label for="node-input-east">East</label><input type="number" id="node-input-east"></div>
   <div class="form-row"><label for="node-input-up">Up</label><input type="number" id="node-input-up"></div>
   <div class="form-row"><label for="node-input-lat">Latitude</label><input type="number" id="node-input-lat"></div>
   <div class="form-row"><label for="node-input-lon">Longitude</label><input type="number" id="node-input-lon"></div>
   <div class="form-row"><label for="node-input-alt">Altitude</label><input type="number" id="node-input-alt"></div>
+  <div class="form-row"><label for="node-input-vNorth">Vel north</label><input type="number" id="node-input-vNorth"></div>
+  <div class="form-row"><label for="node-input-vEast">Vel east</label><input type="number" id="node-input-vEast"></div>
+  <div class="form-row"><label for="node-input-vUp">Vel up</label><input type="number" id="node-input-vUp"></div>
+  <div class="form-row"><label for="node-input-aNorth">Accel north</label><input type="number" id="node-input-aNorth"></div>
+  <div class="form-row"><label for="node-input-aEast">Accel east</label><input type="number" id="node-input-aEast"></div>
+  <div class="form-row"><label for="node-input-aUp">Accel up</label><input type="number" id="node-input-aUp"></div>
   <div class="form-row"><label for="node-input-topic">Payload topic</label><select id="node-input-topic"><option value="camera">Camera</option><option value="gimbal">Gimbal</option><option value="servo">Servo</option><option value="gripper">Gripper</option><option value="winch">Winch</option><option value="parachute">Parachute</option></select></div>
   <div class="form-row"><label for="node-input-verb">Payload verb</label><select id="node-input-verb"></select></div>
   <div class="form-row"><label for="node-input-path">Payload path</label><select id="node-input-path"><option value="legacy">Legacy</option><option value="manager">Gimbal manager</option></select></div>

@@ -1212,9 +1212,11 @@ acknowledgement, so a `node.warn` is all the feedback the operator gets. Advisor
 Vehicle Profile; `custom` opts out of firmware-specific advisories. Warn-not-block is deliberate:
 firmware support moves, and the advisory table is a snapshot, not a gate.
 
-The legacy mode names `local-position` / `local-velocity` / `global-position` (which carried the
-frame inside the mode) remain accepted at one boundary — `LEGACY_MODES` in `lib/move` — because
-Fan-out's `moveMode` config still speaks them; the Move editor migrates them on open.
+There is **one vocabulary**: Move config, Fan-out's `moveMode`/`moveFrame`, and `msg.payload`
+overrides all speak these mode and frame names. The pre-frame names (`local-position` /
+`local-velocity` / `global-position`, which carried the frame inside the mode) are gone, not
+aliased — pre-1.0, unpublished, no migrations (AGENTS.md); an unknown mode or frame throws
+naming the valid set.
 
 ### Command presets
 
