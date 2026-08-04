@@ -2041,10 +2041,17 @@ as `'cancelled'`, and command and payload routed that into the terminal-failure
 branch — status plus `done(err)` — so a Catch node wired for “command failed →
 failsafe” fired on a mere redeploy. `mavlink-mission` already had the quiet branch;
 the other two now match it.
+Four waits have to answer the cancel, and each needed its own hook: the
+inter-member pause, the sequential `AckWaiter`, the param-echo confirm, and the
+broadcast confirm. The last two are hand-rolled promises with their own timers,
+not `AckWaiter`s, so nothing reached them by default.
 *Check:* `lib/fanout/index.js` (`createFanoutCancel`, `executeSequential`,
-`sleep`), `nodes/mavlink-fanout.js` close handler, `node --test test/fanout/
-test/command/node.test.js test/payload/carrier-resend.test.js` — every one of the
-four tests sabotage-verified against the unfixed code.
+`sleep`, `confirmParamMember`, `confirmBroadcast`), `nodes/mavlink-fanout.js`
+close handler, `node --test test/fanout/ test/command/node.test.js
+test/payload/carrier-resend.test.js`. Eight tests were added; the six that
+assert cancellation are sabotage-verified against the unfixed code — four of
+them fail by hanging, which is the bug stated precisely. The other two are
+controls: an uncancelled run must be untouched by the handle.
 
 **The default COMMAND_INT frame is 3, and a wrong frame has no safety net.**
 *Wrong belief:* `MAV_FRAME_GLOBAL` (0) is the safest default because a wrong frame

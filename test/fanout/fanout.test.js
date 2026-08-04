@@ -580,3 +580,67 @@ test('an uncancelled run is untouched by the cancel handle', async () => {
   assert.equal(result.success, true);
   assert.equal(connection.sends.length, 3, 'every member still gets its command');
 });
+
+test('cancel settles a param-echo wait instead of blocking on its timeout (CodeRabbit #140)', async () => {
+  // confirmParamMember is a hand-rolled promise with its own timer, not an
+  // AckWaiter, so cancel.hold() never sees it. Without an explicit hook, close
+  // blocks until the echo arrives or the timeout fires.
+  let unsubscribed = 0;
+  const connection = {
+    peerTable: peerTableStub([peer(1)]),
+    sends: [],
+    send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
+    // Never echoes: only the cancel can end this wait.
+    subscribe() { return () => { unsubscribed += 1; }; },
+  };
+  const cancel = createFanoutCancel();
+
+  const started = Date.now();
+  const run = executeFanout({
+    connection,
+    cancel,
+    action: { type: 'param', action: 'set', paramId: 'FOO', value: 7, paramType: 'MAV_PARAM_TYPE_REAL32' },
+    mode: 'sequential',
+    delivery: 'confirm',
+    timeoutMs: 60000,
+    intervalMs: 0,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  cancel.cancel();
+  const result = await run;
+
+  assert.ok(Date.now() - started < 5000, 'settled on cancel, not after the 60 s echo timeout');
+  assert.equal(result.result, 'cancelled');
+  assert.equal(unsubscribed, 1, 'the PARAM_VALUE subscription is released');
+});
+
+test('cancel settles a broadcast confirm instead of blocking on its timeout (CodeRabbit #140)', async () => {
+  // Same shape for confirmBroadcast, which waits on every member's COMMAND_ACK.
+  let unsubscribed = 0;
+  const connection = {
+    peerTable: peerTableStub([peer(1), peer(2)]),
+    sends: [],
+    send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
+    subscribe() { return () => { unsubscribed += 1; }; },
+  };
+  const cancel = createFanoutCancel();
+
+  const started = Date.now();
+  const run = executeFanout({
+    connection,
+    cancel,
+    action: commandAction(),
+    mode: 'broadcast',
+    delivery: 'confirm',
+    timeoutMs: 60000,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  cancel.cancel();
+  const result = await run;
+
+  assert.ok(Date.now() - started < 5000, 'settled on cancel, not after the 60 s ack timeout');
+  assert.equal(result.result, 'cancelled');
+  assert.equal(unsubscribed, 1, 'the COMMAND_ACK subscription is released');
+});
