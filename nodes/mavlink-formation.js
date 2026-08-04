@@ -222,8 +222,8 @@ function resolveAnchor(config, payload, peerTable) {
 function resolvePitch(config, payload) {
   const payloadPitch = firstNonBlank(payload.pitchDeg);
   if (payloadPitch !== null) return finite(payloadPitch, 'payload.pitchDeg');
-  const configPitch = firstNonBlank(config.pitchDeg);
-  return configPitch === null ? 0 : Number(configPitch);
+  // Editor default is 0 — trust config.pitchDeg (Number only, no second default).
+  return Number(config.pitchDeg);
 }
 
 /**
