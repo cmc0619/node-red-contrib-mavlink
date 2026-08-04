@@ -1,7 +1,7 @@
 'use strict';
 
 const delivery = require('../lib/delivery');
-const { executeFanout, guardFanoutInput } = require('../lib/fanout');
+const { executeFanout, guardFanoutInput, parseSysidList } = require('../lib/fanout');
 const { resolveFrame, mergeParams, DEFAULT_TIMEOUT_MS } = require('../lib/command');
 const { positionFrom, velocityFrom, valueFrom } = require('../lib/move');
 const { dialectFromConnection } = require('../lib/addressing');
@@ -147,6 +147,7 @@ function actionFrom(config, payload) {
       preset: payload.preset || config.preset,
       // mergeParams Number-coerces 1–7; payload.params overlays last.
       params: mergeParams(config, { ...payload, ...(payload.params || {}) }),
+      memberParams: payload.memberParams,
       carrier: payload.carrier || config.carrier,
       frame: resolveFrame(payload.mavFrame, config.frame),
     };
@@ -271,30 +272,4 @@ function buildListStub(sysids) {
       return () => {};
     },
   };
-}
-
-/**
- * Parse a comma-separated sysid list. Each id must be an integer in 1..255
- * (MAVLink system id is a uint8; 0 is broadcast and not a member).
- * Bad tokens fail loudly — silently dropping `256` would send a partial fan-out.
- *
- * @param {string|string[]} value
- * @returns {number[]}
- */
-function parseSysidList(value) {
-  const parts = Array.isArray(value)
-    ? value.map((part) => String(part).trim())
-    : String(value || '').split(',').map((part) => part.trim());
-  const ids = [];
-  for (const part of parts) {
-    if (part === '') continue;
-    const n = Number(part);
-    if (!Number.isInteger(n) || n < 1 || n > 255) {
-      throw new Error(
-        `mavlink-fanout: sysid must be an integer in 1..255 (got ${JSON.stringify(part)})`
-      );
-    }
-    ids.push(n);
-  }
-  return ids;
 }

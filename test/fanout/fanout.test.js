@@ -692,6 +692,209 @@ test('fan-out refuses a whitespace coordinate, not just an absent one (#141)', a
   assert.equal(connection.sends.length, 0, 'nothing reaches the fleet');
 });
 
+// ── Per-member param overrides (memberParams) ─────────────────────────────────
+
+test('memberParams gives each member its own canonical lat/lon on the INT carrier', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  const result = await executeFanout({
+    connection,
+    // Canonical decimal degrees per member, scaled to degE7 by the shared INT
+    // builder — the merge happens before the carrier, not at the wire fields.
+    action: {
+      type: 'command',
+      carrier: 'int',
+      frame: 3,
+      commandId: 192,
+      params: { 7: 50 },
+      memberParams: { 1: { 5: -35.1, 6: 149.1 }, 2: { 5: -35.2, 6: 149.2 } },
+    },
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  assert.equal(result.success, true);
+  const bySysid = Object.fromEntries(
+    connection.sends.map((s) => [s.message.fields.target_system, s.message.fields])
+  );
+  assert.equal(bySysid[1].x, -351000000);
+  assert.equal(bySysid[1].y, 1491000000);
+  assert.equal(bySysid[2].x, -352000000);
+  assert.equal(bySysid[2].y, 1492000000);
+  assert.equal(bySysid[1].z, 50, 'shared params still apply under an override');
+  assert.equal(bySysid[2].z, 50);
+});
+
+test('memberParams merges over action.params on the LONG carrier; members without an entry fall back', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  const result = await executeFanout({
+    connection,
+    action: {
+      type: 'command',
+      carrier: 'long',
+      preset: 'reposition',
+      params: { 5: 47.4, 6: 8.5, 7: 30 },
+      // JSON payloads arrive with string keys — the lookup must not care.
+      memberParams: { '2': { '5': 47.5, '6': 8.6 } },
+    },
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  assert.equal(result.success, true);
+  const bySysid = Object.fromEntries(
+    connection.sends.map((s) => [s.message.fields.target_system, s.message.fields])
+  );
+  assert.equal(bySysid[1].param5, 47.4, 'member without an entry uses action.params unchanged');
+  assert.equal(bySysid[1].param6, 8.5);
+  assert.equal(bySysid[2].param5, 47.5);
+  assert.equal(bySysid[2].param6, 8.6);
+  assert.equal(bySysid[2].param7, 30, 'unoverridden index falls through to action.params');
+});
+
+test('broadcast refuses memberParams — one packet carries one param set (§10)', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  const result = await executeFanout({
+    connection,
+    action: commandAction({ memberParams: { 1: { 5: -35 } } }),
+    mode: 'broadcast',
+    delivery: 'send',
+    selection: { mode: 'all' },
+  });
+
+  assert.equal(result.result, 'refused');
+  assert.match(result.detail, /one param set|uniform/);
+  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
+});
+
+test('memberParams on a non-command action is refused', async () => {
+  const connection = connectionStub([peer(1)]);
+
+  const result = await executeFanout({
+    connection,
+    action: {
+      type: 'move',
+      mode: 'global-position',
+      position: { lat: -35, lon: 149, alt: 10 },
+      memberParams: { 1: { 5: -35 } },
+    },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  assert.equal(result.result, 'refused');
+  assert.match(result.detail, /memberParams is only defined for Command actions/);
+  assert.equal(connection.sends.length, 0);
+});
+
+test('a member whose merged params still lack lat/lon refuses the whole run before any send', async () => {
+  const connection = connectionStub([peer(1), peer(2), peer(3)]);
+
+  const result = await executeFanout({
+    connection,
+    // Members 2 and 3 have no override and no shared lat/lon — sending would
+    // scatter member 1 to its slot and the rest to 0,0.
+    action: {
+      type: 'command',
+      carrier: 'long',
+      preset: 'reposition',
+      params: { 7: 30 },
+      memberParams: { 1: { 5: 47.4, 6: 8.5 } },
+    },
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  assert.equal(result.result, 'refused');
+  assert.match(result.detail, /requires latitude and longitude/);
+  assert.match(result.detail, /2, 3/, 'the aggregate names the offending sysids');
+  assert.equal(connection.sends.length, 0, 'a partial null-island run never starts');
+});
+
+test('confirm-mode retry resends the member\'s own params, not the shared set', async (t) => {
+  installRetryTimerHarness(t);
+  const subs = [];
+  const connection = {
+    peerTable: peerTableStub([peer(7)]),
+    sends: [],
+    send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
+    subscribe(filter, handler) {
+      subs.push(handler);
+      return () => {};
+    },
+  };
+  const deliver = (decoded) => subs.slice().forEach((h) => h(decoded));
+
+  const run = executeFanout({
+    connection,
+    action: {
+      type: 'command',
+      carrier: 'long',
+      commandId: 192,
+      params: { 5: 47.4, 6: 8.5, 7: 30 },
+      memberParams: { 7: { 5: 47.7, 6: 8.7 } },
+    },
+    mode: 'sequential',
+    delivery: 'confirm',
+    intervalMs: 0,
+    maxRetries: 1,
+  });
+
+  await Promise.resolve();
+  assert.equal(connection.sends.length, 1, 'first transmission is out');
+  // TEMPORARILY_REJECTED backs off (harness fires the 1 s retry timer) and
+  // resends through the same buildWrappedMessage path.
+  deliver({ sysid: 7, compid: 1, fields: { command: 192, result: 1 } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(connection.sends.length, 2, 'retry was resent');
+  deliver({ sysid: 7, compid: 1, fields: { command: 192, result: 0 } });
+  const result = await run;
+
+  assert.equal(result.success, true);
+  assert.deepEqual(
+    connection.sends.map((s) => s.message.fields.confirmation),
+    [0, 1],
+    'the resend is a confirmation transmission'
+  );
+  for (const { message } of connection.sends) {
+    assert.equal(message.fields.param5, 47.7, 'retry carries the member\'s own latitude');
+    assert.equal(message.fields.param6, 8.7);
+    assert.equal(message.fields.param7, 30);
+  }
+});
+
+// Fires only the AckWaiter's 1 s retry back-off (on a microtask); every other
+// timer — the ack timeout — never fires, same shape as the command node's
+// retry harness.
+function installRetryTimerHarness(t) {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const active = new Set();
+
+  globalThis.setTimeout = (fn, delayMs) => {
+    const handle = {};
+    active.add(handle);
+    if (delayMs === 1000) {
+      queueMicrotask(() => {
+        if (active.delete(handle)) fn();
+      });
+    }
+    return handle;
+  };
+  globalThis.clearTimeout = (handle) => {
+    active.delete(handle);
+  };
+  t.after(() => {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  });
+}
+
 test('fan-out move refuses a whitespace coordinate too (#141 duplicate-helper bug)', async () => {
   // isPresentCoordinate existed twice — fan-out kept its own copy, so fixing
   // the whitespace hole in the command module left the move global-position
