@@ -2021,6 +2021,35 @@ example prep asks for it. That is the altitude reset; force-disarm cleanup was
 removed as ineffective for this path.
 *Check:* `sitl/run-example-suite.js` (`restartVehicleFleet`), `sitl/AGENTS.md`.
 
+**Blank coordinates are refused per preset, because the dialect cannot tell you.**
+*Wrong belief:* the guard against blank lat/lon becoming `0,0` can be driven from
+the bundle — refuse whenever the command's entry has `hasLocation`.
+*Fact:* `hasLocation` does not mean "the operator must supply a position". The
+dialect marks `MAV_CMD_NAV_TAKEOFF` (22) and `MAV_CMD_NAV_LAND` (21) as
+`hasLocation` **and** `isDestination`, yet blank coordinates on both are the
+ordinary "here" case — ArduPilot's takeoff handler documents param5/6 as "not
+supported", and landing at the current position is routine. Neither flag
+separates "blank means here" from "blank means the Gulf of Guinea", and no other
+field in the entry does either. Measured across `common.xml`: 26 commands are
+`hasLocation && isDestination`, and they include takeoff, land and every VTOL
+variant alongside `DO_REPOSITION`.
+So the rule lives on the preset that expresses the intent — `requireLocation` on
+Go To / Reposition and Orbit, and `{ unless: { param: 1, equals: 1 } }` on Set
+Home, whose "use current position" flag makes the vehicle ignore the coordinates
+outright. This is a column on a table that already exists, not a new protocol
+copy (§6).
+The check runs on the operator's input, *before* `buildParamArray` fills absent
+params with 0 — after that, blank and a deliberate `0` are the same value. An
+explicit `0` still sends: the guard is against silence, not against the equator.
+Payload's `gimbal|roi-set` gets the same treatment through `required: true` slots
+rather than `default: 0`.
+*Not covered:* advanced mode, where the operator picks any MAV_CMD and types raw
+params. There is no preset to carry the intent, and the same `hasLocation`
+objection applies, so it stays RTFM.
+*Check:* `lib/command/presets.js` (`blankLocationRefusal`, `requireLocationFor`),
+`lib/payload/index.js` (`slotValue`), `node --test test/command/presets.test.js
+test/payload/verbs.test.js` — sabotage-verified.
+
 **Closing a node does not stop a promise chain it started.**
 *Wrong belief:* Node-RED's `close` tears the node down, so an in-flight async run
 stops with it — and a cancelled run is a kind of failure, so the generic failure
