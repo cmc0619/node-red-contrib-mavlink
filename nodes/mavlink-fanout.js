@@ -22,6 +22,17 @@ module.exports = function registerMavlinkFanout(RED) {
       delivery.applyActionStatus(node, 'invalid', 'invalid config');
     }
 
+    // Every fan-out currently in flight, so `close` can stop all of them and
+    // wait for each to unwind. Node-RED's close does not abort a running
+    // promise chain: without this, a redeploy leaves the member loop sending
+    // live vehicle commands from a node that no longer exists.
+    //
+    // A set rather than a single slot, because Node-RED does not serialise
+    // async input handlers — two messages arriving close together re-enter and
+    // run concurrently. One slot would let `close` cancel only the newest run
+    // and return as soon as it settled, leaving the older one alive.
+    const inFlight = new Set();
+
     node.on('input', async (msg, send, done) => {
       const guard = guardFanoutInput(msg);
       if (guard.action === 'suppress') {
@@ -50,7 +61,9 @@ module.exports = function registerMavlinkFanout(RED) {
           }
         }
 
-        const aggregate = await executeFanout({
+        const controller = new AbortController();
+        const run = executeFanout({
+          signal: controller.signal,
           connection: effectiveConnection,
           vehicleBundle: dialectFromConnection(RED, effectiveConnection),
           action: actionFrom(config, payload),
@@ -64,6 +77,22 @@ module.exports = function registerMavlinkFanout(RED) {
           identityId: payload.identityId || config.identity,
           confirmed: msg.confirmed === true || config.confirm === true,
         });
+        const entry = { run, controller };
+        inFlight.add(entry);
+        let aggregate;
+        try {
+          aggregate = await run;
+        } finally {
+          inFlight.delete(entry);
+        }
+
+        // A redeploy cancelled us. The node is going away: finish quietly
+        // rather than emitting or raising on a closed node, which would trip a
+        // Catch node wired for "fan-out failed → failsafe" on a mere deploy.
+        if (aggregate.result === 'cancelled') {
+          done();
+          return;
+        }
 
         applyAggregateStatus(node, aggregate);
         // Output 1 carries the aggregate status record at the message root.
@@ -89,6 +118,20 @@ module.exports = function registerMavlinkFanout(RED) {
         send([null, record]);
         done(err);
       }
+    });
+
+    node.on('close', (done) => {
+      if (inFlight.size === 0) {
+        done();
+        return;
+      }
+      // Stop every loop and cut each in-flight confirmation short, then wait
+      // for all of them to unwind before reporting closed. Calling done()
+      // immediately would let the tail of a cancelled run emit onto a node
+      // Node-RED has already torn down.
+      const running = [...inFlight];
+      for (const entry of running) entry.controller.abort();
+      Promise.allSettled(running.map((entry) => entry.run)).then(() => done());
     });
   }
 

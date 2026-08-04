@@ -650,3 +650,53 @@ function redStub(nodesById) {
     auth: { needsPermission() { return (_req, _res, next) => next && next(); } },
   };
 }
+
+test('a redeploy-cancelled ack wait finishes quietly, not as a command failure (#54/#57)', async () => {
+  // close() cancels the in-flight AckWaiter, which settles the run as
+  // 'cancelled'. That used to fall into the generic terminal-failure branch:
+  // status + done(err) on a node being torn down, so any Catch node wired for
+  // "command failed → failsafe" fired on a mere redeploy. mavlink-mission
+  // already had the quiet branch; command and payload did not.
+  const subs = [];
+  const connection = {
+    peerTable: null,
+    vehicle: null,
+    // Never answers — the wait can only end by cancellation.
+    send() {},
+    subscribe(filter, handler) {
+      const entry = { filter, handler };
+      subs.push(entry);
+      return () => {
+        const i = subs.indexOf(entry);
+        if (i >= 0) subs.splice(i, 1);
+      };
+    },
+  };
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    connection: 'conn',
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '60000',
+    maxRetries: '0',
+  });
+
+  let emitted = false;
+  let doneErr = 'not-called';
+  node.emit('input', { payload: {} }, () => { emitted = true; }, (err) => { doneErr = err; });
+  await tick();
+
+  // The redeploy.
+  await new Promise((resolve) => node.emit('close', resolve));
+  await tick();
+  await tick();
+
+  assert.equal(doneErr, undefined, 'done() called with no error — a cancel is not a failure');
+  assert.equal(emitted, false, 'nothing is emitted onto a node being torn down');
+});

@@ -178,3 +178,26 @@ test('an ordinary DENIED is not a carrier problem and is not resent', async () =
   assert.equal(conn.sent.length, 1, 'DENIED means no, not wrong envelope');
   assert.deepEqual(warnings, []);
 });
+
+test('a redeploy-cancelled ack wait finishes quietly, not as a payload failure (#54/#57)', async () => {
+  // Same rule as mavlink-command and mavlink-mission: close() cancels the
+  // in-flight waiter, and a cancel is not a failure. Routing it through
+  // failAck emitted and raised on a node being torn down, tripping any Catch
+  // node wired for "payload failed → failsafe" on a mere redeploy.
+  // An empty script means the connection never acks, so only the cancel ends it.
+  const { node, conn } = deploy([], { timeout: '60000' });
+
+  let emitted = false;
+  let doneErr = 'not-called';
+  node.emit('input', { payload: {} }, () => { emitted = true; }, (err) => { doneErr = err; });
+  await tick();
+
+  assert.equal(conn.sent.length, 1, 'the command went out before the redeploy');
+
+  await new Promise((resolve) => node.emit('close', resolve));
+  await tick();
+  await tick();
+
+  assert.equal(doneErr, undefined, 'done() called with no error — a cancel is not a failure');
+  assert.equal(emitted, false, 'nothing is emitted onto a node being torn down');
+});
