@@ -788,6 +788,27 @@ test('memberParams on a non-command action is refused', async () => {
 
   assert.equal(result.result, 'refused');
   assert.match(result.detail, /memberParams is only defined for Command actions/);
+});
+
+test('a malformed memberParams shape is refused before any send', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  // An array, a scalar, and a non-object member entry: each would make every
+  // {} lookup return undefined, silently sending the shared params to every
+  // vehicle instead of the per-member ones the caller meant to differentiate.
+  for (const bad of [[], 'per-member', { 1: [5, -35] }]) {
+    const result = await executeFanout({
+      connection,
+      action: commandAction({ memberParams: bad }),
+      mode: 'sequential',
+      delivery: 'send',
+      selection: { mode: 'all' },
+    });
+
+    assert.equal(result.result, 'refused', `${JSON.stringify(bad)} must refuse`);
+    assert.match(result.detail, /memberParams must be an object keyed by sysid/);
+  }
+  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
   assert.equal(connection.sends.length, 0);
 });
 

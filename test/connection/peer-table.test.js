@@ -269,6 +269,9 @@ test('snapshot home converts degE7 to degrees and millimetres to metres', () => 
     lon: 149.1652374,
     alt: 584,
   });
+  // The help text tells flows to gate freshness on sections.* — home must
+  // record an age like every other telemetry section.
+  assert.equal(table.snapshot()[0].components[0].sections.home, 0);
 });
 
 test('a component that has only heartbeated snapshots null telemetry', () => {

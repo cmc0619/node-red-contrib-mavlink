@@ -140,6 +140,21 @@ test('formationTargets gives every vehicle the anchor altitude', () => {
   for (const t of targets) assert.equal(t.alt, 587.5);
 });
 
+test('formationTargets rotates the pattern by the heading', () => {
+  // Column facing east (heading 90): "behind the anchor" is now west, so the
+  // trailing slot moves 10 m west at the same latitude. Same hand-computed
+  // longitude delta as the line test.
+  const targets = formationTargets({
+    shape: 'column',
+    spacing: 10,
+    anchor: { lat: 47.397742, lon: 8.545594, alt: 30 },
+    headingDeg: 90,
+    sysids: [1, 2],
+  });
+  approx(targets[1].lon, 8.545594 - 1.32709215145987e-4, 1e-12, 'slot 1 lon');
+  approx(targets[1].lat, 47.397742, 1e-12, 'slot 1 lat');
+});
+
 test('formationTargets dedupes and sorts sysids, coercing numeric strings', () => {
   const targets = formationTargets({
     shape: 'line',
@@ -156,6 +171,20 @@ test('formationTargets refuses a missing anchor altitude rather than defaulting 
       () => formationTargets({ shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt }, sysids: [1] }),
       /descent to sea level/
     );
+  }
+});
+
+test('formationTargets refuses a malformed sysid instead of silently omitting the vehicle', () => {
+  assert.throws(
+    () => formationTargets({ shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: 30 }, sysids: [1, 'abc'] }),
+    /sysids entry/
+  );
+  assert.throws(() => assignSlots([1, null]), /sysids entry/);
+});
+
+test('slotOffsets refuses a non-positive spacing — all followers would collide', () => {
+  for (const spacing of [0, -5]) {
+    assert.throws(() => slotOffsets('line', 3, spacing), /greater than 0/);
   }
 });
 
