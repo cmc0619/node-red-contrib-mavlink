@@ -6,11 +6,14 @@ name: Publish
 # Before the first run, the npm package must be configured for trusted
 # publishing against this repo and workflow. Until then this job fails on
 # purpose rather than falling back to a token (#106).
+#
+# Tag push only. `workflow_dispatch` would let a branch named `v0.1.0` pass the
+# version check below and publish, and it bought nothing: a failed release is
+# re-run from the Actions UI, which keeps the original tag ref.
 on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
 
 permissions:
   contents: read
