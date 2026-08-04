@@ -669,6 +669,11 @@ async function setupCompanionSigning() {
       const compOf = () => conn.peerTable.getComponent(20, 1);
       while (!compOf()?.primaryEndpoint && Date.now() < deadline) await sleep(500);
       if (!compOf()?.primaryEndpoint) throw new Error('companion AP-20 peer not learned');
+      // Arm-ready MUST run before SETUP_SIGNING. Once the key is loaded,
+      // ArduPilot rejects unsigned commands on non-COMM_0 links — and SITL's
+      // udpclient path is not guaranteed to be COMM_0 — so an unsigned probe
+      // arm after SETUP_SIGNING hangs until the budget dies.
+      ${armReadySource([20], 90000)}
       if (compOf()?.armed) {
         conn.send(buildCommandLong(400, 20, 1, [0, 21196, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
         await sleep(800);
@@ -683,7 +688,6 @@ async function setupCompanionSigning() {
         },
       }, { band: BAND.CONTROL, target: t });
       await sleep(1500);
-      ${armReadySource([20], 90000)}
     `,
     130000,
     { bindPort: 14540, remotePort: 14541, targetSystem: 20 }

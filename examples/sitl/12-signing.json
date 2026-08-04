@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl12-tab",
     "name": "MAVLink 2 signing (companion AP sysid 20)",
-    "info": "Connection: sign outbound + require signed inbound. Passphrase credential is hunter11 (joke lab secret — not for production).\n\nLab harness (sitl/run-example-suite.js):\n1. docker-restarts the fleet, then SETUP_SIGNING on companion AP sysid 20 with sha256(hunter11).\n2. Deploys this flow with Admin API credentials: { signingPassphrase: \"hunter11\" }.\n3. Injects arm; expects COMMAND_ACK accepted and mavlink-in msg.trusted === true on HEARTBEAT.\n\nPorts: bind 0.0.0.0:14540 → remote 127.0.0.1:14541 (companion AP, not the GCS fleet on 14550).\n\nNote: ArduPilot always accepts unsigned frames on MAVLINK_COMM_0 (USB/SITL primary). This example proves mutual key material and GCS requireSigned/trusted, not vehicle-side unsigned reject on that channel.\n\nSigning is off by default in all other examples.",
+    "info": "Connection: sign outbound + require signed inbound. Passphrase credential is hunter11 (joke lab secret — not for production).\n\nLab harness (sitl/run-example-suite.js):\n1. docker-restarts the fleet; proves companion AP-20 arm-ready; then SETUP_SIGNING with sha256(hunter11).\n2. Deploys this flow with Admin API credentials: { signingPassphrase: \"hunter11\" }.\n3. Injects arm; expects COMMAND_ACK accepted and mavlink-in msg.trusted === true on HEARTBEAT.\n\nPorts: bind 0.0.0.0:14540 → remote 127.0.0.1:14541 (companion AP, not the GCS fleet on 14550).\n\nArm-ready must precede SETUP_SIGNING — after the key is loaded, unsigned commands are rejected on non-COMM_0 links (SITL udpclient is not guaranteed to be COMM_0).\n\nSigning is off by default in all other examples.",
     "x": 300,
     "y": 40,
     "wires": []

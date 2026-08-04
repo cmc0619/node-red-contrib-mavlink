@@ -1998,11 +1998,12 @@ that for every Connection with `signOutbound` or `requireSigned`, and before dep
 sends `SETUP_SIGNING` (decoded-shape `{ name, fields }` — flat fields serialize as
 an empty payload) to companion ArduCopter sysid 20 on `14540/14541` with
 `sha256("hunter11")` = `746fb70a…a455b1` (Mission Planner / `MavLinkPacketSignature.key`
-derivation). The standalone companion keeps signing off the main GCS fleet ports;
-14560 remains PX4. ArduPilot’s `accept_unsigned_callback` always admits unsigned
-frames on `MAVLINK_COMM_0` (USB / SITL primary), so this example proves GCS
-`requireSigned` + `msg.trusted` and signed outbound arm — not vehicle-side reject of
-unsigned commands on that channel. `hunter11` is intentionally not a secret.
+derivation). Prep proves arm-ready **before** `SETUP_SIGNING`: once the key is
+loaded, unsigned probe arms fail on links that are not `MAVLINK_COMM_0`
+(SITL `udpclient` is not guaranteed to be COMM_0). The standalone companion keeps
+signing off the main GCS fleet ports; 14560 remains PX4. The example proves GCS
+`requireSigned` + `msg.trusted` and signed outbound arm. `hunter11` is
+intentionally not a secret.
 *Check:* `examples/sitl/12-signing.json`, `sitl/run-example-suite.js`
 (`SITL_SIGNING_PASSPHRASE`, `setupCompanionSigning`, `signingCredentialsForFlows`),
 `sitl/AGENTS.md`.
