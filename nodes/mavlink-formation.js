@@ -171,7 +171,9 @@ module.exports = function registerMavlinkFormation(RED) {
  * 0 (pattern faces north) rather than refusing: unlike a defaulted coordinate
  * or altitude, any heading yields a geometrically valid, fully separated
  * formation — the value orients the pattern, it cannot collapse it (§2:
- * refusals are for inputs whose default is silently dangerous).
+ * refusals are for inputs whose default is silently dangerous). A heading that
+ * is *present but not numeric* is a refusal, not a default — absent means
+ * "don't care", garbage means the flow is wired wrong.
  *
  * @param {object} config node config
  * @param {object} payload msg.payload
@@ -186,7 +188,7 @@ function resolveAnchor(config, payload, peerTable) {
       ? { lat: config.lat, lon: config.lon, alt: config.alt }
       : null);
   if (explicit) {
-    return { anchor: explicit, headingDeg: heading === null ? 0 : Number(heading) };
+    return { anchor: explicit, headingDeg: headingNumber(heading) };
   }
 
   const sysid = Number(config.leader);
@@ -207,8 +209,30 @@ function resolveAnchor(config, payload, peerTable) {
   if (heading === null) heading = position.heading; // may still be null (wire sentinel)
   return {
     anchor: { lat: position.lat, lon: position.lon, alt: position.relativeAlt },
-    headingDeg: heading === null || heading === undefined ? 0 : Number(heading),
+    headingDeg: headingNumber(heading),
   };
+}
+
+/**
+ * Coerce a resolved heading to degrees. Absent (null/undefined) means north
+ * (0) — the documented safe default. A present but non-numeric value refuses
+ * here, at the runtime boundary, so the error names the raw input; letting the
+ * coerced NaN travel on would still refuse (lib/formation validates the
+ * heading) but the message would say `NaN` instead of what the flow sent.
+ *
+ * @param {*} heading resolved heading (payload, config, or leader telemetry)
+ * @returns {number} heading in degrees
+ */
+function headingNumber(heading) {
+  if (heading === null || heading === undefined) return 0;
+  const n = typeof heading === 'number'
+    || (typeof heading === 'string' && heading.trim() !== '')
+    ? Number(heading)
+    : NaN;
+  if (!Number.isFinite(n)) {
+    throw new Error(`mavlink-formation: heading must be a finite number (got ${JSON.stringify(heading)})`);
+  }
+  return n;
 }
 
 /**

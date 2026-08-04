@@ -248,6 +248,119 @@ test('msg.payload.anchor and headingDeg override the configured leader anchor', 
   assert.ok(bySysid[2].param6 > 8.0, 'payload heading 0 (not leader 180) orients the line east');
 });
 
+test('non-numeric msg.payload.headingDeg is refused with the raw value named', async () => {
+  // config.headingDeg is editor-validated; payload.headingDeg is a runtime
+  // boundary. The refusal must land at the node (naming 'north'), not deep in
+  // lib/formation as an anonymous NaN.
+  const connection = connectionStub([peer(1), peer(2)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-formation')(RED);
+  const node = new (RED.nodes.types['mavlink-formation'])({
+    connection: 'conn',
+    shape: 'line',
+    spacing: 10,
+    sysids: '1,2',
+    anchorMode: 'fixed',
+    lat: ANCHOR.lat,
+    lon: ANCHOR.lon,
+    alt: ANCHOR.alt,
+    carrier: 'long',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  let sent;
+  const err = await emitInput(node, { payload: { headingDeg: 'north' } }, (m) => { sent = m; })
+    .then(() => null, (e) => e);
+
+  assert.ok(err, 'non-numeric heading fails the input');
+  assert.match(err.message, /heading/);
+  assert.match(err.message, /north/, 'error names the raw payload value');
+  assert.equal(connection.sends.length, 0, 'nothing was sent');
+  assert.equal(sent[1].result, 'failed');
+});
+
+test('default carrier int builds COMMAND_INT with per-member degE7 coords (§9)', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-formation')(RED);
+  const node = new (RED.nodes.types['mavlink-formation'])({
+    connection: 'conn',
+    shape: 'line',
+    spacing: 10,
+    sysids: '1,2',
+    anchorMode: 'fixed',
+    lat: ANCHOR.lat,
+    lon: ANCHOR.lon,
+    alt: ANCHOR.alt,
+    headingDeg: 0,
+    carrier: 'int',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  let sent;
+
+  await emitInput(node, { payload: {} }, (m) => { sent = m; });
+
+  assert.equal(sent[1].result, 'succeeded');
+  const expected = new Map(
+    formationTargets({ shape: 'line', spacing: 10, anchor: ANCHOR, headingDeg: 0, sysids: [1, 2] })
+      .map((t) => [t.sysid, t])
+  );
+  for (const { message } of connection.sends) {
+    const fields = message.fields;
+    const want = expected.get(fields.target_system);
+    assert.equal(message.name, 'COMMAND_INT');
+    assert.equal(fields.command, 192);
+    assert.equal(fields.frame, 3, 'targets ride MAV_FRAME_GLOBAL_RELATIVE_ALT');
+    assert.equal(fields.x, Math.round(want.lat * 1e7), `sysid ${fields.target_system} lat is degE7 in x`);
+    assert.equal(fields.y, Math.round(want.lon * 1e7), `sysid ${fields.target_system} lon is degE7 in y`);
+    assert.equal(fields.z, want.alt, 'altitude stays float metres in z');
+  }
+});
+
+test('close aborts an in-flight formation run and waits for it to unwind', async () => {
+  // Same close discipline as mavlink-fanout: a 60 s inter-member interval
+  // parks the member loop in the pause, so close is guaranteed to land
+  // mid-run rather than racing a finished one.
+  const connection = connectionStub([peer(1), peer(2), peer(3)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-formation')(RED);
+  const node = new (RED.nodes.types['mavlink-formation'])({
+    connection: 'conn',
+    shape: 'line',
+    spacing: 10,
+    sysids: '1,2,3',
+    anchorMode: 'fixed',
+    lat: ANCHOR.lat,
+    lon: ANCHOR.lon,
+    alt: ANCHOR.alt,
+    headingDeg: 0,
+    carrier: 'long',
+    delivery: 'send',
+    intervalMs: 60000,
+  });
+
+  let emitted = false;
+  let inputSettled = false;
+  const run = emitInput(node, { payload: {} }, () => { emitted = true; })
+    .then(() => { inputSettled = true; });
+
+  // Let the first member's send happen and the loop reach the pause.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(connection.sends.length, 1, 'parked in the interval after member 1');
+  assert.equal(inputSettled, false, 'run is still in flight');
+
+  const closedAt = Date.now();
+  await new Promise((resolve) => node.emit('close', resolve));
+  const closeMs = Date.now() - closedAt;
+  await run;
+
+  assert.ok(closeMs < 5000, `close returned promptly (${closeMs}ms), not after the 60 s interval`);
+  assert.equal(inputSettled, true, 'close waited for the run to unwind before reporting closed');
+  assert.equal(connection.sends.length, 1, 'members 2 and 3 never receive a reposition');
+  assert.equal(emitted, false, 'a cancelled run emits nothing onto a closed node');
+});
+
 test('msg.payload.sysids overrides the configured member list', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(3)]);
   const RED = redStub({ conn: connection });
