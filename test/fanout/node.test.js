@@ -301,3 +301,40 @@ test('close cancels an in-flight fan-out and waits for it to unwind (#54/#57)', 
   assert.equal(connection.sends.length, 1, 'members 2 and 3 never receive a command');
   assert.equal(emitted, false, 'a cancelled run emits nothing onto a closed node');
 });
+
+test('close cancels every concurrent fan-out, not just the newest (Greptile #140)', async () => {
+  // Node-RED does not serialise async input handlers: two messages arriving
+  // close together re-enter and run concurrently. Tracking one slot would let
+  // close cancel only the second run and return as soon as it settled, leaving
+  // the first still walking its member list.
+  const connection = connectionStub([peer(1), peer(2), peer(3)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({
+    connection: 'conn',
+    actionType: 'command',
+    carrier: 'long',
+    commandId: 400,
+    executionMode: 'sequential',
+    delivery: 'send',
+    intervalMs: 60000,
+  });
+
+  let firstSettled = false;
+  let secondSettled = false;
+  const first = emitInput(node, { payload: {} }, () => {}).then(() => { firstSettled = true; });
+  const second = emitInput(node, { payload: {} }, () => {}).then(() => { secondSettled = true; });
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(connection.sends.length, 2, 'both runs sent to their first member');
+  assert.equal(firstSettled, false);
+  assert.equal(secondSettled, false);
+
+  await new Promise((resolve) => node.emit('close', resolve));
+  await Promise.all([first, second]);
+
+  assert.equal(firstSettled, true, 'the older run was cancelled and awaited too');
+  assert.equal(secondSettled, true);
+  assert.equal(connection.sends.length, 2, 'neither run advanced past member 1');
+});

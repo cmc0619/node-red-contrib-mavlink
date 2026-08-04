@@ -22,12 +22,16 @@ module.exports = function registerMavlinkFanout(RED) {
       delivery.applyActionStatus(node, 'invalid', 'invalid config');
     }
 
-    // At most one fan-out in flight per node, tracked so `close` can both stop
-    // it and wait for it to unwind. Node-RED's close does not abort a running
+    // Every fan-out currently in flight, so `close` can stop all of them and
+    // wait for each to unwind. Node-RED's close does not abort a running
     // promise chain: without this, a redeploy leaves the member loop sending
     // live vehicle commands from a node that no longer exists.
-    let inFlight = null;
-    let cancel = null;
+    //
+    // A set rather than a single slot, because Node-RED does not serialise
+    // async input handlers — two messages arriving close together re-enter and
+    // run concurrently. One slot would let `close` cancel only the newest run
+    // and return as soon as it settled, leaving the older one alive.
+    const inFlight = new Set();
 
     node.on('input', async (msg, send, done) => {
       const guard = guardFanoutInput(msg);
@@ -57,7 +61,7 @@ module.exports = function registerMavlinkFanout(RED) {
           }
         }
 
-        cancel = createFanoutCancel();
+        const cancel = createFanoutCancel();
         const run = executeFanout({
           cancel,
           connection: effectiveConnection,
@@ -73,12 +77,13 @@ module.exports = function registerMavlinkFanout(RED) {
           identityId: payload.identityId || config.identity,
           confirmed: msg.confirmed === true || config.confirm === true,
         });
-        inFlight = run;
+        const entry = { run, cancel };
+        inFlight.add(entry);
         let aggregate;
         try {
           aggregate = await run;
         } finally {
-          if (inFlight === run) inFlight = null;
+          inFlight.delete(entry);
         }
 
         // A redeploy cancelled us. The node is going away: finish quietly
@@ -116,16 +121,17 @@ module.exports = function registerMavlinkFanout(RED) {
     });
 
     node.on('close', (done) => {
-      if (!inFlight) {
+      if (inFlight.size === 0) {
         done();
         return;
       }
-      // Stop the loop and cut the in-flight member's ack wait short, then wait
-      // for the chain to actually unwind before reporting closed. Calling
-      // done() immediately would let the tail of a cancelled run emit onto a
-      // node Node-RED has already torn down.
-      cancel.cancel();
-      inFlight.then(() => done(), () => done());
+      // Stop every loop and cut each in-flight confirmation short, then wait
+      // for all of them to unwind before reporting closed. Calling done()
+      // immediately would let the tail of a cancelled run emit onto a node
+      // Node-RED has already torn down.
+      const running = [...inFlight];
+      for (const entry of running) entry.cancel.cancel();
+      Promise.allSettled(running.map((entry) => entry.run)).then(() => done());
     });
   }
 
