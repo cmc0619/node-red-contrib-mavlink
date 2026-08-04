@@ -2,7 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
-const { formationTargets } = require('../lib/formation');
+const { formationTargets, finite } = require('../lib/formation');
 const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
 const { dialectFromConnection } = require('../lib/addressing');
 
@@ -49,10 +49,10 @@ module.exports = function registerMavlinkFormation(RED) {
       delivery.applyActionStatus(node, 'invalid', 'invalid config');
     }
 
-    // Same close discipline as mavlink-fanout: every run in flight, so a
-    // redeploy aborts all of them and waits for each to unwind rather than
-    // leaving a member loop sending live reposition commands from a dead node.
-    const inFlight = new Set();
+    // Abort-on-close discipline shared with mavlink-fanout: a redeploy aborts
+    // every run in flight and waits for each to unwind. Rationale lives with
+    // delivery.inFlightTracker.
+    const inFlight = delivery.inFlightTracker();
 
     node.on('input', async (msg, send, done) => {
       if (delivery.shouldSuppress(msg)) {
@@ -82,9 +82,8 @@ module.exports = function registerMavlinkFormation(RED) {
           memberParams[target.sysid] = { 5: target.lat, 6: target.lon, 7: target.alt };
         }
 
-        const controller = new AbortController();
-        const run = executeFanout({
-          signal: controller.signal,
+        const aggregate = await inFlight.track((signal) => executeFanout({
+          signal,
           connection: connectionNode,
           vehicleBundle: dialectFromConnection(RED, connectionNode),
           action: {
@@ -99,15 +98,7 @@ module.exports = function registerMavlinkFormation(RED) {
           delivery: config.delivery,
           intervalMs: config.intervalMs === undefined || config.intervalMs === '' ? 100 : config.intervalMs,
           timeoutMs: config.timeoutMs === undefined || config.timeoutMs === '' ? DEFAULT_TIMEOUT_MS : config.timeoutMs,
-        });
-        const entry = { run, controller };
-        inFlight.add(entry);
-        let aggregate;
-        try {
-          aggregate = await run;
-        } finally {
-          inFlight.delete(entry);
-        }
+        }));
 
         // A redeploy cancelled us: finish quietly rather than emitting or
         // raising on a closed node (same rule as mavlink-fanout).
@@ -143,15 +134,7 @@ module.exports = function registerMavlinkFormation(RED) {
       }
     });
 
-    node.on('close', (done) => {
-      if (inFlight.size === 0) {
-        done();
-        return;
-      }
-      const running = [...inFlight];
-      for (const entry of running) entry.controller.abort();
-      Promise.allSettled(running.map((entry) => entry.run)).then(() => done());
-    });
+    node.on('close', (done) => inFlight.close(done));
   }
 
   RED.nodes.registerType('mavlink-formation', MavlinkFormationNode);
@@ -182,13 +165,14 @@ module.exports = function registerMavlinkFormation(RED) {
  */
 function resolveAnchor(config, payload, peerTable) {
   // Only msg.payload.headingDeg is runtime-boundary input — validate it where
-  // it enters, naming the raw value. config.headingDeg is editor-validated
-  // (trust it: Number() only, no re-validation), and a leader's telemetry
-  // heading is projected to a finite number or null by the peer table.
+  // it enters with the lib's strict finite(), naming the raw value.
+  // config.headingDeg is editor-validated (trust it: Number() only, no
+  // re-validation), and a leader's telemetry heading is projected to a finite
+  // number or null by the peer table.
   const payloadHeading = firstNonBlank(payload.headingDeg);
   const configHeading = firstNonBlank(config.headingDeg);
   let heading = payloadHeading !== null
-    ? headingNumber(payloadHeading)
+    ? finite(payloadHeading, 'payload.headingDeg')
     : configHeading === null ? null : Number(configHeading);
 
   const explicit = payload.anchor
@@ -219,27 +203,6 @@ function resolveAnchor(config, payload, peerTable) {
     anchor: { lat: position.lat, lon: position.lon, alt: position.relativeAlt },
     headingDeg: heading ?? 0,
   };
-}
-
-/**
- * Validate a present msg.payload.headingDeg — the one runtime-boundary heading
- * source. Strict on type like lib/formation's finite(): only numbers and
- * non-empty numeric strings pass; anything else refuses, naming the raw input
- * (letting the coerced NaN travel on would still refuse in lib/formation, but
- * the message would say `NaN` instead of what the flow sent).
- *
- * @param {*} heading payload heading value (already known non-blank)
- * @returns {number} heading in degrees
- */
-function headingNumber(heading) {
-  const n = typeof heading === 'number'
-    || (typeof heading === 'string' && heading.trim() !== '')
-    ? Number(heading)
-    : NaN;
-  if (!Number.isFinite(n)) {
-    throw new Error(`mavlink-formation: heading must be a finite number (got ${JSON.stringify(heading)})`);
-  }
-  return n;
 }
 
 /**

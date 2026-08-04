@@ -1,4 +1,19 @@
 <script type="text/javascript">
+  // Validate a field only while its anchor mode is selected — other modes hide
+  // the field, and a hidden field's stale value must not block the dialog.
+  function whenAnchorMode(mode, check) {
+    return function (v) {
+      var $mode = $('#node-input-anchorMode');
+      var current = ($mode && $mode.length) ? $mode.val() : (this.anchorMode || 'leader');
+      if (current !== mode) return true;
+      return check(v);
+    };
+  }
+  // A required finite number: blank must not silently become 0.
+  function finiteRequired(v) {
+    return Number.isFinite(Number(v)) && String(v).trim() !== '';
+  }
+
   RED.nodes.registerType('mavlink-formation', {
     category: 'mavlink',
     paletteLabel: 'formation',
@@ -31,43 +46,16 @@
       anchorMode: { value: 'leader' },
       leader: {
         value: '',
-        validate: function (v) {
-          var $mode = $('#node-input-anchorMode');
-          var mode = ($mode && $mode.length) ? $mode.val() : (this.anchorMode || 'leader');
-          if (mode !== 'leader') return true;
+        validate: whenAnchorMode('leader', function (v) {
           var n = Number(v);
           return Number.isInteger(n) && n >= 1 && n <= 255;
-        },
+        }),
       },
-      lat: {
-        value: '',
-        validate: function (v) {
-          var $mode = $('#node-input-anchorMode');
-          var mode = ($mode && $mode.length) ? $mode.val() : (this.anchorMode || 'leader');
-          if (mode !== 'fixed') return true;
-          return Number.isFinite(Number(v)) && String(v).trim() !== '';
-        },
-      },
-      lon: {
-        value: '',
-        validate: function (v) {
-          var $mode = $('#node-input-anchorMode');
-          var mode = ($mode && $mode.length) ? $mode.val() : (this.anchorMode || 'leader');
-          if (mode !== 'fixed') return true;
-          return Number.isFinite(Number(v)) && String(v).trim() !== '';
-        },
-      },
-      alt: {
-        value: '',
-        validate: function (v) {
-          // Required whenever set as the fixed anchor: a blank altitude must
-          // not become 0 — that commands a descent to home level.
-          var $mode = $('#node-input-anchorMode');
-          var mode = ($mode && $mode.length) ? $mode.val() : (this.anchorMode || 'leader');
-          if (mode !== 'fixed') return true;
-          return Number.isFinite(Number(v)) && String(v).trim() !== '';
-        },
-      },
+      lat: { value: '', validate: whenAnchorMode('fixed', finiteRequired) },
+      lon: { value: '', validate: whenAnchorMode('fixed', finiteRequired) },
+      // alt is required whenever set as the fixed anchor: a blank altitude
+      // must not become 0 — that commands a descent to home level.
+      alt: { value: '', validate: whenAnchorMode('fixed', finiteRequired) },
       headingDeg: { value: '', validate: RED.validators.number(true) },
       carrier: { value: 'int' },
       delivery: { value: 'build' },
