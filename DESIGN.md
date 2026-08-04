@@ -2050,9 +2050,12 @@ legal 0 before the guard ever saw it; `hasValue` counted whitespace as present
 for the same reason; and fan-out builds preset params itself, so the command
 node's guard never ran for a fleet-wide Go To at all. All three now treat blank
 and whitespace as absent.
-*Not covered:* advanced mode, where the operator picks any MAV_CMD and types raw
-params. There is no preset to carry the intent, and the same `hasLocation`
-objection applies, so it stays RTFM.
+*Ruled, not pending:* advanced mode is **deliberately unguarded** and stays that
+way. The operator picks a raw MAV_CMD and types its params by number — that is
+the escape hatch, and its whole contract is that you have read the command's
+definition. No preset exists there to carry the intent, and the `hasLocation`
+objection above applies just as much, so any guard would have to invent a rule
+the protocol does not supply. Do not re-raise this as a gap.
 *Check:* `lib/command/presets.js` (`blankLocationRefusal`, `requireLocationFor`),
 `lib/command/merge-params.js` (`isBlank`), `lib/payload/index.js` (`hasValue`,
 `slotValue`), `lib/fanout/index.js` (`validateWrap`), `node --test
