@@ -2012,11 +2012,15 @@ stream cessation alone.
    do not send.
 4. **ArduPilot** Copter-4.7.0 SITL: neither 3527 zero-vel nor 3583 all-ignore
    produced a STATUSTEXT about the setpoint; no “invalid” log path analogous to
-   PX4’s mavlink module warning.
+   PX4’s mavlink module warning. That is **negative-only** evidence — it shows
+   ArduPilot does not complain in this lab, not how (or whether) it actuates on
+   the packet. Actuation was not instrumented here.
 *Decision:* **keep** the stop packet — it is intentional active zero-velocity
-braking (same encoding as the stream). Dropping it would leave only stream
-cessation (PX4 offboard timeout ~500 ms) without a final brake setpoint. Do not
-“fix” a no-op that is not what the code sends.
+braking (same encoding as the stream), not a suspected all-ignore no-op. That
+encoding fact is enough; the keep path does not hinge on proving ArduPilot
+brake response. Dropping it would leave only stream cessation (PX4 offboard
+timeout ~500 ms) without a final brake setpoint. Do not “fix” a no-op that is
+not what the code sends.
 *Check:* `lib/move/index.js` (`buildStopMessage`), `test/move/move.test.js`,
 `examples/sitl/20-move-stream-stop.json`, issue #115.
 
