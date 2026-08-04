@@ -1,0 +1,68 @@
+name: Publish
+
+# Tag-triggered release. Trusted publishing (OIDC) — no NPM_TOKEN secret, and
+# --provenance attests that this tarball came from this workflow on this commit.
+#
+# Before the first run, the npm package must be configured for trusted
+# publishing against this repo and workflow. Until then this job fails on
+# purpose rather than falling back to a token (#106).
+#
+# Tag push only. `workflow_dispatch` would let a branch named `v0.1.0` pass the
+# version check below and publish, and it bought nothing: a failed release is
+# re-run from the Actions UI, which keeps the original tag ref.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.13.0
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      # Node 22.13.0 bundles npm 10.9.2; OIDC trusted publishing landed in
+      # 11.5.1. Without this the tokenless publish below has no credential.
+      - name: Install an npm that can do trusted publishing
+        run: npm install --global npm@^11.5.1
+
+      - name: Install
+        run: npm ci
+
+      # The tag is the release; publishing something that does not pass its own
+      # gate is worse than not publishing.
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Tag matches package version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "tag $tag does not match package.json $pkg" >&2
+            exit 1
+          fi
+
+      - name: Publish
+        run: npm publish --provenance --access public

@@ -222,3 +222,25 @@ test('build command-param pulldowns drop the blank; message fields keep it', () 
   assert.match(messageFields, /spec\.display === 'bitmask'/, 'slice really is the message-field renderer');
   assert.match(messageFields, /\\u2014/, 'message fields keep blank = omit the field');
 });
+
+test('every palette node carries a bare paletteLabel (#106)', () => {
+  // All ten are category "mavlink", and Node-RED renders the category as the
+  // group header — so 'mavlink in' read as "mavlink › mavlink in". Bare labels,
+  // and every node has one rather than falling back to its raw type name.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const dir = path.join(__dirname, '..', '..', 'nodes');
+
+  const missing = [];
+  const prefixed = [];
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.html'))) {
+    const src = fs.readFileSync(path.join(dir, file), 'utf8');
+    if (!/category: 'mavlink'/.test(src)) continue;  // config nodes have no palette entry
+    const label = /paletteLabel: '([^']*)'/.exec(src);
+    if (!label) { missing.push(file); continue; }
+    if (/^mavlink[ -]/.test(label[1])) prefixed.push(`${file}: ${label[1]}`);
+  }
+
+  assert.deepEqual(missing, [], 'every palette node declares a paletteLabel');
+  assert.deepEqual(prefixed, [], 'the category already says "mavlink" — do not repeat it');
+});

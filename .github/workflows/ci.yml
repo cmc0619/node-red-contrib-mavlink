@@ -16,14 +16,21 @@ concurrency:
 
 jobs:
   quality:
-    name: Quality (Node ${{ matrix.node_version }})
-    runs-on: ubuntu-latest
+    name: Quality (${{ matrix.os }}, Node ${{ matrix.node_version }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - node_version: 20.19.0
-          - node_version: 22.13.0
+          - os: ubuntu-latest
+            node_version: 20.19.0
+          - os: ubuntu-latest
+            node_version: 22.13.0
+          # Windows leg earns its place: the CRLF bug (#101) reached main
+          # because every job ran on Linux. .gitattributes is the fix; this is
+          # what would have caught it.
+          - os: windows-latest
+            node_version: 22.13.0
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -45,11 +52,18 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # Ships-only, high and above. Dev advisories do not reach a user, and the
+      # known moderate xml2js chain is accepted in SECURITY.md — gating on those
+      # would mean a permanently red job nobody reads (#106).
+      - name: Audit shipped dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Package contents
         run: npm pack --dry-run
 
       - name: Node-RED package validation
-        if: matrix.node_version == '22.13.0'
+        if: matrix.node_version == '22.13.0' && matrix.os == 'ubuntu-latest'
         run: npm run validate:node-red
 
   package-install:

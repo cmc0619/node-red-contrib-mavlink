@@ -3,7 +3,13 @@
 # shell entrypoints break inside Linux containers ("\r: command not found"),
 # while a multiline LF regex in test/sitl/entrypoint-px4.test.js silently
 # stops matching (issue #101).
-* text=auto
+#
+# `eol=lf` is the part that reaches the working tree: `text=auto` alone only
+# normalizes the blob, so a runner with core.autocrlf=true (which is what the
+# GitHub windows-latest image sets) still checks out CRLF. That is how the
+# Windows CI leg first failed — test/nodes/vehicle-html.test.js matches source
+# text containing a literal \n.
+* text=auto eol=lf eol=lf
 
 # Shell scripts are executed by Linux containers — always LF, on every OS.
 *.sh text eol=lf
