@@ -1988,6 +1988,38 @@ does not open a results-only PR. Harness JSON defaults to `/tmp/`. In-tree `test
 only a pointer to that workflow.
 *Check:* `sitl/AGENTS.md`, `testing.md`, `sitl/.gitignore`.
 
+**Move stream stop is a zero-velocity setpoint — not an all-ignore no-op (#115 / 98a).**
+*Wrong belief:* `buildStopMessage` (`lib/move/index.js`) sends an all-ignore
+`SET_POSITION_TARGET_LOCAL_NED` that PX4 logs as “invalid, missing position,
+velocity or acceleration” and both stacks discard; example 20’s “zero-velocity
+stop” must therefore be a different packet; drop the stop send and rely on
+stream cessation alone.
+*Fact (code + SITL, HEAD measured 2026-08-04):*
+1. **What stop sends.** `type_mask = 3527` = ignore X/Y/Z + AX/AY/AZ + YAW +
+   YAW_RATE, **use** VX/VY/VZ with `vx=vy=vz=0`. Same mask as a normal
+   local-velocity stream (`maskFor('velocity')`). A true all-ignore mask
+   (also ignore VX/VY/VZ) is `3583` — that is **not** what `buildStopMessage`
+   emits. Unit test `Move streams … emits a zero-velocity stop` already asserts
+   the zero components.
+2. **Example 20.** The Stop inject is `{"velocity":{"north":0,"east":0,"up":0}}`.
+   `mavlink-move` calls `stream.stop()` on the prior stream (sends
+   `buildStopMessage`) then starts a new zero-velocity stream. Harness
+   “zero-velocity stop observed” matches that path — not an all-ignore packet.
+3. **PX4 SIH** (`nrc-px4-11`, compose digest): 15× `buildStopMessage` (3527) →
+   **0** `SET_POSITION_TARGET_LOCAL_NED invalid` lines; 15× mask `3583`
+   all-ignore → **15** invalid WARN lines; 15× forward velocity (3527) → 0
+   invalid. The firmware complaint applies only to true all-ignore, which we
+   do not send.
+4. **ArduPilot** Copter-4.7.0 SITL: neither 3527 zero-vel nor 3583 all-ignore
+   produced a STATUSTEXT about the setpoint; no “invalid” log path analogous to
+   PX4’s mavlink module warning.
+*Decision:* **keep** the stop packet — it is intentional active zero-velocity
+braking (same encoding as the stream). Dropping it would leave only stream
+cessation (PX4 offboard timeout ~500 ms) without a final brake setpoint. Do not
+“fix” a no-op that is not what the code sends.
+*Check:* `lib/move/index.js` (`buildStopMessage`), `test/move/move.test.js`,
+`examples/sitl/20-move-stream-stop.json`, issue #115.
+
 **ArduPilot cold-arm returns `FAILED` (4), not `TEMPORARILY_REJECTED` (1).**
 *Wrong belief:* racing arm/takeoff on a freshly restarted ArduCopter SITL draws
 `MAV_RESULT_TEMPORARILY_REJECTED`, so AckWaiter backoff+retry eventually reaches

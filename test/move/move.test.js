@@ -65,6 +65,26 @@ test('buildStopMessage copies target ids and does not invent system 1', () => {
   assert.equal(missing.fields.target_component, undefined);
 });
 
+test('buildStopMessage is zero-velocity (mask 3527), not all-ignore (3583)', () => {
+  // #115 / §14: PX4 rejects all-ignore; our stop keeps VX/VY/VZ usable at 0.
+  const { buildStopMessage, buildMoveMessage } = require('../../lib/move');
+  const stop = buildStopMessage({
+    fields: { time_boot_ms: 0, target_system: 1, target_component: 1 },
+  });
+  const vel = buildMoveMessage({
+    mode: 'local-velocity',
+    target: { sysid: 1, compid: 1 },
+    velocity: { north: 1, east: 0, up: 0 },
+  });
+  assert.equal(stop.fields.type_mask, 3527);
+  assert.equal(stop.fields.type_mask, vel.fields.type_mask);
+  assert.equal(stop.fields.vx, 0);
+  assert.equal(stop.fields.vy, 0);
+  assert.equal(stop.fields.vz, 0);
+  // VX/VY/VZ ignore bits must be clear (8+16+32 = 56).
+  assert.equal(stop.fields.type_mask & 56, 0);
+});
+
 test('Move streams on the Streaming band until TTL and emits a zero-velocity stop', () => {
   const sends = [];
   let timer;
