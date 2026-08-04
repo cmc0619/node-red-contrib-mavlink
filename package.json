@@ -41,6 +41,7 @@
     "node-mavlink": "^2.3.0"
   },
   "overrides": {
+    "jsonata": "^2.2.2",
     "xml2js": "^0.6.2"
   },
   "optionalDependencies": {
