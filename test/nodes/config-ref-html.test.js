@@ -20,6 +20,7 @@ const NODES = [
   'mavlink-mission',
   'mavlink-state',
   'mavlink-fanout',
+  'mavlink-formation',
 ];
 
 for (const name of NODES) {
