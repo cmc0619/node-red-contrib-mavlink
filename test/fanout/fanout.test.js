@@ -643,3 +643,32 @@ test('cancel settles a broadcast confirm instead of blocking on its timeout (Cod
   assert.equal(result.result, 'cancelled');
   assert.equal(unsubscribed, 1, 'the COMMAND_ACK subscription is released');
 });
+
+test('fan-out refuses a preset with blank coordinates rather than sending the fleet to 0,0 (#141)', async () => {
+  // Fan-out builds preset params itself, so the command node's guard never runs
+  // here. Without its own check a fleet-wide Go To with an empty latitude sent
+  // every vehicle to the Gulf of Guinea.
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  const refused = await executeFanout({
+    connection,
+    action: { type: 'command', carrier: 'long', preset: 'reposition', params: { 6: 8.5 } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  assert.equal(refused.result, 'refused');
+  assert.match(refused.detail, /requires latitude and longitude/);
+  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
+
+  // With coordinates it goes out to every member as usual.
+  const ok = await executeFanout({
+    connection,
+    action: { type: 'command', carrier: 'long', preset: 'reposition', params: { 5: 47.4, 6: 8.5 } },
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  assert.equal(ok.success, true);
+  assert.equal(connection.sends.length, 2);
+});

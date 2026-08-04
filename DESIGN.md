@@ -2043,12 +2043,21 @@ params with 0 — after that, blank and a deliberate `0` are the same value. An
 explicit `0` still sends: the guard is against silence, not against the equator.
 Payload's `gimbal|roi-set` gets the same treatment through `required: true` slots
 rather than `default: 0`.
+Blank has to survive the trip to the guard, which means three doors, not one.
+The editor already omits an empty param key, so that path was safe — but
+`mergeParams` ran `Number()` over `msg.payload` overrides, turning `''` into a
+legal 0 before the guard ever saw it; `hasValue` counted whitespace as present
+for the same reason; and fan-out builds preset params itself, so the command
+node's guard never ran for a fleet-wide Go To at all. All three now treat blank
+and whitespace as absent.
 *Not covered:* advanced mode, where the operator picks any MAV_CMD and types raw
 params. There is no preset to carry the intent, and the same `hasLocation`
 objection applies, so it stays RTFM.
 *Check:* `lib/command/presets.js` (`blankLocationRefusal`, `requireLocationFor`),
-`lib/payload/index.js` (`slotValue`), `node --test test/command/presets.test.js
-test/payload/verbs.test.js` — sabotage-verified.
+`lib/command/merge-params.js` (`isBlank`), `lib/payload/index.js` (`hasValue`,
+`slotValue`), `lib/fanout/index.js` (`validateWrap`), `node --test
+test/command/presets.test.js test/fanout/fanout.test.js
+test/payload/verbs.test.js` — every guard sabotage-verified.
 
 **Closing a node does not stop a promise chain it started.**
 *Wrong belief:* Node-RED's `close` tears the node down, so an in-flight async run

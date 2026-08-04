@@ -22,7 +22,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getPreset, buildParamArray, blankLocationRefusal, PRESETS, COMPLETION } = require('../../lib/command');
+const { getPreset, buildParamArray, blankLocationRefusal, mergeParams, PRESETS, COMPLETION } = require('../../lib/command');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -265,4 +265,23 @@ test('presets without a location are untouched by the guard (#88)', () => {
     if (!preset) continue;
     assert.equal(blankLocationRefusal(preset, {}), null, `${id} must not require coordinates`);
   }
+});
+
+test('a blank msg.payload override stays blank instead of coercing to 0 (Greptile #141)', () => {
+  // mergeParams used to Number() everything, so msg.payload = { 5: '' } arrived
+  // as a legal coordinate 0 and the guard downstream saw a present value. A
+  // flow computing coordinates and yielding '' for a missing one is the exact
+  // upstream-math case this protects.
+  for (const blank of ['', '   ', '\t']) {
+    const merged = mergeParams({}, { 5: blank, 6: 8.5 });
+    assert.equal(merged[5], undefined, `${JSON.stringify(blank)} must not become a coordinate`);
+    assert.match(
+      blankLocationRefusal(getPreset('reposition'), merged),
+      /requires latitude and longitude/
+    );
+  }
+
+  // A real override still lands, and an explicit 0 still counts as typed.
+  assert.equal(mergeParams({}, { 5: 47.4 })[5], 47.4);
+  assert.equal(mergeParams({}, { 5: 0 })[5], 0);
 });

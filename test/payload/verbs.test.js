@@ -138,3 +138,21 @@ test('gimbal roi-set refuses a blank coordinate rather than aiming at 0,0 (#88)'
   assert.equal(built.message.fields.param5, 0);
   assert.equal(built.message.fields.param6, 0);
 });
+
+test('whitespace is blank for a required ROI coordinate (#141)', () => {
+  // hasValue() treated ' ' as present and Number(' ') is 0, so a whitespace
+  // latitude slipped past the required check and aimed at the equator.
+  for (const blank of [' ', '   ', '\t']) {
+    assert.throws(
+      () => buildPayloadMessage({
+        topic: 'gimbal',
+        verb: 'roi-set',
+        target: { sysid: 1, compid: 1 },
+        carrier: 'long',
+        values: { lat: blank, lon: 8.5, alt: 30 },
+      }),
+      /lat is required/,
+      `${JSON.stringify(blank)} must refuse`
+    );
+  }
+});
