@@ -691,3 +691,22 @@ test('fan-out refuses a whitespace coordinate, not just an absent one (#141)', a
   }
   assert.equal(connection.sends.length, 0, 'nothing reaches the fleet');
 });
+
+test('fan-out move refuses a whitespace coordinate too (#141 duplicate-helper bug)', async () => {
+  // isPresentCoordinate existed twice — fan-out kept its own copy, so fixing
+  // the whitespace hole in the command module left the move global-position
+  // guard still sending 0,0. There is one copy now.
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  for (const blank of ['', ' ', '\t']) {
+    const refused = await executeFanout({
+      connection,
+      action: { type: 'move', mode: 'global-position', position: { lat: blank, lon: 8.5, alt: 30 } },
+      mode: 'sequential',
+      delivery: 'send',
+    });
+    assert.equal(refused.result, 'refused', `${JSON.stringify(blank)} must refuse`);
+    assert.match(refused.detail, /requires lat and lon/);
+  }
+  assert.equal(connection.sends.length, 0);
+});
