@@ -10,6 +10,21 @@ see AGENTS.md "no migrations, no compatibility shims".
 
 ## [Unreleased]
 
+### Added
+
+- Move now covers the full `SET_POSITION_TARGET_*` matrix: modes Position,
+  Velocity, Position + Velocity, Acceleration, Force (force bit set), and Yaw
+  only — plus a Frame selector (local NED, offset-from-current, body offset for
+  ArduPilot GUIDED, body NED for PX4 OFFBOARD, and global relative/MSL/terrain
+  altitude). Labels follow the frame (body frames read forward/right), vertical
+  inputs stay up-positive everywhere, and there is still no raw `type_mask` —
+  named concepts only. Combinations firmware is known to silently drop (Force
+  anywhere, acceleration-only on ArduPilot, terrain/OFFSET frames on PX4) still
+  send but raise a node warning. Legacy `local-position` / `local-velocity` /
+  `global-position` configs keep working and migrate in the editor; a
+  global-frame position with blank lat/lon now refuses instead of flying
+  to 0,0.
+
 ### Fixed
 
 - Blank latitude/longitude no longer becomes `0,0`. Go To, Orbit and Set Home

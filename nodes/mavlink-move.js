@@ -3,8 +3,10 @@
 const {
   buildMoveMessage,
   createMoveStream,
+  advisoryFor,
   positionFrom,
   velocityFrom,
+  accelFrom,
   valueFrom,
 } = require('../lib/move');
 const { BAND } = require('../lib/connection/bands');
@@ -40,15 +42,30 @@ module.exports = function registerMavlinkMove(RED) {
           connectionNode: connAtDeploy,
         });
 
-        const message = buildMoveMessage({
+        const moveInput = {
           mode: payload.mode || config.mode || 'local-position',
+          frame: payload.frame !== undefined ? payload.frame : config.frame,
           target,
           position: payload.position || positionFrom(config),
           velocity: payload.velocity || velocityFrom(config),
+          accel: payload.accel || accelFrom(config),
           yaw: valueFrom(payload, config, 'yaw'),
           yawRate: valueFrom(payload, config, 'yawRate'),
           timeBootMs: payload.timeBootMs || config.timeBootMs || 0,
+        };
+        const message = buildMoveMessage(moveInput);
+
+        // Known-unsupported firmware combos still send, but never silently
+        // (§14: setpoints carry no ack, so this warning is all the feedback
+        // the operator will get). Firmware comes from the connection's bound
+        // Vehicle Profile; Build tier has none, so only the firmware-agnostic
+        // force advisory can fire there.
+        const advisory = advisoryFor({
+          mode: moveInput.mode,
+          frame: moveInput.frame,
+          firmware: connectionNode?.vehicle?.firmware,
         });
+        if (advisory) node.warn(advisory);
 
         if (delivery === 'build') {
           completeBuild(node, send, message);

@@ -181,7 +181,7 @@ makes unreachable.
 | `mavlink-out` | Transmit content not constructed by an action node — raw buffers, messages forwarded from another connection, envelopes built in a Function node |
 | `mavlink-build` | Any message in the loaded dialect. Full Delivery tiers, plus an optional repeat interval that reports achieved rate against configured rate in status |
 | `mavlink-command` | `MAV_CMD`, grouped presets through to the full dialect |
-| `mavlink-move` | `SET_POSITION_TARGET_*`, streamed, with TTL and stop |
+| `mavlink-move` | `SET_POSITION_TARGET_*` over the full mode × frame matrix (position, velocity, position+velocity, acceleration, force, yaw-only × local/body/global frames), streamed, with TTL and stop |
 | `mavlink-mission` | download / upload / clear × mission / fence / rally |
 | `mavlink-param` | read one, set one, request list |
 | `mavlink-payload` | camera, gimbal, servo, gripper, winch, parachute |
@@ -1177,6 +1177,45 @@ Three rules, each of which encodes a wrong message if missed:
   east divides further by cos(latitude), or offsets shrink toward the poles. Used by Fan-out
   expansion and anything computing relative positions.
 
+### Move setpoint matrix
+
+Move covers the full `SET_POSITION_TARGET_*` capability space with **named modes and frames —
+never a raw `type_mask`** (a set bit means *ignore*, most of the 65,536 values are invalid, and
+firmware drops bad ones silently; the raw-mask escape hatch is mavlink-build, the same place raw
+anything lives). Mode picks which vectors the mask *uses*; frame picks the reference and the
+carrier message (`lib/move/index.js` `MODES` / `MAV_FRAME`):
+
+| Mode | Uses | Notes |
+|---|---|---|
+| Position | x/y/z or lat/lon/alt | |
+| Velocity | vx/vy/vz | also the shape of the stream-stop packet |
+| Position + Velocity | both | feed-forward, PX4 offboard |
+| Acceleration | afx/afy/afz | |
+| Force | afx/afy/afz + force bit (512) | no firmware honors it today — advisory fires |
+| Yaw only | neither | requires yaw or yaw rate, else the packet is the all-ignore PX4 rejects (§14 / #115) |
+
+Yaw and yaw rate are included **by presence** on every mode: blank means mask-ignored, a value —
+including 0 — means commanded.
+
+Frames: `LOCAL_NED`, `LOCAL_OFFSET_NED`, `BODY_OFFSET_NED` (ArduPilot GUIDED), `BODY_NED`
+(PX4 OFFBOARD) ride `SET_POSITION_TARGET_LOCAL_NED`; `GLOBAL_RELATIVE_ALT_INT` (default),
+`GLOBAL_INT`, `GLOBAL_TERRAIN_ALT_INT` ride `SET_POSITION_TARGET_GLOBAL_INT`. The editor stores
+the bare member name; labels follow the frame (body frames read forward/right) and vertical
+inputs are up-positive everywhere — the sign flips once, at encode, per the NED rule above.
+A global-frame position with blank lat/lon refuses (§10 "blank coordinates must not become
+0,0"), matching the Fan-out gate.
+
+**Known-unsupported combos send anyway, but never silently** (`advisoryFor`): a setpoint has no
+acknowledgement, so a `node.warn` is all the feedback the operator gets. Advisories: Force
+(firmware-independent), acceleration-only on ArduPilot, `BODY_NED` on ArduPilot (it wants
+`BODY_OFFSET_NED`), terrain and OFFSET frames on PX4. Firmware comes from the connection's bound
+Vehicle Profile; `custom` opts out of firmware-specific advisories. Warn-not-block is deliberate:
+firmware support moves, and the advisory table is a snapshot, not a gate.
+
+The legacy mode names `local-position` / `local-velocity` / `global-position` (which carried the
+frame inside the mode) remain accepted at one boundary — `LEGACY_MODES` in `lib/move` — because
+Fan-out's `moveMode` config still speaks them; the Move editor migrates them on open.
+
 ### Command presets
 
 A preset is not a separate command. It is **(command, pinned params, exposed params, friendly
@@ -1465,7 +1504,7 @@ by silence. Update this list when an item lands.
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
 | **Param definition catalog** | **done** | One profile-keyed local holding file; authenticated GET is local-only; the Vehicle editor's explicit authenticated Update downloads its optional `paramDefsUrl`, validates, and atomically replaces the file. Param editor datalist + units/enums remain optional enrichment. |
 | **Full command-param `enum=` recovery** | **done** | Seed compile carries common.xml `<param enum=`> links into the bundle (e.g. Arm → `MAV_BOOL`). The old `hints.js` overlay is gone. |
-| **Move editor §6 reshape** | **done** | Per-field rows + mode/delivery visibility in the Move dialog. |
+| **Move editor §6 reshape** | **done** | Per-field rows + mode/frame/delivery visibility in the Move dialog, full setpoint matrix (§ "Move setpoint matrix"). |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
 | **`httpAdminRoot` on non-enum admin routes** | **done** | Command/Build/In/Fan-out/Param/Vehicle editor catalogs use `RED.mavlink.adminApiUrl('/mavlink/…')`. |
 | **SITL example flows** | **done** | `examples/sitl/` 01–27 (companion, INT matrix, Move, param echo, In/Build/Out, inherit, TCP template, formation basics, Lucy in the Sky) + README; regular demos in `examples/` (see `CATALOG.md`). |

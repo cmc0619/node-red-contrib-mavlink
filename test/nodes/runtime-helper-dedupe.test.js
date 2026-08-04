@@ -38,7 +38,7 @@ test('In does not double-cap badge text', () => {
 test('Move and Fan-out share lib/move config mappers and Fan-out uses mergeParams', () => {
   const move = fs.readFileSync(path.join(nodesDir, 'mavlink-move.js'), 'utf8');
   const fanout = fs.readFileSync(path.join(nodesDir, 'mavlink-fanout.js'), 'utf8');
-  assert.match(move, /positionFrom,\s*\n\s*velocityFrom,\s*\n\s*valueFrom/);
+  assert.match(move, /positionFrom,\s*\n\s*velocityFrom,\s*\n\s*accelFrom,\s*\n\s*valueFrom/);
   assert.match(move, /require\('\.\.\/lib\/move'\)/);
   assert.match(fanout, /require\('\.\.\/lib\/move'\)/);
   assert.match(fanout, /mergeParams\(/);
