@@ -42,7 +42,7 @@ without understanding each step.
 |------|-----|-------|
 | `01-completion-takeoff.json` | SITL 01 Completion takeoff | 1× ArduPilot |
 | `02-completion-timeout.json` | SITL 02 Completion timeout | 1× ArduPilot |
-| `03-temporarily-rejected.json` | SITL 03 Temporarily rejected | 1× ArduPilot (fresh boot) |
+| `03-temporarily-rejected.json` | SITL 03 Temporarily rejected | 1× PX4 (packed mode → retry) |
 | `04-mode-tables.json` | SITL 04 Mode tables | 1× ArduPilot + 1× PX4 |
 | `05-px4-param-union.json` | SITL 05 PX4 param union | 1× PX4 |
 | `06-mission-fence-rally.json` | SITL 06 Mission/fence/rally | 1× ArduPilot + 1× PX4 |
