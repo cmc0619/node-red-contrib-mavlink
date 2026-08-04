@@ -593,6 +593,43 @@ test('PARAM_SET echo confirm compares wire values — a clamped value does not c
   assert.equal(clamped.members[0].result, 'unconfirmed');
 });
 
+test('PARAM_SET echo with a different param_type never confirms — byte-identical garbage is not success', async () => {
+  // A REAL32-typed set landing on a bytewise integer parameter stores the
+  // float's bit pattern as a garbage integer and echoes those exact bytes
+  // back with the vehicle's own type. Byte equality alone would confirm the
+  // garbage store; the type gate declines it (§14: false failure over false
+  // success).
+  const handlers = [];
+  const connection = {
+    peerTable: peerTableStub([peer(5)]),
+    sends: [],
+    send(message, options) { this.sends.push({ message, options }); },
+    subscribe(filter, handler) {
+      handlers.push(handler);
+      return () => {};
+    },
+  };
+
+  const run = executeFanout({
+    connection,
+    // Sent as REAL32 (9)…
+    message: builtParamSet({ fields: { param_value: 5, param_type: 9 } }),
+    mode: 'sequential',
+    delivery: 'confirm',
+    timeoutMs: 50,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  // …echoed byte-identical but typed INT32 (6) by the vehicle.
+  handlers.slice().forEach((h) => h({
+    sysid: 5, compid: 1, name: 'PARAM_VALUE',
+    fields: { param_id: 'FOO', param_value: 5, param_type: 6 },
+  }));
+  const result = await run;
+
+  assert.equal(result.success, false);
+  assert.equal(result.members[0].result, 'unconfirmed');
+});
+
 test('confirm-mode retry resends the member\'s patched message with the confirmation counter', async (t) => {
   installRetryTimerHarness(t);
   const subs = [];

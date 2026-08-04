@@ -1402,6 +1402,12 @@ The `PARAM_SET` echo compares at the wire plane (`matchesParamEchoWire`, lib/par
 replicator holds only the built message, and a vehicle that applied the set verbatim echoes the
 identical float32 bit pattern — c-cast float or bytewise integer alike — so `Object.is` on
 `Math.fround` of both sides is the invariant, and a clamped value honestly reports unconfirmed.
+**The echo's `param_type` must equal the sent one**: byte-identical bytes under a different type
+are a garbage store (a REAL32 set landing on a bytewise integer parameter), and the gate
+declines them — false failure over false success (§14). The canonical-value comparison —
+decoding the echo by the vehicle's type and comparing against what the operator *meant* —
+remains the Param node's own confirm tier; use it where unit-level certainty matters more than
+fleet fan-out.
 
 **Per-target overrides.** `targets` is an array of sysids or `{sysid, ...fieldPatches}`
 objects: the list *is* the selection (explicit-list semantics — the caller cannot ask for one
