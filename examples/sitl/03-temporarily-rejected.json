@@ -4,16 +4,16 @@
     "type": "tab",
     "label": "SITL 03 Temporarily rejected",
     "disabled": false,
-    "info": "Race a freshly restarted SITL before GPS lock to draw TEMPORARILY_REJECTED; the node backs off and retries until the vehicle is ready. This is best-effort because ArduPilot may reach a ready state quickly.",
+    "info": "Exercises AckWaiter backoff on MAV_RESULT_TEMPORARILY_REJECTED. PX4 DO_SET_MODE with HEARTBEAT-packed custom_mode 196608 returns (1) on this SIH image; the node retries until maxRetries is exhausted.",
     "env": []
   },
   {
     "id": "sitl03-comment",
     "type": "comment",
     "z": "sitl03-tab",
-    "name": "Arm/takeoff immediately after deploy (retry on TEMPORARILY_REJECTED)",
-    "info": "Harness prep restarts nrc-ap-1, waits briefly, then deploys this flow. The once:true inject fires 5 seconds after deploy to race GPS readiness without landing in the earliest hard-fail boot window. Arm then takeoff use delivery=confirm with maxRetries=5 so TEMPORARILY_REJECTED (1) triggers backoff and retry when the fresh boot is still settling.\n\nLaunch (fresh ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. TEMPORARILY_REJECTED is best-effort; a fast GPS lock may go straight to ACCEPTED.",
-    "x": 280,
+    "name": "TEMPORARILY_REJECTED retry (PX4 packed mode)",
+    "info": "ArduPilot cold-arm returns MAV_RESULT_FAILED (4) with STATUSTEXT, not TEMPORARILY_REJECTED (1) — so an AP arm race cannot exercise AckWaiter retries (DESIGN.md §14).\n\nThis example uses the measured PX4 path from §14: DO_SET_MODE with param2=196608 (POSCTL packed as HEARTBEAT reports it) is TEMPORARILY_REJECTED on every attempt. delivery=confirm + maxRetries=3 backs off and retries; the status output should show result temporarily_rejected with retries >= 1 (exhausted).\n\nCorrect POSCTL encoding is param2=3 (example 04). This flow intentionally sends the wrong packing so (1) is stable and the retry loop is observable.\n\nConnection: bind 0.0.0.0:14560 → remote 127.0.0.1:14561, sysid 11.",
+    "x": 300,
     "y": 40,
     "wires": []
   },
@@ -30,24 +30,24 @@
   {
     "id": "sitl03-vehicle",
     "type": "mavlink-vehicle",
-    "name": "ArduCopter sysid 1",
+    "name": "PX4 sysid 11",
     "vehicleFamily": "copter",
-    "firmware": "ardupilot",
-    "dialect": "ardupilotmega",
+    "firmware": "px4",
+    "dialect": "common",
     "dialectSource": "bundled",
-    "defaultTargetSystem": 1,
+    "defaultTargetSystem": 11,
     "defaultTargetComponent": 1,
     "paramDefsUrl": ""
   },
   {
     "id": "sitl03-connection",
     "type": "mavlink-connection",
-    "name": "UDP ArduPilot SITL",
+    "name": "UDP PX4 SITL",
     "mode": "udp",
     "bindHost": "0.0.0.0",
-    "bindPort": 14550,
+    "bindPort": 14560,
     "remoteHost": "127.0.0.1",
-    "remotePort": 14551,
+    "remotePort": 14561,
     "broadcast": false,
     "vehicle": "sitl03-vehicle",
     "localIdentity": "sitl03-identity",
@@ -65,7 +65,7 @@
     "id": "sitl03-inject",
     "type": "inject",
     "z": "sitl03-tab",
-    "name": "Race boot",
+    "name": "Packed POSCTL (expect reject+retry)",
     "props": [
       {
         "p": "payload"
@@ -73,82 +73,53 @@
     ],
     "repeat": "",
     "crontab": "",
-    "once": true,
-    "onceDelay": 5,
+    "once": false,
+    "onceDelay": 0.1,
     "topic": "",
     "payload": "",
     "payloadType": "date",
-    "x": 130,
+    "x": 200,
     "y": 160,
     "wires": [
       [
-        "sitl03-arm"
+        "sitl03-mode"
       ]
     ]
   },
   {
-    "id": "sitl03-arm",
+    "id": "sitl03-mode",
     "type": "mavlink-command",
     "z": "sitl03-tab",
-    "name": "Arm (confirm, retry)",
+    "name": "DO_SET_MODE packed 196608",
     "mode": "preset",
-    "preset": "arm",
+    "preset": "set_mode",
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "sitl03-connection",
     "timeout": "10000",
-    "maxRetries": "5",
+    "maxRetries": "3",
     "unconfirmedContinue": false,
     "completionTimeout": "30000",
-    "params": "{}",
-    "x": 330,
-    "y": 160,
-    "wires": [
-      [
-        "sitl03-takeoff"
-      ],
-      [
-        "sitl03-arm-status"
-      ]
-    ],
-    "carrier": "long",
-    "targetSystem": "",
-    "targetComponent": ""
-  },
-  {
-    "id": "sitl03-takeoff",
-    "type": "mavlink-command",
-    "z": "sitl03-tab",
-    "name": "Takeoff 10 m (confirm, retry)",
-    "mode": "preset",
-    "preset": "takeoff",
-    "advancedCommand": "",
-    "delivery": "confirm",
-    "connection": "sitl03-connection",
-    "timeout": "10000",
-    "maxRetries": "5",
-    "unconfirmedContinue": false,
-    "completionTimeout": "30000",
-    "params": "{\"7\":10}",
-    "x": 560,
+    "params": "{\"1\":1,\"2\":196608}",
+    "x": 480,
     "y": 160,
     "wires": [
       [
         "sitl03-done"
       ],
       [
-        "sitl03-takeoff-status"
+        "sitl03-status"
       ]
     ],
     "carrier": "long",
-    "targetSystem": "",
-    "targetComponent": ""
+    "targetSystem": "11",
+    "targetComponent": "1"
   },
   {
     "id": "sitl03-done",
     "type": "debug",
     "z": "sitl03-tab",
-    "name": "chain done",
+    "name": "mode continue",
     "active": true,
     "tosidebar": true,
     "console": false,
@@ -157,15 +128,15 @@
     "targetType": "full",
     "statusVal": "",
     "statusType": "auto",
-    "x": 770,
+    "x": 730,
     "y": 140,
     "wires": []
   },
   {
-    "id": "sitl03-arm-status",
+    "id": "sitl03-status",
     "type": "debug",
     "z": "sitl03-tab",
-    "name": "arm status",
+    "name": "mode status",
     "active": true,
     "tosidebar": true,
     "console": false,
@@ -174,25 +145,8 @@
     "targetType": "full",
     "statusVal": "",
     "statusType": "auto",
-    "x": 330,
-    "y": 240,
-    "wires": []
-  },
-  {
-    "id": "sitl03-takeoff-status",
-    "type": "debug",
-    "z": "sitl03-tab",
-    "name": "takeoff status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 560,
-    "y": 240,
+    "x": 720,
+    "y": 200,
     "wires": []
   }
 ]

@@ -1988,6 +1988,37 @@ does not open a results-only PR. Harness JSON defaults to `/tmp/`. In-tree `test
 only a pointer to that workflow.
 *Check:* `sitl/AGENTS.md`, `testing.md`, `sitl/.gitignore`.
 
+**ArduPilot cold-arm returns `FAILED` (4), not `TEMPORARILY_REJECTED` (1).**
+*Wrong belief:* racing arm/takeoff on a freshly restarted ArduCopter SITL draws
+`MAV_RESULT_TEMPORARILY_REJECTED`, so AckWaiter backoff+retry eventually reaches
+`ACCEPTED` (example 03’s original story).
+*Fact:* measured against Copter-4.7.0 prebuilt SITL after `docker restart`: arm
+ACKs are `FAILED` with STATUSTEXT (`Arm: System not initialised`, EKF/gyro lines)
+until ~23 s, then `ACCEPTED`. No `TEMPORARILY_REJECTED` appears. AckWaiter only
+retries result `(1)`, so `FAILED` is terminal (`retries: 0`). Example 03 therefore
+targets PX4 `DO_SET_MODE` with param2=`196608` (HEARTBEAT-packed POSCTL), which
+stably returns `(1)` on the lab SIH image — the node retries until `maxRetries` is
+exhausted and the status shows `temporarily_rejected` with `retries >= 1`. Correct
+POSCTL encoding remains param2=`3` (example 04 / §14).
+*Check:* `examples/sitl/03-temporarily-rejected.json`, `lib/command/ack.js`.
+
+**AP `DO_SET_HOME` GLOBAL_INT needs HOME/EKF origin before ACCEPTED.**
+*Wrong belief:* example 18’s AP GLOBAL_INT failure means ArduPilot rejects the
+frame (contradicting the local-vs-global §14 measurement).
+*Fact:* the same COMMAND_INT (`frame=5`, lab home lat/lon/alt) returns
+`MAV_RESULT_FAILED` (4) when sent ~5 s after fleet restart, and `ACCEPTED` once
+`HOME_POSITION` / EKF origin exist (~20 s). LOCAL_NED DENIED is unchanged. Harness
+prep `ap-home-ready` waits for peer `home` before deploy.
+*Check:* `sitl/run-example-suite.js` (`waitApHomeReady`), `examples/sitl/18-int-local-vs-global.json`.
+
+**Copter 4.7.0 SITL has no `WPNAV_SPEED` parameter.**
+*Wrong belief:* example 21’s AP echo timeout is a float32 compare / param_type
+decode bug.
+*Fact:* `PARAM_REQUEST_LIST` on lab AP-1 returns 1369 params with no `WPNAV_SPEED`
+(and no `WPNAV*` in `copter.parm`). Unknown names produce no `PARAM_VALUE` echo.
+Example 21 uses live `LOIT_SPEED_MS` (REAL32) instead; PX4 `MPC_XY_VEL_MAX` unchanged.
+*Check:* `examples/sitl/21-param-echo-float32.json`.
+
 **SITL signing example uses companion AP sysid 20 and joke passphrase `hunter11`.**
 *Wrong belief:* Admin API deploy cannot supply Connection signing credentials, so
 example 12 must stay SKIP; or signing should be exercised on the GCS fleet (AP-1 /

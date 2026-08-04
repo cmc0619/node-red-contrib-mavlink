@@ -52,10 +52,11 @@ const PROFILE = {
     prep: 'ap-guided-1',
   },
   '03-temporarily-rejected': {
-    waitMs: 30000,
-    expect: 'arm eventually accepted (TEMPORARILY_REJECTED only on fresh boot)',
+    waitMs: 20000,
+    expect: 'TEMPORARILY_REJECTED retried until exhausted (PX4 packed mode)',
+    prep: 'px4-mode-ready',
     notes:
-      'fleet restart already boots AP-1; TEMPORARILY_REJECTED remains best-effort if GPS/EKF settle before inject',
+      'AP cold-arm returns FAILED(4), not (1); example uses PX4 DO_SET_MODE param2=196608 which stably returns TEMPORARILY_REJECTED',
   },
   '04-mode-tables': {
     waitMs: 20000,
@@ -138,6 +139,7 @@ const PROFILE = {
   '18-int-local-vs-global': {
     waitMs: 25000,
     expect: 'GLOBAL_INT accepted both stacks; LOCAL_NED denied AP / accepted PX4',
+    prep: 'ap-home-ready',
   },
   '19-ap-int-carrier-goto': {
     waitMs: 55000,
@@ -160,6 +162,7 @@ const PROFILE = {
   '23-profile-target-inherit': {
     waitMs: 20000,
     expect: 'command inherits profile target sysid 2',
+    prep: 'ap-arm-ready-2',
   },
   '24-companion-receive': {
     waitMs: 15000,
@@ -286,6 +289,26 @@ function verdictFrom(profile, summary, log) {
   const errText = summary.errors.join('\n');
   const expect = profile.expect || '';
 
+  if (/TEMPORARILY_REJECTED retried|temporarily rejected/i.test(expect)) {
+    const retried = summary.debug.some((d) => {
+      const retriesMatch = (d.excerpt || '').match(/retries:\s*(\d+)/);
+      const retries = retriesMatch ? Number(retriesMatch[1]) : 0;
+      const rejected =
+        d.result === 'temporarily_rejected' ||
+        /temporarily_rejected/i.test(d.excerpt || '');
+      return rejected && retries >= 1;
+    });
+    if (retried) {
+      return {
+        status: 'PASS',
+        reason: 'TEMPORARILY_REJECTED observed with AckWaiter retries',
+      };
+    }
+    return {
+      status: 'FAIL',
+      reason: 'TEMPORARILY_REJECTED retry path not observed',
+    };
+  }
   if (/completion timeout/i.test(expect)) {
     // Must be the takeoff node's completion timeout — arm/GUIDED timed-out must not PASS.
     const takeoffTimedOut = summary.debug.some((d) => {
@@ -427,14 +450,16 @@ function verdictFrom(profile, summary, log) {
     }
   }
   if (/inherits profile target|sysid 2/i.test(expect)) {
-    const inheritOk = summary.debug.some((d) => {
-      if (d.result !== 'accepted' && d.result !== 'sent') return false;
-      return /sysid:\s*2\b/.test(d.excerpt || '') || /target:\s*\{\s*sysid:\s*2\b/.test(d.excerpt || '');
-    });
+    // Inherit is proven by the resolved target on the status record — success
+    // or arm-DENIED both count; requiring accepted alone masked cold-EKF FAIL.
+    const inheritOk = summary.debug.some((d) =>
+      /target:\s*\{\s*sysid:\s*2\b/.test(d.excerpt || '') ||
+      (/sysid:\s*2\b/.test(d.excerpt || '') && /target|compid/i.test(d.excerpt || ''))
+    );
     if (inheritOk) {
       return { status: 'PASS', reason: 'profile target inherit resolved sysid 2' };
     }
-    return { status: 'UNKNOWN', reason: 'accepted/sent without resolved target sysid 2' };
+    return { status: 'UNKNOWN', reason: 'no status record with resolved target sysid 2' };
   }
   if (/companion receive/i.test(expect)) {
     // Receive proof only — outbound NVF `sent` must not PASS this story.
@@ -648,6 +673,31 @@ async function waitApArmReady(sysids, budgetMs = 120000) {
 }
 
 /**
+ * Wait until AP has published HOME_POSITION (EKF origin). Needed before
+ * DO_SET_HOME GLOBAL_INT — cold SITL returns MAV_RESULT_FAILED until then.
+ *
+ * @param {number} [sysid]
+ */
+async function waitApHomeReady(sysid = 1) {
+  console.log(`  waiting for AP-${sysid} HOME_POSITION…`);
+  runApControlScript(
+    `
+      const deadline = Date.now() + 90000;
+      const compOf = () => conn.peerTable.getComponent(${sysid}, 1);
+      while (Date.now() < deadline) {
+        const c = compOf();
+        if (c?.home && c.home.lat != null) break;
+        await sleep(500);
+      }
+      if (!compOf()?.home || compOf().home.lat == null) {
+        throw new Error('AP-${sysid} HOME_POSITION not seen after fleet restart');
+      }
+    `,
+    100000
+  );
+}
+
+/**
  * Provision MAVLink2 signing on the standalone companion ArduCopter (sysid 20)
  * and prove it can arm before example 12 deploys. Uses the same sha256(passphrase)
  * key Mission Planner / node-mavlink derive from SITL_SIGNING_PASSPHRASE.
@@ -772,6 +822,12 @@ async function prep(kind) {
   }
   if (kind === 'ap-arm-ready-fleet') {
     await waitApArmReady([1, 2, 3, 4, 5]);
+  }
+  if (kind === 'ap-arm-ready-2') {
+    await waitApArmReady([2]);
+  }
+  if (kind === 'ap-home-ready') {
+    await waitApHomeReady(1);
   }
   if (kind === 'ap-signing-companion-20') {
     await setupCompanionSigning();
