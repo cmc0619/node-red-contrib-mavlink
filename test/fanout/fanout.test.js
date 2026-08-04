@@ -672,3 +672,22 @@ test('fan-out refuses a preset with blank coordinates rather than sending the fl
   assert.equal(ok.success, true);
   assert.equal(connection.sends.length, 2);
 });
+
+test('fan-out refuses a whitespace coordinate, not just an absent one (#141)', async () => {
+  // Fan-out passes action.params straight to the guard — it never goes through
+  // mergeParams — so the whitespace rule has to live in isPresentCoordinate
+  // too. Number('  ') is 0, which would have reached the whole fleet.
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  for (const blank of ['', ' ', '\t']) {
+    const refused = await executeFanout({
+      connection,
+      action: { type: 'command', carrier: 'long', preset: 'reposition', params: { 5: blank, 6: 8.5 } },
+      mode: 'sequential',
+      delivery: 'send',
+    });
+    assert.equal(refused.result, 'refused', `${JSON.stringify(blank)} must refuse`);
+    assert.match(refused.detail, /requires latitude and longitude/);
+  }
+  assert.equal(connection.sends.length, 0, 'nothing reaches the fleet');
+});
