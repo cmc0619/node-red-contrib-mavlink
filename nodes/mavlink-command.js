@@ -37,6 +37,7 @@ const {
   RESULT_NAME,
   getPreset,
   buildParamArray,
+  blankLocationRefusal,
   mergeParams,
   AckWaiter,
   checkCompletion,
@@ -181,6 +182,11 @@ module.exports = function registerMavlinkCommand(RED) {
     function getParams(payload) {
       const userParams = mergeParams(config, payload);
       if (preset) {
+        // Refuse before the zero-fill, not after: buildParamArray turns a blank
+        // lat/lon into 0,0 — a legal coordinate the vehicle will happily fly to
+        // (§9, §10 "blank coordinates must not become 0,0").
+        const refusal = blankLocationRefusal(preset, userParams);
+        if (refusal) throw new Error(`mavlink-command: ${refusal}`);
         return buildParamArray(preset, userParams);
       }
       // Advanced: build a full 7-element array from userParams, default 0.

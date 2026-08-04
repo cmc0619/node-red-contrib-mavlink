@@ -643,3 +643,70 @@ test('cancel settles a broadcast confirm instead of blocking on its timeout (Cod
   assert.equal(result.result, 'cancelled');
   assert.equal(unsubscribed, 1, 'the COMMAND_ACK subscription is released');
 });
+
+test('fan-out refuses a preset with blank coordinates rather than sending the fleet to 0,0 (#141)', async () => {
+  // Fan-out builds preset params itself, so the command node's guard never runs
+  // here. Without its own check a fleet-wide Go To with an empty latitude sent
+  // every vehicle to the Gulf of Guinea.
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  const refused = await executeFanout({
+    connection,
+    action: { type: 'command', carrier: 'long', preset: 'reposition', params: { 6: 8.5 } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  assert.equal(refused.result, 'refused');
+  assert.match(refused.detail, /requires latitude and longitude/);
+  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
+
+  // With coordinates it goes out to every member as usual.
+  const ok = await executeFanout({
+    connection,
+    action: { type: 'command', carrier: 'long', preset: 'reposition', params: { 5: 47.4, 6: 8.5 } },
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  assert.equal(ok.success, true);
+  assert.equal(connection.sends.length, 2);
+});
+
+test('fan-out refuses a whitespace coordinate, not just an absent one (#141)', async () => {
+  // Fan-out passes action.params straight to the guard — it never goes through
+  // mergeParams — so the whitespace rule has to live in isPresentCoordinate
+  // too. Number('  ') is 0, which would have reached the whole fleet.
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  for (const blank of ['', ' ', '\t']) {
+    const refused = await executeFanout({
+      connection,
+      action: { type: 'command', carrier: 'long', preset: 'reposition', params: { 5: blank, 6: 8.5 } },
+      mode: 'sequential',
+      delivery: 'send',
+    });
+    assert.equal(refused.result, 'refused', `${JSON.stringify(blank)} must refuse`);
+    assert.match(refused.detail, /requires latitude and longitude/);
+  }
+  assert.equal(connection.sends.length, 0, 'nothing reaches the fleet');
+});
+
+test('fan-out move refuses a whitespace coordinate too (#141 duplicate-helper bug)', async () => {
+  // isPresentCoordinate existed twice — fan-out kept its own copy, so fixing
+  // the whitespace hole in the command module left the move global-position
+  // guard still sending 0,0. There is one copy now.
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  for (const blank of ['', ' ', '\t']) {
+    const refused = await executeFanout({
+      connection,
+      action: { type: 'move', mode: 'global-position', position: { lat: blank, lon: 8.5, alt: 30 } },
+      mode: 'sequential',
+      delivery: 'send',
+    });
+    assert.equal(refused.result, 'refused', `${JSON.stringify(blank)} must refuse`);
+    assert.match(refused.detail, /requires lat and lon/);
+  }
+  assert.equal(connection.sends.length, 0);
+});

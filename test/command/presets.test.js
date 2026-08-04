@@ -22,7 +22,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getPreset, buildParamArray, PRESETS, COMPLETION } = require('../../lib/command');
+const { getPreset, buildParamArray, blankLocationRefusal, mergeParams, PRESETS, COMPLETION } = require('../../lib/command');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -219,4 +219,69 @@ test('buildParamArray always returns a 7-element array', () => {
     const arr = buildParamArray(p, emptyUser());
     assert.equal(arr.length, 7, `preset '${p.id}' must produce 7 params`);
   }
+});
+
+test('location presets refuse blank lat/lon rather than sending 0,0 (#88)', () => {
+  // buildParamArray fills absent params with 0, so a blank latitude became a
+  // legal coordinate in the Gulf of Guinea and the vehicle flew to it. The
+  // guard reads the operator's input, before that zero-fill.
+  const reposition = getPreset('reposition');
+  assert.match(
+    blankLocationRefusal(reposition, { 1: 5, 5: '', 6: 8.5 }),
+    /requires latitude and longitude/
+  );
+  assert.equal(blankLocationRefusal(reposition, { 5: 47.4, 6: 8.5 }), null);
+
+  // An explicit 0 is a real coordinate, deliberately typed, and passes.
+  assert.equal(blankLocationRefusal(reposition, { 5: 0, 6: 0 }), null);
+
+  // Orbit carries the same rule.
+  assert.match(
+    blankLocationRefusal(getPreset('orbit'), { 5: 47.4 }),
+    /requires latitude and longitude/
+  );
+});
+
+test('Set Home only needs coordinates when it is not using the current position (#88)', () => {
+  const setHome = getPreset('set_home');
+
+  // param1 = 1 is "use current position": the vehicle ignores lat/lon entirely,
+  // so demanding them would refuse a perfectly ordinary Set Home.
+  assert.equal(blankLocationRefusal(setHome, { 1: 1 }), null);
+
+  // param1 = 0 means the coordinates are the home position, so they must exist.
+  assert.match(blankLocationRefusal(setHome, { 1: 0 }), /requires latitude and longitude/);
+  // A blank flag is 0 — "no" — and still demands coordinates.
+  assert.match(blankLocationRefusal(setHome, {}), /requires latitude and longitude/);
+  assert.equal(blankLocationRefusal(setHome, { 1: 0, 5: 47.4, 6: 8.5 }), null);
+});
+
+test('presets without a location are untouched by the guard (#88)', () => {
+  // Takeoff and Land are hasLocation *and* isDestination in the dialect, yet
+  // blank coordinates there are the normal "here" case — which is why the rule
+  // lives on the preset rather than being read from those XML flags.
+  for (const id of ['takeoff', 'land', 'arm', 'disarm']) {
+    const preset = getPreset(id);
+    if (!preset) continue;
+    assert.equal(blankLocationRefusal(preset, {}), null, `${id} must not require coordinates`);
+  }
+});
+
+test('a blank msg.payload override stays blank instead of coercing to 0 (Greptile #141)', () => {
+  // mergeParams used to Number() everything, so msg.payload = { 5: '' } arrived
+  // as a legal coordinate 0 and the guard downstream saw a present value. A
+  // flow computing coordinates and yielding '' for a missing one is the exact
+  // upstream-math case this protects.
+  for (const blank of ['', '   ', '\t']) {
+    const merged = mergeParams({}, { 5: blank, 6: 8.5 });
+    assert.equal(merged[5], undefined, `${JSON.stringify(blank)} must not become a coordinate`);
+    assert.match(
+      blankLocationRefusal(getPreset('reposition'), merged),
+      /requires latitude and longitude/
+    );
+  }
+
+  // A real override still lands, and an explicit 0 still counts as typed.
+  assert.equal(mergeParams({}, { 5: 47.4 })[5], 47.4);
+  assert.equal(mergeParams({}, { 5: 0 })[5], 0);
 });

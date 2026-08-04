@@ -55,6 +55,12 @@ test('every catalog verb builds without error', () => {
       if (topic === 'gimbal' && verb === 'aim') {
         input.path = 'legacy';
       }
+      // roi-set is the one verb whose coordinates are required rather than
+      // defaulted — a blank ROI must fail loud rather than aim at 0,0 (§10).
+      // Supply them so this still exercises the build path.
+      if (topic === 'gimbal' && verb === 'roi-set') {
+        input.values = { lat: 47.397742, lon: 8.545594, alt: 30 };
+      }
       assert.doesNotThrow(() => buildPayloadMessage(input), `${topic}/${verb}`);
     }
   }
@@ -100,6 +106,53 @@ test('shared field keys map to colliding enum families, so a stashed id must not
       zeroBased.length,
       families.length,
       `every ${key} family starts at 0, so ids overlap: ${families.join(', ')}`
+    );
+  }
+});
+
+test('gimbal roi-set refuses a blank coordinate rather than aiming at 0,0 (#88)', () => {
+  // buildPayloadMessage used to default lat/lon/alt to 0, so an operator who
+  // left a field blank pointed the camera at the Gulf of Guinea with no error.
+  const base = {
+    topic: 'gimbal',
+    verb: 'roi-set',
+    target: { sysid: 1, compid: 1 },
+    carrier: 'long',
+  };
+
+  for (const [missing, values] of [
+    ['lat', { lon: 8.5, alt: 30 }],
+    ['lon', { lat: 47.4, alt: 30 }],
+    ['alt', { lat: 47.4, lon: 8.5 }],
+  ]) {
+    assert.throws(
+      () => buildPayloadMessage({ ...base, values }),
+      new RegExp(`${missing} is required`),
+      `blank ${missing} must refuse`
+    );
+  }
+
+  // An explicit 0 is a real coordinate and still sends — the guard is against
+  // silence, not against the equator.
+  const built = buildPayloadMessage({ ...base, values: { lat: 0, lon: 0, alt: 0 } });
+  assert.equal(built.message.fields.param5, 0);
+  assert.equal(built.message.fields.param6, 0);
+});
+
+test('whitespace is blank for a required ROI coordinate (#141)', () => {
+  // hasValue() treated ' ' as present and Number(' ') is 0, so a whitespace
+  // latitude slipped past the required check and aimed at the equator.
+  for (const blank of [' ', '   ', '\t']) {
+    assert.throws(
+      () => buildPayloadMessage({
+        topic: 'gimbal',
+        verb: 'roi-set',
+        target: { sysid: 1, compid: 1 },
+        carrier: 'long',
+        values: { lat: blank, lon: 8.5, alt: 30 },
+      }),
+      /lat is required/,
+      `${JSON.stringify(blank)} must refuse`
     );
   }
 });

@@ -47,3 +47,29 @@ test('payload override wins over config', () => {
   assert.equal(user[1], 50);
   assert.equal(user[5], -35.36);
 });
+
+test('blank is absent, and everything else still merges as before (#141)', () => {
+  // Advanced mode reads these params straight through, so the contract is that
+  // a raw MAV_CMD can still be expressed exactly. Blank became absent to stop
+  // an empty override reading as coordinate 0; nothing else may have shifted.
+
+  // The NaN sentinel is the whole reason this function exists — JSON cannot
+  // carry a bare NaN, so the string form must survive.
+  assert.ok(Number.isNaN(mergeParams({ params: '{"5":"NaN"}' }, null)[5]));
+  assert.ok(Number.isNaN(mergeParams({}, { 5: NaN })[5]));
+
+  // Ordinary values, including the ones a blank check could plausibly eat.
+  assert.equal(mergeParams({}, { 1: 0 })[1], 0, 'explicit zero is a value');
+  assert.equal(mergeParams({}, { 7: -35.2 })[7], -35.2);
+  assert.equal(mergeParams({}, { 2: '47.4' })[2], 47.4, 'numeric strings still coerce');
+
+  // Blank in any form is absent. Advanced mode then supplies its own 0, which
+  // is its documented behaviour; a preset instead refuses (see presets.test.js).
+  for (const blank of ['', '   ', '\t', null]) {
+    assert.equal(mergeParams({}, { 5: blank })[5], undefined, JSON.stringify(blank));
+  }
+
+  // And a blank override no longer wipes a configured value to 0 — it falls
+  // through to what the node was configured with.
+  assert.equal(mergeParams({ params: '{"5":47.4}' }, { 5: '' })[5], 47.4);
+});
