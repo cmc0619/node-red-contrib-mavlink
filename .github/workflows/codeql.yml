@@ -1,0 +1,35 @@
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    # Weekly, so a newly published rule finds old code without waiting for a push.
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze JavaScript
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v3.28.16
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v3.28.16

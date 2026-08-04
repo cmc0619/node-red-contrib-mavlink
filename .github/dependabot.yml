@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # Actions are SHA-pinned, which is right — and rots without something
+  # bumping it (#106).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "deps"
+    # The runtime chain is pinned deliberately: node-mavlink drags a vulnerable
+    # xml2js through mavlink-mappings, and the only "fix" npm audit offers is a
+    # breaking downgrade. See SECURITY.md — do not let a bot take that trade.
+    ignore:
+      - dependency-name: node-mavlink
+        update-types: ["version-update:semver-major"]
+    groups:
+      dev-dependencies:
+        dependency-type: development
