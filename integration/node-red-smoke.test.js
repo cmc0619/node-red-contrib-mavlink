@@ -152,10 +152,8 @@ function representativeFlow() {
       z: 'flow',
       type: 'mavlink-fanout',
       delivery: 'build',
-      dialect: '__vehicle',
-      selectionMode: 'all',
-      actionType: 'command',
-      vehicle: 'vehicle',
+      selectionMode: 'list',
+      sysids: '1,2',
       identity: 'identity',
       wires: [[], []]
     }

@@ -10,6 +10,20 @@ see AGENTS.md "no migrations, no compatibility shims".
 
 ## [Unreleased]
 
+### Changed
+
+- **Fan-out is now a replicator, not an action node.** It takes one *built*
+  message — wire any action node's Build tier (or mavlink-build) into it — and
+  retargets it per member; the embedded command/move/payload/param mini-editor
+  is gone, and with it every duplicated builder path. What a message means is
+  inferred from its name (COMMAND_* ack-confirms, PARAM_SET echo-confirms
+  sequential-only at the wire plane, SET_POSITION_TARGET_* streams, MISSION_*
+  and PARAM_REQUEST_LIST refuse). New: per-target overrides
+  (`{message, targets: [{sysid, ...fieldPatches}]}` — wire units, the list is
+  the selection) and sequential `concurrency` so confirm waits can overlap.
+  Existing fan-out flows need rewiring (a Build node upstream); all bundled
+  examples are updated. `memberParams` is replaced by `targets`.
+
 ### Added
 
 - Move now covers the full `SET_POSITION_TARGET_*` matrix: modes Position,

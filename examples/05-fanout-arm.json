@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex05-tab",
     "name": "Fan-out sequential arm",
-    "info": "Dry-run then live sequential arm across ArduPilot SITL sysids 1\u20135. Live node has confirm=true. Bind 127.0.0.1:14550, remote 14551.",
+    "info": "One Command node in Build delivery (preset Arm) feeds two fan-outs: a dry-run preview and a live confirm run across ArduPilot SITL sysids 1\u20135. Live node has confirm=true. Bind 127.0.0.1:14550, remote 14551.",
     "x": 160,
     "y": 40,
     "wires": []
@@ -81,8 +81,87 @@
     "y": 160,
     "wires": [
       [
-        "ex05-fanout-dry"
+        "ex05-cmd-arm-build"
       ]
+    ]
+  },
+  {
+    "id": "ex05-cmd-arm-build",
+    "type": "mavlink-command",
+    "z": "ex05-tab",
+    "name": "Arm (build, dry)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "ardupilotmega",
+    "carrier": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 260,
+    "y": 160,
+    "wires": [
+      [
+        "ex05-fanout-dry"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "ex05-inject-live",
+    "type": "inject",
+    "z": "ex05-tab",
+    "name": "Live arm",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "once": false,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 240,
+    "wires": [
+      [
+        "ex05-cmd-arm-build-live"
+      ]
+    ]
+  },
+  {
+    "id": "ex05-cmd-arm-build-live",
+    "type": "mavlink-command",
+    "z": "ex05-tab",
+    "name": "Arm (build, live)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "ardupilotmega",
+    "carrier": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 260,
+    "y": 240,
+    "wires": [
+      [
+        "ex05-fanout-live"
+      ],
+      []
     ]
   },
   {
@@ -100,25 +179,6 @@
     "intervalMs": 100,
     "dryRun": true,
     "delivery": "build",
-    "actionType": "command",
-    "commandId": 400,
-    "preset": "",
-    "params": "{\"1\":1}",
-    "moveMode": "position",
-    "north": 0,
-    "east": 0,
-    "up": 0,
-    "lat": "",
-    "lon": "",
-    "alt": "",
-    "topic": "camera",
-    "verb": "photo",
-    "path": "legacy",
-    "paramAction": "set",
-    "paramId": "",
-    "value": "",
-    "paramType": "MAV_PARAM_TYPE_REAL32",
-    "firmware": "ardupilot",
     "timeoutMs": 10000,
     "x": 310,
     "y": 160,
@@ -128,38 +188,6 @@
       ],
       [
         "ex05-dry-status"
-      ]
-    ],
-    "carrier": "long",
-    "moveFrame": "LOCAL_NED"
-  },
-  {
-    "id": "ex05-inject-live",
-    "type": "inject",
-    "z": "ex05-tab",
-    "name": "Live arm",
-    "props": [
-      {
-        "p": "payload"
-      },
-      {
-        "p": "confirmed",
-        "v": "true",
-        "vt": "bool"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 120,
-    "y": 280,
-    "wires": [
-      [
-        "ex05-fanout-live"
       ]
     ]
   },
@@ -178,25 +206,6 @@
     "intervalMs": 100,
     "dryRun": false,
     "delivery": "confirm",
-    "actionType": "command",
-    "commandId": 400,
-    "preset": "",
-    "params": "{\"1\":1}",
-    "moveMode": "position",
-    "north": 0,
-    "east": 0,
-    "up": 0,
-    "lat": "",
-    "lon": "",
-    "alt": "",
-    "topic": "camera",
-    "verb": "photo",
-    "path": "legacy",
-    "paramAction": "set",
-    "paramId": "",
-    "value": "",
-    "paramType": "MAV_PARAM_TYPE_REAL32",
-    "firmware": "ardupilot",
     "timeoutMs": 10000,
     "x": 310,
     "y": 280,
@@ -208,9 +217,7 @@
         "ex05-live-status"
       ]
     ],
-    "confirm": true,
-    "carrier": "long",
-    "moveFrame": "LOCAL_NED"
+    "confirm": true
   },
   {
     "id": "ex05-dry-status",

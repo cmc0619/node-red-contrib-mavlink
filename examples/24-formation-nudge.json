@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex24-tab",
     "name": "Formation nudge",
-    "info": "Fan-out fans a Move velocity setpoint (Local NED) north=1 m/s across sysids 1\u20135. Broadcast pins target_system=0 (single-stack only). Bind 14550\u219214551.",
+    "info": "One Move node in Build delivery (velocity north=1 m/s, Local NED) feeds three fan-outs: dry-run, sequential across sysids 1\u20135, and broadcast (all active vehicles; target_system=0, single-stack only). Bind 14550\u219214551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -64,7 +64,7 @@
     "id": "ex24-inject-dry",
     "type": "inject",
     "z": "ex24-tab",
-    "name": "Dry run",
+    "name": "Nudge",
     "props": [
       {
         "p": "payload"
@@ -81,8 +81,48 @@
     "y": 160,
     "wires": [
       [
-        "ex24-fanout-dry"
+        "ex24-move-build"
       ]
+    ]
+  },
+  {
+    "id": "ex24-move-build",
+    "type": "mavlink-move",
+    "z": "ex24-tab",
+    "name": "Nudge north 1 m/s (build)",
+    "delivery": "build",
+    "mode": "velocity",
+    "frame": "LOCAL_NED",
+    "connection": "",
+    "dialect": "ardupilotmega",
+    "identity": "",
+    "targetSystem": "",
+    "targetComponent": "",
+    "north": 0,
+    "east": 0,
+    "up": 0,
+    "lat": "",
+    "lon": "",
+    "alt": "",
+    "vNorth": 1,
+    "vEast": 0,
+    "vUp": 0,
+    "aNorth": 0,
+    "aEast": 0,
+    "aUp": 0,
+    "yaw": "",
+    "yawRate": "",
+    "intervalMs": 100,
+    "ttlMs": 1000,
+    "x": 260,
+    "y": 200,
+    "wires": [
+      [
+        "ex24-fanout-dry",
+        "ex24-fanout-seq",
+        "ex24-fanout-bcast"
+      ],
+      []
     ]
   },
   {
@@ -100,28 +140,6 @@
     "intervalMs": 150,
     "dryRun": true,
     "delivery": "build",
-    "actionType": "move",
-    "commandId": 400,
-    "preset": "",
-    "params": "{}",
-    "moveMode": "velocity",
-    "north": 0,
-    "east": 0,
-    "up": 0,
-    "vNorth": 1,
-    "vEast": 0,
-    "vUp": 0,
-    "lat": "",
-    "lon": "",
-    "alt": "",
-    "topic": "camera",
-    "verb": "photo",
-    "path": "legacy",
-    "paramAction": "set",
-    "paramId": "",
-    "value": "",
-    "paramType": "MAV_PARAM_TYPE_REAL32",
-    "firmware": "ardupilot",
     "timeoutMs": 10000,
     "x": 320,
     "y": 160,
@@ -131,32 +149,6 @@
       ],
       [
         "ex24-debug-dry-status"
-      ]
-    ],
-    "moveFrame": "LOCAL_NED"
-  },
-  {
-    "id": "ex24-inject-seq",
-    "type": "inject",
-    "z": "ex24-tab",
-    "name": "Nudge (sequential)",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 130,
-    "y": 280,
-    "wires": [
-      [
-        "ex24-fanout-seq"
       ]
     ]
   },
@@ -175,28 +167,6 @@
     "intervalMs": 150,
     "dryRun": false,
     "delivery": "send",
-    "actionType": "move",
-    "commandId": 400,
-    "preset": "",
-    "params": "{}",
-    "moveMode": "velocity",
-    "north": 0,
-    "east": 0,
-    "up": 0,
-    "vNorth": 1,
-    "vEast": 0,
-    "vUp": 0,
-    "lat": "",
-    "lon": "",
-    "alt": "",
-    "topic": "camera",
-    "verb": "photo",
-    "path": "legacy",
-    "paramAction": "set",
-    "paramId": "",
-    "value": "",
-    "paramType": "MAV_PARAM_TYPE_REAL32",
-    "firmware": "ardupilot",
     "timeoutMs": 10000,
     "x": 320,
     "y": 280,
@@ -207,32 +177,6 @@
       [
         "ex24-debug-seq-status"
       ]
-    ],
-    "moveFrame": "LOCAL_NED"
-  },
-  {
-    "id": "ex24-inject-bcast",
-    "type": "inject",
-    "z": "ex24-tab",
-    "name": "Nudge (broadcast)",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 130,
-    "y": 400,
-    "wires": [
-      [
-        "ex24-fanout-bcast"
-      ]
     ]
   },
   {
@@ -241,8 +185,7 @@
     "z": "ex24-tab",
     "name": "Nudge (broadcast)",
     "connection": "ex24-connection",
-    "selectionMode": "list",
-    "sysids": "1,2,3,4,5",
+    "selectionMode": "all",
     "vehicleType": "",
     "firmwareFilter": "",
     "armedFilter": "",
@@ -250,28 +193,6 @@
     "intervalMs": 150,
     "dryRun": false,
     "delivery": "send",
-    "actionType": "move",
-    "commandId": 400,
-    "preset": "",
-    "params": "{}",
-    "moveMode": "velocity",
-    "north": 0,
-    "east": 0,
-    "up": 0,
-    "vNorth": 1,
-    "vEast": 0,
-    "vUp": 0,
-    "lat": "",
-    "lon": "",
-    "alt": "",
-    "topic": "camera",
-    "verb": "photo",
-    "path": "legacy",
-    "paramAction": "set",
-    "paramId": "",
-    "value": "",
-    "paramType": "MAV_PARAM_TYPE_REAL32",
-    "firmware": "ardupilot",
     "timeoutMs": 10000,
     "x": 320,
     "y": 400,
@@ -282,8 +203,7 @@
       [
         "ex24-debug-bcast-status"
       ]
-    ],
-    "moveFrame": "LOCAL_NED"
+    ]
   },
   {
     "id": "ex24-debug-dry-status",

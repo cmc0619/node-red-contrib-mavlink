@@ -11,16 +11,13 @@ test('mavlink-fanout node emits continue only for all-success aggregate', async 
   const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: 'conn',
-    actionType: 'command',
-    carrier: 'long',
-    commandId: 400,
     executionMode: 'sequential',
     delivery: 'send',
     intervalMs: 0,
   });
   let sent;
 
-  await emitInput(node, { payload: {} }, (messages) => {
+  await emitInput(node, { payload: builtCommand() }, (messages) => {
     sent = messages;
   });
 
@@ -29,15 +26,12 @@ test('mavlink-fanout node emits continue only for all-success aggregate', async 
   assert.equal(connection.sends.length, 2);
 });
 
-test('build+list with no connection succeeds — peer table not needed for explicit sysid list (§6)', async () => {
+test('build+list with no connection emits one retargeted message per member on output 0 (§6/§9)', async () => {
   const RED = redStub({});  // no connection registered
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: '',
-    actionType: 'command',
-    carrier: 'long',
-    commandId: 400,
     delivery: 'build',
     selectionMode: 'list',
     sysids: '1,2',
@@ -45,30 +39,52 @@ test('build+list with no connection succeeds — peer table not needed for expli
     intervalMs: 0,
   });
   let sent;
-  await emitInput(node, { payload: {} }, (messages) => { sent = messages; });
+  await emitInput(node, { payload: builtCommand() }, (messages) => { sent = messages; });
 
   assert.equal(sent[1].result, 'succeeded', 'build+list with no connection must succeed');
   assert.equal(sent[1].count, 2, 'both listed sysids built');
-  assert.equal(sent[0].payload.result, 'succeeded', 'output 0 carries built aggregate');
+  assert.ok(Array.isArray(sent[0]), 'output 0 carries the product batch for mavlink-out');
+  assert.deepEqual(
+    sent[0].map((m) => m.payload.fields.target_system),
+    [1, 2],
+    'one retargeted message per member'
+  );
+  assert.equal(sent[0][0].payload.name, 'COMMAND_LONG');
 });
 
-test('sysid list rejects values outside 1..255 (config and payload)', async () => {
+test('a payload that is not a built message fails loudly naming the contract', async () => {
+  const connection = connectionStub([peer(1)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({ connection: 'conn', delivery: 'send', intervalMs: 0 });
+
+  let sent;
+  const err = await emitInput(node, { payload: { commandId: 400 } }, (m) => { sent = m; }).then(
+    () => null,
+    (e) => e
+  );
+  assert.ok(err, 'refused non-message payload is passed to done(err)');
+  assert.equal(sent[0], null);
+  assert.equal(sent[1].result, 'refused');
+  assert.match(sent[1].detail, /Build-tier|mavlink-build/);
+  assert.equal(connection.sends.length, 0);
+});
+
+test('sysid list rejects values outside 1..255 (config and wrapper selection)', async () => {
   const RED = redStub({});
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
 
   const fromConfig = new Node({
     connection: '',
-    actionType: 'command',
-    carrier: 'long',
-    commandId: 400,
     delivery: 'build',
     selectionMode: 'list',
     sysids: '1,256',
     intervalMs: 0,
   });
   let sentConfig;
-  const errConfig = await emitInput(fromConfig, { payload: {} }, (m) => { sentConfig = m; }).then(
+  const errConfig = await emitInput(fromConfig, { payload: builtCommand() }, (m) => { sentConfig = m; }).then(
     () => null,
     (e) => e
   );
@@ -77,28 +93,25 @@ test('sysid list rejects values outside 1..255 (config and payload)', async () =
   assert.match(errConfig.message, /256/, 'error names the bad token');
   assert.equal(sentConfig[1].result, 'failed');
 
-  const fromPayload = new Node({
+  const fromWrapper = new Node({
     connection: '',
-    actionType: 'command',
-    carrier: 'long',
-    commandId: 400,
     delivery: 'build',
     selectionMode: 'list',
     sysids: '1,2',
     intervalMs: 0,
   });
-  let sentPayload;
-  const errPayload = await emitInput(
-    fromPayload,
-    { payload: { sysids: '0,3' } },
-    (m) => { sentPayload = m; }
+  let sentWrapper;
+  const errWrapper = await emitInput(
+    fromWrapper,
+    { payload: { message: builtCommand(), selection: { mode: 'list', sysids: '0,3' } } },
+    (m) => { sentWrapper = m; }
   ).then(
     () => null,
     (e) => e
   );
-  assert.ok(errPayload, 'out-of-range payload sysid (0 = broadcast) fails the input');
-  assert.match(errPayload.message, /1\.\.255/);
-  assert.equal(sentPayload[1].result, 'failed');
+  assert.ok(errWrapper, 'out-of-range wrapper sysid (0 = broadcast) fails the input');
+  assert.match(errWrapper.message, /1\.\.255/);
+  assert.equal(sentWrapper[1].result, 'failed');
 });
 
 test('build+all without connection fails loudly naming the rule (§6)', async () => {
@@ -107,15 +120,12 @@ test('build+all without connection fails loudly naming the rule (§6)', async ()
   const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: '',
-    actionType: 'command',
-    carrier: 'long',
-    commandId: 400,
     delivery: 'build',
     selectionMode: 'all',
     intervalMs: 0,
   });
   let sent;
-  const err = await emitInput(node, { payload: {} }, (m) => { sent = m; }).then(
+  const err = await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; }).then(
     () => null,
     (e) => e
   );
@@ -128,61 +138,58 @@ test('build+all without connection fails loudly naming the rule (§6)', async ()
   assert.match(sent[1].detail, /peer table/i, 'status record detail names the rule');
 });
 
-test('identityId from payload is passed through to connection.send options', async () => {
+test('wrapper identityId is passed through to connection.send options', async () => {
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: 'conn',
-    actionType: 'command',
-    carrier: 'long',
-    commandId: 400,
     delivery: 'send',
     intervalMs: 0,
   });
-  await emitInput(node, { payload: { identityId: 'my-identity-id' } }, () => {});
+  await emitInput(node, { payload: { message: builtCommand(), identityId: 'my-identity-id' } }, () => {});
 
   assert.equal(connection.sends.length, 1);
   assert.equal(connection.sends[0].options.identityId, 'my-identity-id',
-    'payload.identityId must reach connection.send options');
+    'wrapper identityId must reach connection.send options');
 });
 
-test('config.identity is used as identityId when payload does not override', async () => {
+test('config.identity is used as identityId when the wrapper does not override', async () => {
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: 'conn',
-    actionType: 'command',
-    carrier: 'long',
-    commandId: 400,
     delivery: 'send',
     identity: 'cfg-identity-id',
     intervalMs: 0,
   });
-  await emitInput(node, { payload: {} }, () => {});
+  await emitInput(node, { payload: builtCommand() }, () => {});
 
   assert.equal(connection.sends.length, 1);
   assert.equal(connection.sends[0].options.identityId, 'cfg-identity-id',
     'config.identity must reach connection.send options as identityId');
 });
 
-test('mavlink-fanout node gates a safety preset on msg.confirmed / node confirm (§10)', async () => {
+test('mavlink-fanout node gates DO_FLIGHTTERMINATION on msg.confirmed / node confirm (§10)', async () => {
   const RED = redStub({ conn: connectionStub([peer(1)]) });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
 
   // No confirmation anywhere → refused, nothing sent.
-  const gated = new Node({ connection: 'conn', carrier: 'long', actionType: 'command',
-    preset: 'flight_termination', delivery: 'send' });
+  const gated = new Node({ connection: 'conn', delivery: 'send' });
   let sent;
-  const err = await emitInput(gated, { payload: { 1: 1 } }, (m) => { sent = m; }).then(
+  const err = await emitInput(
+    gated,
+    { payload: builtCommand({ fields: { command: 185, param1: 1 } }) },
+    (m) => { sent = m; }
+  ).then(
     () => null,
     (e) => e
   );
-  assert.ok(err, 'refused safety preset is passed to done(err)');
+  assert.ok(err, 'refused safety command is passed to done(err)');
   assert.match(err.message, /mavlink-fanout: refused/);
   assert.ok(sent, 'status output is emitted before done(err)');
   assert.equal(sent[0], null);
@@ -194,24 +201,23 @@ test('mavlink-fanout node gates a safety preset on msg.confirmed / node confirm 
   const RED2 = redStub({ conn: conn2 });
   require('../../nodes/mavlink-fanout')(RED2);
   const okNode = new (RED2.nodes.types['mavlink-fanout'])({
-    connection: 'conn', actionType: 'command',
-    carrier: 'long', preset: 'flight_termination', delivery: 'send',
+    connection: 'conn', delivery: 'send',
   });
-  await emitInput(okNode, { payload: { 1: 1 }, confirmed: true }, () => {});
+  await emitInput(okNode, {
+    payload: builtCommand({ fields: { command: 185, param1: 1 } }),
+    confirmed: true,
+  }, () => {});
   assert.equal(conn2.sends.length, 1);
   assert.equal(conn2.sends[0].message.fields.command, 185);
 });
 
-test('msg.payload.memberParams reaches the fan-out action per member', async () => {
+test('wrapper targets reach the replicator with per-member patches', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: 'conn',
-    actionType: 'command',
-    carrier: 'long',
-    commandId: 192,
     executionMode: 'sequential',
     delivery: 'send',
     intervalMs: 0,
@@ -220,8 +226,8 @@ test('msg.payload.memberParams reaches the fan-out action per member', async () 
 
   await emitInput(node, {
     payload: {
-      params: { 5: 47.4, 6: 8.5 },
-      memberParams: { 2: { 5: 47.5, 6: 8.6 } },
+      message: builtCommand({ fields: { command: 192, param5: 47.4, param6: 8.5 } }),
+      targets: [1, { sysid: 2, param5: 47.5, param6: 8.6 }],
     },
   }, (messages) => { sent = messages; });
 
@@ -229,9 +235,9 @@ test('msg.payload.memberParams reaches the fan-out action per member', async () 
   const bySysid = Object.fromEntries(
     connection.sends.map((s) => [s.message.fields.target_system, s.message.fields])
   );
-  assert.equal(bySysid[1].param5, 47.4, 'member without an override keeps the shared params');
+  assert.equal(bySysid[1].param5, 47.4, 'bare sysid keeps the shared message');
   assert.equal(bySysid[1].param6, 8.5);
-  assert.equal(bySysid[2].param5, 47.5, 'payload.memberParams overrides that member');
+  assert.equal(bySysid[2].param5, 47.5, 'patched target gets its own fields');
   assert.equal(bySysid[2].param6, 8.6);
 });
 
@@ -242,6 +248,26 @@ function emitInput(node, msg, send) {
       else resolve();
     });
   });
+}
+
+function builtCommand(overrides = {}) {
+  return {
+    name: overrides.name || 'COMMAND_LONG',
+    fields: {
+      target_system: 0,
+      target_component: 0,
+      command: 400,
+      confirmation: 0,
+      param1: 0,
+      param2: 0,
+      param3: 0,
+      param4: 0,
+      param5: 0,
+      param6: 0,
+      param7: 0,
+      ...(overrides.fields || {}),
+    },
+  };
 }
 
 function peer(sysid) {
@@ -306,9 +332,6 @@ test('close cancels an in-flight fan-out and waits for it to unwind (#54/#57)', 
   const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: 'conn',
-    actionType: 'command',
-    carrier: 'long',
-    commandId: 400,
     executionMode: 'sequential',
     delivery: 'send',
     intervalMs: 60000,
@@ -316,7 +339,7 @@ test('close cancels an in-flight fan-out and waits for it to unwind (#54/#57)', 
 
   let emitted = false;
   let inputSettled = false;
-  const run = emitInput(node, { payload: {} }, () => { emitted = true; })
+  const run = emitInput(node, { payload: builtCommand() }, () => { emitted = true; })
     .then(() => { inputSettled = true; });
 
   // Let the first member's send happen and the loop reach the pause.
@@ -349,9 +372,6 @@ test('close cancels every concurrent fan-out, not just the newest (Greptile #140
   const Node = RED.nodes.types['mavlink-fanout'];
   const node = new Node({
     connection: 'conn',
-    actionType: 'command',
-    carrier: 'long',
-    commandId: 400,
     executionMode: 'sequential',
     delivery: 'send',
     intervalMs: 60000,
@@ -359,8 +379,8 @@ test('close cancels every concurrent fan-out, not just the newest (Greptile #140
 
   let firstSettled = false;
   let secondSettled = false;
-  const first = emitInput(node, { payload: {} }, () => {}).then(() => { firstSettled = true; });
-  const second = emitInput(node, { payload: {} }, () => {}).then(() => { secondSettled = true; });
+  const first = emitInput(node, { payload: builtCommand() }, () => {}).then(() => { firstSettled = true; });
+  const second = emitInput(node, { payload: builtCommand() }, () => {}).then(() => { secondSettled = true; });
 
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(connection.sends.length, 2, 'both runs sent to their first member');

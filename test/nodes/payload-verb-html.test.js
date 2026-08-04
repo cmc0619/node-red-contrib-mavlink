@@ -55,20 +55,10 @@ test('mavlink-payload verb is a topic-dependent select', () => {
   assert.doesNotMatch(payloadHtml, /PAYLOAD_VERBS\s*=/, 'no local PAYLOAD_VERBS table');
 });
 
-test('mavlink-fanout verb is a topic-dependent select', () => {
-  assertVerbSelect(fanoutHtml, 'mavlink-fanout');
-  assert.match(
-    fanoutHtml,
-    /RED\.mavlink\.refreshVerbOptions/,
-    'verb options come from the shared helper'
-  );
-  assert.match(
-    fanoutHtml,
-    /\$\('#node-input-topic'\)\.on\('change'/,
-    'topic change refreshes verb options'
-  );
-  assert.doesNotMatch(fanoutHtml, /function refreshVerbOptions/, 'no local verb-options copy');
-  assert.doesNotMatch(fanoutHtml, /PAYLOAD_VERBS\s*=/, 'no local PAYLOAD_VERBS table');
+test('mavlink-fanout has no payload verb editor — it replicates built messages (§10)', () => {
+  assert.doesNotMatch(fanoutHtml, /node-input-verb/, 'no verb select in the replicator editor');
+  assert.doesNotMatch(fanoutHtml, /node-input-topic/, 'no payload topic select either');
+  assert.doesNotMatch(fanoutHtml, /PAYLOAD_VERBS/, 'no payload verb table reference');
 });
 
 test('editor catalog includes every lib/payload verb value', () => {

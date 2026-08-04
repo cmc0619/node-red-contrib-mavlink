@@ -6,36 +6,6 @@
     defaults: {
       name: { value: '' },
       connection: { value: '', type: 'mavlink-connection', required: false },
-      dialect: {
-        value: '',
-        validate: function (v) {
-          var $delivery = $('#node-input-delivery');
-          var delivery = ($delivery && $delivery.length) ? $delivery.val() : (this.delivery || 'build');
-          var $selectionMode = $('#node-input-selectionMode');
-          var selectionMode = ($selectionMode && $selectionMode.length)
-            ? $selectionMode.val()
-            : (this.selectionMode || 'all');
-          if (delivery === 'build' && selectionMode === 'list') return !!v;
-          return true;
-        },
-      },
-      vehicle: {
-        value: '',
-        type: 'mavlink-vehicle',
-        required: false,
-        validate: function (v) {
-          var $delivery = $('#node-input-delivery');
-          var delivery = ($delivery && $delivery.length) ? $delivery.val() : (this.delivery || 'build');
-          var $selectionMode = $('#node-input-selectionMode');
-          var selectionMode = ($selectionMode && $selectionMode.length)
-            ? $selectionMode.val()
-            : (this.selectionMode || 'all');
-          var $dialect = $('#node-input-dialect');
-          var dialect = ($dialect && $dialect.length && $dialect.val()) ? $dialect.val() : (this.dialect || '');
-          if (delivery === 'build' && selectionMode === 'list' && dialect === '__vehicle') return !!v;
-          return true;
-        },
-      },
       identity: { value: '' },
       selectionMode: { value: 'all' },
       sysids: {
@@ -57,43 +27,18 @@
       armedFilter: { value: '' },
       executionMode: { value: 'sequential' },
       intervalMs: { value: 100, validate: RED.validators.number() },
+      concurrency: {
+        value: 1,
+        validate: function (v) {
+          var n = Number(v);
+          return Number.isInteger(n) && n >= 1;
+        },
+      },
       dryRun: { value: false },
       confirm: { value: false },
       delivery: { value: 'build' },
-      actionType: { value: 'command' },
-      carrier: { value: 'int' },
-      frame: { value: '' },
-      commandId: { value: 400, validate: RED.validators.number() },
-      preset: { value: '' },
-      // Free-text JSON: the editor is the loud-failure point — the runtime
-      // mergeParams treats unparseable saved JSON as empty (§2 config trust).
-      params: { value: '{}', validate: function (v) {
-        if (!v) return true;
-        try { JSON.parse(v); return true; } catch (_e) { return false; }
-      } },
-      moveMode: { value: 'position' },
-      moveFrame: { value: 'LOCAL_NED' },
-      north: { value: 0, validate: RED.validators.number(true) },
-      east: { value: 0, validate: RED.validators.number(true) },
-      up: { value: 0, validate: RED.validators.number(true) },
-      lat: { value: '', validate: RED.validators.number(true) },
-      lon: { value: '', validate: RED.validators.number(true) },
-      alt: { value: '', validate: RED.validators.number(true) },
-      vNorth: { value: 0, validate: RED.validators.number(true) },
-      vEast: { value: 0, validate: RED.validators.number(true) },
-      vUp: { value: 0, validate: RED.validators.number(true) },
-      aNorth: { value: 0, validate: RED.validators.number(true) },
-      aEast: { value: 0, validate: RED.validators.number(true) },
-      aUp: { value: 0, validate: RED.validators.number(true) },
-      topic: { value: 'camera' },
-      verb: { value: 'photo' },
-      path: { value: 'legacy' },
-      paramAction: { value: 'set' },
-      paramId: { value: '' },
-      value: { value: '', validate: RED.validators.number(true) },
-      paramType: { value: 'MAV_PARAM_TYPE_REAL32' },
-      firmware: { value: 'ardupilot' },
-      timeoutMs: { value: 10000, validate: RED.validators.number() }
+      timeoutMs: { value: 10000, validate: RED.validators.number() },
+      maxRetries: { value: 0, validate: RED.validators.number() }
     },
     inputs: 1,
     outputs: 2,
@@ -104,147 +49,61 @@
       var node = this;
       if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
-
-      $('#node-input-topic').on('change', function () {
-        RED.mavlink.refreshVerbOptions();
-        refreshCarrierRows();
-      });
-      $('#node-input-verb').on('change', refreshCarrierRows);
-      $('#node-input-path').on('change', refreshCarrierRows);
-      RED.mavlink.refreshVerbOptions({ saved: node.verb });
 
       var _msgCatalog = { seq: 0 };
-      var _cmdCatalog = { seq: 0 };
-
-      // Fan-out's Build path is narrower than the shared rule: the Dialect picker
-      // only governs when Delivery is Build AND Selection is an explicit list;
-      // every other combination reads the connection's profile (§6). Feed that
-      // as the isBuild override into the shared loadCatalog / resolver.
-      function fanoutIsBuildList() {
-        var delivery = $('#node-input-delivery').val() || 'build';
-        var selectionMode = $('#node-input-selectionMode').val() || 'all';
-        return delivery === 'build' && selectionMode === 'list';
-      }
-
-      function loadMessagesCatalog(cb) {
-        RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
-          isBuild: fanoutIsBuildList(),
-          listKey: 'messages'
-        });
-      }
-
-      function buildVehicleTypeDropdown(catalog) {
-        if (!catalog) return;
-        var sel = $('#node-input-vehicleType');
-        var prefer = sel.val() || (
-          node.vehicleType !== undefined && node.vehicleType !== null
-            ? String(node.vehicleType)
-            : ''
-        );
-        RED.mavlink.fillEnumSelect(sel, (catalog.enums && catalog.enums.MAV_TYPE) || [], {
-          saved: prefer,
-          allowEmpty: true,
-          emptyLabel: 'Any type',
-          titleNamespace: 'mavTypeTip',
-          triggerChange: false
-        });
-      }
-
-      function loadCommandsCatalog(cb) {
-        RED.mavlink.loadCatalog('/mavlink/command/commands', _cmdCatalog, cb, {
-          isBuild: fanoutIsBuildList(),
-          listKey: 'commands'
-        });
-      }
-
-      function buildCommandDropdown(catalog) {
-        var sel = $('#node-input-commandId');
-        var prefer = sel.val() || (
-          node.commandId !== undefined && node.commandId !== null
-            ? String(node.commandId)
-            : ''
-        );
-        RED.mavlink.fillEnumSelect(sel, catalog.commands || [], {
-          saved: prefer,
-          titleNamespace: 'mavCmdTip',
-          triggerChange: false
-        });
-      }
-
       function refreshVehicleTypeOptions() {
-        loadMessagesCatalog(buildVehicleTypeDropdown);
+        // MAV_TYPE options come from the connection's profile catalog; without
+        // a connection the filter cannot resolve at runtime anyway, so an
+        // unfilled dropdown is honest, not broken.
+        RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, function (catalog) {
+          if (!catalog) return;
+          var sel = $('#node-input-vehicleType');
+          var prefer = sel.val() || (
+            node.vehicleType !== undefined && node.vehicleType !== null
+              ? String(node.vehicleType)
+              : ''
+          );
+          RED.mavlink.fillEnumSelect(sel, (catalog.enums && catalog.enums.MAV_TYPE) || [], {
+            saved: prefer,
+            allowEmpty: true,
+            emptyLabel: 'Any type',
+            titleNamespace: 'mavTypeTip',
+            triggerChange: false
+          });
+        }, { isBuild: false, listKey: 'messages' });
       }
 
-      function refreshCommandOptions() {
-        loadCommandsCatalog(buildCommandDropdown);
-      }
-
+      /**
+       * §6 reshape: only the rows for the current selection, execution, and
+       * delivery exist. Sysids only for list selection; filter rows only for
+       * filter selection; interval/concurrency only for sequential; confirm
+       * timing only for the confirm tier; identity only on wire tiers.
+       */
       function refreshVisibility() {
         var d = $('#node-input-delivery').val() || 'build';
         var sel = $('#node-input-selectionMode').val() || 'all';
-        // Fan-out's Build path for this matrix is the narrow Build+list case
-        // (same isBuild override resolveCatalogTarget already takes).
-        var isBuildList = d === 'build' && sel === 'list';
-        var dialect = $('#node-input-dialect').val() || node.dialect || '';
-        RED.mavlink.applyBuildTierRowVisibility({
-          isBuild: isBuildList,
-          dialect: dialect,
-          dialectRow: '#row-fanout-dialect',
-          vehicleRow: '#row-fanout-vehicle',
-          connectionRow: '#row-fanout-connection'
-        });
+        var exec = $('#node-input-executionMode').val() || 'sequential';
         $('#row-fanout-identity').toggle(d !== 'build');
+        $('#row-fanout-sysids').toggle(sel === 'list');
+        $('#row-fanout-typeFilter').toggle(sel === 'filter');
+        $('#row-fanout-firmwareFilter').toggle(sel === 'filter');
+        $('#row-fanout-armedFilter').toggle(sel === 'filter');
+        $('#row-fanout-interval').toggle(exec === 'sequential');
+        $('#row-fanout-concurrency').toggle(exec === 'sequential' && d === 'confirm');
+        $('#row-fanout-timeout').toggle(d === 'confirm');
+        $('#row-fanout-retries').toggle(d === 'confirm');
       }
 
-      function refreshCatalogsAndVisibility() {
-        refreshVehicleTypeOptions();
-        refreshCommandOptions();
-        refreshVisibility();
-      }
-
-      var $dialect = $('#node-input-dialect');
-      $dialect.on('change', refreshCatalogsAndVisibility);
-      if (RED.mavlink && RED.mavlink.populateDialectSelect) {
-        RED.mavlink.populateDialectSelect($dialect, {
-          saved: node.dialect || '',
-          includeVehicleEscape: true
-        });
-      }
-      $('#node-input-vehicle').on('change', function () {
-        refreshVehicleTypeOptions();
-        refreshCommandOptions();
-      });
+      $('#node-input-delivery').on('change', refreshVisibility);
+      $('#node-input-selectionMode').on('change', refreshVisibility);
+      $('#node-input-executionMode').on('change', refreshVisibility);
       $('#node-input-connection').on('change', function () {
         refreshVehicleTypeOptions();
-        refreshCommandOptions();
         RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: ['gcs', 'custom'] });
         refreshVisibility();
       });
-      $('#node-input-delivery').on('change', refreshCatalogsAndVisibility);
-      $('#node-input-selectionMode').on('change', refreshCatalogsAndVisibility);
-
-      // ── Carrier (§9) ───────────────────────────────────────────────────────
-      // Carrier applies to anything riding a MAV_CMD: command actions and
-      // command-backed payload verbs. Message-kind payload verbs (gimbal
-      // manager aiming) ignore it. Frame only exists on COMMAND_INT.
-      function refreshCarrierRows() {
-        var t = $('#node-input-actionType').val() || 'command';
-        var usesCarrier = t === 'command' ||
-          (t === 'payload' && !RED.mavlink.payloadVerbIgnoresCarrier(
-            $('#node-input-topic').val() || 'camera',
-            $('#node-input-verb').val() || '',
-            $('#node-input-path').val() || 'legacy'
-          ));
-        $('#row-fanout-carrier').toggle(usesCarrier);
-        $('#row-fanout-frame').toggle(usesCarrier && $('#node-input-carrier').val() === 'int');
-      }
-      $('#node-input-carrier').on('change', refreshCarrierRows);
-      $('#node-input-actionType').on('change', refreshCarrierRows);
-      refreshCarrierRows();
       refreshVehicleTypeOptions();
-      refreshCommandOptions();
       RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: ['gcs', 'custom'] });
       refreshVisibility();
     }
@@ -254,83 +113,28 @@
 <script type="text/html" data-template-name="mavlink-fanout">
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row" id="row-fanout-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
-  <div class="form-row" id="row-fanout-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
-  <div class="form-row" id="row-fanout-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
   <div class="form-row" id="row-fanout-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-selectionMode">Selection</label><select id="node-input-selectionMode"><option value="all">All active vehicles</option><option value="list">Explicit sysid list</option><option value="filter">Filter</option></select></div>
-  <div class="form-row"><label for="node-input-sysids">Sysids</label><input type="text" id="node-input-sysids" placeholder="1,2,3"></div>
-  <div class="form-row"><label for="node-input-vehicleType">Type filter</label><select id="node-input-vehicleType"></select></div>
-  <div class="form-row"><label for="node-input-firmwareFilter">Firmware</label><select id="node-input-firmwareFilter"><option value="">Any</option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
-  <div class="form-row"><label for="node-input-armedFilter">Armed</label><select id="node-input-armedFilter"><option value="">Any</option><option value="true">Armed</option><option value="false">Disarmed</option></select></div>
+  <div class="form-row" id="row-fanout-sysids"><label for="node-input-sysids">Sysids</label><input type="text" id="node-input-sysids" placeholder="1,2,3"></div>
+  <div class="form-row" id="row-fanout-typeFilter"><label for="node-input-vehicleType">Type filter</label><select id="node-input-vehicleType"></select></div>
+  <div class="form-row" id="row-fanout-firmwareFilter"><label for="node-input-firmwareFilter">Firmware</label><select id="node-input-firmwareFilter"><option value="">Any</option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
+  <div class="form-row" id="row-fanout-armedFilter"><label for="node-input-armedFilter">Armed</label><select id="node-input-armedFilter"><option value="">Any</option><option value="true">Armed</option><option value="false">Disarmed</option></select></div>
   <div class="form-row"><label for="node-input-executionMode">Execution</label><select id="node-input-executionMode"><option value="sequential">Sequential</option><option value="broadcast">Broadcast</option></select></div>
-  <div class="form-row"><label for="node-input-intervalMs">Interval ms</label><input type="number" id="node-input-intervalMs" min="0"></div>
+  <div class="form-row" id="row-fanout-interval"><label for="node-input-intervalMs">Interval ms</label><input type="number" id="node-input-intervalMs" min="0"></div>
+  <div class="form-row" id="row-fanout-concurrency"><label for="node-input-concurrency">Concurrency</label><input type="number" id="node-input-concurrency" min="1" style="width:80px"> <span class="form-tips">confirm waits in flight at once; 1 = strictly sequential</span></div>
   <div class="form-row"><label for="node-input-dryRun">Dry run</label><input type="checkbox" id="node-input-dryRun" style="display:inline-block;width:auto;"></div>
   <div class="form-row"><label for="node-input-confirm">Confirm</label><input type="checkbox" id="node-input-confirm" style="display:inline-block;width:auto;"> <span>Allow safety commands (Flight Termination)</span></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
-  <div class="form-row"><label for="node-input-actionType">Action</label><select id="node-input-actionType"><option value="command">Command</option><option value="move">Move</option><option value="payload">Payload</option><option value="param">Param set</option><option value="mission">Mission (refused)</option></select></div>
-  <div class="form-row"><label for="node-input-commandId">Command</label><select id="node-input-commandId" style="width:70%"></select></div>
-  <div class="form-row"><label for="node-input-params">Params JSON</label><input type="text" id="node-input-params" placeholder='{"1":1}'></div>
-  <div class="form-row" id="row-fanout-carrier"><label for="node-input-carrier">Carrier</label><select id="node-input-carrier" style="width:70%"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
-  <div class="form-row" id="row-fanout-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="">Global, relative alt (default)</option><option value="3">Global, relative alt</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
-  <div class="form-row"><label for="node-input-moveMode">Move mode</label><select id="node-input-moveMode">
-    <option value="position">Position</option>
-    <option value="velocity">Velocity</option>
-    <option value="position-velocity">Position + Velocity</option>
-    <option value="acceleration">Acceleration</option>
-    <option value="force">Force</option>
-    <option value="yaw-only">Yaw only</option>
-  </select></div>
-  <div class="form-row"><label for="node-input-moveFrame">Move frame</label><select id="node-input-moveFrame">
-    <optgroup label="Local">
-      <option value="LOCAL_NED">Local NED (world origin)</option>
-      <option value="LOCAL_OFFSET_NED">Offset from current position</option>
-      <option value="BODY_OFFSET_NED">Body offset — ArduPilot GUIDED</option>
-      <option value="BODY_NED">Body NED — PX4 OFFBOARD</option>
-    </optgroup>
-    <optgroup label="Global">
-      <option value="GLOBAL_RELATIVE_ALT_INT">Global, altitude above home</option>
-      <option value="GLOBAL_INT">Global, absolute altitude (MSL)</option>
-      <option value="GLOBAL_TERRAIN_ALT_INT">Global, terrain altitude</option>
-    </optgroup>
-  </select></div>
-  <div class="form-row"><label for="node-input-north">North</label><input type="number" id="node-input-north"></div>
-  <div class="form-row"><label for="node-input-east">East</label><input type="number" id="node-input-east"></div>
-  <div class="form-row"><label for="node-input-up">Up</label><input type="number" id="node-input-up"></div>
-  <div class="form-row"><label for="node-input-lat">Latitude</label><input type="number" id="node-input-lat"></div>
-  <div class="form-row"><label for="node-input-lon">Longitude</label><input type="number" id="node-input-lon"></div>
-  <div class="form-row"><label for="node-input-alt">Altitude</label><input type="number" id="node-input-alt"></div>
-  <div class="form-row"><label for="node-input-vNorth">Vel north</label><input type="number" id="node-input-vNorth"></div>
-  <div class="form-row"><label for="node-input-vEast">Vel east</label><input type="number" id="node-input-vEast"></div>
-  <div class="form-row"><label for="node-input-vUp">Vel up</label><input type="number" id="node-input-vUp"></div>
-  <div class="form-row"><label for="node-input-aNorth">Accel north</label><input type="number" id="node-input-aNorth"></div>
-  <div class="form-row"><label for="node-input-aEast">Accel east</label><input type="number" id="node-input-aEast"></div>
-  <div class="form-row"><label for="node-input-aUp">Accel up</label><input type="number" id="node-input-aUp"></div>
-  <div class="form-row"><label for="node-input-topic">Payload topic</label><select id="node-input-topic"><option value="camera">Camera</option><option value="gimbal">Gimbal</option><option value="servo">Servo</option><option value="gripper">Gripper</option><option value="winch">Winch</option><option value="parachute">Parachute</option></select></div>
-  <div class="form-row"><label for="node-input-verb">Payload verb</label><select id="node-input-verb"></select></div>
-  <div class="form-row"><label for="node-input-path">Payload path</label><select id="node-input-path"><option value="legacy">Legacy</option><option value="manager">Gimbal manager</option></select></div>
-  <div class="form-row"><label for="node-input-paramId">Param id</label><input type="text" id="node-input-paramId" maxlength="16"></div>
-  <div class="form-row"><label for="node-input-value">Param value</label><input type="number" id="node-input-value"></div>
-  <div class="form-row"><label for="node-input-paramType">Param type</label><select id="node-input-paramType"><option value="MAV_PARAM_TYPE_REAL32">REAL32 (9)</option><option value="MAV_PARAM_TYPE_UINT8">UINT8 (1)</option><option value="MAV_PARAM_TYPE_INT8">INT8 (2)</option><option value="MAV_PARAM_TYPE_UINT16">UINT16 (3)</option><option value="MAV_PARAM_TYPE_INT16">INT16 (4)</option><option value="MAV_PARAM_TYPE_UINT32">UINT32 (5)</option><option value="MAV_PARAM_TYPE_INT32">INT32 (6)</option></select></div>
-  <div class="form-row"><label for="node-input-timeoutMs">Timeout ms</label><input type="number" id="node-input-timeoutMs" min="1"></div>
+  <div class="form-row" id="row-fanout-timeout"><label for="node-input-timeoutMs">Timeout ms</label><input type="number" id="node-input-timeoutMs" min="1"></div>
+  <div class="form-row" id="row-fanout-retries"><label for="node-input-maxRetries">Retries</label><input type="number" id="node-input-maxRetries" min="0"></div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-fanout">
-  <p>Fans one single-message MAVLink action out across the active vehicles selected from a Connection peer table.</p>
-  <p>Sequential mode sends one targeted message per member at the configured interval. Broadcast mode sends one packet with target_system 0 and target_component 1.</p>
-  <p>Output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail. Mission actions and parameter list requests are refused.</p>
-  <p>The <b>Carrier</b> field is required for Command actions and command-backed
-  Payload verbs (§9) — message-kind payload verbs (gimbal manager aiming) ignore it:
-  <code>COMMAND_INT</code> scales positional params from decimal degrees to
-  <code>degE7</code> integers with an explicit <b>Frame</b>;
-  <code>COMMAND_LONG</code> sends float params. Positional values are always
-  entered in decimal degrees. <code>msg.payload.carrier</code> and
-  <code>msg.payload.mavFrame</code> override per message.</p>
-  <p>For Command actions in sequential mode, <code>msg.payload.memberParams</code>
-  (<code>{sysid: {paramIndex: value}}</code>, same canonical units as the params)
-  overrides individual params per member — e.g. each vehicle's own lat/lon/alt in
-  params 5/6/7 — while members without an entry use the shared params unchanged.</p>
+  <p>Replicates one <b>built</b> MAVLink message across the active vehicles selected from a Connection peer table. Fan-out is a replicator, not an action node: wire any action node in <b>Build</b> delivery (Command, Move, Payload, Param — or mavlink-build) into it, and it retargets that message per member.</p>
+  <p><code>msg.payload</code> is either the built message <code>{name, fields}</code> straight off a Build output, or the wrapper <code>{message, targets, ...options}</code>. <code>targets</code> is an array of sysids or <code>{sysid, ...fieldPatches}</code> objects — the patches overwrite message fields per member in <b>wire units</b> (Fan-out is a raw surface; a COMMAND_INT location patch is degE7), and the list itself becomes the selection. Runtime option overrides (<code>executionMode</code>, <code>delivery</code>, <code>intervalMs</code>, <code>concurrency</code>, …) ride the wrapper too.</p>
+  <p>What the message means is inferred from its name: <code>COMMAND_LONG</code>/<code>COMMAND_INT</code> confirm by COMMAND_ACK; <code>PARAM_SET</code> confirms by its PARAM_VALUE echo (sequential only); <code>SET_POSITION_TARGET_*</code> setpoints carry no ack and ride the streaming band. <code>MISSION_*</code> and <code>PARAM_REQUEST_LIST</code> are refused — multi-message transactions cannot be replicated.</p>
+  <p>Sequential mode sends one retargeted message per member at the configured interval; <b>Concurrency</b> lets up to N confirm waits overlap so one slow vehicle doesn't delay the rest. Broadcast mode sends one packet with target_system 0 and target_component 1, and requires the <i>All active vehicles</i> selection — a broadcast reaches every vehicle on the link, so it cannot honour a subset, per-target patches, or a PARAM_SET.</p>
+  <p>On <b>Build</b> delivery output 0 emits the product — one retargeted message per member (or the single broadcast packet) for a downstream <b>mavlink-out</b>; no Connection is needed when the selection is an explicit list. On wire tiers output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail.</p>
   <p><b>Send as</b> — selects the GCS or custom identity that stamps source SysID/CompID on outbound frames. Only identities with a <code>gcs</code> or <code>custom</code> role are offered. Hidden on Build delivery (source ids are stamped at the wire by the sending node).</p>
-  <p>The Connection is not required when Delivery is <b>Build</b> and Selection is <b>Explicit sysid list</b> — the list resolves without a live peer table. All other combinations (all/filter even in Build) still require a Connection because the peer table is the only place those selections resolve.</p>
-  <p>Broadcast requires the <i>All active vehicles</i> selection: a broadcast packet reaches every vehicle on the link, so it cannot honour a filtered or explicit-list subset. Use sequential fan-out for a subset.</p>
   <p>Safety commands (Flight Termination) are refused unless the <b>Confirm</b> box is ticked or <code>msg.confirmed = true</code> is set.</p>
 </script>

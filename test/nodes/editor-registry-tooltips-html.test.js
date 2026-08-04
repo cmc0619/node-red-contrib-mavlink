@@ -51,16 +51,17 @@ test('Command Advanced MAV_CMD select and enum options use catalog descriptions'
   assert.match(html, /spec\.description \|\| ''/);
 });
 
-test('In / Fan-out message and command selects use shared fillEnumSelect', () => {
+test('In / Fan-out enum selects use shared fillEnumSelect', () => {
   const inn = readHtml('mavlink-in');
   assert.match(inn, /RED\.mavlink\.fillEnumSelect\(sel,/);
   assert.match(inn, /titleNamespace:\s*'mavMsgTip'/);
   assert.doesNotMatch(inn, /function syncMessageTitle/);
 
+  // The replicator keeps one enum select — the MAV_TYPE member filter.
   const fanout = readHtml('mavlink-fanout');
   assert.match(fanout, /RED\.mavlink\.fillEnumSelect\(sel,/);
-  assert.match(fanout, /titleNamespace:\s*'mavCmdTip'/);
   assert.match(fanout, /titleNamespace:\s*'mavTypeTip'/);
+  assert.doesNotMatch(fanout, /titleNamespace:\s*'mavCmdTip'/, 'no command select in the replicator');
   assert.doesNotMatch(fanout, /function syncCmdTitle|function syncTypeTitle/);
 });
 

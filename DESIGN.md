@@ -186,7 +186,7 @@ makes unreachable.
 | `mavlink-param` | read one, set one, request list |
 | `mavlink-payload` | camera, gimbal, servo, gripper, winch, parachute |
 | `mavlink-state` | peer table reads, transitions, snapshots |
-| `mavlink-fanout` | group fan-out with aggregation |
+| `mavlink-fanout` | replicates one built message across a group (selection × sequential/broadcast), with per-target overrides, concurrency, and honest aggregation |
 
 **Dependencies.** `node-mavlink` for framing/CRC/signing primitives, a shipped MAVLink XML
 seed (`seed/mavlink`) for dialect definitions, an XML parser, and `serialport` as an
@@ -1375,7 +1375,49 @@ rows are generated per verb and there is no `#node-input-<slot>` to read at save
 
 ## 10. Fan-out
 
-`mavlink-fanout` fans one action out across a selected group.
+`mavlink-fanout` is a **replicator, not an action node**: it takes one *built* message — the
+`{name, fields}` shape every action node's Build tier and mavlink-build emit — and replicates
+it across a selected group, retargeting `target_system`/`target_component` per member. Message
+construction lives in exactly one place, the action nodes' Build tiers; Fan-out owns only what
+exists when there is more than one vehicle: selection, execution strategy, pacing, per-member
+retargeting, and honest aggregation. The wiring is `command/move/payload/param [Build] →
+fan-out`, the same producer/consumer contract mavlink-out already speaks.
+
+`msg.payload` is either the built message directly, or the wrapper `{message, targets,
+...options}` when a Function node adds per-target patches or runtime option overrides — the
+wrapper keeps every runtime override on the payload (§6).
+
+**What a message means is inferred from its name**, and its confirmation rides along:
+
+| Message | Confirmation | Notes |
+|---|---|---|
+| `COMMAND_LONG` / `COMMAND_INT` | real `COMMAND_ACK` per member | retry bumps the LONG `confirmation` counter |
+| `PARAM_SET` | wire-plane `PARAM_VALUE` echo | sequential only — broadcast makes the echoes a storm |
+| `SET_POSITION_TARGET_*` | none — setpoints carry no ack | rides the streaming band |
+| any other targeted message | none | fire-and-forget on the control band |
+| `MISSION_*`, `PARAM_REQUEST_LIST` | **refused** | multi-message transactions / bulk transfers |
+| no `target_system` field | **refused** | nothing to retarget |
+
+The `PARAM_SET` echo compares at the wire plane (`matchesParamEchoWire`, lib/param): the
+replicator holds only the built message, and a vehicle that applied the set verbatim echoes the
+identical float32 bit pattern — c-cast float or bytewise integer alike — so `Object.is` on
+`Math.fround` of both sides is the invariant, and a clamped value honestly reports unconfirmed.
+
+**Per-target overrides.** `targets` is an array of sysids or `{sysid, ...fieldPatches}`
+objects: the list *is* the selection (explicit-list semantics — the caller cannot ask for one
+group and patch another), and the patches overwrite message fields per member in **wire units**.
+Fan-out is a raw surface (§ "unit conversion belongs to exactly one of two surfaces"): a
+COMMAND_INT location patch is degE7, exactly as mavlink-build would take it — the typed
+degrees-in surface is the action node upstream. `target_system` is forced back to the member
+after patching, so a patch cannot cross-address another vehicle. Broadcast refuses `targets`
+(uniform messages only, below). Safety: `DO_FLIGHTTERMINATION` (185) in a replicated command
+still requires `msg.confirmed === true` or the node's Confirm — the gate reads the wire fields.
+
+**Concurrency.** Sequential fan-out dispatches up to `concurrency` members at once (default 1 —
+strictly sequential, the historical cadence). Where it earns its keep is the confirm tier: at
+concurrency 1 a single timing-out straggler delays everyone behind it by timeout × retries;
+raising it lets confirm waits overlap while `intervalMs` still paces every launch. Records keep
+member order regardless.
 
 **Selection** comes from the peer table: all vehicles, an explicit sysid list, or a filter on
 type, firmware, or armed state. Groups resolve at execution, not deploy — a vehicle that went
@@ -1430,16 +1472,8 @@ failed in the aggregate status. Aborting leaves the fleet half-commanded, which 
 than either end state; re-resolving silently adds vehicles the operator never approved. Continue
 is the only option that ends in a state the operator can reason about.
 
-**Fan-out wraps single-message actions, never multi-message transactions.**
-
-| Action | Fan-out | Why |
-|---|---|---|
-| Command | yes | one message, one acknowledgement per vehicle |
-| Move | yes | setpoints, no acknowledgement to correlate |
-| Payload | yes | commands, same shape as Command |
-| Param — set one | sequential only | one message confirmed by echo; broadcast makes the echoes a storm |
-| Param — request list | no | a bulk transfer, not a message |
-| Mission — any action | no | a conversation the vehicle drives |
+**Fan-out replicates single messages, never multi-message transactions** — the message-name
+table above is the whole rule, enforced by name at the boundary.
 
 Mission is the instructive exclusion. Upload is `MISSION_COUNT`, then the vehicle requesting items
 by sequence, then an acknowledgement — many messages to *one* target. Broadcasting it starts a
