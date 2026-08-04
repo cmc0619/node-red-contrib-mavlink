@@ -171,9 +171,9 @@ module.exports = function registerMavlinkFormation(RED) {
  * 0 (pattern faces north) rather than refusing: unlike a defaulted coordinate
  * or altitude, any heading yields a geometrically valid, fully separated
  * formation — the value orients the pattern, it cannot collapse it (§2:
- * refusals are for inputs whose default is silently dangerous). A heading that
- * is *present but not numeric* is a refusal, not a default — absent means
- * "don't care", garbage means the flow is wired wrong.
+ * refusals are for inputs whose default is silently dangerous). A *payload*
+ * heading that is present but not numeric is a refusal, not a default — absent
+ * means "don't care", garbage means the flow is wired wrong.
  *
  * @param {object} config node config
  * @param {object} payload msg.payload
@@ -181,14 +181,22 @@ module.exports = function registerMavlinkFormation(RED) {
  * @returns {{anchor: {lat: *, lon: *, alt: *}, headingDeg: number}}
  */
 function resolveAnchor(config, payload, peerTable) {
-  let heading = firstNonBlank(payload.headingDeg, config.headingDeg);
+  // Only msg.payload.headingDeg is runtime-boundary input — validate it where
+  // it enters, naming the raw value. config.headingDeg is editor-validated
+  // (trust it: Number() only, no re-validation), and a leader's telemetry
+  // heading is projected to a finite number or null by the peer table.
+  const payloadHeading = firstNonBlank(payload.headingDeg);
+  const configHeading = firstNonBlank(config.headingDeg);
+  let heading = payloadHeading !== null
+    ? headingNumber(payloadHeading)
+    : configHeading === null ? null : Number(configHeading);
 
   const explicit = payload.anchor
     || (config.anchorMode === 'fixed'
       ? { lat: config.lat, lon: config.lon, alt: config.alt }
       : null);
   if (explicit) {
-    return { anchor: explicit, headingDeg: headingNumber(heading) };
+    return { anchor: explicit, headingDeg: heading ?? 0 };
   }
 
   const sysid = Number(config.leader);
@@ -209,22 +217,21 @@ function resolveAnchor(config, payload, peerTable) {
   if (heading === null) heading = position.heading; // may still be null (wire sentinel)
   return {
     anchor: { lat: position.lat, lon: position.lon, alt: position.relativeAlt },
-    headingDeg: headingNumber(heading),
+    headingDeg: heading ?? 0,
   };
 }
 
 /**
- * Coerce a resolved heading to degrees. Absent (null/undefined) means north
- * (0) — the documented safe default. A present but non-numeric value refuses
- * here, at the runtime boundary, so the error names the raw input; letting the
- * coerced NaN travel on would still refuse (lib/formation validates the
- * heading) but the message would say `NaN` instead of what the flow sent.
+ * Validate a present msg.payload.headingDeg — the one runtime-boundary heading
+ * source. Strict on type like lib/formation's finite(): only numbers and
+ * non-empty numeric strings pass; anything else refuses, naming the raw input
+ * (letting the coerced NaN travel on would still refuse in lib/formation, but
+ * the message would say `NaN` instead of what the flow sent).
  *
- * @param {*} heading resolved heading (payload, config, or leader telemetry)
+ * @param {*} heading payload heading value (already known non-blank)
  * @returns {number} heading in degrees
  */
 function headingNumber(heading) {
-  if (heading === null || heading === undefined) return 0;
   const n = typeof heading === 'number'
     || (typeof heading === 'string' && heading.trim() !== '')
     ? Number(heading)

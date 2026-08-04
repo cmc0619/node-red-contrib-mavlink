@@ -353,10 +353,13 @@ test('close aborts an in-flight formation run and waits for it to unwind', async
   const closedAt = Date.now();
   await new Promise((resolve) => node.emit('close', resolve));
   const closeMs = Date.now() - closedAt;
+  // Capture before awaiting run: afterwards the assertion would hold trivially
+  // and stop proving that close itself waited for the unwind.
+  const inputSettledAtClose = inputSettled;
   await run;
 
   assert.ok(closeMs < 5000, `close returned promptly (${closeMs}ms), not after the 60 s interval`);
-  assert.equal(inputSettled, true, 'close waited for the run to unwind before reporting closed');
+  assert.equal(inputSettledAtClose, true, 'close waited for the run to unwind before reporting closed');
   assert.equal(connection.sends.length, 1, 'members 2 and 3 never receive a reposition');
   assert.equal(emitted, false, 'a cancelled run emits nothing onto a closed node');
 });
