@@ -167,16 +167,16 @@ test('sphere formationTargets vary altitude from the anchor', () => {
   assert.ok(alts.some((a) => a > 40) && alts.some((a) => a < 40), 'followers span above and below');
 });
 
-test('bodyToNed pitch 90 maps forward to down (tumble around +Y)', () => {
+test('bodyToNed pitch 90 maps forward to −down (nose-up tumble around +Y)', () => {
   const ned = bodyToNed({ forward: 10, right: 0, down: 0 }, 0, 90);
   approx(ned.north, 0, 1e-9, 'north');
   approx(ned.east, 0, 1e-9, 'east');
-  approx(ned.down, 10, 1e-9, 'down');
+  approx(ned.down, -10, 1e-9, 'down');
 });
 
 test('formationTargets pitchDeg tumbles a column without changing lateral separation', () => {
-  // Column slot 1 is 10 m behind (forward −10). Pitch +90 → that offset becomes
-  // down −10, so the follower sits 10 m above the anchor at the same lat/lon.
+  // Column slot 1 is 10 m behind (forward −10). Nose-up pitch +90 → that
+  // offset becomes down +10, so the follower sits 10 m below the anchor.
   const targets = formationTargets({
     shape: 'column',
     spacing: 10,
@@ -187,7 +187,7 @@ test('formationTargets pitchDeg tumbles a column without changing lateral separa
   });
   approx(targets[1].lat, 47.397742, 1e-12, 'slot 1 lat');
   approx(targets[1].lon, 8.545594, 1e-12, 'slot 1 lon');
-  approx(targets[1].alt, 40, 1e-9, 'slot 1 alt = anchor − (−10)');
+  approx(targets[1].alt, 20, 1e-9, 'slot 1 alt = anchor − (+10)');
 });
 
 test('formationTargets rotates the pattern by the heading', () => {
