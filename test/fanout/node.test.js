@@ -202,6 +202,39 @@ test('mavlink-fanout node gates a safety preset on msg.confirmed / node confirm 
   assert.equal(conn2.sends[0].message.fields.command, 185);
 });
 
+test('msg.payload.memberParams reaches the fan-out action per member', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({
+    connection: 'conn',
+    actionType: 'command',
+    carrier: 'long',
+    commandId: 192,
+    executionMode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  let sent;
+
+  await emitInput(node, {
+    payload: {
+      params: { 5: 47.4, 6: 8.5 },
+      memberParams: { 2: { 5: 47.5, 6: 8.6 } },
+    },
+  }, (messages) => { sent = messages; });
+
+  assert.equal(sent[1].result, 'succeeded');
+  const bySysid = Object.fromEntries(
+    connection.sends.map((s) => [s.message.fields.target_system, s.message.fields])
+  );
+  assert.equal(bySysid[1].param5, 47.4, 'member without an override keeps the shared params');
+  assert.equal(bySysid[1].param6, 8.5);
+  assert.equal(bySysid[2].param5, 47.5, 'payload.memberParams overrides that member');
+  assert.equal(bySysid[2].param6, 8.6);
+});
+
 function emitInput(node, msg, send) {
   return new Promise((resolve, reject) => {
     node.emit('input', msg, send, (err) => {
@@ -294,10 +327,13 @@ test('close cancels an in-flight fan-out and waits for it to unwind (#54/#57)', 
   const closedAt = Date.now();
   await new Promise((resolve) => node.emit('close', resolve));
   const closeMs = Date.now() - closedAt;
+  // Capture before awaiting run: afterwards the assertion would hold trivially
+  // and stop proving that close itself waited for the unwind.
+  const inputSettledAtClose = inputSettled;
   await run;
 
   assert.ok(closeMs < 5000, `close returned promptly (${closeMs}ms), not after the 60 s interval`);
-  assert.equal(inputSettled, true, 'close waited for the run to unwind before reporting closed');
+  assert.equal(inputSettledAtClose, true, 'close waited for the run to unwind before reporting closed');
   assert.equal(connection.sends.length, 1, 'members 2 and 3 never receive a command');
   assert.equal(emitted, false, 'a cancelled run emits nothing onto a closed node');
 });

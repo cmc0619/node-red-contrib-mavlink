@@ -277,7 +277,7 @@ test('frame row binds to the frame property and follows the INT carrier (§9)', 
   assert.match(
     html,
     /frame:\s*\{ value: '' \}/,
-    'frame is declared in defaults (blank = builder default GLOBAL) so the selection persists'
+    'frame is declared in defaults (blank = builder default GLOBAL_RELATIVE_ALT) so the selection persists'
   );
   assert.match(html, /row-fanout-frame/, 'frame row id must exist');
   assert.match(html, /refreshCarrierRows/, 'carrier/frame visibility is wired');

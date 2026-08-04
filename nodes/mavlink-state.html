@@ -107,4 +107,13 @@
     <li>Continue — snapshot peers (on input) or feed records as they arrive.</li>
     <li>Status — terminal status on every snapshot outcome (success or failure). Feed mode uses output 0 only for the event stream.</li>
   </ol>
+  <h3>Snapshot telemetry</h3>
+  <p>Each snapshot component carries the last-received telemetry in canonical units; a key is <code>null</code> when its message has never been seen, and a field is <code>null</code> when the vehicle sent the wire sentinel for "unknown".</p>
+  <ul>
+    <li><code>position</code> — <code>lat</code>/<code>lon</code> degrees, <code>alt</code> m AMSL, <code>relativeAlt</code> m, <code>heading</code> degrees.</li>
+    <li><code>gps</code> — <code>fixType</code> (GPS_FIX_TYPE), <code>satellites</code>.</li>
+    <li><code>battery</code> — <code>id</code>, <code>voltage</code> V, <code>remaining</code> %, <code>current</code> A; SYS_STATUS carries no id/current, BATTERY_STATUS no voltage.</li>
+    <li><code>home</code> — <code>lat</code>/<code>lon</code> degrees, <code>alt</code> m AMSL.</li>
+  </ul>
+  <p>These are last-seen values, not live readings — gate on the <code>sections.*</code> ages (ms) for freshness.</p>
 </script>
