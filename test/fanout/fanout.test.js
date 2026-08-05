@@ -9,6 +9,7 @@ const {
   guardFanoutInput,
   selectFanoutMembers,
 } = require('../../lib/fanout');
+const { BAND } = require('../../lib/connection/bands');
 
 test('selection resolves all, explicit list, and filters while excluding stale peers', () => {
   const peerTable = peerTableStub([
@@ -54,24 +55,80 @@ test('a payload that is not a built message is refused with a pointer at Build t
   assert.equal(connection.sends.length, 0);
 });
 
-test('mission messages and PARAM_REQUEST_LIST are refused — not single-message actions (§10)', async () => {
+test('mission transfer steps and PARAM_REQUEST_LIST are refused — not single-message actions (§10)', async () => {
   const connection = connectionStub([peer(1)]);
 
-  const mission = await executeFanout({
-    connection,
-    message: { name: 'MISSION_COUNT', fields: { target_system: 1, target_component: 1, count: 4 } },
-    delivery: 'send',
-  });
+  for (const name of [
+    'MISSION_COUNT',
+    'MISSION_ITEM_INT',
+    'MISSION_REQUEST_LIST',
+    'MISSION_ACK',
+    'MISSION_WRITE_PARTIAL_LIST',
+  ]) {
+    const refused = await executeFanout({
+      connection,
+      message: { name, fields: { target_system: 1, target_component: 1, count: 4 } },
+      delivery: 'send',
+    });
+    assert.equal(refused.result, 'refused', `${name} must refuse`);
+    assert.match(refused.detail, /mission transfer/);
+  }
+
   const paramList = await executeFanout({
     connection,
     message: { name: 'PARAM_REQUEST_LIST', fields: { target_system: 1, target_component: 1 } },
     delivery: 'send',
   });
-
-  assert.equal(mission.result, 'refused');
-  assert.match(mission.detail, /Mission/);
   assert.equal(paramList.result, 'refused');
   assert.match(paramList.detail, /bulk transfer/);
+  assert.equal(connection.sends.length, 0);
+});
+
+test('single-shot MISSION_* commands replicate — the family name is not the rule (§10)', async () => {
+  // MISSION_SET_CURRENT ("everyone jump to waypoint 5") and MISSION_CLEAR_ALL
+  // ("everyone wipe your mission") are addressed single messages, not steps in
+  // a transfer. A MISSION_ prefix match refused them; the explicit step list
+  // does not. Neither carries a COMMAND_ACK, so both stay fire-and-forget.
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  const setCurrent = await executeFanout({
+    connection,
+    message: { name: 'MISSION_SET_CURRENT', fields: { target_system: 0, target_component: 0, seq: 5 } },
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  assert.equal(setCurrent.success, true);
+  assert.deepEqual(connection.sends.map((s) => s.message.fields.target_system), [1, 2]);
+  assert.equal(connection.sends[0].message.fields.seq, 5);
+
+  const clearAll = await executeFanout({
+    connection: connectionStub([peer(1)]),
+    message: { name: 'MISSION_CLEAR_ALL', fields: { target_system: 0, target_component: 0, mission_type: 0 } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+  assert.equal(clearAll.success, true);
+});
+
+test('every offboard setpoint rides the streaming band, not just the position pair', async () => {
+  // A SET_POSITION_TARGET_ prefix left SET_ATTITUDE_TARGET and
+  // SET_ACTUATOR_CONTROL_TARGET on the control band, where a 50 Hz stream
+  // competes with arm/RTL for the queue.
+  for (const name of [
+    'SET_POSITION_TARGET_LOCAL_NED',
+    'SET_POSITION_TARGET_GLOBAL_INT',
+    'SET_ATTITUDE_TARGET',
+    'SET_ACTUATOR_CONTROL_TARGET',
+  ]) {
+    const kind = classifyMessage(
+      { name, fields: { target_system: 1, target_component: 1 } },
+      'sequential'
+    ).kind;
+    assert.equal(kind.band, BAND.STREAMING, `${name} must ride the streaming band`);
+    assert.equal(kind.confirmation, 'none', `${name} carries no acknowledgement`);
+  }
 });
 
 test('a message with no target_system field cannot be retargeted and is refused', async () => {

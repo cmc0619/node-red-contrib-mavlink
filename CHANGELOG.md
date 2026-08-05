@@ -16,9 +16,11 @@ see AGENTS.md "no migrations, no compatibility shims".
   message — wire any action node's Build tier (or mavlink-build) into it — and
   retargets it per member; the embedded command/move/payload/param mini-editor
   is gone, and with it every duplicated builder path. What a message means is
-  inferred from its name (COMMAND_* ack-confirms, PARAM_SET echo-confirms
-  sequential-only at the wire plane, SET_POSITION_TARGET_* streams, MISSION_*
-  and PARAM_REQUEST_LIST refuse). New: per-target overrides
+  inferred from its name — matched against explicit name sets, never prefixes
+  (COMMAND_* ack-confirms; PARAM_SET echo-confirms sequential-only at the wire
+  plane; the four offboard setpoints stream; mission *transfer steps* and
+  PARAM_REQUEST_LIST refuse, while single-shot MISSION_SET_CURRENT /
+  MISSION_CLEAR_ALL replicate normally). New: per-target overrides
   (`{message, targets: [{sysid, ...fieldPatches}]}` — wire units, the list is
   the selection) and sequential `concurrency` so confirm waits can overlap.
   Existing fan-out flows need rewiring (a Build node upstream); all bundled

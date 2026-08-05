@@ -1395,10 +1395,24 @@ wrapper keeps every runtime override on the payload (§6).
 |---|---|---|
 | `COMMAND_LONG` / `COMMAND_INT` | real `COMMAND_ACK` per member | retry bumps the LONG `confirmation` counter |
 | `PARAM_SET` | wire-plane `PARAM_VALUE` echo | sequential only — broadcast makes the echoes a storm |
-| `SET_POSITION_TARGET_*` | none — setpoints carry no ack | rides the streaming band |
+| offboard setpoints (`SET_POSITION_TARGET_LOCAL_NED`/`_GLOBAL_INT`, `SET_ATTITUDE_TARGET`, `SET_ACTUATOR_CONTROL_TARGET`) | none — setpoints carry no ack | rides the streaming band |
 | any other targeted message | none | fire-and-forget on the control band |
-| `MISSION_*`, `PARAM_REQUEST_LIST` | **refused** | multi-message transactions / bulk transfers |
+| mission **transfer steps**, `PARAM_REQUEST_LIST` | **refused** | multi-message transactions / bulk transfers |
 | no `target_system` field | **refused** | nothing to retarget |
+
+Both tables are **explicit name sets, never name prefixes**. A `MISSION_` prefix over-refuses:
+`MISSION_SET_CURRENT` ("everyone jump to waypoint 5") and `MISSION_CLEAR_ALL` are addressed
+single messages that fan out perfectly well, and a custom dialect's `MISSION_*` would be refused
+sight unseen. A `SET_POSITION_TARGET_` prefix under-catches, silently leaving `SET_ATTITUDE_TARGET`
+and `SET_ACTUATOR_CONTROL_TARGET` on the control band where a 50 Hz stream competes with arm/RTL
+for the queue. The dialect XML cannot answer either question — "participates in a transfer
+protocol" is protocol semantics, not message metadata — so the sets are hand-curated, like the
+command presets, and each addition is a deliberate judgement.
+
+Fan-out addresses **each member's autopilot**: selection resolves autopilot components, and the
+built message's `target_component` is replaced per member (broadcast pins it to 1, §10
+"Broadcast"). A message hand-addressed to some other component is re-addressed, not honoured —
+Fan-out is a fleet tool, and the per-component case is the single-vehicle nodes' job.
 
 The `PARAM_SET` echo compares at the wire plane (`matchesParamEchoWire`, lib/param): the
 replicator holds only the built message, and a vehicle that applied the set verbatim echoes the
