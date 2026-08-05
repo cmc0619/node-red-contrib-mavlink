@@ -385,17 +385,19 @@ test('an XZ archive is named as such instead of reaching JSON.parse', async (t) 
   );
 });
 
-test('a non-JSON body is quoted as printable ASCII only', async (t) => {
+test('a body that is neither JSON nor XML is quoted as printable ASCII only', async (t) => {
   const userDir = tempUserDir(t);
   const previousFetch = globalThis.fetch;
-  // "<html>" followed by bytes that would render as control characters.
-  globalThis.fetch = async () => bytesResponse([0x3c, 0x68, 0x74, 0x6d, 0x6c, 0x3e, 0x00, 0x01, 0x1f]);
+  // "oops" followed by bytes that would render as control characters. A body
+  // starting with '<' takes the XML branch instead and gets its own message.
+  globalThis.fetch = async () => bytesResponse([0x6f, 0x6f, 0x70, 0x73, 0x00, 0x01, 0x1f]);
   t.after(() => { globalThis.fetch = previousFetch; });
 
   await assert.rejects(
-    updateParamDefs(userDir, 'profile-html', 'https://example.invalid/params'),
+    updateParamDefs(userDir, 'profile-garbage', 'https://example.invalid/params'),
     (err) => {
-      assert.match(err.message, /did not return JSON \(starts with "<html>\.\.\."\)/);
+      assert.match(err.message, /did not return JSON or XML \(starts with "oops\.\.\."\)/);
+      assert.doesNotMatch(err.message, /Unexpected token/);
       return true;
     }
   );
@@ -412,4 +414,117 @@ test('a well-formed PX4 document still downloads and persists', async (t) => {
   assert.equal(result.count, 1);
   const reread = await readParamDefs(userDir, 'profile-px4');
   assert.equal(reread.get('RC1_MIN').unit, 'us');
+});
+
+/**
+ * PX4 publishes the same 1836 parameters twice: `parameters.json.xz` and an
+ * uncompressed `parameters.xml`. The XML is what makes PX4 usable without an
+ * LZMA dependency, so it normalizes into the PX4 *JSON* shape and every
+ * assertion about that shape above continues to hold.
+ */
+const PX4_XML = `<?xml version="1.0"?>
+<parameters>
+  <version>3</version>
+  <group name="Radio Calibration">
+    <parameter name="RC1_MIN" default="1000.0" type="FLOAT">
+      <short_desc>RC channel 1 minimum</short_desc>
+      <long_desc>Minimum value for RC channel 1</long_desc>
+      <min>800.0</min>
+      <max>1500.0</max>
+      <unit>us</unit>
+      <increment>0.5</increment>
+    </parameter>
+    <parameter name="RC1_TRIM" type="FLOAT">
+      <short_desc>RC trim</short_desc>
+    </parameter>
+  </group>
+  <group name="ADSB">
+    <parameter name="ADSB_EMERGC" type="INT32">
+      <short_desc>ADSB-Out Emergency State</short_desc>
+      <values>
+        <value code="0">NoEmergency</value>
+        <value code="-1.0">Negative float code</value>
+      </values>
+    </parameter>
+    <parameter name="ADSB_IDENT" type="INT32" boolean="true">
+      <short_desc>ADSB-Out Ident Configuration</short_desc>
+      <long_desc>Enable Identification of Position feature</long_desc>
+    </parameter>
+  </group>
+</parameters>`;
+
+function xmlResponse(text) {
+  return { ok: true, async arrayBuffer() { return Buffer.from(text, 'utf8'); } };
+}
+
+test('PX4 parameters.xml is read, walking groups and mapping snake_case elements', async (t) => {
+  const userDir = tempUserDir(t);
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => xmlResponse(PX4_XML);
+  t.after(() => { globalThis.fetch = previousFetch; });
+
+  const { count } = await updateParamDefs(
+    userDir, 'profile-xml', 'https://artifacts.px4.io/Firmware/_general/parameters.xml'
+  );
+  assert.equal(count, 4, 'parameters are found inside their <group> wrappers');
+
+  const map = await readParamDefs(userDir, 'profile-xml');
+  assert.deepEqual(map.get('RC1_MIN'), {
+    description: 'Minimum value for RC channel 1',
+    unit: 'us',
+    min: 800,
+    max: 1500,
+    increment: 0.5,
+    values: undefined,
+  });
+  assert.equal(
+    map.get('RC1_TRIM').description, 'RC trim',
+    'short_desc carries the entry when long_desc is absent'
+  );
+});
+
+test('XML value codes are not always integers', () => {
+  // 36 of PX4's real entries use codes like "-1.0"; a digits-only test drops them.
+  const previous = globalThis.fetch;
+  globalThis.fetch = previous;
+  const map = parsePdefJson({
+    parameters: [{ name: 'X', shortDesc: 'x', values: [{ value: -1.0, description: 'Neg' }] }],
+  });
+  assert.deepEqual(map.get('X').values, [{ value: -1, label: 'Neg' }]);
+});
+
+test('a boolean="true" parameter expands to the Disabled/Enabled pair PX4 itself generates', async (t) => {
+  // The XML states booleans as an attribute and omits <values>; PX4's own JSON
+  // generator expands it. This is the entire measured difference between the
+  // two published formats — 98 parameters, 0 otherwise unexplained.
+  const userDir = tempUserDir(t);
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => xmlResponse(PX4_XML);
+  t.after(() => { globalThis.fetch = previousFetch; });
+
+  await updateParamDefs(userDir, 'profile-bool', 'https://example.invalid/parameters.xml');
+  const map = await readParamDefs(userDir, 'profile-bool');
+  assert.deepEqual(map.get('ADSB_IDENT').values, [
+    { value: 0, label: 'Disabled' },
+    { value: 1, label: 'Enabled' },
+  ]);
+  // An explicit <values> block still wins over the attribute expansion.
+  assert.deepEqual(map.get('ADSB_EMERGC').values, [
+    { value: 0, label: 'NoEmergency' },
+    { value: -1, label: 'Negative float code' },
+  ]);
+});
+
+test('XML that is not a parameter document says so instead of reporting zero parameters', async (t) => {
+  const userDir = tempUserDir(t);
+  const previousFetch = globalThis.fetch;
+  // An HTML error page also starts with '<' and would otherwise reach the
+  // "contains no parameter definitions" wall, which reads as an empty source.
+  globalThis.fetch = async () => xmlResponse('<html><body>404 Not Found</body></html>');
+  t.after(() => { globalThis.fetch = previousFetch; });
+
+  await assert.rejects(
+    updateParamDefs(userDir, 'profile-html-xml', 'https://example.invalid/oops'),
+    /no <parameters> root/
+  );
 });
