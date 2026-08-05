@@ -381,7 +381,15 @@ test('GET honours firmware and family sent by the editor, with no deployed profi
 
   assert.equal(res.body.source, 'seed');
   assert.ok(res.body.defs.RC1_MIN, 'definitions arrive without a deployed profile');
-  assert.ok(res.body.defs.ARSPD_OFF_PCNT, 'and the plane document was selected, not the union');
+  assert.ok(res.body.defs.ARSPD_OFF_PCNT, 'and the plane document answered');
+  // The discriminating half: ARSPD_OFF_PCNT is in the union too, so it passes
+  // either way. ACRO_BAL_PITCH is Copter-only, so its absence is what proves
+  // the family was honoured rather than ignored.
+  assert.equal(
+    res.body.defs.ACRO_BAL_PITCH,
+    undefined,
+    'the plane document was selected, not the ArduPilot union'
+  );
 });
 
 test('GET prefers the editor query over a stale deployed profile', async (t) => {

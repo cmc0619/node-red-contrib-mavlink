@@ -177,11 +177,18 @@ test('mavlink-param CompID reloads when catalog source changes', () => {
 });
 
 /**
- * The value validator. Node-RED evaluates `validate` outside oneditprepare, so
- * it reads a script-scope mirror of the definitions rather than the dialog's
- * own cache — this exercises the real function out of the file.
+ * Mount the real value validator out of the file.
+ *
+ * Node-RED evaluates `validate` outside oneditprepare, against a saved config
+ * with no dialog open, so the extracted body runs in a context carrying the
+ * real shared helpers — a stubbed `resolveCatalogTarget` would quietly stop
+ * proving that the loader and the validator derive the same key.
+ *
+ * @param {string} liveParamId  what the dialog's paramId field reports
+ * @param {Function} [nodeFor]  RED.nodes.node stand-in
+ * @returns {object} the VM context: validateForTest, keyForTest, seed
  */
-function mountValueValidator(defs, liveParamId) {
+function mountValidator(liveParamId, nodeFor) {
   const start = html.indexOf('var _paramDefsByKey = {};');
   const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
   assert.ok(start >= 0 && end > start, 'the keyed cache and key helper are present');
@@ -194,24 +201,32 @@ function mountValueValidator(defs, liveParamId) {
   const valueStart = html.indexOf('validate: function (v) {', valueKey);
   assert.ok(valueStart > valueKey, 'the value validator is present');
   const valueEnd = html.indexOf('\n        },', valueStart);
+  // Unguarded, a moved closing brace makes this -1: the slice loses its last
+  // character and the failure surfaces as a SyntaxError that names nothing.
+  assert.ok(valueEnd > valueStart, 'the value validator terminates at the expected anchor');
   const body = html.slice(valueStart + 'validate: function (v) {'.length, valueEnd);
   assert.match(body, /_paramDefsByKey/, 'the extracted body is the definition-aware validator');
 
-  // Real shared helpers: the point of the keyed cache is that `validate` and
-  // the loader derive the same key from the same resolver, which a stubbed
-  // resolver here would quietly stop proving.
   const context = {
     $: () => ({ val: () => liveParamId, length: 0 }),
     Number,
-    RED: { mavlink: {}, nodes: { node: () => null } },
+    RED: { mavlink: {}, nodes: { node: nodeFor || (() => null) } },
   };
   installEditorHelpers(context);
   vm.runInNewContext(
     `${html.slice(start, end)}
-     _paramDefsByKey[paramDefsKey({})] = ${JSON.stringify(defs)};
+     this.keyForTest = paramDefsKey;
+     this.seed = function (map) { for (var k in map) { _paramDefsByKey[k] = map[k]; } };
      this.validateForTest = function (v) { ${body} };`,
     context
   );
+  return context;
+}
+
+/** One definition set, under the key a dialog with no fields set would compute. */
+function mountValueValidator(defs, liveParamId) {
+  const context = mountValidator(liveParamId);
+  context.seed({ [context.keyForTest({})]: defs });
   return context.validateForTest;
 }
 
@@ -261,37 +276,7 @@ test('mavlink-param value validator: with no definitions loaded it is the plain 
  * with 2000 would fail on a value that firmware accepts.
  */
 function mountKeyedValidator(byKey, editedNode, liveParamId) {
-  const start = html.indexOf('var _paramDefsByKey = {};');
-  const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
-  assert.ok(start >= 0 && end > start, 'the keyed cache and key helper are present');
-
-  // Anchor from the `value:` key: a bare search finds the first inline
-  // validator in the file, so adding one earlier in paramDefaults would
-  // silently point this harness at a different function.
-  const valueKey = html.indexOf('value: {');
-  assert.ok(valueKey > 0, 'the value default is present');
-  const valueStart = html.indexOf('validate: function (v) {', valueKey);
-  assert.ok(valueStart > valueKey, 'the value validator is present');
-  const valueEnd = html.indexOf('\n        },', valueStart);
-  const body = html.slice(valueStart + 'validate: function (v) {'.length, valueEnd);
-  assert.match(body, /_paramDefsByKey/, 'the extracted body is the definition-aware validator');
-
-  // Real shared helpers: the point of the keyed cache is that `validate` and
-  // the loader derive the same key from the same resolver, which a stubbed
-  // resolver here would quietly stop proving.
-  const context = {
-    $: () => ({ val: () => liveParamId, length: 0 }),
-    Number,
-    RED: { mavlink: {}, nodes: { node: () => null } },
-  };
-  installEditorHelpers(context);
-  vm.runInNewContext(
-    `${html.slice(start, end)}
-     this.keyForTest = paramDefsKey;
-     this.seed = function (map) { for (var k in map) { _paramDefsByKey[k] = map[k]; } };
-     this.validateForTest = function (v) { ${body} };`,
-    context
-  );
+  const context = mountValidator(liveParamId);
   context.seed(byKey);
   return context.validateForTest.bind(editedNode);
 }
@@ -325,31 +310,18 @@ test('mavlink-param value validator: a node whose definitions were never loaded 
 });
 
 test('mavlink-param defs key: the Vehicle Profile escape keys on the profile, not the dialect', () => {
-  const key = mountKeyedValidator(BY_KEY, {}, '') && null;
-  // Re-mount just to reach the exported helper.
-  const start = html.indexOf('var _paramDefsByKey = {};');
-  const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
-  const context = {
-    $: () => ({ val: () => '', length: 0 }),
-    RED: { mavlink: {}, nodes: { node: () => ({ vehicle: 'v9', dialect: 'ardupilotmega' }) } },
-  };
-  installEditorHelpers(context);
-  vm.runInNewContext(`${html.slice(start, end)}\nthis.k = paramDefsKey;`, context);
+  const k = mountValidator('', () => ({ vehicle: 'v9', dialect: 'ardupilotmega' })).keyForTest;
 
   // The profile's own metadata joins its key, so editing an undeployed
   // profile's firmware or family cannot be served the previous catalog.
-  assert.match(
-    context.k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v1' }),
-    /^vehicle:v1\|/
-  );
+  assert.match(k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v1' }), /^vehicle:v1\|/);
   assert.notEqual(
-    context.k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v1' }),
-    context.k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v2' }),
+    k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v1' }),
+    k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v2' }),
     'two profiles are two definition sets'
   );
   // Wire tiers resolve the profile through the connection.
-  assert.match(context.k({ delivery: 'send', connection: 'c1' }), /^vehicle:v9\|/);
-  assert.equal(key, null);
+  assert.match(k({ delivery: 'send', connection: 'c1' }), /^vehicle:v9\|/);
 });
 
 test('mavlink-param value validator: falls back to the saved id when no dialog is open', () => {
