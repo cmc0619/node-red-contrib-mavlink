@@ -12,6 +12,20 @@ see AGENTS.md "no migrations, no compatibility shims".
 
 ### Added
 
+- **PX4 parameter definitions now work from the upstream URL.** Point Param
+  defs URL at `https://artifacts.px4.io/Firmware/_general/parameters.xml` and
+  Update loads all 1836 definitions. PX4 publishes the same parameters twice —
+  `parameters.json.xz` and an uncompressed `parameters.xml` — and reading the
+  XML avoids an LZMA dependency entirely, since `fast-xml-parser` is already
+  used for dialect XML. Format is sniffed from the document's first byte, not
+  its `Content-Type`, because PX4 serves the archive as `application/json`.
+  The XML normalizes into the PX4 JSON shape, so one code path reads both.
+  A `boolean="true"` parameter expands to the same Disabled/Enabled pair PX4's
+  own JSON generator emits — the whole measured difference between the two
+  published formats, 98 parameters. Verified field-for-field against the live
+  document: 1836 parsed, 369 with enumerated values, 737 with units, 1119 with
+  a minimum, 503 with an increment — every count identical to the JSON.
+
 - Parameter definitions now read **PX4's `parameters.json`** as well as
   ArduPilot's `apm.pdef.json`. The two shapes differ in both directions: PX4
   is a flat `parameters` array carrying the id inside each entry as `name`
