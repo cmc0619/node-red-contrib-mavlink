@@ -1138,22 +1138,40 @@
   };
 
   /**
-   * Editor-side uint8 range check. Blank is allowed (inherit / optional).
-   * Two-argument form so Node-RED treats a returned string as the invalid
-   * reason (one-arg validators treat any string as truthy/valid).
+   * Editor-side integer range check for a wire field. Blank is allowed
+   * (inherit / optional). Two-argument form so Node-RED treats a returned
+   * string as the invalid reason (one-arg validators treat any string as
+   * truthy/valid).
+   *
+   * The bounds are the field's own, taken from the dialect XML — a `uint8_t`
+   * is 0–255, an `int16_t` is −32768–32767. A value outside them cannot be
+   * encoded, so refusing it in the editor is the difference between a red
+   * triangle and a runtime pack error on deploy.
+   *
+   * @param {number} min
+   * @param {number} max
+   * @returns {function(*, object=): true|string}
+   */
+  RED.mavlink.validateIntRange = function (min, max) {
+    return function (v, _opt) {
+      if (v === undefined || v === null || String(v).trim() === '') return true;
+      var n = Number(v);
+      if (!Number.isInteger(n) || n < min || n > max) {
+        return 'must be an integer between ' + min + ' and ' + max;
+      }
+      return true;
+    };
+  };
+
+  /**
+   * uint8 range check — the common case, kept by name because every target /
+   * source id field reads better for it.
    *
    * @param {number} min  0 for target ids (broadcast), 1 for source ids
    * @returns {function(*, object=): true|string}
    */
   RED.mavlink.validateUint8 = function (min) {
-    return function (v, _opt) {
-      if (v === undefined || v === null || String(v).trim() === '') return true;
-      var n = Number(v);
-      if (!Number.isInteger(n) || n < min || n > 255) {
-        return 'must be an integer between ' + min + ' and 255';
-      }
-      return true;
-    };
+    return RED.mavlink.validateIntRange(min, 255);
   };
 
   /**

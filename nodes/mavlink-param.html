@@ -11,7 +11,12 @@
       targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
       targetComponent: { value: '', validate: RED.validators.number(true) },
       paramId: { value: '' },
-      paramIndex: { value: -1, validate: RED.validators.number(true) },
+      // int16_t on the wire, and -1 is the protocol's "use the name"
+      // sentinel (PARAM_REQUEST_READ: "Send -1 to use the param ID field as
+      // identifier"). The real ceiling is the vehicle's param_count, which
+      // is not knowable in the editor, so the field's own width is the
+      // bound — it still refuses -5 and 99999, which encode to neither.
+      paramIndex: { value: -1, validate: RED.mavlink.validateIntRange(-1, 32767) },
       value: {
         value: '',
         /**
@@ -639,7 +644,7 @@
     <label>&nbsp;</label>
     <span id="mav-param-defs-tip-text" class="form-tips" style="font-size:0.85em;"></span>
   </div>
-  <div class="form-row"><label for="node-input-paramIndex">Index</label><input type="number" id="node-input-paramIndex"></div>
+  <div class="form-row"><label for="node-input-paramIndex">Index</label><input type="number" id="node-input-paramIndex" min="-1" max="32767" step="1" title="Position in the vehicle's parameter table. -1 means look the parameter up by name instead."></div>
   <div class="form-row">
     <label for="node-input-value">Value</label>
     <!--

@@ -960,3 +960,29 @@ test('splitCompIdsByTopic suggests components the dialect names after the device
   // collapsing the list to zero choices.
   assert.deepEqual(RED.mavlink.splitCompIdsByTopic(entries, 'gripper').others, entries);
 });
+
+// ── validateIntRange ─────────────────────────────────────────────────────────
+
+test('validateIntRange refuses what the wire field cannot encode', () => {
+  const { RED } = loadResource();
+  // param_index is int16_t and -1 is the protocol's "use the name" sentinel.
+  const index = RED.mavlink.validateIntRange(-1, 32767);
+
+  assert.equal(index(-1), true, 'the by-name sentinel');
+  assert.equal(index(0), true, 'the first real index');
+  assert.equal(index(32767), true, 'the field ceiling');
+  assert.equal(index(''), true, 'blank is inherit/optional, as elsewhere');
+
+  assert.match(String(index(-5)), /between -1 and 32767/, 'no such index');
+  assert.match(String(index(99999)), /between -1 and 32767/, 'past int16');
+  assert.match(String(index(2.5)), /integer/, 'the field is integral');
+});
+
+test('validateUint8 keeps its own name and bounds through the shared range check', () => {
+  const { RED } = loadResource();
+  const id = RED.mavlink.validateUint8(1);
+  assert.equal(id(1), true);
+  assert.equal(id(255), true);
+  assert.match(String(id(0)), /between 1 and 255/, 'a source id may not be 0');
+  assert.match(String(id(256)), /between 1 and 255/);
+});

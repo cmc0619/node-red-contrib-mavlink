@@ -10,6 +10,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { installEditorHelpers } = require('../helpers/editor-resource');
+
 const nodesDir = path.join(__dirname, '..', '..', 'nodes');
 
 test('shared validateUint8 helper is two-arg (string return = invalid reason)', () => {
@@ -20,12 +22,21 @@ test('shared validateUint8 helper is two-arg (string return = invalid reason)', 
     'utf8'
   );
   assert.match(resource, /RED\.mavlink\.validateUint8\s*=\s*function/);
-  assert.match(
-    resource,
-    /validateUint8\s*=\s*function\s*\(\s*min\s*\)\s*\{\s*return\s*function\s*\(\s*v\s*,\s*_?opt/,
-    'validator must take (v, opt) so a returned string fails validation'
-  );
-  assert.match(resource, /n < min \|\| n > 255/);
+
+  // Behaviour, not source text: validateUint8 delegates to the shared
+  // validateIntRange, so pinning its inlined body pinned an implementation
+  // detail. What must hold is the contract — two-arg, and 0..255.
+  const context = { RED: { mavlink: {} }, $: () => ({ length: 0, val: () => undefined }) };
+  installEditorHelpers(context);
+  const validate = context.RED.mavlink.validateUint8(0);
+
+  assert.equal(validate.length, 2, 'two-arg, so a returned string fails validation');
+  assert.equal(validate(0), true, 'broadcast id');
+  assert.equal(validate(255), true, 'the uint8 ceiling');
+  assert.equal(validate(''), true, 'blank means inherit / all');
+  assert.match(String(validate(256)), /between 0 and 255/, 'a string is the invalid reason');
+  assert.match(String(validate(-1)), /between 0 and 255/);
+  assert.match(String(validate(1.5)), /integer/);
 });
 
 const TARGET_FILES = [
