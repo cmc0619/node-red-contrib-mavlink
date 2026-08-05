@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { installEditorHelpers } = require('../helpers/editor-resource');
 const { assertChangeHandlerContains } = require('./html-assert');
 
 const html = fs.readFileSync(
@@ -112,19 +113,27 @@ test('mavlink-param has refreshVisibility and companion row hiding', () => {
   );
 });
 
-test('mavlink-param loadParamDefs is tier-aware (build uses dialect or vehicle, wire uses connection)', () => {
-  assert.match(html, /node-input-dialect.*\.val\(\)|\.val\(\).*node-input-dialect/s,
-    'dialect field used in defs load');
-  assert.match(html, /dialect\s*===\s*'__vehicle'/,
-    'build defs load supports the Vehicle Profile dialect escape');
-  assert.match(html, /query\s*=\s*\{\s*dialect:\s*dialect\s*\}/,
-    'concrete build dialect loads defs by dialect');
+test('mavlink-param defs load delegates its catalog target to the shared resolver', () => {
+  assert.match(html, /RED\.mavlink\.resolveCatalogTarget\(\)/,
+    'the dialog resolves its target through the shared helper');
+  assert.match(html, /RED\.mavlink\.resolveCatalogTarget\(\{\s*source:/,
+    'and validation resolves the same way from saved config');
+
+  // The resolver owns query construction and the connection→profile hop, so
+  // the tier matrix is proven once against it (mavlink-editor-resource.test.js)
+  // rather than re-asserted per node.
+  assert.doesNotMatch(html, /query\s*=\s*\{\s*dialect:\s*dialect\s*\}/,
+    'no hand-rolled defs query');
+  assert.doesNotMatch(html, /connectionNode\.vehicle/,
+    'no hand-rolled connection→vehicle hop');
   assert.doesNotMatch(html, /ardupilotmega/, 'defs load must not invent ardupilotmega');
-  // Wire tier: reads vehicleId through connection node
-  assert.match(html, /connectionNode\.vehicle/, 'defs load reads vehicle through connection node');
-  // Delivery-driven branch
+
+  // Naming the field an operator still has to fill stays here: this is the
+  // only dialog that requires firmware, and the only one showing the notice.
+  assert.match(html, /dialect\s*===\s*'__vehicle'/,
+    'the notice path distinguishes the Vehicle Profile escape');
   assert.match(html, /delivery.*===.*'build'|'build'.*===.*delivery/,
-    'defs load is branched on delivery tier');
+    'and is branched on delivery tier');
 });
 
 test('mavlink-param ensureConfigNodePicker called for vehicle', () => {
@@ -188,11 +197,15 @@ function mountValueValidator(defs, liveParamId) {
   const body = html.slice(valueStart + 'validate: function (v) {'.length, valueEnd);
   assert.match(body, /_paramDefsByKey/, 'the extracted body is the definition-aware validator');
 
+  // Real shared helpers: the point of the keyed cache is that `validate` and
+  // the loader derive the same key from the same resolver, which a stubbed
+  // resolver here would quietly stop proving.
   const context = {
-    $: () => ({ val: () => liveParamId }),
+    $: () => ({ val: () => liveParamId, length: 0 }),
     Number,
-    RED: { nodes: { node: () => null } },
+    RED: { mavlink: {}, nodes: { node: () => null } },
   };
+  installEditorHelpers(context);
   vm.runInNewContext(
     `${html.slice(start, end)}
      _paramDefsByKey[paramDefsKey({})] = ${JSON.stringify(defs)};
@@ -263,11 +276,15 @@ function mountKeyedValidator(byKey, editedNode, liveParamId) {
   const body = html.slice(valueStart + 'validate: function (v) {'.length, valueEnd);
   assert.match(body, /_paramDefsByKey/, 'the extracted body is the definition-aware validator');
 
+  // Real shared helpers: the point of the keyed cache is that `validate` and
+  // the loader derive the same key from the same resolver, which a stubbed
+  // resolver here would quietly stop proving.
   const context = {
-    $: () => ({ val: () => liveParamId }),
+    $: () => ({ val: () => liveParamId, length: 0 }),
     Number,
-    RED: { nodes: { node: () => null } },
+    RED: { mavlink: {}, nodes: { node: () => null } },
   };
+  installEditorHelpers(context);
   vm.runInNewContext(
     `${html.slice(start, end)}
      this.keyForTest = paramDefsKey;
@@ -312,12 +329,18 @@ test('mavlink-param defs key: the Vehicle Profile escape keys on the profile, no
   // Re-mount just to reach the exported helper.
   const start = html.indexOf('var _paramDefsByKey = {};');
   const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
-  const context = { $: () => ({ val: () => '' }), RED: { nodes: { node: () => ({ vehicle: 'v9' }) } } };
+  const context = {
+    $: () => ({ val: () => '', length: 0 }),
+    RED: { mavlink: {}, nodes: { node: () => ({ vehicle: 'v9', dialect: 'ardupilotmega' }) } },
+  };
+  installEditorHelpers(context);
   vm.runInNewContext(`${html.slice(start, end)}\nthis.k = paramDefsKey;`, context);
 
-  assert.equal(
+  // The profile's own metadata joins its key, so editing an undeployed
+  // profile's firmware or family cannot be served the previous catalog.
+  assert.match(
     context.k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v1' }),
-    'vehicle:v1'
+    /^vehicle:v1\|/
   );
   assert.notEqual(
     context.k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v1' }),
@@ -325,7 +348,7 @@ test('mavlink-param defs key: the Vehicle Profile escape keys on the profile, no
     'two profiles are two definition sets'
   );
   // Wire tiers resolve the profile through the connection.
-  assert.equal(context.k({ delivery: 'send', connection: 'c1' }), 'vehicle:v9');
+  assert.match(context.k({ delivery: 'send', connection: 'c1' }), /^vehicle:v9\|/);
   assert.equal(key, null);
 });
 

@@ -15,12 +15,38 @@ const paramHtml = fs.readFileSync(
   'utf8'
 );
 
+const { installEditorHelpers } = require('../helpers/editor-resource');
+
+/** `change.mavEnumTip` fires on `change`… */
+function baseEvent(event) {
+  return String(event).split('.')[0];
+}
+
+/** …but unbinds only alongside its own namespace. */
+function eventNamespace(event) {
+  return String(event).split('.').slice(1).join('.');
+}
+
+/** The slice of a jQuery result set the shared enum helpers actually use. */
+function matchSet(list) {
+  return {
+    length: list.length,
+    attr: (name) => (list[0] ? list[0].attr(name) : undefined),
+  };
+}
+
 class FakeElement {
   constructor(value = '') {
+    // A found element, as in the real dialog: helpers branch on `.length` to
+    // tell an absent field from an empty one.
+    this.length = 1;
     this.value = value;
     this.label = '';
     this.attrs = {};
+    // `handlers[event]` dispatches every binding for that event; `bound`
+    // is the per-namespace registry behind it.
     this.handlers = {};
+    this.bound = {};
     this.options = [];
     this.visible = true;
     this.disabled = false;
@@ -67,8 +93,60 @@ class FakeElement {
   }
 
   on(events, handler) {
-    for (const event of events.split(/\s+/)) this.handlers[event] = handler;
+    for (const spec of String(events).split(/\s+/)) {
+      const base = baseEvent(spec);
+      if (!this.bound[base]) this.bound[base] = [];
+      this.bound[base].push({ ns: eventNamespace(spec), handler });
+      this.rebind(base);
+    }
     return this;
+  }
+
+  off(events) {
+    for (const spec of String(events).split(/\s+/)) {
+      const base = baseEvent(spec);
+      if (!this.bound[base]) continue;
+      const ns = eventNamespace(spec);
+      // jQuery semantics, and the reason they matter here: `off('change.ns')`
+      // unbinds only that namespace. Collapsing it to `off('change')` would let
+      // a helper's own tip-sync silently unbind the dialog's change handler,
+      // and the harness would stop seeing what a fill does to the value box.
+      this.bound[base] = ns ? this.bound[base].filter((b) => b.ns !== ns) : [];
+      this.rebind(base);
+    }
+    return this;
+  }
+
+  rebind(base) {
+    if (!this.bound[base] || !this.bound[base].length) {
+      delete this.handlers[base];
+      return;
+    }
+    this.handlers[base] = (event) => {
+      for (const b of (this.bound[base] || []).slice()) {
+        b.handler.call(this, event || { preventDefault() {} });
+      }
+    };
+  }
+
+  trigger(event) {
+    const handler = this.handlers[baseEvent(event)];
+    if (handler) handler({ preventDefault() {} });
+    return this;
+  }
+
+  /**
+   * Enough of a selector engine for the shared enum helpers: they ask for an
+   * option by value (`ensureSavedEnumOption`) and for the selected one
+   * (`bindSelectTitleSync`). A miss returns an empty set, as jQuery does.
+   */
+  find(selector) {
+    const byValue = /^option\[value="(.*)"\]$/.exec(String(selector));
+    if (byValue) return matchSet(this.options.filter((o) => o.val() === byValue[1]));
+    if (String(selector) === 'option:selected') {
+      return matchSet(this.options.filter((o) => o.val() === this.value));
+    }
+    return matchSet([]);
   }
 
   userClick() {
@@ -213,11 +291,7 @@ test('Param definition GET failures clear stale UI and render server and fallbac
     _paramDefsByKey: {},
     paramDefsKey: () => 'test-key',
     RED: {
-      mavlink: {
-        adminApiUrl: (value) => value,
-        enumOptionLabel: (entry) => `${entry.name} (${entry.value})`,
-        applyFieldMeta: () => {},
-      },
+      mavlink: {},
       nodes: {
         node(id) {
           return id === 'profile-1' ? { dialect: 'ardupilotmega' } : null;
@@ -225,6 +299,10 @@ test('Param definition GET failures clear stale UI and render server and fallbac
       },
     },
   };
+  installEditorHelpers(context);
+  // The real one walks the DOM with .closest()/.after(); field meta is not
+  // what this harness exercises.
+  context.RED.mavlink.applyFieldMeta = () => {};
   vm.runInNewContext(
     `${paramHtml.slice(start, end)}\nthis.loadParamDefsForTest = loadParamDefs;`,
     context
@@ -301,14 +379,12 @@ test('Param definition loader explains every path on which it does not ask', () 
       _paramDefsByKey: {},
       paramDefsKey: () => 'test-key',
       RED: {
-        mavlink: {
-        adminApiUrl: (v) => v,
-        enumOptionLabel: (e) => `${e.name} (${e.value})`,
-        applyFieldMeta: () => {},
-      },
+        mavlink: {},
         nodes: { node: (id) => (nodesById || {})[id] || null },
       },
     };
+    installEditorHelpers(context);
+    context.RED.mavlink.applyFieldMeta = () => {};
     vm.runInNewContext(
       `${paramHtml.slice(start, end)}\nthis.loadParamDefsForTest = loadParamDefs;`,
       context
@@ -384,14 +460,12 @@ function mountParamPanel(defs, initialValue) {
     _paramDefsByKey: {},
     paramDefsKey: () => 'test-key',
     RED: {
-      mavlink: {
-        adminApiUrl: (v) => v,
-        enumOptionLabel: (e) => `${e.name} (${e.value})`,
-        applyFieldMeta: () => {},
-      },
+      mavlink: {},
       nodes: { node: (id) => (id === 'profile-1' ? { dialect: 'ardupilotmega' } : null) },
     },
   };
+  installEditorHelpers(context);
+  context.RED.mavlink.applyFieldMeta = () => {};
   vm.runInNewContext(
     `${paramHtml.slice(start, end)}
      this.loadParamDefsForTest = loadParamDefs;
@@ -568,18 +642,26 @@ function mountValueField(defs, values) {
     _paramDefsByKey: {},
     paramDefsKey: () => 'test-key',
     RED: {
-      mavlink: {
-        adminApiUrl: (v) => v,
-        enumOptionLabel: (e) => `${e.name} (${e.value})`,
-        // The real helper lives in resources/mavlink-editor.js and uses
-        // .closest()/.after(); record the call instead.
-        applyFieldMeta: (inputId, meta) => { applied.push({ inputId, meta }); },
-      },
+      mavlink: {},
       nodes: { node: () => ({ dialect: 'ardupilotmega' }) },
     },
   };
+  installEditorHelpers(context);
+  // The real helper uses .closest()/.after(); record the call instead.
+  context.RED.mavlink.applyFieldMeta = (inputId, meta) => {
+    applied.push({ inputId, meta });
+  };
+  // The select's change handler is registered in oneditprepare, outside the
+  // sliced region — but the shared filler ends a fill by firing change, so a
+  // harness without the handler cannot see a fill clobber the value box.
+  const handlerStart = paramHtml.indexOf("$('#mav-param-value-select').on('change'");
+  assert.ok(handlerStart > 0, 'the value select change handler is present');
+  const handlerClose = '\n      });';
+  const handlerEnd = paramHtml.indexOf(handlerClose, handlerStart) + handlerClose.length;
+
   vm.runInNewContext(
     `${paramHtml.slice(start, end)}
+     ${paramHtml.slice(handlerStart, handlerEnd)}
      this.loadParamDefsForTest = loadParamDefs;
      this.refreshInfoForTest = refreshParamInfo;`,
     context

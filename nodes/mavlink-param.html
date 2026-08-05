@@ -57,25 +57,19 @@
   var _paramDefsByKey = {};
 
   /**
-   * Which definition set a node uses. Computed from live dialog fields while
-   * loading, and from saved config when validating — they agree for the open
-   * node, and a closed node whose set was never loaded simply misses, which
-   * skips the range check rather than applying someone else's bounds.
+   * Which definition set a node uses. The shared resolver already answers this
+   * for every catalog-backed dialog, from live fields or — via `source` — from
+   * a saved config; definitions are one more catalog keyed the same way.
    *
-   * @param {{delivery?: string, dialect?: string, vehicle?: string,
-   *          firmware?: string, connection?: string}} source
+   * They agree for the open node, and a closed node whose set was never loaded
+   * simply misses, which skips the range check rather than applying someone
+   * else's bounds.
+   *
+   * @param {object} source  saved node config
    * @returns {string}
    */
   function paramDefsKey(source) {
-    var delivery = source.delivery || 'build';
-    if (delivery === 'build') {
-      var dialect = source.dialect || '';
-      if (dialect !== '__vehicle') return 'dialect:' + dialect + '|' + (source.firmware || '');
-      return 'vehicle:' + (source.vehicle || '');
-    }
-    var conn = (RED.nodes && typeof RED.nodes.node === 'function')
-      ? RED.nodes.node(source.connection) : null;
-    return 'vehicle:' + ((conn && conn.vehicle) || '');
+    return RED.mavlink.resolveCatalogTarget({ source: source }).key;
   }
 
   /**
@@ -160,38 +154,12 @@
        * nothing, which is exactly what a typed-in param id looked like before.
        */
       /**
-       * This dialog's definition-set key, from the *live* fields — so it
-       * matches what `validate` computes from saved config for the same node.
+       * This dialog's definition-set key, from the *live* fields — the same
+       * resolver `validate` runs against saved config, so the two agree for
+       * the open node.
        */
-      /**
-       * Carry the profile's firmware and vehicle family in the query.
-       *
-       * The route can otherwise only reach them through `RED.nodes.getNode`,
-       * which sees *deployed* config nodes — a Vehicle Profile just created or
-       * edited is visible here but not there, so the seed could not be keyed
-       * and the field came up empty until the next deploy. The editor already
-       * read `dialect` from this same node; firmware and family ride along.
-       *
-       * @param {object} query
-       * @param {string} vehicleId
-       */
-      function addProfileMetadata(query, vehicleId) {
-        if (!RED.nodes || typeof RED.nodes.node !== 'function') return;
-        var vehicleNode = RED.nodes.node(vehicleId);
-        if (!vehicleNode) return;
-        if (vehicleNode.dialect) query.dialect = vehicleNode.dialect;
-        if (vehicleNode.firmware) query.firmware = vehicleNode.firmware;
-        if (vehicleNode.vehicleFamily) query.vehicleFamily = vehicleNode.vehicleFamily;
-      }
-
       function currentDefsKey() {
-        return paramDefsKey({
-          delivery: $('#node-input-delivery').val() || 'build',
-          dialect: $('#node-input-dialect').val() || '',
-          vehicle: $('#node-input-vehicle').val() || '',
-          firmware: $('#node-input-firmware').val() || '',
-          connection: $('#node-input-connection').val() || '',
-        });
+        return RED.mavlink.resolveCatalogTarget().key;
       }
 
       function noParamDefs(notice) {
@@ -203,44 +171,52 @@
         refreshParamInfo();
       }
 
-      function loadParamDefs() {
+      /**
+       * Which field the operator still has to fill, or '' when none.
+       *
+       * The resolver answers *whether* a target resolves; naming the missing
+       * field belongs here, because this dialog is the only one that shows the
+       * notice and the only one for which firmware is required.
+       *
+       * @param {{vehicleId: string, firmware: string}} target
+       * @returns {string}
+       */
+      function paramDefsTargetError(target) {
         var delivery = $('#node-input-delivery').val() || 'build';
-        var query;
-        var vehicleId;
-
         if (delivery === 'build') {
           var dialect = $('#node-input-dialect').val() || '';
-          if (!dialect) return noParamDefs('Pick a dialect to load parameter definitions.');
+          if (!dialect) return 'Pick a dialect to load parameter definitions.';
           if (dialect === '__vehicle') {
-            vehicleId = $('#node-input-vehicle').val() || '';
-            if (!vehicleId) return noParamDefs('Pick a Vehicle Profile to load parameter definitions.');
-            query = { vehicle: vehicleId };
-            addProfileMetadata(query, vehicleId);
-          } else {
-            query = { dialect: dialect };
-            var firmware = $('#node-input-firmware').val() || '';
-            if (!firmware) return noParamDefs('Pick a firmware to load parameter definitions.');
-            query.firmware = firmware;
+            return target.vehicleId
+              ? ''
+              : 'Pick a Vehicle Profile to load parameter definitions.';
           }
-        } else {
-          var connectionId = $('#node-input-connection').val() || '';
-          if (!connectionId) return noParamDefs('Pick a Connection to load parameter definitions.');
-          var connectionNode = RED.nodes && typeof RED.nodes.node === 'function'
-            ? RED.nodes.node(connectionId) : null;
-          if (!connectionNode) return noParamDefs('The selected Connection could not be resolved.');
-          vehicleId = connectionNode.vehicle || '';
-          if (!vehicleId) {
-            return noParamDefs('This Connection has no Vehicle Profile, which is where parameter definitions live.');
-          }
-          query = { vehicle: vehicleId };
-          addProfileMetadata(query, vehicleId);
+          return target.firmware ? '' : 'Pick a firmware to load parameter definitions.';
         }
+        var connectionId = $('#node-input-connection').val() || '';
+        if (!connectionId) return 'Pick a Connection to load parameter definitions.';
+        var connectionNode = RED.nodes && typeof RED.nodes.node === 'function'
+          ? RED.nodes.node(connectionId) : null;
+        if (!connectionNode) return 'The selected Connection could not be resolved.';
+        if (!target.vehicleId) {
+          return 'This Connection has no Vehicle Profile, which is where parameter definitions live.';
+        }
+        return '';
+      }
+
+      function loadParamDefs() {
+        var target = RED.mavlink.resolveCatalogTarget();
+        var missing = paramDefsTargetError(target);
+        if (missing) return noParamDefs(missing);
 
         var seq = ++_defsSeq;
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), query, function (data) {
+        // Cache under the key this request was built from, not whatever the
+        // fields say when it lands.
+        var key = target.key;
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), target.query, function (data) {
           if (seq !== _defsSeq) return;
           _paramDefs = data.defs || {};
-          _paramDefsByKey[currentDefsKey()] = _paramDefs;
+          _paramDefsByKey[key] = _paramDefs;
           _defsNotice = data.notice || '';
           _defsLoaded = true;
           rebuildParamIndex();
@@ -248,7 +224,7 @@
         }).fail(function (xhr) {
           if (seq !== _defsSeq) return;
           _paramDefs = {};
-          _paramDefsByKey[currentDefsKey()] = _paramDefs;
+          _paramDefsByKey[key] = _paramDefs;
           _defsNotice = (xhr && xhr.responseJSON && xhr.responseJSON.error) ||
             'Parameter definitions unavailable.';
           _defsLoaded = true;
@@ -451,17 +427,34 @@
           return;
         }
 
+        // Numeric, not string: a saved `1.0` is the documented `1`, and the
+        // select's option values are numeric strings.
         var current = String($value.val() === undefined ? '' : $value.val()).trim();
-        var known = false;
-        for (var i = 0; i < def.values.length; i++) {
-          var entry = def.values[i];
-          var $opt = $('<option></option>')
-            .val(String(entry.value))
-            .text(RED.mavlink.enumOptionLabel({ name: entry.label, value: entry.value }));
-          if (entry.description) $opt.attr('title', entry.description);
-          $select.append($opt);
-          if (current !== '' && Number(current) === Number(entry.value)) known = true;
-        }
+        var known = current !== '' && def.values.some(function (entry) {
+          return Number(current) === Number(entry.value);
+        });
+
+        // Shared filler (§6): option values stay numeric strings, `title`
+        // carries the dialect description, and the tip sync comes with it.
+        // A definition's `label` is the entry's name — the helper composes
+        // "NAME (value)" from it rather than showing a bare name.
+        RED.mavlink.fillEnumSelect(
+          $select,
+          def.values.map(function (entry) {
+            return {
+              name: entry.label,
+              value: entry.value,
+              description: entry.description,
+            };
+          }),
+          // `triggerChange` off: the helper fires change after selecting its
+          // fallback entry, and this select's handler writes the picked value
+          // into the box — which would overwrite a custom value with the first
+          // documented one before the custom option below even exists. The
+          // selection is set explicitly here instead.
+          { saved: known ? String(Number(current)) : '', triggerChange: false }
+        );
+
         // Always offered: firmware accepts values no metadata file lists, and a
         // blank value defers to msg.payload — neither may become unreachable
         // just because this parameter happens to document an enumeration.
@@ -470,6 +463,9 @@
         );
 
         $select.val(known ? String(Number(current)) : VALUE_CUSTOM);
+        // The custom option is appended after the fill, so re-sync the tip:
+        // selecting it must clear the previous option's description.
+        RED.mavlink.bindSelectTitleSync($select);
         $select.toggle(true);
         // A value the list does not cover keeps the box visible beside the
         // select, so it can be seen and edited rather than silently dropped.
@@ -480,11 +476,11 @@
       function clearParamDefs() {
         _paramDefs = {};
         _defsLoaded = false;
-        // Keys usually change with the definitions, so an old entry stays
-        // correct for its own key. One case does not: editing a Vehicle
-        // Profile's firmware keeps the key ('vehicle:<id>') while the
-        // definitions behind it change. Drop this key so the window before the
-        // reload lands cannot range-check against the previous catalog.
+        // The key now carries every field that changes the answer — profile
+        // dialect, firmware and family included — so a changed target already
+        // lands on a different key. This drops the entry for the key being
+        // left, so an explicit clear cannot be served its own stale catalog in
+        // the window before the reload arrives.
         delete _paramDefsByKey[currentDefsKey()];
       }
 

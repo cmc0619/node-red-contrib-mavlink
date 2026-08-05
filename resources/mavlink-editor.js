@@ -467,7 +467,8 @@
 
   /**
    * Resolve which Vehicle / dialect the editor catalogs (messages, commands,
-   * enums) should load, following the role × tier matrix (DESIGN.md §6):
+   * enums, parameter definitions) should load, following the role × tier
+   * matrix (DESIGN.md §6):
    *
    *   - Build tier: the Dialect picker governs. A concrete dialect queries by
    *     name; the `from Vehicle Profile…` escape (`__vehicle`) queries by the
@@ -476,7 +477,18 @@
    *   - Wire tiers: the bound Connection's Vehicle Profile governs. No
    *     connection or no bound profile resolves to no catalog target.
    *
+   * Profile metadata travels with the profile id, read from the *editor-side*
+   * node: a profile created — or edited — and not yet deployed answers for
+   * what is on screen, not for what the runtime last saw.
+   *
+   * The key is the identity of the query, so every field that changes the
+   * answer changes the key. Two readers share one shape: a dialog resolves
+   * from live fields, while `validate` runs against a saved config with no DOM
+   * behind it. Pass `opts.source` for the latter, and the key a load writes is
+   * the key a validation reads.
+   *
    * @param {object} [opts]
+   * @param {object} [opts.source]  saved config read instead of the DOM
    * @param {boolean} [opts.isBuild]  explicit Build-tier override; when omitted
    *   the delivery/tier selector value === 'build' decides.
    * @param {string} [opts.deliverySelector='#node-input-delivery']
@@ -484,13 +496,23 @@
    * @param {string} [opts.dialectSelector='#node-input-dialect']
    * @param {string} [opts.vehicleSelector='#node-input-vehicle']
    * @param {string} [opts.connectionSelector='#node-input-connection']
-   * @returns {{key: string, query: object|null, dialect: string, vehicleId: string}}
+   * @param {string} [opts.firmwareSelector='#node-input-firmware']
+   * @returns {{key: string, query: object|null, dialect: string, vehicleId: string,
+   *   firmware: string, vehicleFamily: string}}
    */
   RED.mavlink.resolveCatalogTarget = function (opts) {
     opts = opts || {};
     var dialectSelector = opts.dialectSelector || '#node-input-dialect';
     var vehicleSelector = opts.vehicleSelector || '#node-input-vehicle';
     var connectionSelector = opts.connectionSelector || '#node-input-connection';
+    var firmwareSelector = opts.firmwareSelector || '#node-input-firmware';
+    var source = opts.source;
+
+    function read(field, selector) {
+      if (!source) return valueFromSelector(selector);
+      var v = source[field];
+      return v === undefined || v === null ? '' : String(v).trim();
+    }
 
     var isBuild;
     if (typeof opts.isBuild === 'boolean') {
@@ -498,60 +520,79 @@
     } else {
       var deliverySelector = opts.deliverySelector || '#node-input-delivery';
       var tierSelector = opts.tierSelector || '#node-input-tier';
-      var mode = $(deliverySelector).length
-        ? valueFromSelector(deliverySelector)
-        : valueFromSelector(tierSelector);
+      var hasDelivery = source
+        ? source.delivery !== undefined
+        : !!$(deliverySelector).length;
+      var mode = hasDelivery
+        ? read('delivery', deliverySelector)
+        : read('tier', tierSelector);
       isBuild = mode === 'build';
     }
 
     function empty() {
-      return { key: 'empty', query: null, dialect: '', vehicleId: '' };
-    }
-
-    function vehicleDialectOf(vehicleId) {
-      if (vehicleId && RED.nodes && typeof RED.nodes.node === 'function') {
-        var vehicle = RED.nodes.node(vehicleId);
-        if (vehicle && vehicle.dialect) return vehicle.dialect;
-      }
-      return '';
-    }
-
-    if (isBuild) {
-      var dialectVal = valueFromSelector(dialectSelector);
-      if (!dialectVal) return empty();
-      if (dialectVal !== '__vehicle') {
-        return {
-          key: 'dialect:' + dialectVal,
-          query: { dialect: dialectVal },
-          dialect: dialectVal,
-          vehicleId: '',
-        };
-      }
-      var vehicleId = valueFromSelector(vehicleSelector);
-      if (!vehicleId) return empty();
-      var vehicleDialect = vehicleDialectOf(vehicleId);
       return {
-        key: 'vehicle:' + vehicleId,
-        query: { vehicle: vehicleId, dialect: vehicleDialect },
-        dialect: vehicleDialect,
-        vehicleId: vehicleId,
+        key: 'empty',
+        query: null,
+        dialect: '',
+        vehicleId: '',
+        firmware: '',
+        vehicleFamily: '',
       };
     }
 
+    // Everything a profile contributes to the answer — dialect, firmware,
+    // vehicle family — joins its key, so editing any of them on an undeployed
+    // profile misses the cache instead of being served the previous catalog.
+    function forProfile(vehicleId) {
+      var profile = (vehicleId && RED.nodes && typeof RED.nodes.node === 'function')
+        ? RED.nodes.node(vehicleId)
+        : null;
+      var dialect = (profile && profile.dialect) || '';
+      var firmware = (profile && profile.firmware) || '';
+      var family = (profile && profile.vehicleFamily) || '';
+      var query = { vehicle: vehicleId, dialect: dialect };
+      if (firmware) query.firmware = firmware;
+      if (family) query.vehicleFamily = family;
+      return {
+        key: ['vehicle:' + vehicleId, dialect, firmware, family].join('|'),
+        query: query,
+        dialect: dialect,
+        vehicleId: vehicleId,
+        firmware: firmware,
+        vehicleFamily: family,
+      };
+    }
+
+    if (isBuild) {
+      var dialectVal = read('dialect', dialectSelector);
+      if (!dialectVal) return empty();
+      if (dialectVal !== '__vehicle') {
+        // Firmware is a definition axis, not a dialect one: PX4 and ArduPilot
+        // document the same id with different bounds and units. Dialogs
+        // without the field read '' and keep their original key.
+        var firmwareVal = read('firmware', firmwareSelector);
+        var query = { dialect: dialectVal };
+        if (firmwareVal) query.firmware = firmwareVal;
+        return {
+          key: 'dialect:' + dialectVal + (firmwareVal ? '|' + firmwareVal : ''),
+          query: query,
+          dialect: dialectVal,
+          vehicleId: '',
+          firmware: firmwareVal,
+          vehicleFamily: '',
+        };
+      }
+      var vehicleId = read('vehicle', vehicleSelector);
+      if (!vehicleId) return empty();
+      return forProfile(vehicleId);
+    }
+
     // Wire tier: the connection's bound Vehicle Profile is the catalog source.
-    var connectionId = valueFromSelector(connectionSelector);
+    var connectionId = read('connection', connectionSelector);
     if (connectionId && RED.nodes && typeof RED.nodes.node === 'function') {
       var conn = RED.nodes.node(connectionId);
       var vehicleRef = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
-      if (vehicleRef) {
-        var connDialect = vehicleDialectOf(vehicleRef);
-        return {
-          key: 'vehicle:' + vehicleRef,
-          query: { vehicle: vehicleRef, dialect: connDialect },
-          dialect: connDialect,
-          vehicleId: vehicleRef,
-        };
-      }
+      if (vehicleRef) return forProfile(vehicleRef);
     }
     return empty();
   };

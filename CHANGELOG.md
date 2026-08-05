@@ -28,7 +28,8 @@ see AGENTS.md "no migrations, no compatibility shims".
   documented enumeration gets a real select — `FLTMODE1` offers "AltHold (2)"
   rather than asking you to remember that AltHold is 2 — with a
   **Custom value…** escape, because firmware accepts values no metadata file
-  lists. Documented bounds are enforced at edit time: 50 for an 800–2200 PWM
+  lists. Hovering an entry shows its description, as on every other
+  catalog-backed dropdown. Documented bounds are enforced at edit time: 50 for an 800–2200 PWM
   parameter is refused in the editor instead of reaching the vehicle. Units
   print beside the box and the documented increment becomes the step. Roughly
   1 parameter in 4 carries an enumeration and about half carry bounds (24%/51%

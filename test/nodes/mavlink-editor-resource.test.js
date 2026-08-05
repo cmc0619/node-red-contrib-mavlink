@@ -79,7 +79,14 @@ test('resolveCatalogTarget Build tier: a concrete dialect queries by name', () =
   const { RED } = loadResource({ '#node-input-dialect': 'common' });
   assert.deepEqual(
     plain(RED.mavlink.resolveCatalogTarget({ isBuild: true })),
-    { key: 'dialect:common', query: { dialect: 'common' }, dialect: 'common', vehicleId: '' }
+    {
+      key: 'dialect:common',
+      query: { dialect: 'common' },
+      dialect: 'common',
+      vehicleId: '',
+      firmware: '',
+      vehicleFamily: '',
+    }
   );
 });
 
@@ -87,7 +94,7 @@ test('resolveCatalogTarget Build tier: an empty dialect never invents ardupilotm
   const { RED } = loadResource({ '#node-input-dialect': '' });
   assert.deepEqual(
     plain(RED.mavlink.resolveCatalogTarget({ isBuild: true })),
-    { key: 'empty', query: null, dialect: '', vehicleId: '' }
+    { key: 'empty', query: null, dialect: '', vehicleId: '', firmware: '', vehicleFamily: '' }
   );
 });
 
@@ -99,10 +106,12 @@ test('resolveCatalogTarget Build tier: the __vehicle escape queries by profile i
   assert.deepEqual(
     plain(RED.mavlink.resolveCatalogTarget({ isBuild: true })),
     {
-      key: 'vehicle:vehicle-1',
+      key: 'vehicle:vehicle-1|ardupilotmega||',
       query: { vehicle: 'vehicle-1', dialect: 'ardupilotmega' },
       dialect: 'ardupilotmega',
       vehicleId: 'vehicle-1',
+      firmware: '',
+      vehicleFamily: '',
     }
   );
 });
@@ -111,7 +120,7 @@ test('resolveCatalogTarget Build tier: __vehicle without a profile resolves to e
   const { RED } = loadResource({ '#node-input-dialect': '__vehicle', '#node-input-vehicle': '' });
   assert.deepEqual(
     plain(RED.mavlink.resolveCatalogTarget({ isBuild: true })),
-    { key: 'empty', query: null, dialect: '', vehicleId: '' }
+    { key: 'empty', query: null, dialect: '', vehicleId: '', firmware: '', vehicleFamily: '' }
   );
 });
 
@@ -126,10 +135,12 @@ test('resolveCatalogTarget wire tier: the connection bound profile is the catalo
   assert.deepEqual(
     plain(RED.mavlink.resolveCatalogTarget({ isBuild: false })),
     {
-      key: 'vehicle:vehicle-1',
+      key: 'vehicle:vehicle-1|common||',
       query: { vehicle: 'vehicle-1', dialect: 'common' },
       dialect: 'common',
       vehicleId: 'vehicle-1',
+      firmware: '',
+      vehicleFamily: '',
     }
   );
 });
@@ -138,8 +149,65 @@ test('resolveCatalogTarget wire tier: no connection resolves to empty (no invent
   const { RED } = loadResource({ '#node-input-connection': '' });
   assert.deepEqual(
     plain(RED.mavlink.resolveCatalogTarget({ isBuild: false })),
-    { key: 'empty', query: null, dialect: '', vehicleId: '' }
+    { key: 'empty', query: null, dialect: '', vehicleId: '', firmware: '', vehicleFamily: '' }
   );
+});
+
+test('resolveCatalogTarget: live fields and saved config resolve to the same key', () => {
+  const fields = {
+    '#node-input-delivery': 'build',
+    '#node-input-dialect': 'ardupilotmega',
+    '#node-input-firmware': 'ardupilot',
+  };
+  const { RED } = loadResource(fields);
+
+  // The keyed definition cache is only sound because a dialog's load and a
+  // closed node's `validate` land on the same entry. They read different
+  // places — the DOM and the saved config — so this is the load-bearing case.
+  assert.equal(
+    RED.mavlink.resolveCatalogTarget().key,
+    RED.mavlink.resolveCatalogTarget({
+      source: { delivery: 'build', dialect: 'ardupilotmega', firmware: 'ardupilot' },
+    }).key
+  );
+});
+
+test('resolveCatalogTarget: firmware is a definition axis, and only when present', () => {
+  const withFirmware = loadResource({
+    '#node-input-dialect': 'ardupilotmega',
+    '#node-input-firmware': 'px4',
+  }).RED.mavlink.resolveCatalogTarget({ isBuild: true });
+  const without = loadResource({
+    '#node-input-dialect': 'ardupilotmega',
+  }).RED.mavlink.resolveCatalogTarget({ isBuild: true });
+
+  // Same dialect, different firmware: PX4 and ArduPilot document RC1_MIN with
+  // different bounds, so one key may never serve both.
+  assert.equal(withFirmware.key, 'dialect:ardupilotmega|px4');
+  assert.equal(withFirmware.query.firmware, 'px4');
+  // Dialogs without the field keep their original key and query untouched.
+  assert.equal(without.key, 'dialect:ardupilotmega');
+  assert.deepEqual(plain(without.query), { dialect: 'ardupilotmega' });
+});
+
+test('resolveCatalogTarget: an undeployed profile answers from the editor-side node', () => {
+  const { RED } = loadResource(
+    { '#node-input-dialect': '__vehicle', '#node-input-vehicle': 'vehicle-1' },
+    { 'vehicle-1': { dialect: 'ardupilotmega', firmware: 'ardupilot', vehicleFamily: 'copter' } }
+  );
+  const target = RED.mavlink.resolveCatalogTarget({ isBuild: true });
+
+  // `RED.nodes.getNode` on the runtime side sees deployed config nodes only,
+  // so the profile's own metadata has to travel with its id.
+  assert.deepEqual(plain(target.query), {
+    vehicle: 'vehicle-1',
+    dialect: 'ardupilotmega',
+    firmware: 'ardupilot',
+    vehicleFamily: 'copter',
+  });
+  // …and join the key, or editing an undeployed profile keeps serving the
+  // catalog the previous value loaded.
+  assert.equal(target.key, 'vehicle:vehicle-1|ardupilotmega|ardupilot|copter');
 });
 
 test('resolveCatalogTarget derives Build from the delivery selector when isBuild is omitted', () => {
