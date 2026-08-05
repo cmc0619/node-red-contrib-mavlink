@@ -377,6 +377,16 @@
         if (parts.length) $('#node-input-paramId').attr('title', parts.join(' | '));
         else $('#node-input-paramId').removeAttr('title');
 
+        // A documented type drives the field, exactly as documented bounds and
+        // enumerations drive the Value control. §14 measured what the operator
+        // picking it costs: a REAL32-typed set of an integer parameter is
+        // applied by the vehicle and echoed back with the vehicle's own type,
+        // decodes to 1.401298464324817e-45, and times out the confirm for a set
+        // that succeeded. PX4 publishes a type for every parameter; ArduPilot
+        // publishes none, so there the operator's choice stands untouched
+        // rather than being replaced by a guess.
+        if (def && def.type) $('#node-input-paramType').val(def.type);
+
         refreshValueField(def);
       }
 
