@@ -76,13 +76,15 @@ test('normalizeFamily passes through known values', () => {
   }
 });
 
-test('normalizeFamily returns unknown for unrecognised input', () => {
-  assert.equal(normalizeFamily('drone'), 'unknown');
-  assert.equal(normalizeFamily(''), 'unknown');
-  assert.equal(normalizeFamily(undefined), 'unknown');
-  // Flows saved before the rename carry 'generic'; it normalises to the same
-  // behaviour it always had, which is why no alias is kept for it.
-  assert.equal(normalizeFamily('generic'), 'unknown');
+test('normalizeFamily returns unknown for anything not in the list', () => {
+  // One rule, no special cases — `generic` sits here because it is not a
+  // family, not because anything remembers that it used to be one. The
+  // editor's Vehicle field is a closed select, so reaching this at all means
+  // a config the editor did not write, and `unknown` is the least-claiming
+  // family there is: names, no bounds, no enumerations.
+  for (const family of ['drone', '', undefined, 'generic', 'GENERIC', 'copter ']) {
+    assert.equal(normalizeFamily(family), 'unknown');
+  }
 });
 
 /* ---------- resolveDialect — seed ---------- */
