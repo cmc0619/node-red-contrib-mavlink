@@ -309,12 +309,12 @@
       function refreshParamInfo() {
         var id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
         var def = _paramDefs[id];
+        // The value field's hover text is applied by applyFieldMeta below;
+        // setting it here too would be two mechanisms for one attribute.
         if (def && def.description) {
           $('#node-input-paramId').attr('title', def.description);
-          $('#node-input-value').attr('title', def.description);
         } else {
           $('#node-input-paramId').removeAttr('title');
-          $('#node-input-value').removeAttr('title');
         }
         if (def && (def.description || def.unit)) {
           var parts = [];
@@ -354,7 +354,14 @@
         var $select = $('#mav-param-value-select');
         var hasValues = !!(action === 'set' && def && def.values && def.values.length);
 
-        $('#mav-param-value-unit').text(def && def.unit ? def.unit : '');
+        // Shared helper (§6): sets the hover text on the input *and* its label,
+        // and maintains the units hint. A private span here would be a second
+        // units mechanism for the same job.
+        RED.mavlink.applyFieldMeta('node-input-value', {
+          description: def && def.description ? def.description : '',
+          // The helper's key is `units`; a parameter definition carries `unit`.
+          units: def && def.unit ? def.unit : '',
+        });
 
         // Bounds and step are hints on the box; the validator is what actually
         // refuses, since a saved flow can carry anything.
@@ -507,7 +514,7 @@
       font-family: monospace;
       font-size: 0.9em;
     }
-    .mav-param-unit {
+    .mav-field-units {
       margin-left: 6px;
       color: var(--red-ui-secondary-text-color, #888);
       font-size: 0.85em;
@@ -561,7 +568,6 @@
     -->
     <select id="mav-param-value-select" style="width:60%;display:none"></select>
     <input type="text" id="node-input-value">
-    <span id="mav-param-value-unit" class="mav-param-unit"></span>
   </div>
   <div class="form-row"><label for="node-input-paramType">Type</label><select id="node-input-paramType"><option value="MAV_PARAM_TYPE_REAL32">REAL32 (9)</option><option value="MAV_PARAM_TYPE_UINT8">UINT8 (1)</option><option value="MAV_PARAM_TYPE_INT8">INT8 (2)</option><option value="MAV_PARAM_TYPE_UINT16">UINT16 (3)</option><option value="MAV_PARAM_TYPE_INT16">INT16 (4)</option><option value="MAV_PARAM_TYPE_UINT32">UINT32 (5)</option><option value="MAV_PARAM_TYPE_INT32">INT32 (6)</option></select></div>
   <div class="form-row" id="row-timeout"><label for="node-input-timeout">Timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="10000"></div>

@@ -213,6 +213,7 @@ test('Param definition GET failures clear stale UI and render server and fallbac
       mavlink: {
         adminApiUrl: (value) => value,
         enumOptionLabel: (entry) => `${entry.label} (${entry.value})`,
+        applyFieldMeta: () => {},
       },
       nodes: {
         node(id) {
@@ -294,7 +295,11 @@ test('Param definition loader explains every path on which it does not ask', () 
       $,
       node: {},
       RED: {
-        mavlink: { adminApiUrl: (v) => v, enumOptionLabel: (e) => `${e.label} (${e.value})` },
+        mavlink: {
+        adminApiUrl: (v) => v,
+        enumOptionLabel: (e) => `${e.label} (${e.value})`,
+        applyFieldMeta: () => {},
+      },
         nodes: { node: (id) => (nodesById || {})[id] || null },
       },
     };
@@ -370,7 +375,11 @@ function mountParamPanel(defs, initialValue) {
     $,
     node: {},
     RED: {
-      mavlink: { adminApiUrl: (v) => v, enumOptionLabel: (e) => `${e.label} (${e.value})` },
+      mavlink: {
+        adminApiUrl: (v) => v,
+        enumOptionLabel: (e) => `${e.label} (${e.value})`,
+        applyFieldMeta: () => {},
+      },
       nodes: { node: (id) => (id === 'profile-1' ? { dialect: 'ardupilotmega' } : null) },
     },
   };
@@ -515,6 +524,7 @@ const VALUE_DEFS = {
 };
 
 function mountValueField(defs, values) {
+  const applied = [];
   const start = paramHtml.indexOf('var _paramDefs = {};');
   const end = paramHtml.indexOf('/* Reload defs when tier-influencing fields change. */', start);
   const seed = Object.assign({
@@ -548,6 +558,9 @@ function mountValueField(defs, values) {
       mavlink: {
         adminApiUrl: (v) => v,
         enumOptionLabel: (e) => `${e.name} (${e.value})`,
+        // The real helper lives in resources/mavlink-editor.js and uses
+        // .closest()/.after(); record the call instead.
+        applyFieldMeta: (inputId, meta) => { applied.push({ inputId, meta }); },
       },
       nodes: { node: () => ({ dialect: 'ardupilotmega' }) },
     },
@@ -560,7 +573,7 @@ function mountValueField(defs, values) {
   );
   context.loadParamDefsForTest();
   requests[0].resolve({ defs });
-  return { context, element };
+  return { context, element, applied };
 }
 
 test('an enumerated parameter becomes a select, with a custom escape', () => {
@@ -604,7 +617,7 @@ test('a parameter with no enumeration keeps the plain box', () => {
 });
 
 test('bounds, step and unit are published on the field', () => {
-  const { context, element } = mountValueField(VALUE_DEFS, {
+  const { context, element, applied } = mountValueField(VALUE_DEFS, {
     '#node-input-paramId': 'RC1_MIN',
   });
   context.refreshInfoForTest();
@@ -613,12 +626,17 @@ test('bounds, step and unit are published on the field', () => {
   assert.equal(value.attrs.min, '800');
   assert.equal(value.attrs.max, '2200');
   assert.equal(value.attrs.step, '1');
-  assert.equal(element('#mav-param-value-unit').label, 'PWM');
+  // The unit reaches the field through the shared helper now, so assert the
+  // call rather than a private span — and that `unit` was mapped to its
+  // `units` key, which is the easy thing to get silently wrong.
+  const meta = applied[applied.length - 1];
+  assert.equal(meta.inputId, 'node-input-value');
+  assert.equal(meta.meta.units, 'PWM');
 });
 
 test('switching to an undocumented parameter clears the previous bounds', () => {
   // Stale min/max from the last parameter would reject perfectly good values.
-  const { context, element } = mountValueField(VALUE_DEFS, {
+  const { context, element, applied } = mountValueField(VALUE_DEFS, {
     '#node-input-paramId': 'RC1_MIN',
   });
   context.refreshInfoForTest();
@@ -628,7 +646,7 @@ test('switching to an undocumented parameter clears the previous bounds', () => 
   context.refreshInfoForTest();
   assert.equal(element('#node-input-value').attrs.min, undefined);
   assert.equal(element('#node-input-value').attrs.max, undefined);
-  assert.equal(element('#mav-param-value-unit').label, '');
+  assert.equal(applied[applied.length - 1].meta.units, '', 'stale units are cleared');
 });
 
 test('the Read action leaves the value field alone', () => {

@@ -87,7 +87,15 @@ test('queue band picker and companion target visibility live once in the resourc
 test('Param node titles come from loaded param defs, not baked HTML', () => {
   const html = readHtml('mavlink-param');
   assert.match(html, /#node-input-paramId'\)\.attr\('title', def\.description\)/);
-  assert.match(html, /#node-input-value'\)\.attr\('title', def\.description\)/);
+  // The value field goes through the shared helper, which sets the title on the
+  // input *and* its label and maintains the units hint — one mechanism, not a
+  // hand-set attribute plus a private units span.
+  assert.match(html, /RED\.mavlink\.applyFieldMeta\('node-input-value'/);
+  assert.doesNotMatch(
+    html,
+    /#node-input-value'\)\.attr\('title'/,
+    'the value title must not also be set by hand'
+  );
   assert.ok(
     !/<input[^>]*id="node-input-paramId"[^>]*title="/.test(html),
     'paramId must not bake a static title into the template'
