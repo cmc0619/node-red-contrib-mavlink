@@ -203,7 +203,13 @@ function parseRateLimit(value) {
       continue;
     }
     const name = part.slice(0, eq).trim();
-    const hz = Number(part.slice(eq + 1).trim());
+    const rawHz = part.slice(eq + 1).trim();
+    // `Number('')` is 0, and 0 is the *explicit* "unlimited" value — so a
+    // blank (`ATTITUDE=`) would silently delete the limit the operator asked
+    // for, and a second blank token would clobber a good earlier one. An
+    // unreadable value is skipped instead, leaving the message on the default
+    // limit: the node keeps skipping rather than falling open.
+    const hz = rawHz === '' ? NaN : Number(rawHz);
     if (name && Number.isFinite(hz) && hz >= 0) {
       result.perMessageMs.set(name, hz > 0 ? 1000 / hz : 0);
     }

@@ -450,6 +450,39 @@ test('mavlink-in: the editor validates the rate-limit shape; runtime trusts the 
   );
 });
 
+test('mavlink-in: a blank pair value does not fall open to unlimited', () => {
+  // `Number('')` is 0 and `NAME=0` means unlimited, so the naive parse turns a
+  // typo into "delete the limit the operator asked for" — and a later blank
+  // token clobbers a good earlier one. Skipping the unreadable value leaves
+  // the message on the bare default: the node keeps skipping.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  // Default 0.001 Hz for everything; the ATTITUDE pair is a typo, and the
+  // second HEARTBEAT token would otherwise erase the first.
+  Constructor.call(node, {
+    connection: 'conn-1',
+    rateLimit: '0.001, ATTITUDE=, HEARTBEAT=0.001, HEARTBEAT=',
+  });
+
+  stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0.1 }, trusted: true });
+  stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0.2 }, trusted: true });
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
+
+  assert.equal(
+    node._sends.filter((m) => m.topic === 'ATTITUDE').length, 1,
+    'the blank pair falls back to the bare default, not to unlimited'
+  );
+  assert.equal(
+    node._sends.filter((m) => m.topic === 'HEARTBEAT').length, 1,
+    'a trailing blank token does not erase the readable limit before it'
+  );
+});
+
 test('mavlink-in: changed-only does not crash on 64-bit BigInt fields (SYSTEM_TIME-style)', () => {
   const RED = makeRED();
   const { stub } = makeConnectionStub();
