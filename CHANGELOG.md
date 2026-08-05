@@ -10,6 +10,32 @@ see AGENTS.md "no migrations, no compatibility shims".
 
 ## [Unreleased]
 
+### Added
+
+- Parameter definitions now read **PX4's `parameters.json`** as well as
+  ArduPilot's `apm.pdef.json`. The two shapes differ in both directions: PX4
+  is a flat `parameters` array carrying the id inside each entry as `name`
+  (the ArduPilot walk would have keyed those off the array index and produced
+  a param called `0`), describes with `shortDesc`/`longDesc`, states bounds as
+  plain numbers rather than a `"low high"` string, and lists enumerated values
+  as `[{value, description}]` instead of `{"0": "Label"}`.
+
+### Fixed
+
+- The Param id field explains itself when it has no definitions to offer.
+  Four paths out of the loader — no Connection, a Connection with no Vehicle
+  Profile, no dialect, no firmware — returned before marking the load
+  complete, and the notice row renders only on a completed load. The two most
+  likely states therefore produced no dropdown, no hover text, and no reason;
+  typing a real param id looked like nothing happening.
+- A compressed parameter-definitions file is named rather than parsed. PX4
+  publishes `parameters.json.xz` **and serves it as
+  `Content-Type: application/json`**, so the header cannot be trusted and the
+  magic number is checked instead. Previously the XZ bytes reached
+  `JSON.parse`, whose error — binary and all — was shown to the operator as
+  ``Unexpected token '<27>', "<27>7zXZ..." is not valid JSON``. Non-JSON bodies
+  are now quoted as printable ASCII only.
+
 ### Changed
 
 - **Fan-out is now a replicator, not an action node.** It takes one *built*

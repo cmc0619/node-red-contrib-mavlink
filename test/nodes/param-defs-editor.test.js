@@ -254,3 +254,75 @@ test('Param definition GET failures clear stale UI and render server and fallbac
     'Parameter definitions unavailable.'
   );
 });
+
+/**
+ * The four ways loadParamDefs can decline to ask the server. Each used to be a
+ * bare `return`, which left `_defsLoaded` false — and the notice row renders
+ * only when `_defsLoaded` is true. So the states most likely to be hit (no
+ * Connection yet, or a Connection without a Vehicle Profile) were exactly the
+ * ones that produced no datalist, no tooltip, and no explanation: an operator
+ * typed a real param id and nothing happened.
+ */
+test('Param definition loader explains every path on which it does not ask', () => {
+  const start = paramHtml.indexOf('var _paramDefs = {};');
+  const end = paramHtml.indexOf('/* Reload defs when tier-influencing fields change. */', start);
+  assert.ok(start >= 0 && end > start, 'Param definition loader is present');
+
+  function run(values, nodesById) {
+    const elements = new Map();
+    const requests = [];
+    function element(selector) {
+      if (!elements.has(selector)) elements.set(selector, new FakeElement(values[selector] || ''));
+      return elements.get(selector);
+    }
+    function $(selector) {
+      if (selector === '<option></option>') return new FakeElement();
+      return element(selector);
+    }
+    $.getJSON = (url, query, success) => {
+      const request = new FakeDeferred({ url, query });
+      request.doneHandler = success;
+      requests.push(request);
+      return request;
+    };
+    const context = {
+      $,
+      node: {},
+      RED: {
+        mavlink: { adminApiUrl: (v) => v, enumOptionLabel: (e) => `${e.label} (${e.value})` },
+        nodes: { node: (id) => (nodesById || {})[id] || null },
+      },
+    };
+    vm.runInNewContext(
+      `${paramHtml.slice(start, end)}\nthis.loadParamDefsForTest = loadParamDefs;`,
+      context
+    );
+    context.loadParamDefsForTest();
+    return { element, requests };
+  }
+
+  const cases = [
+    ['no Connection on a wire tier', { '#node-input-delivery': 'send' }, null, /Connection/i],
+    [
+      'Connection without a Vehicle Profile',
+      { '#node-input-delivery': 'send', '#node-input-connection': 'conn-1' },
+      { 'conn-1': {} },
+      /Vehicle Profile/i,
+    ],
+    ['no dialect on the Build tier', { '#node-input-delivery': 'build' }, null, /dialect/i],
+    [
+      'no firmware behind an explicit dialect',
+      { '#node-input-delivery': 'build', '#node-input-dialect': 'ardupilotmega' },
+      null,
+      /firmware/i,
+    ],
+  ];
+
+  for (const [label, values, nodesById, expected] of cases) {
+    const { element, requests } = run(values, nodesById);
+    assert.equal(requests.length, 0, `${label}: must not reach the server`);
+    assert.equal(element('#row-param-defs-tip').visible, true, `${label}: notice row is shown`);
+    assert.match(element('#mav-param-defs-tip-text').label, expected, `${label}: says why`);
+    assert.equal(element('#node-input-paramId').attrs.list, undefined, `${label}: no stale datalist`);
+  }
+});

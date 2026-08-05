@@ -12,6 +12,19 @@ const canonicalArduPilotPdef = JSON.parse(fs.readFileSync(
   'utf8'
 ));
 
+/**
+ * A fetch response carrying `obj` as UTF-8 JSON bytes. The downloader reads
+ * `arrayBuffer()` rather than `json()` so it can sniff the magic number first —
+ * PX4 serves an XZ archive under `Content-Type: application/json`, so bytes are
+ * the only honest signal.
+ */
+function jsonResponse(obj) {
+  return {
+    ok: true,
+    async arrayBuffer() { return Buffer.from(JSON.stringify(obj), 'utf8'); },
+  };
+}
+
 function tempUserDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-param-route-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -175,17 +188,12 @@ test('POST explicitly downloads and returns the validated definition count', asy
   const previousFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
     requested.push(url);
-    return {
-      ok: true,
-      async json() {
-        return {
-          Vehicle: {
-            ONE: { humanName: 'One', documentation: 'First.', fields: {} },
-            TWO: { humanName: 'Two', documentation: 'Second.', fields: {} },
-          },
-        };
+    return jsonResponse({
+      Vehicle: {
+        ONE: { humanName: 'One', documentation: 'First.', fields: {} },
+        TWO: { humanName: 'Two', documentation: 'Second.', fields: {} },
       },
-    };
+    });
   };
   t.after(() => { globalThis.fetch = previousFetch; });
   const updateRes = mockRes();
@@ -211,10 +219,7 @@ test('POST accepts and persists the canonical ArduPilot PascalCase document', as
   const userDir = tempUserDir(t);
   const { routes } = captureRoutes(userDir);
   const previousFetch = globalThis.fetch;
-  globalThis.fetch = async () => ({
-    ok: true,
-    async json() { return canonicalArduPilotPdef; },
-  });
+  globalThis.fetch = async () => jsonResponse(canonicalArduPilotPdef);
   t.after(() => { globalThis.fetch = previousFetch; });
   const updateRes = mockRes();
 

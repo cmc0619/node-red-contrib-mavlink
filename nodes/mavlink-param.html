@@ -76,6 +76,22 @@
        * Request sequencing prevents a stale response from overwriting a newer one.
        */
       var _defsSeq = 0;
+
+      /**
+       * Give up on loading definitions, saying why. Every path out of
+       * loadParamDefs has to come through here: a bare `return` leaves
+       * _defsLoaded false, which is the one condition under which the notice
+       * row cannot render — so the field silently offers nothing and explains
+       * nothing, which is exactly what a typed-in param id looked like before.
+       */
+      function noParamDefs(notice) {
+        _paramDefs = {};
+        _defsNotice = notice;
+        _defsLoaded = true;
+        rebuildParamIdDatalist();
+        refreshParamInfo();
+      }
+
       function loadParamDefs() {
         var delivery = $('#node-input-delivery').val() || 'build';
         var query;
@@ -83,10 +99,10 @@
 
         if (delivery === 'build') {
           var dialect = $('#node-input-dialect').val() || '';
-          if (!dialect) return;
+          if (!dialect) return noParamDefs('Pick a dialect to load parameter definitions.');
           if (dialect === '__vehicle') {
             vehicleId = $('#node-input-vehicle').val() || '';
-            if (!vehicleId) return;
+            if (!vehicleId) return noParamDefs('Pick a Vehicle Profile to load parameter definitions.');
             query = { vehicle: vehicleId };
             if (RED.nodes && typeof RED.nodes.node === 'function') {
               var vehicleNode = RED.nodes.node(vehicleId);
@@ -95,17 +111,19 @@
           } else {
             query = { dialect: dialect };
             var firmware = $('#node-input-firmware').val() || '';
-            if (!firmware) return;
+            if (!firmware) return noParamDefs('Pick a firmware to load parameter definitions.');
             query.firmware = firmware;
           }
         } else {
           var connectionId = $('#node-input-connection').val() || '';
-          if (!connectionId) return;
+          if (!connectionId) return noParamDefs('Pick a Connection to load parameter definitions.');
           var connectionNode = RED.nodes && typeof RED.nodes.node === 'function'
             ? RED.nodes.node(connectionId) : null;
-          if (!connectionNode) return;
+          if (!connectionNode) return noParamDefs('The selected Connection could not be resolved.');
           vehicleId = connectionNode.vehicle || '';
-          if (!vehicleId) return;
+          if (!vehicleId) {
+            return noParamDefs('This Connection has no Vehicle Profile, which is where parameter definitions live.');
+          }
           query = { vehicle: vehicleId };
         }
 
@@ -287,5 +305,6 @@
   <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — pick a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Send-as</b> identity stamps the source address.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). For GCS/custom identities, fill target sysid/compid or leave blank to inherit the profile default.</p>
   <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast.</p>
-  <p>When the flow is deployed and its Vehicle Profile has downloaded parameter definitions, the <b>Param id</b> field becomes a searchable datalist. Set a <b>Param defs URL</b> and use <b>Update</b> in the Vehicle Profile editor to download definitions for any firmware, including ArduPilot.</p>
+  <p>When the flow is deployed and its Vehicle Profile has downloaded parameter definitions, the <b>Param id</b> field becomes a searchable datalist, and the definition's text appears as hover help on both the id and the value. Set a <b>Param defs URL</b> and use <b>Update</b> in the Vehicle Profile editor to download them. When definitions are unavailable the field says why, under the input.</p>
+  <p>Both firmware formats are read: ArduPilot's <code>apm.pdef.json</code> (objects keyed by param id) and PX4's <code>parameters.json</code> (a <code>parameters</code> array carrying <code>name</code> inside each entry). The document must be <b>uncompressed JSON</b> — PX4 publishes only <code>parameters.json.xz</code>, so it needs decompressing and hosting first. A compressed file is named as such rather than being parsed.</p>
 </script>
