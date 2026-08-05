@@ -1762,6 +1762,44 @@ and never measured. Two of five were wrong:
   vertically with no `STATUSTEXT`. Kept, reworded to name the measurement.
 - **New — PX4 `BODY_NED` now warns** (item 4).
 
+*Mechanism (firmware source, read 2026-08-05 — consulted **after** the measurement, which is
+the wrong order and cost a rig run; see the note below):*
+
+- **PX4** (`src/modules/mavlink/mavlink_receiver.cpp`,
+  `handle_message_set_position_target_local_ned`, read at **`main`, not the measured v1.18.0
+  tag**): the frame switch handles `LOCAL_NED` and the body frames only. The body branch
+  rotates *velocity* by the vehicle attitude and sets the position setpoint to
+  `matrix::Vector3f(NAN, NAN, NAN)` — **body frames are velocity-only; position is discarded.**
+  A frame outside the switch is rejected outright with
+  `mavlink_log_critical(… "coordinate frame %u unsupported")`. That explains all three PX4
+  observations: frame 7 rejected outright, frame 9 accepted-but-position-dropped, frame 8 a
+  position-only packet carrying nothing actionable.
+- **ArduPilot** (`ArduCopter/GCS_MAVLink_Copter.cpp`, read at the measured **`Copter-4.7.0`**
+  tag): accepts exactly `LOCAL_NED`, `LOCAL_OFFSET_NED`, `BODY_NED`, `BODY_OFFSET_NED`; the
+  `_OFFSET_` variants add the current position (`pos_ned_m += rel_pos_ned_m`), and acceleration
+  fields feed real `PosVelAccel` / `VelAccel` / `Accel` guided submodes — corroborating the
+  acceleration-only refutation with a mechanism, not just 43 m of motion.
+
+*Two honest gaps in that source read, neither of which moves the decision:*
+
+1. **The ArduPilot source summary and the measurement disagree on frame 8.** The read suggests
+   `BODY_NED` is rotated-then-absolute while only `_OFFSET_` frames add current position; the
+   measurement put the vehicle at ≈(30, 30, −40) from a (30, 20, −20) start, which is offset
+   behaviour. The measurement is a direct observation of the flown build; the source read was a
+   summarisation, not a line-by-line audit. **Measurement wins** (§14 exists for exactly this),
+   and the guard is conservative on frame 8 either way, so nothing changes. Resolve by reading
+   the handler line-by-line if frame 8 ever needs to relax.
+2. **PX4 should have emitted a STATUSTEXT for frame 7** (`mavlink_log_critical`), and the run
+   did not report one. Either the log was not captured or v1.18.0 differs from `main`. Worth
+   confirming before quoting the rejection path as measured.
+
+*Method note for the next agent:* AGENTS.md already says reference implementations are the
+*default hypothesis* and §14 is the *authority*. Reading these two handlers first would have
+produced the whole frame matrix in minutes and told the rig what to look for; the rig was still
+required for the actuation questions (acceptance in the parser is not action by the controller —
+the acceleration refutation turned on precisely that gap) and for pinning behaviour to the
+versions users fly. Hypothesis from source, authority from measurement — in that order.
+
 *Check:* `lib/move/index.js` (`OFFSET_FRAMES`, `advisoryFor`), `node --test test/move/move.test.js`
 — "blank local coordinates: refused in absolute frames, inert in measured OFFSET frames" and
 "measurement-refuted advisories are silent".
