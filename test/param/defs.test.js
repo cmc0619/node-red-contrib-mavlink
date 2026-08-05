@@ -286,3 +286,130 @@ test('corrupt local JSON and invalid local documents propagate instead of appear
   await assert.rejects(readParamDefs(userDir, 'profile-corrupt'), /JSON|property name|position/i);
   await assert.rejects(readParamDefs(userDir, 'profile-empty'), /no parameter definitions/i);
 });
+
+/**
+ * PX4 publishes `parameters.json.xz`: a different container *and* a different
+ * schema from ArduPilot's `apm.pdef.json`. Both walls were hit in the field —
+ * the XZ bytes reached JSON.parse and its error, binary and all, was shown to
+ * the operator.
+ */
+
+/** A fetch response carrying raw bytes, as `defaultFetch` now reads them. */
+function bytesResponse(bytes) {
+  return { ok: true, async arrayBuffer() { return Buffer.from(bytes); } };
+}
+
+test('parsePdefJson reads the PX4 parameters array, keyed by the entry name', () => {
+  const map = parsePdefJson({
+    version: 1,
+    parameters: [
+      {
+        name: 'RC1_MIN',
+        shortDesc: 'RC channel 1 minimum',
+        longDesc: 'Minimum value for RC channel 1',
+        type: 'Float',
+        min: 800,
+        max: 1500,
+        units: 'us',
+      },
+    ],
+  });
+
+  // The id lives *inside* the entry here; the ArduPilot walk would have keyed
+  // this off the array index and produced a param called "0".
+  assert.deepEqual([...map.keys()], ['RC1_MIN']);
+  const def = map.get('RC1_MIN');
+  assert.equal(def.description, 'Minimum value for RC channel 1', 'longDesc preferred over shortDesc');
+  assert.equal(def.unit, 'us');
+  assert.equal(def.min, 800);
+  assert.equal(def.max, 1500);
+});
+
+test('PX4 entries without a longDesc fall back to the one-line shortDesc', () => {
+  // longDesc is on 61% of PX4 entries; shortDesc on 100%. A blank tooltip for
+  // the other 39% would be the visible symptom.
+  const map = parsePdefJson({
+    parameters: [{ name: 'PWM_MAIN_REV', shortDesc: 'Reverse Output Range for SIM', type: 'Int32' }],
+  });
+  assert.equal(map.get('PWM_MAIN_REV').description, 'Reverse Output Range for SIM');
+});
+
+test('PX4 states enumerated values as an array, ArduPilot as an object; both land the same', () => {
+  const px4 = parsePdefJson({
+    parameters: [{
+      name: 'ADSB_EMERGC',
+      shortDesc: 'ADSB-Out Emergency State',
+      values: [
+        { value: 0, description: 'NoEmergency' },
+        { value: 1, description: 'General' },
+      ],
+    }],
+  });
+  assert.deepEqual(px4.get('ADSB_EMERGC').values, [
+    { value: 0, label: 'NoEmergency' },
+    { value: 1, label: 'General' },
+  ]);
+
+  const ardupilot = parsePdefJson({
+    Vehicle: { ARMING_CHECK: { humanName: 'Arming', documentation: 'x', Values: { 0: 'None', 1: 'All' } } },
+  });
+  assert.deepEqual(ardupilot.get('ARMING_CHECK').values, [
+    { value: 0, label: 'None' },
+    { value: 1, label: 'All' },
+  ]);
+});
+
+test('a values array with no usable entries yields undefined, not NaN options', () => {
+  const map = parsePdefJson({
+    parameters: [{ name: 'X', shortDesc: 'x', values: [{ description: 'no value field' }] }],
+  });
+  assert.equal(map.get('X').values, undefined);
+});
+
+test('an XZ archive is named as such instead of reaching JSON.parse', async (t) => {
+  const userDir = tempUserDir(t);
+  // The real magic number, and the bytes behind the "7zXZ" in the reported error.
+  const xz = [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x04, 0xe6, 0xd6];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => bytesResponse(xz);
+  t.after(() => { globalThis.fetch = previousFetch; });
+
+  await assert.rejects(
+    updateParamDefs(userDir, 'profile-xz', 'https://artifacts.px4.io/Firmware/_general/parameters.json.xz'),
+    (err) => {
+      assert.match(err.message, /XZ archive, not JSON/);
+      // The point of the change: no binary, no "Unexpected token" in the editor.
+      assert.doesNotMatch(err.message, /Unexpected token/);
+      return true;
+    }
+  );
+});
+
+test('a non-JSON body is quoted as printable ASCII only', async (t) => {
+  const userDir = tempUserDir(t);
+  const previousFetch = globalThis.fetch;
+  // "<html>" followed by bytes that would render as control characters.
+  globalThis.fetch = async () => bytesResponse([0x3c, 0x68, 0x74, 0x6d, 0x6c, 0x3e, 0x00, 0x01, 0x1f]);
+  t.after(() => { globalThis.fetch = previousFetch; });
+
+  await assert.rejects(
+    updateParamDefs(userDir, 'profile-html', 'https://example.invalid/params'),
+    (err) => {
+      assert.match(err.message, /did not return JSON \(starts with "<html>\.\.\."\)/);
+      return true;
+    }
+  );
+});
+
+test('a well-formed PX4 document still downloads and persists', async (t) => {
+  const userDir = tempUserDir(t);
+  const doc = { parameters: [{ name: 'RC1_MIN', shortDesc: 'RC channel 1 minimum', units: 'us' }] };
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => bytesResponse(Buffer.from(JSON.stringify(doc), 'utf8'));
+  t.after(() => { globalThis.fetch = previousFetch; });
+
+  const result = await updateParamDefs(userDir, 'profile-px4', 'https://example.invalid/parameters.json');
+  assert.equal(result.count, 1);
+  const reread = await readParamDefs(userDir, 'profile-px4');
+  assert.equal(reread.get('RC1_MIN').unit, 'us');
+});
