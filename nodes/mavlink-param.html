@@ -24,14 +24,21 @@
        * is int16_t's, because the true ceiling is the vehicle's param_count and
        * the editor cannot know it without a full list read.
        *
-       * By name the field is hidden and carries -1, written by the dialog
+       * Anywhere else the field is hidden and carries -1, written by the dialog
        * rather than typed. Checking a value the operator cannot see would red
        * the node over something they have no way to fix.
        */
       paramIndex: {
         value: -1,
         validate: function (v, opt) {
-          if ((this.lookup || 'name') !== 'index') return true;
+          if (!indexAddressed(this)) return true;
+          // The shared range check passes blank as "inherit / optional", which
+          // every target-id field wants and this one does not: in index mode
+          // the index *is* the identifier, and an empty box reaches the wire
+          // as Number('') — index 0, a different parameter, silently.
+          if (v === undefined || v === null || String(v).trim() === '') {
+            return 'an index is required when identifying by index';
+          }
           return RED.mavlink.validateIntRange(0, 32767)(v, opt);
         },
       },
@@ -102,6 +109,30 @@
    * @param {object} node
    * @returns {string}
    */
+  /**
+   * Whether this node addresses its parameter by index.
+   *
+   * Two things have to be true, and the second is the protocol's, not the
+   * operator's: only `PARAM_REQUEST_READ` carries a `param_index` at all.
+   * `PARAM_SET`'s fields are target_system, target_component, param_id,
+   * param_value, param_type — there is nowhere to put an index, so a set is
+   * addressed by name whatever the mode says. `PARAM_REQUEST_LIST` names no
+   * parameter either way.
+   *
+   * Live field first, saved value as the fallback — the same order every
+   * other Build-tier validator in the palette reads its cross-field state in
+   * (`buildTierDialectDefaults`), since validators also run with the dialog
+   * closed, where jQuery yields an empty set rather than throwing.
+   *
+   * @param {object} node
+   * @returns {boolean}
+   */
+  function indexAddressed(node) {
+    var action = $('#node-input-action').val() || (node && node.action) || 'read';
+    var lookup = $('#node-input-lookup').val() || (node && node.lookup) || 'name';
+    return action === 'read' && lookup === 'index';
+  }
+
   function editedParamId(node) {
     // Validators also run with the dialog closed (on import, and on deploy),
     // where the field is absent — jQuery returns an empty set and `.val()`
@@ -134,12 +165,20 @@
        * Show the one field that names the parameter, and keep the other
        * honest.
        *
+       * The choice is offered only where the protocol can act on it. A read
+       * carries both fields and picks between them; a set has no
+       * `param_index` field to carry an index and a list request names no
+       * parameter at all, so for those the question is not asked and the
+       * answer is Name.
+       *
        * `param_index` -1 means "use param_id", so name-mode writes -1 into the
        * hidden field rather than leaving whatever index was last typed —
        * a stale index would win over the name on the wire.
        */
       function applyLookupMode() {
-        var byIndex = $('input[name=node-input-lookup]:checked').val() === 'index';
+        var addressable = ($('#node-input-action').val() || 'read') === 'read';
+        var byIndex = indexAddressed(node);
+        $('#row-param-lookup').toggle(addressable);
         $('#row-paramId').toggle(!byIndex);
         $('#row-paramIndex').toggle(byIndex);
         if (!byIndex) {
@@ -583,7 +622,13 @@
         loadParamDefs();
         RED.mavlink.reloadTargetCompId(node);
       });
-      $('input[name=node-input-lookup]').on('change', applyLookupMode);
+      // The radios are the control, `#node-input-lookup` is the saved value.
+      $('input[name=mav-param-lookup]').on('change', function () {
+        $('#node-input-lookup').val(
+          $('input[name=mav-param-lookup]:checked').val() || 'name'
+        );
+        applyLookupMode();
+      });
 
       $('#node-input-firmware').on('change', function () {
         clearParamDefs();
@@ -619,7 +664,12 @@
         // move the caret instead of the selection.
         if (event.preventDefault) event.preventDefault();
       });
-      $('#node-input-action').on('change', refreshParamInfo);
+      // The action decides whether a parameter can be addressed by index at
+      // all, so it redraws the mode rows as well as the Value field.
+      $('#node-input-action').on('change', function () {
+        applyLookupMode();
+        refreshParamInfo();
+      });
       $('#mav-param-value-select').on('change', function () {
         var picked = $('#mav-param-value-select').val();
         if (picked === VALUE_CUSTOM) {
@@ -638,6 +688,10 @@
       // one published option.
       RED.mavlink.fillEnumSelect($('#node-input-paramType'), RED.mavlink.PARAM_TYPE_OPTIONS,
         { valueKey: 'name', saved: node.paramType, triggerChange: false });
+      // Node-RED has already filled the hidden field from the saved property;
+      // the radios are ours to check off it.
+      $('input[name=mav-param-lookup][value="' +
+        ($('#node-input-lookup').val() || 'name') + '"]').prop('checked', true);
       applyLookupMode();
       refreshVisibility();
       loadParamDefs();
@@ -689,20 +743,30 @@
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and echo-confirm</option><option value="collect">Request list and collect</option></select></div>
   <div class="form-row" id="row-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
   <div class="form-row" id="row-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
-  <div class="form-row" id="row-firmware"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value="">(select firmware)</option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
+  <div class="form-row" id="row-firmware"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value=""></option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
   <div class="form-row" id="row-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-identity"><label for="node-input-identity">Send-as</label><select id="node-input-identity"></select></div>
   <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action"><option value="read">Read one</option><option value="set">Set one</option><option value="request-list">Request list</option></select></div>
   <div class="form-row" id="row-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
   <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
+  <!--
+    The radios are the control; the hidden input is what persists. Node-RED
+    loads and saves a property from `#node-input-<prop>` (§2), and a radio
+    *group* has no single element carrying that id — named `node-input-lookup`
+    they looked like they did, and the mode was thrown away on every close.
+    So they write through to the hidden field, exactly as the Value select
+    below writes through to `#node-input-value`: one persisted field per
+    property, no oneditsave needed to marshal it.
+  -->
   <div class="form-row" id="row-param-lookup">
     <label for="node-input-lookup">Identify by</label>
+    <input type="hidden" id="node-input-lookup">
     <span>
       <label style="width:auto;margin-right:12px;">
-        <input type="radio" name="node-input-lookup" value="name" style="width:auto;vertical-align:top;"> Name
+        <input type="radio" name="mav-param-lookup" value="name" style="width:auto;vertical-align:top;"> Name
       </label>
       <label style="width:auto;">
-        <input type="radio" name="node-input-lookup" value="index" style="width:auto;vertical-align:top;"> Index
+        <input type="radio" name="mav-param-lookup" value="index" style="width:auto;vertical-align:top;"> Index
       </label>
     </span>
   </div>
@@ -752,6 +816,14 @@
   text becomes hover help on both the id and the value. A name that is in no
   list still works: Lua scripts and custom builds declare parameters no metadata
   file has heard of.</p>
+  <p><b>Identify by</b> picks name or index, and appears only on <i>Read one</i>.
+  <code>PARAM_REQUEST_READ</code> carries both fields and uses the index unless
+  it is <code>-1</code>, so they are alternatives rather than a pair; by index
+  the name is not sent at all. <code>PARAM_SET</code> has no index field and
+  <i>Request list</i> names no parameter, so both are always by name. The index
+  starts at 0 and runs to the count the vehicle reports in
+  <code>PARAM_VALUE.param_count</code> — it is a position in <i>that</i>
+  vehicle's table, not a stable identifier across firmware versions.</p>
   <p><b>Value</b> follows the definition. A parameter with documented choices
   becomes a dropdown — <code>FLTMODE1</code> offers "AltHold (2)" — with a
   <b>Custom value…</b> escape for anything the list does not cover. Documented

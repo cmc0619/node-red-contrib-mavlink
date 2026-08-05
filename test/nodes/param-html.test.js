@@ -342,11 +342,17 @@ test('mavlink-param value validator: falls back to the saved id when no dialog i
 
 /* ---------- editor chrome ---------- */
 
-test('every Firmware placeholder names itself instead of rendering blank', () => {
-  // A `<option value="">` is required: firmware is only mandatory on the Build
-  // tier with a concrete dialect, so blank is a legal saved value and dropping
-  // the option would silently default the field to ArduPilot (§6 forbids an
-  // invented firmware). An *unlabelled* one just looks like a broken row.
+test('a Firmware select offers blank, and says nothing in it', () => {
+  // Two rules meeting. The empty option has to exist: firmware is mandatory
+  // only on the Build tier with a concrete dialect, so blank is a legal saved
+  // value, and a list without it would coerce every profile-sourced node to
+  // the first entry — inventing an ArduPilot the operator never picked, with
+  // ArduPilot's bounds and encoding behind it.
+  //
+  // And it has to stay unlabelled: §2 gives "this field must be set" exactly
+  // one mechanism, `validate`, which reds the field and marks the node. A
+  // "(select firmware)" caption is the bespoke placeholder option that row
+  // rules out — a second way to say what the first already says.
   const dir = path.join(__dirname, '..', '..', 'nodes');
   const withFirmware = fs.readdirSync(dir)
     .filter((f) => f.endsWith('.html'))
@@ -355,11 +361,12 @@ test('every Firmware placeholder names itself instead of rendering blank', () =>
 
   assert.ok(withFirmware.length >= 2, 'more than one node offers a Firmware field');
   for (const [name, src] of withFirmware) {
-    assert.doesNotMatch(
-      src,
-      /<option value=""><\/option>/,
-      `${name}: Firmware placeholder renders as an empty row`
-    );
+    const select = /<select id="node-input-firmware">([\s\S]*?)<\/select>/.exec(src);
+    assert.ok(select, `${name}: Firmware is a select`);
+    assert.match(select[1], /<option value=""><\/option>/,
+      `${name}: blank is a legal firmware and needs an option to hold it`);
+    assert.doesNotMatch(select[1], /<option value="">[^<]/,
+      `${name}: the blank option carries a caption instead of leaving §2 to validate`);
   }
 });
 
@@ -377,13 +384,84 @@ test('the Param dialog carries definition detail on hover, not in a row', () => 
 
 /* ---------- identify by name or index ---------- */
 
-test('the Param dialog offers name or index, never both at once', () => {
-  // param_index -1 means "use param_id", so the protocol already treats these
-  // as alternatives. Two visible fields made that a sentinel to know rather
-  // than a choice to make.
-  assert.match(html, /lookup:\s*\{\s*value:\s*'name'\s*\}/, 'defaults to by-name');
-  assert.match(html, /name="node-input-lookup"\s+value="name"/);
-  assert.match(html, /name="node-input-lookup"\s+value="index"/);
+/**
+ * The dialog's real `defaults`, by running the editor script rather than
+ * reading it.
+ *
+ * `registerType` is the only thing the script does at load time, so capturing
+ * its argument yields the actual descriptors — validators included, closing
+ * over the same `$` the dialog uses. Asserting on the source text instead
+ * proves the file *says* something; this proves it *does* it, and a validator
+ * is exactly the kind of thing that can read right and behave wrong.
+ *
+ * @param {object} [fields]  live field values, keyed by selector
+ * @returns {object} the `defaults` object
+ */
+function paramDefaults(fields = {}) {
+  const start = html.indexOf('<script type="text/javascript">');
+  const end = html.indexOf('</script>', start);
+  assert.ok(start >= 0 && end > start, 'the editor script block is where it was');
+
+  let captured = null;
+  const context = {
+    RED: {
+      nodes: {
+        registerType: (name, def) => { captured = def; },
+        getType: () => undefined,
+      },
+      validators: {
+        number: (blankOk) => (v) =>
+          (blankOk && (v === '' || v === undefined || v === null)) || Number.isFinite(Number(v)),
+      },
+    },
+    // One element per selector, so `.val()` answers what the test seeded and
+    // an unseeded selector answers '' — the same "field is empty" the dialog
+    // sees, distinct from the closed-dialog case below.
+    $: (selector) => ({ length: 1, val: () => fields[selector] }),
+  };
+  installEditorHelpers(context);
+  vm.runInNewContext(html.slice(start + '<script type="text/javascript">'.length, end), context);
+
+  assert.ok(captured, 'the script registered mavlink-param');
+  return captured.defaults;
+}
+
+test('every saved property has the input Node-RED saves it from', () => {
+  // Node-RED's load/save is `$("#node-input-<prop>").val()` (§2). A property in
+  // `defaults` with no element of that id silently never persists — which is
+  // how a radio *group* named `node-input-lookup` passed review while the mode
+  // it collected was thrown away on every close. Config-node properties are
+  // exempt: the platform builds their picker.
+  const defaults = paramDefaults();
+  const missing = Object.keys(defaults).filter(
+    (prop) => !defaults[prop].type && !html.includes(`id="node-input-${prop}"`)
+  );
+  assert.deepEqual(missing, [], 'properties with nowhere to be saved from');
+});
+
+test('the mode radios write through to the field that persists', () => {
+  const defaults = paramDefaults();
+  assert.equal(defaults.lookup.value, 'name', 'defaults to by-name');
+
+  // The radios may not *be* `node-input-lookup`: a group has no single element
+  // carrying that id, so Node-RED's `.val()` read finds nothing and the mode
+  // is dropped on close. They carry their own name and write into the hidden
+  // field, which is the one thing Node-RED loads and saves.
+  assert.match(html, /<input type="hidden" id="node-input-lookup">/, 'a real saved field');
+  assert.doesNotMatch(html, /type="radio"[^>]*name="node-input-lookup"/,
+    'radios must not impersonate the saved field');
+  assert.match(html, /type="radio" name="mav-param-lookup" value="name"/);
+  assert.match(html, /type="radio" name="mav-param-lookup" value="index"/);
+  assert.match(
+    html,
+    /\$\('#node-input-lookup'\)\.val\(\s*\$\('input\[name=mav-param-lookup\]:checked'\)\.val\(\)/,
+    'picking a radio writes the mode into the saved field'
+  );
+  assert.match(
+    html,
+    /\$\('input\[name=mav-param-lookup\]\[value="' \+\s*\(\$\('#node-input-lookup'\)\.val\(\)/,
+    'and reopening checks the radio the saved field names'
+  );
 
   assert.match(html, /\$\('#row-paramId'\)\.toggle\(!byIndex\)/, 'name row follows the mode');
   assert.match(html, /\$\('#row-paramIndex'\)\.toggle\(byIndex\)/, 'index row follows the mode');
@@ -394,17 +472,50 @@ test('the Param dialog offers name or index, never both at once', () => {
   );
 });
 
-test('the index range check applies only where an index is edited', () => {
-  // By index the floor is 0: -1 is the "use the name" sentinel and contradicts
-  // the mode. By name the field is hidden, so checking it would red the node
-  // over a value the operator cannot see.
-  const start = html.indexOf('paramIndex: {');
-  assert.ok(start > 0, 'the paramIndex default is present');
-  const body = html.slice(start, html.indexOf('},', html.indexOf('validate:', start)));
+test('the index range check runs only where an index reaches the wire', () => {
+  // Three states, one validator. By index on a read the field is real and
+  // checked from 0 — -1 is the "use the name" sentinel and contradicts the
+  // mode. On a set there is no `param_index` field in PARAM_SET at all, and on
+  // a list request no parameter is named, so the row is hidden and carries -1;
+  // checking it would red the node over a value the operator cannot see, with
+  // no field on screen to fix it in.
+  // A Node-RED validator refuses with the message it wants shown, not `false`,
+  // so "not true" is the refusal — and the message is part of the contract.
+  const refused = (result, why) => {
+    assert.notEqual(result, true, why);
+    assert.match(String(result), /between 0 and 32767/, `${why}: and says why`);
+  };
 
-  assert.match(body, /!==\s*'index'\)\s*return true/, 'by name it does not run');
-  assert.match(body, /validateIntRange\(0,\s*32767\)/, 'by index it is a real index');
-  assert.doesNotMatch(body, /validateIntRange\(-1/, 'and -1 is not a legal typed index');
+  const byIndexRead = paramDefaults({
+    '#node-input-action': 'read',
+    '#node-input-lookup': 'index',
+  }).paramIndex.validate;
+  assert.equal(byIndexRead(0), true, '0 is the first parameter');
+  assert.equal(byIndexRead(32767), true, 'and int16_t is the ceiling');
+  refused(byIndexRead(-1), 'the sentinel is not a typed index');
+  refused(byIndexRead(-5), 'nor is anything below it');
+  refused(byIndexRead(99999), 'nor anything past the ceiling');
+  // Blank has its own refusal, because the shared range check passes it as
+  // "optional" and here it is the identifier — an empty box would reach the
+  // wire as Number('') and read parameter 0 instead.
+  assert.match(String(byIndexRead('')), /index is required/,
+    'by index, an index is required');
+
+  for (const action of ['set', 'request-list']) {
+    const hidden = paramDefaults({
+      '#node-input-action': action,
+      '#node-input-lookup': 'index',
+    }).paramIndex.validate;
+    assert.equal(hidden(-1), true, `${action}: the hidden sentinel passes`);
+    assert.equal(hidden(-5), true, `${action}: and nothing hidden is refused`);
+  }
+
+  // Dialog closed: no live fields, so the saved config answers instead.
+  const closed = paramDefaults().paramIndex.validate;
+  refused(closed.call({ action: 'read', lookup: 'index' }, -1),
+    'a saved by-index read is still checked on deploy');
+  assert.equal(closed.call({ action: 'set', lookup: 'index' }, -1), true,
+    'a saved set is not, whatever its stale mode says');
 });
 
 test('the Index field advertises the same floor the validator enforces', () => {
