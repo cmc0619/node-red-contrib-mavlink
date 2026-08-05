@@ -61,16 +61,23 @@ module.exports = function registerMavlinkParam(RED) {
         const profileId = typeof req.query.vehicle === 'string'
           ? req.query.vehicle.trim() : '';
 
-        // Firmware and vehicle come either from the named profile or, on the
-        // Build tier with an explicit dialect, straight off the query — that
-        // tier has no profile to name, which is why it used to be a dead end.
+        // Firmware and vehicle family come from the query when the editor sent
+        // them, and from the deployed profile otherwise.
+        //
+        // The query wins deliberately. `getNode` resolves only *deployed*
+        // config nodes, so a Vehicle Profile the operator just created — or
+        // edited and not yet deployed — is invisible here while being perfectly
+        // visible in the editor that sent the request. Preferring the query
+        // also means an edited-but-undeployed firmware is honoured rather than
+        // answered from the stale deployed value.
         let firmware = typeof req.query.firmware === 'string' ? req.query.firmware.trim() : '';
-        let vehicleFamily = '';
-        if (profileId) {
+        let vehicleFamily = typeof req.query.vehicleFamily === 'string'
+          ? req.query.vehicleFamily.trim() : '';
+        if (profileId && (!firmware || !vehicleFamily)) {
           const profile = RED.nodes.getNode(profileId);
           if (profile) {
             firmware = firmware || profile.firmware || '';
-            vehicleFamily = profile.vehicleFamily || '';
+            vehicleFamily = vehicleFamily || profile.vehicleFamily || '';
           }
         }
 

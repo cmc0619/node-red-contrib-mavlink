@@ -366,3 +366,36 @@ test('an unknown firmware yields nothing rather than another firmware s paramete
   assert.deepEqual(res.body.defs, {});
   assert.match(res.body.notice, /betaflight/);
 });
+
+test('GET honours firmware and family sent by the editor, with no deployed profile', async (t) => {
+  // `getNode` resolves only *deployed* config nodes. A Vehicle Profile the
+  // operator just created is visible in the editor and invisible here, so
+  // relying on it alone left the field empty until the next deploy.
+  const { routes } = captureRoutes(tempUserDir(t)); // no nodes registered at all
+  const res = mockRes();
+
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { vehicle: 'profile-not-yet-deployed', firmware: 'ardupilot', vehicleFamily: 'plane' } },
+    res
+  );
+
+  assert.equal(res.body.source, 'seed');
+  assert.ok(res.body.defs.RC1_MIN, 'definitions arrive without a deployed profile');
+  assert.ok(res.body.defs.ARSPD_OFF_PCNT, 'and the plane document was selected, not the union');
+});
+
+test('GET prefers the editor query over a stale deployed profile', async (t) => {
+  // Editing a profile's firmware and asking before deploying must answer for
+  // what is on screen, not for what was last deployed.
+  const { routes } = captureRoutes(tempUserDir(t), {
+    'profile-1': { firmware: 'ardupilot', vehicleFamily: 'copter' },
+  });
+  const res = mockRes();
+
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { vehicle: 'profile-1', firmware: 'px4' } },
+    res
+  );
+
+  assert.equal(res.body.defs.RC1_MIN.unit, 'us', 'PX4 units, not ArduPilot PWM');
+});

@@ -29,7 +29,8 @@
           if (v === undefined || v === null || String(v).trim() === '') return true;
           var n = Number(v);
           if (!Number.isFinite(n)) return false;
-          var def = _paramDefsForValidation[editedParamId(this)];
+          var defs = _paramDefsByKey[paramDefsKey(this)];
+          var def = defs && defs[editedParamId(this)];
           if (!def) return true;
           if (def.min !== undefined && n < def.min) return false;
           if (def.max !== undefined && n > def.max) return false;
@@ -43,12 +44,39 @@
   );
 
   /**
-   * A mirror of the loaded definitions, kept at script scope because Node-RED
-   * evaluates `validate` outside `oneditprepare` — the cache itself lives in
-   * the dialog's closure and is unreachable from there. Written on every load;
-   * read only to range-check a value.
+   * Loaded definitions, keyed by *which* definitions they are, because Node-RED
+   * evaluates `validate` outside `oneditprepare` — the dialog's own cache is
+   * unreachable from there.
+   *
+   * Keyed, not a single mirror: a lone table would be whatever the last opened
+   * dialog loaded, and validation of a *different* node would range-check
+   * against the wrong firmware. RC1_MIN is 800-1500 on PX4 and 800-2200 on
+   * ArduPilot, so opening a PX4 node and then deploying an ArduPilot one with
+   * 2000 would fail validation on a value that firmware accepts.
    */
-  var _paramDefsForValidation = {};
+  var _paramDefsByKey = {};
+
+  /**
+   * Which definition set a node uses. Computed from live dialog fields while
+   * loading, and from saved config when validating — they agree for the open
+   * node, and a closed node whose set was never loaded simply misses, which
+   * skips the range check rather than applying someone else's bounds.
+   *
+   * @param {{delivery?: string, dialect?: string, vehicle?: string,
+   *          firmware?: string, connection?: string}} source
+   * @returns {string}
+   */
+  function paramDefsKey(source) {
+    var delivery = source.delivery || 'build';
+    if (delivery === 'build') {
+      var dialect = source.dialect || '';
+      if (dialect !== '__vehicle') return 'dialect:' + dialect + '|' + (source.firmware || '');
+      return 'vehicle:' + (source.vehicle || '');
+    }
+    var conn = (RED.nodes && typeof RED.nodes.node === 'function')
+      ? RED.nodes.node(source.connection) : null;
+    return 'vehicle:' + ((conn && conn.vehicle) || '');
+  }
 
   /**
    * The parameter id currently being edited: the live field while the dialog is
@@ -131,9 +159,44 @@
        * row cannot render — so the field silently offers nothing and explains
        * nothing, which is exactly what a typed-in param id looked like before.
        */
+      /**
+       * This dialog's definition-set key, from the *live* fields — so it
+       * matches what `validate` computes from saved config for the same node.
+       */
+      /**
+       * Carry the profile's firmware and vehicle family in the query.
+       *
+       * The route can otherwise only reach them through `RED.nodes.getNode`,
+       * which sees *deployed* config nodes — a Vehicle Profile just created or
+       * edited is visible here but not there, so the seed could not be keyed
+       * and the field came up empty until the next deploy. The editor already
+       * read `dialect` from this same node; firmware and family ride along.
+       *
+       * @param {object} query
+       * @param {string} vehicleId
+       */
+      function addProfileMetadata(query, vehicleId) {
+        if (!RED.nodes || typeof RED.nodes.node !== 'function') return;
+        var vehicleNode = RED.nodes.node(vehicleId);
+        if (!vehicleNode) return;
+        if (vehicleNode.dialect) query.dialect = vehicleNode.dialect;
+        if (vehicleNode.firmware) query.firmware = vehicleNode.firmware;
+        if (vehicleNode.vehicleFamily) query.vehicleFamily = vehicleNode.vehicleFamily;
+      }
+
+      function currentDefsKey() {
+        return paramDefsKey({
+          delivery: $('#node-input-delivery').val() || 'build',
+          dialect: $('#node-input-dialect').val() || '',
+          vehicle: $('#node-input-vehicle').val() || '',
+          firmware: $('#node-input-firmware').val() || '',
+          connection: $('#node-input-connection').val() || '',
+        });
+      }
+
       function noParamDefs(notice) {
         _paramDefs = {};
-        _paramDefsForValidation = _paramDefs;
+        _paramDefsByKey[currentDefsKey()] = _paramDefs;
         _defsNotice = notice;
         _defsLoaded = true;
         rebuildParamIndex();
@@ -152,10 +215,7 @@
             vehicleId = $('#node-input-vehicle').val() || '';
             if (!vehicleId) return noParamDefs('Pick a Vehicle Profile to load parameter definitions.');
             query = { vehicle: vehicleId };
-            if (RED.nodes && typeof RED.nodes.node === 'function') {
-              var vehicleNode = RED.nodes.node(vehicleId);
-              if (vehicleNode && vehicleNode.dialect) query.dialect = vehicleNode.dialect;
-            }
+            addProfileMetadata(query, vehicleId);
           } else {
             query = { dialect: dialect };
             var firmware = $('#node-input-firmware').val() || '';
@@ -173,13 +233,14 @@
             return noParamDefs('This Connection has no Vehicle Profile, which is where parameter definitions live.');
           }
           query = { vehicle: vehicleId };
+          addProfileMetadata(query, vehicleId);
         }
 
         var seq = ++_defsSeq;
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), query, function (data) {
           if (seq !== _defsSeq) return;
           _paramDefs = data.defs || {};
-          _paramDefsForValidation = _paramDefs;
+          _paramDefsByKey[currentDefsKey()] = _paramDefs;
           _defsNotice = data.notice || '';
           _defsLoaded = true;
           rebuildParamIndex();
@@ -187,7 +248,7 @@
         }).fail(function (xhr) {
           if (seq !== _defsSeq) return;
           _paramDefs = {};
-          _paramDefsForValidation = _paramDefs;
+          _paramDefsByKey[currentDefsKey()] = _paramDefs;
           _defsNotice = (xhr && xhr.responseJSON && xhr.responseJSON.error) ||
             'Parameter definitions unavailable.';
           _defsLoaded = true;

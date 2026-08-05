@@ -173,9 +173,9 @@ test('mavlink-param CompID reloads when catalog source changes', () => {
  * own cache — this exercises the real function out of the file.
  */
 function mountValueValidator(defs, liveParamId) {
-  const start = html.indexOf('var _paramDefsForValidation = {};');
+  const start = html.indexOf('var _paramDefsByKey = {};');
   const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
-  assert.ok(start >= 0 && end > start, 'the validation mirror and helper are present');
+  assert.ok(start >= 0 && end > start, 'the keyed cache and key helper are present');
 
   const valueStart = html.indexOf('validate: function (v) {', 0);
   assert.ok(valueStart > 0, 'the value validator is present');
@@ -185,10 +185,11 @@ function mountValueValidator(defs, liveParamId) {
   const context = {
     $: () => ({ val: () => liveParamId }),
     Number,
+    RED: { nodes: { node: () => null } },
   };
   vm.runInNewContext(
     `${html.slice(start, end)}
-     _paramDefsForValidation = ${JSON.stringify(defs)};
+     _paramDefsByKey[paramDefsKey({})] = ${JSON.stringify(defs)};
      this.validateForTest = function (v) { ${body} };`,
     context
   );
@@ -231,4 +232,86 @@ test('mavlink-param value validator: with no definitions loaded it is the plain 
   const validate = mountValueValidator({}, 'RC1_MIN');
   assert.equal(validate(50), true);
   assert.equal(validate('abc'), false);
+});
+
+/**
+ * Definition sets are keyed, not mirrored. A single script-scope table would be
+ * whatever the last opened dialog loaded, so validating a *different* node
+ * would range-check against the wrong firmware — RC1_MIN is 800–1500 on PX4 and
+ * 800–2200 on ArduPilot, so opening a PX4 node then deploying an ArduPilot one
+ * with 2000 would fail on a value that firmware accepts.
+ */
+function mountKeyedValidator(byKey, editedNode, liveParamId) {
+  const start = html.indexOf('var _paramDefsByKey = {};');
+  const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
+  assert.ok(start >= 0 && end > start, 'the keyed cache and key helper are present');
+
+  const valueStart = html.indexOf('validate: function (v) {', 0);
+  const valueEnd = html.indexOf('\n        },', valueStart);
+  const body = html.slice(valueStart + 'validate: function (v) {'.length, valueEnd);
+
+  const context = {
+    $: () => ({ val: () => liveParamId }),
+    Number,
+    RED: { nodes: { node: () => null } },
+  };
+  vm.runInNewContext(
+    `${html.slice(start, end)}
+     this.keyForTest = paramDefsKey;
+     this.seed = function (map) { for (var k in map) { _paramDefsByKey[k] = map[k]; } };
+     this.validateForTest = function (v) { ${body} };`,
+    context
+  );
+  context.seed(byKey);
+  return context.validateForTest.bind(editedNode);
+}
+
+const PX4_KEY = 'dialect:development|px4';
+const AP_KEY = 'dialect:ardupilotmega|ardupilot';
+const BY_KEY = {
+  [PX4_KEY]: { RC1_MIN: { min: 800, max: 1500 } },
+  [AP_KEY]: { RC1_MIN: { min: 800, max: 2200 } },
+};
+
+test('mavlink-param value validator: each node is checked against its own firmware', () => {
+  const px4Node = { delivery: 'build', dialect: 'development', firmware: 'px4' };
+  const apNode = { delivery: 'build', dialect: 'ardupilotmega', firmware: 'ardupilot' };
+
+  const validatePx4 = mountKeyedValidator(BY_KEY, px4Node, 'RC1_MIN');
+  const validateAp = mountKeyedValidator(BY_KEY, apNode, 'RC1_MIN');
+
+  assert.equal(validatePx4(2000), false, 'PX4 tops out at 1500');
+  assert.equal(validateAp(2000), true, 'ArduPilot allows 2000 — the reported bug');
+  assert.equal(validateAp(2500), false, 'and still enforces its own 2200');
+});
+
+test('mavlink-param value validator: a node whose definitions were never loaded skips the check', () => {
+  // The safe direction: no entry means no bounds to apply, never someone
+  // else's bounds.
+  const strangerNode = { delivery: 'build', dialect: 'common', firmware: 'custom' };
+  const validate = mountKeyedValidator(BY_KEY, strangerNode, 'RC1_MIN');
+  assert.equal(validate(99999), true);
+  assert.equal(validate('abc'), false, 'but it is still a number check');
+});
+
+test('mavlink-param defs key: the Vehicle Profile escape keys on the profile, not the dialect', () => {
+  const key = mountKeyedValidator(BY_KEY, {}, '') && null;
+  // Re-mount just to reach the exported helper.
+  const start = html.indexOf('var _paramDefsByKey = {};');
+  const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
+  const context = { $: () => ({ val: () => '' }), RED: { nodes: { node: () => ({ vehicle: 'v9' }) } } };
+  vm.runInNewContext(`${html.slice(start, end)}\nthis.k = paramDefsKey;`, context);
+
+  assert.equal(
+    context.k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v1' }),
+    'vehicle:v1'
+  );
+  assert.notEqual(
+    context.k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v1' }),
+    context.k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v2' }),
+    'two profiles are two definition sets'
+  );
+  // Wire tiers resolve the profile through the connection.
+  assert.equal(context.k({ delivery: 'send', connection: 'c1' }), 'vehicle:v9');
+  assert.equal(key, null);
 });

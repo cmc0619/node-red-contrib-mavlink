@@ -209,6 +209,9 @@ test('Param definition GET failures clear stale UI and render server and fallbac
   const context = {
     $,
     node: {},
+    // Script-scope in the real file, outside the sliced region.
+    _paramDefsByKey: {},
+    paramDefsKey: () => 'test-key',
     RED: {
       mavlink: {
         adminApiUrl: (value) => value,
@@ -294,6 +297,9 @@ test('Param definition loader explains every path on which it does not ask', () 
     const context = {
       $,
       node: {},
+      // Script-scope in the real file, outside the sliced region.
+      _paramDefsByKey: {},
+      paramDefsKey: () => 'test-key',
       RED: {
         mavlink: {
         adminApiUrl: (v) => v,
@@ -374,6 +380,9 @@ function mountParamPanel(defs, initialValue) {
   const context = {
     $,
     node: {},
+    // Script-scope in the real file, outside the sliced region.
+    _paramDefsByKey: {},
+    paramDefsKey: () => 'test-key',
     RED: {
       mavlink: {
         adminApiUrl: (v) => v,
@@ -554,6 +563,9 @@ function mountValueField(defs, values) {
   const context = {
     $,
     node: {},
+    // Script-scope in the real file, outside the sliced region.
+    _paramDefsByKey: {},
+    paramDefsKey: () => 'test-key',
     RED: {
       mavlink: {
         adminApiUrl: (v) => v,
