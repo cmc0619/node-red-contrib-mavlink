@@ -3026,3 +3026,40 @@ tumble around Y used by SITL 27 (Lucy in the Sky). Planar shapes still keep `dow
 remains on the anchor. Vehicle noses are still not commanded (reposition yaw `NaN`).
 *Check:* `node --test test/formation/formation.test.js test/formation/node.test.js`; SITL
 `examples/sitl/27-lucy-in-the-sky.json` (harness `--only 27`).
+
+**Parameter metadata is per firmware *and* per vehicle document, and the shipped documents are
+not the same set as the Vehicle Profile's families.**
+*Wrong belief:* a parameter id names one thing, so one catalog serves every vehicle. The second
+half survives longer and is the more expensive one: once seven documents ship, seven vehicles
+are each served their own — the source list reads like a family list, so nobody checks.
+*Fact (measured 2026-08-05 against the seed shipped by PR #168,
+`seed/param-defs-2026-08-05-c86294e.seed.gz`, 724 KB gzipped):*
+
+1. **The same id differs between stacks.** `RC1_MIN` is unit `us`, 800–1500 on PX4 and unit
+   `PWM`, 800–2200 increment 1 on ArduPilot. Serving one stack's metadata under the other is a
+   wrong answer, not a near miss — the reason the seed keys on firmware at all, and the reason
+   a value validator that ignores firmware rejects values the firmware accepts.
+2. **Documents differ within one firmware.** ArduCopter 5719, ArduPlane 5764, Rover 5472,
+   ArduSub 5403, Blimp 3127, AntennaTracker 3617, PX4 1836 — 30,938 across seven documents.
+   Copter and Plane share 5180 ids; 539 are Copter-only. A test that asserts family selection
+   must use one of those 539: `ACRO_BAL_PITCH` discriminates, `ARSPD_OFF_PCNT` does not,
+   because it is in the ArduPilot union as well as in Plane.
+3. **Six documents are reachable by family. Blimp is not.** The Vehicle Profile offers
+   `generic|copter|plane|rover|boat|sub|antenna-tracker`; `ARDUPILOT_VEHICLE` maps all but
+   `generic`, with `boat`→Rover because ArduPilot ships boats in the Rover set. Nothing maps
+   `blimp`, so those 3127 definitions are only ever served inside the 6827-id `generic` union.
+   The two lists are independent and no test compares them.
+
+*Decision:* the union stays the fallback for an unmapped or generic vehicle — listing a
+parameter the vehicle lacks costs a failed read, while hiding one it has cannot be recovered
+from inside the editor, so the safe direction is to over-offer. Blimp is therefore not a defect
+to rush. But adding a document does **not** make it selectable: that needs a
+`ARDUPILOT_VEHICLE` entry *and* a Vehicle Profile option, and adding either alone lands the
+document in the union only.
+*Check:* `node -e "const s=require('./lib/param/seed');for(const f of
+['copter','plane','rover','boat','sub','antenna-tracker','generic'])
+console.log(f,s.defsFor({firmware:'ardupilot',vehicleFamily:f}).size);
+console.log('px4',s.defsFor({firmware:'px4'}).size);
+console.log('RC1_MIN',JSON.stringify(s.defsFor({firmware:'px4'}).get('RC1_MIN')),
+JSON.stringify(s.defsFor({firmware:'ardupilot'}).get('RC1_MIN')))"` — `antenna-tracker` is 3617
+and `generic` is 6827; no family prints 3127.
