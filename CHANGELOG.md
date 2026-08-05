@@ -26,6 +26,22 @@ see AGENTS.md "no migrations, no compatibility shims".
 
 ### Added
 
+- Ack attribution on shared links: `AckWaiter` and Fan-out's broadcast confirm
+  now ignore a `COMMAND_ACK` explicitly addressed to a different GCS (MAVLink 2
+  `target_system`/`target_component` extension fields), resolved from the
+  sending identity via the connection's new `resolveSourceIds()`. MAVLink 1
+  acks (no target fields) pass unchanged.
+- Fan-out **Stop on error**: optionally halt remaining members after the first
+  failure; never-dispatched members report `skipped` in the aggregate.
+- Move refuses a blank local position coordinate (north/east/up) instead of
+  zero-filling it into an origin setpoint — the local-frame twin of the
+  global lat/lon guard. Velocity/acceleration blanks stay 0 (a zero rate is
+  inert, not a place).
+- In-node filters grew up: per-message rate limits (`ATTITUDE=2, HEARTBEAT=1`
+  pairs with an optional bare default; malformed input fails closed at
+  deploy), a compared-field subset for changed-only (so hot timestamps don't
+  defeat it), and a field predicate (field present / field equals value).
+
 - Move now covers the full `SET_POSITION_TARGET_*` matrix: modes Position,
   Velocity, Position + Velocity, Acceleration, Force (force bit set), and Yaw
   only — plus a Frame selector (local NED, offset-from-current, body offset for

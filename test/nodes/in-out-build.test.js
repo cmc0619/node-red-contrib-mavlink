@@ -364,6 +364,78 @@ test('mavlink-in: changed-only forwards when fields change', () => {
   assert.equal(node._sends.length, 2);
 });
 
+test('mavlink-in: changed-only compares only the listed fields when Compare fields is set', () => {
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', changedOnly: true, changedFields: 'custom_mode' });
+
+  // A hot timestamp changes every frame; the compared field does not.
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { custom_mode: 4, t: 1 }, trusted: true });
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { custom_mode: 4, t: 2 }, trusted: true });
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { custom_mode: 5, t: 3 }, trusted: true });
+
+  assert.equal(node._sends.length, 2, 'only the first frame and the mode change pass');
+});
+
+test('mavlink-in: field predicate passes on presence, and on value when one is given', () => {
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', fieldName: 'custom_mode', fieldValue: '4' });
+
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { custom_mode: 5 }, trusted: true });
+  stub._deliver({ name: 'SYS_STATUS', sysid: 1, compid: 1, fields: { load: 100 }, trusted: true });
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { custom_mode: 4 }, trusted: true });
+
+  assert.equal(node._sends.length, 1, 'only the matching value passes');
+  assert.equal(node._sends[0].payload.custom_mode, 4);
+});
+
+test('mavlink-in: NAME=Hz pairs rate-limit per message name; unlisted names use the bare default', () => {
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  // ATTITUDE throttled hard; HEARTBEAT explicitly unlimited; no bare default.
+  Constructor.call(node, { connection: 'conn-1', rateLimit: 'ATTITUDE=0.001, HEARTBEAT=0' });
+
+  stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0.1 }, trusted: true });
+  stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0.2 }, trusted: true });
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
+
+  assert.equal(
+    node._sends.filter((m) => m.topic === 'ATTITUDE').length, 1,
+    'second ATTITUDE inside the interval is dropped'
+  );
+  assert.equal(
+    node._sends.filter((m) => m.topic === 'HEARTBEAT').length, 2,
+    'NAME=0 means unlimited for that name'
+  );
+});
+
+test('mavlink-in: a malformed rate limit fails closed at deploy, passing nothing', () => {
+  const RED = makeRED();
+  const { stub, subscribers } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', rateLimit: 'ATTITUDE=fast' });
+
+  assert.equal(node._status && node._status.fill, 'red', 'invalid config badge');
+  assert.equal(subscribers.length, 0, 'a filter that cannot parse its config never subscribes');
+});
+
 test('mavlink-in: changed-only does not crash on 64-bit BigInt fields (SYSTEM_TIME-style)', () => {
   const RED = makeRED();
   const { stub } = makeConnectionStub();

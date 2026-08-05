@@ -62,6 +62,44 @@ test('ack from a different sysid does not settle the transaction; the addressed 
   assert.equal(outcome.resultCode, MAV_RESULT.ACCEPTED);
 });
 
+test('an ack explicitly addressed to another GCS is ignored; ours and MAVLink 1 acks settle (§9)', async () => {
+  const conn = stubConn();
+  const waiter = makeWaiter(conn, {
+    commandId: 400,
+    targetSystem: 2,
+    targetComponent: 1,
+    sourceIds: { sysid: 250, compid: 190 },
+  });
+  const p = waiter.start();
+
+  // The vehicle answers another station's identical command — addressed to
+  // GCS 255, not us. Must not settle our wait, even as DENIED.
+  conn.injectAck(
+    { command: 400, result: MAV_RESULT.DENIED, target_system: 255, target_component: 190 },
+    2, 1
+  );
+  // Our own answer, addressed to 250/190, settles it.
+  conn.injectAck(
+    { command: 400, result: MAV_RESULT.ACCEPTED, target_system: 250, target_component: 190 },
+    2, 1
+  );
+  const outcome = await p;
+  assert.equal(outcome.result, 'accepted');
+
+  // A MAVLink 1 ack carries no target fields — unaddressed passes the gate.
+  const conn2 = stubConn();
+  const waiter2 = makeWaiter(conn2, {
+    commandId: 400,
+    targetSystem: 2,
+    targetComponent: 1,
+    sourceIds: { sysid: 250, compid: 190 },
+  });
+  const p2 = waiter2.start();
+  conn2.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 2, 1);
+  const outcome2 = await p2;
+  assert.equal(outcome2.result, 'accepted');
+});
+
 test('ack for a different command id is ignored', async () => {
   const conn = stubConn();
   const waiter = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 });

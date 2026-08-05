@@ -511,6 +511,44 @@ test('at the default concurrency 1 the second member waits for the first ack', a
   assert.equal(result.success, true);
 });
 
+// ── Stop-on-error (§10) ───────────────────────────────────────────────────────
+
+test('stop-on-error halts after the first failure and reports the rest skipped', async () => {
+  const connection = connectionStub([peer(1), peer(2), peer(3)], { failSysids: new Set([1]) });
+
+  const result = await executeFanout({
+    connection,
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+    stopOnError: true,
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(connection.sends.length, 0, 'members after the failure are never sent to');
+  assert.equal(result.members.find((m) => m.sysid === 1).result, 'failed');
+  assert.equal(result.members.find((m) => m.sysid === 2).result, 'skipped');
+  assert.equal(result.members.find((m) => m.sysid === 3).result, 'skipped');
+  assert.match(result.members.find((m) => m.sysid === 2).detail, /never sent/);
+});
+
+test('without stop-on-error every member is still attempted (the §10 default)', async () => {
+  const connection = connectionStub([peer(1), peer(2), peer(3)], { failSysids: new Set([1]) });
+
+  const result = await executeFanout({
+    connection,
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  assert.equal(result.success, false);
+  assert.deepEqual(connection.sends.map((s) => s.message.fields.target_system), [2, 3]);
+  assert.equal(result.members.filter((m) => m.result === 'skipped').length, 0);
+});
+
 // ── Confirmation ──────────────────────────────────────────────────────────────
 
 test('broadcast confirm matches COMMAND_ACK on sysid AND component (§10)', async () => {
@@ -547,6 +585,41 @@ test('broadcast confirm matches COMMAND_ACK on sysid AND component (§10)', asyn
   assert.equal(result.success, true, 'the autopilot ack, not the gimbal ack, decided the outcome');
   const member = result.members.find((m) => m.sysid === 1);
   assert.equal(member.confirmedBy, 'ack');
+});
+
+test('an ack explicitly addressed to another GCS never settles our wait (§9/§10)', async () => {
+  const handlers = [];
+  const connection = {
+    peerTable: peerTableStub([peer(1)]),
+    sends: [],
+    send(message, options) { this.sends.push({ message, options }); },
+    subscribe(filter, handler) {
+      handlers.push(handler);
+      return () => {};
+    },
+    // We are GCS 250/190 on a link shared with another station.
+    resolveSourceIds() { return { sysid: 250, compid: 190 }; },
+  };
+  const deliver = (decoded) => handlers.slice().forEach((h) => h(decoded));
+
+  const run = executeFanout({
+    connection,
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'confirm',
+    intervalMs: 0,
+    timeoutMs: 60000,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  // The other GCS (255) gets a FAILED answer to *its* identical command…
+  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 4, target_system: 255, target_component: 190 } });
+  // …ours arrives addressed to us and is ACCEPTED. A MAVLink 1 ack (no target
+  // fields) would also pass the gate.
+  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 0, target_system: 250, target_component: 190 } });
+
+  const result = await run;
+  assert.equal(result.success, true, "the other station's FAILED ack did not settle our wait");
 });
 
 test('PARAM_SET echo confirm compares wire values — a clamped value does not confirm', async () => {

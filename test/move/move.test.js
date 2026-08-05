@@ -173,6 +173,27 @@ test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw
   }
 });
 
+test('local position with a blank coordinate refuses — never the origin (§10)', () => {
+  // A blank north zero-filled into a LOCAL_NED position setpoint commands the
+  // world origin. Explicit 0 is a value; blank refuses. Velocity blanks stay
+  // 0 — a zero rate is inert, not a place.
+  assert.throws(
+    () =>
+      buildMoveMessage({
+        mode: 'position',
+        target: { sysid: 2, compid: 1 },
+        position: { north: '', east: 2, up: 3 },
+      }),
+    /blank coordinates must not become the origin/
+  );
+  const velocityBlanks = buildMoveMessage({
+    mode: 'velocity',
+    target: { sysid: 2, compid: 1 },
+    velocity: { north: 1 },
+  });
+  assert.equal(velocityBlanks.fields.vy, 0);
+});
+
 test('global position with blank lat or lon refuses — never 0,0 (§10)', () => {
   assert.throws(
     () =>

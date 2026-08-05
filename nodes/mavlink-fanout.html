@@ -35,6 +35,7 @@
         },
       },
       dryRun: { value: false },
+      stopOnError: { value: false },
       confirm: { value: false },
       delivery: { value: 'build' },
       timeoutMs: { value: 10000, validate: RED.validators.number() },
@@ -90,6 +91,7 @@
         $('#row-fanout-firmwareFilter').toggle(sel === 'filter');
         $('#row-fanout-armedFilter').toggle(sel === 'filter');
         $('#row-fanout-interval').toggle(exec === 'sequential');
+        $('#row-fanout-stopOnError').toggle(exec === 'sequential');
         $('#row-fanout-concurrency').toggle(exec === 'sequential' && d === 'confirm');
         $('#row-fanout-timeout').toggle(d === 'confirm');
         $('#row-fanout-retries').toggle(d === 'confirm');
@@ -123,6 +125,7 @@
   <div class="form-row" id="row-fanout-interval"><label for="node-input-intervalMs">Interval ms</label><input type="number" id="node-input-intervalMs" min="0"></div>
   <div class="form-row" id="row-fanout-concurrency"><label for="node-input-concurrency">Concurrency</label><input type="number" id="node-input-concurrency" min="1" style="width:80px"> <span class="form-tips">confirm waits in flight at once; 1 = strictly sequential</span></div>
   <div class="form-row"><label for="node-input-dryRun">Dry run</label><input type="checkbox" id="node-input-dryRun" style="display:inline-block;width:auto;"></div>
+  <div class="form-row" id="row-fanout-stopOnError"><label for="node-input-stopOnError">Stop on error</label><input type="checkbox" id="node-input-stopOnError" style="display:inline-block;width:auto;"> <span class="form-tips">halt remaining members after the first failure; they report skipped</span></div>
   <div class="form-row"><label for="node-input-confirm">Confirm</label><input type="checkbox" id="node-input-confirm" style="display:inline-block;width:auto;"> <span>Allow safety commands (Flight Termination)</span></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
   <div class="form-row" id="row-fanout-timeout"><label for="node-input-timeoutMs">Timeout ms</label><input type="number" id="node-input-timeoutMs" min="1"></div>
@@ -133,7 +136,7 @@
   <p>Replicates one <b>built</b> MAVLink message across the active vehicles selected from a Connection peer table. Fan-out is a replicator, not an action node: wire any action node in <b>Build</b> delivery (Command, Move, Payload, Param — or mavlink-build) into it, and it retargets that message per member.</p>
   <p><code>msg.payload</code> is either the built message <code>{name, fields}</code> straight off a Build output, or the wrapper <code>{message, targets, ...options}</code>. <code>targets</code> is an array of sysids or <code>{sysid, ...fieldPatches}</code> objects — the patches overwrite message fields per member in <b>wire units</b> (Fan-out is a raw surface; a COMMAND_INT location patch is degE7), and the list itself becomes the selection. Runtime option overrides (<code>executionMode</code>, <code>delivery</code>, <code>intervalMs</code>, <code>concurrency</code>, …) ride the wrapper too.</p>
   <p>What the message means is inferred from its name: <code>COMMAND_LONG</code>/<code>COMMAND_INT</code> confirm by COMMAND_ACK; <code>PARAM_SET</code> confirms by its PARAM_VALUE echo (sequential only); <code>SET_POSITION_TARGET_*</code> setpoints carry no ack and ride the streaming band. <code>MISSION_*</code> and <code>PARAM_REQUEST_LIST</code> are refused — multi-message transactions cannot be replicated.</p>
-  <p>Sequential mode sends one retargeted message per member at the configured interval; <b>Concurrency</b> lets up to N confirm waits overlap so one slow vehicle doesn't delay the rest. Broadcast mode sends one packet with target_system 0 and target_component 1, and requires the <i>All active vehicles</i> selection — a broadcast reaches every vehicle on the link, so it cannot honour a subset, per-target patches, or a PARAM_SET.</p>
+  <p>Sequential mode sends one retargeted message per member at the configured interval; <b>Concurrency</b> lets up to N confirm waits overlap so one slow vehicle doesn't delay the rest. <b>Stop on error</b> halts remaining members after the first failure — they report <code>skipped</code> in the aggregate rather than being commanded. Broadcast mode sends one packet with target_system 0 and target_component 1, and requires the <i>All active vehicles</i> selection — a broadcast reaches every vehicle on the link, so it cannot honour a subset, per-target patches, or a PARAM_SET.</p>
   <p>On <b>Build</b> delivery output 0 emits the product — one retargeted message per member (or the single broadcast packet) for a downstream <b>mavlink-out</b>; no Connection is needed when the selection is an explicit list. On wire tiers output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail.</p>
   <p><b>Send as</b> — selects the GCS or custom identity that stamps source SysID/CompID on outbound frames. Only identities with a <code>gcs</code> or <code>custom</code> role are offered. Hidden on Build delivery (source ids are stamped at the wire by the sending node).</p>
   <p>Safety commands (Flight Termination) are refused unless the <b>Confirm</b> box is ticked or <code>msg.confirmed = true</code> is set.</p>

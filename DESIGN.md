@@ -177,7 +177,7 @@ makes unreachable.
 
 | Type | Purpose |
 |---|---|
-| `mavlink-in` | Subscribe to decoded traffic. Filter by message, sysid, compid; changed-only; rate limit keyed on the *(message, sysid, compid)* tuple |
+| `mavlink-in` | Subscribe to decoded traffic. Filter by message, sysid, compid, and a field predicate (present / equals); changed-only with an optional compared-field subset; rate limit keyed on the *(message, sysid, compid)* tuple — one Hz, or per-message `NAME=Hz` pairs, malformed input failing closed at deploy |
 | `mavlink-out` | Transmit content not constructed by an action node — raw buffers, messages forwarded from another connection, envelopes built in a Function node |
 | `mavlink-build` | Any message in the loaded dialect. Full Delivery tiers, plus an optional repeat interval that reports achieved rate against configured rate in status |
 | `mavlink-command` | `MAV_CMD`, grouped presets through to the full dialect |
@@ -1202,8 +1202,10 @@ Frames: `LOCAL_NED`, `LOCAL_OFFSET_NED`, `BODY_OFFSET_NED` (ArduPilot GUIDED), `
 `GLOBAL_INT`, `GLOBAL_TERRAIN_ALT_INT` ride `SET_POSITION_TARGET_GLOBAL_INT`. The editor stores
 the bare member name; labels follow the frame (body frames read forward/right) and vertical
 inputs are up-positive everywhere — the sign flips once, at encode, per the NED rule above.
-A global-frame position with blank lat/lon refuses (§10 "blank coordinates must not become
-0,0"), matching the Fan-out gate.
+A position with a blank coordinate refuses in every frame (§10 "blank coordinates must not
+become 0,0"): global lat/lon must not become null island, and a local blank zero-filled into
+north/east/up commands the world origin (LOCAL_NED) or an unrequested hold (offset/body).
+Velocity and acceleration blanks stay 0 — a zero rate is inert, not a place.
 
 **Known-unsupported combos send anyway, but never silently** (`advisoryFor`): a setpoint has no
 acknowledgement, so a `node.warn` is all the feedback the operator gets. Advisories: Force
@@ -1424,6 +1426,19 @@ strictly sequential, the historical cadence). Where it earns its keep is the con
 concurrency 1 a single timing-out straggler delays everyone behind it by timeout × retries;
 raising it lets confirm waits overlap while `intervalMs` still paces every launch. Records keep
 member order regardless.
+
+**Stop on error.** Off by default — a member expiring mid-run continues (below), and so does a
+failure, because half-commanded is the operator's call to make, not the node's. Switched on, the
+first member that does not succeed halts further launches; members never dispatched report
+`skipped` in the aggregate, in member order, so the caller sees exactly which vehicles were not
+commanded. In-flight members (concurrency > 1) finish and report normally.
+
+**Ack attribution.** A COMMAND_ACK carries MAVLink 2 `target_system`/`target_component`
+extension fields naming the GCS it answers. On a shared link two stations issuing the same
+MAV_CMD to the same vehicle would otherwise settle each other's waits with the wrong result —
+so AckWaiter and the broadcast confirm ignore an ack *explicitly addressed elsewhere*, resolved
+from the sending identity via `connection.resolveSourceIds()`. Absent fields (MAVLink 1) or 0
+mean unaddressed and pass; a connection stub without the accessor leaves the gate off.
 
 **Selection** comes from the peer table: all vehicles, an explicit sysid list, or a filter on
 type, firmware, or armed state. Groups resolve at execution, not deploy — a vehicle that went
