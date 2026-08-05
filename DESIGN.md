@@ -1202,17 +1202,26 @@ Frames: `LOCAL_NED`, `LOCAL_OFFSET_NED`, `BODY_OFFSET_NED` (ArduPilot GUIDED), `
 `GLOBAL_INT`, `GLOBAL_TERRAIN_ALT_INT` ride `SET_POSITION_TARGET_GLOBAL_INT`. The editor stores
 the bare member name; labels follow the frame (body frames read forward/right) and vertical
 inputs are up-positive everywhere — the sign flips once, at encode, per the NED rule above.
-A position with a blank coordinate refuses in every frame (§10 "blank coordinates must not
-become 0,0"): global lat/lon must not become null island, and a local blank zero-filled into
-north/east/up commands the world origin (LOCAL_NED) or an unrequested hold (offset/body).
-Velocity and acceleration blanks stay 0 — a zero rate is inert, not a place.
+A position with a blank coordinate refuses in every **absolute** frame (§10 "blank coordinates
+must not become 0,0"): global lat/lon must not become null island, and a local blank zero-filled
+into north/east/up commands the EKF origin. The measured OFFSET frames (`LOCAL_OFFSET_NED`,
+`BODY_OFFSET_NED`) are the exception — a zero there is "no change" on every axis, so blanks pass
+as zero offsets (§14). `BODY_NED` keeps the guard: ArduPilot reads it as a body offset but PX4
+does not, so a zero is not provably inert. Velocity and acceleration blanks always stay 0 — a
+zero rate is inert, not a place. Yaw and yaw rate follow the same presence rule as everywhere
+else: blank is mask-ignored, and a blank arriving on `msg.payload` is normalised to unset rather
+than commanding a yaw of zero.
 
 **Known-unsupported combos send anyway, but never silently** (`advisoryFor`): a setpoint has no
-acknowledgement, so a `node.warn` is all the feedback the operator gets. Advisories: Force
-(firmware-independent), acceleration-only on ArduPilot, `BODY_NED` on ArduPilot (it wants
-`BODY_OFFSET_NED`), terrain and OFFSET frames on PX4. Firmware comes from the connection's bound
-Vehicle Profile; `custom` opts out of firmware-specific advisories. Warn-not-block is deliberate:
-firmware support moves, and the advisory table is a snapshot, not a gate.
+acknowledgement, so a `node.warn` is all the feedback the operator gets. The list is what
+measurement supports, nothing more (§14, SITL 2026-08-05): **Force** (firmware-independent —
+neither stack actuated on the force bit), **PX4 + either OFFSET frame** (no motion at all), and
+**PX4 + `BODY_NED`** (body frames carry velocity only; PX4 discards the position). Three earlier
+advisories were *removed* when measurement refuted them — ArduPilot acceleration-only, ArduPilot
+`BODY_NED`, and PX4 terrain-altitude — because a warning that fires on working behaviour is
+noise, and noise gets ignored. Firmware comes from the connection's bound Vehicle Profile;
+`custom` opts out of firmware-specific advisories. Warn-not-block is deliberate: firmware support
+moves, and the advisory table is a snapshot, not a gate.
 
 There is **one vocabulary**: Move config, Fan-out's `moveMode`/`moveFrame`, and `msg.payload`
 overrides all speak these mode and frame names. The pre-frame names (`local-position` /
@@ -1434,7 +1443,11 @@ degrees-in surface is the action node upstream. **Addressing is not patchable:**
 `target_system` and `target_component` are stripped from a patch before it merges, so a patch
 can neither cross-address another vehicle nor re-aim the message at a component that
 `sendOptions` and the confirm waiter — both keyed on the member's autopilot — would disagree
-with, nor invent an addressing field on a message that never declared one. Broadcast refuses
+with, nor invent an addressing field on a message that never declared one. **`command` is
+refused outright**, not stripped: the run's classification, confirmation and safety gate are
+resolved once from the base message, so a patch rewriting it would send an operation that was
+never gated (a `command: 185` patch under an ARM base put Flight Termination on the wire
+unconfirmed). A per-member command is a different message, not a replication. Broadcast refuses
 `targets` (uniform messages only, below). Safety: `DO_FLIGHTTERMINATION` (185) in a replicated command
 still requires `msg.confirmed === true` or the node's Confirm — the gate reads the wire fields.
 

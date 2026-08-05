@@ -66,6 +66,19 @@ test('mavlink-move editor reshapes fields by mode, frame, and delivery (§6)', (
   assert.match(html, /delivery === 'stream'/, 'stream interval and TTL gated on delivery');
 });
 
+test('mavlink-move declares the frame default and the acceleration validators', () => {
+  // A wrong or missing default frame changes the carrier message for every
+  // Move node that never touched the field.
+  assert.match(html, /frame:\s*\{\s*value:\s*'LOCAL_NED'\s*\}/, 'frame defaults to LOCAL_NED');
+  for (const field of ['aNorth', 'aEast', 'aUp']) {
+    assert.match(
+      html,
+      new RegExp(`${field}:\\s*\\{\\s*value:\\s*0,\\s*validate:\\s*RED\\.validators\\.number\\(true\\)`),
+      `${field} declares the blank-allowed numeric validator`
+    );
+  }
+});
+
 test('mavlink-move offers the full mode and frame matrix', () => {
   for (const mode of ['position', 'velocity', 'position-velocity', 'acceleration', 'force', 'yaw-only']) {
     assert.match(html, new RegExp(`option value="${mode}"`), `mode ${mode} offered`);

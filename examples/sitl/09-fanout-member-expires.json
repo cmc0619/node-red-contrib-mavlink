@@ -147,9 +147,7 @@
     "intervalMs": 1000,
     "dryRun": false,
     "delivery": "confirm",
-    "advancedCommand": "",
-    "timeout": "10000",
-    "maxRetries": "3",
+    "maxRetries": 3,
     "x": 390,
     "y": 160,
     "wires": [
@@ -159,7 +157,8 @@
       [
         "sitl09-status"
       ]
-    ]
+    ],
+    "timeoutMs": 10000
   },
   {
     "id": "sitl09-done",

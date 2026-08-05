@@ -129,9 +129,7 @@
     "intervalMs": 200,
     "dryRun": false,
     "delivery": "confirm",
-    "advancedCommand": "",
-    "timeout": "10000",
-    "maxRetries": "3",
+    "maxRetries": 3,
     "x": 360,
     "y": 160,
     "wires": [
@@ -141,7 +139,8 @@
       [
         "sitl11-seq-status"
       ]
-    ]
+    ],
+    "timeoutMs": 10000
   },
   {
     "id": "sitl11-inject-bcast",
@@ -211,9 +210,7 @@
     "intervalMs": 100,
     "dryRun": false,
     "delivery": "confirm",
-    "advancedCommand": "",
-    "timeout": "10000",
-    "maxRetries": "3",
+    "maxRetries": 3,
     "x": 370,
     "y": 300,
     "wires": [
@@ -223,7 +220,8 @@
       [
         "sitl11-bcast-status"
       ]
-    ]
+    ],
+    "timeoutMs": 10000
   },
   {
     "id": "sitl11-inject-snap",

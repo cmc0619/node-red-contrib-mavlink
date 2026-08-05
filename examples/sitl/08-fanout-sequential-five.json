@@ -129,9 +129,7 @@
     "intervalMs": 200,
     "dryRun": true,
     "delivery": "send",
-    "advancedCommand": "",
-    "timeout": "5000",
-    "maxRetries": "0",
+    "maxRetries": 0,
     "x": 320,
     "y": 160,
     "wires": [
@@ -211,9 +209,7 @@
     "intervalMs": 200,
     "dryRun": false,
     "delivery": "confirm",
-    "advancedCommand": "",
-    "timeout": "10000",
-    "maxRetries": "3",
+    "maxRetries": 3,
     "x": 330,
     "y": 280,
     "wires": [
@@ -223,7 +219,8 @@
       [
         "ex07-live-status"
       ]
-    ]
+    ],
+    "timeoutMs": 10000
   },
   {
     "id": "ex07-dry-result",

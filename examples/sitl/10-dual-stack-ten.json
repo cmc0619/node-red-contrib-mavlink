@@ -199,9 +199,7 @@
     "intervalMs": 100,
     "dryRun": false,
     "delivery": "send",
-    "advancedCommand": "",
-    "timeout": "10000",
-    "maxRetries": "0",
+    "maxRetries": 0,
     "x": 390,
     "y": 160,
     "wires": [
@@ -281,9 +279,7 @@
     "intervalMs": 100,
     "dryRun": false,
     "delivery": "send",
-    "advancedCommand": "",
-    "timeout": "10000",
-    "maxRetries": "0",
+    "maxRetries": 0,
     "x": 400,
     "y": 280,
     "wires": [

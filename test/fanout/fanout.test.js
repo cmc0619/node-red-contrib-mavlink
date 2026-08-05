@@ -478,6 +478,27 @@ test('broadcast refuses targets — one packet carries one field set (§10)', as
   assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
 });
 
+test('a targets patch may not rewrite `command` — the safety gate runs once, on the base', async () => {
+  // The run is classified and gated from the base message before any patch is
+  // applied, so a patch rewriting `command` would send an operation that was
+  // never gated: `{sysid, command: 185}` under a base of ARM put Flight
+  // Termination on the wire with no confirmation.
+  const connection = connectionStub([peer(1)]);
+
+  const result = await executeFanout({
+    connection,
+    message: builtCommand({ fields: { command: 400, param1: 1 } }),
+    targets: [{ sysid: 1, command: 185 }],
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  assert.equal(result.result, 'refused');
+  assert.match(result.detail, /may not patch `command`/);
+  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
+});
+
 test('a malformed targets shape is refused before any send', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 

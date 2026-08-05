@@ -45,15 +45,13 @@ see AGENTS.md "no migrations, no compatibility shims".
 
 ### Fixed
 
-- Move firmware advisories are now measured rather than asserted (§14), and
-  two were wrong: ArduPilot Copter-4.7.0 *does* act on acceleration-only
-  setpoints (moved ≈43 m), and it handles `BODY_NED` and `BODY_OFFSET_NED`
-  identically — both warnings removed, along with the unsupportable "PX4
-  rejects terrain-altitude targets" (PX4 accepted and moved, no complaint).
-  Confirmed and kept: the force bit is not actuated on either stack, and PX4
-  ignores both OFFSET frames. Added: PX4 `BODY_NED` warns. The editor's
-  "Body NED — PX4 OFFBOARD" label had the firmware attribution backwards and
-  is corrected.
+- Move firmware advisories are now measured rather than asserted (§14). The
+  warning list is exactly Force (either stack), PX4 + either OFFSET frame, and
+  PX4 + `BODY_NED`. Three were removed as refuted: ArduPilot Copter-4.7.0 *does*
+  act on acceleration-only setpoints (moved ≈43 m), it handles `BODY_NED` and
+  `BODY_OFFSET_NED` identically, and PX4 accepted a terrain-altitude target and
+  moved without complaint. The editor's "Body NED — PX4 OFFBOARD" label had the
+  firmware attribution backwards and is corrected.
 - In-node filters grew up: per-message rate limits (`ATTITUDE=2, HEARTBEAT=1`
   pairs with an optional bare default; the shape is editor-validated per §2),
   a compared-field subset for changed-only (so hot timestamps don't defeat
@@ -61,13 +59,12 @@ see AGENTS.md "no migrations, no compatibility shims".
 
 - Move now covers the full `SET_POSITION_TARGET_*` matrix: modes Position,
   Velocity, Position + Velocity, Acceleration, Force (force bit set), and Yaw
-  only — plus a Frame selector (local NED, offset-from-current, body offset for
-  ArduPilot GUIDED, body NED for PX4 OFFBOARD, and global relative/MSL/terrain
-  altitude). Labels follow the frame (body frames read forward/right), vertical
-  inputs stay up-positive everywhere, and there is still no raw `type_mask` —
-  named concepts only. Combinations firmware is known to silently drop (Force
-  anywhere, acceleration-only on ArduPilot, terrain/OFFSET frames on PX4) still
-  send but raise a node warning. A global-frame position with blank lat/lon now
+  only — plus a Frame selector (local NED, offset-from-current, body offset,
+  body NED, and global relative/MSL/terrain altitude). Labels follow the frame
+  (body frames read forward/right), vertical inputs stay up-positive
+  everywhere, and there is still no raw `type_mask` — named concepts only.
+  Combinations measured as unsupported still send but raise a node warning (see
+  the advisory list under Fixed). A global-frame position with blank lat/lon now
   refuses instead of flying to 0,0. Fan-out move actions speak the same
   vocabulary (`moveMode` + new `moveFrame`, plus velocity/accel fields its
   editor previously lacked). The pre-frame mode names (`local-position`,

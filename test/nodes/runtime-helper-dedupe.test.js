@@ -38,7 +38,16 @@ test('In does not double-cap badge text', () => {
 test('Move uses lib/move config mappers; Fan-out imports no message builders (§10)', () => {
   const move = fs.readFileSync(path.join(nodesDir, 'mavlink-move.js'), 'utf8');
   const fanout = fs.readFileSync(path.join(nodesDir, 'mavlink-fanout.js'), 'utf8');
-  assert.match(move, /positionFrom,\s*\n\s*velocityFrom,\s*\n\s*accelFrom,\s*\n\s*valueFrom/);
+  // Assert each mapper by name, not the destructuring layout: a reformat or a
+  // reorder must not fail a test about *where the code lives*.
+  for (const mapper of ['positionFrom', 'velocityFrom', 'accelFrom', 'valueFrom']) {
+    assert.match(move, new RegExp(`\\b${mapper}\\b`), `Move uses ${mapper}`);
+    assert.doesNotMatch(
+      move,
+      new RegExp(`function\\s+${mapper}\\s*\\(`),
+      `Move must not redeclare ${mapper} locally`
+    );
+  }
   assert.match(move, /require\('\.\.\/lib\/move'\)/);
   // Fan-out is a replicator: message construction lives in the action nodes'
   // Build tiers, so no builder module may be imported here.

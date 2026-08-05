@@ -52,16 +52,24 @@
         rateLimit:   {
           value: 0,
           validate: function (v) {
-            // Blank/number = global Hz; otherwise comma NAME=Hz pairs, with
-            // an optional bare Hz default among them.
+            // Blank/number = global Hz; otherwise comma NAME=Hz pairs, with an
+            // optional bare Hz default among them. Every token must be
+            // *complete*: an empty token (a stray comma) or an empty value
+            // (`ATTITUDE=`) is rejected here rather than silently becoming
+            // "unlimited" at runtime — a typo must not quietly delete the
+            // limit the operator asked for. Number('') is 0, so the emptiness
+            // checks have to come before the numeric one.
             var raw = String(v === undefined || v === null ? '' : v).trim();
             if (!raw) return true;
             return raw.split(',').every(function (token) {
               var part = token.trim();
-              if (!part) return true;
+              if (!part) return false;
               var eq = part.indexOf('=');
-              var hz = Number(eq === -1 ? part : part.slice(eq + 1).trim());
-              if (eq !== -1 && !part.slice(0, eq).trim()) return false;
+              var name = eq === -1 ? '' : part.slice(0, eq).trim();
+              var value = eq === -1 ? part : part.slice(eq + 1).trim();
+              if (eq !== -1 && !name) return false;
+              if (!value) return false;
+              var hz = Number(value);
               return Number.isFinite(hz) && hz >= 0;
             });
           },
@@ -184,5 +192,8 @@
   tuple; 0 means unlimited. Either one Hz number for everything, or comma
   <code>NAME=Hz</code> pairs — <code>ATTITUDE=2, GLOBAL_POSITION_INT=1</code> —
   with an optional bare number among them as the default for unlisted names.
-  The editor validates the shape; the runtime trusts the saved config (§2).</p>
+  Every token must be complete — a stray comma or an empty value
+  (<code>ATTITUDE=</code>) is rejected in the editor, so a typo cannot quietly
+  remove a limit. The editor validates the shape; the runtime trusts the saved
+  config (§2).</p>
 </script>
