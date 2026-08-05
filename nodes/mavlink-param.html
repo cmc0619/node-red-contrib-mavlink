@@ -670,7 +670,11 @@
   <p>Definitions ship with this package for ArduPilot (all six vehicle types)
   and PX4, chosen by the Vehicle Profile's <b>Firmware</b> and <b>Vehicle</b> —
   the same id differs between stacks, so <code>RC1_MIN</code> is microseconds on
-  PX4 and PWM on ArduPilot. A Vehicle Profile that has downloaded its own
+  PX4 and PWM on ArduPilot. Set <b>Vehicle</b> if you know it: an
+  <b>Unknown / custom</b> vehicle is offered every parameter name that firmware
+  documents, but no bounds and no choice lists, because the vehicle documents
+  disagree about those and there is nothing to pick by. Naming the vehicle is
+  what turns the range check and the dropdown on. A Vehicle Profile that has downloaded its own
   definitions overrides the shipped ones, since that download came from the
   firmware you are actually flying. When nothing can be offered, the field says
   why, under the input.</p>

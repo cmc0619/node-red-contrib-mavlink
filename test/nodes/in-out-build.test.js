@@ -245,7 +245,7 @@ function makeVehicleStub() {
     id: 'vehicle-1',
     getDialect: () => bundle,
     getDefaults: () => ({
-      vehicleFamily: 'generic',
+      vehicleFamily: 'unknown',
       firmware: 'ardupilot',
       dialect: 'ardupilotmega',
       dialectRevision: 'seed',

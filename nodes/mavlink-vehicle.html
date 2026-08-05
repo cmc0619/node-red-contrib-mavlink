@@ -4,7 +4,7 @@
       category: 'config',
       defaults: {
         name:                  { value: '' },
-        vehicleFamily:         { value: 'generic', required: true },
+        vehicleFamily:         { value: 'unknown', required: true },
         firmware:              { value: 'ardupilot', required: true },
         dialect:               { value: 'ardupilotmega', required: true },
         dialectRevision:       { value: 'seed', required: true },
@@ -308,12 +308,13 @@
   <div class="form-row">
     <label for="node-config-input-vehicleFamily">Vehicle</label>
     <select id="node-config-input-vehicleFamily">
-      <option value="generic">Generic / unknown</option>
+      <option value="unknown">Unknown / custom</option>
       <option value="copter">Copter</option>
       <option value="plane">Plane</option>
       <option value="rover">Rover</option>
       <option value="boat">Boat</option>
       <option value="sub">Sub</option>
+      <option value="blimp">Blimp</option>
       <option value="antenna-tracker">Antenna Tracker</option>
     </select>
   </div>
@@ -406,7 +407,10 @@
   the library it is a pulldown entry.</p>
   <h3>Details</h3>
   <ul>
-    <li><b>Vehicle</b> — family for mode tables and parameter metadata.</li>
+    <li><b>Vehicle</b> — family for mode tables and parameter metadata. Naming
+      it selects that vehicle's parameter document; <b>Unknown / custom</b>
+      takes every document's parameter names but none of their bounds or
+      choice lists, since the documents disagree on those.</li>
     <li><b>Firmware</b> — ArduPilot, PX4, or custom (suggests a dialect).</li>
     <li><b>Target SysID / CompID</b> — defaults blank palette fields inherit on wire tiers.</li>
     <li><b>Dialect / Version</b> — Advanced: seed or a downloaded snapshot date.</li>

@@ -48,8 +48,8 @@ test('FIRMWARE_TYPES includes ardupilot, px4, custom', () => {
 
 /* ---------- VEHICLE_FAMILIES ---------- */
 
-test('VEHICLE_FAMILIES includes copter, plane, rover, boat, sub, generic', () => {
-  for (const f of ['copter', 'plane', 'rover', 'boat', 'sub', 'generic']) {
+test('VEHICLE_FAMILIES has one family per ArduPilot document, plus unknown', () => {
+  for (const f of ['copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker', 'unknown']) {
     assert.ok(VEHICLE_FAMILIES.includes(f), `expected ${f} in VEHICLE_FAMILIES`);
   }
 });
@@ -71,15 +71,18 @@ test('normalizeFirmware returns custom for unknown input', () => {
 /* ---------- normalizeFamily ---------- */
 
 test('normalizeFamily passes through known values', () => {
-  for (const f of ['copter', 'plane', 'rover', 'boat', 'sub', 'antenna-tracker', 'generic']) {
+  for (const f of ['copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker', 'unknown']) {
     assert.equal(normalizeFamily(f), f);
   }
 });
 
-test('normalizeFamily returns generic for unknown input', () => {
-  assert.equal(normalizeFamily('drone'), 'generic');
-  assert.equal(normalizeFamily(''), 'generic');
-  assert.equal(normalizeFamily(undefined), 'generic');
+test('normalizeFamily returns unknown for unrecognised input', () => {
+  assert.equal(normalizeFamily('drone'), 'unknown');
+  assert.equal(normalizeFamily(''), 'unknown');
+  assert.equal(normalizeFamily(undefined), 'unknown');
+  // Flows saved before the rename carry 'generic'; it normalises to the same
+  // behaviour it always had, which is why no alias is kept for it.
+  assert.equal(normalizeFamily('generic'), 'unknown');
 });
 
 /* ---------- resolveDialect — seed ---------- */

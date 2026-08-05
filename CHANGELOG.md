@@ -36,6 +36,19 @@ see AGENTS.md "no migrations, no compatibility shims".
   on ArduPilot Copter, 20%/61% on PX4). A blank value still defers to
   `msg.payload`, an unknown parameter is never rejected for being unknown, and
   with no definitions loaded this is exactly the previous numeric check.
+- **A vehicle you have not named gets names, and nothing that can act.** The
+  Vehicle Profile's **Vehicle** field gains **Blimp**, so all six ArduPilot
+  documents are now selectable — Blimp's 3127 definitions previously shipped
+  with no family able to reach them. **Generic** is renamed **Unknown /
+  custom**, and now serves the union of parameter *names* with no bounds and no
+  choice lists. The documents disagree: of the 5467 ids in more than one
+  ArduPilot document, 122 disagree on their enumeration and 25 on their maximum,
+  and whichever document was read first used to win. On a Blimp that meant
+  `WP_RADIUS` offered 1–32767 m instead of the documented 0.1–10, so the editor
+  refused a legal 0.5 and accepted 5000; a divergent enumeration is worse, since
+  picking "AltHold (2)" on a vehicle whose mode 2 is something else sets the
+  wrong mode. Naming the vehicle turns the range check and the dropdown back on.
+  Descriptions and units are still shown — they inform, they do not refuse.
 - **Param id is now searched, not just autocompleted.** The datalist is
   replaced by a results panel that matches on **description as well as name**,
   so "minimum" finds `RC1_MIN` — previously you had to know the name before
