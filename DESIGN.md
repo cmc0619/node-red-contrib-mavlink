@@ -3044,22 +3044,36 @@ are each served their own — the source list reads like a family list, so nobod
    Copter and Plane share 5180 ids; 539 are Copter-only. A test that asserts family selection
    must use one of those 539: `ACRO_BAL_PITCH` discriminates, `ARSPD_OFF_PCNT` does not,
    because it is in the ArduPilot union as well as in Plane.
-3. **Six documents are reachable by family. Blimp is not.** The Vehicle Profile offers
-   `generic|copter|plane|rover|boat|sub|antenna-tracker`; `ARDUPILOT_VEHICLE` maps all but
-   `generic`, with `boat`→Rover because ArduPilot ships boats in the Rover set. Nothing maps
-   `blimp`, so those 3127 definitions are only ever served inside the 6827-id `generic` union.
-   The two lists are independent and no test compares them.
+3. **A shipped document is not a reachable one.** As first measured, the Vehicle Profile
+   offered `generic|copter|plane|rover|boat|sub|antenna-tracker` and `ARDUPILOT_VEHICLE`
+   mapped all but `generic`, with `boat`→Rover because ArduPilot ships boats in the Rover
+   set. Nothing mapped `blimp`, so those 3127 definitions were only ever served inside the
+   6827-id union. The source list and the family list are independent; nothing compared them.
+4. **The union is safe for presence and unsafe for everything else.** Its justification only
+   ever covered names — listing a parameter the vehicle lacks costs a failed read. But it
+   also had to *pick* when documents disagree, resolved by whichever `Object.values()` order
+   reached the id first. Of the 5467 ids in more than one ArduPilot document, **122 disagree
+   on `values`, 25 on `max`, 23 on `min`, 5 on `increment`**; `description` (50) and `unit`
+   (19) also differ. On a Blimp, `WP_RADIUS` came back 1–32767 m against a documented
+   0.1–10, so the range check refused a legal 0.5 and accepted 5000. A divergent
+   enumeration is worse: a dropdown offering "AltHold (2)" for a vehicle whose mode 2 is
+   something else sets the wrong mode and looks authoritative doing it.
 
-*Decision:* the union stays the fallback for an unmapped or generic vehicle — listing a
-parameter the vehicle lacks costs a failed read, while hiding one it has cannot be recovered
-from inside the editor, so the safe direction is to over-offer. Blimp is therefore not a defect
-to rush. But adding a document does **not** make it selectable: that needs a
-`ARDUPILOT_VEHICLE` entry *and* a Vehicle Profile option, and adding either alone lands the
-document in the union only.
+*Decision:* the union stays the fallback, because over-offering names is still the right
+direction — but it serves **names only**. `unionSafe` drops `min`, `max`, `increment` and
+`values`; `description` and `unit` stay, disagreements included, because they are text an
+operator reads rather than a control that refuses input or names a mode. Naming the vehicle is
+what turns the range check and the dropdown on, and both node help texts say so.
+`generic` is renamed `unknown` — the field answers "which document describes this vehicle"
+and this is the case where none does. No alias is kept (pre-1.0, AGENTS.md); a flow saved with
+`generic` normalises to `unknown` and behaves exactly as before.
+`blimp` is now a family. Adding a document still does **not** make it selectable on its own:
+that needs an `ARDUPILOT_VEHICLE` entry *and* a Vehicle Profile option. `test/param/seed.test.js`
+now fails when any family falls through to the union, which is the check that was missing.
 *Check:* `node -e "const s=require('./lib/param/seed');for(const f of
-['copter','plane','rover','boat','sub','antenna-tracker','generic'])
+['copter','plane','rover','boat','sub','blimp','antenna-tracker','unknown'])
 console.log(f,s.defsFor({firmware:'ardupilot',vehicleFamily:f}).size);
 console.log('px4',s.defsFor({firmware:'px4'}).size);
 console.log('RC1_MIN',JSON.stringify(s.defsFor({firmware:'px4'}).get('RC1_MIN')),
 JSON.stringify(s.defsFor({firmware:'ardupilot'}).get('RC1_MIN')))"` — `antenna-tracker` is 3617
-and `generic` is 6827; no family prints 3127.
+`blimp` 3127 and `unknown` 6827, and no union entry carries `min`.
