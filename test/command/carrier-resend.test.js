@@ -53,6 +53,7 @@ function scriptedConn(results) {
         for (const { handler } of subs.slice()) handler(decoded);
       }, 0);
     },
+    resolveSourceIds: () => null,
     subscribe(filter, handler) {
       const entry = { filter, handler };
       subs.push(entry);

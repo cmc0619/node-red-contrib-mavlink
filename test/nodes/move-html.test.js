@@ -16,6 +16,7 @@ const html = fs.readFileSync(
 );
 
 const ROW_IDS = [
+  'row-move-frame',
   'row-move-north',
   'row-move-east',
   'row-move-up',
@@ -25,18 +26,26 @@ const ROW_IDS = [
   'row-move-vNorth',
   'row-move-vEast',
   'row-move-vUp',
+  'row-move-aNorth',
+  'row-move-aEast',
+  'row-move-aUp',
   'row-move-yaw',
   'row-move-yawRate',
   'row-move-interval',
   'row-move-ttl',
 ];
 
-test('mavlink-move editor reshapes fields by mode and delivery (§6)', () => {
-  assert.match(html, /function refreshVisibility/, 'mode/delivery drive row visibility');
+test('mavlink-move editor reshapes fields by mode, frame, and delivery (§6)', () => {
+  assert.match(html, /function refreshVisibility/, 'mode/frame/delivery drive row visibility');
   assert.match(
     html,
     /\$\('#node-input-mode'\)\.on\('change', refreshVisibility\)/,
     'mode change refreshes visibility'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-frame'\)\.on\('change', refreshVisibility\)/,
+    'frame change refreshes visibility'
   );
   assertChangeHandlerContains(
     html,
@@ -50,10 +59,52 @@ test('mavlink-move editor reshapes fields by mode and delivery (§6)', () => {
     assert.match(html, new RegExp(`id="${id}"`), `${id} row must exist`);
   }
 
-  assert.match(html, /mode === 'local-position'/, 'local position fields gated on mode');
-  assert.match(html, /mode === 'local-velocity'/, 'local velocity fields gated on mode');
-  assert.match(html, /mode === 'global-position'/, 'global position fields gated on mode');
+  assert.match(html, /usesPosition && !isGlobalFrame/, 'local position fields gated on mode + frame');
+  assert.match(html, /usesPosition && isGlobalFrame/, 'global position fields gated on mode + frame');
+  assert.match(html, /vNorth: usesVelocity/, 'velocity fields gated on mode');
+  assert.match(html, /aNorth: usesAccel/, 'accel/force fields gated on mode');
   assert.match(html, /delivery === 'stream'/, 'stream interval and TTL gated on delivery');
+});
+
+test('mavlink-move declares the frame default and the acceleration validators', () => {
+  // A wrong or missing default frame changes the carrier message for every
+  // Move node that never touched the field.
+  assert.match(html, /frame:\s*\{\s*value:\s*'LOCAL_NED'\s*\}/, 'frame defaults to LOCAL_NED');
+  for (const field of ['aNorth', 'aEast', 'aUp']) {
+    assert.match(
+      html,
+      new RegExp(`${field}:\\s*\\{\\s*value:\\s*0,\\s*validate:\\s*RED\\.validators\\.number\\(true\\)`),
+      `${field} declares the blank-allowed numeric validator`
+    );
+  }
+});
+
+test('mavlink-move offers the full mode and frame matrix', () => {
+  for (const mode of ['position', 'velocity', 'position-velocity', 'acceleration', 'force', 'yaw-only']) {
+    assert.match(html, new RegExp(`option value="${mode}"`), `mode ${mode} offered`);
+  }
+  for (const frame of [
+    'LOCAL_NED',
+    'LOCAL_OFFSET_NED',
+    'BODY_OFFSET_NED',
+    'BODY_NED',
+    'GLOBAL_RELATIVE_ALT_INT',
+    'GLOBAL_INT',
+    'GLOBAL_TERRAIN_ALT_INT',
+  ]) {
+    assert.match(html, new RegExp(`option value="${frame}"`), `frame ${frame} offered`);
+  }
+  // No raw type_mask input — named modes only; raw masks live in mavlink-build.
+  assert.doesNotMatch(html, /type_?[mM]ask"|node-input-typeMask/, 'no raw type_mask field');
+});
+
+test('mavlink-move speaks one canonical vocabulary and labels body frames forward/right', () => {
+  // Pre-1.0, no aliases (AGENTS.md "no migrations, no compatibility shims"):
+  // the pre-frame mode names must not appear anywhere in the editor.
+  assert.doesNotMatch(html, /local-position|local-velocity|global-position/, 'no legacy mode names');
+  assert.match(html, /isBodyFrame \? 'Metres forward' : 'Metres north'/, 'body frames relabel north to forward');
+  assert.match(html, /'Force' : 'Accel'/, 'force mode relabels the accel vector');
+  assert.match(html, /'N' : 'm\/s²'/, 'force mode swaps the accel unit to newtons');
 });
 
 test('mavlink-move has one labeled row per parameter, not dual local/global rows', () => {

@@ -94,4 +94,22 @@ test('a disabled Connection still exposes an empty peer table', () => {
   assert.ok(node.peerTable, 'peer table is present');
   assert.equal(typeof node.subscribe, 'function');
   assert.equal(typeof node.send, 'function');
+  assert.equal(typeof node.resolveSourceIds, 'function', 'ack-attribution accessor is part of the wrapper contract');
+  assert.equal(node.resolveSourceIds(), null, 'a disabled connection resolves no source ids — the gate stays off');
+});
+
+test('the live Connection wrapper forwards resolveSourceIds to the runtime (Codex #161)', () => {
+  // The runtime method alone is not enough: palette nodes reach the runtime
+  // only through the wrapper (node.subscribe/send/peerTable), so an
+  // unforwarded accessor is a TypeError on the first confirm-delivery send —
+  // invisible to unit tests whose stubs all provide the method.
+  const source = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', '..', 'nodes', 'mavlink-connection.js'),
+    'utf8'
+  );
+  assert.match(
+    source,
+    /node\.resolveSourceIds = \(identityId\) => node\.connection\.resolveSourceIds\(identityId\)/,
+    'wrapper forwards resolveSourceIds alongside subscribe/send'
+  );
 });

@@ -39,8 +39,9 @@ reference these by name rather than re-explaining them each time.
 `mode: "advanced"`, `advancedCommand: "<MAV_CMD numeric>"`. `params` is a JSON string
 keyed by param index (`"{\"7\":20}"` = param7 = 20).
 
-**Move** `mode`: `local-position` (N/E/Up metres), `local-velocity` (vN/vE/vUp m/s),
-`global-position` (`lat`/`lon` deg, `alt` m). `intervalMs`, `ttlMs` govern the stream.
+**Move** `mode`: `position`, `velocity`, `position-velocity`, `acceleration`, `force`,
+`yaw-only`; `frame` picks local (N/E/Up metres) vs global (`lat`/`lon` deg, `alt` m)
+and the body/offset/altitude-datum variants. `intervalMs`, `ttlMs` govern the stream.
 Up is up-positive in the UI; the node flips to NED at encode. **No arc primitive** — a
 curved path is either many setpoints from a Function node, `DO_ORBIT`, or a mission ring.
 
@@ -60,9 +61,12 @@ curved path is either many setpoints from a Function node, `DO_ORBIT`, or a miss
 
 **In** filters: `message`, `sysid`, `compid`, `changedOnly`, `rateLimit` (Hz).
 
-**Fan-out** `selectionMode`: `all` \| `list` (`sysids: "1,2,3"`) \| `filter`
-(`vehicleType`/`firmwareFilter`/`armedFilter`); `executionMode`: `sequential`
-(`intervalMs`) \| `broadcast` (`target_system=0`); `dryRun` bool.
+**Fan-out** is a replicator: wire a Build-tier action node into it and it retargets
+the built `{name, fields}` message per member. `selectionMode`: `all` \| `list`
+(`sysids: "1,2,3"`) \| `filter` (`vehicleType`/`firmwareFilter`/`armedFilter`);
+`executionMode`: `sequential` (`intervalMs`, `concurrency`) \| `broadcast`
+(`target_system=0`); `dryRun` bool. Payload wrapper `{message, targets}` patches
+wire fields per member.
 
 **Firmware honesty facts used below:**
 
@@ -75,8 +79,8 @@ curved path is either many setpoints from a Function node, `DO_ORBIT`, or a miss
 - **A circle, honest options** (pick per flow): (a) `DO_ORBIT` (Orbit preset) — one
   command, ArduCopter 4.x and PX4 both implement it; center defaults to current position
   on ArduPilot when lat/lon are 0. (b) ArduCopter **CIRCLE mode (7)** after setting the
-  `CIRCLE_RADIUS` param — firmware-native, ArduPilot-only. (c) A **Move global-position
-  stream** of setpoints computed around a ring in a Function node — shows the toolkit's
+  `CIRCLE_RADIUS` param — firmware-native, ArduPilot-only. (c) A **Move global position
+  stream** (`mode: "position"`, global frame) of setpoints computed around a ring in a Function node — shows the toolkit's
   streaming path but the arc is your maths, not the vehicle's. The stroll flow uses
   `DO_ORBIT`; a sibling flow shows the Move-stream ring for contrast.
 - PX4 `DO_SET_MODE` custom_mode is an encoded main/sub-mode bitfield, **not** a small
@@ -135,11 +139,11 @@ importable tab per file with shared config nodes inline.
   go stops the vehicle. It exists to contrast honest streaming against `DO_ORBIT` and to
   show Move's freshness/stop behaviour.
 - **Nodes:** config triplet, `command` (arm/set_mode/takeoff/land), `inject`, one
-  `function` (ring generator — the only computed part), `move` (`mode:
-  "global-position"`, `delivery: "stream"`, `intervalMs: 200`, `ttlMs: 1500`), `debug`.
+  `function` (ring generator — the only computed part), `move` (`mode: "position"`,
+  `frame: "GLOBAL_RELATIVE_ALT_INT"`, `delivery: "stream"`, `intervalMs: 200`, `ttlMs: 1500`), `debug`.
 - **Key config:** Function computes `lat = c_lat + (R·sinθ)/111320`,
   `lon = c_lon + (R·cosθ)/(111320·cos c_lat)` per §"Coordinate frames"; emits
-  `{payload:{mode:"global-position",position:{lat,lon,alt}}}`. Move TTL means the stream
+  `{payload:{mode:"position",frame:"GLOBAL_RELATIVE_ALT_INT",position:{lat,lon,alt}}}`. Move TTL means the stream
   self-stops if injects stop arriving. Comment states plainly: no arc primitive exists;
   the ring is the flow author's maths.
 - **Inject buttons:** **`Arm+GUIDED+Takeoff`**, **`◯ Fly circle`** (repeat inject at 5 Hz
@@ -333,7 +337,7 @@ importable tab per file with shared config nodes inline.
   N/E/Up velocity through a Move node with a short TTL, so releasing a button lets the
   stream lapse and the vehicle stops — the freshness-and-stop contract that keeps a
   streamed control from running away.
-- **Nodes:** config triplet, `command` arm→GUIDED, `move` (`mode: "local-velocity"`,
+- **Nodes:** config triplet, `command` arm→GUIDED, `move` (`mode: "velocity"`, `frame: "LOCAL_NED"`,
   `delivery: "stream"`, `intervalMs: 100`, `ttlMs: 500`), `inject` (velocity presets),
   `debug`.
 - **Key config:** e.g. Forward `{velocity:{north:2,east:0,up:0}}`; Up
@@ -351,11 +355,12 @@ importable tab per file with shared config nodes inline.
   velocity setpoint across a sysid list, first sequentially (paced) then as a single
   broadcast, showing when simultaneity beats pacing. Move carries no ack, so the fan-out
   reports per-vehicle send outcomes, not confirmations.
-- **Nodes:** config triplet, 2× `fanout` (`actionType`/`topic` = move; one
-  `executionMode: "sequential"` `intervalMs: 150`, one `broadcast`), `inject`, `debug`.
-- **Key config:** selection `list` `sysids: "1,2,3,4,5"`; move velocity
-  `{north:1,east:0,up:0}`; broadcast pins `target_system=0`, single-stack only. Dry-run
-  inject shows the expanded plan first. Comment references §10 broadcast rules.
+- **Nodes:** config triplet, `move` (Build, velocity north 1 m/s) feeding 3× `fanout`
+  (dry-run; `executionMode: "sequential"` `intervalMs: 150`; `broadcast`), `inject`, `debug`.
+- **Key config:** selection `list` `sysids: "1,2,3,4,5"` (broadcast uses `all`); the Move
+  node builds the setpoint, the fan-outs replicate it; broadcast pins `target_system=0`,
+  single-stack only. Dry-run inject shows the expanded plan first. Comment references §10
+  broadcast rules.
 - **Inject buttons:** **`Dry run`**, **`Nudge (sequential)`**, **`Nudge (broadcast)`**.
 
 ### 25 — Speed & yaw choreography
@@ -501,8 +506,8 @@ instances it needs. Filenames restart at `01` inside the folder.
 - **Story:** Sequential arm across ArduPilot sysids 1–5 on one connection with 200 ms
   pacing, dry-run first; exercises the peer table, queue pacing, and fan-out aggregation
   across the full five-instance rig.
-- **Nodes:** config triplet, 2× `fanout` (dry-run + live, `list` 1–5, `sequential`
-  `intervalMs: 200`), `inject`, `debug`.
+- **Nodes:** config triplet, `command` (Build, preset Arm) per path feeding 2× `fanout`
+  (dry-run + live, `list` 1–5, `sequential` `intervalMs: 200`), `inject`, `debug`.
 - **Config/launch:** the five-ArduCopter loop (see README); bind `14550`→`14551`.
 
 ### sitl/09 — Fan-out member expires mid-fan-out
@@ -511,8 +516,9 @@ instances it needs. Filenames restart at `01` inside the folder.
 - **Story:** Start a sequential fan-out across five, then kill one SITL instance partway;
   the run continues, and the aggregate reports the dropped member as failed rather than
   aborting or silently re-resolving the group (§10).
-- **Nodes:** config triplet, `fanout` (`sequential`, `confirm`, `intervalMs: 500` to give a
-  human time to kill one), `state` feed (watch the `expired` event), `inject`, `debug`.
+- **Nodes:** config triplet, `command` (Build, preset Arm) feeding `fanout` (`sequential`,
+  `confirm`, `intervalMs: 500` to give a human time to kill one), `state` feed (watch the
+  `expired` event), `inject`, `debug`.
 - **Config/launch:** five ArduCopters; comment: `kill` one instance's PID after the run
   starts; expect one `failed` entry in the aggregate, four succeeded.
 
@@ -522,8 +528,8 @@ instances it needs. Filenames restart at `01` inside the folder.
 - **Story:** Both connections live at once — five ArduPilot (1–5) + five PX4 (11–15) — with
   a State feed showing all ten peers and a per-stack broadcast arm (two broadcasts, one per
   connection, because a broadcast is single-stack). The whole-rig integration demo.
-- **Nodes:** 1 identity, 2 vehicles, 2 connections, 2× `fanout` (`broadcast` arm per stack),
-  `state` feed, `inject`, `debug`.
+- **Nodes:** 1 identity, 2 vehicles, 2 connections, `command` (Build, preset Arm) per stack
+  feeding 2× `fanout` (`broadcast` per stack), `state` feed, `inject`, `debug`.
 - **Config/launch:** prefer `sitl/docker-compose.yml` (`--profile sitl`); AP bind
   `14550`→`14551`, PX4 bind `14560`→`14561`.
 
@@ -546,8 +552,9 @@ instances it needs. Filenames restart at `01` inside the folder.
 - **Story:** Arm the five-ArduPilot group two ways and compare: sequential fan-out (paced,
   per-vehicle acks) versus a single `target_system=0` broadcast confirmed by polling the
   peer-table armed state rather than counting the ack storm (§10).
-- **Nodes:** config triplet, 2× `fanout` (sequential confirm; broadcast + `confirm` waiting
-  on the resolved set), `state` snapshot, `inject`, `debug`.
+- **Nodes:** config triplet, `command` (Build, preset Arm) per path feeding 2× `fanout`
+  (sequential confirm; broadcast + `confirm` waiting on the resolved set), `state`
+  snapshot, `inject`, `debug`.
 - **Config/launch:** five ArduCopters; comment on the inbound ack-burst congestion note.
 
 ### sitl/12 — Signing: sign-outbound + require-signed (dry-run notes)

@@ -1,250 +1,293 @@
 [
-    {
-        "id": "ex07-tab",
-        "type": "tab",
-        "label": "SITL 08 Fan-out \u00d75 pacing",
-        "disabled": false,
-        "info": "Sequential arm across five ArduPilot SITL instances (sysids 1\u20135) on one connection with 200 ms inter-vehicle pacing. Dry-run verifies fan-out targets before the live run commits. Demonstrates multi-vehicle peer table use, queue pacing, and fan-out partial-failure handling.",
-        "env": []
-    },
-    {
-        "id": "ex07-comment",
-        "type": "comment",
-        "z": "ex07-tab",
-        "name": "Five-vehicle sequential arm on ArduPilot connection (DESIGN.md \u00a713 rig)",
-        "info": "The DESIGN.md testing rig runs five ArduPilot SITL instances at sysids 1\u20135 and five PX4 at 11\u201315 on separate connections.\n\nThis flow targets the ArduPilot connection only. Start five Copter SITL processes:\n  for i in 1 2 3 4 5; do\n    sim_vehicle.py -v ArduCopter -I $((i-1)) --sysid $i \\\n      --out udp:127.0.0.1:14550 &\n  done\n\nBind the connection to 0.0.0.0:14550 and set remotePort to 14551 (ArduPilot SITL\nbroadcasts HEARTBEAT to all registered outputs so all five sysids appear on the peer\ntable after the first heartbeat window).\n\nDry-run output: a list of { sysid, result: 'dry-run' } records with no actual sends.\nLive output 0: one continue message per successfully commanded vehicle, in order.\nLive output 1: one status record per vehicle whether it succeeded or failed.",
-        "x": 290,
-        "y": 40,
-        "wires": []
-    },
-    {
-        "id": "ex07-identity",
-        "type": "mavlink-local-identity",
-        "name": "GCS identity",
-        "role": "gcs",
-        "sourceSystemId": 255,
-        "sourceComponentId": 190,
-        "heartbeatType": "MAV_TYPE_GCS",
-        "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
-    },
-    {
-        "id": "ex07-vehicle",
-        "type": "mavlink-vehicle",
-        "name": "ArduPilot fleet",
-        "vehicleFamily": "copter",
-        "firmware": "ardupilot",
-        "dialect": "ardupilotmega",
-        "dialectSource": "bundled",
-        "defaultTargetSystem": 1,
-        "defaultTargetComponent": 1,
-        "paramDefsUrl": ""
-    },
-    {
-        "id": "ex07-connection",
-        "type": "mavlink-connection",
-        "name": "UDP ArduPilot 5\u00d7SITL",
-        "mode": "udp",
-        "bindHost": "0.0.0.0",
-        "bindPort": 14550,
-        "remoteHost": "127.0.0.1",
-        "remotePort": 14551,
-        "broadcast": false,
-        "vehicle": "ex07-vehicle",
-        "localIdentity": "ex07-identity",
-        "additionalIdentities": [],
-        "signOutbound": false,
-        "requireSigned": false,
-        "acceptInvalid": false,
-        "linkId": 0,
-        "heartbeatInterval": 1000,
-        "staleMs": "",
-        "expireMs": "",
-        "disabled": false
-    },
-    {
-        "id": "ex07-inject-dry",
-        "type": "inject",
-        "z": "ex07-tab",
-        "name": "Dry run",
-        "props": [
-            {
-                "p": "payload"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "",
-        "payloadType": "date",
-        "x": 120,
-        "y": 160,
-        "wires": [
-            [
-                "ex07-fanout-dry"
-            ]
-        ]
-    },
-    {
-        "id": "ex07-fanout-dry",
-        "type": "mavlink-fanout",
-        "z": "ex07-tab",
-        "name": "Arm (dry run)",
-        "connection": "ex07-connection",
-        "selectionMode": "list",
-        "sysids": "1,2,3,4,5",
-        "vehicleType": "",
-        "firmwareFilter": "",
-        "armedFilter": "",
-        "executionMode": "sequential",
-        "intervalMs": 200,
-        "dryRun": true,
-        "topic": "command",
-        "verb": "arm",
-        "delivery": "send",
-        "preset": "arm",
-        "advancedCommand": "",
-        "timeout": "5000",
-        "maxRetries": "0",
-        "params": "{}",
-        "x": 320,
-        "y": 160,
-        "wires": [
-            [
-                "ex07-dry-result"
-            ],
-            [
-                "ex07-dry-status"
-            ]
-        ],
-        "carrier": "long"
-    },
-    {
-        "id": "ex07-inject-live",
-        "type": "inject",
-        "z": "ex07-tab",
-        "name": "Live run",
-        "props": [
-            {
-                "p": "payload"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "",
-        "payloadType": "date",
-        "x": 120,
-        "y": 280,
-        "wires": [
-            [
-                "ex07-fanout-live"
-            ]
-        ]
-    },
-    {
-        "id": "ex07-fanout-live",
-        "type": "mavlink-fanout",
-        "z": "ex07-tab",
-        "name": "Arm (live, confirm)",
-        "connection": "ex07-connection",
-        "selectionMode": "list",
-        "sysids": "1,2,3,4,5",
-        "vehicleType": "",
-        "firmwareFilter": "",
-        "armedFilter": "",
-        "executionMode": "sequential",
-        "intervalMs": 200,
-        "dryRun": false,
-        "topic": "command",
-        "verb": "arm",
-        "delivery": "confirm",
-        "preset": "arm",
-        "advancedCommand": "",
-        "timeout": "10000",
-        "maxRetries": "3",
-        "params": "{}",
-        "x": 330,
-        "y": 280,
-        "wires": [
-            [
-                "ex07-live-result"
-            ],
-            [
-                "ex07-live-status"
-            ]
-        ],
-        "carrier": "long"
-    },
-    {
-        "id": "ex07-dry-result",
-        "type": "debug",
-        "z": "ex07-tab",
-        "name": "dry continue",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 540,
-        "y": 140,
-        "wires": []
-    },
-    {
-        "id": "ex07-dry-status",
-        "type": "debug",
-        "z": "ex07-tab",
-        "name": "dry status",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 540,
-        "y": 200,
-        "wires": []
-    },
-    {
-        "id": "ex07-live-result",
-        "type": "debug",
-        "z": "ex07-tab",
-        "name": "live continue",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 550,
-        "y": 260,
-        "wires": []
-    },
-    {
-        "id": "ex07-live-status",
-        "type": "debug",
-        "z": "ex07-tab",
-        "name": "live status",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 550,
-        "y": 320,
-        "wires": []
-    }
+  {
+    "id": "ex07-tab",
+    "type": "tab",
+    "label": "SITL 08 Fan-out \u00d75 pacing",
+    "disabled": false,
+    "info": "Sequential arm across five ArduPilot SITL instances (sysids 1\u20135) on one connection with 200 ms inter-vehicle pacing. Dry-run verifies fan-out targets before the live run commits. Demonstrates multi-vehicle peer table use, queue pacing, and fan-out partial-failure handling.",
+    "env": []
+  },
+  {
+    "id": "ex07-comment",
+    "type": "comment",
+    "z": "ex07-tab",
+    "name": "Five-vehicle sequential arm on ArduPilot connection (DESIGN.md \u00a713 rig)",
+    "info": "The DESIGN.md testing rig runs five ArduPilot SITL instances at sysids 1\u20135 and five PX4 at 11\u201315 on separate connections.\n\nThis flow targets the ArduPilot connection only. Start five Copter SITL processes:\n  for i in 1 2 3 4 5; do\n    sim_vehicle.py -v ArduCopter -I $((i-1)) --sysid $i \\\n      --out udp:127.0.0.1:14550 &\n  done\n\nBind the connection to 0.0.0.0:14550 and set remotePort to 14551 (ArduPilot SITL\nbroadcasts HEARTBEAT to all registered outputs so all five sysids appear on the peer\ntable after the first heartbeat window).\n\nDry-run output: a list of { sysid, result: 'dry-run' } records with no actual sends.\nLive output 0: one continue message per successfully commanded vehicle, in order.\nLive output 1: one status record per vehicle whether it succeeded or failed.",
+    "x": 290,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ex07-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex07-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduPilot fleet",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "ex07-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot 5\u00d7SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "ex07-vehicle",
+    "localIdentity": "ex07-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex07-inject-dry",
+    "type": "inject",
+    "z": "ex07-tab",
+    "name": "Dry run",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 160,
+    "wires": [
+      [
+        "ex07-fanout-dry-build"
+      ]
+    ]
+  },
+  {
+    "id": "ex07-fanout-dry-build",
+    "type": "mavlink-command",
+    "z": "ex07-tab",
+    "name": "Arm (dry run) (build)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "carrier": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 180,
+    "y": 160,
+    "wires": [
+      [
+        "ex07-fanout-dry"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "ex07-fanout-dry",
+    "type": "mavlink-fanout",
+    "z": "ex07-tab",
+    "name": "Arm (dry run)",
+    "connection": "ex07-connection",
+    "selectionMode": "list",
+    "sysids": "1,2,3,4,5",
+    "vehicleType": "",
+    "firmwareFilter": "",
+    "armedFilter": "",
+    "executionMode": "sequential",
+    "intervalMs": 200,
+    "dryRun": true,
+    "delivery": "send",
+    "maxRetries": 0,
+    "x": 320,
+    "y": 160,
+    "wires": [
+      [
+        "ex07-dry-result"
+      ],
+      [
+        "ex07-dry-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex07-inject-live",
+    "type": "inject",
+    "z": "ex07-tab",
+    "name": "Live run",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 280,
+    "wires": [
+      [
+        "ex07-fanout-live-build"
+      ]
+    ]
+  },
+  {
+    "id": "ex07-fanout-live-build",
+    "type": "mavlink-command",
+    "z": "ex07-tab",
+    "name": "Arm (live, confirm) (build)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "carrier": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 190,
+    "y": 280,
+    "wires": [
+      [
+        "ex07-fanout-live"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "ex07-fanout-live",
+    "type": "mavlink-fanout",
+    "z": "ex07-tab",
+    "name": "Arm (live, confirm)",
+    "connection": "ex07-connection",
+    "selectionMode": "list",
+    "sysids": "1,2,3,4,5",
+    "vehicleType": "",
+    "firmwareFilter": "",
+    "armedFilter": "",
+    "executionMode": "sequential",
+    "intervalMs": 200,
+    "dryRun": false,
+    "delivery": "confirm",
+    "maxRetries": 3,
+    "x": 330,
+    "y": 280,
+    "wires": [
+      [
+        "ex07-live-result"
+      ],
+      [
+        "ex07-live-status"
+      ]
+    ],
+    "timeoutMs": 10000
+  },
+  {
+    "id": "ex07-dry-result",
+    "type": "debug",
+    "z": "ex07-tab",
+    "name": "dry continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 540,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "ex07-dry-status",
+    "type": "debug",
+    "z": "ex07-tab",
+    "name": "dry status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 540,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "ex07-live-result",
+    "type": "debug",
+    "z": "ex07-tab",
+    "name": "live continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 550,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "ex07-live-status",
+    "type": "debug",
+    "z": "ex07-tab",
+    "name": "live status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 550,
+    "y": 320,
+    "wires": []
+  }
 ]

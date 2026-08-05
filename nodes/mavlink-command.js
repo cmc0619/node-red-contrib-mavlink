@@ -363,6 +363,9 @@ module.exports = function registerMavlinkCommand(RED) {
           commandId,
           targetSystem: target.sysid,
           targetComponent: target.compid,
+          // Ack attribution (§9): ignore an ack explicitly addressed to a
+          // different GCS on a shared link.
+          sourceIds: connNode.resolveSourceIds(identityId),
           timeoutMs,
           maxRetries: noAutoRetry ? 0 : maxRetries,
           noAutoRetry,

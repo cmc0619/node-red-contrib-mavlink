@@ -201,7 +201,7 @@
     "name": "Velocity stream",
     "connection": "sitl20-connection",
     "delivery": "stream",
-    "mode": "local-velocity",
+    "mode": "velocity",
     "targetSystem": 1,
     "targetComponent": 1,
     "north": 0,
@@ -226,7 +226,8 @@
       [
         "sitl20-move-status"
       ]
-    ]
+    ],
+    "frame": "LOCAL_NED"
   },
   {
     "id": "sitl20-arm-status",

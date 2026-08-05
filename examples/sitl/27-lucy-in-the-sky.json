@@ -4,15 +4,15 @@
     "type": "tab",
     "label": "SITL 27 Lucy in the Sky",
     "disabled": false,
-    "info": "Lucy in the Sky: five ArduPilot copters take off, spread on a line, form a sphere, tumble the sphere around body +Y (pitch 0→45→90→135→180), then peel off one-by-one and land.",
+    "info": "Lucy in the Sky: five ArduPilot copters take off, spread on a line, form a sphere, tumble the sphere around body +Y (pitch 0\u219245\u219290\u2192135\u2192180), then peel off one-by-one and land.",
     "env": []
   },
   {
     "id": "sitl27-comment",
     "type": "comment",
     "z": "sitl27-tab",
-    "name": "Lucy in the Sky — sphere tumble then peel",
-    "info": "Choreography on AP sysids 1–5:\n1. GUIDED → arm → takeoff 40 m\n2. Spread: line spacing 18 m (fixed Canberra-home anchor, alt 40)\n3. Form sphere radius 12 m\n4. Rotate as a group around Y: pitchDeg 0 → 45 → 90 → 135 → 180 (same sphere node family, pitch on each step)\n5. Peel: sequential NAV_LAND with 2 s pacing\n\nSphere is 3-D — followers sit above and below the anchor; keep the anchor high enough (40 m with radius 12 clears ~28 m AGL).\n\nHarness: ap-arm-ready-fleet. Long wait — settle delays between geometry steps.",
+    "name": "Lucy in the Sky \u2014 sphere tumble then peel",
+    "info": "Choreography on AP sysids 1\u20135:\n1. GUIDED \u2192 arm \u2192 takeoff 40 m\n2. Spread: line spacing 18 m (fixed Canberra-home anchor, alt 40)\n3. Form sphere radius 12 m\n4. Rotate as a group around Y: pitchDeg 0 \u2192 45 \u2192 90 \u2192 135 \u2192 180 (same sphere node family, pitch on each step)\n5. Peel: sequential NAV_LAND with 2 s pacing\n\nSphere is 3-D \u2014 followers sit above and below the anchor; keep the anchor high enough (40 m with radius 12 clears ~28 m AGL).\n\nHarness: ap-arm-ready-fleet. Long wait \u2014 settle delays between geometry steps.",
     "x": 360,
     "y": 40,
     "wires": []
@@ -42,7 +42,7 @@
   {
     "id": "sitl27-connection",
     "type": "mavlink-connection",
-    "name": "UDP ArduPilot 5×SITL",
+    "name": "UDP ArduPilot 5\u00d7SITL",
     "mode": "udp",
     "bindHost": "0.0.0.0",
     "bindPort": 14550,
@@ -82,15 +82,43 @@
     "y": 200,
     "wires": [
       [
-        "sitl27-guided"
+        "sitl27-guided-build"
       ]
+    ]
+  },
+  {
+    "id": "sitl27-guided-build",
+    "type": "mavlink-command",
+    "z": "sitl27-tab",
+    "name": "GUIDED \u00d75 (build)",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "carrier": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"1\":1,\"2\":4}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 180,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-guided"
+      ],
+      []
     ]
   },
   {
     "id": "sitl27-guided",
     "type": "mavlink-fanout",
     "z": "sitl27-tab",
-    "name": "GUIDED ×5",
+    "name": "GUIDED \u00d75",
     "connection": "sitl27-connection",
     "selectionMode": "list",
     "sysids": "1,2,3,4,5",
@@ -100,21 +128,15 @@
     "executionMode": "sequential",
     "intervalMs": 200,
     "dryRun": false,
-    "actionType": "command",
-    "topic": "command",
-    "verb": "set_mode",
     "delivery": "confirm",
-    "preset": "set_mode",
     "advancedCommand": "",
     "timeout": "10000",
     "maxRetries": "3",
-    "params": "{\"1\":1,\"2\":4}",
-    "carrier": "long",
     "x": 320,
     "y": 200,
     "wires": [
       [
-        "sitl27-arm"
+        "sitl27-arm-build"
       ],
       [
         "sitl27-st-guided"
@@ -122,10 +144,38 @@
     ]
   },
   {
+    "id": "sitl27-arm-build",
+    "type": "mavlink-command",
+    "z": "sitl27-tab",
+    "name": "Arm \u00d75 (build)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "carrier": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 380,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-arm"
+      ],
+      []
+    ]
+  },
+  {
     "id": "sitl27-arm",
     "type": "mavlink-fanout",
     "z": "sitl27-tab",
-    "name": "Arm ×5",
+    "name": "Arm \u00d75",
     "connection": "sitl27-connection",
     "selectionMode": "list",
     "sysids": "1,2,3,4,5",
@@ -135,21 +185,15 @@
     "executionMode": "sequential",
     "intervalMs": 200,
     "dryRun": false,
-    "actionType": "command",
-    "topic": "command",
-    "verb": "arm",
     "delivery": "confirm",
-    "preset": "arm",
     "advancedCommand": "",
     "timeout": "10000",
     "maxRetries": "3",
-    "params": "{}",
-    "carrier": "long",
     "x": 520,
     "y": 200,
     "wires": [
       [
-        "sitl27-takeoff"
+        "sitl27-takeoff-build"
       ],
       [
         "sitl27-st-arm"
@@ -157,10 +201,38 @@
     ]
   },
   {
+    "id": "sitl27-takeoff-build",
+    "type": "mavlink-command",
+    "z": "sitl27-tab",
+    "name": "Takeoff 40 m \u00d75 (build)",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "carrier": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"7\":40}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 600,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-takeoff"
+      ],
+      []
+    ]
+  },
+  {
     "id": "sitl27-takeoff",
     "type": "mavlink-fanout",
     "z": "sitl27-tab",
-    "name": "Takeoff 40 m ×5",
+    "name": "Takeoff 40 m \u00d75",
     "connection": "sitl27-connection",
     "selectionMode": "list",
     "sysids": "1,2,3,4,5",
@@ -170,16 +242,10 @@
     "executionMode": "sequential",
     "intervalMs": 200,
     "dryRun": false,
-    "actionType": "command",
-    "topic": "command",
-    "verb": "takeoff",
     "delivery": "confirm",
-    "preset": "takeoff",
     "advancedCommand": "",
     "timeout": "10000",
     "maxRetries": "3",
-    "params": "{\"7\":40}",
-    "carrier": "long",
     "x": 740,
     "y": 200,
     "wires": [
@@ -548,15 +614,43 @@
     "y": 200,
     "wires": [
       [
-        "sitl27-land"
+        "sitl27-land-build"
       ]
+    ]
+  },
+  {
+    "id": "sitl27-land-build",
+    "type": "mavlink-command",
+    "z": "sitl27-tab",
+    "name": "Peel land \u00d75 (build)",
+    "mode": "preset",
+    "preset": "land",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "carrier": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 3680,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-land"
+      ],
+      []
     ]
   },
   {
     "id": "sitl27-land",
     "type": "mavlink-fanout",
     "z": "sitl27-tab",
-    "name": "Peel land ×5",
+    "name": "Peel land \u00d75",
     "connection": "sitl27-connection",
     "selectionMode": "list",
     "sysids": "1,2,3,4,5",
@@ -566,16 +660,10 @@
     "executionMode": "sequential",
     "intervalMs": 2000,
     "dryRun": false,
-    "actionType": "command",
-    "topic": "command",
-    "verb": "land",
     "delivery": "confirm",
-    "preset": "land",
     "advancedCommand": "",
     "timeout": "10000",
     "maxRetries": "3",
-    "params": "{}",
-    "carrier": "long",
     "x": 3820,
     "y": 200,
     "wires": [

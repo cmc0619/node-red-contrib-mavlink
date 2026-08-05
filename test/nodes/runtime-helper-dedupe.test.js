@@ -35,13 +35,22 @@ test('In does not double-cap badge text', () => {
   assert.doesNotMatch(text, /capBadge\([^)]+\)\.slice\(/);
 });
 
-test('Move and Fan-out share lib/move config mappers and Fan-out uses mergeParams', () => {
+test('Move uses lib/move config mappers; Fan-out imports no message builders (§10)', () => {
   const move = fs.readFileSync(path.join(nodesDir, 'mavlink-move.js'), 'utf8');
   const fanout = fs.readFileSync(path.join(nodesDir, 'mavlink-fanout.js'), 'utf8');
-  assert.match(move, /positionFrom,\s*\n\s*velocityFrom,\s*\n\s*valueFrom/);
+  // Assert each mapper by name, not the destructuring layout: a reformat or a
+  // reorder must not fail a test about *where the code lives*.
+  for (const mapper of ['positionFrom', 'velocityFrom', 'accelFrom', 'valueFrom']) {
+    assert.match(move, new RegExp(`\\b${mapper}\\b`), `Move uses ${mapper}`);
+    assert.doesNotMatch(
+      move,
+      new RegExp(`function\\s+${mapper}\\s*\\(`),
+      `Move must not redeclare ${mapper} locally`
+    );
+  }
   assert.match(move, /require\('\.\.\/lib\/move'\)/);
-  assert.match(fanout, /require\('\.\.\/lib\/move'\)/);
-  assert.match(fanout, /mergeParams\(/);
-  assert.doesNotMatch(fanout, /function\s+positionFrom\s*\(/);
-  assert.doesNotMatch(fanout, /function\s+numericPayloadParams\s*\(/);
+  // Fan-out is a replicator: message construction lives in the action nodes'
+  // Build tiers, so no builder module may be imported here.
+  assert.doesNotMatch(fanout, /require\('\.\.\/lib\/move'\)/);
+  assert.doesNotMatch(fanout, /mergeParams|buildCommand|buildMoveMessage|buildPayloadMessage|buildParamMessage/);
 });

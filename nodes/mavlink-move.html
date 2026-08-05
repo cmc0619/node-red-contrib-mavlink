@@ -7,7 +7,8 @@
       connection: { value: '', type: 'mavlink-connection' },
       identity: { value: '' },
       delivery: { value: 'build' },
-      mode: { value: 'local-position' },
+      mode: { value: 'position' },
+      frame: { value: 'LOCAL_NED' },
       targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
       targetComponent: { value: '', validate: RED.validators.number(true) },
       north: { value: 0, validate: RED.validators.number(true) },
@@ -16,6 +17,9 @@
       vNorth: { value: 0, validate: RED.validators.number(true) },
       vEast: { value: 0, validate: RED.validators.number(true) },
       vUp: { value: 0, validate: RED.validators.number(true) },
+      aNorth: { value: 0, validate: RED.validators.number(true) },
+      aEast: { value: 0, validate: RED.validators.number(true) },
+      aUp: { value: 0, validate: RED.validators.number(true) },
       lat: { value: '', validate: RED.validators.number(true) },
       lon: { value: '', validate: RED.validators.number(true) },
       alt: { value: '', validate: RED.validators.number(true) },
@@ -55,11 +59,17 @@
        * Companion (wire) → target sysid AND compid hidden (derived from airframe).
        */
       function refreshVisibility() {
-        var mode = $('#node-input-mode').val() || 'local-position';
+        var mode = $('#node-input-mode').val() || 'position';
+        var frame = $('#node-input-frame').val() || 'LOCAL_NED';
         var delivery = $('#node-input-delivery').val() || 'build';
         var dialect = $('#node-input-dialect').val() || node.dialect || '';
         var isBuild = delivery === 'build';
         var isWire = !isBuild;
+        var isGlobalFrame = frame.indexOf('GLOBAL') === 0;
+        var isBodyFrame = frame === 'BODY_NED' || frame === 'BODY_OFFSET_NED';
+        var usesPosition = mode === 'position' || mode === 'position-velocity';
+        var usesVelocity = mode === 'velocity' || mode === 'position-velocity';
+        var usesAccel = mode === 'acceleration' || mode === 'force';
         var tgt = RED.mavlink.applyCompanionTargetVisibility({
           isBuild: isBuild,
           identityId: isWire ? $('#node-input-identity').val() : '',
@@ -79,15 +89,18 @@
           identity: isWire,
           targetSystem: tgt.targetSystem,
           targetComponent: tgt.targetComponent,
-          north: mode === 'local-position',
-          east: mode === 'local-position',
-          up: mode === 'local-position',
-          lat: mode === 'global-position',
-          lon: mode === 'global-position',
-          alt: mode === 'global-position',
-          vNorth: mode === 'local-velocity',
-          vEast: mode === 'local-velocity',
-          vUp: mode === 'local-velocity',
+          north: usesPosition && !isGlobalFrame,
+          east: usesPosition && !isGlobalFrame,
+          up: usesPosition && !isGlobalFrame,
+          lat: usesPosition && isGlobalFrame,
+          lon: usesPosition && isGlobalFrame,
+          alt: usesPosition && isGlobalFrame,
+          vNorth: usesVelocity,
+          vEast: usesVelocity,
+          vUp: usesVelocity,
+          aNorth: usesAccel,
+          aEast: usesAccel,
+          aUp: usesAccel,
           yaw: true,
           yawRate: true,
           interval: delivery === 'stream',
@@ -104,13 +117,37 @@
         $('#row-move-vNorth').toggle(!!show.vNorth);
         $('#row-move-vEast').toggle(!!show.vEast);
         $('#row-move-vUp').toggle(!!show.vUp);
+        $('#row-move-aNorth').toggle(!!show.aNorth);
+        $('#row-move-aEast').toggle(!!show.aEast);
+        $('#row-move-aUp').toggle(!!show.aUp);
         $('#row-move-yaw').toggle(!!show.yaw);
         $('#row-move-yawRate').toggle(!!show.yawRate);
         $('#row-move-interval').toggle(!!show.interval);
         $('#row-move-ttl').toggle(!!show.ttl);
+
+        // Labels follow the frame and mode so the operator never translates
+        // MAVLink axis conventions in their head: body frames are heading
+        // relative (forward/right), Force relabels the accel vector and its
+        // unit. Vertical inputs stay up-positive in every frame (§ "NED is
+        // down-positive": the sign flips once, at encode).
+        $('#label-move-north').text(isBodyFrame ? 'Metres forward' : 'Metres north');
+        $('#label-move-east').text(isBodyFrame ? 'Metres right' : 'Metres east');
+        $('#label-move-vNorth').text(isBodyFrame ? 'Forward m/s' : 'North m/s');
+        $('#label-move-vEast').text(isBodyFrame ? 'Right m/s' : 'East m/s');
+        var accelWord = mode === 'force' ? 'Force' : 'Accel';
+        $('#label-move-aNorth').text(accelWord + (isBodyFrame ? ' forward' : ' north'));
+        $('#label-move-aEast').text(accelWord + (isBodyFrame ? ' right' : ' east'));
+        $('#label-move-aUp').text(accelWord + ' up');
+        $('.unit-move-accel').text(mode === 'force' ? 'N' : 'm/s²');
+        $('#label-move-alt').text(
+          frame === 'GLOBAL_INT' ? 'Metres alt (MSL)'
+            : frame === 'GLOBAL_TERRAIN_ALT_INT' ? 'Metres alt (terrain)'
+              : 'Metres alt (above home)'
+        );
       }
 
       $('#node-input-mode').on('change', refreshVisibility);
+      $('#node-input-frame').on('change', refreshVisibility);
       $('#node-input-delivery').on('change', function () {
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);
@@ -148,18 +185,41 @@
   <div class="form-row" id="row-move-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
   <div class="form-row" id="row-move-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="stream">Stream</option></select></div>
-  <div class="form-row"><label for="node-input-mode">Mode</label><select id="node-input-mode"><option value="local-position">Local position</option><option value="local-velocity">Local velocity</option><option value="global-position">Global position</option></select></div>
+  <div class="form-row"><label for="node-input-mode">Mode</label><select id="node-input-mode">
+    <option value="position">Position</option>
+    <option value="velocity">Velocity</option>
+    <option value="position-velocity">Position + Velocity</option>
+    <option value="acceleration">Acceleration</option>
+    <option value="force">Force</option>
+    <option value="yaw-only">Yaw only</option>
+  </select></div>
+  <div class="form-row" id="row-move-frame"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%">
+    <optgroup label="Local">
+      <option value="LOCAL_NED">Local NED (world origin)</option>
+      <option value="LOCAL_OFFSET_NED">Offset from current position</option>
+      <option value="BODY_OFFSET_NED">Body offset — ArduPilot GUIDED</option>
+      <option value="BODY_NED">Body NED (ArduPilot: body offset; PX4 differs)</option>
+    </optgroup>
+    <optgroup label="Global">
+      <option value="GLOBAL_RELATIVE_ALT_INT">Global, altitude above home</option>
+      <option value="GLOBAL_INT">Global, absolute altitude (MSL)</option>
+      <option value="GLOBAL_TERRAIN_ALT_INT">Global, terrain altitude</option>
+    </optgroup>
+  </select></div>
   <div class="form-row" id="row-move-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
   <div class="form-row" id="row-move-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
-  <div class="form-row" id="row-move-north"><label for="node-input-north">Metres north</label><input type="text" id="node-input-north" step="any" style="width:120px"> m</div>
-  <div class="form-row" id="row-move-east"><label for="node-input-east">Metres east</label><input type="text" id="node-input-east" step="any" style="width:120px"> m</div>
+  <div class="form-row" id="row-move-north"><label for="node-input-north" id="label-move-north">Metres north</label><input type="text" id="node-input-north" step="any" style="width:120px"> m</div>
+  <div class="form-row" id="row-move-east"><label for="node-input-east" id="label-move-east">Metres east</label><input type="text" id="node-input-east" step="any" style="width:120px"> m</div>
   <div class="form-row" id="row-move-up"><label for="node-input-up">Metres up</label><input type="text" id="node-input-up" step="any" style="width:120px"> m</div>
   <div class="form-row" id="row-move-lat"><label for="node-input-lat">Degrees lat</label><input type="text" id="node-input-lat" step="any" style="width:120px"> deg</div>
   <div class="form-row" id="row-move-lon"><label for="node-input-lon">Degrees lon</label><input type="text" id="node-input-lon" step="any" style="width:120px"> deg</div>
-  <div class="form-row" id="row-move-alt"><label for="node-input-alt">Metres alt</label><input type="text" id="node-input-alt" step="any" style="width:120px"> m</div>
-  <div class="form-row" id="row-move-vNorth"><label for="node-input-vNorth">North m/s</label><input type="text" id="node-input-vNorth" step="any" style="width:120px"> m/s</div>
-  <div class="form-row" id="row-move-vEast"><label for="node-input-vEast">East m/s</label><input type="text" id="node-input-vEast" step="any" style="width:120px"> m/s</div>
+  <div class="form-row" id="row-move-alt"><label for="node-input-alt" id="label-move-alt">Metres alt</label><input type="text" id="node-input-alt" step="any" style="width:120px"> m</div>
+  <div class="form-row" id="row-move-vNorth"><label for="node-input-vNorth" id="label-move-vNorth">North m/s</label><input type="text" id="node-input-vNorth" step="any" style="width:120px"> m/s</div>
+  <div class="form-row" id="row-move-vEast"><label for="node-input-vEast" id="label-move-vEast">East m/s</label><input type="text" id="node-input-vEast" step="any" style="width:120px"> m/s</div>
   <div class="form-row" id="row-move-vUp"><label for="node-input-vUp">Up m/s</label><input type="text" id="node-input-vUp" step="any" style="width:120px"> m/s</div>
+  <div class="form-row" id="row-move-aNorth"><label for="node-input-aNorth" id="label-move-aNorth">Accel north</label><input type="text" id="node-input-aNorth" step="any" style="width:120px"> <span class="unit-move-accel">m/s²</span></div>
+  <div class="form-row" id="row-move-aEast"><label for="node-input-aEast" id="label-move-aEast">Accel east</label><input type="text" id="node-input-aEast" step="any" style="width:120px"> <span class="unit-move-accel">m/s²</span></div>
+  <div class="form-row" id="row-move-aUp"><label for="node-input-aUp" id="label-move-aUp">Accel up</label><input type="text" id="node-input-aUp" step="any" style="width:120px"> <span class="unit-move-accel">m/s²</span></div>
   <div class="form-row" id="row-move-yaw"><label for="node-input-yaw">Yaw</label><input type="text" id="node-input-yaw" step="any" style="width:120px"> rad</div>
   <div class="form-row" id="row-move-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="text" id="node-input-yawRate" step="any" style="width:120px"> rad/s</div>
   <div class="form-row" id="row-move-interval"><label for="node-input-intervalMs">Stream interval</label><input type="number" id="node-input-intervalMs" style="width:80px"> ms</div>
@@ -167,8 +227,12 @@
 </script>
 
 <script type="text/html" data-help-name="mavlink-move">
-  <p>Builds or sends SET_POSITION_TARGET_* messages. Local altitude and vertical velocity are entered up-positive; the node flips them once to MAVLink NED down-positive values.</p>
-  <p>Mode and delivery reshape the form (§6): only the parameters for the selected mode are shown. Stream interval and TTL appear only for Stream delivery.</p>
+  <p>Builds or sends SET_POSITION_TARGET_* messages. Vertical inputs — altitude, climb, vertical acceleration — are entered up-positive everywhere; the node flips them once to MAVLink NED down-positive values. The type_mask is computed from the mode; you never enter a bitmask.</p>
+  <p><b>Mode</b> picks what drives the vehicle: <i>Position</i>, <i>Velocity</i>, <i>Position + Velocity</i> (feed-forward), <i>Acceleration</i>, <i>Force</i> (same vector with the force bit set), or <i>Yaw only</i>. Yaw and yaw rate are optional on every mode — blank means ignored, a value (including 0) means commanded; Yaw only requires at least one of them.</p>
+  <p><b>Frame</b> picks the reference and the carrier message: local frames (world NED, offset-from-current, body offset, body NED) send <code>SET_POSITION_TARGET_LOCAL_NED</code>; global frames (altitude above home, absolute MSL, terrain) send <code>SET_POSITION_TARGET_GLOBAL_INT</code> with lat/lon entered in degrees. Field labels follow the frame — body frames read forward/right.</p>
+  <p><b>Frame semantics differ per firmware</b> (measured in SITL, §14). ArduPilot reads <i>offset from current</i>, <i>body offset</i> and <i>body NED</i> all as offsets from where the vehicle is now; PX4 ignores both OFFSET frames outright and does <i>not</i> treat body NED as an offset. On PX4, prefer <b>Local NED</b> for position setpoints. Because a zero is "no change" only in a true offset frame, a blank coordinate is accepted (as a zero offset) in <i>offset from current</i> and <i>body offset</i>, and refused everywhere else rather than silently commanding the local origin.</p>
+  <p>Combinations measured as unsupported — Force on either stack, and OFFSET or body-NED frames on PX4 — are still sent but raise a node warning, since setpoints carry no acknowledgement.</p>
+  <p>Mode, frame, and delivery reshape the form (§6): only the parameters for the selection are shown. Stream interval and TTL appear only for Stream delivery.</p>
   <p>On <b>Build</b> delivery the Dialect dropdown selects the bundled dialect used for catalogs; choose <i>from Vehicle Profile…</i> to inherit dialect and target defaults from a Vehicle Profile. On <b>Send</b> or <b>Stream</b> delivery a Connection is required and the Send-as identity determines addressing: a companion identity derives the target sysid from its airframe and pins compid to 1 (the autopilot).</p>
   <p>Output 0 continues only on success. Output 1 carries the status record for every terminal outcome.</p>
 </script>

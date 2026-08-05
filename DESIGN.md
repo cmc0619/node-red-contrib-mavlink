@@ -177,16 +177,16 @@ makes unreachable.
 
 | Type | Purpose |
 |---|---|
-| `mavlink-in` | Subscribe to decoded traffic. Filter by message, sysid, compid; changed-only; rate limit keyed on the *(message, sysid, compid)* tuple |
+| `mavlink-in` | Subscribe to decoded traffic. Filter by message, sysid, compid, and a field predicate (present / equals); changed-only with an optional compared-field subset; rate limit keyed on the *(message, sysid, compid)* tuple — one Hz, or per-message `NAME=Hz` pairs, shape validated in the editor (§2) |
 | `mavlink-out` | Transmit content not constructed by an action node — raw buffers, messages forwarded from another connection, envelopes built in a Function node |
 | `mavlink-build` | Any message in the loaded dialect. Full Delivery tiers, plus an optional repeat interval that reports achieved rate against configured rate in status |
 | `mavlink-command` | `MAV_CMD`, grouped presets through to the full dialect |
-| `mavlink-move` | `SET_POSITION_TARGET_*`, streamed, with TTL and stop |
+| `mavlink-move` | `SET_POSITION_TARGET_*` over the full mode × frame matrix (position, velocity, position+velocity, acceleration, force, yaw-only × local/body/global frames), streamed, with TTL and stop |
 | `mavlink-mission` | download / upload / clear × mission / fence / rally |
 | `mavlink-param` | read one, set one, request list |
 | `mavlink-payload` | camera, gimbal, servo, gripper, winch, parachute |
 | `mavlink-state` | peer table reads, transitions, snapshots |
-| `mavlink-fanout` | group fan-out with aggregation |
+| `mavlink-fanout` | replicates one built message across a group (selection × sequential/broadcast), with per-target overrides, concurrency, and honest aggregation |
 
 **Dependencies.** `node-mavlink` for framing/CRC/signing primitives, a shipped MAVLink XML
 seed (`seed/mavlink`) for dialect definitions, an XML parser, and `serialport` as an
@@ -1177,6 +1177,58 @@ Three rules, each of which encodes a wrong message if missed:
   east divides further by cos(latitude), or offsets shrink toward the poles. Used by Fan-out
   expansion and anything computing relative positions.
 
+### Move setpoint matrix
+
+Move covers the full `SET_POSITION_TARGET_*` capability space with **named modes and frames —
+never a raw `type_mask`** (a set bit means *ignore*, most of the 65,536 values are invalid, and
+firmware drops bad ones silently; the raw-mask escape hatch is mavlink-build, the same place raw
+anything lives). Mode picks which vectors the mask *uses*; frame picks the reference and the
+carrier message (`lib/move/index.js` `MODES` / `MAV_FRAME`):
+
+| Mode | Uses | Notes |
+|---|---|---|
+| Position | x/y/z or lat/lon/alt | |
+| Velocity | vx/vy/vz | also the shape of the stream-stop packet |
+| Position + Velocity | both | feed-forward, PX4 offboard |
+| Acceleration | afx/afy/afz | |
+| Force | afx/afy/afz + force bit (512) | no firmware honors it today — advisory fires |
+| Yaw only | neither | requires yaw or yaw rate, else the packet is the all-ignore PX4 rejects (§14 / #115) |
+
+Yaw and yaw rate are included **by presence** on every mode: blank means mask-ignored, a value —
+including 0 — means commanded.
+
+Frames: `LOCAL_NED`, `LOCAL_OFFSET_NED`, `BODY_OFFSET_NED` (ArduPilot GUIDED), `BODY_NED`
+(PX4 OFFBOARD) ride `SET_POSITION_TARGET_LOCAL_NED`; `GLOBAL_RELATIVE_ALT_INT` (default),
+`GLOBAL_INT`, `GLOBAL_TERRAIN_ALT_INT` ride `SET_POSITION_TARGET_GLOBAL_INT`. The editor stores
+the bare member name; labels follow the frame (body frames read forward/right) and vertical
+inputs are up-positive everywhere — the sign flips once, at encode, per the NED rule above.
+A position with a blank coordinate refuses in every **absolute** frame (§10 "blank coordinates
+must not become 0,0"): global lat/lon must not become null island, and a local blank zero-filled
+into north/east/up commands the EKF origin. The measured OFFSET frames (`LOCAL_OFFSET_NED`,
+`BODY_OFFSET_NED`) are the exception — a zero there is "no change" on every axis, so blanks pass
+as zero offsets (§14). `BODY_NED` keeps the guard: ArduPilot reads it as a body offset but PX4
+does not, so a zero is not provably inert. Velocity and acceleration blanks always stay 0 — a
+zero rate is inert, not a place. Yaw and yaw rate follow the same presence rule as everywhere
+else: blank is mask-ignored, and a blank arriving on `msg.payload` is normalised to unset rather
+than commanding a yaw of zero.
+
+**Known-unsupported combos send anyway, but never silently** (`advisoryFor`): a setpoint has no
+acknowledgement, so a `node.warn` is all the feedback the operator gets. The list is what
+measurement supports, nothing more (§14, SITL 2026-08-05): **Force** (firmware-independent —
+neither stack actuated on the force bit), **PX4 + either OFFSET frame** (no motion at all), and
+**PX4 + `BODY_NED`** (body frames carry velocity only; PX4 discards the position). Three earlier
+advisories were *removed* when measurement refuted them — ArduPilot acceleration-only, ArduPilot
+`BODY_NED`, and PX4 terrain-altitude — because a warning that fires on working behaviour is
+noise, and noise gets ignored. Firmware comes from the connection's bound Vehicle Profile;
+`custom` opts out of firmware-specific advisories. Warn-not-block is deliberate: firmware support
+moves, and the advisory table is a snapshot, not a gate.
+
+There is **one vocabulary**: Move config, Fan-out's `moveMode`/`moveFrame`, and `msg.payload`
+overrides all speak these mode and frame names. The pre-frame names (`local-position` /
+`local-velocity` / `global-position`, which carried the frame inside the mode) are gone, not
+aliased — pre-1.0, unpublished, no migrations (AGENTS.md); an unknown mode or frame throws
+naming the valid set.
+
 ### Command presets
 
 A preset is not a separate command. It is **(command, pinned params, exposed params, friendly
@@ -1334,7 +1386,91 @@ rows are generated per verb and there is no `#node-input-<slot>` to read at save
 
 ## 10. Fan-out
 
-`mavlink-fanout` fans one action out across a selected group.
+`mavlink-fanout` is a **replicator, not an action node**: it takes one *built* message — the
+`{name, fields}` shape every action node's Build tier and mavlink-build emit — and replicates
+it across a selected group, retargeting `target_system`/`target_component` per member. Message
+construction lives in exactly one place, the action nodes' Build tiers; Fan-out owns only what
+exists when there is more than one vehicle: selection, execution strategy, pacing, per-member
+retargeting, and honest aggregation. The wiring is `command/move/payload/param [Build] →
+fan-out`, the same producer/consumer contract mavlink-out already speaks.
+
+`msg.payload` is either the built message directly, or the wrapper `{message, targets,
+...options}` when a Function node adds per-target patches or runtime option overrides — the
+wrapper keeps every runtime override on the payload (§6).
+
+**What a message means is inferred from its name**, and its confirmation rides along:
+
+| Message | Confirmation | Notes |
+|---|---|---|
+| `COMMAND_LONG` / `COMMAND_INT` | real `COMMAND_ACK` per member | retry bumps the LONG `confirmation` counter |
+| `PARAM_SET` | wire-plane `PARAM_VALUE` echo | sequential only — broadcast makes the echoes a storm |
+| offboard setpoints (`SET_POSITION_TARGET_LOCAL_NED`/`_GLOBAL_INT`, `SET_ATTITUDE_TARGET`, `SET_ACTUATOR_CONTROL_TARGET`) | none — setpoints carry no ack | rides the streaming band |
+| any other targeted message | none | fire-and-forget on the control band |
+| mission **transfer steps**, `PARAM_REQUEST_LIST` | **refused** | multi-message transactions / bulk transfers |
+| no `target_system` field | **refused** | nothing to retarget |
+
+Both tables are **explicit name sets, never name prefixes**. A `MISSION_` prefix over-refuses:
+`MISSION_SET_CURRENT` ("everyone jump to waypoint 5") and `MISSION_CLEAR_ALL` are addressed
+single messages that fan out perfectly well, and a custom dialect's `MISSION_*` would be refused
+sight unseen. A `SET_POSITION_TARGET_` prefix under-catches, silently leaving `SET_ATTITUDE_TARGET`
+and `SET_ACTUATOR_CONTROL_TARGET` on the control band where a 50 Hz stream competes with arm/RTL
+for the queue. The dialect XML cannot answer either question — "participates in a transfer
+protocol" is protocol semantics, not message metadata — so the sets are hand-curated, like the
+command presets, and each addition is a deliberate judgement.
+
+Fan-out addresses **each member's autopilot**: selection resolves autopilot components, and the
+built message's `target_component` is replaced per member (broadcast pins it to 1, §10
+"Broadcast"). A message hand-addressed to some other component is re-addressed, not honoured —
+Fan-out is a fleet tool, and the per-component case is the single-vehicle nodes' job.
+
+The `PARAM_SET` echo compares at the wire plane (`matchesParamEchoWire`, lib/param): the
+replicator holds only the built message, and a vehicle that applied the set verbatim echoes the
+identical float32 bit pattern — c-cast float or bytewise integer alike — so `Object.is` on
+`Math.fround` of both sides is the invariant, and a clamped value honestly reports unconfirmed.
+**The echo's `param_type` must equal the sent one**: byte-identical bytes under a different type
+are a garbage store (a REAL32 set landing on a bytewise integer parameter), and the gate
+declines them — false failure over false success (§14). The canonical-value comparison —
+decoding the echo by the vehicle's type and comparing against what the operator *meant* —
+remains the Param node's own confirm tier; use it where unit-level certainty matters more than
+fleet fan-out.
+
+**Per-target overrides.** `targets` is an array of sysids or `{sysid, ...fieldPatches}`
+objects: the list *is* the selection (explicit-list semantics — the caller cannot ask for one
+group and patch another), and the patches overwrite message fields per member in **wire units**.
+Fan-out is a raw surface (§ "unit conversion belongs to exactly one of two surfaces"): a
+COMMAND_INT location patch is degE7, exactly as mavlink-build would take it — the typed
+degrees-in surface is the action node upstream. **Addressing is not patchable:** both
+`target_system` and `target_component` are stripped from a patch before it merges, so a patch
+can neither cross-address another vehicle nor re-aim the message at a component that
+`sendOptions` and the confirm waiter — both keyed on the member's autopilot — would disagree
+with, nor invent an addressing field on a message that never declared one. **`command` is
+refused outright**, not stripped: the run's classification, confirmation and safety gate are
+resolved once from the base message, so a patch rewriting it would send an operation that was
+never gated (a `command: 185` patch under an ARM base put Flight Termination on the wire
+unconfirmed). A per-member command is a different message, not a replication. Broadcast refuses
+`targets` (uniform messages only, below). Safety: `DO_FLIGHTTERMINATION` (185) in a replicated command
+still requires `msg.confirmed === true` or the node's Confirm — the gate reads the wire fields.
+
+**Concurrency.** Sequential fan-out dispatches up to `concurrency` members at once (default 1 —
+strictly sequential, the historical cadence). Where it earns its keep is the confirm tier: at
+concurrency 1 a single timing-out straggler delays everyone behind it by timeout × retries;
+raising it lets confirm waits overlap while `intervalMs` still paces every launch. Records keep
+member order regardless.
+
+**Stop on error.** Off by default — a member expiring mid-run continues (below), and so does a
+failure, because half-commanded is the operator's call to make, not the node's. Switched on, the
+first member that does not succeed halts further launches; members never dispatched report
+`skipped` in the aggregate, in member order, so the caller sees exactly which vehicles were not
+commanded. In-flight members (concurrency > 1) finish and report normally.
+
+**Ack attribution.** A COMMAND_ACK carries MAVLink 2 `target_system`/`target_component`
+extension fields naming the GCS it answers. On a shared link two stations issuing the same
+MAV_CMD to the same vehicle would otherwise settle each other's waits with the wrong result —
+so AckWaiter and the broadcast confirm share one gate (`ackAddressedTo`, lib/command) that
+ignores an ack *explicitly addressed elsewhere*, resolved from the sending identity via
+`connection.resolveSourceIds()` — part of the connection contract, called unconditionally.
+Absent fields (MAVLink 1) or 0 mean unaddressed and pass; an unresolvable identity yields null
+and leaves the gate off (the send path stays the loud failure).
 
 **Selection** comes from the peer table: all vehicles, an explicit sysid list, or a filter on
 type, firmware, or armed state. Groups resolve at execution, not deploy — a vehicle that went
@@ -1389,16 +1525,8 @@ failed in the aggregate status. Aborting leaves the fleet half-commanded, which 
 than either end state; re-resolving silently adds vehicles the operator never approved. Continue
 is the only option that ends in a state the operator can reason about.
 
-**Fan-out wraps single-message actions, never multi-message transactions.**
-
-| Action | Fan-out | Why |
-|---|---|---|
-| Command | yes | one message, one acknowledgement per vehicle |
-| Move | yes | setpoints, no acknowledgement to correlate |
-| Payload | yes | commands, same shape as Command |
-| Param — set one | sequential only | one message confirmed by echo; broadcast makes the echoes a storm |
-| Param — request list | no | a bulk transfer, not a message |
-| Mission — any action | no | a conversation the vehicle drives |
+**Fan-out replicates single messages, never multi-message transactions** — the message-name
+table above is the whole rule, enforced by name at the boundary.
 
 Mission is the instructive exclusion. Upload is `MISSION_COUNT`, then the vehicle requesting items
 by sequence, then an acknowledgement — many messages to *one* target. Broadcasting it starts a
@@ -1465,7 +1593,7 @@ by silence. Update this list when an item lands.
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
 | **Param definition catalog** | **done** | One profile-keyed local holding file; authenticated GET is local-only; the Vehicle editor's explicit authenticated Update downloads its optional `paramDefsUrl`, validates, and atomically replaces the file. Param editor datalist + units/enums remain optional enrichment. |
 | **Full command-param `enum=` recovery** | **done** | Seed compile carries common.xml `<param enum=`> links into the bundle (e.g. Arm → `MAV_BOOL`). The old `hints.js` overlay is gone. |
-| **Move editor §6 reshape** | **done** | Per-field rows + mode/delivery visibility in the Move dialog. |
+| **Move editor §6 reshape** | **done** | Per-field rows + mode/frame/delivery visibility in the Move dialog, full setpoint matrix (§ "Move setpoint matrix"). |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
 | **`httpAdminRoot` on non-enum admin routes** | **done** | Command/Build/In/Fan-out/Param/Vehicle editor catalogs use `RED.mavlink.adminApiUrl('/mavlink/…')`. |
 | **SITL example flows** | **done** | `examples/sitl/` 01–27 (companion, INT matrix, Move, param echo, In/Build/Out, inherit, TCP template, formation basics, Lucy in the Sky) + README; regular demos in `examples/` (see `CATALOG.md`). |
@@ -1598,6 +1726,99 @@ next agent reads only this file.
 
 **Pull requests stay at or under 50 files.** Larger layers split by module boundary into
 sequential PRs. Count: `git diff --name-only <base>...HEAD | wc -l`.
+
+---
+
+**A local `MAV_FRAME`'s position triplet is absolute or offset *per firmware*, not per frame.**
+*Wrong belief:* the frame number settles the semantics, so a blank coordinate zero-filled into
+`SET_POSITION_TARGET_LOCAL_NED` is either always dangerous (it commands the EKF origin) or
+always inert (a zero offset) — pick one rule and apply it to every local frame. The naming
+invites this: `LOCAL_OFFSET_NED` and `BODY_OFFSET_NED` say "offset" outright, so `BODY_NED`
+reads like the third member of the same family.
+*Fact (SITL, measured 2026-08-05, ArduPilot Copter-4.7.0 GUIDED + PX4 1.18.0 SIH OFFBOARD; raw
+per-trial data `local-ned-frame-results.json` on the test host):* the probe was one
+position-only setpoint (`type_mask 3576`, `x=10, y=0, z=-20`) issued from ≈30 m north / 20 m
+east / 20 m up at heading ≈090 — displaced from the origin and yawed off north, so
+absolute-vs-offset and world-vs-body axes are both separable.
+
+1. **`LOCAL_NED` (1) is absolute on both stacks.** Settled at ≈(10, 0, −20); the zero-probe
+   confirmation walked the vehicle back toward the origin. A blank→0 here is a real place.
+2. **`LOCAL_OFFSET_NED` (7) is a world-axis offset on ArduPilot** — settled ≈(40, 20, −40), the
+   probe added to the start. **PX4 produced no motion at all** (burst and stream): unsupported
+   there in practice.
+3. **`BODY_OFFSET_NED` (9) is a body-axis offset on ArduPilot** — settled ≈(30, 30, −40): 10 m
+   *east* while heading 090, i.e. forward-relative. **PX4: no motion**, same as frame 7.
+4. **`BODY_NED` (8) splits between stacks.** ArduPilot treats it exactly like frame 9 (body-axis
+   offset, ≈(30, 30, −40)). PX4 does **not** treat it as an offset: burst produced no motion,
+   stream produced a large move toward the origin that never settled inside the timeout. The
+   exact PX4 semantics are **inconclusive**; what is conclusive is that it is *not* an offset,
+   so a zero there is not provably inert.
+
+*Decision:* the blank-coordinate guard keys on a measured `OFFSET_FRAMES` set — **7 and 9 only**.
+Blanks pass as zero offsets in those and refuse everywhere else, `BODY_NED` included: a frame
+that means "offset" on one stack and "absolute-like" on the other cannot carry a
+blanks-are-safe exemption. Do not infer a third frame's behaviour from two siblings' names.
+
+*The same run settled the Move firmware advisories*, which had been asserted from documentation
+and never measured. Two of five were wrong:
+
+- **Refuted — "ArduPilot GUIDED ignores acceleration-only setpoints."** Copter-4.7.0 moved
+  ≈43 m north on one. Warning removed: a warning that fires on working behaviour is noise, and
+  noise gets ignored.
+- **Refuted — "ArduPilot expects `BODY_OFFSET_NED`; `BODY_NED` is the PX4 body frame."**
+  ArduPilot handled both identically (item 4), and the editor's "Body NED — PX4 OFFBOARD" label
+  inverted the truth — frame 8 works on ArduPilot and misbehaves on PX4. Warning and label both
+  corrected.
+- **Unsupportable — "PX4 does not support terrain-altitude position targets."** PX4 accepted
+  frame 11 and moved, with no invalid `STATUSTEXT`. Warning removed. (Whether the terrain
+  *datum* was honoured was not instrumented: this refutes rejection, not correctness.)
+- **Confirmed — PX4 ignores both OFFSET frames** (items 2–3), now measured rather than assumed.
+- **Confirmed — the force bit (512) is not actuated** on either stack. ArduPilot is
+  **negative-only** here (no motion, no complaint, actuation not instrumented); PX4 drifted
+  vertically with no `STATUSTEXT`. Kept, reworded to name the measurement.
+- **New — PX4 `BODY_NED` now warns** (item 4).
+
+*Mechanism (firmware source, read 2026-08-05 — consulted **after** the measurement, which is
+the wrong order and cost a rig run; see the note below):*
+
+- **PX4** (`src/modules/mavlink/mavlink_receiver.cpp`,
+  `handle_message_set_position_target_local_ned`, read at **`main`, not the measured v1.18.0
+  tag**): the frame switch handles `LOCAL_NED` and the body frames only. The body branch
+  rotates *velocity* by the vehicle attitude and sets the position setpoint to
+  `matrix::Vector3f(NAN, NAN, NAN)` — **body frames are velocity-only; position is discarded.**
+  A frame outside the switch is rejected outright with
+  `mavlink_log_critical(… "coordinate frame %u unsupported")`. That explains all three PX4
+  observations: frame 7 rejected outright, frame 9 accepted-but-position-dropped, frame 8 a
+  position-only packet carrying nothing actionable.
+- **ArduPilot** (`ArduCopter/GCS_MAVLink_Copter.cpp`, read at the measured **`Copter-4.7.0`**
+  tag): accepts exactly `LOCAL_NED`, `LOCAL_OFFSET_NED`, `BODY_NED`, `BODY_OFFSET_NED`; the
+  `_OFFSET_` variants add the current position (`pos_ned_m += rel_pos_ned_m`), and acceleration
+  fields feed real `PosVelAccel` / `VelAccel` / `Accel` guided submodes — corroborating the
+  acceleration-only refutation with a mechanism, not just 43 m of motion.
+
+*Two honest gaps in that source read, neither of which moves the decision:*
+
+1. **The ArduPilot source summary and the measurement disagree on frame 8.** The read suggests
+   `BODY_NED` is rotated-then-absolute while only `_OFFSET_` frames add current position; the
+   measurement put the vehicle at ≈(30, 30, −40) from a (30, 20, −20) start, which is offset
+   behaviour. The measurement is a direct observation of the flown build; the source read was a
+   summarisation, not a line-by-line audit. **Measurement wins** (§14 exists for exactly this),
+   and the guard is conservative on frame 8 either way, so nothing changes. Resolve by reading
+   the handler line-by-line if frame 8 ever needs to relax.
+2. **PX4 should have emitted a STATUSTEXT for frame 7** (`mavlink_log_critical`), and the run
+   did not report one. Either the log was not captured or v1.18.0 differs from `main`. Worth
+   confirming before quoting the rejection path as measured.
+
+*Method note for the next agent:* AGENTS.md already says reference implementations are the
+*default hypothesis* and §14 is the *authority*. Reading these two handlers first would have
+produced the whole frame matrix in minutes and told the rig what to look for; the rig was still
+required for the actuation questions (acceptance in the parser is not action by the controller —
+the acceleration refutation turned on precisely that gap) and for pinning behaviour to the
+versions users fly. Hypothesis from source, authority from measurement — in that order.
+
+*Check:* `lib/move/index.js` (`OFFSET_FRAMES`, `advisoryFor`), `node --test test/move/move.test.js`
+— "blank local coordinates: refused in absolute frames, inert in measured OFFSET frames" and
+"measurement-refuted advisories are silent".
 
 ---
 

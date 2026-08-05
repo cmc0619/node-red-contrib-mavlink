@@ -2,9 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, guardFanoutInput, parseSysidList } = require('../lib/fanout');
-const { resolveFrame, mergeParams, DEFAULT_TIMEOUT_MS } = require('../lib/command');
-const { positionFrom, velocityFrom, valueFrom } = require('../lib/move');
-const { dialectFromConnection } = require('../lib/addressing');
+const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
 
 module.exports = function registerMavlinkFanout(RED) {
   function MavlinkFanoutNode(config) {
@@ -34,21 +32,25 @@ module.exports = function registerMavlinkFanout(RED) {
       }
 
       try {
-        const payload = msg.payload ?? {};
-        const selection = selectionFrom(config, payload);
-        const effectiveDelivery = payload.delivery || config.delivery;
-        const effectiveSelectionMode = selection.mode || 'all';
+        const { message, opts } = unwrapPayload(msg.payload);
+        const selection = opts.selection || selectionFrom(config);
+        const effectiveDelivery = opts.delivery || config.delivery;
+        const listSelected = (selection.mode || 'all') === 'list' || Array.isArray(opts.targets);
 
         let effectiveConnection = connectionNode;
         if (!connectionNode || !connectionNode.peerTable) {
-          if (effectiveDelivery === 'build' && effectiveSelectionMode === 'list') {
-            // No connection needed: build messages for the explicit sysid list
+          if (effectiveDelivery === 'build' && listSelected) {
+            // No connection needed: replicate for the explicit sysid list
             // without consulting a live peer table (§6 Fan-out exception).
-            effectiveConnection = buildListStub(selection.sysids);
+            effectiveConnection = buildListStub(
+              Array.isArray(opts.targets)
+                ? opts.targets.map((t) => (typeof t === 'object' && t !== null ? t.sysid : t))
+                : selection.sysids
+            );
           } else {
             const rule = effectiveDelivery === 'build'
-              ? `build+${effectiveSelectionMode} selection requires a Connection — ` +
-                `the live peer table is the only place ${effectiveSelectionMode} selection can resolve`
+              ? `build+${selection.mode || 'all'} selection requires a Connection — ` +
+                'the live peer table is the only place that selection can resolve'
               : 'requires a Connection with a peer table';
             throw new Error(`mavlink-fanout: ${rule}`);
           }
@@ -57,16 +59,18 @@ module.exports = function registerMavlinkFanout(RED) {
         const aggregate = await inFlight.track((signal) => executeFanout({
           signal,
           connection: effectiveConnection,
-          vehicleBundle: dialectFromConnection(RED, effectiveConnection),
-          action: actionFrom(config, payload),
+          message,
+          targets: opts.targets,
           selection,
-          mode: payload.executionMode || config.executionMode || 'sequential',
+          mode: opts.executionMode || config.executionMode || 'sequential',
           delivery: effectiveDelivery,
-          dryRun: payload.dryRun !== undefined ? !!payload.dryRun : !!config.dryRun,
-          intervalMs: numberOption(payload, config, 'intervalMs', 100),
-          timeoutMs: numberOption(payload, config, 'timeoutMs', DEFAULT_TIMEOUT_MS),
-          maxRetries: numberOption(payload, config, 'maxRetries', 0),
-          identityId: payload.identityId || config.identity,
+          dryRun: opts.dryRun !== undefined ? !!opts.dryRun : !!config.dryRun,
+          intervalMs: numberOption(opts, config, 'intervalMs', 100),
+          timeoutMs: numberOption(opts, config, 'timeoutMs', DEFAULT_TIMEOUT_MS),
+          maxRetries: numberOption(opts, config, 'maxRetries', 0),
+          concurrency: numberOption(opts, config, 'concurrency', 1),
+          stopOnError: opts.stopOnError !== undefined ? !!opts.stopOnError : !!config.stopOnError,
+          identityId: opts.identityId || config.identity,
           confirmed: msg.confirmed === true || config.confirm === true,
         }));
 
@@ -80,11 +84,24 @@ module.exports = function registerMavlinkFanout(RED) {
 
         applyAggregateStatus(node, aggregate);
         // Output 1 carries the aggregate status record at the message root.
-        // Output 0 (continue) wraps the aggregate under msg.payload as a normal
-        // trigger (§9).
-        send(aggregate.continue
-          ? [{ payload: aggregate }, aggregate]
-          : [null, aggregate]);
+        // On Build delivery output 0 carries the product — one message per
+        // member, ready for mavlink-out — matching every other Build tier
+        // (§9 "Build's output goes to mavlink-out"). On wire tiers output 0
+        // is the continue trigger wrapping the aggregate (§9).
+        if (aggregate.result === 'succeeded' && effectiveDelivery === 'build') {
+          // Sequential build: one message per member. Broadcast build: the
+          // single target_system=0 packet (aggregate.message).
+          const perMember = aggregate.message
+            ? [{ payload: aggregate.message }]
+            : aggregate.members
+                .filter((member) => member.success && member.message)
+                .map((member) => ({ payload: member.message }));
+          send([perMember, aggregate]);
+        } else {
+          send(aggregate.continue
+            ? [{ payload: aggregate }, aggregate]
+            : [null, aggregate]);
+        }
         if (!aggregate.success && aggregate.result !== 'dry_run') {
           done(new Error(`mavlink-fanout: ${aggregate.result}`));
         } else {
@@ -110,64 +127,32 @@ module.exports = function registerMavlinkFanout(RED) {
   RED.nodes.registerType('mavlink-fanout', MavlinkFanoutNode);
 };
 
-function actionFrom(config, payload) {
-  const type = payload.actionType || payload.type || config.actionType || 'command';
-  if (type === 'command') {
-    return {
-      type,
-      commandId: payload.commandId || config.commandId || config.advancedCommand,
-      preset: payload.preset || config.preset,
-      // mergeParams Number-coerces 1–7; payload.params overlays last.
-      params: mergeParams(config, { ...payload, ...(payload.params || {}) }),
-      memberParams: payload.memberParams,
-      carrier: payload.carrier || config.carrier,
-      frame: resolveFrame(payload.mavFrame, config.frame),
-    };
+/**
+ * Fan-out accepts two payload shapes (§10): a built message directly —
+ * `{name, fields}`, chained straight off a Build-tier action node — or the
+ * wrapper `{message, targets, ...options}` when a Function node adds
+ * per-target patches or runtime option overrides. Everything rides
+ * `msg.payload` (§6: runtime overrides live on the payload).
+ *
+ * @param {*} payload
+ * @returns {{message: object, opts: object}}
+ */
+function unwrapPayload(payload) {
+  if (payload && typeof payload === 'object' && payload.message && typeof payload.message === 'object') {
+    const { message, ...opts } = payload;
+    return { message, opts };
   }
-  if (type === 'move') {
-    return {
-      type,
-      mode: payload.moveMode || config.moveMode || 'local-position',
-      position: payload.position || positionFrom(config),
-      velocity: payload.velocity || velocityFrom(config),
-      yaw: valueFrom(payload, config, 'yaw'),
-      yawRate: valueFrom(payload, config, 'yawRate'),
-      timeBootMs: payload.timeBootMs || config.timeBootMs || 0,
-    };
-  }
-  if (type === 'payload') {
-    return {
-      type,
-      topic: payload.topic || config.topic,
-      verb: payload.verb || config.verb,
-      path: payload.path || config.path,
-      values: payload.values || valuesFrom(config),
-      carrier: payload.carrier || config.carrier,
-      frame: resolveFrame(payload.mavFrame, config.frame),
-    };
-  }
-  if (type === 'param') {
-    return {
-      type,
-      action: payload.paramAction || payload.action || config.paramAction || 'set',
-      paramId: payload.paramId || config.paramId,
-      value: payload.value !== undefined ? payload.value : config.value,
-      paramType: payload.paramType || config.paramType || 'MAV_PARAM_TYPE_REAL32',
-      firmware: payload.firmware || config.firmware,
-    };
-  }
-  return { type };
+  return { message: payload, opts: {} };
 }
 
-function selectionFrom(config, payload) {
-  if (payload.selection) return payload.selection;
+function selectionFrom(config) {
   const filter = {};
-  assignIfPresent(filter, 'type', payload.vehicleType || config.vehicleType);
-  assignIfPresent(filter, 'firmware', payload.firmwareFilter || config.firmwareFilter);
-  assignIfPresent(filter, 'armed', payload.armedFilter || config.armedFilter);
+  assignIfPresent(filter, 'type', config.vehicleType);
+  assignIfPresent(filter, 'firmware', config.firmwareFilter);
+  assignIfPresent(filter, 'armed', config.armedFilter);
   return {
-    mode: payload.selectionMode || config.selectionMode || 'all',
-    sysids: payload.sysids || config.sysids,
+    mode: config.selectionMode || 'all',
+    sysids: config.sysids,
     filter,
   };
 }
@@ -186,40 +171,20 @@ function assignIfPresent(target, key, value) {
   if (value !== undefined && value !== null && value !== '') target[key] = value;
 }
 
-function valuesFrom(config) {
-  return {
-    count: config.count,
-    interval: config.interval,
-    mode: config.modeValue,
-    distance: config.distance,
-    pitch: config.pitch,
-    roll: config.roll,
-    yaw: config.payloadYaw,
-    pitchRate: config.pitchRate,
-    yawRate: config.payloadYawRate,
-    servo: config.servo,
-    pwm: config.pwm,
-    period: config.period,
-    instance: config.instance,
-    action: config.actionValue,
-    length: config.length,
-    rate: config.rate,
-  };
-}
-
-function numberOption(payload, config, key, fallback) {
-  if (payload[key] !== undefined) return payload[key];
+function numberOption(opts, config, key, fallback) {
+  if (opts[key] !== undefined) return opts[key];
   if (config[key] !== undefined && config[key] !== '') return config[key];
   return fallback;
 }
 
 /**
- * Synthetic connection used when delivery=build and selectionMode=list with no
- * real Connection configured. Peer table returns one active autopilot entry per
- * listed sysid so executeFanout can build targeted messages without needing a
- * live peer table (§6 Fan-out exception).
+ * Synthetic connection used when delivery=build with an explicit sysid list
+ * (config list selection or a runtime targets array) and no real Connection
+ * configured. Peer table returns one active autopilot entry per listed sysid
+ * so executeFanout can retarget messages without a live peer table (§6 Fan-out
+ * exception).
  *
- * @param {string|string[]} sysids  Raw sysids value from config or payload.
+ * @param {string|Array} sysids  Raw sysids from config, or target sysids.
  * @returns {object}
  */
 function buildListStub(sysids) {

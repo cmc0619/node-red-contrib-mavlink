@@ -490,6 +490,7 @@ function connectionStub(rows) {
     send(message, options) {
       this.sends.push({ message, options });
     },
+    resolveSourceIds: () => null,
     subscribe() {
       return () => {};
     },

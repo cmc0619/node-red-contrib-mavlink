@@ -3,7 +3,15 @@
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
 const { formationTargets, finite } = require('../lib/formation');
-const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
+const {
+  DEFAULT_TIMEOUT_MS,
+  getPreset,
+  buildParamArray,
+  buildCommandLong,
+  buildCommandInt,
+  CARRIER,
+  intCoordKinds,
+} = require('../lib/command');
 const { dialectFromConnection } = require('../lib/addressing');
 
 /**
@@ -11,10 +19,10 @@ const { dialectFromConnection } = require('../lib/addressing');
  *
  * The node is deliberately thin (three steps, all owned elsewhere): resolve the
  * anchor from config/payload or the leader's peer-table telemetry, compute one
- * absolute target per vehicle with lib/formation, and dispatch one sequential
- * fan-out of the Go To / Reposition preset with per-member lat/lon/alt in
- * `memberParams` (params 5/6/7). All geometry lives in lib/formation; all
- * sending lives in lib/fanout.
+ * absolute target per vehicle with lib/formation, and hand Fan-out one built
+ * Go To / Reposition message plus per-member lat/lon/alt patches in `targets`
+ * (wire units — Fan-out is a raw surface, §10). All geometry lives in
+ * lib/formation; all replication lives in lib/fanout.
  *
  * Altitude semantics: targets ride the carrier's default frame,
  * MAV_FRAME_GLOBAL_RELATIVE_ALT (metres above home) — the same frame PX4
@@ -79,23 +87,40 @@ module.exports = function registerMavlinkFormation(RED) {
           sysids,
         });
 
-        const memberParams = {};
-        for (const target of targets) {
-          memberParams[target.sysid] = { 5: target.lat, 6: target.lon, 7: target.alt };
-        }
+        // Build the shared Reposition message once (the coordinates are
+        // per-member and always patched, so the base carries zeros there),
+        // then hand Fan-out one wire-unit patch per member: canonical degrees
+        // on the LONG carrier's param5/6, degE7 on the INT carrier's x/y —
+        // the same frame-aware scaling the carrier builders apply (§9),
+        // performed here because Fan-out patches are the raw surface (§10).
+        const preset = getPreset(REPOSITION_PRESET);
+        const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
+        const isInt = config.carrier === CARRIER.INT;
+        const bundle = isInt ? dialectFromConnection(RED, connectionNode) : null;
+        const message = isInt
+          ? buildCommandInt(Number(preset.commandId), 0, 0, params, {
+              coordKinds: (bundle && intCoordKinds(bundle, Number(preset.commandId))) || undefined,
+            })
+          : buildCommandLong(Number(preset.commandId), 0, 0, params, 0);
+        const memberTargets = targets.map((target) => (isInt
+          ? {
+              sysid: target.sysid,
+              x: Math.round(target.lat * 1e7),
+              y: Math.round(target.lon * 1e7),
+              z: target.alt,
+            }
+          : {
+              sysid: target.sysid,
+              param5: target.lat,
+              param6: target.lon,
+              param7: target.alt,
+            }));
 
         const aggregate = await inFlight.track((signal) => executeFanout({
           signal,
           connection: connectionNode,
-          vehicleBundle: dialectFromConnection(RED, connectionNode),
-          action: {
-            type: 'command',
-            preset: REPOSITION_PRESET,
-            params: SHARED_PARAMS,
-            memberParams,
-            carrier: config.carrier,
-          },
-          selection: { mode: 'list', sysids },
+          message,
+          targets: memberTargets,
           mode: 'sequential',
           delivery: config.delivery,
           intervalMs: config.intervalMs === undefined || config.intervalMs === '' ? 100 : config.intervalMs,

@@ -365,6 +365,7 @@ test('mavlink-payload companion identity derives sysid; compid stays config-reso
   const conn = {
     vehicle: { targetSystem: 10, targetComponent: 2 },
     send(message, opts) { sends.push({ message, opts }); },
+    resolveSourceIds: () => null,
     subscribe() { return () => {}; },
   };
   const comp1 = {
@@ -399,6 +400,7 @@ test('mavlink-payload companion + explicit compid config → {companion sysid, c
   const conn = {
     vehicle: { targetSystem: 10, targetComponent: 2 },
     send(message, opts) { sends.push({ message, opts }); },
+    resolveSourceIds: () => null,
     subscribe() { return () => {}; },
   };
   const comp1 = {
@@ -430,6 +432,7 @@ test('mavlink-payload payload.target beats companion derivation', () => {
   const conn = {
     vehicle: { targetSystem: 10, targetComponent: 2 },
     send(message, opts) { sends.push({ message, opts }); },
+    resolveSourceIds: () => null,
     subscribe() { return () => {}; },
   };
   const comp1 = {
@@ -559,6 +562,7 @@ function connStub() {
     send(message, opts) {
       sent.push({ message, opts });
     },
+    resolveSourceIds: () => null,
     subscribe(filter, handler) {
       const entry = { filter, handler };
       subs.push(entry);

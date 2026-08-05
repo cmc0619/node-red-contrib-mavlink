@@ -46,7 +46,34 @@
         sysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
         compid:      { value: '' },
         changedOnly: { value: false },
-        rateLimit:   { value: 0 },
+        changedFields: { value: '' },
+        fieldName:   { value: '' },
+        fieldValue:  { value: '' },
+        rateLimit:   {
+          value: 0,
+          validate: function (v) {
+            // Blank/number = global Hz; otherwise comma NAME=Hz pairs, with an
+            // optional bare Hz default among them. Every token must be
+            // *complete*: an empty token (a stray comma) or an empty value
+            // (`ATTITUDE=`) is rejected here rather than silently becoming
+            // "unlimited" at runtime — a typo must not quietly delete the
+            // limit the operator asked for. Number('') is 0, so the emptiness
+            // checks have to come before the numeric one.
+            var raw = String(v === undefined || v === null ? '' : v).trim();
+            if (!raw) return true;
+            return raw.split(',').every(function (token) {
+              var part = token.trim();
+              if (!part) return false;
+              var eq = part.indexOf('=');
+              var name = eq === -1 ? '' : part.slice(0, eq).trim();
+              var value = eq === -1 ? part : part.slice(eq + 1).trim();
+              if (eq !== -1 && !name) return false;
+              if (!value) return false;
+              var hz = Number(value);
+              return Number.isFinite(hz) && hz >= 0;
+            });
+          },
+        },
       },
       inputs: 0,
       outputs: 1,
@@ -65,6 +92,13 @@
         if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
           RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
         }
+
+        // §6: the compare-fields row only exists while Changed only is on.
+        function refreshChangedFieldsRow() {
+          $('#row-in-changedFields').toggle($('#node-input-changedOnly').is(':checked'));
+        }
+        $('#node-input-changedOnly').on('change', refreshChangedFieldsRow);
+        refreshChangedFieldsRow();
         $('#node-input-connection').on('change', function () {
           refreshMessageOptions(node);
         });
@@ -111,10 +145,20 @@
     <input type="checkbox" id="node-input-changedOnly" style="width:auto">
     <label for="node-input-changedOnly" style="width:auto"> Changed only</label>
   </div>
+  <div class="form-row" id="row-in-changedFields">
+    <label for="node-input-changedFields"><i class="fa fa-list"></i> Compare fields</label>
+    <input type="text" id="node-input-changedFields" placeholder="all fields (e.g. base_mode,custom_mode)">
+  </div>
+  <div class="form-row">
+    <label for="node-input-fieldName"><i class="fa fa-crosshairs"></i> Field</label>
+    <input type="text" id="node-input-fieldName" placeholder="(any)" style="width:140px">
+    <label for="node-input-fieldValue" style="width:auto;margin-left:6px">=</label>
+    <input type="text" id="node-input-fieldValue" placeholder="(present)" style="width:120px">
+  </div>
   <div class="form-row">
     <label for="node-input-rateLimit"><i class="fa fa-tachometer"></i> Rate limit</label>
-    <input type="number" id="node-input-rateLimit" placeholder="0" min="0" step="0.1" style="width:80px">
-    <span> msg/s (0 = unlimited)</span>
+    <input type="text" id="node-input-rateLimit" placeholder="0" style="width:220px">
+    <span> Hz, or NAME=Hz pairs (0 = unlimited)</span>
   </div>
 </script>
 
@@ -137,7 +181,19 @@
   <p><b>Message</b>, <b>Sysid</b>, and <b>Compid</b> filters are all optional;
   leave blank to match all traffic on the connection.</p>
   <p><b>Changed only</b>: only forward a message when its field values differ
-  from the previous delivery for the same (message, sysid, compid) tuple.</p>
+  from the previous delivery for the same (message, sysid, compid) tuple.
+  <b>Compare fields</b> restricts the comparison to the listed fields (comma
+  separated) — so a hot timestamp doesn't make every frame look changed; blank
+  compares every field.</p>
+  <p><b>Field</b>: pass only messages where the named field exists — and, when
+  a value is given, equals it (compared as strings, so enums and 64-bit values
+  work naturally). Example: <code>base_mode</code> = <code>217</code>.</p>
   <p><b>Rate limit</b>: maximum messages per second per (message, sysid, compid)
-  tuple; 0 means unlimited.</p>
+  tuple; 0 means unlimited. Either one Hz number for everything, or comma
+  <code>NAME=Hz</code> pairs — <code>ATTITUDE=2, GLOBAL_POSITION_INT=1</code> —
+  with an optional bare number among them as the default for unlisted names.
+  Every token must be complete — a stray comma or an empty value
+  (<code>ATTITUDE=</code>) is rejected in the editor, so a typo cannot quietly
+  remove a limit. The editor validates the shape; the runtime trusts the saved
+  config (§2).</p>
 </script>
