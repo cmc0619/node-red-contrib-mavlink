@@ -177,10 +177,16 @@ function mountValueValidator(defs, liveParamId) {
   const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
   assert.ok(start >= 0 && end > start, 'the keyed cache and key helper are present');
 
-  const valueStart = html.indexOf('validate: function (v) {', 0);
-  assert.ok(valueStart > 0, 'the value validator is present');
+  // Anchor from the `value:` key: a bare search finds the first inline
+  // validator in the file, so adding one earlier in paramDefaults would
+  // silently point this harness at a different function.
+  const valueKey = html.indexOf('value: {');
+  assert.ok(valueKey > 0, 'the value default is present');
+  const valueStart = html.indexOf('validate: function (v) {', valueKey);
+  assert.ok(valueStart > valueKey, 'the value validator is present');
   const valueEnd = html.indexOf('\n        },', valueStart);
   const body = html.slice(valueStart + 'validate: function (v) {'.length, valueEnd);
+  assert.match(body, /_paramDefsByKey/, 'the extracted body is the definition-aware validator');
 
   const context = {
     $: () => ({ val: () => liveParamId }),
@@ -246,9 +252,16 @@ function mountKeyedValidator(byKey, editedNode, liveParamId) {
   const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
   assert.ok(start >= 0 && end > start, 'the keyed cache and key helper are present');
 
-  const valueStart = html.indexOf('validate: function (v) {', 0);
+  // Anchor from the `value:` key: a bare search finds the first inline
+  // validator in the file, so adding one earlier in paramDefaults would
+  // silently point this harness at a different function.
+  const valueKey = html.indexOf('value: {');
+  assert.ok(valueKey > 0, 'the value default is present');
+  const valueStart = html.indexOf('validate: function (v) {', valueKey);
+  assert.ok(valueStart > valueKey, 'the value validator is present');
   const valueEnd = html.indexOf('\n        },', valueStart);
   const body = html.slice(valueStart + 'validate: function (v) {'.length, valueEnd);
+  assert.match(body, /_paramDefsByKey/, 'the extracted body is the definition-aware validator');
 
   const context = {
     $: () => ({ val: () => liveParamId }),
@@ -314,4 +327,20 @@ test('mavlink-param defs key: the Vehicle Profile escape keys on the profile, no
   // Wire tiers resolve the profile through the connection.
   assert.equal(context.k({ delivery: 'send', connection: 'c1' }), 'vehicle:v9');
   assert.equal(key, null);
+});
+
+test('mavlink-param value validator: falls back to the saved id when no dialog is open', () => {
+  // The branch Node-RED actually uses on deploy and on import. With a dialog
+  // open the live field wins; closed, `$('#node-input-paramId')` is an empty
+  // set and `.val()` is undefined, so the node's own saved id has to carry it.
+  const node = {
+    delivery: 'build',
+    dialect: 'ardupilotmega',
+    firmware: 'ardupilot',
+    paramId: 'RC1_MIN',
+  };
+  const validate = mountKeyedValidator(BY_KEY, node, undefined);
+
+  assert.equal(validate(2000), true, 'ArduPilot bounds, resolved from node.paramId');
+  assert.equal(validate(2500), false, 'and they are actually applied, not skipped');
 });

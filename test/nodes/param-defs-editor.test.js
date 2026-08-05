@@ -215,7 +215,7 @@ test('Param definition GET failures clear stale UI and render server and fallbac
     RED: {
       mavlink: {
         adminApiUrl: (value) => value,
-        enumOptionLabel: (entry) => `${entry.label} (${entry.value})`,
+        enumOptionLabel: (entry) => `${entry.name} (${entry.value})`,
         applyFieldMeta: () => {},
       },
       nodes: {
@@ -303,7 +303,7 @@ test('Param definition loader explains every path on which it does not ask', () 
       RED: {
         mavlink: {
         adminApiUrl: (v) => v,
-        enumOptionLabel: (e) => `${e.label} (${e.value})`,
+        enumOptionLabel: (e) => `${e.name} (${e.value})`,
         applyFieldMeta: () => {},
       },
         nodes: { node: (id) => (nodesById || {})[id] || null },
@@ -386,7 +386,7 @@ function mountParamPanel(defs, initialValue) {
     RED: {
       mavlink: {
         adminApiUrl: (v) => v,
-        enumOptionLabel: (e) => `${e.label} (${e.value})`,
+        enumOptionLabel: (e) => `${e.name} (${e.value})`,
         applyFieldMeta: () => {},
       },
       nodes: { node: (id) => (id === 'profile-1' ? { dialect: 'ardupilotmega' } : null) },
@@ -536,6 +536,7 @@ function mountValueField(defs, values) {
   const applied = [];
   const start = paramHtml.indexOf('var _paramDefs = {};');
   const end = paramHtml.indexOf('/* Reload defs when tier-influencing fields change. */', start);
+  assert.ok(start >= 0 && end > start, 'Param definition loader is present');
   const seed = Object.assign({
     '#node-input-delivery': 'build',
     '#node-input-dialect': '__vehicle',

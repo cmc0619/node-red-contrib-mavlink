@@ -86,10 +86,10 @@
    * @returns {string}
    */
   function editedParamId(node) {
-    var live;
     // Validators also run with the dialog closed (on import, and on deploy),
-    // where the field does not exist.
-    try { live = $('#node-input-paramId').val(); } catch (_err) { live = ''; }
+    // where the field is absent — jQuery returns an empty set and `.val()`
+    // yields undefined rather than throwing, so the saved id is the fallback.
+    var live = $('#node-input-paramId').val();
     if (!live && node && node.paramId) live = node.paramId;
     return String(live || '').toUpperCase().trim();
   }
@@ -259,6 +259,13 @@
 
       /** Ids in display order, rebuilt whenever definitions change. */
       var _paramIds = [];
+      /**
+       * Uppercased description per id. `searchParams` runs on every keystroke
+       * over as many as 6827 definitions, and a short prefix sends nearly all
+       * of them to the description branch — uppercasing there allocated a
+       * string per parameter per keypress.
+       */
+      var _paramText = {};
       /** Ids currently on screen, so keyboard selection has something to index. */
       var _hits = [];
       var _hitIndex = -1;
@@ -274,6 +281,12 @@
 
       function rebuildParamIndex() {
         _paramIds = Object.keys(_paramDefs).sort();
+        _paramText = {};
+        for (var n = 0; n < _paramIds.length; n++) {
+          var entry = _paramDefs[_paramIds[n]];
+          _paramText[_paramIds[n]] = entry && entry.description
+            ? entry.description.toUpperCase() : '';
+        }
         var hasDefs = _paramIds.length > 0;
         $('#row-param-defs-tip').toggle(!hasDefs && _defsLoaded && !!_defsNotice);
         if (!hasDefs && _defsLoaded && _defsNotice) {
@@ -301,9 +314,7 @@
           var at = id.indexOf(q);
           if (at === 0) { prefix.push(id); continue; }
           if (at > 0) { contains.push(id); continue; }
-          var def = _paramDefs[id];
-          var text = def && def.description ? def.description.toUpperCase() : '';
-          if (text.indexOf(q) !== -1) described.push(id);
+          if (_paramText[id].indexOf(q) !== -1) described.push(id);
         }
         return exact.concat(prefix, contains, described).slice(0, MAX_HITS);
       }
@@ -469,6 +480,12 @@
       function clearParamDefs() {
         _paramDefs = {};
         _defsLoaded = false;
+        // Keys usually change with the definitions, so an old entry stays
+        // correct for its own key. One case does not: editing a Vehicle
+        // Profile's firmware keeps the key ('vehicle:<id>') while the
+        // definitions behind it change. Drop this key so the window before the
+        // reload lands cannot range-check against the previous catalog.
+        delete _paramDefsByKey[currentDefsKey()];
       }
 
       $('#node-input-delivery').on('change', function () {
@@ -628,7 +645,9 @@
       metadata file lists, and a blank value defers to msg.payload.
     -->
     <select id="mav-param-value-select" style="width:60%;display:none"></select>
-    <input type="text" id="node-input-value">
+    <!-- number, not text: min/max/step are inert on a text input, and the
+         help text promises the documented increment becomes the step. -->
+    <input type="number" id="node-input-value">
   </div>
   <div class="form-row"><label for="node-input-paramType">Type</label><select id="node-input-paramType"><option value="MAV_PARAM_TYPE_REAL32">REAL32 (9)</option><option value="MAV_PARAM_TYPE_UINT8">UINT8 (1)</option><option value="MAV_PARAM_TYPE_INT8">INT8 (2)</option><option value="MAV_PARAM_TYPE_UINT16">UINT16 (3)</option><option value="MAV_PARAM_TYPE_INT16">INT16 (4)</option><option value="MAV_PARAM_TYPE_UINT32">UINT32 (5)</option><option value="MAV_PARAM_TYPE_INT32">INT32 (6)</option></select></div>
   <div class="form-row" id="row-timeout"><label for="node-input-timeout">Timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="10000"></div>
