@@ -735,3 +735,35 @@ test('the Read action leaves the value field alone', () => {
   context.refreshInfoForTest();
   assert.equal(element('#mav-param-value-select').visible, false);
 });
+
+test('a published type is the only type on offer; an unpublished one leaves the choice', () => {
+  // PX4 states a type for every parameter and ArduPilot states none, so the
+  // control follows what was published rather than which firmware it is.
+  const { context, element } = mountValueField(
+    {
+      BAT_N_CELLS: { description: 'Cells', type: 'MAV_PARAM_TYPE_INT32' },
+      ATC_RAT_RLL_P: { description: 'Roll P gain' },
+    },
+    { '#node-input-paramId': 'BAT_N_CELLS' }
+  );
+  context.refreshInfoForTest();
+
+  const $type = element('#node-input-paramType');
+  assert.equal($type.val(), 'MAV_PARAM_TYPE_INT32', 'set from the definition');
+  assert.equal($type.options.length, 1, 'and nothing else can be picked');
+  assert.match($type.attrs.title, /Published by the firmware/);
+
+  // A parameter whose firmware publishes nothing gets the full list back —
+  // narrowing must not be one-way.
+  element('#node-input-paramId').val('ATC_RAT_RLL_P');
+  context.refreshInfoForTest();
+  assert.ok($type.options.length > 1, 'the choice returns');
+  assert.match($type.attrs.title, /publishes no type/);
+});
+
+test('the Type select ships empty and is filled from one list', () => {
+  // Two copies of the option table — one in markup, one in the script that
+  // narrows and restores it — would be a table that has to agree with itself.
+  assert.match(paramHtml, /<select id="node-input-paramType"><\/select>/);
+  assert.match(paramHtml, /_paramTypeOptions\s*=\s*\[/);
+});

@@ -166,6 +166,7 @@
         $('#row-identity').toggle(!isBuild);
         $('#row-timeout').toggle(!isBuild);
 
+        restoreParamTypeOptions($('#node-input-paramType'));
         applyLookupMode();
 
         /* role-driven rows: companion hides both target rows */
@@ -181,6 +182,41 @@
       var _paramDefs = {};
       var _defsLoaded = false;
       var _defsNotice = '';
+
+      /**
+       * The Type select's options, in one place. The markup used to carry them
+       * and the script needed the same list to narrow and restore it — two
+       * copies of a table that must agree. The <select> ships empty and is
+       * filled from here.
+       */
+      var _paramTypeOptions = [
+        { value: 'MAV_PARAM_TYPE_REAL32', label: 'REAL32 (9)' },
+        { value: 'MAV_PARAM_TYPE_UINT8', label: 'UINT8 (1)' },
+        { value: 'MAV_PARAM_TYPE_INT8', label: 'INT8 (2)' },
+        { value: 'MAV_PARAM_TYPE_UINT16', label: 'UINT16 (3)' },
+        { value: 'MAV_PARAM_TYPE_INT16', label: 'INT16 (4)' },
+        { value: 'MAV_PARAM_TYPE_UINT32', label: 'UINT32 (5)' },
+        { value: 'MAV_PARAM_TYPE_INT32', label: 'INT32 (6)' },
+      ];
+
+      function paramTypeLabel(value) {
+        for (var i = 0; i < _paramTypeOptions.length; i++) {
+          if (_paramTypeOptions[i].value === value) return _paramTypeOptions[i].label;
+        }
+        return value;
+      }
+
+      function restoreParamTypeOptions($select) {
+        var keep = $select.val();
+        $select.empty();
+        for (var i = 0; i < _paramTypeOptions.length; i++) {
+          $select.append(
+            $('<option></option>').val(_paramTypeOptions[i].value).text(_paramTypeOptions[i].label)
+          );
+        }
+        if (keep) $select.val(keep);
+      }
+
 
       /**
        * Tier-aware defs load: build tier reads vehicle from the vehicle field;
@@ -420,15 +456,34 @@
         if (parts.length) $('#node-input-paramId').attr('title', parts.join(' | '));
         else $('#node-input-paramId').removeAttr('title');
 
-        // A documented type drives the field, exactly as documented bounds and
-        // enumerations drive the Value control. §14 measured what the operator
-        // picking it costs: a REAL32-typed set of an integer parameter is
-        // applied by the vehicle and echoed back with the vehicle's own type,
-        // decodes to 1.401298464324817e-45, and times out the confirm for a set
-        // that succeeded. PX4 publishes a type for every parameter; ArduPilot
-        // publishes none, so there the operator's choice stands untouched
-        // rather than being replaced by a guess.
-        if (def && def.type) $('#node-input-paramType').val(def.type);
+        // A published type is shown and locked; an unpublished one is asked for.
+        //
+        // Keyed on whether a type was published, not on the firmware's name —
+        // PX4 is simply the only publisher today, and ArduPilot starting would
+        // need no change here. §14 measured what the operator picking it costs:
+        // a REAL32-typed set of an integer parameter is applied by the vehicle,
+        // echoed back with the vehicle's own type, decodes to
+        // 1.401298464324817e-45, and times out the confirm for a set that
+        // succeeded. Where the firmware states the answer, offering the operator
+        // a way to contradict it is offering them that failure.
+        // Immutable by having nothing else to offer, not by `disabled`. A
+        // disabled control is the obvious way to say "you cannot change this",
+        // but nothing else in this palette disables a field that `defaults`
+        // saves, so whether Node-RED round-trips one is unverified here — and a
+        // Type that silently saves empty is the §14 failure with extra steps.
+        // Narrowing the option list needs no new save path: the field is read
+        // exactly as every other field is.
+        var $type = $('#node-input-paramType');
+        if (def && def.type) {
+          $type.empty()
+            .append($('<option></option>').val(def.type).text(paramTypeLabel(def.type)))
+            .val(def.type)
+            .attr('title', 'Published by the firmware for this parameter.');
+        } else {
+          restoreParamTypeOptions($type);
+          $type.attr('title',
+            'This firmware publishes no type for its parameters — pick the one the parameter actually stores.');
+        }
 
         refreshValueField(def);
       }
@@ -708,7 +763,7 @@
          help text promises the documented increment becomes the step. -->
     <input type="number" id="node-input-value">
   </div>
-  <div class="form-row"><label for="node-input-paramType">Type</label><select id="node-input-paramType"><option value="MAV_PARAM_TYPE_REAL32">REAL32 (9)</option><option value="MAV_PARAM_TYPE_UINT8">UINT8 (1)</option><option value="MAV_PARAM_TYPE_INT8">INT8 (2)</option><option value="MAV_PARAM_TYPE_UINT16">UINT16 (3)</option><option value="MAV_PARAM_TYPE_INT16">INT16 (4)</option><option value="MAV_PARAM_TYPE_UINT32">UINT32 (5)</option><option value="MAV_PARAM_TYPE_INT32">INT32 (6)</option></select></div>
+  <div class="form-row"><label for="node-input-paramType">Type</label><select id="node-input-paramType"></select></div>
   <div class="form-row" id="row-timeout"><label for="node-input-timeout">Timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="10000"></div>
 </script>
 
