@@ -10,13 +10,31 @@
       action: { value: 'read' },
       targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
       targetComponent: { value: '', validate: RED.validators.number(true) },
+      // Which way the parameter is named. The protocol has one field for this
+      // -- param_index -1 means "use param_id" -- so the two are alternatives,
+      // not a pair, and the dialog shows one at a time.
+      lookup: { value: 'name' },
       paramId: { value: '' },
-      // int16_t on the wire, and -1 is the protocol's "use the name"
-      // sentinel (PARAM_REQUEST_READ: "Send -1 to use the param ID field as
-      // identifier"). The real ceiling is the vehicle's param_count, which
-      // is not knowable in the editor, so the field's own width is the
-      // bound — it still refuses -5 and 99999, which encode to neither.
-      paramIndex: { value: -1, validate: RED.mavlink.validateIntRange(-1, 32767) },
+      /**
+       * Only a real index is edited, so only a real index is checked.
+       *
+       * By index the floor is 0, not -1: -1 is the protocol's "use the name"
+       * sentinel (PARAM_REQUEST_READ: "Send -1 to use the param ID field as
+       * identifier"), so it contradicts the mode that field is in. The ceiling
+       * is int16_t's, because the true ceiling is the vehicle's param_count and
+       * the editor cannot know it without a full list read.
+       *
+       * By name the field is hidden and carries -1, written by the dialog
+       * rather than typed. Checking a value the operator cannot see would red
+       * the node over something they have no way to fix.
+       */
+      paramIndex: {
+        value: -1,
+        validate: function (v, opt) {
+          if ((this.lookup || 'name') !== 'index') return true;
+          return RED.mavlink.validateIntRange(0, 32767)(v, opt);
+        },
+      },
       value: {
         value: '',
         /**
@@ -112,6 +130,24 @@
         RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       }
 
+      /**
+       * Show the one field that names the parameter, and keep the other
+       * honest.
+       *
+       * `param_index` -1 means "use param_id", so name-mode writes -1 into the
+       * hidden field rather than leaving whatever index was last typed —
+       * a stale index would win over the name on the wire.
+       */
+      function applyLookupMode() {
+        var byIndex = $('input[name=node-input-lookup]:checked').val() === 'index';
+        $('#row-paramId').toggle(!byIndex);
+        $('#row-paramIndex').toggle(byIndex);
+        if (!byIndex) {
+          $('#node-input-paramIndex').val(-1);
+          hideParamResults();
+        }
+      }
+
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
       function refreshVisibility() {
         var delivery = $('#node-input-delivery').val() || 'build';
@@ -129,6 +165,8 @@
         /* Param-owned wire rows stay local */
         $('#row-identity').toggle(!isBuild);
         $('#row-timeout').toggle(!isBuild);
+
+        applyLookupMode();
 
         /* role-driven rows: companion hides both target rows */
         RED.mavlink.applyCompanionTargetVisibility({
@@ -523,6 +561,8 @@
         loadParamDefs();
         RED.mavlink.reloadTargetCompId(node);
       });
+      $('input[name=node-input-lookup]').on('change', applyLookupMode);
+
       $('#node-input-firmware').on('change', function () {
         clearParamDefs();
         loadParamDefs();
@@ -627,7 +667,18 @@
   <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action"><option value="read">Read one</option><option value="set">Set one</option><option value="request-list">Request list</option></select></div>
   <div class="form-row" id="row-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
   <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
-  <div class="form-row">
+  <div class="form-row" id="row-param-lookup">
+    <label for="node-input-lookup">Identify by</label>
+    <span>
+      <label style="width:auto;margin-right:12px;">
+        <input type="radio" name="node-input-lookup" value="name" style="width:auto;vertical-align:top;"> Name
+      </label>
+      <label style="width:auto;">
+        <input type="radio" name="node-input-lookup" value="index" style="width:auto;vertical-align:top;"> Index
+      </label>
+    </span>
+  </div>
+  <div class="form-row" id="row-paramId">
     <label for="node-input-paramId">Param id</label>
     <input type="text" id="node-input-paramId" maxlength="16" autocomplete="off"
            placeholder="search name or description, e.g. minimum">
@@ -644,7 +695,7 @@
     <label>&nbsp;</label>
     <span id="mav-param-defs-tip-text" class="form-tips" style="font-size:0.85em;"></span>
   </div>
-  <div class="form-row"><label for="node-input-paramIndex">Index</label><input type="number" id="node-input-paramIndex" min="-1" max="32767" step="1" title="Position in the vehicle's parameter table. -1 means look the parameter up by name instead."></div>
+  <div class="form-row" id="row-paramIndex"><label for="node-input-paramIndex">Index</label><input type="number" id="node-input-paramIndex" min="0" max="32767" step="1" title="Position in the vehicle's parameter table, from 0. The vehicle reports how many it has in PARAM_VALUE param_count."></div>
   <div class="form-row">
     <label for="node-input-value">Value</label>
     <!--

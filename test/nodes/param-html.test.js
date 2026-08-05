@@ -374,3 +374,43 @@ test('the Param dialog carries definition detail on hover, not in a row', () => 
     'the paramId field carries it as hover text'
   );
 });
+
+/* ---------- identify by name or index ---------- */
+
+test('the Param dialog offers name or index, never both at once', () => {
+  // param_index -1 means "use param_id", so the protocol already treats these
+  // as alternatives. Two visible fields made that a sentinel to know rather
+  // than a choice to make.
+  assert.match(html, /lookup:\s*\{\s*value:\s*'name'\s*\}/, 'defaults to by-name');
+  assert.match(html, /name="node-input-lookup"\s+value="name"/);
+  assert.match(html, /name="node-input-lookup"\s+value="index"/);
+
+  assert.match(html, /\$\('#row-paramId'\)\.toggle\(!byIndex\)/, 'name row follows the mode');
+  assert.match(html, /\$\('#row-paramIndex'\)\.toggle\(byIndex\)/, 'index row follows the mode');
+  assert.match(
+    html,
+    /\$\('#node-input-paramIndex'\)\.val\(-1\)/,
+    'by name, the hidden index carries the sentinel rather than a stale value'
+  );
+});
+
+test('the index range check applies only where an index is edited', () => {
+  // By index the floor is 0: -1 is the "use the name" sentinel and contradicts
+  // the mode. By name the field is hidden, so checking it would red the node
+  // over a value the operator cannot see.
+  const start = html.indexOf('paramIndex: {');
+  assert.ok(start > 0, 'the paramIndex default is present');
+  const body = html.slice(start, html.indexOf('},', html.indexOf('validate:', start)));
+
+  assert.match(body, /!==\s*'index'\)\s*return true/, 'by name it does not run');
+  assert.match(body, /validateIntRange\(0,\s*32767\)/, 'by index it is a real index');
+  assert.doesNotMatch(body, /validateIntRange\(-1/, 'and -1 is not a legal typed index');
+});
+
+test('the Index field advertises the same floor the validator enforces', () => {
+  assert.match(
+    html,
+    /id="node-input-paramIndex"[^>]*min="0"/,
+    'the spinner may not offer -1 when the validator refuses it'
+  );
+});
