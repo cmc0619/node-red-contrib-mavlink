@@ -1713,6 +1713,61 @@ sequential PRs. Count: `git diff --name-only <base>...HEAD | wc -l`.
 
 ---
 
+**A local `MAV_FRAME`'s position triplet is absolute or offset *per firmware*, not per frame.**
+*Wrong belief:* the frame number settles the semantics, so a blank coordinate zero-filled into
+`SET_POSITION_TARGET_LOCAL_NED` is either always dangerous (it commands the EKF origin) or
+always inert (a zero offset) — pick one rule and apply it to every local frame. The naming
+invites this: `LOCAL_OFFSET_NED` and `BODY_OFFSET_NED` say "offset" outright, so `BODY_NED`
+reads like the third member of the same family.
+*Fact (SITL, measured 2026-08-05, ArduPilot Copter-4.7.0 GUIDED + PX4 1.18.0 SIH OFFBOARD; raw
+per-trial data `local-ned-frame-results.json` on the test host):* the probe was one
+position-only setpoint (`type_mask 3576`, `x=10, y=0, z=-20`) issued from ≈30 m north / 20 m
+east / 20 m up at heading ≈090 — displaced from the origin and yawed off north, so
+absolute-vs-offset and world-vs-body axes are both separable.
+
+1. **`LOCAL_NED` (1) is absolute on both stacks.** Settled at ≈(10, 0, −20); the zero-probe
+   confirmation walked the vehicle back toward the origin. A blank→0 here is a real place.
+2. **`LOCAL_OFFSET_NED` (7) is a world-axis offset on ArduPilot** — settled ≈(40, 20, −40), the
+   probe added to the start. **PX4 produced no motion at all** (burst and stream): unsupported
+   there in practice.
+3. **`BODY_OFFSET_NED` (9) is a body-axis offset on ArduPilot** — settled ≈(30, 30, −40): 10 m
+   *east* while heading 090, i.e. forward-relative. **PX4: no motion**, same as frame 7.
+4. **`BODY_NED` (8) splits between stacks.** ArduPilot treats it exactly like frame 9 (body-axis
+   offset, ≈(30, 30, −40)). PX4 does **not** treat it as an offset: burst produced no motion,
+   stream produced a large move toward the origin that never settled inside the timeout. The
+   exact PX4 semantics are **inconclusive**; what is conclusive is that it is *not* an offset,
+   so a zero there is not provably inert.
+
+*Decision:* the blank-coordinate guard keys on a measured `OFFSET_FRAMES` set — **7 and 9 only**.
+Blanks pass as zero offsets in those and refuse everywhere else, `BODY_NED` included: a frame
+that means "offset" on one stack and "absolute-like" on the other cannot carry a
+blanks-are-safe exemption. Do not infer a third frame's behaviour from two siblings' names.
+
+*The same run settled the Move firmware advisories*, which had been asserted from documentation
+and never measured. Two of five were wrong:
+
+- **Refuted — "ArduPilot GUIDED ignores acceleration-only setpoints."** Copter-4.7.0 moved
+  ≈43 m north on one. Warning removed: a warning that fires on working behaviour is noise, and
+  noise gets ignored.
+- **Refuted — "ArduPilot expects `BODY_OFFSET_NED`; `BODY_NED` is the PX4 body frame."**
+  ArduPilot handled both identically (item 4), and the editor's "Body NED — PX4 OFFBOARD" label
+  inverted the truth — frame 8 works on ArduPilot and misbehaves on PX4. Warning and label both
+  corrected.
+- **Unsupportable — "PX4 does not support terrain-altitude position targets."** PX4 accepted
+  frame 11 and moved, with no invalid `STATUSTEXT`. Warning removed. (Whether the terrain
+  *datum* was honoured was not instrumented: this refutes rejection, not correctness.)
+- **Confirmed — PX4 ignores both OFFSET frames** (items 2–3), now measured rather than assumed.
+- **Confirmed — the force bit (512) is not actuated** on either stack. ArduPilot is
+  **negative-only** here (no motion, no complaint, actuation not instrumented); PX4 drifted
+  vertically with no `STATUSTEXT`. Kept, reworded to name the measurement.
+- **New — PX4 `BODY_NED` now warns** (item 4).
+
+*Check:* `lib/move/index.js` (`OFFSET_FRAMES`, `advisoryFor`), `node --test test/move/move.test.js`
+— "blank local coordinates: refused in absolute frames, inert in measured OFFSET frames" and
+"measurement-refuted advisories are silent".
+
+---
+
 **Takeoff completion compares climb height, and the takeoff param's datum is frame-dependent.**
 *Wrong belief:* the `NAV_TAKEOFF` param is always a relative altitude, so completion can compare
 it directly to `GLOBAL_POSITION_INT.relative_alt` regardless of frame.

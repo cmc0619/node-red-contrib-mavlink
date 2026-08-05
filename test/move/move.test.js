@@ -207,31 +207,62 @@ test('global position with blank lat or lon refuses — never 0,0 (§10)', () =>
   );
 });
 
-test('advisoryFor warns on known-unsupported firmware combos and stays quiet otherwise', () => {
+test('advisoryFor fires only on measured-unsupported combos (§14, SITL 2026-08-05)', () => {
   const { advisoryFor } = require('../../lib/move');
-  // Force: firmware-independent — neither major firmware honors bit 9 today.
+  // Confirmed by measurement: no useful actuation on either stack.
   assert.match(advisoryFor({ mode: 'force', frame: 'LOCAL_NED' }), /force bit/i);
-  assert.match(
-    advisoryFor({ mode: 'acceleration', frame: 'LOCAL_NED', firmware: 'ardupilot' }),
-    /ArduPilot/
-  );
-  assert.match(
-    advisoryFor({ mode: 'position', frame: 'BODY_NED', firmware: 'ardupilot' }),
-    /BODY_OFFSET_NED/
-  );
-  assert.match(
-    advisoryFor({ mode: 'position', frame: 'GLOBAL_TERRAIN_ALT_INT', firmware: 'px4' }),
-    /terrain/
-  );
-  assert.match(
-    advisoryFor({ mode: 'position', frame: 'BODY_OFFSET_NED', firmware: 'px4' }),
-    /OFFSET/
-  );
+  // Confirmed: PX4 1.18 produced no motion at all for either OFFSET frame.
+  for (const frame of ['LOCAL_OFFSET_NED', 'BODY_OFFSET_NED']) {
+    assert.match(advisoryFor({ mode: 'position', frame, firmware: 'px4' }), /OFFSET/);
+  }
+  // New from measurement: PX4 does not read BODY_NED as a body offset.
+  assert.match(advisoryFor({ mode: 'position', frame: 'BODY_NED', firmware: 'px4' }), /BODY_NED/);
   // Supported combos and unknown firmware stay silent.
-  assert.equal(advisoryFor({ mode: 'position', frame: 'BODY_NED', firmware: 'px4' }), null);
+  assert.equal(advisoryFor({ mode: 'position', frame: 'LOCAL_NED', firmware: 'px4' }), null);
   assert.equal(advisoryFor({ mode: 'acceleration', frame: 'LOCAL_NED', firmware: 'px4' }), null);
   assert.equal(advisoryFor({ mode: 'acceleration', frame: 'LOCAL_NED', firmware: 'custom' }), null);
   assert.equal(advisoryFor({ mode: 'position', frame: 'LOCAL_NED' }), null);
+});
+
+test('measurement-refuted advisories are silent — a warning on working behaviour is noise (§14)', () => {
+  const { advisoryFor } = require('../../lib/move');
+  // ArduPilot Copter-4.7.0 *moved* ~43 m on an acceleration-only setpoint, so
+  // "ArduPilot ignores acceleration-only" was wrong.
+  assert.equal(advisoryFor({ mode: 'acceleration', frame: 'LOCAL_NED', firmware: 'ardupilot' }), null);
+  // ArduPilot treated BODY_NED and BODY_OFFSET_NED identically (body-axis
+  // offset), so "ArduPilot expects BODY_OFFSET_NED" was wrong.
+  assert.equal(advisoryFor({ mode: 'position', frame: 'BODY_NED', firmware: 'ardupilot' }), null);
+  assert.equal(advisoryFor({ mode: 'position', frame: 'BODY_OFFSET_NED', firmware: 'ardupilot' }), null);
+  // PX4 accepted a terrain-altitude target and moved without complaint, so
+  // "PX4 does not support terrain-altitude targets" was not supportable.
+  assert.equal(advisoryFor({ mode: 'position', frame: 'GLOBAL_TERRAIN_ALT_INT', firmware: 'px4' }), null);
+});
+
+test('blank local coordinates: refused in absolute frames, inert in measured OFFSET frames (§14)', () => {
+  const target = { sysid: 2, compid: 1 };
+  // Absolute local frames — a blank zero-filled here commands the EKF origin.
+  // BODY_NED is included deliberately: ArduPilot reads it as a body offset but
+  // PX4 moved absolute-like, so it cannot claim the exemption.
+  for (const frame of ['LOCAL_NED', 'BODY_NED']) {
+    assert.throws(
+      () => buildMoveMessage({ mode: 'position', frame, target, position: { north: '', east: 2, up: 3 } }),
+      /blank coordinates must not become the origin/,
+      `${frame} must refuse a blank coordinate`
+    );
+  }
+  // Measured OFFSET frames — zero means "no change" on every axis, so a blank
+  // is inert and passes as 0.
+  for (const frame of ['LOCAL_OFFSET_NED', 'BODY_OFFSET_NED']) {
+    const message = buildMoveMessage({
+      mode: 'position',
+      frame,
+      target,
+      position: { north: 10, east: '', up: '' },
+    });
+    assert.equal(message.fields.x, 10, `${frame} keeps the commanded axis`);
+    assert.equal(message.fields.y, 0, `${frame} blank east is a zero offset`);
+    assert.equal(message.fields.z, -0, `${frame} blank up is a zero offset`);
+  }
 });
 
 test('buildStopMessage copies target ids and does not invent system 1', () => {

@@ -38,7 +38,22 @@ see AGENTS.md "no migrations, no compatibility shims".
 - Move refuses a blank local position coordinate (north/east/up) instead of
   zero-filling it into an origin setpoint — the local-frame twin of the
   global lat/lon guard. Velocity/acceleration blanks stay 0 (a zero rate is
-  inert, not a place).
+  inert, not a place). SITL measurement (§14) narrowed this to *absolute*
+  frames: blanks pass as zero offsets in `LOCAL_OFFSET_NED`/`BODY_OFFSET_NED`,
+  and are refused in `LOCAL_NED` and `BODY_NED` — the latter because ArduPilot
+  reads it as a body offset while PX4 moves absolute-like on the same packet.
+
+### Fixed
+
+- Move firmware advisories are now measured rather than asserted (§14), and
+  two were wrong: ArduPilot Copter-4.7.0 *does* act on acceleration-only
+  setpoints (moved ≈43 m), and it handles `BODY_NED` and `BODY_OFFSET_NED`
+  identically — both warnings removed, along with the unsupportable "PX4
+  rejects terrain-altitude targets" (PX4 accepted and moved, no complaint).
+  Confirmed and kept: the force bit is not actuated on either stack, and PX4
+  ignores both OFFSET frames. Added: PX4 `BODY_NED` warns. The editor's
+  "Body NED — PX4 OFFBOARD" label had the firmware attribution backwards and
+  is corrected.
 - In-node filters grew up: per-message rate limits (`ATTITUDE=2, HEARTBEAT=1`
   pairs with an optional bare default; the shape is editor-validated per §2),
   a compared-field subset for changed-only (so hot timestamps don't defeat
