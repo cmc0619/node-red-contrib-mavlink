@@ -38,9 +38,9 @@ see AGENTS.md "no migrations, no compatibility shims".
   global lat/lon guard. Velocity/acceleration blanks stay 0 (a zero rate is
   inert, not a place).
 - In-node filters grew up: per-message rate limits (`ATTITUDE=2, HEARTBEAT=1`
-  pairs with an optional bare default; malformed input fails closed at
-  deploy), a compared-field subset for changed-only (so hot timestamps don't
-  defeat it), and a field predicate (field present / field equals value).
+  pairs with an optional bare default; the shape is editor-validated per §2),
+  a compared-field subset for changed-only (so hot timestamps don't defeat
+  it), and a field predicate (field present / field equals value).
 
 - Move now covers the full `SET_POSITION_TARGET_*` matrix: modes Position,
   Velocity, Position + Velocity, Acceleration, Force (force bit set), and Yaw

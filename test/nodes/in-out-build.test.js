@@ -423,17 +423,31 @@ test('mavlink-in: NAME=Hz pairs rate-limit per message name; unlisted names use 
   );
 });
 
-test('mavlink-in: a malformed rate limit fails closed at deploy, passing nothing', () => {
+test('mavlink-in: the editor validates the rate-limit shape; runtime trusts the saved config (§2)', () => {
+  // AGENTS: "Runtime code MUST NOT duplicate validation already performed by
+  // the editor." A hand-edited unreadable token is skipped (like fanout's
+  // unparseable params JSON), never a second deploy-time error path.
   const RED = makeRED();
   const { stub, subscribers } = makeConnectionStub();
   RED.nodes._register('conn-1', stub);
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', rateLimit: 'ATTITUDE=fast' });
+  Constructor.call(node, { connection: 'conn-1', rateLimit: 'ATTITUDE=fast, HEARTBEAT=0.001' });
 
-  assert.equal(node._status && node._status.fill, 'red', 'invalid config badge');
-  assert.equal(subscribers.length, 0, 'a filter that cannot parse its config never subscribes');
+  assert.equal(subscribers.length, 1, 'the node subscribes normally');
+  stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0.1 }, trusted: true });
+  stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0.2 }, trusted: true });
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
+  assert.equal(
+    node._sends.filter((m) => m.topic === 'ATTITUDE').length, 2,
+    'the unreadable pair is skipped — ATTITUDE unlimited'
+  );
+  assert.equal(
+    node._sends.filter((m) => m.topic === 'HEARTBEAT').length, 1,
+    'the readable pair still limits its message'
+  );
 });
 
 test('mavlink-in: changed-only does not crash on 64-bit BigInt fields (SYSTEM_TIME-style)', () => {

@@ -72,15 +72,12 @@ module.exports = function registerMavlinkIn(RED) {
         : String(config.fieldValue).trim();
 
     // Rate limit: one Hz for everything, or per-message `NAME=Hz` pairs with
-    // an optional bare Hz default for unlisted names. A filter that cannot
-    // parse its own config must never silently pass everything — malformed
-    // input fails closed at deploy.
+    // an optional bare Hz default for unlisted names. The editor validator is
+    // the loud-failure point for this shape (§2 config trust, AGENTS
+    // "Runtime code MUST NOT duplicate validation already performed by the
+    // editor"); the parse skips tokens it cannot read, same as fanout's
+    // params JSON treating unparseable saved config as empty.
     const rate = parseRateLimit(config.rateLimit);
-    if (rate.error) {
-      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
-      node.error(`mavlink-in: ${rate.error}`);
-      return;
-    }
 
     /** @type {Map<string, string>} key → last JSON of fields */
     const lastFieldJson = new Map();
@@ -185,10 +182,12 @@ function parseNameList(value) {
  * Parse the rate-limit config: blank/0 = unlimited; a bare number is the Hz
  * for every message; `NAME=Hz` comma pairs limit named messages, and a bare
  * number among the pairs sets the default for unlisted names. `NAME=0` means
- * that message is unlimited. Malformed tokens return an error — fail closed.
+ * that message is unlimited. The editor validator is the loud-failure point
+ * for the shape (§2 config trust); tokens that still cannot be read — only
+ * reachable via hand-edited flow JSON — are skipped.
  *
  * @param {*} value
- * @returns {{defaultMs: number, perMessageMs: Map<string, number>, error?: string}}
+ * @returns {{defaultMs: number, perMessageMs: Map<string, number>}}
  */
 function parseRateLimit(value) {
   const result = { defaultMs: 0, perMessageMs: new Map() };
@@ -200,18 +199,14 @@ function parseRateLimit(value) {
     const eq = part.indexOf('=');
     if (eq === -1) {
       const hz = Number(part);
-      if (!Number.isFinite(hz) || hz < 0) {
-        return { ...result, error: `rate limit ${JSON.stringify(part)} is not a Hz number or NAME=Hz pair` };
-      }
-      result.defaultMs = hz > 0 ? 1000 / hz : 0;
+      if (Number.isFinite(hz) && hz > 0) result.defaultMs = 1000 / hz;
       continue;
     }
     const name = part.slice(0, eq).trim();
     const hz = Number(part.slice(eq + 1).trim());
-    if (!name || !Number.isFinite(hz) || hz < 0) {
-      return { ...result, error: `rate limit pair ${JSON.stringify(part)} must be NAME=Hz` };
+    if (name && Number.isFinite(hz) && hz >= 0) {
+      result.perMessageMs.set(name, hz > 0 ? 1000 / hz : 0);
     }
-    result.perMessageMs.set(name, hz > 0 ? 1000 / hz : 0);
   }
   return result;
 }

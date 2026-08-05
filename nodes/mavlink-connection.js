@@ -45,6 +45,7 @@ module.exports = function registerMavlinkConnection(RED) {
       node.status({ fill: 'grey', shape: 'ring', text: 'disabled' });
       node.subscribe = () => () => {};
       node.send = () => {};
+      node.resolveSourceIds = () => null;
       node.peerTable = new PeerTable({});
       node.on('close', (done) => done());
       return;
@@ -127,6 +128,7 @@ module.exports = function registerMavlinkConnection(RED) {
 
     node.subscribe = (filter, handler) => node.connection.subscribe(filter, handler);
     node.send = (message, options) => node.connection.send(message, options);
+    node.resolveSourceIds = (identityId) => node.connection.resolveSourceIds(identityId);
     Object.defineProperty(node, 'peerTable', { get: () => node.connection.peerTable });
 
     applyStatus(node, STATE.CONNECTING);

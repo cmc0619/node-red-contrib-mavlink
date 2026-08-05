@@ -177,7 +177,7 @@ makes unreachable.
 
 | Type | Purpose |
 |---|---|
-| `mavlink-in` | Subscribe to decoded traffic. Filter by message, sysid, compid, and a field predicate (present / equals); changed-only with an optional compared-field subset; rate limit keyed on the *(message, sysid, compid)* tuple — one Hz, or per-message `NAME=Hz` pairs, malformed input failing closed at deploy |
+| `mavlink-in` | Subscribe to decoded traffic. Filter by message, sysid, compid, and a field predicate (present / equals); changed-only with an optional compared-field subset; rate limit keyed on the *(message, sysid, compid)* tuple — one Hz, or per-message `NAME=Hz` pairs, shape validated in the editor (§2) |
 | `mavlink-out` | Transmit content not constructed by an action node — raw buffers, messages forwarded from another connection, envelopes built in a Function node |
 | `mavlink-build` | Any message in the loaded dialect. Full Delivery tiers, plus an optional repeat interval that reports achieved rate against configured rate in status |
 | `mavlink-command` | `MAV_CMD`, grouped presets through to the full dialect |
