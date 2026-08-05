@@ -490,3 +490,152 @@ test('the panel is capped so a full seed cannot render 6827 rows', () => {
   context.renderForTest('');
   assert.equal(rendered().length, 50);
 });
+
+/**
+ * The Value field. A parameter with a documented enumeration does not take
+ * "a number" — FLTMODE1 takes a flight mode — and one with documented bounds
+ * should not let 50 reach a vehicle expecting 800-2200.
+ */
+const VALUE_DEFS = {
+  FLTMODE1: {
+    description: 'Flight mode when pwm is <= 1230',
+    values: [
+      { value: 0, label: 'Stabilize' },
+      { value: 2, label: 'AltHold' },
+      { value: 5, label: 'Loiter' },
+    ],
+  },
+  RC1_MIN: {
+    description: 'RC minimum PWM pulse width',
+    unit: 'PWM',
+    min: 800,
+    max: 2200,
+    increment: 1,
+  },
+};
+
+function mountValueField(defs, values) {
+  const start = paramHtml.indexOf('var _paramDefs = {};');
+  const end = paramHtml.indexOf('/* Reload defs when tier-influencing fields change. */', start);
+  const seed = Object.assign({
+    '#node-input-delivery': 'build',
+    '#node-input-dialect': '__vehicle',
+    '#node-input-vehicle': 'profile-1',
+    '#node-input-action': 'set',
+  }, values || {});
+
+  const elements = new Map();
+  const requests = [];
+  function element(selector) {
+    if (!elements.has(selector)) elements.set(selector, new FakeElement(seed[selector] || ''));
+    return elements.get(selector);
+  }
+  function $(selector) {
+    if (selector.charAt(0) === '<') return new FakeElement();
+    return element(selector);
+  }
+  $.getJSON = (url, query, success) => {
+    const request = new FakeDeferred({ url, query });
+    request.doneHandler = success;
+    requests.push(request);
+    return request;
+  };
+
+  const context = {
+    $,
+    node: {},
+    RED: {
+      mavlink: {
+        adminApiUrl: (v) => v,
+        enumOptionLabel: (e) => `${e.name} (${e.value})`,
+      },
+      nodes: { node: () => ({ dialect: 'ardupilotmega' }) },
+    },
+  };
+  vm.runInNewContext(
+    `${paramHtml.slice(start, end)}
+     this.loadParamDefsForTest = loadParamDefs;
+     this.refreshInfoForTest = refreshParamInfo;`,
+    context
+  );
+  context.loadParamDefsForTest();
+  requests[0].resolve({ defs });
+  return { context, element };
+}
+
+test('an enumerated parameter becomes a select, with a custom escape', () => {
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'FLTMODE1',
+    '#node-input-value': '2',
+  });
+  context.refreshInfoForTest();
+
+  const select = element('#mav-param-value-select');
+  const labels = select.options.map((o) => o.label);
+  assert.deepEqual(labels, ['Stabilize (0)', 'AltHold (2)', 'Loiter (5)', 'Custom value…']);
+  assert.equal(select.val(), '2', 'the saved value preselects its own option');
+  assert.equal(select.visible, true);
+  assert.equal(element('#node-input-value').visible, false, 'the box hides behind the select');
+});
+
+test('a value the enumeration does not cover lands in custom mode, still visible', () => {
+  // Firmware accepts values no metadata file lists; dropping to a blank select
+  // would silently discard one the operator deliberately set.
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'FLTMODE1',
+    '#node-input-value': '17',
+  });
+  context.refreshInfoForTest();
+
+  assert.equal(element('#mav-param-value-select').val(), '__custom');
+  assert.equal(element('#node-input-value').visible, true);
+  assert.equal(element('#node-input-value').val(), '17', 'and the value is untouched');
+});
+
+test('a parameter with no enumeration keeps the plain box', () => {
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'RC1_MIN',
+    '#node-input-value': '1000',
+  });
+  context.refreshInfoForTest();
+
+  assert.equal(element('#mav-param-value-select').visible, false);
+  assert.equal(element('#node-input-value').visible, true);
+});
+
+test('bounds, step and unit are published on the field', () => {
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'RC1_MIN',
+  });
+  context.refreshInfoForTest();
+
+  const value = element('#node-input-value');
+  assert.equal(value.attrs.min, '800');
+  assert.equal(value.attrs.max, '2200');
+  assert.equal(value.attrs.step, '1');
+  assert.equal(element('#mav-param-value-unit').label, 'PWM');
+});
+
+test('switching to an undocumented parameter clears the previous bounds', () => {
+  // Stale min/max from the last parameter would reject perfectly good values.
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'RC1_MIN',
+  });
+  context.refreshInfoForTest();
+  assert.equal(element('#node-input-value').attrs.min, '800');
+
+  element('#node-input-paramId').val('SCR_USER1');
+  context.refreshInfoForTest();
+  assert.equal(element('#node-input-value').attrs.min, undefined);
+  assert.equal(element('#node-input-value').attrs.max, undefined);
+  assert.equal(element('#mav-param-value-unit').label, '');
+});
+
+test('the Read action leaves the value field alone', () => {
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'FLTMODE1',
+    '#node-input-action': 'read',
+  });
+  context.refreshInfoForTest();
+  assert.equal(element('#mav-param-value-select').visible, false);
+});

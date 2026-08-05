@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const { assertChangeHandlerContains } = require('./html-assert');
 
 const html = fs.readFileSync(
@@ -164,4 +165,70 @@ test('mavlink-param CompID reloads when catalog source changes', () => {
     'RED.mavlink.reloadTargetCompId(node)',
     'dialect change reloads CompID'
   );
+});
+
+/**
+ * The value validator. Node-RED evaluates `validate` outside oneditprepare, so
+ * it reads a script-scope mirror of the definitions rather than the dialog's
+ * own cache — this exercises the real function out of the file.
+ */
+function mountValueValidator(defs, liveParamId) {
+  const start = html.indexOf('var _paramDefsForValidation = {};');
+  const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
+  assert.ok(start >= 0 && end > start, 'the validation mirror and helper are present');
+
+  const valueStart = html.indexOf('validate: function (v) {', 0);
+  assert.ok(valueStart > 0, 'the value validator is present');
+  const valueEnd = html.indexOf('\n        },', valueStart);
+  const body = html.slice(valueStart + 'validate: function (v) {'.length, valueEnd);
+
+  const context = {
+    $: () => ({ val: () => liveParamId }),
+    Number,
+  };
+  vm.runInNewContext(
+    `${html.slice(start, end)}
+     _paramDefsForValidation = ${JSON.stringify(defs)};
+     this.validateForTest = function (v) { ${body} };`,
+    context
+  );
+  return context.validateForTest;
+}
+
+const RANGE_DEFS = { RC1_MIN: { min: 800, max: 2200 } };
+
+test('mavlink-param value validator: blank defers to msg.payload rather than failing', () => {
+  const validate = mountValueValidator(RANGE_DEFS, 'RC1_MIN');
+  assert.equal(validate(''), true);
+  assert.equal(validate(undefined), true);
+  assert.equal(validate('   '), true);
+});
+
+test('mavlink-param value validator: refuses a value outside the documented range', () => {
+  const validate = mountValueValidator(RANGE_DEFS, 'RC1_MIN');
+  assert.equal(validate(1500), true, 'inside');
+  assert.equal(validate(800), true, 'the bounds themselves are legal');
+  assert.equal(validate(2200), true);
+  assert.equal(validate(50), false, 'below min');
+  assert.equal(validate(9000), false, 'above max');
+});
+
+test('mavlink-param value validator: non-numeric always fails', () => {
+  const validate = mountValueValidator(RANGE_DEFS, 'RC1_MIN');
+  assert.equal(validate('abc'), false);
+});
+
+test('mavlink-param value validator: an unknown parameter is never rejected for being unknown', () => {
+  // Lua scripts and custom builds declare parameters no metadata file has;
+  // definitions are advisory here, not an allowlist.
+  const validate = mountValueValidator(RANGE_DEFS, 'SCR_USER1');
+  assert.equal(validate(999999), true);
+  assert.equal(validate(-1), true);
+  assert.equal(validate('abc'), false, 'but it still has to be a number');
+});
+
+test('mavlink-param value validator: with no definitions loaded it is the plain numeric check', () => {
+  const validate = mountValueValidator({}, 'RC1_MIN');
+  assert.equal(validate(50), true);
+  assert.equal(validate('abc'), false);
 });

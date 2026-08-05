@@ -12,12 +12,59 @@
       targetComponent: { value: '', validate: RED.validators.number(true) },
       paramId: { value: '' },
       paramIndex: { value: -1, validate: RED.validators.number(true) },
-      value: { value: '', validate: RED.validators.number(true) },
+      value: {
+        value: '',
+        /**
+         * Blank is valid and load-bearing: it defers to `msg.payload` at
+         * runtime rather than being an unfilled form. Beyond that the value
+         * must be a number, and — when the definition documents bounds — must
+         * be inside them. Catching 50 for an 800–2200 PWM parameter here beats
+         * discovering it after the vehicle has taken it.
+         *
+         * Definitions are advisory, not authority: with none loaded this is
+         * exactly the old numeric check, and a parameter absent from the seed
+         * is never rejected for being unknown.
+         */
+        validate: function (v) {
+          if (v === undefined || v === null || String(v).trim() === '') return true;
+          var n = Number(v);
+          if (!Number.isFinite(n)) return false;
+          var def = _paramDefsForValidation[editedParamId(this)];
+          if (!def) return true;
+          if (def.min !== undefined && n < def.min) return false;
+          if (def.max !== undefined && n > def.max) return false;
+          return true;
+        },
+      },
       paramType: { value: 'MAV_PARAM_TYPE_REAL32' },
       timeout: { value: '', validate: RED.validators.number(true) }
     },
     RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
   );
+
+  /**
+   * A mirror of the loaded definitions, kept at script scope because Node-RED
+   * evaluates `validate` outside `oneditprepare` — the cache itself lives in
+   * the dialog's closure and is unreachable from there. Written on every load;
+   * read only to range-check a value.
+   */
+  var _paramDefsForValidation = {};
+
+  /**
+   * The parameter id currently being edited: the live field while the dialog is
+   * open, falling back to the saved value.
+   *
+   * @param {object} node
+   * @returns {string}
+   */
+  function editedParamId(node) {
+    var live;
+    // Validators also run with the dialog closed (on import, and on deploy),
+    // where the field does not exist.
+    try { live = $('#node-input-paramId').val(); } catch (_err) { live = ''; }
+    if (!live && node && node.paramId) live = node.paramId;
+    return String(live || '').toUpperCase().trim();
+  }
 
   RED.nodes.registerType('mavlink-param', {
     category: 'mavlink',
@@ -86,6 +133,7 @@
        */
       function noParamDefs(notice) {
         _paramDefs = {};
+        _paramDefsForValidation = _paramDefs;
         _defsNotice = notice;
         _defsLoaded = true;
         rebuildParamIndex();
@@ -131,6 +179,7 @@
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), query, function (data) {
           if (seq !== _defsSeq) return;
           _paramDefs = data.defs || {};
+          _paramDefsForValidation = _paramDefs;
           _defsNotice = data.notice || '';
           _defsLoaded = true;
           rebuildParamIndex();
@@ -138,6 +187,7 @@
         }).fail(function (xhr) {
           if (seq !== _defsSeq) return;
           _paramDefs = {};
+          _paramDefsForValidation = _paramDefs;
           _defsNotice = (xhr && xhr.responseJSON && xhr.responseJSON.error) ||
             'Parameter definitions unavailable.';
           _defsLoaded = true;
@@ -278,22 +328,73 @@
         } else {
           $('#row-param-info').hide();
         }
+        refreshValueField(def);
+      }
+
+      /** Sentinel option that hands the operator back the free-text box. */
+      var VALUE_CUSTOM = '__custom';
+
+      /**
+       * Shape the Value field to the parameter being set.
+       *
+       * A documented enumeration becomes a real select — `FLTMODE1` takes a
+       * flight mode, not "a number", and picking "AltHold" beats remembering
+       * that it is 2. Bounds and increment become input attributes, and the
+       * unit is printed beside the box rather than buried in hover text (§6:
+       * inline hints are units and range; prose belongs in the tooltip).
+       *
+       * The persisted field is always `#node-input-value` — the select writes
+       * through to it — so nothing here changes what Node-RED saves.
+       *
+       * @param {?object} def
+       */
+      function refreshValueField(def) {
         var action = $('#node-input-action').val() || 'read';
-        var $valueList = $('#mav-param-value-list');
-        $valueList.empty();
-        if (action === 'set' && def && def.values && def.values.length) {
-          for (var i = 0; i < def.values.length; i++) {
-            var entry = def.values[i];
-            var $vopt = $('<option></option>')
-              .val(String(entry.value))
-              .text(RED.mavlink.enumOptionLabel({ name: entry.label, value: entry.value }));
-            if (entry.description) $vopt.attr('title', entry.description);
-            $valueList.append($vopt);
-          }
-          $('#node-input-value').attr('list', 'mav-param-value-list');
-        } else {
-          $('#node-input-value').attr('list', null);
+        var $value = $('#node-input-value');
+        var $select = $('#mav-param-value-select');
+        var hasValues = !!(action === 'set' && def && def.values && def.values.length);
+
+        $('#mav-param-value-unit').text(def && def.unit ? def.unit : '');
+
+        // Bounds and step are hints on the box; the validator is what actually
+        // refuses, since a saved flow can carry anything.
+        if (def && def.min !== undefined) $value.attr('min', def.min);
+        else $value.removeAttr('min');
+        if (def && def.max !== undefined) $value.attr('max', def.max);
+        else $value.removeAttr('max');
+        if (def && def.increment !== undefined) $value.attr('step', def.increment);
+        else $value.removeAttr('step');
+
+        $select.empty();
+        if (!hasValues) {
+          $select.toggle(false);
+          $value.toggle(true);
+          return;
         }
+
+        var current = String($value.val() === undefined ? '' : $value.val()).trim();
+        var known = false;
+        for (var i = 0; i < def.values.length; i++) {
+          var entry = def.values[i];
+          var $opt = $('<option></option>')
+            .val(String(entry.value))
+            .text(RED.mavlink.enumOptionLabel({ name: entry.label, value: entry.value }));
+          if (entry.description) $opt.attr('title', entry.description);
+          $select.append($opt);
+          if (current !== '' && Number(current) === Number(entry.value)) known = true;
+        }
+        // Always offered: firmware accepts values no metadata file lists, and a
+        // blank value defers to msg.payload — neither may become unreachable
+        // just because this parameter happens to document an enumeration.
+        $select.append(
+          $('<option></option>').val(VALUE_CUSTOM).text('Custom value…')
+        );
+
+        $select.val(known ? String(Number(current)) : VALUE_CUSTOM);
+        $select.toggle(true);
+        // A value the list does not cover keeps the box visible beside the
+        // select, so it can be seen and edited rather than silently dropped.
+        $value.toggle(!known);
       }
 
       /* Reload defs when tier-influencing fields change. */
@@ -360,6 +461,16 @@
         if (event.preventDefault) event.preventDefault();
       });
       $('#node-input-action').on('change', refreshParamInfo);
+      $('#mav-param-value-select').on('change', function () {
+        var picked = $('#mav-param-value-select').val();
+        if (picked === VALUE_CUSTOM) {
+          // Reveal the box rather than clearing it: whatever was there is more
+          // likely the value they wanted than an empty field.
+          $('#node-input-value').toggle(true);
+          return;
+        }
+        $('#node-input-value').val(picked).toggle(false);
+      });
 
       /* Initial state. */
       RED.mavlink.refreshIdentitySelect(node);
@@ -395,6 +506,11 @@
     .mav-param-hit-id {
       font-family: monospace;
       font-size: 0.9em;
+    }
+    .mav-param-unit {
+      margin-left: 6px;
+      color: var(--red-ui-secondary-text-color, #888);
+      font-size: 0.85em;
     }
     .mav-param-hit-detail {
       font-size: 0.8em;
@@ -438,8 +554,14 @@
   <div class="form-row"><label for="node-input-paramIndex">Index</label><input type="number" id="node-input-paramIndex"></div>
   <div class="form-row">
     <label for="node-input-value">Value</label>
-    <input type="text" id="node-input-value" list="mav-param-value-list">
-    <datalist id="mav-param-value-list"></datalist>
+    <!--
+      The select writes through to #node-input-value, which stays the persisted
+      field. "Custom value…" reveals the box again — firmware accepts values no
+      metadata file lists, and a blank value defers to msg.payload.
+    -->
+    <select id="mav-param-value-select" style="width:60%;display:none"></select>
+    <input type="text" id="node-input-value">
+    <span id="mav-param-value-unit" class="mav-param-unit"></span>
   </div>
   <div class="form-row"><label for="node-input-paramType">Type</label><select id="node-input-paramType"><option value="MAV_PARAM_TYPE_REAL32">REAL32 (9)</option><option value="MAV_PARAM_TYPE_UINT8">UINT8 (1)</option><option value="MAV_PARAM_TYPE_INT8">INT8 (2)</option><option value="MAV_PARAM_TYPE_UINT16">UINT16 (3)</option><option value="MAV_PARAM_TYPE_INT16">INT16 (4)</option><option value="MAV_PARAM_TYPE_UINT32">UINT32 (5)</option><option value="MAV_PARAM_TYPE_INT32">INT32 (6)</option></select></div>
   <div class="form-row" id="row-timeout"><label for="node-input-timeout">Timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="10000"></div>
@@ -457,6 +579,12 @@
   text becomes hover help on both the id and the value. A name that is in no
   list still works: Lua scripts and custom builds declare parameters no metadata
   file has heard of.</p>
+  <p><b>Value</b> follows the definition. A parameter with documented choices
+  becomes a dropdown — <code>FLTMODE1</code> offers "AltHold (2)" — with a
+  <b>Custom value…</b> escape for anything the list does not cover. Documented
+  bounds are checked before you can deploy, units print beside the box, and the
+  documented increment becomes the step. Leaving it blank is still how you defer
+  the value to <code>msg.payload</code>.</p>
   <p>Definitions ship with this package for ArduPilot (all six vehicle types)
   and PX4, chosen by the Vehicle Profile's <b>Firmware</b> and <b>Vehicle</b> —
   the same id differs between stacks, so <code>RC1_MIN</code> is microseconds on

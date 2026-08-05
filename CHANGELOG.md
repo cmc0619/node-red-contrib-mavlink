@@ -24,6 +24,17 @@ see AGENTS.md "no migrations, no compatibility shims".
   still overrides the seed id by id; a corrupt download is now reported *and*
   falls back to the seed rather than costing the operator both.
   Regenerate with `npm run generate-param-seed`.
+- **The Value field now knows what it is setting.** A parameter with a
+  documented enumeration gets a real select — `FLTMODE1` offers "AltHold (2)"
+  rather than asking you to remember that AltHold is 2 — with a
+  **Custom value…** escape, because firmware accepts values no metadata file
+  lists. Documented bounds are enforced at edit time: 50 for an 800–2200 PWM
+  parameter is refused in the editor instead of reaching the vehicle. Units
+  print beside the box and the documented increment becomes the step. Roughly
+  1 parameter in 4 carries an enumeration and about half carry bounds (24%/51%
+  on ArduPilot Copter, 20%/61% on PX4). A blank value still defers to
+  `msg.payload`, an unknown parameter is never rejected for being unknown, and
+  with no definitions loaded this is exactly the previous numeric check.
 - **Param id is now searched, not just autocompleted.** The datalist is
   replaced by a results panel that matches on **description as well as name**,
   so "minimum" finds `RC1_MIN` — previously you had to know the name before
