@@ -12,6 +12,52 @@ see AGENTS.md "no migrations, no compatibility shims".
 
 ### Added
 
+- **Parameter definitions now ship with the package.** 30,938 definitions
+  across seven targets — ArduPilot's six vehicle documents and PX4's — as a
+  737 KB gzipped seed alongside the existing dialect seed, taking the package
+  from 516 KB to 1.2 MB. The Param id field is populated out of the box, with
+  no manual download; the Build tier, which names no Vehicle Profile and could
+  previously reach no definitions at all, is answered from the seed. Keyed on
+  the profile's firmware and vehicle family, because the same id genuinely
+  differs between stacks — `RC1_MIN` is microseconds 800–1500 on PX4 and PWM
+  800–2200 on ArduPilot. A profile that has downloaded its own definitions
+  still overrides the seed id by id; a corrupt download is now reported *and*
+  falls back to the seed rather than costing the operator both.
+  Regenerate with `npm run generate-param-seed`.
+- **The Value field now knows what it is setting.** A parameter with a
+  documented enumeration gets a real select — `FLTMODE1` offers "AltHold (2)"
+  rather than asking you to remember that AltHold is 2 — with a
+  **Custom value…** escape, because firmware accepts values no metadata file
+  lists. Hovering an entry shows its description, as on every other
+  catalog-backed dropdown. Documented bounds are enforced at edit time: 50 for an 800–2200 PWM
+  parameter is refused in the editor instead of reaching the vehicle. Units
+  print beside the box and the documented increment becomes the step. Roughly
+  1 parameter in 4 carries an enumeration and about half carry bounds (24%/51%
+  on ArduPilot Copter, 20%/61% on PX4). A blank value still defers to
+  `msg.payload`, an unknown parameter is never rejected for being unknown, and
+  with no definitions loaded this is exactly the previous numeric check.
+- **A vehicle you have not named gets names, and nothing that can act.** The
+  Vehicle Profile's **Vehicle** field gains **Blimp**, so all six ArduPilot
+  documents are now selectable — Blimp's 3127 definitions previously shipped
+  with no family able to reach them. **Generic** is renamed **Unknown /
+  custom**, and now serves the union of parameter *names* with no bounds and no
+  choice lists. The documents disagree: of the 5467 ids in more than one
+  ArduPilot document, 122 disagree on their enumeration and 25 on their maximum,
+  and whichever document was read first used to win. On a Blimp that meant
+  `WP_RADIUS` offered 1–32767 m instead of the documented 0.1–10, so the editor
+  refused a legal 0.5 and accepted 5000; a divergent enumeration is worse, since
+  picking "AltHold (2)" on a vehicle whose mode 2 is something else sets the
+  wrong mode. Naming the vehicle turns the range check and the dropdown back on.
+  Descriptions and units are still shown — they inform, they do not refuse.
+- **Param id is now searched, not just autocompleted.** The datalist is
+  replaced by a results panel that matches on **description as well as name**,
+  so "minimum" finds `RC1_MIN` — previously you had to know the name before
+  you could find it, which a 6827-entry list makes worse rather than better.
+  Exact and prefix name matches rank above description matches, each row shows
+  the description and units, and arrow keys plus Enter select. Typing a name
+  in no list still works: Lua scripts and custom builds declare parameters no
+  metadata file has heard of.
+
 - **PX4 parameter definitions now work from the upstream URL.** Point Param
   defs URL at `https://artifacts.px4.io/Firmware/_general/parameters.xml` and
   Update loads all 1836 definitions. PX4 publishes the same parameters twice —

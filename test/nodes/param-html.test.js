@@ -8,6 +8,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
+const { installEditorHelpers } = require('../helpers/editor-resource');
 const { assertChangeHandlerContains } = require('./html-assert');
 
 const html = fs.readFileSync(
@@ -111,19 +113,27 @@ test('mavlink-param has refreshVisibility and companion row hiding', () => {
   );
 });
 
-test('mavlink-param loadParamDefs is tier-aware (build uses dialect or vehicle, wire uses connection)', () => {
-  assert.match(html, /node-input-dialect.*\.val\(\)|\.val\(\).*node-input-dialect/s,
-    'dialect field used in defs load');
-  assert.match(html, /dialect\s*===\s*'__vehicle'/,
-    'build defs load supports the Vehicle Profile dialect escape');
-  assert.match(html, /query\s*=\s*\{\s*dialect:\s*dialect\s*\}/,
-    'concrete build dialect loads defs by dialect');
+test('mavlink-param defs load delegates its catalog target to the shared resolver', () => {
+  assert.match(html, /RED\.mavlink\.resolveCatalogTarget\(\)/,
+    'the dialog resolves its target through the shared helper');
+  assert.match(html, /RED\.mavlink\.resolveCatalogTarget\(\{\s*source:/,
+    'and validation resolves the same way from saved config');
+
+  // The resolver owns query construction and the connection→profile hop, so
+  // the tier matrix is proven once against it (mavlink-editor-resource.test.js)
+  // rather than re-asserted per node.
+  assert.doesNotMatch(html, /query\s*=\s*\{\s*dialect:\s*dialect\s*\}/,
+    'no hand-rolled defs query');
+  assert.doesNotMatch(html, /connectionNode\.vehicle/,
+    'no hand-rolled connection→vehicle hop');
   assert.doesNotMatch(html, /ardupilotmega/, 'defs load must not invent ardupilotmega');
-  // Wire tier: reads vehicleId through connection node
-  assert.match(html, /connectionNode\.vehicle/, 'defs load reads vehicle through connection node');
-  // Delivery-driven branch
+
+  // Naming the field an operator still has to fill stays here: this is the
+  // only dialog that requires firmware, and the only one showing the notice.
+  assert.match(html, /dialect\s*===\s*'__vehicle'/,
+    'the notice path distinguishes the Vehicle Profile escape');
   assert.match(html, /delivery.*===.*'build'|'build'.*===.*delivery/,
-    'defs load is branched on delivery tier');
+    'and is branched on delivery tier');
 });
 
 test('mavlink-param ensureConfigNodePicker called for vehicle', () => {
@@ -164,4 +174,168 @@ test('mavlink-param CompID reloads when catalog source changes', () => {
     'RED.mavlink.reloadTargetCompId(node)',
     'dialect change reloads CompID'
   );
+});
+
+/**
+ * Mount the real value validator out of the file.
+ *
+ * Node-RED evaluates `validate` outside oneditprepare, against a saved config
+ * with no dialog open, so the extracted body runs in a context carrying the
+ * real shared helpers — a stubbed `resolveCatalogTarget` would quietly stop
+ * proving that the loader and the validator derive the same key.
+ *
+ * @param {string} liveParamId  what the dialog's paramId field reports
+ * @param {Function} [nodeFor]  RED.nodes.node stand-in
+ * @returns {object} the VM context: validateForTest, keyForTest, seed
+ */
+function mountValidator(liveParamId, nodeFor) {
+  const start = html.indexOf('var _paramDefsByKey = {};');
+  const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
+  assert.ok(start >= 0 && end > start, 'the keyed cache and key helper are present');
+
+  // Anchor from the `value:` key: a bare search finds the first inline
+  // validator in the file, so adding one earlier in paramDefaults would
+  // silently point this harness at a different function.
+  const valueKey = html.indexOf('value: {');
+  assert.ok(valueKey > 0, 'the value default is present');
+  const valueStart = html.indexOf('validate: function (v) {', valueKey);
+  assert.ok(valueStart > valueKey, 'the value validator is present');
+  const valueEnd = html.indexOf('\n        },', valueStart);
+  // Unguarded, a moved closing brace makes this -1: the slice loses its last
+  // character and the failure surfaces as a SyntaxError that names nothing.
+  assert.ok(valueEnd > valueStart, 'the value validator terminates at the expected anchor');
+  const body = html.slice(valueStart + 'validate: function (v) {'.length, valueEnd);
+  assert.match(body, /_paramDefsByKey/, 'the extracted body is the definition-aware validator');
+
+  const context = {
+    $: () => ({ val: () => liveParamId, length: 0 }),
+    Number,
+    RED: { mavlink: {}, nodes: { node: nodeFor || (() => null) } },
+  };
+  installEditorHelpers(context);
+  vm.runInNewContext(
+    `${html.slice(start, end)}
+     this.keyForTest = paramDefsKey;
+     this.seed = function (map) { for (var k in map) { _paramDefsByKey[k] = map[k]; } };
+     this.validateForTest = function (v) { ${body} };`,
+    context
+  );
+  return context;
+}
+
+/** One definition set, under the key a dialog with no fields set would compute. */
+function mountValueValidator(defs, liveParamId) {
+  const context = mountValidator(liveParamId);
+  context.seed({ [context.keyForTest({})]: defs });
+  return context.validateForTest;
+}
+
+const RANGE_DEFS = { RC1_MIN: { min: 800, max: 2200 } };
+
+test('mavlink-param value validator: blank defers to msg.payload rather than failing', () => {
+  const validate = mountValueValidator(RANGE_DEFS, 'RC1_MIN');
+  assert.equal(validate(''), true);
+  assert.equal(validate(undefined), true);
+  assert.equal(validate('   '), true);
+});
+
+test('mavlink-param value validator: refuses a value outside the documented range', () => {
+  const validate = mountValueValidator(RANGE_DEFS, 'RC1_MIN');
+  assert.equal(validate(1500), true, 'inside');
+  assert.equal(validate(800), true, 'the bounds themselves are legal');
+  assert.equal(validate(2200), true);
+  assert.equal(validate(50), false, 'below min');
+  assert.equal(validate(9000), false, 'above max');
+});
+
+test('mavlink-param value validator: non-numeric always fails', () => {
+  const validate = mountValueValidator(RANGE_DEFS, 'RC1_MIN');
+  assert.equal(validate('abc'), false);
+});
+
+test('mavlink-param value validator: an unknown parameter is never rejected for being unknown', () => {
+  // Lua scripts and custom builds declare parameters no metadata file has;
+  // definitions are advisory here, not an allowlist.
+  const validate = mountValueValidator(RANGE_DEFS, 'SCR_USER1');
+  assert.equal(validate(999999), true);
+  assert.equal(validate(-1), true);
+  assert.equal(validate('abc'), false, 'but it still has to be a number');
+});
+
+test('mavlink-param value validator: with no definitions loaded it is the plain numeric check', () => {
+  const validate = mountValueValidator({}, 'RC1_MIN');
+  assert.equal(validate(50), true);
+  assert.equal(validate('abc'), false);
+});
+
+/**
+ * Definition sets are keyed, not mirrored. A single script-scope table would be
+ * whatever the last opened dialog loaded, so validating a *different* node
+ * would range-check against the wrong firmware — RC1_MIN is 800–1500 on PX4 and
+ * 800–2200 on ArduPilot, so opening a PX4 node then deploying an ArduPilot one
+ * with 2000 would fail on a value that firmware accepts.
+ */
+function mountKeyedValidator(byKey, editedNode, liveParamId) {
+  const context = mountValidator(liveParamId);
+  context.seed(byKey);
+  return context.validateForTest.bind(editedNode);
+}
+
+const PX4_KEY = 'dialect:development|px4';
+const AP_KEY = 'dialect:ardupilotmega|ardupilot';
+const BY_KEY = {
+  [PX4_KEY]: { RC1_MIN: { min: 800, max: 1500 } },
+  [AP_KEY]: { RC1_MIN: { min: 800, max: 2200 } },
+};
+
+test('mavlink-param value validator: each node is checked against its own firmware', () => {
+  const px4Node = { delivery: 'build', dialect: 'development', firmware: 'px4' };
+  const apNode = { delivery: 'build', dialect: 'ardupilotmega', firmware: 'ardupilot' };
+
+  const validatePx4 = mountKeyedValidator(BY_KEY, px4Node, 'RC1_MIN');
+  const validateAp = mountKeyedValidator(BY_KEY, apNode, 'RC1_MIN');
+
+  assert.equal(validatePx4(2000), false, 'PX4 tops out at 1500');
+  assert.equal(validateAp(2000), true, 'ArduPilot allows 2000 — the reported bug');
+  assert.equal(validateAp(2500), false, 'and still enforces its own 2200');
+});
+
+test('mavlink-param value validator: a node whose definitions were never loaded skips the check', () => {
+  // The safe direction: no entry means no bounds to apply, never someone
+  // else's bounds.
+  const strangerNode = { delivery: 'build', dialect: 'common', firmware: 'custom' };
+  const validate = mountKeyedValidator(BY_KEY, strangerNode, 'RC1_MIN');
+  assert.equal(validate(99999), true);
+  assert.equal(validate('abc'), false, 'but it is still a number check');
+});
+
+test('mavlink-param defs key: the Vehicle Profile escape keys on the profile, not the dialect', () => {
+  const k = mountValidator('', () => ({ vehicle: 'v9', dialect: 'ardupilotmega' })).keyForTest;
+
+  // The profile's own metadata joins its key, so editing an undeployed
+  // profile's firmware or family cannot be served the previous catalog.
+  assert.match(k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v1' }), /^vehicle:v1\|/);
+  assert.notEqual(
+    k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v1' }),
+    k({ delivery: 'build', dialect: '__vehicle', vehicle: 'v2' }),
+    'two profiles are two definition sets'
+  );
+  // Wire tiers resolve the profile through the connection.
+  assert.match(k({ delivery: 'send', connection: 'c1' }), /^vehicle:v9\|/);
+});
+
+test('mavlink-param value validator: falls back to the saved id when no dialog is open', () => {
+  // The branch Node-RED actually uses on deploy and on import. With a dialog
+  // open the live field wins; closed, `$('#node-input-paramId')` is an empty
+  // set and `.val()` is undefined, so the node's own saved id has to carry it.
+  const node = {
+    delivery: 'build',
+    dialect: 'ardupilotmega',
+    firmware: 'ardupilot',
+    paramId: 'RC1_MIN',
+  };
+  const validate = mountKeyedValidator(BY_KEY, node, undefined);
+
+  assert.equal(validate(2000), true, 'ArduPilot bounds, resolved from node.paramId');
+  assert.equal(validate(2500), false, 'and they are actually applied, not skipped');
 });

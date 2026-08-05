@@ -1,0 +1,97 @@
+'use strict';
+
+/**
+ * The shipped parameter-definition seed lookup (`lib/param/seed.js`).
+ *
+ * Two properties matter here and neither is visible from the route tests:
+ * which document a vehicle family selects, and what an unknown vehicle is
+ * allowed to be told. Both were wrong once — Blimp's document shipped with no
+ * family able to select it, and the union served another vehicle's bounds
+ * under the name of the one in front of you (DESIGN.md §14).
+ */
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const { defsFor } = require('../../lib/param/seed');
+const { VEHICLE_FAMILIES } = require('../../lib/vehicle');
+
+/* ---------- family → document ---------- */
+
+test('every vehicle family except unknown selects its own document', () => {
+  const union = defsFor({ firmware: 'ardupilot', vehicleFamily: 'unknown' });
+  assert.ok(union.size > 0, 'the seed is readable');
+
+  for (const family of VEHICLE_FAMILIES) {
+    if (family === 'unknown') continue;
+    const defs = defsFor({ firmware: 'ardupilot', vehicleFamily: family });
+    assert.ok(defs.size > 0, `${family} resolves to definitions`);
+    // A family with no ARDUPILOT_VEHICLE entry silently falls through to the
+    // union. That is exactly how Blimp hid: shipped, counted, unreachable.
+    assert.notEqual(
+      defs.size,
+      union.size,
+      `${family} falls through to the union — it has no document mapping`
+    );
+  }
+});
+
+test('boat reads the Rover document, which is where ArduPilot ships boats', () => {
+  const boat = defsFor({ firmware: 'ardupilot', vehicleFamily: 'boat' });
+  const rover = defsFor({ firmware: 'ardupilot', vehicleFamily: 'rover' });
+  assert.equal(boat.size, rover.size);
+  assert.deepEqual([...boat.keys()].sort(), [...rover.keys()].sort());
+});
+
+test('blimp selects the Blimp document, not the union', () => {
+  const blimp = defsFor({ firmware: 'ardupilot', vehicleFamily: 'blimp' });
+  const union = defsFor({ firmware: 'ardupilot', vehicleFamily: 'unknown' });
+  assert.ok(blimp.size < union.size, 'a single document is smaller than the union');
+  // Copter-only, so its absence proves the Blimp document answered.
+  assert.equal(blimp.has('ACRO_BAL_PITCH'), false);
+});
+
+/* ---------- what an unknown vehicle is told ---------- */
+
+test('a named family keeps the bounds its own document documents', () => {
+  const blimp = defsFor({ firmware: 'ardupilot', vehicleFamily: 'blimp' });
+  const wp = blimp.get('WP_RADIUS');
+  assert.ok(wp, 'WP_RADIUS is in the Blimp document');
+  assert.equal(wp.min, 0.1);
+  assert.equal(wp.max, 10);
+});
+
+test('the unknown-vehicle union carries names but never bounds or enumerations', () => {
+  const union = defsFor({ firmware: 'ardupilot', vehicleFamily: 'unknown' });
+
+  for (const [id, def] of union) {
+    assert.equal(def.min, undefined, `${id} must not carry a union min`);
+    assert.equal(def.max, undefined, `${id} must not carry a union max`);
+    assert.equal(def.increment, undefined, `${id} must not carry a union increment`);
+    assert.equal(def.values, undefined, `${id} must not carry a union enumeration`);
+  }
+
+  // WP_RADIUS is the measured case: Blimp documents 0.1–10 m, the union would
+  // otherwise say 1–32767, so the editor refused a legal 0.5 and accepted 5000.
+  const wp = union.get('WP_RADIUS');
+  assert.ok(wp, 'the name is still offered');
+  assert.ok(wp.description, 'and its description, which cannot refuse input');
+});
+
+test('an unrecognised family is treated as unknown, not as a guess', () => {
+  const union = defsFor({ firmware: 'ardupilot', vehicleFamily: 'unknown' });
+  for (const family of ['blimpish', '', undefined]) {
+    const defs = defsFor({ firmware: 'ardupilot', vehicleFamily: family });
+    assert.equal(defs.size, union.size);
+  }
+});
+
+test('PX4 has one document, so a family never narrows it', () => {
+  const plain = defsFor({ firmware: 'px4' });
+  assert.ok(plain.size > 0);
+  for (const family of ['copter', 'plane', 'unknown']) {
+    assert.equal(defsFor({ firmware: 'px4', vehicleFamily: family }).size, plain.size);
+  }
+  // And it keeps its bounds: one document is never a union.
+  assert.equal(plain.get('RC1_MIN').max, 1500);
+});

@@ -48,8 +48,8 @@ test('FIRMWARE_TYPES includes ardupilot, px4, custom', () => {
 
 /* ---------- VEHICLE_FAMILIES ---------- */
 
-test('VEHICLE_FAMILIES includes copter, plane, rover, boat, sub, generic', () => {
-  for (const f of ['copter', 'plane', 'rover', 'boat', 'sub', 'generic']) {
+test('VEHICLE_FAMILIES has one family per ArduPilot document, plus unknown', () => {
+  for (const f of ['copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker', 'unknown']) {
     assert.ok(VEHICLE_FAMILIES.includes(f), `expected ${f} in VEHICLE_FAMILIES`);
   }
 });
@@ -71,15 +71,20 @@ test('normalizeFirmware returns custom for unknown input', () => {
 /* ---------- normalizeFamily ---------- */
 
 test('normalizeFamily passes through known values', () => {
-  for (const f of ['copter', 'plane', 'rover', 'boat', 'sub', 'antenna-tracker', 'generic']) {
+  for (const f of ['copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker', 'unknown']) {
     assert.equal(normalizeFamily(f), f);
   }
 });
 
-test('normalizeFamily returns generic for unknown input', () => {
-  assert.equal(normalizeFamily('drone'), 'generic');
-  assert.equal(normalizeFamily(''), 'generic');
-  assert.equal(normalizeFamily(undefined), 'generic');
+test('normalizeFamily returns unknown for anything not in the list', () => {
+  // One rule, no special cases — `generic` sits here because it is not a
+  // family, not because anything remembers that it used to be one. The
+  // editor's Vehicle field is a closed select, so reaching this at all means
+  // a config the editor did not write, and `unknown` is the least-claiming
+  // family there is: names, no bounds, no enumerations.
+  for (const family of ['drone', '', undefined, 'generic', 'GENERIC', 'copter ']) {
+    assert.equal(normalizeFamily(family), 'unknown');
+  }
 });
 
 /* ---------- resolveDialect — seed ---------- */

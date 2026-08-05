@@ -12,12 +12,81 @@
       targetComponent: { value: '', validate: RED.validators.number(true) },
       paramId: { value: '' },
       paramIndex: { value: -1, validate: RED.validators.number(true) },
-      value: { value: '', validate: RED.validators.number(true) },
+      value: {
+        value: '',
+        /**
+         * Blank is valid and load-bearing: it defers to `msg.payload` at
+         * runtime rather than being an unfilled form. Beyond that the value
+         * must be a number, and — when the definition documents bounds — must
+         * be inside them. Catching 50 for an 800–2200 PWM parameter here beats
+         * discovering it after the vehicle has taken it.
+         *
+         * Definitions are advisory, not authority: with none loaded this is
+         * exactly the old numeric check, and a parameter absent from the seed
+         * is never rejected for being unknown.
+         */
+        validate: function (v) {
+          if (v === undefined || v === null || String(v).trim() === '') return true;
+          var n = Number(v);
+          if (!Number.isFinite(n)) return false;
+          var defs = _paramDefsByKey[paramDefsKey(this)];
+          var def = defs && defs[editedParamId(this)];
+          if (!def) return true;
+          if (def.min !== undefined && n < def.min) return false;
+          if (def.max !== undefined && n > def.max) return false;
+          return true;
+        },
+      },
       paramType: { value: 'MAV_PARAM_TYPE_REAL32' },
       timeout: { value: '', validate: RED.validators.number(true) }
     },
     RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
   );
+
+  /**
+   * Loaded definitions, keyed by *which* definitions they are, because Node-RED
+   * evaluates `validate` outside `oneditprepare` — the dialog's own cache is
+   * unreachable from there.
+   *
+   * Keyed, not a single mirror: a lone table would be whatever the last opened
+   * dialog loaded, and validation of a *different* node would range-check
+   * against the wrong firmware. RC1_MIN is 800-1500 on PX4 and 800-2200 on
+   * ArduPilot, so opening a PX4 node and then deploying an ArduPilot one with
+   * 2000 would fail validation on a value that firmware accepts.
+   */
+  var _paramDefsByKey = {};
+
+  /**
+   * Which definition set a node uses. The shared resolver already answers this
+   * for every catalog-backed dialog, from live fields or — via `source` — from
+   * a saved config; definitions are one more catalog keyed the same way.
+   *
+   * They agree for the open node, and a closed node whose set was never loaded
+   * simply misses, which skips the range check rather than applying someone
+   * else's bounds.
+   *
+   * @param {object} source  saved node config
+   * @returns {string}
+   */
+  function paramDefsKey(source) {
+    return RED.mavlink.resolveCatalogTarget({ source: source }).key;
+  }
+
+  /**
+   * The parameter id currently being edited: the live field while the dialog is
+   * open, falling back to the saved value.
+   *
+   * @param {object} node
+   * @returns {string}
+   */
+  function editedParamId(node) {
+    // Validators also run with the dialog closed (on import, and on deploy),
+    // where the field is absent — jQuery returns an empty set and `.val()`
+    // yields undefined rather than throwing, so the saved id is the fallback.
+    var live = $('#node-input-paramId').val();
+    if (!live && node && node.paramId) live = node.paramId;
+    return String(live || '').toUpperCase().trim();
+  }
 
   RED.nodes.registerType('mavlink-param', {
     category: 'mavlink',
@@ -84,99 +153,216 @@
        * row cannot render — so the field silently offers nothing and explains
        * nothing, which is exactly what a typed-in param id looked like before.
        */
+      /**
+       * This dialog's definition-set key, from the *live* fields — the same
+       * resolver `validate` runs against saved config, so the two agree for
+       * the open node.
+       */
+      function currentDefsKey() {
+        return RED.mavlink.resolveCatalogTarget().key;
+      }
+
       function noParamDefs(notice) {
         _paramDefs = {};
+        _paramDefsByKey[currentDefsKey()] = _paramDefs;
         _defsNotice = notice;
         _defsLoaded = true;
-        rebuildParamIdDatalist();
+        rebuildParamIndex();
         refreshParamInfo();
       }
 
-      function loadParamDefs() {
+      /**
+       * Which field the operator still has to fill, or '' when none.
+       *
+       * The resolver answers *whether* a target resolves; naming the missing
+       * field belongs here, because this dialog is the only one that shows the
+       * notice and the only one for which firmware is required.
+       *
+       * @param {{vehicleId: string, firmware: string}} target
+       * @returns {string}
+       */
+      function paramDefsTargetError(target) {
         var delivery = $('#node-input-delivery').val() || 'build';
-        var query;
-        var vehicleId;
-
         if (delivery === 'build') {
           var dialect = $('#node-input-dialect').val() || '';
-          if (!dialect) return noParamDefs('Pick a dialect to load parameter definitions.');
+          if (!dialect) return 'Pick a dialect to load parameter definitions.';
           if (dialect === '__vehicle') {
-            vehicleId = $('#node-input-vehicle').val() || '';
-            if (!vehicleId) return noParamDefs('Pick a Vehicle Profile to load parameter definitions.');
-            query = { vehicle: vehicleId };
-            if (RED.nodes && typeof RED.nodes.node === 'function') {
-              var vehicleNode = RED.nodes.node(vehicleId);
-              if (vehicleNode && vehicleNode.dialect) query.dialect = vehicleNode.dialect;
-            }
-          } else {
-            query = { dialect: dialect };
-            var firmware = $('#node-input-firmware').val() || '';
-            if (!firmware) return noParamDefs('Pick a firmware to load parameter definitions.');
-            query.firmware = firmware;
+            return target.vehicleId
+              ? ''
+              : 'Pick a Vehicle Profile to load parameter definitions.';
           }
-        } else {
-          var connectionId = $('#node-input-connection').val() || '';
-          if (!connectionId) return noParamDefs('Pick a Connection to load parameter definitions.');
-          var connectionNode = RED.nodes && typeof RED.nodes.node === 'function'
-            ? RED.nodes.node(connectionId) : null;
-          if (!connectionNode) return noParamDefs('The selected Connection could not be resolved.');
-          vehicleId = connectionNode.vehicle || '';
-          if (!vehicleId) {
-            return noParamDefs('This Connection has no Vehicle Profile, which is where parameter definitions live.');
-          }
-          query = { vehicle: vehicleId };
+          return target.firmware ? '' : 'Pick a firmware to load parameter definitions.';
         }
+        var connectionId = $('#node-input-connection').val() || '';
+        if (!connectionId) return 'Pick a Connection to load parameter definitions.';
+        var connectionNode = RED.nodes && typeof RED.nodes.node === 'function'
+          ? RED.nodes.node(connectionId) : null;
+        if (!connectionNode) return 'The selected Connection could not be resolved.';
+        if (!target.vehicleId) {
+          return 'This Connection has no Vehicle Profile, which is where parameter definitions live.';
+        }
+        return '';
+      }
+
+      function loadParamDefs() {
+        var target = RED.mavlink.resolveCatalogTarget();
+        var missing = paramDefsTargetError(target);
+        if (missing) return noParamDefs(missing);
 
         var seq = ++_defsSeq;
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), query, function (data) {
+        // Cache under the key this request was built from, not whatever the
+        // fields say when it lands.
+        var key = target.key;
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), target.query, function (data) {
           if (seq !== _defsSeq) return;
           _paramDefs = data.defs || {};
+          _paramDefsByKey[key] = _paramDefs;
           _defsNotice = data.notice || '';
           _defsLoaded = true;
-          rebuildParamIdDatalist();
+          rebuildParamIndex();
           refreshParamInfo();
         }).fail(function (xhr) {
           if (seq !== _defsSeq) return;
           _paramDefs = {};
+          _paramDefsByKey[key] = _paramDefs;
           _defsNotice = (xhr && xhr.responseJSON && xhr.responseJSON.error) ||
             'Parameter definitions unavailable.';
           _defsLoaded = true;
-          rebuildParamIdDatalist();
+          rebuildParamIndex();
           refreshParamInfo();
         });
       }
 
-      function rebuildParamIdDatalist() {
-        var $list = $('#mav-param-id-list');
-        $list.empty();
-        var ids = Object.keys(_paramDefs).sort();
-        for (var i = 0; i < ids.length; i++) {
-          var id = ids[i];
-          var def = _paramDefs[id];
-          var label = def.description
-            ? id + ' \u2014 ' + def.description.slice(0, 60)
-            : id;
-          var $opt = $('<option></option>').val(id).text(label);
-          if (def.description) $opt.attr('title', def.description);
-          $list.append($opt);
+      /** Ids in display order, rebuilt whenever definitions change. */
+      var _paramIds = [];
+      /**
+       * Uppercased description per id. `searchParams` runs on every keystroke
+       * over as many as 6827 definitions, and a short prefix sends nearly all
+       * of them to the description branch — uppercasing there allocated a
+       * string per parameter per keypress.
+       */
+      var _paramText = {};
+      /** Ids currently on screen, so keyboard selection has something to index. */
+      var _hits = [];
+      var _hitIndex = -1;
+      /**
+       * The query those hits came from. Arrow keys re-render, and re-reading
+       * the input would silently re-search — the same string in the live
+       * editor, but it makes the panel depend on the input rather than on what
+       * it last drew.
+       */
+      var _hitQuery = '';
+
+      var MAX_HITS = 50;
+
+      function rebuildParamIndex() {
+        _paramIds = Object.keys(_paramDefs).sort();
+        _paramText = {};
+        for (var n = 0; n < _paramIds.length; n++) {
+          var entry = _paramDefs[_paramIds[n]];
+          _paramText[_paramIds[n]] = entry && entry.description
+            ? entry.description.toUpperCase() : '';
         }
-        var hasDefs = ids.length > 0;
-        $('#node-input-paramId').attr('list', hasDefs ? 'mav-param-id-list' : null);
+        var hasDefs = _paramIds.length > 0;
         $('#row-param-defs-tip').toggle(!hasDefs && _defsLoaded && !!_defsNotice);
         if (!hasDefs && _defsLoaded && _defsNotice) {
           $('#mav-param-defs-tip-text').text(_defsNotice);
         }
+        hideParamResults();
+      }
+
+      /**
+       * Rank matches for `query`. A datalist could only match the start of the
+       * name, so finding a parameter meant already knowing what it was called;
+       * description text is searched here precisely so "minimum" finds RC1_MIN.
+       * Exact and prefix name matches still sort above body text.
+       */
+      function searchParams(query) {
+        var q = String(query || '').trim().toUpperCase();
+        var exact = [];
+        var prefix = [];
+        var contains = [];
+        var described = [];
+        for (var i = 0; i < _paramIds.length; i++) {
+          var id = _paramIds[i];
+          if (!q) { prefix.push(id); if (prefix.length >= MAX_HITS) break; continue; }
+          if (id === q) { exact.push(id); continue; }
+          var at = id.indexOf(q);
+          if (at === 0) { prefix.push(id); continue; }
+          if (at > 0) { contains.push(id); continue; }
+          if (_paramText[id].indexOf(q) !== -1) described.push(id);
+        }
+        return exact.concat(prefix, contains, described).slice(0, MAX_HITS);
+      }
+
+      function hideParamResults() {
+        _hits = [];
+        _hitIndex = -1;
+        _hitQuery = '';
+        $('#mav-param-results').empty().toggle(false);
+      }
+
+      function chooseParam(id) {
+        $('#node-input-paramId').val(id);
+        hideParamResults();
+        refreshParamInfo();
+      }
+
+      function renderParamResults(query, keepIndex) {
+        if (!_paramIds.length) return hideParamResults();
+        _hitQuery = String(query || '');
+        _hits = searchParams(_hitQuery);
+        _hitIndex = _hits.length
+          ? Math.max(0, Math.min(keepIndex === undefined ? 0 : keepIndex, _hits.length - 1))
+          : -1;
+
+        var $panel = $('#mav-param-results');
+        $panel.empty();
+        for (var i = 0; i < _hits.length; i++) {
+          var id = _hits[i];
+          var def = _paramDefs[id] || {};
+          var detail = def.description || '';
+          if (def.unit) detail = detail ? detail + '  \u00b7  ' + def.unit : def.unit;
+
+          var $row = $('<div></div>')
+            .attr('class', 'mav-param-hit' + (i === _hitIndex ? ' mav-param-hit-active' : ''))
+            .attr('data-param-id', id);
+          $row.append($('<div></div>').attr('class', 'mav-param-hit-id').text(id));
+          if (detail) {
+            $row.append($('<div></div>').attr('class', 'mav-param-hit-detail').text(detail));
+          }
+          // `id` is captured per row; a shared loop variable would make every
+          // row select the last one.
+          $row.on('mousedown', (function (chosen) {
+            return function (event) {
+              // mousedown, not click: the input's blur would tear the panel
+              // down before a click could land.
+              if (event && event.preventDefault) event.preventDefault();
+              chooseParam(chosen);
+            };
+          }(id)));
+          $panel.append($row);
+        }
+        $panel.toggle(_hits.length > 0);
+      }
+
+      function moveParamSelection(delta) {
+        if (!_hits.length) return;
+        // Re-render rather than track nodes: the panel is capped at MAX_HITS,
+        // so the active row stays a function of state instead of history.
+        var next = (_hitIndex + delta + _hits.length) % _hits.length;
+        renderParamResults(_hitQuery, next);
       }
 
       function refreshParamInfo() {
         var id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
         var def = _paramDefs[id];
+        // The value field's hover text is applied by applyFieldMeta below;
+        // setting it here too would be two mechanisms for one attribute.
         if (def && def.description) {
           $('#node-input-paramId').attr('title', def.description);
-          $('#node-input-value').attr('title', def.description);
         } else {
           $('#node-input-paramId').removeAttr('title');
-          $('#node-input-value').removeAttr('title');
         }
         if (def && (def.description || def.unit)) {
           var parts = [];
@@ -190,28 +376,112 @@
         } else {
           $('#row-param-info').hide();
         }
+        refreshValueField(def);
+      }
+
+      /** Sentinel option that hands the operator back the free-text box. */
+      var VALUE_CUSTOM = '__custom';
+
+      /**
+       * Shape the Value field to the parameter being set.
+       *
+       * A documented enumeration becomes a real select — `FLTMODE1` takes a
+       * flight mode, not "a number", and picking "AltHold" beats remembering
+       * that it is 2. Bounds and increment become input attributes, and the
+       * unit is printed beside the box rather than buried in hover text (§6:
+       * inline hints are units and range; prose belongs in the tooltip).
+       *
+       * The persisted field is always `#node-input-value` — the select writes
+       * through to it — so nothing here changes what Node-RED saves.
+       *
+       * @param {?object} def
+       */
+      function refreshValueField(def) {
         var action = $('#node-input-action').val() || 'read';
-        var $valueList = $('#mav-param-value-list');
-        $valueList.empty();
-        if (action === 'set' && def && def.values && def.values.length) {
-          for (var i = 0; i < def.values.length; i++) {
-            var entry = def.values[i];
-            var $vopt = $('<option></option>')
-              .val(String(entry.value))
-              .text(RED.mavlink.enumOptionLabel({ name: entry.label, value: entry.value }));
-            if (entry.description) $vopt.attr('title', entry.description);
-            $valueList.append($vopt);
-          }
-          $('#node-input-value').attr('list', 'mav-param-value-list');
-        } else {
-          $('#node-input-value').attr('list', null);
+        var $value = $('#node-input-value');
+        var $select = $('#mav-param-value-select');
+        var hasValues = !!(action === 'set' && def && def.values && def.values.length);
+
+        // Shared helper (§6): sets the hover text on the input *and* its label,
+        // and maintains the units hint. A private span here would be a second
+        // units mechanism for the same job.
+        RED.mavlink.applyFieldMeta('node-input-value', {
+          description: def && def.description ? def.description : '',
+          // The helper's key is `units`; a parameter definition carries `unit`.
+          units: def && def.unit ? def.unit : '',
+        });
+
+        // Bounds and step are hints on the box; the validator is what actually
+        // refuses, since a saved flow can carry anything.
+        if (def && def.min !== undefined) $value.attr('min', def.min);
+        else $value.removeAttr('min');
+        if (def && def.max !== undefined) $value.attr('max', def.max);
+        else $value.removeAttr('max');
+        if (def && def.increment !== undefined) $value.attr('step', def.increment);
+        else $value.removeAttr('step');
+
+        $select.empty();
+        if (!hasValues) {
+          $select.toggle(false);
+          $value.toggle(true);
+          return;
         }
+
+        // Numeric, not string: a saved `1.0` is the documented `1`, and the
+        // select's option values are numeric strings.
+        var current = String($value.val() === undefined ? '' : $value.val()).trim();
+        var known = current !== '' && def.values.some(function (entry) {
+          return Number(current) === Number(entry.value);
+        });
+
+        // Shared filler (§6): option values stay numeric strings, `title`
+        // carries the dialect description, and the tip sync comes with it.
+        // A definition's `label` is the entry's name — the helper composes
+        // "NAME (value)" from it rather than showing a bare name.
+        RED.mavlink.fillEnumSelect(
+          $select,
+          def.values.map(function (entry) {
+            return {
+              name: entry.label,
+              value: entry.value,
+              description: entry.description,
+            };
+          }),
+          // `triggerChange` off: the helper fires change after selecting its
+          // fallback entry, and this select's handler writes the picked value
+          // into the box — which would overwrite a custom value with the first
+          // documented one before the custom option below even exists. The
+          // selection is set explicitly here instead.
+          { saved: known ? String(Number(current)) : '', triggerChange: false }
+        );
+
+        // Always offered: firmware accepts values no metadata file lists, and a
+        // blank value defers to msg.payload — neither may become unreachable
+        // just because this parameter happens to document an enumeration.
+        $select.append(
+          $('<option></option>').val(VALUE_CUSTOM).text('Custom value…')
+        );
+
+        $select.val(known ? String(Number(current)) : VALUE_CUSTOM);
+        // The custom option is appended after the fill, so re-sync the tip:
+        // selecting it must clear the previous option's description.
+        RED.mavlink.bindSelectTitleSync($select);
+        $select.toggle(true);
+        // A value the list does not cover keeps the box visible beside the
+        // select, so it can be seen and edited rather than silently dropped.
+        $value.toggle(!known);
       }
 
       /* Reload defs when tier-influencing fields change. */
       function clearParamDefs() {
         _paramDefs = {};
         _defsLoaded = false;
+        // The key now carries every field that changes the answer — profile
+        // dialect, firmware and family included — so a changed target already
+        // lands on a different key. This drops the entry for the key being
+        // left, so an explicit clear cannot be served its own stale catalog in
+        // the window before the reload arrives.
+        delete _paramDefsByKey[currentDefsKey()];
       }
 
       $('#node-input-delivery').on('change', function () {
@@ -256,7 +526,32 @@
       RED.mavlink.reloadTargetCompId(node);
 
       $('#node-input-paramId').on('input change', refreshParamInfo);
+      $('#node-input-paramId').on('input focus', function () {
+        renderParamResults($('#node-input-paramId').val());
+      });
+      $('#node-input-paramId').on('blur', hideParamResults);
+      $('#node-input-paramId').on('keydown', function (event) {
+        var key = event && event.key;
+        if (key === 'ArrowDown') { moveParamSelection(1); }
+        else if (key === 'ArrowUp') { moveParamSelection(-1); }
+        else if (key === 'Enter' && _hitIndex >= 0) { chooseParam(_hits[_hitIndex]); }
+        else if (key === 'Escape') { hideParamResults(); }
+        else { return; }
+        // Enter would otherwise submit the edit dialog, and the arrows would
+        // move the caret instead of the selection.
+        if (event.preventDefault) event.preventDefault();
+      });
       $('#node-input-action').on('change', refreshParamInfo);
+      $('#mav-param-value-select').on('change', function () {
+        var picked = $('#mav-param-value-select').val();
+        if (picked === VALUE_CUSTOM) {
+          // Reveal the box rather than clearing it: whatever was there is more
+          // likely the value they wanted than an empty field.
+          $('#node-input-value').toggle(true);
+          return;
+        }
+        $('#node-input-value').val(picked).toggle(false);
+      });
 
       /* Initial state. */
       RED.mavlink.refreshIdentitySelect(node);
@@ -267,6 +562,45 @@
 </script>
 
 <script type="text/html" data-template-name="mavlink-param">
+  <style>
+    /* Colours come from Node-RED's theme variables so the panel follows the
+       editor's light and dark themes instead of pinning its own palette. */
+    .mav-param-results {
+      max-height: 260px;
+      overflow-y: auto;
+      border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+      border-radius: 3px;
+      background: var(--red-ui-form-input-background, #fff);
+      margin: 2px 0 0 107px;
+      width: 70%;
+    }
+    .mav-param-hit {
+      padding: 4px 8px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--red-ui-secondary-border-color, #eee);
+    }
+    .mav-param-hit:last-child { border-bottom: none; }
+    .mav-param-hit:hover,
+    .mav-param-hit-active {
+      background: var(--red-ui-list-item-background-hover, #efefef);
+    }
+    .mav-param-hit-id {
+      font-family: monospace;
+      font-size: 0.9em;
+    }
+    .mav-field-units {
+      margin-left: 6px;
+      color: var(--red-ui-secondary-text-color, #888);
+      font-size: 0.85em;
+    }
+    .mav-param-hit-detail {
+      font-size: 0.8em;
+      color: var(--red-ui-secondary-text-color, #888);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  </style>
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and echo-confirm</option><option value="collect">Request list and collect</option></select></div>
   <div class="form-row" id="row-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
@@ -279,8 +613,16 @@
   <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row">
     <label for="node-input-paramId">Param id</label>
-    <input type="text" id="node-input-paramId" maxlength="16" list="mav-param-id-list" placeholder="e.g. FS_GCS_ENABLE">
-    <datalist id="mav-param-id-list"></datalist>
+    <input type="text" id="node-input-paramId" maxlength="16" autocomplete="off"
+           placeholder="search name or description, e.g. minimum">
+    <!--
+      A results panel, not a datalist: a datalist can only match the start of
+      the name, so you had to know the parameter was called RC1_MIN before you
+      could find it. This searches descriptions too, and shows units. Typing a
+      name that is in no list still works — Lua scripts and custom builds
+      declare parameters no metadata file has ever heard of.
+    -->
+    <div id="mav-param-results" class="mav-param-results" style="display:none"></div>
   </div>
   <div class="form-row" id="row-param-info" style="display:none">
     <label>&nbsp;</label>
@@ -293,8 +635,15 @@
   <div class="form-row"><label for="node-input-paramIndex">Index</label><input type="number" id="node-input-paramIndex"></div>
   <div class="form-row">
     <label for="node-input-value">Value</label>
-    <input type="text" id="node-input-value" list="mav-param-value-list">
-    <datalist id="mav-param-value-list"></datalist>
+    <!--
+      The select writes through to #node-input-value, which stays the persisted
+      field. "Custom value…" reveals the box again — firmware accepts values no
+      metadata file lists, and a blank value defers to msg.payload.
+    -->
+    <select id="mav-param-value-select" style="width:60%;display:none"></select>
+    <!-- number, not text: min/max/step are inert on a text input, and the
+         help text promises the documented increment becomes the step. -->
+    <input type="number" id="node-input-value">
   </div>
   <div class="form-row"><label for="node-input-paramType">Type</label><select id="node-input-paramType"><option value="MAV_PARAM_TYPE_REAL32">REAL32 (9)</option><option value="MAV_PARAM_TYPE_UINT8">UINT8 (1)</option><option value="MAV_PARAM_TYPE_INT8">INT8 (2)</option><option value="MAV_PARAM_TYPE_UINT16">UINT16 (3)</option><option value="MAV_PARAM_TYPE_INT16">INT16 (4)</option><option value="MAV_PARAM_TYPE_UINT32">UINT32 (5)</option><option value="MAV_PARAM_TYPE_INT32">INT32 (6)</option></select></div>
   <div class="form-row" id="row-timeout"><label for="node-input-timeout">Timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="10000"></div>
@@ -305,6 +654,29 @@
   <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — pick a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Send-as</b> identity stamps the source address.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). For GCS/custom identities, fill target sysid/compid or leave blank to inherit the profile default.</p>
   <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast.</p>
-  <p>When the flow is deployed and its Vehicle Profile has downloaded parameter definitions, the <b>Param id</b> field becomes a searchable datalist, and the definition's text appears as hover help on both the id and the value. Set a <b>Param defs URL</b> and use <b>Update</b> in the Vehicle Profile editor to download them. When definitions are unavailable the field says why, under the input.</p>
+  <p><b>Param id</b> searches shipped parameter definitions — type any part of a
+  <i>name or description</i> and pick from the results. "minimum" finds
+  <code>RC1_MIN</code>; you do not have to know the name first. Each result shows
+  its description and units, arrow keys and Enter select, and the definition's
+  text becomes hover help on both the id and the value. A name that is in no
+  list still works: Lua scripts and custom builds declare parameters no metadata
+  file has heard of.</p>
+  <p><b>Value</b> follows the definition. A parameter with documented choices
+  becomes a dropdown — <code>FLTMODE1</code> offers "AltHold (2)" — with a
+  <b>Custom value…</b> escape for anything the list does not cover. Documented
+  bounds are checked before you can deploy, units print beside the box, and the
+  documented increment becomes the step. Leaving it blank is still how you defer
+  the value to <code>msg.payload</code>.</p>
+  <p>Definitions ship with this package for ArduPilot (all six vehicle types)
+  and PX4, chosen by the Vehicle Profile's <b>Firmware</b> and <b>Vehicle</b> —
+  the same id differs between stacks, so <code>RC1_MIN</code> is microseconds on
+  PX4 and PWM on ArduPilot. Set <b>Vehicle</b> if you know it: an
+  <b>Unknown / custom</b> vehicle is offered every parameter name that firmware
+  documents, but no bounds and no choice lists, because the vehicle documents
+  disagree about those and there is nothing to pick by. Naming the vehicle is
+  what turns the range check and the dropdown on. A Vehicle Profile that has downloaded its own
+  definitions overrides the shipped ones, since that download came from the
+  firmware you are actually flying. When nothing can be offered, the field says
+  why, under the input.</p>
   <p>Three source formats are read, sniffed from the document itself rather than from its <code>Content-Type</code>: ArduPilot's <code>apm.pdef.json</code> (objects keyed by param id), PX4's <code>parameters.json</code> (a <code>parameters</code> array carrying <code>name</code> inside each entry), and PX4's <code>parameters.xml</code> (<code>&lt;parameter&gt;</code> elements inside <code>&lt;group&gt;</code>). For PX4 use <code>https://artifacts.px4.io/Firmware/_general/parameters.xml</code> — the <code>.json</code> is published only as an <code>.xz</code> archive, which is refused by name rather than parsed.</p>
 </script>
