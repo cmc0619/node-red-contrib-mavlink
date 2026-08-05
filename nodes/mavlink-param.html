@@ -181,98 +181,9 @@
       var _defsNotice = '';
 
       /**
-       * Show the one field that names the parameter, and keep the other
-       * honest.
-       *
-       * `param_index` -1 means "use param_id", so name-mode writes -1 into the
-       * hidden field rather than leaving whatever index was last typed —
-       * a stale index would win over the name on the wire.
-       */
-      function applyLookupMode() {
-        var byIndex = $('input[name=node-input-lookup]:checked').val() === 'index';
-        $('#row-paramId').toggle(!byIndex);
-        $('#row-paramIndex').toggle(byIndex);
-        if (!byIndex) {
-          $('#node-input-paramIndex').val(-1);
-          hideParamResults();
-        }
-      }
-
-      /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
-      function refreshVisibility() {
-        var delivery = $('#node-input-delivery').val() || 'build';
-        var isBuild = (delivery === 'build');
-        var dialect = $('#node-input-dialect').val() || node.dialect || '';
-
-        RED.mavlink.applyBuildTierRowVisibility({
-          isBuild: isBuild,
-          dialect: dialect,
-          dialectRow: '#row-dialect',
-          vehicleRow: '#row-vehicle',
-          firmwareRow: '#row-firmware',
-          connectionRow: '#row-connection'
-        });
-        /* Param-owned wire rows stay local */
-        $('#row-identity').toggle(!isBuild);
-        $('#row-timeout').toggle(!isBuild);
-
-        RED.mavlink.fillEnumSelect($('#node-input-paramType'), RED.mavlink.PARAM_TYPE_OPTIONS,
-          { valueKey: 'name', saved: node.paramType, triggerChange: false });
-        applyLookupMode();
-
-        /* role-driven rows: companion hides both target rows */
-        RED.mavlink.applyCompanionTargetVisibility({
-          isBuild: isBuild,
-          identityId: $('#node-input-identity').val() || '',
-          targetSystemRow: '#row-targetSystem',
-          targetComponentRow: '#row-targetComponent',
-        });
-      }
-
-      /* ── Param definition catalog ─────────────────────────────── */
-      var _paramDefs = {};
-      var _defsLoaded = false;
-      var _defsNotice = '';
-
-      /**
-       * The Type select's options, in one place. The markup used to carry them
-       * and the script needed the same list to narrow and restore it — two
-       * copies of a table that must agree. The <select> ships empty and is
-       * filled from here.
-       */
-      var _paramTypeOptions = [
-        { value: 'MAV_PARAM_TYPE_REAL32', label: 'REAL32 (9)' },
-        { value: 'MAV_PARAM_TYPE_UINT8', label: 'UINT8 (1)' },
-        { value: 'MAV_PARAM_TYPE_INT8', label: 'INT8 (2)' },
-        { value: 'MAV_PARAM_TYPE_UINT16', label: 'UINT16 (3)' },
-        { value: 'MAV_PARAM_TYPE_INT16', label: 'INT16 (4)' },
-        { value: 'MAV_PARAM_TYPE_UINT32', label: 'UINT32 (5)' },
-        { value: 'MAV_PARAM_TYPE_INT32', label: 'INT32 (6)' },
-      ];
-
-      function paramTypeLabel(value) {
-        for (var i = 0; i < _paramTypeOptions.length; i++) {
-          if (_paramTypeOptions[i].value === value) return _paramTypeOptions[i].label;
-        }
-        return value;
-      }
-
-      function restoreParamTypeOptions($select) {
-        var keep = $select.val();
-        $select.empty();
-        for (var i = 0; i < _paramTypeOptions.length; i++) {
-          $select.append(
-            $('<option></option>').val(_paramTypeOptions[i].value).text(_paramTypeOptions[i].label)
-          );
-        }
-        if (keep) $select.val(keep);
-      }
-
-
-      /**
        * Tier-aware defs load: build tier reads vehicle from the vehicle field;
-       * wire tiers read it through the selected connection's profile.
-       * Request sequencing prevents a stale response from overwriting a newer one.
+       * wire tiers read it through the selected connection's profile. Request
+       * sequencing prevents a stale response from overwriting a newer one.
        */
       var _defsSeq = 0;
 
@@ -527,8 +438,9 @@
         var $type = $('#node-input-paramType');
         var published = def && def.type;
         // Option values are the MAV_PARAM_TYPE *name*, which is what the node
-        // saves and the runtime reads; `saved` is passed so the narrowed list
-        // does not have the previous pick appended back as a missing option.
+        // saves and the runtime reads. `saved` is passed explicitly so the
+        // narrowed list does not get the previous pick appended back as a
+        // missing option.
         RED.mavlink.fillEnumSelect(
           $type,
           published
@@ -722,8 +634,8 @@
       /* Initial state. */
       RED.mavlink.refreshIdentitySelect(node);
       // Once, not per redraw: refreshVisibility runs on every field change, and
-      // refilling here would reset a Type the definition had narrowed to one
-      // published option.
+      // refilling there would reset a Type the definition had narrowed to its
+      // one published option.
       RED.mavlink.fillEnumSelect($('#node-input-paramType'), RED.mavlink.PARAM_TYPE_OPTIONS,
         { valueKey: 'name', saved: node.paramType, triggerChange: false });
       applyLookupMode();

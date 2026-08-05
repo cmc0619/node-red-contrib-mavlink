@@ -761,9 +761,11 @@ test('a published type is the only type on offer; an unpublished one leaves the 
   assert.match($type.attrs.title, /publishes no type/);
 });
 
-test('the Type select ships empty and is filled from one list', () => {
-  // Two copies of the option table — one in markup, one in the script that
-  // narrows and restores it — would be a table that has to agree with itself.
+test('the Type select ships empty and is filled from the shared table', () => {
+  // The table's home is lib/codec/param-union.js, mirrored once for the editor
+  // in resources/mavlink-editor.js and pinned there by test. A per-node copy
+  // would be a third one that has to agree with the other two.
   assert.match(paramHtml, /<select id="node-input-paramType"><\/select>/);
-  assert.match(paramHtml, /_paramTypeOptions\s*=\s*\[/);
+  assert.match(paramHtml, /RED\.mavlink\.PARAM_TYPE_OPTIONS/, 'filled from the shared table');
+  assert.doesNotMatch(paramHtml, /_paramTypeOptions\s*=\s*\[/, 'and keeps no copy of its own');
 });
