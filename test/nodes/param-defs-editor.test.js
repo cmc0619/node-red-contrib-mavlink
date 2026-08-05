@@ -35,6 +35,47 @@ function matchSet(list) {
   };
 }
 
+/**
+ * The jQuery-ish scaffolding every harness in this file needs: one element per
+ * selector, a fresh element for any tag string, and a `$.getJSON` that records
+ * requests instead of issuing them.
+ *
+ * Four copies of this existed. They had already drifted — one still tested for
+ * the literal `'<option></option>'` where the others test `charAt(0) === '<'`,
+ * which is the same tag-detection bug this PR fixed once in the production
+ * path. One copy is one place for that to be right.
+ *
+ * @param {object} values  seed values keyed by selector
+ * @returns {{element: Function, $: Function, requests: object[]}}
+ */
+function makeDom(values = {}) {
+  const elements = new Map();
+  const requests = [];
+
+  function element(selector) {
+    if (!elements.has(selector)) {
+      elements.set(selector, new FakeElement(values[selector] || ''));
+    }
+    return elements.get(selector);
+  }
+
+  function $(selector) {
+    // Any tag string builds a fresh element: the results panel renders its own
+    // rows, and a shared stub would make every row the same node.
+    if (String(selector).charAt(0) === '<') return new FakeElement();
+    return element(selector);
+  }
+
+  $.getJSON = (url, query, success) => {
+    const request = new FakeDeferred({ url, query });
+    request.doneHandler = success;
+    requests.push(request);
+    return request;
+  };
+
+  return { element, $, requests };
+}
+
 class FakeElement {
   constructor(value = '') {
     // A found element, as in the real dialog: helpers branch on `.length` to
@@ -265,24 +306,7 @@ test('Param definition GET failures clear stale UI and render server and fallbac
     '#node-input-paramId': 'MAV17_RAW_SENS',
     '#node-input-action': 'read',
   };
-  const elements = new Map();
-  const requests = [];
-  function element(selector) {
-    if (!elements.has(selector)) {
-      elements.set(selector, new FakeElement(values[selector] || ''));
-    }
-    return elements.get(selector);
-  }
-  function $(selector) {
-    if (selector === '<option></option>') return new FakeElement();
-    return element(selector);
-  }
-  $.getJSON = (url, query, success) => {
-    const request = new FakeDeferred({ url, query });
-    request.doneHandler = success;
-    requests.push(request);
-    return request;
-  };
+  const { element, $, requests } = makeDom(values);
 
   const context = {
     $,
@@ -353,25 +377,7 @@ test('Param definition loader explains every path on which it does not ask', () 
   assert.ok(start >= 0 && end > start, 'Param definition loader is present');
 
   function run(values, nodesById) {
-    const elements = new Map();
-    const requests = [];
-    function element(selector) {
-      if (!elements.has(selector)) elements.set(selector, new FakeElement(values[selector] || ''));
-      return elements.get(selector);
-    }
-    function $(selector) {
-      // Any tag string creates a fresh element: the results panel builds
-      // its own rows, and returning a shared stub would make every row the
-      // same node.
-      if (selector.charAt(0) === '<') return new FakeElement();
-      return element(selector);
-    }
-    $.getJSON = (url, query, success) => {
-      const request = new FakeDeferred({ url, query });
-      request.doneHandler = success;
-      requests.push(request);
-      return request;
-    };
+    const { element, $, requests } = makeDom(values);
     const context = {
       $,
       node: {},
@@ -436,22 +442,7 @@ function mountParamPanel(defs, initialValue) {
     '#node-input-paramId': initialValue || '',
     '#node-input-action': 'read',
   };
-  const elements = new Map();
-  const requests = [];
-  function element(selector) {
-    if (!elements.has(selector)) elements.set(selector, new FakeElement(values[selector] || ''));
-    return elements.get(selector);
-  }
-  function $(selector) {
-    if (selector.charAt(0) === '<') return new FakeElement();
-    return element(selector);
-  }
-  $.getJSON = (url, query, success) => {
-    const request = new FakeDeferred({ url, query });
-    request.doneHandler = success;
-    requests.push(request);
-    return request;
-  };
+  const { element, $, requests } = makeDom(values);
 
   const context = {
     $,
@@ -618,22 +609,7 @@ function mountValueField(defs, values) {
     '#node-input-action': 'set',
   }, values || {});
 
-  const elements = new Map();
-  const requests = [];
-  function element(selector) {
-    if (!elements.has(selector)) elements.set(selector, new FakeElement(seed[selector] || ''));
-    return elements.get(selector);
-  }
-  function $(selector) {
-    if (selector.charAt(0) === '<') return new FakeElement();
-    return element(selector);
-  }
-  $.getJSON = (url, query, success) => {
-    const request = new FakeDeferred({ url, query });
-    request.doneHandler = success;
-    requests.push(request);
-    return request;
-  };
+  const { element, $, requests } = makeDom(seed);
 
   const context = {
     $,
