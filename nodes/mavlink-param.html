@@ -357,25 +357,26 @@
       function refreshParamInfo() {
         var id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
         var def = _paramDefs[id];
-        // The value field's hover text is applied by applyFieldMeta below;
-        // setting it here too would be two mechanisms for one attribute.
-        if (def && def.description) {
-          $('#node-input-paramId').attr('title', def.description);
-        } else {
-          $('#node-input-paramId').removeAttr('title');
-        }
-        if (def && (def.description || def.unit)) {
-          var parts = [];
+
+        // Hover text, not a row. Description, unit and range are reference —
+        // read once when picking the parameter, then in the way for every
+        // edit after. `title` is the same mechanism every other catalog-backed
+        // field in the palette uses (§6), so this adds no second one.
+        //
+        // The Value box gets its own hover from applyFieldMeta; setting one
+        // here too would be two mechanisms for one attribute.
+        var parts = [];
+        if (def) {
           if (def.description) parts.push(def.description);
           if (def.unit) parts.push('Unit: ' + def.unit);
           if (def.min !== undefined || def.max !== undefined) {
-            parts.push('Range: ' + (def.min !== undefined ? def.min : '?') + ' – ' + (def.max !== undefined ? def.max : '?'));
+            parts.push('Range: ' + (def.min !== undefined ? def.min : '?') +
+              ' – ' + (def.max !== undefined ? def.max : '?'));
           }
-          $('#mav-param-info-text').text(parts.join(' | '));
-          $('#row-param-info').show();
-        } else {
-          $('#row-param-info').hide();
         }
+        if (parts.length) $('#node-input-paramId').attr('title', parts.join(' | '));
+        else $('#node-input-paramId').removeAttr('title');
+
         refreshValueField(def);
       }
 
@@ -605,7 +606,7 @@
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and echo-confirm</option><option value="collect">Request list and collect</option></select></div>
   <div class="form-row" id="row-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
   <div class="form-row" id="row-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
-  <div class="form-row" id="row-firmware"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value=""></option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
+  <div class="form-row" id="row-firmware"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value="">(select firmware)</option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
   <div class="form-row" id="row-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-identity"><label for="node-input-identity">Send-as</label><select id="node-input-identity"></select></div>
   <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action"><option value="read">Read one</option><option value="set">Set one</option><option value="request-list">Request list</option></select></div>
@@ -623,10 +624,6 @@
       declare parameters no metadata file has ever heard of.
     -->
     <div id="mav-param-results" class="mav-param-results" style="display:none"></div>
-  </div>
-  <div class="form-row" id="row-param-info" style="display:none">
-    <label>&nbsp;</label>
-    <span id="mav-param-info-text" style="font-size:0.85em;color:#888;"></span>
   </div>
   <div class="form-row" id="row-param-defs-tip" style="display:none">
     <label>&nbsp;</label>

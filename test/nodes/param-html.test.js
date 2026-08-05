@@ -339,3 +339,38 @@ test('mavlink-param value validator: falls back to the saved id when no dialog i
   assert.equal(validate(2000), true, 'ArduPilot bounds, resolved from node.paramId');
   assert.equal(validate(2500), false, 'and they are actually applied, not skipped');
 });
+
+/* ---------- editor chrome ---------- */
+
+test('every Firmware placeholder names itself instead of rendering blank', () => {
+  // A `<option value="">` is required: firmware is only mandatory on the Build
+  // tier with a concrete dialect, so blank is a legal saved value and dropping
+  // the option would silently default the field to ArduPilot (§6 forbids an
+  // invented firmware). An *unlabelled* one just looks like a broken row.
+  const dir = path.join(__dirname, '..', '..', 'nodes');
+  const withFirmware = fs.readdirSync(dir)
+    .filter((f) => f.endsWith('.html'))
+    .map((f) => [f, fs.readFileSync(path.join(dir, f), 'utf8')])
+    .filter(([, src]) => /id="node-input-firmware"/.test(src));
+
+  assert.ok(withFirmware.length >= 2, 'more than one node offers a Firmware field');
+  for (const [name, src] of withFirmware) {
+    assert.doesNotMatch(
+      src,
+      /<option value=""><\/option>/,
+      `${name}: Firmware placeholder renders as an empty row`
+    );
+  }
+});
+
+test('the Param dialog carries definition detail on hover, not in a row', () => {
+  // Description, unit and range are reference: read once when picking the
+  // parameter, then in the way for every edit after.
+  assert.doesNotMatch(html, /id="row-param-info"/, 'no standing info row');
+  assert.doesNotMatch(html, /mav-param-info-text/, 'and no orphaned span for it');
+  assert.match(
+    html,
+    /\$\('#node-input-paramId'\)\.attr\('title'/,
+    'the paramId field carries it as hover text'
+  );
+});

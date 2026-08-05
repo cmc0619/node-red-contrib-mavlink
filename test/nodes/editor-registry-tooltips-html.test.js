@@ -86,7 +86,10 @@ test('queue band picker and companion target visibility live once in the resourc
 
 test('Param node titles come from loaded param defs, not baked HTML', () => {
   const html = readHtml('mavlink-param');
-  assert.match(html, /#node-input-paramId'\)\.attr\('title', def\.description\)/);
+  // Composed from the loaded definition — description, then unit and range —
+  // because the dialog carries this on hover rather than in a standing row.
+  assert.match(html, /#node-input-paramId'\)\.attr\('title', parts\.join/);
+  assert.match(html, /parts\.push\(def\.description\)/, 'sourced from the definition');
   // The value field goes through the shared helper, which sets the title on the
   // input *and* its label and maintains the units hint — one mechanism, not a
   // hand-set attribute plus a private units span.

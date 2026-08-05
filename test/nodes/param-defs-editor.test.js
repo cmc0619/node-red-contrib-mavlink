@@ -340,10 +340,13 @@ test('Param definition GET failures clear stale UI and render server and fallbac
     notice: 'stale notice',
   });
   // The panel stays closed until the operator types or focuses; what a
-  // successful load must produce here is the hover text and the info row.
+  // successful load must produce here is the hover text — description, unit
+  // and range ride on `title`, not on a row that stays in the dialog.
   assert.equal(element('#mav-param-results').visible, false);
-  assert.equal(element('#row-param-info').visible, true);
-  assert.equal(element('#node-input-paramId').attrs.title, 'Previously loaded definition.');
+  assert.equal(
+    element('#node-input-paramId').attrs.title,
+    'Previously loaded definition. | Unit: Hz'
+  );
 
   context.loadParamDefsForTest();
   requests[1].reject({ responseJSON: { error: 'holding file is corrupt' } });
@@ -351,7 +354,6 @@ test('Param definition GET failures clear stale UI and render server and fallbac
   assert.equal(element('#mav-param-results').options.length, 0, 'stale hits are cleared');
   assert.equal(element('#mav-param-results').visible, false);
   assert.equal(element('#node-input-paramId').attrs.title, undefined);
-  assert.equal(element('#row-param-info').visible, false);
   assert.equal(element('#row-param-defs-tip').visible, true);
   assert.equal(element('#mav-param-defs-tip-text').label, 'holding file is corrupt');
 
@@ -538,7 +540,12 @@ test('choosing a row fills the field and closes the panel', () => {
 
   assert.equal(element('#node-input-paramId').val(), 'RC1_MIN');
   assert.equal(element('#mav-param-results').visible, false);
-  assert.equal(element('#node-input-paramId').attrs.title, 'Minimum value for RC channel 1');
+  // Everything the operator needs about the parameter rides on hover, so the
+  // dialog does not keep a reference row in front of them after they picked.
+  assert.equal(
+    element('#node-input-paramId').attrs.title,
+    'Minimum value for RC channel 1 | Unit: us'
+  );
 });
 
 test('every row selects its own parameter, not the last one rendered', () => {
