@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__github__pull_request_read",
+      "Bash(npm test)",
+      "Bash(npm test *)",
+      "Bash(npm run lint)",
+      "Bash(npm run lint *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__github__create_pull_request",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); [ \"$(printf '%s' \"$input\" | jq -r '(.tool_input.draft == true)')\" = \"true\" ] && exit 0; jq -n '{hookSpecificOutput:{hookEventName:\"PreToolUse\",permissionDecision:\"deny\",permissionDecisionReason:\"AGENTS.md:57 — PRs are opened as drafts; only the repo owner marks them ready. Re-call mcp__github__create_pull_request with draft: true.\"}}'",
+            "timeout": 10,
+            "statusMessage": "Checking PR draft gate"
+          }
+        ]
+      }
+    ]
+  }
+}

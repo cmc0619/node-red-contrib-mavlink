@@ -145,5 +145,14 @@ vite.config.ts.timestamp-*
 # AI-assistant working files. Planning notes and settings for whatever agent is
 # driving; they are scratch, not documentation, and they go stale the moment the
 # work lands. AGENTS.md is the durable agent-facing file (#106).
-.claude/
+#
+# One exception: .claude/settings.json carries hooks, which are enforcement, not
+# scratch — the draft-PR gate belongs to the repo the same way the lint config
+# does, and sessions run in fresh containers that would otherwise start without
+# it. Personal overrides still go in .claude/settings.local.json, still ignored.
+#
+# Note the glob: git cannot re-include a file whose parent directory is excluded,
+# so this must exclude the directory *contents* (.claude/*), not the directory.
+.claude/*
+!.claude/settings.json
 docs/superpowers/
