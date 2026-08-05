@@ -119,3 +119,59 @@ which is what makes the pass worth doing.
 **Worth deciding once:** hand-regenerate when a dialog settles, or make the
 Puppeteer capture something CI runs. The second only pays off if the pictures
 are load-bearing for users rather than decoration in the README.
+
+---
+
+## Per-target patches in the Fan-out editor
+
+**The gap.** Fan-out replicates one built message across a group, and
+`msg.payload.targets` can patch fields per member — but only from a payload.
+There is no editor surface, so the case that motivates the feature needs a
+function node to express:
+
+> Send one GPS location to Fan-out. Without a per-member offset, every drone in
+> the group is commanded to *the same coordinate*.
+
+That is not a formatting inconvenience. Replicating a `COMMAND_INT` Reposition
+or a `SET_POSITION_TARGET_GLOBAL_INT` verbatim across N vehicles is a set of
+converging trajectories to one point, and the operator who reached for Fan-out
+because it is the simple node is exactly the one who will not think to write a
+function node first.
+
+**What it costs — and why the obvious UI is the wrong one.** The naive version
+is a sysid → JSON table of raw field patches. Three reasons that is not the
+thing to build:
+
+1. Fan-out is the **raw wire plane** (DESIGN.md, "unit conversion belongs to
+   exactly one of two surfaces"). Patches are wire units, so on either global
+   carrier the operator is hand-typing degE7 — `900` to mean 0.00009°. An
+   unvalidated integer box where a typo is a hundred metres is the surface §2
+   exists to keep out of editors.
+2. **A degree offset is not a distance.** 1e-5° of latitude is ≈1.11 m
+   anywhere; 1e-5° of longitude is 1.11 m at the equator and ≈0.56 m at 60° N.
+   A UI offering "offset X/Y" in degE7 gives separation that silently changes
+   with latitude — the spacing tested at the test field is not the spacing
+   flown elsewhere. The useful unit is **metres**, converted against the
+   message's own latitude at build time. That is computation, not a config
+   field, which is what makes this more than an editor change.
+3. That computation already exists. `lib/formation/index.js` has
+   `EARTH_RADIUS_M`, the flat-earth conversion and the `cos(lat) → 0` refusal
+   (`:272-284`). A second implementation inside the Fan-out editor is the
+   duplication this repo keeps deleting.
+
+Note the feature is not position-only — per-member `PARAM_SET` values or
+per-member speeds are the same shape — but position is what carries the hazard,
+and units are what make it hard.
+
+**Before doing it, answer this.** Is the need *"spread a group around a point"*
+or *"nudge any replicated message per member"*? The first is
+`mavlink-formation`, which already takes an anchor and emits per-member
+coordinates — and if that is the real need, the answer is documentation and an
+example, not a new editor surface. The second is genuinely absent: Formation
+only emits Reposition, so there is no way to spread a group using any *other*
+built message.
+
+If it gets built: metres and not degE7, converted through `lib/formation`'s
+existing helpers rather than a second copy, and the table has to make clear
+which member gets which offset — an unlabelled sysid → JSON blob fails the same
+readability test that retired Fan-out's embedded mini-editor.
