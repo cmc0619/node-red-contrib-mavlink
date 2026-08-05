@@ -149,7 +149,7 @@ module.exports = function registerMavlinkPayload(RED) {
             targetComponent: target.compid,
             // Ack attribution (§9): ignore an ack explicitly addressed to a
             // different GCS on a shared link.
-            sourceIds: connectionNode.resolveSourceIds ? connectionNode.resolveSourceIds(identityId) : null,
+            sourceIds: connectionNode.resolveSourceIds(identityId),
             timeoutMs,
             maxRetries,
           });

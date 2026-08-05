@@ -449,6 +449,7 @@ test('concurrency overlaps confirm waits so a straggler does not serialize the f
     peerTable: peerTableStub([peer(1), peer(2)]),
     sends: [],
     send(message, options) { this.sends.push({ message, options }); },
+    resolveSourceIds: () => null,
     subscribe(filter, handler) {
       handlers.push(handler);
       return () => {};
@@ -485,6 +486,7 @@ test('at the default concurrency 1 the second member waits for the first ack', a
     peerTable: peerTableStub([peer(1), peer(2)]),
     sends: [],
     send(message, options) { this.sends.push({ message, options }); },
+    resolveSourceIds: () => null,
     subscribe(filter, handler) {
       handlers.push(handler);
       return () => {};
@@ -559,6 +561,7 @@ test('broadcast confirm matches COMMAND_ACK on sysid AND component (§10)', asyn
     send(message, options) {
       this.sends.push({ message, options });
     },
+    resolveSourceIds: () => null,
     subscribe(filter, handler) {
       handlers.push(handler);
       return () => {};
@@ -628,6 +631,7 @@ test('PARAM_SET echo confirm compares wire values — a clamped value does not c
     peerTable: peerTableStub([peer(5)]),
     sends: [],
     send(message, options) { this.sends.push({ message, options }); },
+    resolveSourceIds: () => null,
     subscribe(filter, handler) {
       handlers.push(handler);
       return () => {};
@@ -677,6 +681,7 @@ test('PARAM_SET echo with a different param_type never confirms — byte-identic
     peerTable: peerTableStub([peer(5)]),
     sends: [],
     send(message, options) { this.sends.push({ message, options }); },
+    resolveSourceIds: () => null,
     subscribe(filter, handler) {
       handlers.push(handler);
       return () => {};
@@ -710,6 +715,7 @@ test('confirm-mode retry resends the member\'s patched message with the confirma
     peerTable: peerTableStub([peer(7)]),
     sends: [],
     send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
+    resolveSourceIds: () => null,
     subscribe(filter, handler) {
       subs.push(handler);
       return () => {};
@@ -811,6 +817,7 @@ test('cancel settles a param-echo wait instead of blocking on its timeout (CodeR
     sends: [],
     send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
     // Never echoes: only the cancel can end this wait.
+    resolveSourceIds: () => null,
     subscribe() { return () => { unsubscribed += 1; }; },
   };
   const controller = new AbortController();
@@ -842,6 +849,7 @@ test('cancel settles a broadcast confirm instead of blocking on its timeout (Cod
     peerTable: peerTableStub([peer(1), peer(2)]),
     sends: [],
     send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
+    resolveSourceIds: () => null,
     subscribe() { return () => { unsubscribed += 1; }; },
   };
   const controller = new AbortController();
@@ -982,6 +990,7 @@ function connectionStub(rows, options = {}) {
       this.sends.push({ message, options: sendOptions });
       if (options.afterSend) options.afterSend(message);
     },
+    resolveSourceIds: () => null,
     subscribe() {
       return () => {};
     },

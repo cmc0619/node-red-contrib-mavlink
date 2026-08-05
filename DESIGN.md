@@ -1436,9 +1436,11 @@ commanded. In-flight members (concurrency > 1) finish and report normally.
 **Ack attribution.** A COMMAND_ACK carries MAVLink 2 `target_system`/`target_component`
 extension fields naming the GCS it answers. On a shared link two stations issuing the same
 MAV_CMD to the same vehicle would otherwise settle each other's waits with the wrong result —
-so AckWaiter and the broadcast confirm ignore an ack *explicitly addressed elsewhere*, resolved
-from the sending identity via `connection.resolveSourceIds()`. Absent fields (MAVLink 1) or 0
-mean unaddressed and pass; a connection stub without the accessor leaves the gate off.
+so AckWaiter and the broadcast confirm share one gate (`ackAddressedTo`, lib/command) that
+ignores an ack *explicitly addressed elsewhere*, resolved from the sending identity via
+`connection.resolveSourceIds()` — part of the connection contract, called unconditionally.
+Absent fields (MAVLink 1) or 0 mean unaddressed and pass; an unresolvable identity yields null
+and leaves the gate off (the send path stays the loud failure).
 
 **Selection** comes from the peer table: all vehicles, an explicit sysid list, or a filter on
 type, firmware, or armed state. Groups resolve at execution, not deploy — a vehicle that went

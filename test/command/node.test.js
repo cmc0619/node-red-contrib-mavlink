@@ -138,6 +138,7 @@ test('Safety preset with confirmed === true proceeds to send the command', async
 test('Async handler contains a throw as a terminal failed status plus done(err)', async () => {
   const conn = {
     // Throws when the AckWaiter tries to subscribe.
+    resolveSourceIds: () => null,
     subscribe() { throw new Error('boom'); },
     send() {},
   };
@@ -591,6 +592,7 @@ function connStubWithInject(vehicleOverride) {
       ? vehicleOverride
       : { targetSystem: 1, targetComponent: 1 },
     send(message, opts) { sent.push({ message, opts }); },
+    resolveSourceIds: () => null,
     subscribe(filter, handler) {
       const entry = { filter, handler };
       subs.push(entry);
@@ -617,6 +619,7 @@ function connStub(vehicleOverride) {
       ? vehicleOverride
       : { targetSystem: 1, targetComponent: 1 },
     send(message, opts) { sent.push({ message, opts }); },
+    resolveSourceIds: () => null,
     subscribe(filter, handler) {
       const entry = { filter, handler };
       subs.push(entry);
@@ -663,6 +666,7 @@ test('a redeploy-cancelled ack wait finishes quietly, not as a command failure (
     vehicle: null,
     // Never answers — the wait can only end by cancellation.
     send() {},
+    resolveSourceIds: () => null,
     subscribe(filter, handler) {
       const entry = { filter, handler };
       subs.push(entry);
