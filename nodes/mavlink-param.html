@@ -88,7 +88,7 @@
         _paramDefs = {};
         _defsNotice = notice;
         _defsLoaded = true;
-        rebuildParamIdDatalist();
+        rebuildParamIndex();
         refreshParamInfo();
       }
 
@@ -133,7 +133,7 @@
           _paramDefs = data.defs || {};
           _defsNotice = data.notice || '';
           _defsLoaded = true;
-          rebuildParamIdDatalist();
+          rebuildParamIndex();
           refreshParamInfo();
         }).fail(function (xhr) {
           if (seq !== _defsSeq) return;
@@ -141,31 +141,119 @@
           _defsNotice = (xhr && xhr.responseJSON && xhr.responseJSON.error) ||
             'Parameter definitions unavailable.';
           _defsLoaded = true;
-          rebuildParamIdDatalist();
+          rebuildParamIndex();
           refreshParamInfo();
         });
       }
 
-      function rebuildParamIdDatalist() {
-        var $list = $('#mav-param-id-list');
-        $list.empty();
-        var ids = Object.keys(_paramDefs).sort();
-        for (var i = 0; i < ids.length; i++) {
-          var id = ids[i];
-          var def = _paramDefs[id];
-          var label = def.description
-            ? id + ' \u2014 ' + def.description.slice(0, 60)
-            : id;
-          var $opt = $('<option></option>').val(id).text(label);
-          if (def.description) $opt.attr('title', def.description);
-          $list.append($opt);
-        }
-        var hasDefs = ids.length > 0;
-        $('#node-input-paramId').attr('list', hasDefs ? 'mav-param-id-list' : null);
+      /** Ids in display order, rebuilt whenever definitions change. */
+      var _paramIds = [];
+      /** Ids currently on screen, so keyboard selection has something to index. */
+      var _hits = [];
+      var _hitIndex = -1;
+      /**
+       * The query those hits came from. Arrow keys re-render, and re-reading
+       * the input would silently re-search — the same string in the live
+       * editor, but it makes the panel depend on the input rather than on what
+       * it last drew.
+       */
+      var _hitQuery = '';
+
+      var MAX_HITS = 50;
+
+      function rebuildParamIndex() {
+        _paramIds = Object.keys(_paramDefs).sort();
+        var hasDefs = _paramIds.length > 0;
         $('#row-param-defs-tip').toggle(!hasDefs && _defsLoaded && !!_defsNotice);
         if (!hasDefs && _defsLoaded && _defsNotice) {
           $('#mav-param-defs-tip-text').text(_defsNotice);
         }
+        hideParamResults();
+      }
+
+      /**
+       * Rank matches for `query`. A datalist could only match the start of the
+       * name, so finding a parameter meant already knowing what it was called;
+       * description text is searched here precisely so "minimum" finds RC1_MIN.
+       * Exact and prefix name matches still sort above body text.
+       */
+      function searchParams(query) {
+        var q = String(query || '').trim().toUpperCase();
+        var exact = [];
+        var prefix = [];
+        var contains = [];
+        var described = [];
+        for (var i = 0; i < _paramIds.length; i++) {
+          var id = _paramIds[i];
+          if (!q) { prefix.push(id); if (prefix.length >= MAX_HITS) break; continue; }
+          if (id === q) { exact.push(id); continue; }
+          var at = id.indexOf(q);
+          if (at === 0) { prefix.push(id); continue; }
+          if (at > 0) { contains.push(id); continue; }
+          var def = _paramDefs[id];
+          var text = def && def.description ? def.description.toUpperCase() : '';
+          if (text.indexOf(q) !== -1) described.push(id);
+        }
+        return exact.concat(prefix, contains, described).slice(0, MAX_HITS);
+      }
+
+      function hideParamResults() {
+        _hits = [];
+        _hitIndex = -1;
+        _hitQuery = '';
+        $('#mav-param-results').empty().toggle(false);
+      }
+
+      function chooseParam(id) {
+        $('#node-input-paramId').val(id);
+        hideParamResults();
+        refreshParamInfo();
+      }
+
+      function renderParamResults(query, keepIndex) {
+        if (!_paramIds.length) return hideParamResults();
+        _hitQuery = String(query || '');
+        _hits = searchParams(_hitQuery);
+        _hitIndex = _hits.length
+          ? Math.max(0, Math.min(keepIndex === undefined ? 0 : keepIndex, _hits.length - 1))
+          : -1;
+
+        var $panel = $('#mav-param-results');
+        $panel.empty();
+        for (var i = 0; i < _hits.length; i++) {
+          var id = _hits[i];
+          var def = _paramDefs[id] || {};
+          var detail = def.description || '';
+          if (def.unit) detail = detail ? detail + '  \u00b7  ' + def.unit : def.unit;
+
+          var $row = $('<div></div>')
+            .attr('class', 'mav-param-hit' + (i === _hitIndex ? ' mav-param-hit-active' : ''))
+            .attr('data-param-id', id);
+          $row.append($('<div></div>').attr('class', 'mav-param-hit-id').text(id));
+          if (detail) {
+            $row.append($('<div></div>').attr('class', 'mav-param-hit-detail').text(detail));
+          }
+          // `id` is captured per row; a shared loop variable would make every
+          // row select the last one.
+          $row.on('mousedown', (function (chosen) {
+            return function (event) {
+              // mousedown, not click: the input's blur would tear the panel
+              // down before a click could land.
+              if (event && event.preventDefault) event.preventDefault();
+              chooseParam(chosen);
+            };
+          }(id)));
+          $panel.append($row);
+        }
+        $panel.toggle(_hits.length > 0);
+      }
+
+      function moveParamSelection(delta) {
+        if (!_hits.length) return;
+        // Re-render rather than track nodes: the panel is capped at MAX_HITS,
+        // so the active row stays a function of state instead of history.
+        var next = (_hitIndex + delta + _hits.length) % _hits.length;
+        renderParamResults(_hitQuery, next);
       }
 
       function refreshParamInfo() {
@@ -256,6 +344,21 @@
       RED.mavlink.reloadTargetCompId(node);
 
       $('#node-input-paramId').on('input change', refreshParamInfo);
+      $('#node-input-paramId').on('input focus', function () {
+        renderParamResults($('#node-input-paramId').val());
+      });
+      $('#node-input-paramId').on('blur', hideParamResults);
+      $('#node-input-paramId').on('keydown', function (event) {
+        var key = event && event.key;
+        if (key === 'ArrowDown') { moveParamSelection(1); }
+        else if (key === 'ArrowUp') { moveParamSelection(-1); }
+        else if (key === 'Enter' && _hitIndex >= 0) { chooseParam(_hits[_hitIndex]); }
+        else if (key === 'Escape') { hideParamResults(); }
+        else { return; }
+        // Enter would otherwise submit the edit dialog, and the arrows would
+        // move the caret instead of the selection.
+        if (event.preventDefault) event.preventDefault();
+      });
       $('#node-input-action').on('change', refreshParamInfo);
 
       /* Initial state. */
@@ -267,6 +370,40 @@
 </script>
 
 <script type="text/html" data-template-name="mavlink-param">
+  <style>
+    /* Colours come from Node-RED's theme variables so the panel follows the
+       editor's light and dark themes instead of pinning its own palette. */
+    .mav-param-results {
+      max-height: 260px;
+      overflow-y: auto;
+      border: 1px solid var(--red-ui-form-input-border-color, #ccc);
+      border-radius: 3px;
+      background: var(--red-ui-form-input-background, #fff);
+      margin: 2px 0 0 107px;
+      width: 70%;
+    }
+    .mav-param-hit {
+      padding: 4px 8px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--red-ui-secondary-border-color, #eee);
+    }
+    .mav-param-hit:last-child { border-bottom: none; }
+    .mav-param-hit:hover,
+    .mav-param-hit-active {
+      background: var(--red-ui-list-item-background-hover, #efefef);
+    }
+    .mav-param-hit-id {
+      font-family: monospace;
+      font-size: 0.9em;
+    }
+    .mav-param-hit-detail {
+      font-size: 0.8em;
+      color: var(--red-ui-secondary-text-color, #888);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  </style>
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and echo-confirm</option><option value="collect">Request list and collect</option></select></div>
   <div class="form-row" id="row-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
@@ -279,8 +416,16 @@
   <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row">
     <label for="node-input-paramId">Param id</label>
-    <input type="text" id="node-input-paramId" maxlength="16" list="mav-param-id-list" placeholder="e.g. FS_GCS_ENABLE">
-    <datalist id="mav-param-id-list"></datalist>
+    <input type="text" id="node-input-paramId" maxlength="16" autocomplete="off"
+           placeholder="search name or description, e.g. minimum">
+    <!--
+      A results panel, not a datalist: a datalist can only match the start of
+      the name, so you had to know the parameter was called RC1_MIN before you
+      could find it. This searches descriptions too, and shows units. Typing a
+      name that is in no list still works — Lua scripts and custom builds
+      declare parameters no metadata file has ever heard of.
+    -->
+    <div id="mav-param-results" class="mav-param-results" style="display:none"></div>
   </div>
   <div class="form-row" id="row-param-info" style="display:none">
     <label>&nbsp;</label>
@@ -305,6 +450,19 @@
   <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — pick a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Send-as</b> identity stamps the source address.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). For GCS/custom identities, fill target sysid/compid or leave blank to inherit the profile default.</p>
   <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast.</p>
-  <p>When the flow is deployed and its Vehicle Profile has downloaded parameter definitions, the <b>Param id</b> field becomes a searchable datalist, and the definition's text appears as hover help on both the id and the value. Set a <b>Param defs URL</b> and use <b>Update</b> in the Vehicle Profile editor to download them. When definitions are unavailable the field says why, under the input.</p>
+  <p><b>Param id</b> searches shipped parameter definitions — type any part of a
+  <i>name or description</i> and pick from the results. "minimum" finds
+  <code>RC1_MIN</code>; you do not have to know the name first. Each result shows
+  its description and units, arrow keys and Enter select, and the definition's
+  text becomes hover help on both the id and the value. A name that is in no
+  list still works: Lua scripts and custom builds declare parameters no metadata
+  file has heard of.</p>
+  <p>Definitions ship with this package for ArduPilot (all six vehicle types)
+  and PX4, chosen by the Vehicle Profile's <b>Firmware</b> and <b>Vehicle</b> —
+  the same id differs between stacks, so <code>RC1_MIN</code> is microseconds on
+  PX4 and PWM on ArduPilot. A Vehicle Profile that has downloaded its own
+  definitions overrides the shipped ones, since that download came from the
+  firmware you are actually flying. When nothing can be offered, the field says
+  why, under the input.</p>
   <p>Three source formats are read, sniffed from the document itself rather than from its <code>Content-Type</code>: ArduPilot's <code>apm.pdef.json</code> (objects keyed by param id), PX4's <code>parameters.json</code> (a <code>parameters</code> array carrying <code>name</code> inside each entry), and PX4's <code>parameters.xml</code> (<code>&lt;parameter&gt;</code> elements inside <code>&lt;group&gt;</code>). For PX4 use <code>https://artifacts.px4.io/Firmware/_general/parameters.xml</code> — the <code>.json</code> is published only as an <code>.xz</code> archive, which is refused by name rather than parsed.</p>
 </script>

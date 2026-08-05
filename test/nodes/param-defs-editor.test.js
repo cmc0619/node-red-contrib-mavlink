@@ -233,15 +233,17 @@ test('Param definition GET failures clear stale UI and render server and fallbac
     },
     notice: 'stale notice',
   });
-  assert.equal(element('#mav-param-id-list').options.length, 1);
+  // The panel stays closed until the operator types or focuses; what a
+  // successful load must produce here is the hover text and the info row.
+  assert.equal(element('#mav-param-results').visible, false);
   assert.equal(element('#row-param-info').visible, true);
   assert.equal(element('#node-input-paramId').attrs.title, 'Previously loaded definition.');
 
   context.loadParamDefsForTest();
   requests[1].reject({ responseJSON: { error: 'holding file is corrupt' } });
 
-  assert.equal(element('#mav-param-id-list').options.length, 0);
-  assert.equal(element('#node-input-paramId').attrs.list, undefined);
+  assert.equal(element('#mav-param-results').options.length, 0, 'stale hits are cleared');
+  assert.equal(element('#mav-param-results').visible, false);
   assert.equal(element('#node-input-paramId').attrs.title, undefined);
   assert.equal(element('#row-param-info').visible, false);
   assert.equal(element('#row-param-defs-tip').visible, true);
@@ -276,7 +278,10 @@ test('Param definition loader explains every path on which it does not ask', () 
       return elements.get(selector);
     }
     function $(selector) {
-      if (selector === '<option></option>') return new FakeElement();
+      // Any tag string creates a fresh element: the results panel builds
+      // its own rows, and returning a shared stub would make every row the
+      // same node.
+      if (selector.charAt(0) === '<') return new FakeElement();
       return element(selector);
     }
     $.getJSON = (url, query, success) => {
@@ -325,4 +330,163 @@ test('Param definition loader explains every path on which it does not ask', () 
     assert.match(element('#mav-param-defs-tip-text').label, expected, `${label}: says why`);
     assert.equal(element('#node-input-paramId').attrs.list, undefined, `${label}: no stale datalist`);
   }
+});
+
+/**
+ * The results panel. A datalist could only match the *start of the name*, so
+ * finding a parameter meant already knowing what it was called — the exact
+ * problem a seeded 6827-entry list makes worse, not better.
+ */
+function mountParamPanel(defs, initialValue) {
+  const start = paramHtml.indexOf('var _paramDefs = {};');
+  const end = paramHtml.indexOf('/* Reload defs when tier-influencing fields change. */', start);
+  assert.ok(start >= 0 && end > start, 'Param definition loader is present');
+
+  const values = {
+    '#node-input-delivery': 'build',
+    '#node-input-dialect': '__vehicle',
+    '#node-input-vehicle': 'profile-1',
+    '#node-input-paramId': initialValue || '',
+    '#node-input-action': 'read',
+  };
+  const elements = new Map();
+  const requests = [];
+  function element(selector) {
+    if (!elements.has(selector)) elements.set(selector, new FakeElement(values[selector] || ''));
+    return elements.get(selector);
+  }
+  function $(selector) {
+    if (selector.charAt(0) === '<') return new FakeElement();
+    return element(selector);
+  }
+  $.getJSON = (url, query, success) => {
+    const request = new FakeDeferred({ url, query });
+    request.doneHandler = success;
+    requests.push(request);
+    return request;
+  };
+
+  const context = {
+    $,
+    node: {},
+    RED: {
+      mavlink: { adminApiUrl: (v) => v, enumOptionLabel: (e) => `${e.label} (${e.value})` },
+      nodes: { node: (id) => (id === 'profile-1' ? { dialect: 'ardupilotmega' } : null) },
+    },
+  };
+  vm.runInNewContext(
+    `${paramHtml.slice(start, end)}
+     this.loadParamDefsForTest = loadParamDefs;
+     this.renderForTest = renderParamResults;
+     this.moveForTest = moveParamSelection;
+     this.hitsForTest = function () { return _hits.slice(); };
+     this.hitIndexForTest = function () { return _hitIndex; };`,
+    context
+  );
+  context.loadParamDefsForTest();
+  requests[0].resolve({ defs });
+
+  /** Ids currently rendered, read off the panel's own rows. */
+  const rendered = () => element('#mav-param-results').options
+    .map((row) => row.attrs['data-param-id']);
+
+  return { context, element, rendered };
+}
+
+const PANEL_DEFS = {
+  RC1_MIN: { description: 'Minimum value for RC channel 1', unit: 'us' },
+  RC1_MAX: { description: 'Maximum value for RC channel 1', unit: 'us' },
+  BAT_V_EMPTY: { description: 'Empty cell voltage', unit: 'V' },
+  ATC_RAT_RLL_P: { description: 'Roll axis rate controller P gain' },
+};
+
+test('the results panel searches descriptions, not just the start of the name', () => {
+  const { context, rendered } = mountParamPanel(PANEL_DEFS);
+
+  context.renderForTest('minimum');
+  // No parameter is *called* "minimum" — the old datalist could never have
+  // surfaced this, which is the entire reason the panel exists.
+  assert.deepEqual(rendered(), ['RC1_MIN']);
+
+  context.renderForTest('voltage');
+  assert.deepEqual(rendered(), ['BAT_V_EMPTY']);
+});
+
+test('an exact or prefix name match outranks a description match', () => {
+  const { context, rendered } = mountParamPanel(PANEL_DEFS);
+
+  context.renderForTest('RC1_');
+  assert.deepEqual(rendered(), ['RC1_MAX', 'RC1_MIN'], 'prefix hits, in id order');
+
+  // "RC channel 1" appears in both descriptions, so both match — but the one
+  // whose *name* matches has to come first.
+  context.renderForTest('RC1_MAX');
+  assert.equal(rendered()[0], 'RC1_MAX');
+});
+
+test('search is case-insensitive and a blank query lists everything', () => {
+  const { context, rendered } = mountParamPanel(PANEL_DEFS);
+
+  context.renderForTest('bat_v');
+  assert.deepEqual(rendered(), ['BAT_V_EMPTY']);
+
+  context.renderForTest('');
+  assert.equal(rendered().length, Object.keys(PANEL_DEFS).length);
+});
+
+test('a row carries the id and a detail line with units', () => {
+  const { context, element } = mountParamPanel(PANEL_DEFS);
+  context.renderForTest('RC1_MIN');
+
+  const row = element('#mav-param-results').options[0];
+  assert.equal(row.options[0].label, 'RC1_MIN');
+  assert.match(row.options[1].label, /Minimum value for RC channel 1/);
+  assert.match(row.options[1].label, /us/, 'units ride the detail line');
+});
+
+test('choosing a row fills the field and closes the panel', () => {
+  const { context, element } = mountParamPanel(PANEL_DEFS);
+  context.renderForTest('minimum');
+
+  const row = element('#mav-param-results').options[0];
+  // mousedown, not click: the input's blur fires first and would otherwise
+  // tear the panel down before a click could land.
+  row.handlers.mousedown({ preventDefault() {} });
+
+  assert.equal(element('#node-input-paramId').val(), 'RC1_MIN');
+  assert.equal(element('#mav-param-results').visible, false);
+  assert.equal(element('#node-input-paramId').attrs.title, 'Minimum value for RC channel 1');
+});
+
+test('every row selects its own parameter, not the last one rendered', () => {
+  // The classic closure-over-loop-variable bug: one shared `id` would make
+  // each row choose whatever the loop finished on.
+  const { context, element } = mountParamPanel(PANEL_DEFS);
+  context.renderForTest('RC1_');
+
+  element('#mav-param-results').options[1].handlers.mousedown({ preventDefault() {} });
+  assert.equal(element('#node-input-paramId').val(), 'RC1_MIN');
+});
+
+test('arrow keys move the selection and wrap', () => {
+  const { context } = mountParamPanel(PANEL_DEFS);
+  context.renderForTest('RC1_');
+  assert.equal(context.hitIndexForTest(), 0);
+
+  context.moveForTest(1);
+  assert.equal(context.hitIndexForTest(), 1);
+  context.moveForTest(1);
+  assert.equal(context.hitIndexForTest(), 0, 'wraps past the end');
+  context.moveForTest(-1);
+  assert.equal(context.hitIndexForTest(), 1, 'and wraps backwards');
+});
+
+test('the panel is capped so a full seed cannot render 6827 rows', () => {
+  const many = {};
+  for (let i = 0; i < 400; i += 1) {
+    many[`P_${String(i).padStart(4, '0')}`] = { description: 'bulk' };
+  }
+  const { context, rendered } = mountParamPanel(many);
+  context.renderForTest('');
+  assert.equal(rendered().length, 50);
 });

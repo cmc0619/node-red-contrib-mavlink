@@ -12,6 +12,27 @@ see AGENTS.md "no migrations, no compatibility shims".
 
 ### Added
 
+- **Parameter definitions now ship with the package.** 30,938 definitions
+  across seven targets — ArduPilot's six vehicle documents and PX4's — as a
+  737 KB gzipped seed alongside the existing dialect seed, taking the package
+  from 516 KB to 1.2 MB. The Param id field is populated out of the box, with
+  no manual download; the Build tier, which names no Vehicle Profile and could
+  previously reach no definitions at all, is answered from the seed. Keyed on
+  the profile's firmware and vehicle family, because the same id genuinely
+  differs between stacks — `RC1_MIN` is microseconds 800–1500 on PX4 and PWM
+  800–2200 on ArduPilot. A profile that has downloaded its own definitions
+  still overrides the seed id by id; a corrupt download is now reported *and*
+  falls back to the seed rather than costing the operator both.
+  Regenerate with `npm run generate-param-seed`.
+- **Param id is now searched, not just autocompleted.** The datalist is
+  replaced by a results panel that matches on **description as well as name**,
+  so "minimum" finds `RC1_MIN` — previously you had to know the name before
+  you could find it, which a 6827-entry list makes worse rather than better.
+  Exact and prefix name matches rank above description matches, each row shows
+  the description and units, and arrow keys plus Enter select. Typing a name
+  in no list still works: Lua scripts and custom builds declare parameters no
+  metadata file has heard of.
+
 - **PX4 parameter definitions now work from the upstream URL.** Point Param
   defs URL at `https://artifacts.px4.io/Firmware/_general/parameters.xml` and
   Update loads all 1836 definitions. PX4 publishes the same parameters twice —
