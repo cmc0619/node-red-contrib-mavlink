@@ -166,7 +166,58 @@
         $('#row-identity').toggle(!isBuild);
         $('#row-timeout').toggle(!isBuild);
 
-        restoreParamTypeOptions($('#node-input-paramType'));
+        /* role-driven rows: companion hides both target rows */
+        RED.mavlink.applyCompanionTargetVisibility({
+          isBuild: isBuild,
+          identityId: $('#node-input-identity').val() || '',
+          targetSystemRow: '#row-targetSystem',
+          targetComponentRow: '#row-targetComponent',
+        });
+      }
+
+      /* ── Param definition catalog ─────────────────────────────── */
+      var _paramDefs = {};
+      var _defsLoaded = false;
+      var _defsNotice = '';
+
+      /**
+       * Show the one field that names the parameter, and keep the other
+       * honest.
+       *
+       * `param_index` -1 means "use param_id", so name-mode writes -1 into the
+       * hidden field rather than leaving whatever index was last typed —
+       * a stale index would win over the name on the wire.
+       */
+      function applyLookupMode() {
+        var byIndex = $('input[name=node-input-lookup]:checked').val() === 'index';
+        $('#row-paramId').toggle(!byIndex);
+        $('#row-paramIndex').toggle(byIndex);
+        if (!byIndex) {
+          $('#node-input-paramIndex').val(-1);
+          hideParamResults();
+        }
+      }
+
+      /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
+      function refreshVisibility() {
+        var delivery = $('#node-input-delivery').val() || 'build';
+        var isBuild = (delivery === 'build');
+        var dialect = $('#node-input-dialect').val() || node.dialect || '';
+
+        RED.mavlink.applyBuildTierRowVisibility({
+          isBuild: isBuild,
+          dialect: dialect,
+          dialectRow: '#row-dialect',
+          vehicleRow: '#row-vehicle',
+          firmwareRow: '#row-firmware',
+          connectionRow: '#row-connection'
+        });
+        /* Param-owned wire rows stay local */
+        $('#row-identity').toggle(!isBuild);
+        $('#row-timeout').toggle(!isBuild);
+
+        RED.mavlink.fillEnumSelect($('#node-input-paramType'), RED.mavlink.PARAM_TYPE_OPTIONS,
+          { valueKey: 'name', saved: node.paramType, triggerChange: false });
         applyLookupMode();
 
         /* role-driven rows: companion hides both target rows */
@@ -474,16 +525,20 @@
         // Narrowing the option list needs no new save path: the field is read
         // exactly as every other field is.
         var $type = $('#node-input-paramType');
-        if (def && def.type) {
-          $type.empty()
-            .append($('<option></option>').val(def.type).text(paramTypeLabel(def.type)))
-            .val(def.type)
-            .attr('title', 'Published by the firmware for this parameter.');
-        } else {
-          restoreParamTypeOptions($type);
-          $type.attr('title',
-            'This firmware publishes no type for its parameters — pick the one the parameter actually stores.');
-        }
+        var published = def && def.type;
+        // Option values are the MAV_PARAM_TYPE *name*, which is what the node
+        // saves and the runtime reads; `saved` is passed so the narrowed list
+        // does not have the previous pick appended back as a missing option.
+        RED.mavlink.fillEnumSelect(
+          $type,
+          published
+            ? RED.mavlink.PARAM_TYPE_OPTIONS.filter(function (o) { return o.name === def.type; })
+            : RED.mavlink.PARAM_TYPE_OPTIONS,
+          { valueKey: 'name', saved: published ? def.type : $type.val(), triggerChange: false }
+        );
+        $type.attr('title', published
+          ? 'Published by the firmware for this parameter.'
+          : 'This firmware publishes no type for its parameters — pick the one the parameter actually stores.');
 
         refreshValueField(def);
       }
@@ -666,6 +721,12 @@
 
       /* Initial state. */
       RED.mavlink.refreshIdentitySelect(node);
+      // Once, not per redraw: refreshVisibility runs on every field change, and
+      // refilling here would reset a Type the definition had narrowed to one
+      // published option.
+      RED.mavlink.fillEnumSelect($('#node-input-paramType'), RED.mavlink.PARAM_TYPE_OPTIONS,
+        { valueKey: 'name', saved: node.paramType, triggerChange: false });
+      applyLookupMode();
       refreshVisibility();
       loadParamDefs();
     }

@@ -986,3 +986,35 @@ test('validateUint8 keeps its own name and bounds through the shared range check
   assert.match(String(id(0)), /between 1 and 255/, 'a source id may not be 0');
   assert.match(String(id(256)), /between 1 and 255/);
 });
+
+// ── PARAM_TYPE_OPTIONS ───────────────────────────────────────────────────────
+
+test('PARAM_TYPE_OPTIONS mirrors the codec table it copies', () => {
+  const { RED } = loadResource();
+  const { PARAM_TYPES } = require('../../lib/codec/param-union');
+
+  // Same set, same numbers. The editor copy exists only because browser HTML
+  // cannot require() the module; drifting from it would offer a type the codec
+  // refuses to encode, or hide one it accepts.
+  const fromCodec = Object.entries(PARAM_TYPES)
+    .map(([value, info]) => ({ name: info.name, value: Number(value) }))
+    .sort((a, b) => a.value - b.value);
+  // `plain` first: the options are built inside the VM realm, so a structural
+  // comparison against Node-side objects fails on prototype identity alone.
+  const fromEditor = plain(RED.mavlink.PARAM_TYPE_OPTIONS)
+    .map((o) => ({ name: o.name, value: o.value }))
+    .sort((a, b) => a.value - b.value);
+
+  assert.deepEqual(fromEditor, fromCodec);
+});
+
+test('PARAM_TYPE_OPTIONS omits the widths the codec cannot encode', () => {
+  const { RED } = loadResource();
+  // MAV_PARAM_TYPE also has REAL64 / INT64 / UINT64. Offering them would offer
+  // a choice that fails at send.
+  const names = RED.mavlink.PARAM_TYPE_OPTIONS.map((o) => o.name);
+  for (const absent of ['MAV_PARAM_TYPE_REAL64', 'MAV_PARAM_TYPE_INT64', 'MAV_PARAM_TYPE_UINT64']) {
+    assert.equal(names.includes(absent), false, `${absent} is not encodable`);
+  }
+  assert.equal(names[0], 'MAV_PARAM_TYPE_REAL32', 'the field default leads the list');
+});

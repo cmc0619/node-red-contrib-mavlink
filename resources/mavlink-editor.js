@@ -84,6 +84,25 @@
   };
 
   /**
+   * Param value types the codec can encode, for the Param editor's Type field.
+   * Editor-side copy of `lib/codec/param-union.js` `PARAM_TYPES` — browser HTML
+   * cannot require() the Node module. Pinned against that table by test.
+   *
+   * A deliberate subset of `MAV_PARAM_TYPE`: the enum also has REAL64, INT64
+   * and UINT64, which the codec does not encode, so offering them would offer a
+   * choice that fails at send. REAL32 leads because it is the field's default.
+   */
+  RED.mavlink.PARAM_TYPE_OPTIONS = [
+    { name: 'MAV_PARAM_TYPE_REAL32', value: 9, label: 'REAL32 (9)' },
+    { name: 'MAV_PARAM_TYPE_UINT8', value: 1, label: 'UINT8 (1)' },
+    { name: 'MAV_PARAM_TYPE_INT8', value: 2, label: 'INT8 (2)' },
+    { name: 'MAV_PARAM_TYPE_UINT16', value: 3, label: 'UINT16 (3)' },
+    { name: 'MAV_PARAM_TYPE_INT16', value: 4, label: 'INT16 (4)' },
+    { name: 'MAV_PARAM_TYPE_UINT32', value: 5, label: 'UINT32 (5)' },
+    { name: 'MAV_PARAM_TYPE_INT32', value: 6, label: 'INT32 (6)' },
+  ];
+
+  /**
    * Outbound queue band picker options (DESIGN.md §7). Editor-side copy of
    * `lib/connection/bands` names — browser HTML cannot require() the module.
    * Labels are Title Case (`Emergency (0)`), not screaming-snake enum names.
