@@ -27,6 +27,11 @@ const {
   readParamDefs,
   updateParamDefs,
 } = require('../lib/param/defs');
+const {
+  defsFor: seedDefsFor,
+  seedStamp,
+  seedError,
+} = require('../lib/param/seed');
 const { BAND } = require('../lib/connection/bands');
 const {
   makeStatusRecord,
@@ -55,22 +60,65 @@ module.exports = function registerMavlinkParam(RED) {
       async (req, res) => {
         const profileId = typeof req.query.vehicle === 'string'
           ? req.query.vehicle.trim() : '';
-        if (!profileId) {
+
+        // Firmware and vehicle come either from the named profile or, on the
+        // Build tier with an explicit dialect, straight off the query — that
+        // tier has no profile to name, which is why it used to be a dead end.
+        let firmware = typeof req.query.firmware === 'string' ? req.query.firmware.trim() : '';
+        let vehicleFamily = '';
+        if (profileId) {
+          const profile = RED.nodes.getNode(profileId);
+          if (profile) {
+            firmware = firmware || profile.firmware || '';
+            vehicleFamily = profile.vehicleFamily || '';
+          }
+        }
+
+        const seeded = seedDefsFor({ firmware, vehicleFamily });
+
+        /**
+         * The seed is the baseline; a profile's downloaded definitions override
+         * it id by id, because that download came from the firmware actually
+         * being flown while the seed is a snapshot of whenever it was built.
+         */
+        function merged(downloaded) {
+          const out = new Map(seeded);
+          for (const [id, def] of downloaded) out.set(id, def);
+          return out;
+        }
+
+        function answer(map, source) {
+          if (map.size > 0) {
+            return res.json({ defs: Object.fromEntries(map), source, stamp: seedStamp() });
+          }
           return res.json({
             defs: {},
-            notice: 'Parameter definitions require a Vehicle Profile holding file.',
+            notice: seedError()
+              || (firmware
+                ? `No parameter definitions for firmware "${firmware}".`
+                : 'Pick a firmware, or a Vehicle Profile, to load parameter definitions.'),
           });
         }
+
+        if (!profileId) return answer(seeded, 'seed');
+
         try {
-          const map = await readParamDefs(RED.settings.userDir, profileId);
-          if (map.size === 0) {
+          const downloaded = await readParamDefs(RED.settings.userDir, profileId);
+          return answer(
+            downloaded.size ? merged(downloaded) : seeded,
+            downloaded.size ? 'profile' : 'seed'
+          );
+        } catch (err) {
+          // A corrupt holding file is the operator's own download and must be
+          // reported — but it should not also cost them the shipped baseline.
+          if (seeded.size > 0) {
             return res.json({
-              defs: {},
-              notice: 'No downloaded parameter definitions. Use Update in the Vehicle Profile editor.',
+              defs: Object.fromEntries(seeded),
+              source: 'seed',
+              stamp: seedStamp(),
+              notice: `Downloaded definitions are unreadable, showing the shipped seed: ${err.message}`,
             });
           }
-          return res.json({ defs: Object.fromEntries(map) });
-        } catch (err) {
           return res.status(500).json({
             defs: {},
             error: `Local parameter definitions are invalid: ${err.message}`,

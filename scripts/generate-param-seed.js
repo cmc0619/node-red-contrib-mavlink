@@ -11,19 +11,18 @@
  *   seed/params-active.json                    → { "file": "param-defs-…seed.gz", … }
  *   seed/param-defs-YYYY-MM-DD-<hash>.seed.gz  → gunzip → JSON (see below)
  *
- * Upstream publishes per-vehicle documents for ArduPilot and one for PX4, and
- * the six ArduPilot vehicles overlap almost completely — measured, 6649 of 6827
- * parameter ids carry a byte-identical definition in every vehicle that has
- * them, and only 178 diverge. Shipping the six separately costs ~889 KB
- * gzipped; hoisting the identical ones into `shared` and keeping only real
- * divergence per vehicle costs ~215 KB. That fold is the whole reason a seed
- * covering every ArduPilot vehicle fits in the package at all.
+ * Upstream publishes one document per ArduPilot vehicle and one for PX4, and
+ * each is stored here exactly as parsed. The six ArduPilot vehicles do overlap
+ * almost completely — 6649 of 6827 ids are byte-identical across every vehicle
+ * that has them — but hoisting the common ones into a shared table to save
+ * ~670 KB gzipped buys nothing at this package size and costs a fold, an
+ * unfold, and two shapes to reason about. Whole maps, no cleverness.
  *
  *   {
  *     stamp, generatedAt, sources: [{firmware, vehicle, url, bytes}],
  *     firmwares: {
- *       ardupilot: { shared: {ID: def}, vehicles: {ArduCopter: {ID: def}} },
- *       px4:       { shared: {ID: def}, vehicles: {} }
+ *       ardupilot: { vehicles: {ArduCopter: {ID: def}, ArduPlane: {…}, …} },
+ *       px4:       { vehicles: {default: {ID: def}} }
  *     }
  *   }
  *
@@ -91,46 +90,6 @@ function normalize(text) {
   return parsePdefJson(document);
 }
 
-/**
- * Hoist definitions that are identical everywhere into `shared`, leaving only
- * genuine per-vehicle divergence behind.
- *
- * @param {Map<string, Map<string, object>>} byVehicle vehicle → (id → def)
- * @returns {{shared: object, vehicles: object, stats: object}}
- */
-function fold(byVehicle) {
-  /** @type {Map<string, Set<string>>} id → distinct JSON encodings */
-  const encodings = new Map();
-  for (const perVehicle of byVehicle.values()) {
-    for (const [id, def] of perVehicle) {
-      if (!encodings.has(id)) encodings.set(id, new Set());
-      encodings.get(id).add(JSON.stringify(def));
-    }
-  }
-
-  const shared = {};
-  const vehicles = {};
-  let divergent = 0;
-  for (const [id, distinct] of encodings) {
-    if (distinct.size === 1) {
-      shared[id] = JSON.parse([...distinct][0]);
-      continue;
-    }
-    divergent += 1;
-    for (const [vehicle, perVehicle] of byVehicle) {
-      if (!perVehicle.has(id)) continue;
-      vehicles[vehicle] = vehicles[vehicle] || {};
-      vehicles[vehicle][id] = perVehicle.get(id);
-    }
-  }
-
-  return {
-    shared,
-    vehicles,
-    stats: { ids: encodings.size, shared: encodings.size - divergent, divergent },
-  };
-}
-
 async function main() {
   const byFirmware = new Map();
   const sources = [];
@@ -155,11 +114,12 @@ async function main() {
 
   const firmwares = {};
   for (const [firmware, byVehicle] of byFirmware) {
-    const folded = fold(byVehicle);
-    firmwares[firmware] = { shared: folded.shared, vehicles: folded.vehicles };
+    const vehicles = {};
+    for (const [vehicle, map] of byVehicle) vehicles[vehicle] = Object.fromEntries(map);
+    firmwares[firmware] = { vehicles };
     process.stderr.write(
-      `${firmware}: ${folded.stats.ids} ids, ${folded.stats.shared} shared, `
-      + `${folded.stats.divergent} divergent\n`
+      `${firmware}: ${Object.keys(vehicles).length} vehicle(s), `
+      + `${Object.values(vehicles).reduce((n, v) => n + Object.keys(v).length, 0)} definitions\n`
     );
   }
 

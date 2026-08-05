@@ -31,7 +31,7 @@ function tempUserDir(t) {
   return dir;
 }
 
-function captureRoutes(userDir) {
+function captureRoutes(userDir, nodesById = {}) {
   const routes = new Map();
   const permissions = [];
   const RED = {
@@ -46,7 +46,7 @@ function captureRoutes(userDir) {
         node.error = () => {};
       },
       registerType(name, ctor) { this.types[name] = ctor; },
-      getNode() { return null; },
+      getNode(id) { return nodesById[id] || null; },
     },
     httpAdmin: {
       get(route, auth, handler) { routes.set(`GET ${route}`, { auth, handler }); },
@@ -112,10 +112,12 @@ test('GET reads a profile holding file without fetching or requiring a deployed 
   assert.equal(res.body.url, undefined);
 });
 
-test('GET returns empty definitions with an Update notice when no holding file exists', async (t) => {
+test('GET says what is missing when there is no profile, no firmware and no seed to fall back on', async (t) => {
   const { routes } = captureRoutes(tempUserDir(t));
   const res = mockRes();
 
+  // No holding file, and getNode resolves nothing — so no firmware is known
+  // and the seed cannot be keyed. The answer has to name the missing piece.
   await routes.get('GET /mavlink/param/defs').handler(
     { query: { vehicle: 'profile-missing' } },
     res
@@ -123,7 +125,7 @@ test('GET returns empty definitions with an Update notice when no holding file e
 
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.body.defs, {});
-  assert.match(res.body.notice, /Update.*Vehicle Profile/i);
+  assert.match(res.body.notice, /firmware|Vehicle Profile/i);
 });
 
 test('GET returns an error response for a corrupt local holding file', async (t) => {
@@ -241,4 +243,126 @@ test('POST accepts and persists the canonical ArduPilot PascalCase document', as
     { value: 0, label: 'Disabled' },
     { value: 1, label: 'Enabled' },
   ]);
+});
+
+/**
+ * The shipped seed (DESIGN.md §4). Before it, definitions existed only in a
+ * per-profile holding file that had to be downloaded by hand, so the Build tier
+ * with an explicit dialect — which names no profile — could never reach any,
+ * and answered "requires a Vehicle Profile holding file" to an operator who had
+ * just downloaded one.
+ */
+
+test('GET answers the Build tier from the seed, with no profile at all', async (t) => {
+  const { routes } = captureRoutes(tempUserDir(t));
+  const res = mockRes();
+
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { dialect: 'development', firmware: 'px4' } },
+    res
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.source, 'seed');
+  assert.ok(res.body.defs.RC1_MIN, 'PX4 definitions are served without a profile');
+  assert.match(res.body.defs.RC1_MIN.description, /channel 1/i);
+  assert.ok(res.body.stamp, 'the answer names which seed it came from');
+});
+
+test('GET keys the seed on firmware — the same id differs between stacks', async (t) => {
+  const { routes } = captureRoutes(tempUserDir(t));
+
+  const px4 = mockRes();
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { firmware: 'px4' } }, px4
+  );
+  const ardupilot = mockRes();
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { firmware: 'ardupilot' } }, ardupilot
+  );
+
+  // RC1_MIN is microseconds on PX4 and PWM on ArduPilot, with different
+  // bounds. Serving one firmware's metadata under the other is a wrong answer,
+  // not a near miss.
+  assert.equal(px4.body.defs.RC1_MIN.unit, 'us');
+  assert.equal(ardupilot.body.defs.RC1_MIN.unit, 'PWM');
+  assert.notEqual(px4.body.defs.RC1_MIN.max, ardupilot.body.defs.RC1_MIN.max);
+});
+
+test('GET takes firmware and vehicle family from the named profile', async (t) => {
+  const { routes } = captureRoutes(tempUserDir(t), {
+    'profile-copter': { firmware: 'ardupilot', vehicleFamily: 'copter' },
+  });
+  const res = mockRes();
+
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { vehicle: 'profile-copter' } },
+    res
+  );
+
+  assert.equal(res.body.source, 'seed');
+  assert.ok(res.body.defs.RC1_MIN);
+  // Copter-only: a Plane or Rover seed would not carry this.
+  assert.ok(res.body.defs.ATC_ANG_RLL_P, 'the copter document was selected');
+});
+
+test('a downloaded definition overrides the seeded one for the same id', async (t) => {
+  const userDir = tempUserDir(t);
+  writeHoldingFile(userDir, 'profile-copter', {
+    Vehicle: {
+      RC1_MIN: { humanName: 'Mine', documentation: 'From my own vehicle.', fields: {} },
+    },
+  });
+  const { routes } = captureRoutes(userDir, {
+    'profile-copter': { firmware: 'ardupilot', vehicleFamily: 'copter' },
+  });
+  const res = mockRes();
+
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { vehicle: 'profile-copter' } },
+    res
+  );
+
+  assert.equal(res.body.source, 'profile');
+  assert.equal(
+    res.body.defs.RC1_MIN.description, 'From my own vehicle.',
+    'the download wins: it came from the firmware actually being flown'
+  );
+  assert.ok(
+    Object.keys(res.body.defs).length > 1,
+    'and it does not replace the whole seed, only the ids it covers'
+  );
+});
+
+test('a corrupt holding file is reported without also costing the shipped seed', async (t) => {
+  const userDir = tempUserDir(t);
+  const file = path.join(userDir, 'mavlink', 'param-defs', 'profile-copter.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, '{broken');
+  const { routes } = captureRoutes(userDir, {
+    'profile-copter': { firmware: 'ardupilot', vehicleFamily: 'copter' },
+  });
+  const res = mockRes();
+
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { vehicle: 'profile-copter' } },
+    res
+  );
+
+  assert.equal(res.statusCode, 200, 'the seed still answers');
+  assert.ok(res.body.defs.RC1_MIN);
+  assert.match(res.body.notice, /unreadable/i, 'but the operator is told their download is broken');
+});
+
+test('an unknown firmware yields nothing rather than another firmware s parameters', async (t) => {
+  const { routes } = captureRoutes(tempUserDir(t));
+  const res = mockRes();
+
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { firmware: 'betaflight' } },
+    res
+  );
+
+  assert.deepEqual(res.body.defs, {});
+  assert.match(res.body.notice, /betaflight/);
 });

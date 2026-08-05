@@ -24,7 +24,8 @@
     "test:lint-config": "node --test test/tooling/lint-coverage.check.js",
     "test:runtime": "node --test integration/node-red-smoke.test.js",
     "validate:node-red": "npm exec --yes --package=node-red-dev@0.1.6 -- node-red-dev validate",
-    "generate-seed": "node scripts/generate-seed.js"
+    "generate-seed": "node scripts/generate-seed.js",
+    "generate-param-seed": "node scripts/generate-param-seed.js"
   },
   "files": [
     "lib",
