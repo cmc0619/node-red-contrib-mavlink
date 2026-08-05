@@ -592,6 +592,70 @@ test('stop-on-error halts after the first failure and reports the rest skipped',
   assert.match(result.members.find((m) => m.sysid === 2).detail, /never sent/);
 });
 
+test('stop-on-error re-checks after the inter-member pause (concurrency > 1)', async () => {
+  // At concurrency > 1 an earlier member is still in flight during the pause,
+  // so the pre-wait verdict is stale by up to intervalMs. Without a re-check
+  // after the wait, a fast failure landing inside that window still dispatched
+  // the next member.
+  const connection = connectionStub([peer(1), peer(2), peer(3)], { failSysids: new Set([1]) });
+
+  const result = await executeFanout({
+    connection,
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'send',
+    concurrency: 3,
+    intervalMs: 5,
+    stopOnError: true,
+    // Yield long enough for member 1's failure record to settle mid-pause.
+    wait: () => new Promise((resolve) => setTimeout(resolve, 5)),
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(connection.sends.length, 0, 'members 2 and 3 are never dispatched');
+  assert.equal(result.members.find((m) => m.sysid === 1).result, 'failed');
+  assert.equal(result.members.find((m) => m.sysid === 2).result, 'skipped');
+  assert.equal(result.members.find((m) => m.sysid === 3).result, 'skipped');
+});
+
+test('a targets patch cannot re-address the message away from the member autopilot', async () => {
+  // sendOptions and the confirm waiter are both keyed on member.compid, so a
+  // patched target_component would address the wire message at a component
+  // neither agrees with — the autopilot ignores it and the ack wait times out.
+  const connection = connectionStub([peer(1)]);
+
+  await executeFanout({
+    connection,
+    message: builtCommand({ fields: { command: 192, param7: 30 } }),
+    targets: [{ sysid: 1, target_system: 99, target_component: 42, param5: 47.4 }],
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  const fields = connection.sends[0].message.fields;
+  assert.equal(fields.target_system, 1, 'sysid pinned to the member');
+  assert.equal(fields.target_component, 1, 'compid pinned to the member autopilot');
+  assert.equal(fields.param5, 47.4, 'non-addressing patches still apply');
+  assert.equal(fields.param7, 30, 'shared fields survive');
+});
+
+test('pinning never invents target_component on a system-only message', async () => {
+  const connection = connectionStub([peer(1)]);
+
+  await executeFanout({
+    connection,
+    message: { name: 'SET_MODE', fields: { target_system: 9, base_mode: 1, custom_mode: 4 } },
+    targets: [{ sysid: 1, target_component: 42 }],
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  const fields = connection.sends[0].message.fields;
+  assert.equal(fields.target_system, 1);
+  assert.equal('target_component' in fields, false, 'a declared-field-only message stays that shape');
+});
+
 test('without stop-on-error every member is still attempted (the §10 default)', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(3)], { failSysids: new Set([1]) });
 

@@ -1430,9 +1430,12 @@ objects: the list *is* the selection (explicit-list semantics — the caller can
 group and patch another), and the patches overwrite message fields per member in **wire units**.
 Fan-out is a raw surface (§ "unit conversion belongs to exactly one of two surfaces"): a
 COMMAND_INT location patch is degE7, exactly as mavlink-build would take it — the typed
-degrees-in surface is the action node upstream. `target_system` is forced back to the member
-after patching, so a patch cannot cross-address another vehicle. Broadcast refuses `targets`
-(uniform messages only, below). Safety: `DO_FLIGHTTERMINATION` (185) in a replicated command
+degrees-in surface is the action node upstream. **Addressing is not patchable:** both
+`target_system` and `target_component` are stripped from a patch before it merges, so a patch
+can neither cross-address another vehicle nor re-aim the message at a component that
+`sendOptions` and the confirm waiter — both keyed on the member's autopilot — would disagree
+with, nor invent an addressing field on a message that never declared one. Broadcast refuses
+`targets` (uniform messages only, below). Safety: `DO_FLIGHTTERMINATION` (185) in a replicated command
 still requires `msg.confirmed === true` or the node's Confirm — the gate reads the wire fields.
 
 **Concurrency.** Sequential fan-out dispatches up to `concurrency` members at once (default 1 —
