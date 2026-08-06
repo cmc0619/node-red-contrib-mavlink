@@ -56,6 +56,14 @@
          * is never rejected for being unknown.
          */
         validate: function (v) {
+          // Only PARAM_SET carries param_value, and only a set shows the row.
+          // Configure a set with an out-of-range value, switch to Read one,
+          // and without this the node stays red over a field that is no longer
+          // on screen — the same trap the index validator avoids, and the one
+          // hiding a row creates if the check is not hidden with it.
+          if (RED.mavlink.liveOr('#node-input-action', this && this.action, 'read') !== 'set') {
+            return true;
+          }
           if (RED.mavlink.isBlank(v)) return true;
           var n = Number(v);
           if (!Number.isFinite(n)) return false;
@@ -181,17 +189,17 @@
         var byIndex = indexAddressed(node);
         var toggle = RED.mavlink.toggleRow;
 
+        var showName = namesOne && !byIndex;
         toggle('#row-param-lookup', action === 'read');
-        toggle('#row-paramId', namesOne && !byIndex);
+        toggle('#row-paramId', showName);
         toggle('#row-paramIndex', namesOne && byIndex);
         toggle('#row-value', action === 'set');
         toggle('#row-paramType', action === 'set');
 
-        if (!byIndex) {
-          $('#node-input-paramIndex').val(-1);
-          hideParamResults();
-        }
-        if (!namesOne) hideParamResults();
+        if (!byIndex) $('#node-input-paramIndex').val(-1);
+        // The results panel floats under the name field, so it is tied to that
+        // row by construction rather than by a second condition that can drift.
+        if (!showName) hideParamResults();
       }
 
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
