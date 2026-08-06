@@ -156,6 +156,51 @@ test('frame names select the carrier message and coordinate_frame value', () => 
   );
 });
 
+test('`frame` is the only frame spelling — `coordinateFrame` is not an alias', () => {
+  const global = {
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { lat: 47, lon: 8, alt: 10 },
+  };
+
+  // Pre-1.0, no aliases (AGENTS.md): nothing in the editor, tests, examples or
+  // docs ever used the second spelling, so it is deleted rather than kept
+  // working. Supplying it fails loud — the frame falls to the LOCAL_NED default
+  // and the local guard then refuses the global coordinates.
+  assert.throws(
+    () => buildMoveMessage({ ...global, coordinateFrame: 'GLOBAL_RELATIVE_ALT_INT' }),
+    /requires north, east and up/
+  );
+
+  // Both real spellings of `frame` keep working: member name and raw number.
+  for (const frame of ['GLOBAL_RELATIVE_ALT_INT', 6, '6']) {
+    const message = buildMoveMessage({ ...global, frame });
+    assert.equal(message.fields.coordinate_frame, 6, `frame ${JSON.stringify(frame)} resolves`);
+  }
+
+  // Blank still defaults; whitespace deliberately does *not* — it throws rather
+  // than silently defaulting past a configured frame (see the comment in
+  // resolveModeAndFrame, and #174).
+  for (const blank of [undefined, null, '']) {
+    const message = buildMoveMessage({
+      mode: 'position',
+      frame: blank,
+      target: { sysid: 2, compid: 1 },
+      position: { north: 1, east: 2, up: 3 },
+    });
+    assert.equal(message.fields.coordinate_frame, 1, `blank ${JSON.stringify(blank)} defaults`);
+  }
+  assert.throws(
+    () => buildMoveMessage({
+      mode: 'position',
+      frame: ' ',
+      target: { sysid: 2, compid: 1 },
+      position: { north: 1, east: 2, up: 3 },
+    }),
+    /unknown Move frame/
+  );
+});
+
 test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw', () => {
   const defaulted = buildMoveMessage({
     target: { sysid: 2, compid: 1 },
