@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Launch one ArduCopter SITL instance for the lab from the official prebuilt binary.
-# Required: SYSID. Optional: INSTANCE, OUT_HOST, OUT_PORT, HOME_*.
+# Required: SYSID. Optional: INSTANCE, OUT_HOST, OUT_PORT, HOME_*, ENABLE_GIMBAL,
+# EXTRA_DEFAULTS (comma-separated paths appended after the lab defaults).
 set -euo pipefail
 
 # shellcheck source=resolve-out-host.sh
@@ -13,6 +14,8 @@ OUT_PORT="${OUT_PORT:-14550}"
 HOME_LAT="${HOME_LAT:--35.363262}"
 HOME_LON="${HOME_LON:-149.165237}"
 HOME_ALT="${HOME_ALT:-584}"
+ENABLE_GIMBAL="${ENABLE_GIMBAL:-0}"
+EXTRA_DEFAULTS="${EXTRA_DEFAULTS:-}"
 
 LAT="$(awk -v b="$HOME_LAT" -v i="$INSTANCE" 'BEGIN { printf "%.8f", b + (i * 0.0001) }')"
 LON="$(awk -v b="$HOME_LON" -v i="$INSTANCE" 'BEGIN { printf "%.8f", b + (i * 0.0001) }')"
@@ -33,7 +36,17 @@ ln -sfn /logs "${RUN_DIR}/logs"
 cd "${RUN_DIR}"
 export HOME="/home/sitl"
 
-echo "entrypoint-ap: sysid=${SYSID} instance=${INSTANCE} out=udpclient:${OUT_IP}:${OUT_PORT} (from ${OUT_HOST}) home=${LAT},${LON},${HOME_ALT} aircraft=${AIRCRAFT}"
+DEFAULTS="/params/copter.parm,/params/ap-logging.parm"
+if [[ -n "${EXTRA_DEFAULTS}" ]]; then
+  DEFAULTS="${DEFAULTS},${EXTRA_DEFAULTS}"
+fi
+
+GIMBAL_ARGS=()
+if [[ "${ENABLE_GIMBAL}" == "1" || "${ENABLE_GIMBAL}" == "true" ]]; then
+  GIMBAL_ARGS+=(--gimbal)
+fi
+
+echo "entrypoint-ap: sysid=${SYSID} instance=${INSTANCE} out=udpclient:${OUT_IP}:${OUT_PORT} (from ${OUT_HOST}) home=${LAT},${LON},${HOME_ALT} aircraft=${AIRCRAFT} gimbal=${ENABLE_GIMBAL} defaults=${DEFAULTS}"
 
 # Official static binary (firmware.ardupilot.org). udpclient sends telemetry to
 # the Node-RED bind port; Connection learns each vehicle's source endpoint from
@@ -46,5 +59,6 @@ exec /usr/local/bin/arducopter \
   --speedup 1 \
   --sysid "${SYSID}" \
   --home "${LAT},${LON},${HOME_ALT},270" \
-  --defaults /params/copter.parm,/params/ap-logging.parm \
+  "${GIMBAL_ARGS[@]}" \
+  --defaults "${DEFAULTS}" \
   --serial0 "udpclient:${OUT_IP}:${OUT_PORT}"

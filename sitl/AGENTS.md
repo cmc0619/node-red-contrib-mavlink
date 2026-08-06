@@ -132,6 +132,9 @@ local or paste a collapsed `<details>` block — do not land it in git.
   `timed-out` (crossed bytewise on AP); matching-only would not prove the override rung.
 - Example **32**: `known set status` succeeded (LOIT_SPEED_MS) **then** `unknown set status`
   `timed-out` / `echo timeout` on missing `WPNAV_SPEED` (dead peer alone must not PASS).
+- Examples **33–35**: Payload on **sysid 31 / 14570** (`nrc-ap-payload-31`). **33** needs
+  `aim`/`mode`/`roi set`/`roi clear` all succeeded; **34** photo succeeded **and** video
+  start/stop denied|failed; **35** `manager status` succeeded with `unconfirmed` detail.
 
 ## Port / sysid map (quick)
 
@@ -141,6 +144,7 @@ local or paste a collapsed `<details>` block — do not land it in git.
 | PX4 GCS | 11–15 | `0.0.0.0:14560` | mavlink `-o 14560` |
 | AP companion | 20 | `0.0.0.0:14540` | udpclient → `14540` |
 | PX4 companion | 21 | `0.0.0.0:14542` | mavlink → `14542` |
+| AP payload | 31 | `0.0.0.0:14570` | udpclient → `14570` (`--gimbal`) |
 
 Directed commands use the Connection peer table (reply to HEARTBEAT source).
 `remotePort` 14551/14561 is pre-peer fallback only.

@@ -29,9 +29,12 @@ test('entrypoint launches official prebuilt arducopter via udpclient', () => {
   );
   assert.match(
     src,
-    /--defaults\s+\/params\/copter\.parm,\/params\/ap-logging\.parm/,
-    'must load autotest copter defaults plus lab logging parm'
+    /DEFAULTS="\/params\/copter\.parm,\/params\/ap-logging\.parm"/,
+    'must start from autotest copter defaults plus lab logging parm'
   );
+  assert.match(src, /--defaults "\$\{DEFAULTS\}"/, 'must pass assembled defaults to arducopter');
+  assert.match(src, /ENABLE_GIMBAL/, 'payload lab may enable --gimbal');
+  assert.match(src, /EXTRA_DEFAULTS/, 'payload lab may append mount/camera parm');
   assert.doesNotMatch(src, /sim_vehicle\.py/, 'must not require a source tree / sim_vehicle');
   assert.doesNotMatch(src, /mavproxy/i, 'must not require MAVProxy');
 
@@ -41,8 +44,16 @@ test('entrypoint launches official prebuilt arducopter via udpclient', () => {
     /OUT_PORT:\s*"14550"/,
     'compose AP GCS default must target host 14550'
   );
-  // x-ap anchor sets OUT_PORT 14550; companion overrides to 14540.
+  // x-ap anchor sets OUT_PORT 14550; companion overrides to 14540; payload to 14570.
   assert.match(compose, /OUT_PORT:\s*"14540"/, 'companion AP uses 14540');
+  assert.match(compose, /OUT_PORT:\s*"14570"/, 'payload AP uses 14570');
+  assert.match(compose, /nrc-ap-payload-31/, 'payload vehicle container is defined');
+  assert.match(compose, /ENABLE_GIMBAL:\s*"1"/, 'payload vehicle enables --gimbal');
+  assert.match(
+    compose,
+    /ap-payload-gimbal\.parm/,
+    'payload vehicle loads mount/camera defaults'
+  );
 });
 
 test('Dockerfile downloads the pinned Copter-4.7.0 prebuilt binary', () => {

@@ -12,6 +12,8 @@ union, mission/fence/rally, fan-out pacing, signing). Prefer the **Docker lab** 
 | PX4 GCS | 11–15 | `14560` → `14561` |
 | AP companion | 20 | `14540` → `14541` |
 | PX4 companion | 21 | `14542` → `14543` |
+| AP payload (gimbal/camera) | 31 | `14570` → `14571` |
+| PX4 payload | 32 | reserved — SIH has no gimbal/camera |
 
 ```bash
 cd sitl && docker compose --profile sitl up -d --build
@@ -72,6 +74,9 @@ without understanding each step.
 | `30-px4-param-list.json` | SITL 30 PX4 param list | 1× PX4 (request-list collect) |
 | `31-param-encoding-override.json` | SITL 31 Param encoding override | 1× ArduPilot + 1× PX4 |
 | `32-param-echo-timeout.json` | SITL 32 Param echo timeout | 1× ArduPilot (unknown id) |
+| `33-payload-gimbal-legacy.json` | SITL 33 Payload gimbal legacy | AP payload sysid 31 (`14570`) |
+| `34-payload-camera.json` | SITL 34 Payload camera | AP payload sysid 31 (photo ok / video DENIED) |
+| `35-payload-gimbal-manager.json` | SITL 35 Payload gimbal manager | AP payload sysid 31 (send unconfirmed) |
 
 ## Running the suite
 

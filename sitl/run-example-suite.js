@@ -216,6 +216,23 @@ const PROFILE = {
     notes:
       'LOIT_SPEED_MS confirm proves AP-1 reachable; then missing WPNAV_SPEED must timed-out / echo timeout',
   },
+  '33-payload-gimbal-legacy': {
+    waitMs: 35000,
+    expect: 'AP-31 legacy gimbal aim mode ROI accepted',
+    injectGapMs: 2500,
+    notes: 'sysid 31 / 14570 — aim + set-mode + roi-set + roi-clear confirm',
+  },
+  '34-payload-camera': {
+    waitMs: 35000,
+    expect: 'AP-31 camera photo accepted video denied',
+    injectGapMs: 2500,
+    notes: 'CAM1_TYPE=1 stills ACCEPTED; VIDEO_* DENIED on this SITL stack',
+  },
+  '35-payload-gimbal-manager': {
+    waitMs: 15000,
+    expect: 'AP-31 gimbal manager aim sent unconfirmed',
+    notes: 'delivery=send; no COMMAND_ACK / no manager telemetry on Copter-4.7.0 --gimbal',
+  },
 };
 
 function req(method, urlPath, body, headers = {}) {
@@ -634,6 +651,50 @@ function verdictFrom(profile, summary, log) {
     }
     return { status: 'FAIL', reason: 'paramEncoding override path not observed' };
   }
+  if (/AP-31 legacy gimbal|legacy gimbal aim mode ROI/i.test(expect)) {
+    const aim = summary.debug.some((d) => /aim status/i.test(d.tag) && d.result === 'succeeded');
+    const mode = summary.debug.some((d) => /mode status/i.test(d.tag) && d.result === 'succeeded');
+    const roiSet = summary.debug.some((d) => /roi set status/i.test(d.tag) && d.result === 'succeeded');
+    const roiClear = summary.debug.some((d) => /roi clear status/i.test(d.tag) && d.result === 'succeeded');
+    if (aim && mode && roiSet && roiClear) {
+      return { status: 'PASS', reason: 'legacy gimbal aim/mode/ROI all accepted on AP-31' };
+    }
+    return {
+      status: aim || mode || roiSet || roiClear ? 'PARTIAL' : 'FAIL',
+      reason: `legacy gimbal: aim=${aim} mode=${mode} roiSet=${roiSet} roiClear=${roiClear}`,
+    };
+  }
+  if (/AP-31 camera photo|camera photo accepted video denied/i.test(expect)) {
+    const photo = summary.debug.some((d) => /photo status/i.test(d.tag) && d.result === 'succeeded');
+    const vStartDenied = summary.debug.some(
+      (d) => /video start status/i.test(d.tag) && /denied|failed/i.test(d.result || '')
+    );
+    const vStopDenied = summary.debug.some(
+      (d) => /video stop status/i.test(d.tag) && /denied|failed/i.test(d.result || '')
+    );
+    if (photo && vStartDenied && vStopDenied) {
+      return {
+        status: 'PASS',
+        reason: 'camera photo accepted; video start/stop DENIED as measured',
+      };
+    }
+    return {
+      status: photo || vStartDenied || vStopDenied ? 'PARTIAL' : 'FAIL',
+      reason: `camera: photo=${photo} vStartDenied=${vStartDenied} vStopDenied=${vStopDenied}`,
+    };
+  }
+  if (/AP-31 gimbal manager|gimbal manager aim sent/i.test(expect)) {
+    const mgr = summary.debug.some(
+      (d) =>
+        /manager status/i.test(d.tag) &&
+        d.result === 'succeeded' &&
+        /unconfirmed/i.test(d.detail || d.excerpt || '')
+    );
+    if (mgr) {
+      return { status: 'PASS', reason: 'gimbal manager aim sent (unconfirmed) on AP-31' };
+    }
+    return { status: 'FAIL', reason: 'manager send/unconfirmed status not observed' };
+  }
   if (/WPNAV_SPEED echo timeout|unknown .*echo timeout/i.test(expect)) {
     // Negative path: timed-out is the success — but only after a known-param
     // confirm proves AP-1 is reachable (dead peer would also echo-timeout).
@@ -788,6 +849,7 @@ const VEHICLE_CONTAINERS = [
   'nrc-px4-15',
   'nrc-ap-companion-20',
   'nrc-px4-companion-21',
+  'nrc-ap-payload-31',
 ];
 
 const PX4_VEHICLE_CONTAINERS = [

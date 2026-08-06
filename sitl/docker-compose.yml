@@ -1,4 +1,4 @@
-# Five ArduPilot + five PX4 + two companion SITL instances.
+# Five ArduPilot + five PX4 + companion + payload SITL instances.
 # Usage:
 #   docker compose --profile sitl up -d --build
 #   docker compose --profile sitl --profile nodered up -d --build
@@ -6,6 +6,7 @@
 # Node-RED (host or nodered profile) should bind 0.0.0.0:
 #   AP GCS 14550→14551 | PX4 GCS 14560→14561
 #   AP companion 14540→14541 | PX4 companion 14542→14543
+#   AP payload 14570→14571 (sysid 31; PX4 payload 32 reserved)
 # Vehicles send to the Compose bridge gateway; a 127.0.0.1 bind misses that path.
 
 x-ap: &ap
@@ -61,7 +62,8 @@ services:
         set -eu
         for d in ap-1 ap-2 ap-3 ap-4 ap-5 \
                  px4-11 px4-12 px4-13 px4-14 px4-15 \
-                 ap-companion-20 px4-companion-21; do
+                 ap-companion-20 px4-companion-21 \
+                 ap-payload-31; do
           mkdir -p "/logs/$$d"
         done
         chmod -R a+rwX /logs
@@ -213,6 +215,27 @@ services:
       - ./logs/ap-companion-20:/logs
       - ./params/ap-logging.parm:/params/ap-logging.parm:ro
       - ./params/copter.parm:/params/copter.parm:ro
+      - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
+
+  # Payload-class AP: --gimbal + mount/camera defaults for mavlink-payload SITL.
+  # Isolated sysid/ports so GCS fleet examples never share the link (same idea
+  # as companion 20). PX4 payload sysid 32 is reserved — SIH has no gimbal/camera.
+  ap-payload-31:
+    <<: *ap
+    container_name: nrc-ap-payload-31
+    environment:
+      <<: *ap-env
+      SYSID: "31"
+      INSTANCE: "20"
+      OUT_PORT: "14570"
+      ENABLE_GIMBAL: "1"
+      EXTRA_DEFAULTS: "/params/ap-payload-gimbal.parm"
+    volumes:
+      - ./logs/ap-payload-31:/logs
+      - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./params/copter.parm:/params/copter.parm:ro
+      - ./params/ap-payload-gimbal.parm:/params/ap-payload-gimbal.parm:ro
       - ./scripts/entrypoint-ap.sh:/usr/local/bin/entrypoint-ap.sh:ro
       - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
 

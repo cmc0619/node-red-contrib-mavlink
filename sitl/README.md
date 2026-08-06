@@ -39,9 +39,13 @@ but works in restricted VMs).
 | PX4 GCS fleet | 11–15 | **`0.0.0.0:14560` → `14561`** | host `14560` |
 | AP companion vehicle | 20 | **`0.0.0.0:14540` → `14541`** | host `14540` |
 | PX4 companion vehicle | 21 | **`0.0.0.0:14542` → `14543`** | host `14542` |
+| AP payload (gimbal/camera) | 31 | **`0.0.0.0:14570` → `14571`** | host `14570` |
+| PX4 payload | 32 | reserved | SIH has no useful gimbal/camera |
 
 Existing GCS examples expect AP on `14550/14551` and PX4 on `14560/14561`. Companion
 lab flows are `examples/sitl/15-companion-ap.json` and `16-companion-px4.json`.
+Payload flows are `examples/sitl/33–35` against `ap-payload-31` (`--gimbal` +
+`params/ap-payload-gimbal.parm`).
 
 ### Why examples still list two ports
 
@@ -58,11 +62,12 @@ ecosystem convention around **14540** (onboard / MAVSDK).
 
 ## What gets started
 
-Twelve containers (Compose profile `sitl`):
+Thirteen containers (Compose profile `sitl`):
 
 - `ap-1` … `ap-5` — ArduCopter, sysid 1–5  
 - `px4-11` … `px4-15` — PX4 SIH quad, sysid 11–15  
 - `ap-companion-20`, `px4-companion-21` — dedicated companion-test vehicles  
+- `ap-payload-31` — ArduCopter with `--gimbal` + mount/camera defaults, sysid 31  
 
 Each vehicle has `extra_hosts: host.docker.internal:host-gateway`. Entrypoints resolve that
 name to an IPv4 address and, when Compose maps it to idle `docker0` while the container sits
