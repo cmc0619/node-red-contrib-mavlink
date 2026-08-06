@@ -174,7 +174,12 @@ function statusRecord(result, detail, extra = {}) {
  * @returns {number}
  */
 function streamMs(payloadValue, configValue, name, minimum) {
-  if (payloadValue === undefined || payloadValue === null || payloadValue === '') {
+  // Blank is undefined/null/whitespace-only, the same sentinel lib/move uses:
+  // `Number(' ')` is a finite 0, so a whitespace ttl would otherwise read as
+  // "never expire" and silently outlive the configured TTL.
+  const blank = payloadValue === undefined || payloadValue === null
+    || (typeof payloadValue === 'string' && payloadValue.trim() === '');
+  if (blank) {
     return Number(configValue);
   }
   // Only numbers and numeric strings: bare Number() coercion turns `true`

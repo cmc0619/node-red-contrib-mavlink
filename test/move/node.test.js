@@ -505,6 +505,41 @@ test('mavlink-move stream: TTL expiry emits an expired message the flow can chai
   assert.equal(status.detail, 'expired');
 });
 
+test('mavlink-move stream: a whitespace ttl inherits the configured TTL, never "run forever"', async () => {
+  const conn = { vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    intervalMs: 5,
+    ttlMs: 20,
+  });
+
+  const emitted = [];
+  node.send = (messages) => { emitted.push(messages); };
+
+  // Number(' ') is a finite 0, and ttl 0 means "stream until replaced or
+  // closed" — so an untrimmed whitespace override would silently outlive the
+  // configured 20 ms. Expiring proves it inherited the configured value.
+  node.emit('input', { payload: { ttlMs: ' ' } }, () => {}, () => {});
+  const deadline = Date.now() + 2000;
+  while (!emitted.length && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  node.emit('close', () => {});
+
+  assert.equal(emitted.length, 1, 'whitespace ttl still expires');
+  assert.equal(emitted[0][0].payload.action, 'expired');
+});
+
 test('mavlink-move stream: a replaced or closed stream expires silently', async () => {
   const conn = { vehicle: {}, send() {} };
   const RED = redStub({ conn });

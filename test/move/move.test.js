@@ -230,6 +230,48 @@ test('global position with blank lat, lon or alt refuses — never 0,0 at ground
   assert.equal(explicitZero.fields.alt, 0);
 });
 
+test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)', () => {
+  // The blank guards are only as good as the blank test: ' ' is not '', so
+  // without trimming it reaches numberOr, and Number(' ') === 0 passes the
+  // finite check. Every one of these zero-fills somewhere dangerous.
+  assert.throws(
+    () => buildMoveMessage({
+      mode: 'position',
+      target: { sysid: 2, compid: 1 },
+      position: { north: ' ', east: 2, up: 3 },
+    }),
+    /blank coordinates must not become the origin/
+  );
+  assert.throws(
+    () => buildMoveMessage({
+      mode: 'position',
+      frame: 'GLOBAL_RELATIVE_ALT_INT',
+      target: { sysid: 2, compid: 1 },
+      position: { lat: 47, lon: 8, alt: '  ' },
+    }),
+    /blank coordinates must not become 0,0/
+  );
+
+  // Yaw follows the presence rule: whitespace is absent, so the ignore bit
+  // stays set rather than commanding a yaw of 0 (north) nobody asked for.
+  const yawBlank = buildMoveMessage({
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { north: 1, east: 2, up: 3 },
+    yaw: ' ',
+  });
+  assert.equal(yawBlank.fields.type_mask & 1024, 1024, 'whitespace yaw stays ignored');
+  assert.equal(yawBlank.fields.yaw, 0);
+
+  // A real value is still a value, whitespace-padded or not.
+  const padded = buildMoveMessage({
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { north: ' 4 ', east: 2, up: 3 },
+  });
+  assert.equal(padded.fields.x, 4);
+});
+
 test('advisoryFor fires only on measured-unsupported combos (§14, SITL 2026-08-05)', () => {
   const { advisoryFor } = require('../../lib/move');
   // Confirmed: PX4 1.18 produced no motion at all for either OFFSET frame.
