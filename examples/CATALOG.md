@@ -39,7 +39,7 @@ reference these by name rather than re-explaining them each time.
 `mode: "advanced"`, `advancedCommand: "<MAV_CMD numeric>"`. `params` is a JSON string
 keyed by param index (`"{\"7\":20}"` = param7 = 20).
 
-**Move** `mode`: `position`, `velocity`, `position-velocity`, `acceleration`, `force`,
+**Move** `mode`: `position`, `velocity`, `position-velocity`, `acceleration`,
 `yaw-only`; `frame` picks local (N/E/Up metres) vs global (`lat`/`lon` deg, `alt` m)
 and the body/offset/altitude-datum variants. `intervalMs`, `ttlMs` govern the stream.
 Up is up-positive in the UI; the node flips to NED at encode. **No arc primitive** — a

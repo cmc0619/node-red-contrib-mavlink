@@ -82,21 +82,21 @@ test('acceleration Move drives af* with the up-positive sign flipped once', () =
   assert.equal(message.fields.afx, 0.5);
   assert.equal(message.fields.afy, -0.25);
   assert.equal(message.fields.afz, -1);
-  // Ignore position (7) + velocity (56) + yaw + yaw rate; force bit clear.
+  // Ignore position (7) + velocity (56) + yaw + yaw rate.
   assert.equal(message.fields.type_mask, 7 + 56 + 1024 + 2048);
-  assert.equal(message.fields.type_mask & 512, 0);
 });
 
-test('force Move sends the same af* vector with the force bit (512) set', () => {
-  const message = buildMoveMessage({
-    mode: 'force',
-    target: { sysid: 2, compid: 1 },
-    accel: { north: 2, east: 0, up: 3 },
-  });
-
-  assert.equal(message.fields.afx, 2);
-  assert.equal(message.fields.afz, -3);
-  assert.equal(message.fields.type_mask, 7 + 56 + 512 + 1024 + 2048);
+test('force is not a Move mode — no firmware actuated the force bit (§14)', () => {
+  // Removed, not aliased (pre-1.0, no migrations): the mode throws naming the
+  // valid set rather than quietly building an acceleration setpoint.
+  assert.throws(
+    () => buildMoveMessage({
+      mode: 'force',
+      target: { sysid: 2, compid: 1 },
+      accel: { north: 2, east: 0, up: 3 },
+    }),
+    /unknown Move mode "force"/
+  );
 });
 
 test('yaw-only Move ignores every translation vector and requires yaw or yaw rate', () => {
@@ -194,7 +194,7 @@ test('local position with a blank coordinate refuses — never the origin (§10)
   assert.equal(velocityBlanks.fields.vy, 0);
 });
 
-test('global position with blank lat or lon refuses — never 0,0 (§10)', () => {
+test('global position with blank lat, lon or alt refuses — never 0,0 at ground level (§10)', () => {
   assert.throws(
     () =>
       buildMoveMessage({
@@ -205,12 +205,75 @@ test('global position with blank lat or lon refuses — never 0,0 (§10)', () =>
       }),
     /blank coordinates must not become 0,0/
   );
+  // A blank alt zero-filled is the same hazard on the vertical axis: 0 m above
+  // home (frame 6) or 0 m AGL (frame 11) is the ground, 0 m MSL (frame 5) may
+  // be below it. An explicit 0 stays a value; blank refuses.
+  for (const frame of ['GLOBAL_RELATIVE_ALT_INT', 'GLOBAL_INT', 'GLOBAL_TERRAIN_ALT_INT']) {
+    assert.throws(
+      () =>
+        buildMoveMessage({
+          mode: 'position',
+          frame,
+          target: { sysid: 2, compid: 1 },
+          position: { lat: 47, lon: 8 },
+        }),
+      /blank coordinates must not become 0,0/,
+      `${frame} must refuse a blank alt`
+    );
+  }
+  const explicitZero = buildMoveMessage({
+    mode: 'position',
+    frame: 'GLOBAL_RELATIVE_ALT_INT',
+    target: { sysid: 2, compid: 1 },
+    position: { lat: 47, lon: 8, alt: 0 },
+  });
+  assert.equal(explicitZero.fields.alt, 0);
+});
+
+test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)', () => {
+  // The blank guards are only as good as the blank test: ' ' is not '', so
+  // without trimming it reaches numberOr, and Number(' ') === 0 passes the
+  // finite check. Every one of these zero-fills somewhere dangerous.
+  assert.throws(
+    () => buildMoveMessage({
+      mode: 'position',
+      target: { sysid: 2, compid: 1 },
+      position: { north: ' ', east: 2, up: 3 },
+    }),
+    /blank coordinates must not become the origin/
+  );
+  assert.throws(
+    () => buildMoveMessage({
+      mode: 'position',
+      frame: 'GLOBAL_RELATIVE_ALT_INT',
+      target: { sysid: 2, compid: 1 },
+      position: { lat: 47, lon: 8, alt: '  ' },
+    }),
+    /blank coordinates must not become 0,0/
+  );
+
+  // Yaw follows the presence rule: whitespace is absent, so the ignore bit
+  // stays set rather than commanding a yaw of 0 (north) nobody asked for.
+  const yawBlank = buildMoveMessage({
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { north: 1, east: 2, up: 3 },
+    yaw: ' ',
+  });
+  assert.equal(yawBlank.fields.type_mask & 1024, 1024, 'whitespace yaw stays ignored');
+  assert.equal(yawBlank.fields.yaw, 0);
+
+  // A real value is still a value, whitespace-padded or not.
+  const padded = buildMoveMessage({
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { north: ' 4 ', east: 2, up: 3 },
+  });
+  assert.equal(padded.fields.x, 4);
 });
 
 test('advisoryFor fires only on measured-unsupported combos (§14, SITL 2026-08-05)', () => {
   const { advisoryFor } = require('../../lib/move');
-  // Confirmed by measurement: no useful actuation on either stack.
-  assert.match(advisoryFor({ mode: 'force', frame: 'LOCAL_NED' }), /force bit/i);
   // Confirmed: PX4 1.18 produced no motion at all for either OFFSET frame.
   for (const frame of ['LOCAL_OFFSET_NED', 'BODY_OFFSET_NED']) {
     assert.match(advisoryFor({ mode: 'position', frame, firmware: 'px4' }), /OFFSET/);
@@ -344,4 +407,47 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
   assert.equal(sends[2].message.fields.vy, 0);
   assert.equal(sends[2].message.fields.vz, 0);
   assert.equal(sends[2].options.band, BAND.STREAMING);
+});
+
+test('onExpire fires on TTL with the stop message, and never on a caller stop', () => {
+  const expiries = [];
+  let timer;
+  let now = 0;
+  const options = {
+    connection: { send() {} },
+    message: buildMoveMessage({
+      mode: 'velocity',
+      target: { sysid: 4, compid: 1 },
+      velocity: { north: 1, east: 0, up: 0 },
+    }),
+    target: { sysid: 4, compid: 1 },
+    intervalMs: 100,
+    ttlMs: 250,
+    now: () => now,
+    setInterval(fn) { timer = fn; return 'timer'; },
+    clearInterval() {},
+    onExpire: (stopMessage) => expiries.push(stopMessage),
+  };
+
+  // A caller-driven stop is already known to the caller — silent.
+  const replaced = createMoveStream(options);
+  replaced.start();
+  replaced.stop();
+  assert.equal(expiries.length, 0, 'stop() must not notify');
+
+  const expiring = createMoveStream(options);
+  expiring.start();
+  now = 260;
+  timer();
+
+  assert.equal(expiring.active, false);
+  assert.equal(expiries.length, 1, 'TTL expiry notifies exactly once');
+  // The stop packet the vehicle actually got, not the streamed setpoint.
+  assert.equal(expiries[0].name, 'SET_POSITION_TARGET_LOCAL_NED');
+  assert.equal(expiries[0].fields.type_mask, 3527);
+  assert.equal(expiries[0].fields.vx, 0);
+
+  // The timer firing again after expiry must not re-notify.
+  timer();
+  assert.equal(expiries.length, 1);
 });

@@ -334,6 +334,290 @@ test('mavlink-move concrete Build dialect does not inherit stale Vehicle Profile
   assert.ok(Number.isNaN(sent[0].payload.fields.target_component), 'concrete Build dialect has no profile inheritance rung');
 });
 
+test('mavlink-move blank payload frame inherits the configured frame, not LOCAL_NED', () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'build',
+    dialect: 'common',
+    mode: 'position',
+    frame: 'GLOBAL_RELATIVE_ALT_INT',
+    lat: 47,
+    lon: 8,
+    alt: 10,
+    targetSystem: 5,
+    targetComponent: 1,
+  });
+
+  // Blank means inherit (§6): an unset/null/'' payload frame keeps the
+  // configured global frame rather than resetting to the LOCAL_NED default.
+  for (const blank of [undefined, null, '']) {
+    let sent;
+    node.emit('input', { payload: { frame: blank } }, (m) => { sent = m; }, () => {});
+    assert.equal(sent[0].payload.name, 'SET_POSITION_TARGET_GLOBAL_INT', `blank frame ${JSON.stringify(blank)} inherits config`);
+    assert.equal(sent[0].payload.fields.coordinate_frame, 6);
+  }
+
+  // An explicit payload frame still wins.
+  let sent;
+  node.emit(
+    'input',
+    { payload: { frame: 'LOCAL_NED', position: { north: 1, east: 2, up: 3 } } },
+    (m) => { sent = m; },
+    () => {}
+  );
+  assert.equal(sent[0].payload.name, 'SET_POSITION_TARGET_LOCAL_NED');
+});
+
+test('mavlink-move stream: payload intervalMs overrides config (§6 payload overrides values)', async () => {
+  const sends = [];
+  const conn = {
+    vehicle: {},
+    send(message, opts) { sends.push({ message, opts }); },
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    intervalMs: 60000,
+    ttlMs: 0,
+  });
+
+  node.emit('input', { payload: { intervalMs: 5, ttlMs: 0 } }, () => {}, () => {});
+
+  // At the configured 60 s interval no re-send would arrive inside the
+  // deadline; the payload's 5 ms override must produce several.
+  const deadline = Date.now() + 2000;
+  while (sends.length < 3 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  node.emit('close', () => {});
+  assert.ok(sends.length >= 3, `payload interval override must re-send (got ${sends.length} sends)`);
+});
+
+test('mavlink-move stream: malformed payload timing overrides refuse the input', () => {
+  const conn = {
+    vehicle: {},
+    send() {},
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    intervalMs: 100,
+    ttlMs: 1000,
+  });
+
+  // A NaN ttl would never satisfy the stream's `ttl > 0` expiry check (the
+  // stream runs forever); a negative interval reaches setInterval as ~1 ms.
+  // Both must fail the input instead.
+  const bad = [
+    { payload: { ttlMs: 'forever' }, why: 'non-numeric ttl' },
+    { payload: { intervalMs: 'fast' }, why: 'non-numeric interval' },
+    { payload: { intervalMs: -5 }, why: 'negative interval' },
+    { payload: { intervalMs: 0 }, why: 'zero interval' },
+    { payload: { ttlMs: -1 }, why: 'negative ttl' },
+    // Bare Number() coercion would make these numeric: true → 1 ms flood,
+    // false/[] → 0. Only numbers and numeric strings are values.
+    { payload: { intervalMs: true }, why: 'boolean interval' },
+    { payload: { ttlMs: false }, why: 'boolean ttl' },
+    { payload: { intervalMs: [5] }, why: 'array interval' },
+  ];
+  for (const { payload, why } of bad) {
+    let sent;
+    let doneError;
+    node.emit('input', { payload }, (m) => { sent = m; }, (err) => { doneError = err; });
+    assert.equal(sent[0], null, `${why} must not start a stream`);
+    assert.equal(sent[1].result, 'failed', `${why} fails the input`);
+    assert.match(doneError.message, /milliseconds/, `${why} names the timing rule`);
+  }
+
+  // Blank still inherits config, and an explicit payload ttl of 0 is a value
+  // ("stream until replaced or closed"), not a malformed override.
+  for (const payload of [{}, { intervalMs: '', ttlMs: null }, { ttlMs: 0 }]) {
+    let sent;
+    let doneError;
+    node.emit('input', { payload }, (m) => { sent = m; }, (err) => { doneError = err; });
+    assert.equal(doneError, undefined, `${JSON.stringify(payload)} must be accepted`);
+    assert.equal(sent[1].result, 'succeeded');
+  }
+  node.emit('close', () => {});
+});
+
+test('mavlink-move stream: TTL expiry emits an expired message the flow can chain on', async () => {
+  const conn = { vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    intervalMs: 5,
+    ttlMs: 20,
+  });
+
+  const emitted = [];
+  node.send = (messages) => { emitted.push(messages); };
+
+  let started;
+  node.emit('input', { payload: {} }, (m) => { started = m; }, () => {});
+  assert.ok(started[0], 'starting the stream fires the continue port');
+
+  const deadline = Date.now() + 2000;
+  while (!emitted.length && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  node.emit('close', () => {});
+
+  assert.equal(emitted.length, 1, 'expiry emits exactly once');
+  const [out, status] = emitted[0];
+  // §9: output 0 is a trigger fired at most once per input, and the stream's
+  // start already fired it. A second message here would run the downstream
+  // chain twice — once at t=0 and once at expiry.
+  assert.equal(out, null, 'expiry must not re-fire the continue port');
+  assert.equal(status.result, 'succeeded');
+  assert.equal(status.detail, 'expired');
+  // Carries the stop packet the vehicle actually got: zero-velocity, not the
+  // all-ignore mask PX4 rejects (§14 / #115).
+  assert.equal(status.message.fields.type_mask, 3527);
+});
+
+test('mavlink-move stream: a whitespace ttl inherits the configured TTL, never "run forever"', async () => {
+  const conn = { vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    intervalMs: 5,
+    ttlMs: 20,
+  });
+
+  const emitted = [];
+  node.send = (messages) => { emitted.push(messages); };
+
+  // Number(' ') is a finite 0, and ttl 0 means "stream until replaced or
+  // closed" — so an untrimmed whitespace override would silently outlive the
+  // configured 20 ms. Expiring proves it inherited the configured value.
+  node.emit('input', { payload: { ttlMs: ' ' } }, () => {}, () => {});
+  const deadline = Date.now() + 2000;
+  while (!emitted.length && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  node.emit('close', () => {});
+
+  assert.equal(emitted.length, 1, 'whitespace ttl still expires');
+  assert.equal(emitted[0][1].detail, 'expired');
+});
+
+test('mavlink-move stream: a replaced or closed stream expires silently', async () => {
+  const conn = { vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    intervalMs: 5,
+    ttlMs: 0,
+  });
+
+  const emitted = [];
+  node.send = (messages) => { emitted.push(messages); };
+
+  // The flow caused both of these, so neither needs announcing back to it.
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  node.emit('close', () => {});
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(emitted.length, 0, 'replacement and close emit nothing');
+});
+
+test('mavlink-move stream: rejected timing override leaves the active stream running', async () => {
+  const sends = [];
+  const conn = {
+    vehicle: {},
+    send(message) { sends.push(message); },
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    intervalMs: 5,
+    ttlMs: 0,
+  });
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  let deadline = Date.now() + 2000;
+  while (sends.length < 2 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.ok(sends.length >= 2, 'stream must be running before the bad input');
+
+  // The rejected replacement must not stop the running stream: validation
+  // happens before stream.stop(), same as a buildMoveMessage refusal.
+  let doneError;
+  node.emit('input', { payload: { ttlMs: 'forever' } }, () => {}, (err) => { doneError = err; });
+  assert.match(doneError.message, /milliseconds/);
+
+  const before = sends.length;
+  deadline = Date.now() + 2000;
+  while (sends.length < before + 2 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  node.emit('close', () => {});
+  assert.ok(
+    sends.length >= before + 2,
+    `stream must keep sending after a rejected override (got ${sends.length - before} further sends)`
+  );
+});
+
 function redStub(nodesById) {
   return {
     nodes: {
@@ -344,6 +628,9 @@ function redStub(nodesById) {
         node.id = config.id || 'node';
         node.status = () => {};
         node.error = () => {};
+        // Real Node-RED gives every node a send() for emits that outlive the
+        // input handler — the stream-expiry message is one.
+        node.send = () => {};
       },
       registerType(name, ctor) {
         this.types[name] = ctor;
