@@ -70,23 +70,7 @@ module.exports = function registerMavlinkMission(RED) {
      */
     const activeByKey = new Map();
 
-    // Any throw out of the handler becomes one terminal record on output 1 plus
-    // one done(err) — the same single Catch path the async branches use (§2).
-    node.on('input', (msg, send, done) => {
-      try {
-        handleInput(msg, send, done);
-      } catch (err) {
-        applyActionStatus(node, 'error', `${operation} error`);
-        send([null, record(operation, config.missionType || 'mission', null, {
-          result: 'failed',
-          phase: 'error',
-          reason: err.message,
-        })]);
-        done(err);
-      }
-    });
-
-    function handleInput(msg, send, done) {
+    node.on('input', function handleInput(msg, send, done) {
       if (shouldSuppress(msg)) {
         done();
         return;
@@ -249,7 +233,7 @@ module.exports = function registerMavlinkMission(RED) {
           })]);
           done(err);
         });
-    }
+    });
 
     node.on('close', (done) => {
       for (const machine of activeByKey.values()) machine.cancel();

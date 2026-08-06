@@ -76,16 +76,18 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
   assert.equal(outputs[0][1].result, 'succeeded');
 });
 
-test('confirm tier with no connection fails loud instead of silently building', async () => {
+test('confirm tier with no connection raises instead of silently building', () => {
   const Node = loadNode(new StubConnection());
   // No connection bound but delivery is confirm — must not degrade to Build (§9).
   const node = new Node({ operation: 'download', delivery: 'confirm', missionType: 'mission' });
-  const { outputs, err } = await runInput(node, { payload: {} });
 
-  assert.equal(outputs.length, 1);
-  assert.equal(outputs[0][0], null, 'output 0 must not fire');
-  assert.equal(outputs[0][1].result, 'failed');
-  assert.ok(err, 'done(err) reports the misconfiguration');
+  const outputs = [];
+  // Measured against Node-RED 5.0.4: the runtime catches a throw out of an
+  // input handler and routes it to node.error → Catch, with the same error and
+  // source a hand-rolled try/catch produced. What this pins is the part the
+  // runtime cannot: a wire tier must not fall through to a Build result.
+  assert.throws(() => node.emit('input', { payload: {} }, (m) => outputs.push(m), () => {}));
+  assert.equal(outputs.length, 0, 'no built plan on a wire tier without a Connection');
 });
 
 test('mission Build concrete dialect uses config firmware and no Vehicle Profile target rung', async () => {
