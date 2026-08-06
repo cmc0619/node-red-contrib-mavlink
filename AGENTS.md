@@ -59,7 +59,8 @@ resource; never spend them on work-in-progress. Open every PR as a draft and kee
 it while iterating. The boundary is absolute: an agent never flips a PR to ready-for-review —
 not when the work looks done, not when tests are green, not when told to "wrap up." The owner
 flips it when they're satisfied, and that flip is what triggers the reviewers (today:
-**CodeRabbit and Codex** (`chatgpt-codex-connector`)).
+**CodeRabbit**, **Codex** (`chatgpt-codex-connector`), and sometimes
+**GitHub Advanced Security** / CodeQL inline comments — Greptile is gone).
 
 **Bot feedback is event-driven or timer-driven, never blocking.** After the owner marks a PR
 ready, do not sit waiting for reviewers and do not busy-poll. If the environment supports
@@ -84,11 +85,11 @@ open for the next passer-by.
 https://cursor.com/automations (or `/automate` in the Agents Window) on this repo with
 triggers: **CI completed** (covers CodeRabbit check completion) and **PR review submitted**
 (covers Codex and human reviews). Prompt should: identify the open PR, collect inline comments
-from CodeRabbit / Codex, form a plan that applies or declines each finding against DESIGN.md
-while restating the concrete problem and smallest fix per the YAGNI section, then push fixes
-under the 50-file cap and reply on the threads. Without a trigger like this, the fallback is
-the periodic timer check above — agents otherwise only learn reviews finished when a human
-pings them.
+from CodeRabbit / Codex / GitHub Advanced Security, form a plan that applies or declines each
+finding against DESIGN.md while restating the concrete problem and smallest fix per the YAGNI
+section, then push fixes under the 50-file cap and reply on the threads. Without a trigger
+like this, the fallback is the periodic timer check above — agents otherwise only learn
+reviews finished when a human pings them.
 
 ## Simplicity: YAGNI is a hard constraint
 
