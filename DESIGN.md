@@ -181,7 +181,7 @@ makes unreachable.
 | `mavlink-out` | Transmit content not constructed by an action node — raw buffers, messages forwarded from another connection, envelopes built in a Function node |
 | `mavlink-build` | Any message in the loaded dialect. Full Delivery tiers, plus an optional repeat interval that reports achieved rate against configured rate in status |
 | `mavlink-command` | `MAV_CMD`, grouped presets through to the full dialect |
-| `mavlink-move` | `SET_POSITION_TARGET_*` over the full mode × frame matrix (position, velocity, position+velocity, acceleration, force, yaw-only × local/body/global frames), streamed, with TTL and stop |
+| `mavlink-move` | `SET_POSITION_TARGET_*` over the full mode × frame matrix (position, velocity, position+velocity, acceleration, yaw-only × local/body/global frames), streamed, with TTL, stop, and an expiry message |
 | `mavlink-mission` | download / upload / clear × mission / fence / rally |
 | `mavlink-param` | read one, set one, request list |
 | `mavlink-payload` | camera, gimbal, servo, gripper, winch, parachute |
@@ -1015,6 +1015,24 @@ is governed by the role × tier matrix (§6).
 Move has no acknowledgement of any kind, so its third tier is **Stream** instead — sustained
 setpoints with TTL and stop, no confirmation possible.
 
+**A stream announces its own expiry — on output 1.** When the TTL elapses the node sends the
+zero-velocity stop packet and emits a status record with `detail: 'expired'`, carrying the stop
+packet the vehicle actually got. Without it a timed move is unobservable: the vehicle halts, the
+flow hears nothing, and the node's status still reads "streaming", so the obvious use of a TTL —
+*move for N ms, then do the next thing* — cannot be built. Branch on it with a `switch`, the
+same way any other outcome is branched on.
+
+**It must not go on output 0.** That port is a trigger fired at most once per input (§9
+"Two outputs"), and starting the stream already fired it; a second message there runs the whole
+downstream chain twice, so the "then do X" would fire at t=0 as well as at expiry. A payload
+discriminator does not rescue this — §9's guarantee is precisely that a consumer *never* has to
+inspect the payload to know whether to proceed. Expiry is a lifecycle update, and lifecycle
+updates ride output 1, exactly as Mission and Param progress does.
+
+Every other stop stays **silent** on both ports, because the flow caused it and already knows: a
+new input replaces the stream, and a redeploy closes it. That asymmetry is the rule — announce
+what the flow could not otherwise observe, and nothing else.
+
 ### Three kinds of confirmation
 
 Not every message can be acknowledged, and the node must offer the right one:
@@ -1191,8 +1209,12 @@ carrier message (`lib/move/index.js` `MODES` / `MAV_FRAME`):
 | Velocity | vx/vy/vz | also the shape of the stream-stop packet |
 | Position + Velocity | both | feed-forward, PX4 offboard |
 | Acceleration | afx/afy/afz | |
-| Force | afx/afy/afz + force bit (512) | no firmware honors it today — advisory fires |
 | Yaw only | neither | requires yaw or yaw rate, else the packet is the all-ignore PX4 rejects (§14 / #115) |
+
+There is **no Force mode**. It was removed once measurement showed neither stack actuates on the
+force bit (512) — a mode that warns "expect this to be ignored" on every use is not a capability,
+it is a dead branch with a label. Removed, not aliased: the name throws. `mavlink-build` remains
+the escape hatch for anyone who genuinely wants the raw bit.
 
 Yaw and yaw rate are included **by presence** on every mode: blank means mask-ignored, a value —
 including 0 — means commanded.
@@ -1203,8 +1225,9 @@ Frames: `LOCAL_NED`, `LOCAL_OFFSET_NED`, `BODY_OFFSET_NED` (ArduPilot GUIDED), `
 the bare member name; labels follow the frame (body frames read forward/right) and vertical
 inputs are up-positive everywhere — the sign flips once, at encode, per the NED rule above.
 A position with a blank coordinate refuses in every **absolute** frame (§10 "blank coordinates
-must not become 0,0"): global lat/lon must not become null island, and a local blank zero-filled
-into north/east/up commands the EKF origin. The measured OFFSET frames (`LOCAL_OFFSET_NED`,
+must not become 0,0"): global lat/lon must not become null island, a blank global alt must not
+become ground level (0 m above home in frame 6, 0 m AGL in frame 11 — or below ground at
+0 m MSL in frame 5), and a local blank zero-filled into north/east/up commands the EKF origin. The measured OFFSET frames (`LOCAL_OFFSET_NED`,
 `BODY_OFFSET_NED`) are the exception — a zero there is "no change" on every axis, so blanks pass
 as zero offsets (§14). `BODY_NED` keeps the guard: ArduPilot reads it as a body offset but PX4
 does not, so a zero is not provably inert. Velocity and acceleration blanks always stay 0 — a
@@ -1212,19 +1235,25 @@ zero rate is inert, not a place. Yaw and yaw rate follow the same presence rule 
 else: blank is mask-ignored, and a blank arriving on `msg.payload` is normalised to unset rather
 than commanding a yaw of zero.
 
+**Blank means undefined, null, or a string holding nothing but whitespace** (`isBlank`). The
+whitespace arm is load-bearing: `Number(' ')` is a *finite* `0`, so a blank test of `=== ''`
+leaves every guard above open to a string that merely looks empty (§14). A padded number
+(`' 4 '`) is still `4` — only strings with no content are blank.
+
 **Known-unsupported combos send anyway, but never silently** (`advisoryFor`): a setpoint has no
 acknowledgement, so a `node.warn` is all the feedback the operator gets. The list is what
-measurement supports, nothing more (§14, SITL 2026-08-05): **Force** (firmware-independent —
-neither stack actuated on the force bit), **PX4 + either OFFSET frame** (no motion at all), and
-**PX4 + `BODY_NED`** (body frames carry velocity only; PX4 discards the position). Three earlier
+measurement supports, nothing more (§14, SITL 2026-08-05): **PX4 + either OFFSET frame** (no
+motion at all) and **PX4 + `BODY_NED`** (body frames carry velocity only; PX4 discards the
+position). Both surviving advisories are PX4-specific, so a Build-tier node — which has no
+connection and therefore no firmware — never warns. Three earlier
 advisories were *removed* when measurement refuted them — ArduPilot acceleration-only, ArduPilot
 `BODY_NED`, and PX4 terrain-altitude — because a warning that fires on working behaviour is
 noise, and noise gets ignored. Firmware comes from the connection's bound Vehicle Profile;
 `custom` opts out of firmware-specific advisories. Warn-not-block is deliberate: firmware support
 moves, and the advisory table is a snapshot, not a gate.
 
-There is **one vocabulary**: Move config, Fan-out's `moveMode`/`moveFrame`, and `msg.payload`
-overrides all speak these mode and frame names. The pre-frame names (`local-position` /
+There is **one vocabulary**: Move config and `msg.payload` overrides speak these mode and frame
+names (Fan-out no longer builds Move inputs at all — it replicates built messages, §10). The pre-frame names (`local-position` /
 `local-velocity` / `global-position`, which carried the frame inside the mode) are gone, not
 aliased — pre-1.0, unpublished, no migrations (AGENTS.md); an unknown mode or frame throws
 naming the valid set.
@@ -1786,7 +1815,8 @@ and never measured. Two of five were wrong:
 - **Confirmed — PX4 ignores both OFFSET frames** (items 2–3), now measured rather than assumed.
 - **Confirmed — the force bit (512) is not actuated** on either stack. ArduPilot is
   **negative-only** here (no motion, no complaint, actuation not instrumented); PX4 drifted
-  vertically with no `STATUSTEXT`. Kept, reworded to name the measurement.
+  vertically with no `STATUSTEXT`. Kept at the time, reworded to name the measurement —
+  and **later removed outright**; see the force-mode entry below.
 - **New — PX4 `BODY_NED` now warns** (item 4).
 
 *Mechanism (firmware source, read 2026-08-05 — consulted **after** the measurement, which is
@@ -2625,8 +2655,9 @@ test/param/param.test.js`; no `normalizeTarget` / `parseUint8` under `lib/` or `
 downstream `numberOr(..., 1)`) must invent `{sysid: 1, compid: 1}` so a message always
 "works"; emitting `NaN` (or letting the uint8 codec reject a non-finite id) is a regression.
 *Fact:* Inventing `{1,1}` can arm/move the wrong airframe on a busy link. An empty ladder
-yielding non-finite ids fails at encode (`lib/codec/numeric` rejects non-finite integers) or
-leaves an unusable Build object — safer than a silent command to system 1. On Build with a
+yielding non-finite ids fails at encode — enforced at the wire boundary
+(`lib/connection/wire.js` `assignFields`), not by `lib/codec/numeric`, which the send path
+never crosses; see the 2026-08-06 broadcast-0 entry — safer than a silent command to system 1. On Build with a
 concrete dialect there is no profile inherit rung at all — targets must be stamped or stay
 unresolved. Companion compid `1` and fan-out broadcast `{sysid: 0, compid: 1}` remain
 matrix/spec addresses, not null-guards. Do not reintroduce target→`1` fallbacks in builders or
@@ -3167,3 +3198,116 @@ with nothing in the dialog able to clear it. **When a field is hidden, the check
 is hidden with it.** The one exception is the index, which is *stamped* to `-1` rather than left:
 `param_index` -1 means "use `param_id`", so a leftover index wins on the wire, while a leftover
 value or type is never read and clearing it would only discard the operator's typing.
+
+---
+
+**A non-finite integer field serialized as 0 — an unresolved NaN target hit the wire as
+broadcast, not as a broken encode (2026-08-06).**
+*Wrong belief:* the "unresolved target beats inventing drone 1" ruling assumed a `NaN` target
+id fails at encode (`lib/codec/numeric` rejects non-finite integers) or at worst leaves an
+unusable Build object.
+*Fact (measured):* the send path never crosses `lib/codec` — builder fields go raw through
+`wire.js` `assignFields` into `node-mavlink`, whose `Buffer.write*Int*` calls range-check with
+comparisons that `NaN` fails *falsely* (`NaN > max` and `NaN < min` are both false), so `NaN`
+and `±Infinity` write as **0**. Measured end-to-end: `buildMoveMessage` with a `NaN` target
+serialized and decoded back as `target_system 0` — the broadcast address every vehicle on the
+link acts on, strictly worse than the invented `{1,1}` the ruling exists to prevent.
+`assignFields` now refuses a non-finite number on any integer-kind field — the one choke point
+every outbound message crosses, and `Connection.send()`'s dry-run serialize turns it into a
+synchronous error in the sending node's error path. Floats are untouched: a `NaN` float is
+legal MAVLink ("field not used").
+*Check:* `node --test test/connection/wire-nonfinite.test.js`; the guard is
+`lib/connection/wire.js` `assignFields`.
+
+---
+
+**Move keeps the superseded `*_INT` global frames, `time_boot_ms` 0, and measurement-gated
+advisories — external-review findings ruled on (2026-08-06).**
+*Wrong belief (external review):* the node should speak the non-deprecated `MAV_FRAME`
+spellings (0/3/10) since common.xml superseded 5/6/11 in 2024-03; a streamed node should
+populate `time_boot_ms` from a clock; ArduPilot deserves advisories for yaw-only setpoints and
+one-shot velocity decay.
+*Fact (source-read, ArduPilot master b224a65 / PX4 main ae5ebc8 / MAVSDK):* PX4's
+`handle_message_set_position_target_global_int` accepts **only** 5/6/11 and rejects 0/3/10
+with "invalid coordinate frame"; ArduPilot's `mavlink_coordinate_frame_to_location_alt_frame`
+accepts both spellings; MAVSDK offboard sends only the `*_INT` set. The superseded spellings
+are the interoperable ones — the modern set would break PX4, and accepting both is an alias
+set (banned pre-1.0). Neither firmware reads `time_boot_ms` in these handlers (PX4 stamps its
+own `hrt_absolute_time()`); pymavlink/AP-autotest send 0, MAVSDK a local elapsed counter — 0
+stays, with `payload.timeBootMs` as the escape. Advisories stay measurement-only per the
+existing ruling; two source-read hypotheses are recorded here as **to-measure on the next SITL
+session, not advisories**: ArduPilot funnels an all-ignore pos/vel/accel mask (yaw-only) into
+`hold_position()` without ever reading yaw, and ArduPilot zeroes velocity/accel targets
+`GUID_TIMEOUT` (default 3 s) after the last setpoint — so a one-shot Send velocity move brakes
+after ~3 s by design.
+*Check:* `lib/move/index.js` `MAV_FRAME` table (5/6/11 only); `node --test
+test/move/move.test.js`.
+
+---
+
+**A measured-dead mode is not a capability — Force is removed, not warned about (2026-08-06).**
+*Wrong belief:* once measurement showed neither stack actuates on the force bit, an advisory
+saying "expect it to be ignored" was the right resolution — the mode is legal MAVLink, keeping
+it costs little, and warn-not-block is the house style for firmware gaps.
+*Fact:* warn-not-block exists for combinations that *work somewhere* — a different firmware, a
+later release, a vehicle we did not measure. Force is not that: it is a mode whose every use
+fires a warning telling the operator it does nothing, while carrying a `MODES` entry, a mask
+bit, an editor option, conditional labels, a unit swap, and tests. That is a dead branch with a
+label on it, and the advisory table is not a graveyard for features measurement killed. Deleted
+(pre-1.0, no aliases — the name throws naming the valid set); the measurement stays recorded
+above, and `mavlink-build` remains the raw-`type_mask` escape hatch. The distinction to carry
+forward: **advise on what might work elsewhere, delete what is measured not to work anywhere.**
+*Check:* `grep -ri force lib/move nodes/mavlink-move.*` returns nothing; `node --test
+test/move/move.test.js`.
+
+---
+
+**Telling the vehicle is not telling the flow — a Move stream announces its own expiry
+(2026-08-06).**
+*Wrong belief:* TTL expiry is handled, because the stream sends the zero-velocity stop packet
+when it elapses. The stopping is the behaviour; there is nothing further to report.
+*Fact:* the vehicle halted and the flow never found out. The node emitted nothing and its status
+still read "streaming", so *move for N ms, then do the next thing* — the obvious reason to set a
+TTL at all — was unbuildable, and the node's own display lied about live state. Both reference
+implementations (`-ai`, `-kimi`) emit a stream-lifecycle message; ours was alone in staying
+quiet. TTL expiry now emits a status record with `detail: 'expired'`. Stops the flow *caused*
+stay silent (replacement, redeploy): the general rule is **announce what the flow could not
+otherwise observe, and nothing else**, which is the same reasoning that keeps advisories from
+becoming noise.
+
+*Second wrong belief, caught in review before merge:* that the announcement belonged on output
+0 alongside the `streaming` message, and that adding an `action` field to distinguish them made
+that safe. It does not. Output 0 is a trigger fired **at most once per input**, and §9's whole
+guarantee is that a consumer never inspects the payload to decide whether to proceed — so a
+second message there runs the entire downstream chain a second time. The feature would have
+broken the exact use case that motivated it: *move for N ms then do X* would have done X
+immediately **and** at expiry. A discriminator field cannot fix a port whose contract is
+"arrival means proceed". Lifecycle updates belong on output 1, which is what Mission and Param
+already do with progress — the precedent was sitting in the same section of this document.
+*Check:* `node --test test/move/node.test.js` — the TTL-expiry test asserts output 0 is `null`.
+
+---
+
+**`Number(' ')` is a finite zero — a blank test of `=== ''` is not a blank test (2026-08-06).**
+*Wrong belief:* blank is `undefined | null | ''`, and that trio is what the §10 coordinate
+guards, the yaw presence rule, and the stream-timing override all test for. Anything else is a
+value and belongs downstream.
+*Fact:* `Number(' ') === 0`, and `Number.isFinite(0)` is true, so a whitespace-only string is
+neither blank nor rejected — it zero-fills, silently, wherever the blank test let it past. Four
+places, found when a review bot reported the least dangerous one:
+
+| input | became | guard defeated |
+|---|---|---|
+| `position.north: ' '` | `x = 0` | §10 local blank-coordinate — commands the EKF origin |
+| `position.alt: ' '` | `alt = 0` | the blank-alt guard added in the same PR — ground level |
+| `yaw: ' '` | ignore bit cleared, `yaw = 0` | yaw presence rule — commands north |
+| `payload.ttlMs: ' '` | ttl `0` = never expire | outlives the configured TTL |
+
+Fixed at the sentinel, not the four call sites: `isBlank` trims, and the node's `streamMs` uses
+the same test. Each hazard then resolves the way its neighbours already do — absolute
+coordinates refuse, yaw stays mask-ignored, a blank ttl inherits config — instead of growing a
+fourth bespoke rule. The general lesson is about *sentinels*: a guard is only as good as the
+predicate that decides what it guards against, so when a blank/empty/absent test protects
+something safety-relevant, check what the language quietly coerces into range. `Number('')`,
+`Number(null)`, and `Number([])` are all `0` too; only `''` and `null` were being caught.
+*Check:* `node --test test/move/move.test.js` — the whitespace-is-blank test walks all four.
