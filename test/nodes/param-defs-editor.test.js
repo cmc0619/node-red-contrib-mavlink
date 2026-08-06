@@ -17,233 +17,7 @@ const paramHtml = fs.readFileSync(
 
 const { installEditorHelpers } = require('../helpers/editor-resource');
 
-/** `change.mavEnumTip` fires on `change`… */
-function baseEvent(event) {
-  return String(event).split('.')[0];
-}
-
-/** …but unbinds only alongside its own namespace. */
-function eventNamespace(event) {
-  return String(event).split('.').slice(1).join('.');
-}
-
-/** The slice of a jQuery result set the shared enum helpers actually use. */
-function matchSet(list) {
-  return {
-    length: list.length,
-    attr: (name) => (list[0] ? list[0].attr(name) : undefined),
-  };
-}
-
-/**
- * The jQuery-ish scaffolding every harness in this file needs: one element per
- * selector, a fresh element for any tag string, and a `$.getJSON` that records
- * requests instead of issuing them.
- *
- * Four copies of this existed. They had already drifted — one still tested for
- * the literal `'<option></option>'` where the others test `charAt(0) === '<'`,
- * which is the same tag-detection bug this PR fixed once in the production
- * path. One copy is one place for that to be right.
- *
- * @param {object} values  seed values keyed by selector
- * @returns {{element: Function, $: Function, requests: object[]}}
- */
-function makeDom(values = {}) {
-  const elements = new Map();
-  const requests = [];
-
-  function element(selector) {
-    if (!elements.has(selector)) {
-      elements.set(selector, new FakeElement(values[selector] || ''));
-    }
-    return elements.get(selector);
-  }
-
-  function $(selector) {
-    // Any tag string builds a fresh element: the results panel renders its own
-    // rows, and a shared stub would make every row the same node.
-    if (String(selector).charAt(0) === '<') return new FakeElement();
-    return element(selector);
-  }
-
-  $.getJSON = (url, query, success) => {
-    const request = new FakeDeferred({ url, query });
-    request.doneHandler = success;
-    requests.push(request);
-    return request;
-  };
-
-  return { element, $, requests };
-}
-
-class FakeElement {
-  constructor(value = '') {
-    // A found element, as in the real dialog: helpers branch on `.length` to
-    // tell an absent field from an empty one.
-    this.length = 1;
-    this.value = value;
-    this.label = '';
-    this.attrs = {};
-    // `handlers[event]` dispatches every binding for that event; `bound`
-    // is the per-namespace registry behind it.
-    this.handlers = {};
-    this.bound = {};
-    this.options = [];
-    this.visible = true;
-    this.disabled = false;
-  }
-
-  val(value) {
-    if (value === undefined) return this.value;
-    this.value = String(value);
-    return this;
-  }
-
-  text(value) {
-    if (value === undefined) return this.label;
-    this.label = String(value);
-    return this;
-  }
-
-  attr(name, value) {
-    if (value === undefined) return this.attrs[name];
-    if (value === null) delete this.attrs[name];
-    else this.attrs[name] = String(value);
-    return this;
-  }
-
-  removeAttr(name) {
-    delete this.attrs[name];
-    return this;
-  }
-
-  prop(name, value) {
-    if (value === undefined) return this[name];
-    this[name] = value;
-    return this;
-  }
-
-  empty() {
-    this.options = [];
-    return this;
-  }
-
-  append(option) {
-    this.options.push(option);
-    return this;
-  }
-
-  on(events, handler) {
-    for (const spec of String(events).split(/\s+/)) {
-      const base = baseEvent(spec);
-      if (!this.bound[base]) this.bound[base] = [];
-      this.bound[base].push({ ns: eventNamespace(spec), handler });
-      this.rebind(base);
-    }
-    return this;
-  }
-
-  off(events) {
-    for (const spec of String(events).split(/\s+/)) {
-      const base = baseEvent(spec);
-      if (!this.bound[base]) continue;
-      const ns = eventNamespace(spec);
-      // jQuery semantics, and the reason they matter here: `off('change.ns')`
-      // unbinds only that namespace. Collapsing it to `off('change')` would let
-      // a helper's own tip-sync silently unbind the dialog's change handler,
-      // and the harness would stop seeing what a fill does to the value box.
-      this.bound[base] = ns ? this.bound[base].filter((b) => b.ns !== ns) : [];
-      this.rebind(base);
-    }
-    return this;
-  }
-
-  rebind(base) {
-    if (!this.bound[base] || !this.bound[base].length) {
-      delete this.handlers[base];
-      return;
-    }
-    this.handlers[base] = (event) => {
-      for (const b of (this.bound[base] || []).slice()) {
-        b.handler.call(this, event || { preventDefault() {} });
-      }
-    };
-  }
-
-  trigger(event) {
-    const handler = this.handlers[baseEvent(event)];
-    if (handler) handler({ preventDefault() {} });
-    return this;
-  }
-
-  /**
-   * Enough of a selector engine for the shared enum helpers: they ask for an
-   * option by value (`ensureSavedEnumOption`) and for the selected one
-   * (`bindSelectTitleSync`). A miss returns an empty set, as jQuery does.
-   */
-  find(selector) {
-    const byValue = /^option\[value="(.*)"\]$/.exec(String(selector));
-    if (byValue) return matchSet(this.options.filter((o) => o.val() === byValue[1]));
-    if (String(selector) === 'option:selected') {
-      return matchSet(this.options.filter((o) => o.val() === this.value));
-    }
-    return matchSet([]);
-  }
-
-  userClick() {
-    if (this.disabled || !this.handlers.click) return;
-    this.handlers.click.call(this, { preventDefault() {} });
-  }
-
-  toggle(visible) {
-    this.visible = !!visible;
-    return this;
-  }
-
-  show() {
-    this.visible = true;
-    return this;
-  }
-
-  hide() {
-    this.visible = false;
-    return this;
-  }
-}
-
-class FakeDeferred {
-  constructor(options) {
-    this.options = options;
-    this.doneHandler = null;
-    this.failHandler = null;
-    this.alwaysHandler = null;
-  }
-
-  done(handler) {
-    this.doneHandler = handler;
-    return this;
-  }
-
-  fail(handler) {
-    this.failHandler = handler;
-    return this;
-  }
-
-  always(handler) {
-    this.alwaysHandler = handler;
-    return this;
-  }
-
-  resolve(data) {
-    if (this.doneHandler) this.doneHandler(data);
-    if (this.alwaysHandler) this.alwaysHandler();
-  }
-
-  reject(xhr) {
-    if (this.failHandler) this.failHandler(xhr);
-    if (this.alwaysHandler) this.alwaysHandler();
-  }
-}
+const { makeDom, FakeElement, FakeDeferred } = require('../helpers/fake-dom');
 
 test('Vehicle parameter Update is single-flight and restores both result states', () => {
   const start = vehicleHtml.indexOf("$('#mav-param-defs-update').on('click'");
@@ -340,10 +114,13 @@ test('Param definition GET failures clear stale UI and render server and fallbac
     notice: 'stale notice',
   });
   // The panel stays closed until the operator types or focuses; what a
-  // successful load must produce here is the hover text and the info row.
+  // successful load must produce here is the hover text — description, unit
+  // and range ride on `title`, not on a row that stays in the dialog.
   assert.equal(element('#mav-param-results').visible, false);
-  assert.equal(element('#row-param-info').visible, true);
-  assert.equal(element('#node-input-paramId').attrs.title, 'Previously loaded definition.');
+  assert.equal(
+    element('#node-input-paramId').attrs.title,
+    'Previously loaded definition. | Unit: Hz'
+  );
 
   context.loadParamDefsForTest();
   requests[1].reject({ responseJSON: { error: 'holding file is corrupt' } });
@@ -351,7 +128,6 @@ test('Param definition GET failures clear stale UI and render server and fallbac
   assert.equal(element('#mav-param-results').options.length, 0, 'stale hits are cleared');
   assert.equal(element('#mav-param-results').visible, false);
   assert.equal(element('#node-input-paramId').attrs.title, undefined);
-  assert.equal(element('#row-param-info').visible, false);
   assert.equal(element('#row-param-defs-tip').visible, true);
   assert.equal(element('#mav-param-defs-tip-text').label, 'holding file is corrupt');
 
@@ -538,7 +314,12 @@ test('choosing a row fills the field and closes the panel', () => {
 
   assert.equal(element('#node-input-paramId').val(), 'RC1_MIN');
   assert.equal(element('#mav-param-results').visible, false);
-  assert.equal(element('#node-input-paramId').attrs.title, 'Minimum value for RC channel 1');
+  // Everything the operator needs about the parameter rides on hover, so the
+  // dialog does not keep a reference row in front of them after they picked.
+  assert.equal(
+    element('#node-input-paramId').attrs.title,
+    'Minimum value for RC channel 1 | Unit: us'
+  );
 });
 
 test('every row selects its own parameter, not the last one rendered', () => {
@@ -727,4 +508,38 @@ test('the Read action leaves the value field alone', () => {
   });
   context.refreshInfoForTest();
   assert.equal(element('#mav-param-value-select').visible, false);
+});
+
+test('a published type is the only type on offer; an unpublished one leaves the choice', () => {
+  // PX4 states a type for every parameter and ArduPilot states none, so the
+  // control follows what was published rather than which firmware it is.
+  const { context, element } = mountValueField(
+    {
+      BAT_N_CELLS: { description: 'Cells', type: 'MAV_PARAM_TYPE_INT32' },
+      ATC_RAT_RLL_P: { description: 'Roll P gain' },
+    },
+    { '#node-input-paramId': 'BAT_N_CELLS' }
+  );
+  context.refreshInfoForTest();
+
+  const $type = element('#node-input-paramType');
+  assert.equal($type.val(), 'MAV_PARAM_TYPE_INT32', 'set from the definition');
+  assert.equal($type.options.length, 1, 'and nothing else can be picked');
+  assert.match($type.attrs.title, /Published by the firmware/);
+
+  // A parameter whose firmware publishes nothing gets the full list back —
+  // narrowing must not be one-way.
+  element('#node-input-paramId').val('ATC_RAT_RLL_P');
+  context.refreshInfoForTest();
+  assert.ok($type.options.length > 1, 'the choice returns');
+  assert.match($type.attrs.title, /publishes no type/);
+});
+
+test('the Type select ships empty and is filled from the shared table', () => {
+  // The table's home is lib/codec/param-union.js, mirrored once for the editor
+  // in resources/mavlink-editor.js and pinned there by test. A per-node copy
+  // would be a third one that has to agree with the other two.
+  assert.match(paramHtml, /<select id="node-input-paramType"><\/select>/);
+  assert.match(paramHtml, /RED\.mavlink\.PARAM_TYPE_OPTIONS/, 'filled from the shared table');
+  assert.doesNotMatch(paramHtml, /_paramTypeOptions\s*=\s*\[/, 'and keeps no copy of its own');
 });

@@ -97,6 +97,44 @@ test('PARAM_REQUEST_READ and PARAM_REQUEST_LIST build their distinct messages', 
   });
 });
 
+test('a read addressed by index neither needs a param id nor sends one', () => {
+  // PARAM_REQUEST_READ's param_index documents itself as "Send -1 to use the
+  // param ID field as identifier (else the param ID will be ignored)". So an
+  // index of 0 or more is the whole address, and the editor's Index mode —
+  // where the name field is hidden and empty — has no id to supply.
+  assert.deepEqual(
+    buildParamMessage({ action: 'read', target: { sysid: 9, compid: 1 }, paramIndex: 0 }),
+    {
+      name: 'PARAM_REQUEST_READ',
+      fields: {
+        target_system: 9,
+        target_component: 1,
+        param_id: '',
+        param_index: 0,
+      },
+    }
+  );
+
+  // An id alongside a real index is the ignored field, and is not sent as if
+  // it meant something.
+  assert.equal(
+    buildParamMessage({
+      action: 'read',
+      target: { sysid: 9, compid: 1 },
+      paramId: 'SYSID_THISMAV',
+      paramIndex: 4,
+    }).fields.param_id,
+    ''
+  );
+
+  // -1 is the other half of the same sentinel: the id is back to being the
+  // address, so a missing one is still an error rather than an empty read.
+  assert.throws(
+    () => buildParamMessage({ action: 'read', target: { sysid: 9, compid: 1 }, paramIndex: -1 }),
+    /param id is required/
+  );
+});
+
 test('resolveParamEncoding: explicit override wins over capabilities and firmware', () => {
   assert.equal(
     resolveParamEncoding({

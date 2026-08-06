@@ -60,6 +60,8 @@ test('parsePdefJson parses namespaced ArduPilot format', () => {
     min: 0,
     max: 16384,
     increment: 1,
+    // ArduPilot publishes no wire type in either pdef format.
+    type: undefined,
     values: [
       { value: 0, label: 'Disabled' },
       { value: 1, label: 'Enabled' },
@@ -79,6 +81,7 @@ test('parsePdefJson parses the canonical ArduPilot PascalCase document shape', (
     min: 0,
     max: 50,
     increment: 1,
+    type: undefined,
     values: undefined,
   });
   assert.deepEqual(map.get('ALAND_ENABLE').values, [
@@ -475,6 +478,7 @@ test('PX4 parameters.xml is read, walking groups and mapping snake_case elements
     min: 800,
     max: 1500,
     increment: 0.5,
+    type: 'MAV_PARAM_TYPE_REAL32',
     values: undefined,
   });
   assert.equal(

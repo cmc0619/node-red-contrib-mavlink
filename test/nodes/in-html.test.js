@@ -54,8 +54,8 @@ test('message filter resolves dialect from the Connection vehicle graph (wire-on
 
 test('message filter preserves the saved message name after async catalog load', () => {
   assert.match(html, /node\.message/, 'saved message is re-applied');
-  assert.match(html, /var prefer = sel\.val\(\)/, 'in-progress selection wins over saved');
-  assert.match(html, /saved:\s*prefer/, 'prefer is passed to fillEnumSelect');
+  assert.match(html, /saved:\s*node\.message/, 'the saved message is offered');
+  assert.match(html, /preferLive:\s*true/, 'in-progress selection wins over saved');
   assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'unknown saved values use shared fillEnumSelect sentinel');
 });
 

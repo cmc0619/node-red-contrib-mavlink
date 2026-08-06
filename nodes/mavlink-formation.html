@@ -34,7 +34,7 @@
       sysids: {
         value: '',
         validate: function (v) {
-          if (v === undefined || v === null || String(v).trim() === '') return true;
+          if (RED.mavlink.isBlank(v)) return true;
           return String(v).split(',').every(function (part) {
             part = part.trim();
             if (!part) return true;

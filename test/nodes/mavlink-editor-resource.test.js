@@ -960,3 +960,139 @@ test('splitCompIdsByTopic suggests components the dialect names after the device
   // collapsing the list to zero choices.
   assert.deepEqual(RED.mavlink.splitCompIdsByTopic(entries, 'gripper').others, entries);
 });
+
+// ── validateIntRange ─────────────────────────────────────────────────────────
+
+test('validateIntRange refuses what the wire field cannot encode', () => {
+  const { RED } = loadResource();
+  // param_index is int16_t and -1 is the protocol's "use the name" sentinel.
+  const index = RED.mavlink.validateIntRange(-1, 32767);
+
+  assert.equal(index(-1), true, 'the by-name sentinel');
+  assert.equal(index(0), true, 'the first real index');
+  assert.equal(index(32767), true, 'the field ceiling');
+  assert.equal(index(''), true, 'blank is inherit/optional, as elsewhere');
+
+  assert.match(String(index(-5)), /between -1 and 32767/, 'no such index');
+  assert.match(String(index(99999)), /between -1 and 32767/, 'past int16');
+  assert.match(String(index(2.5)), /integer/, 'the field is integral');
+});
+
+test('validateUint8 keeps its own name and bounds through the shared range check', () => {
+  const { RED } = loadResource();
+  const id = RED.mavlink.validateUint8(1);
+  assert.equal(id(1), true);
+  assert.equal(id(255), true);
+  assert.match(String(id(0)), /between 1 and 255/, 'a source id may not be 0');
+  assert.match(String(id(256)), /between 1 and 255/);
+});
+
+// ── PARAM_TYPE_OPTIONS ───────────────────────────────────────────────────────
+
+test('PARAM_TYPE_OPTIONS mirrors the codec table it copies', () => {
+  const { RED } = loadResource();
+  const { PARAM_TYPES } = require('../../lib/codec/param-union');
+
+  // Same set, same numbers. The editor copy exists only because browser HTML
+  // cannot require() the module; drifting from it would offer a type the codec
+  // refuses to encode, or hide one it accepts.
+  const fromCodec = Object.entries(PARAM_TYPES)
+    .map(([value, info]) => ({ name: info.name, value: Number(value) }))
+    .sort((a, b) => a.value - b.value);
+  // `plain` first: the options are built inside the VM realm, so a structural
+  // comparison against Node-side objects fails on prototype identity alone.
+  const fromEditor = plain(RED.mavlink.PARAM_TYPE_OPTIONS)
+    .map((o) => ({ name: o.name, value: o.value }))
+    .sort((a, b) => a.value - b.value);
+
+  assert.deepEqual(fromEditor, fromCodec);
+});
+
+test('PARAM_TYPE_OPTIONS omits the widths the codec cannot encode', () => {
+  const { RED } = loadResource();
+  // MAV_PARAM_TYPE also has REAL64 / INT64 / UINT64. Offering them would offer
+  // a choice that fails at send.
+  const names = RED.mavlink.PARAM_TYPE_OPTIONS.map((o) => o.name);
+  for (const absent of ['MAV_PARAM_TYPE_REAL64', 'MAV_PARAM_TYPE_INT64', 'MAV_PARAM_TYPE_UINT64']) {
+    assert.equal(names.includes(absent), false, `${absent} is not encodable`);
+  }
+  assert.equal(names[0], 'MAV_PARAM_TYPE_REAL32', 'the field default leads the list');
+});
+
+// ── isBlank / liveOr / toggleRow / fillEnumSelect precedence ─────────────────
+
+test('isBlank is one spelling of "nothing was entered"', () => {
+  const { RED } = loadResource();
+  for (const blank of [undefined, null, '', '   ', '\t\n']) {
+    assert.equal(RED.mavlink.isBlank(blank), true, JSON.stringify(blank));
+  }
+  // 0 and false are values, not absences — an optional numeric field that
+  // treated 0 as blank would silently drop a legal sysid or index.
+  for (const filled of [0, false, '0', 'x', -1]) {
+    assert.equal(RED.mavlink.isBlank(filled), false, JSON.stringify(filled));
+  }
+});
+
+test('liveOr reads the open dialog, then the saved config, then the fallback', () => {
+  const open = loadResource({ '#node-input-action': 'set' }).RED;
+  assert.equal(open.mavlink.liveOr('#node-input-action', 'read'), 'set',
+    'the live field wins while the dialog is open');
+
+  // Dialog closed: the selector matches nothing, which is the state Node-RED
+  // runs `validate` in on import and on deploy.
+  const closed = loadResource().RED;
+  assert.equal(closed.mavlink.liveOr('#node-input-action', 'read'), 'read',
+    'the saved value carries it');
+  assert.equal(closed.mavlink.liveOr('#node-input-action', undefined, 'read'), 'read',
+    'and the fallback carries it when nothing was ever saved');
+  assert.equal(closed.mavlink.liveOr('#node-input-action', undefined), '');
+
+  // A field that exists but is empty is not an answer either.
+  const empty = loadResource({ '#node-input-action': '' }).RED;
+  assert.equal(empty.mavlink.liveOr('#node-input-action', 'read'), 'read');
+});
+
+test('toggleRow tolerates a row the dialog does not have', () => {
+  const { RED } = loadResource({}, {}, { trackToggle: true });
+  assert.doesNotThrow(() => RED.mavlink.toggleRow('#row-not-here', true));
+  assert.doesNotThrow(() => RED.mavlink.toggleRow('', true));
+  assert.doesNotThrow(() => RED.mavlink.toggleRow(undefined, false));
+});
+
+test('fillEnumSelect: preferLive decides which value survives a refill', () => {
+  const { makeDom } = require('../helpers/fake-dom');
+  const { installEditorHelpers } = require('../helpers/editor-resource');
+  const ENTRIES = [
+    { name: 'ALPHA', value: 1 },
+    { name: 'BRAVO', value: 2 },
+    { name: 'CHARLIE', value: 3 },
+  ];
+
+  /**
+   * @param {string} live     what the operator has already picked
+   * @param {*} saved         the node's pre-edit value
+   * @param {boolean} preferLive
+   * @returns {string} the selection after the refill
+   */
+  function refill(live, saved, preferLive) {
+    const { $ } = makeDom({ '#sel': live });
+    const context = { RED: { settings: { httpAdminRoot: '/' } }, $ };
+    installEditorHelpers(context);
+    const $sel = $('#sel');
+    context.RED.mavlink.fillEnumSelect($sel, ENTRIES, {
+      saved, preferLive, valueKey: 'value', triggerChange: false,
+    });
+    return $sel.val();
+  }
+
+  // The default is right for a one-time fill in oneditprepare: the saved value
+  // is what the node means, and the select has not been touched yet.
+  assert.equal(refill('3', 2, false), '2', 'saved wins by default');
+  // An async refill lands after the operator has moved the select. Snapping it
+  // back to the pre-edit value discards a choice they already made.
+  assert.equal(refill('3', 2, true), '3', 'preferLive keeps the in-progress pick');
+  // Nothing in progress: preferLive changes nothing.
+  assert.equal(refill('', 2, true), '2');
+  // Nothing saved either: the first entry, as before.
+  assert.equal(refill('', undefined, true), '1');
+});

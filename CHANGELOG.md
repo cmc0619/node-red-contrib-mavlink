@@ -12,6 +12,33 @@ see AGENTS.md "no migrations, no compatibility shims".
 
 ### Added
 
+- **A parameter is identified by name or by index, not both at once.** The
+  dialog showed Param id and Index side by side, with `-1` in Index meaning
+  "ignore me, use the name" — a sentinel to know, dressed as a field to fill.
+  A radio picks one. By name the Index row is hidden and carries `-1`, stamped
+  on every switch rather than left at whatever was typed before, because
+  `PARAM_REQUEST_READ` sends both fields and a leftover index silently wins
+  over the name. By index the range starts at **0**, since `-1` contradicts the
+  mode, and `-5`, `99999` or a blank box are refused instead of reaching the
+  vehicle — a blank one used to arrive as index 0, reading a different
+  parameter than the one nobody named. A read by index now sends no name at
+  all: the field documents itself as ignored whenever the index is real, and
+  requiring one made every by-index read fail on the empty box the mode hides.
+  The choice appears only on **Read one** — `PARAM_SET` has no `param_index`
+  field to carry an index and `PARAM_REQUEST_LIST` names no parameter, so
+  offering the mode there was offering a setting that could not act.
+- **The Type field answers itself where the firmware publishes an answer.** PX4
+  states a type for all 1836 of its parameters and it was being parsed and then
+  discarded; it now ships in the seed, and choosing a parameter narrows Type to
+  that one option — immutable by having nothing else on offer. ArduPilot
+  publishes no type in either of its metadata formats, so there the full choice
+  remains and nothing is guessed: DESIGN.md §14 records a REAL32-typed set of an
+  integer parameter timing out a confirm for a set that had actually succeeded.
+- **Definition detail moved to hover.** Description, unit and range were a
+  standing row under the field; they are reference read once when picking a
+  parameter, so they now ride on the field's tooltip like every other
+  catalog-backed field in the palette.
+
 - **Parameter definitions now ship with the package.** 30,938 definitions
   across seven targets — ArduPilot's six vehicle documents and PX4's — as a
   737 KB gzipped seed alongside the existing dialect seed, taking the package

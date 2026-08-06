@@ -95,3 +95,38 @@ test('PX4 has one document, so a family never narrows it', () => {
   // And it keeps its bounds: one document is never a union.
   assert.equal(plain.get('RC1_MIN').max, 1500);
 });
+
+/* ---------- published parameter type ---------- */
+
+test('PX4 definitions carry the type PX4 publishes, as a MAV_PARAM_TYPE', () => {
+  const px4 = defsFor({ firmware: 'px4' });
+  let typed = 0;
+  for (const [id, def] of px4) {
+    if (!def.type) continue;
+    typed++;
+    assert.match(def.type, /^MAV_PARAM_TYPE_(REAL32|INT32)$/, `${id} uses the MAVLink spelling`);
+  }
+  // Upstream states one for every parameter; dropping any is data thrown away.
+  assert.equal(typed, px4.size);
+  assert.equal(px4.get('RC1_MIN').type, 'MAV_PARAM_TYPE_REAL32');
+});
+
+test('ArduPilot definitions carry no type, because upstream publishes none', () => {
+  // apm.pdef.json and apm.pdef.xml publish Description, DisplayName, Units,
+  // Range, Increment, Values, Bitmask, ReadOnly, RebootRequired, Calibration,
+  // Volatile and User — and no wire type. Inferring one from Values/Bitmask
+  // would pre-fill the exact mistake DESIGN.md §14 measured.
+  const copter = defsFor({ firmware: 'ardupilot', vehicleFamily: 'copter' });
+  for (const [id, def] of copter) {
+    assert.equal(def.type, undefined, `${id} must not carry an invented type`);
+  }
+});
+
+test('the unknown-vehicle union carries no type either', () => {
+  // Nothing to conflict today, since no ArduPilot document publishes one — but
+  // a type is what the value is encoded as on the wire, and a union cannot
+  // vouch for a field that acts.
+  for (const [id, def] of defsFor({ firmware: 'ardupilot', vehicleFamily: 'unknown' })) {
+    assert.equal(def.type, undefined, `${id} must not carry a union type`);
+  }
+});

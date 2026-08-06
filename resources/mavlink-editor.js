@@ -84,6 +84,25 @@
   };
 
   /**
+   * Param value types the codec can encode, for the Param editor's Type field.
+   * Editor-side copy of `lib/codec/param-union.js` `PARAM_TYPES` — browser HTML
+   * cannot require() the Node module. Pinned against that table by test.
+   *
+   * A deliberate subset of `MAV_PARAM_TYPE`: the enum also has REAL64, INT64
+   * and UINT64, which the codec does not encode, so offering them would offer a
+   * choice that fails at send. REAL32 leads because it is the field's default.
+   */
+  RED.mavlink.PARAM_TYPE_OPTIONS = [
+    { name: 'MAV_PARAM_TYPE_REAL32', value: 9, label: 'REAL32 (9)' },
+    { name: 'MAV_PARAM_TYPE_UINT8', value: 1, label: 'UINT8 (1)' },
+    { name: 'MAV_PARAM_TYPE_INT8', value: 2, label: 'INT8 (2)' },
+    { name: 'MAV_PARAM_TYPE_UINT16', value: 3, label: 'UINT16 (3)' },
+    { name: 'MAV_PARAM_TYPE_INT16', value: 4, label: 'INT16 (4)' },
+    { name: 'MAV_PARAM_TYPE_UINT32', value: 5, label: 'UINT32 (5)' },
+    { name: 'MAV_PARAM_TYPE_INT32', value: 6, label: 'INT32 (6)' },
+  ];
+
+  /**
    * Outbound queue band picker options (DESIGN.md §7). Editor-side copy of
    * `lib/connection/bands` names — browser HTML cannot require() the module.
    * Labels are Title Case (`Emergency (0)`), not screaming-snake enum names.
@@ -763,16 +782,30 @@
    * Fill a select from enum entries. Option values are numeric strings so
    * node configs save MAVLink enum ids, not localized labels.
    *
+   * `preferLive` inverts which value wins when both a saved one and an
+   * in-progress selection exist. The default — saved first — is right for a
+   * one-time fill in `oneditprepare`. An *async* refill (a catalog arriving
+   * after a Connection change) needs the opposite, or the fill snaps the
+   * select back to the pre-edit value the operator has already moved off.
+   * Three dialogs open-coded that inversion into a `prefer` local before
+   * calling this; the choice belongs to the one function that acts on it.
+   *
    * @param {object} $select  jQuery select
    * @param {Array<{name:string,value:number|string,label?:string}>} entries
    * @param {object} opts
+   * @param {boolean} [opts.preferLive]  in-progress selection outranks `saved`
    */
   RED.mavlink.fillEnumSelect = function ($select, entries, opts) {
     opts = opts || {};
     var valueKey = opts.valueKey || 'value';
-    var saved = opts.saved !== undefined && opts.saved !== null
-      ? String(opts.saved)
-      : String($select.val() || '');
+    var live = $select.val();
+    // An explicit `saved: ''` means "select nothing"; it is not the same as
+    // omitting it, so the default branch keeps testing for undefined/null and
+    // not for blankness.
+    var savedGiven = opts.saved !== undefined && opts.saved !== null;
+    var saved = opts.preferLive && !RED.mavlink.isBlank(live)
+      ? String(live)
+      : (savedGiven ? String(opts.saved) : String(live || ''));
     $select.empty();
     if (opts.allowEmpty) {
       $select.append($('<option></option>').val('').text(opts.emptyLabel || '\u2014'));
@@ -1138,22 +1171,78 @@
   };
 
   /**
-   * Editor-side uint8 range check. Blank is allowed (inherit / optional).
-   * Two-argument form so Node-RED treats a returned string as the invalid
-   * reason (one-arg validators treat any string as truthy/valid).
+   * "Nothing was entered" — absent, null, or whitespace.
+   *
+   * Every optional editor field asks this before deciding a value is worth
+   * checking, and it was open-coded identically at seven sites across the
+   * palette. One spelling, so "blank" cannot come to mean subtly different
+   * things in two dialogs.
+   *
+   * @param {*} v
+   * @returns {boolean}
+   */
+  RED.mavlink.isBlank = function (v) {
+    return v === undefined || v === null || String(v).trim() === '';
+  };
+
+  /**
+   * The in-progress value of a field, falling back to what was saved.
+   *
+   * Editor code reads cross-field state in two situations and needs opposite
+   * sources for them: while the dialog is open the live input is the truth
+   * (the operator may have just changed it), and while it is closed — Node-RED
+   * runs `validate` on import and on deploy — jQuery matches nothing and the
+   * saved config is all there is. Four call sites had grown their own version
+   * of this, differing only in which was checked first.
+   *
+   * @param {string} selector  jQuery selector for the live field
+   * @param {*} saved          the node's saved value
+   * @param {*} [fallback='']  when neither answers
+   * @returns {string}
+   */
+  RED.mavlink.liveOr = function (selector, saved, fallback) {
+    var $el = $(selector);
+    var live = $el && $el.length ? $el.val() : undefined;
+    if (!RED.mavlink.isBlank(live)) return String(live);
+    if (!RED.mavlink.isBlank(saved)) return String(saved);
+    return fallback === undefined ? '' : String(fallback);
+  };
+
+  /**
+   * Editor-side integer range check for a wire field. Blank is allowed
+   * (inherit / optional). Two-argument form so Node-RED treats a returned
+   * string as the invalid reason (one-arg validators treat any string as
+   * truthy/valid).
+   *
+   * The bounds are the field's own, taken from the dialect XML — a `uint8_t`
+   * is 0–255, an `int16_t` is −32768–32767. A value outside them cannot be
+   * encoded, so refusing it in the editor is the difference between a red
+   * triangle and a runtime pack error on deploy.
+   *
+   * @param {number} min
+   * @param {number} max
+   * @returns {function(*, object=): true|string}
+   */
+  RED.mavlink.validateIntRange = function (min, max) {
+    return function (v, _opt) {
+      if (RED.mavlink.isBlank(v)) return true;
+      var n = Number(v);
+      if (!Number.isInteger(n) || n < min || n > max) {
+        return 'must be an integer between ' + min + ' and ' + max;
+      }
+      return true;
+    };
+  };
+
+  /**
+   * uint8 range check — the common case, kept by name because every target /
+   * source id field reads better for it.
    *
    * @param {number} min  0 for target ids (broadcast), 1 for source ids
    * @returns {function(*, object=): true|string}
    */
   RED.mavlink.validateUint8 = function (min) {
-    return function (v, _opt) {
-      if (v === undefined || v === null || String(v).trim() === '') return true;
-      var n = Number(v);
-      if (!Number.isInteger(n) || n < min || n > 255) {
-        return 'must be an integer between ' + min + ' and 255';
-      }
-      return true;
-    };
+    return RED.mavlink.validateIntRange(min, 255);
   };
 
   /**
@@ -1180,14 +1269,10 @@
     var dialectSelector = opts.dialectSelector || '#node-input-dialect';
 
     function currentMode(self) {
-      var $m = $(modeSelector);
-      if ($m && $m.length) return String($m.val() || '');
-      return (self && self[modeField]) || '';
+      return RED.mavlink.liveOr(modeSelector, self && self[modeField]);
     }
     function currentDialect(self) {
-      var $d = $(dialectSelector);
-      if ($d && $d.length && $d.val()) return String($d.val());
-      return (self && self.dialect) || '';
+      return RED.mavlink.liveOr(dialectSelector, self && self.dialect);
     }
 
     var defaults = {
@@ -1224,6 +1309,19 @@
   };
 
   /**
+   * Show or hide a form row, tolerating a selector that matches nothing —
+   * a dialog may legitimately not have every row a shared helper can toggle.
+   *
+   * @param {string} selector
+   * @param {boolean} shown
+   */
+  RED.mavlink.toggleRow = function (selector, shown) {
+    if (!selector) return;
+    var $el = $(selector);
+    if ($el && $el.length) $el.toggle(!!shown);
+  };
+
+  /**
    * Toggle the Build-tier dialect / vehicle / firmware / connection rows from
    * the current dialect + Build state. Thin helper — each node keeps ownership
    * of its remaining role/mode rows; this covers only the shared four.
@@ -1240,11 +1338,7 @@
     opts = opts || {};
     var isBuild = !!opts.isBuild;
     var dialect = opts.dialect || '';
-    function toggle(selector, shown) {
-      if (!selector) return;
-      var $el = $(selector);
-      if ($el && $el.length) $el.toggle(!!shown);
-    }
+    var toggle = RED.mavlink.toggleRow;
     toggle(opts.dialectRow, isBuild);
     toggle(opts.vehicleRow, isBuild && dialect === '__vehicle');
     toggle(opts.firmwareRow, isBuild && !!dialect && dialect !== '__vehicle');
@@ -1273,11 +1367,7 @@
     var isCompanion = !isBuild && RED.mavlink.identityRole(identityId) === 'companion';
     var targetSystem = isBuild || !isCompanion;
     var targetComponent = hideCompid ? (isBuild || !isCompanion) : true;
-    function toggle(selector, shown) {
-      if (!selector) return;
-      var $el = $(selector);
-      if ($el && $el.length) $el.toggle(!!shown);
-    }
+    var toggle = RED.mavlink.toggleRow;
     if (opts.combinedTargetRow) toggle(opts.combinedTargetRow, targetSystem);
     toggle(opts.targetSystemRow, targetSystem);
     toggle(opts.targetComponentRow, targetComponent);
