@@ -61,8 +61,8 @@ module.exports = function registerMavlinkMove(RED) {
         // Known-unsupported firmware combos still send, but never silently
         // (§14: setpoints carry no ack, so this warning is all the feedback
         // the operator will get). Firmware comes from the connection's bound
-        // Vehicle Profile; Build tier has none, so only the firmware-agnostic
-        // force advisory can fire there.
+        // Vehicle Profile; every measured advisory is PX4-specific, so Build
+        // tier — which has no connection — never warns.
         const advisory = advisoryFor({
           mode: moveInput.mode,
           frame: moveInput.frame,
@@ -93,6 +93,12 @@ module.exports = function registerMavlinkMove(RED) {
               identityId,
               intervalMs,
               ttlMs,
+              // TTL expiry is the only stop the flow did not cause, so it is
+              // the only one it cannot observe: without this the node would
+              // halt the vehicle and keep reporting "streaming" forever.
+              // Async, so it uses node.send — the input that started the
+              // stream was completed long ago.
+              onExpire: (stopMessage) => completeExpiry(node, stopMessage),
             });
             stream.start();
             completeResult(node, send, 'succeeded', 'streaming', message);
@@ -124,7 +130,23 @@ function completeBuild(node, send, message) {
 
 function completeResult(node, send, result, action, message) {
   applyActionStatus(node, 'ok', action);
-  send([{ payload: { result, message } }, statusRecord(result, action, { message })]);
+  send([{ payload: { result, action, message } }, statusRecord(result, action, { message })]);
+}
+
+/**
+ * A stream reached its TTL: the vehicle already has the stop packet, and this
+ * is what tells the flow. `action` is what separates it from the `streaming`
+ * message that opened the stream — both are successes on the same port.
+ *
+ * @param {object} node
+ * @param {object} message  the zero-velocity stop message that was sent
+ */
+function completeExpiry(node, message) {
+  applyActionStatus(node, 'ok', 'stream expired');
+  node.send([
+    { payload: { result: 'succeeded', action: 'expired', message } },
+    statusRecord('succeeded', 'expired', { message }),
+  ]);
 }
 
 function fail(node, send, err, msg, done) {

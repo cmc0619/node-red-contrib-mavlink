@@ -461,6 +461,81 @@ test('mavlink-move stream: malformed payload timing overrides refuse the input',
   node.emit('close', () => {});
 });
 
+test('mavlink-move stream: TTL expiry emits an expired message the flow can chain on', async () => {
+  const conn = { vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    intervalMs: 5,
+    ttlMs: 20,
+  });
+
+  const emitted = [];
+  node.send = (messages) => { emitted.push(messages); };
+
+  let started;
+  node.emit('input', { payload: {} }, (m) => { started = m; }, () => {});
+  // Both stream messages are successes on port 0; `action` is what separates
+  // "it started" from "it ended".
+  assert.equal(started[0].payload.action, 'streaming');
+
+  const deadline = Date.now() + 2000;
+  while (!emitted.length && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  node.emit('close', () => {});
+
+  assert.equal(emitted.length, 1, 'expiry emits exactly once');
+  const [out, status] = emitted[0];
+  assert.equal(out.payload.result, 'succeeded');
+  assert.equal(out.payload.action, 'expired');
+  // Carries the stop packet the vehicle actually got: zero-velocity, not the
+  // all-ignore mask PX4 rejects (§14 / #115).
+  assert.equal(out.payload.message.fields.type_mask, 3527);
+  assert.equal(status.result, 'succeeded');
+  assert.equal(status.detail, 'expired');
+});
+
+test('mavlink-move stream: a replaced or closed stream expires silently', async () => {
+  const conn = { vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    intervalMs: 5,
+    ttlMs: 0,
+  });
+
+  const emitted = [];
+  node.send = (messages) => { emitted.push(messages); };
+
+  // The flow caused both of these, so neither needs announcing back to it.
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  node.emit('close', () => {});
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(emitted.length, 0, 'replacement and close emit nothing');
+});
+
 test('mavlink-move stream: rejected timing override leaves the active stream running', async () => {
   const sends = [];
   const conn = {
@@ -518,6 +593,9 @@ function redStub(nodesById) {
         node.id = config.id || 'node';
         node.status = () => {};
         node.error = () => {};
+        // Real Node-RED gives every node a send() for emits that outlive the
+        // input handler — the stream-expiry message is one.
+        node.send = () => {};
       },
       registerType(name, ctor) {
         this.types[name] = ctor;

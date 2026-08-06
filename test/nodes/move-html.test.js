@@ -62,7 +62,7 @@ test('mavlink-move editor reshapes fields by mode, frame, and delivery (§6)', (
   assert.match(html, /usesPosition && !isGlobalFrame/, 'local position fields gated on mode + frame');
   assert.match(html, /usesPosition && isGlobalFrame/, 'global position fields gated on mode + frame');
   assert.match(html, /vNorth: usesVelocity/, 'velocity fields gated on mode');
-  assert.match(html, /aNorth: usesAccel/, 'accel/force fields gated on mode');
+  assert.match(html, /aNorth: usesAccel/, 'accel fields gated on mode');
   assert.match(html, /delivery === 'stream'/, 'stream interval and TTL gated on delivery');
 });
 
@@ -80,9 +80,11 @@ test('mavlink-move declares the frame default and the acceleration validators', 
 });
 
 test('mavlink-move offers the full mode and frame matrix', () => {
-  for (const mode of ['position', 'velocity', 'position-velocity', 'acceleration', 'force', 'yaw-only']) {
+  for (const mode of ['position', 'velocity', 'position-velocity', 'acceleration', 'yaw-only']) {
     assert.match(html, new RegExp(`option value="${mode}"`), `mode ${mode} offered`);
   }
+  // Force is gone, not hidden: no firmware actuated the force bit (§14).
+  assert.doesNotMatch(html, /option value="force"/, 'force is not offered');
   for (const frame of [
     'LOCAL_NED',
     'LOCAL_OFFSET_NED',
@@ -103,8 +105,6 @@ test('mavlink-move speaks one canonical vocabulary and labels body frames forwar
   // the pre-frame mode names must not appear anywhere in the editor.
   assert.doesNotMatch(html, /local-position|local-velocity|global-position/, 'no legacy mode names');
   assert.match(html, /isBodyFrame \? 'Metres forward' : 'Metres north'/, 'body frames relabel north to forward');
-  assert.match(html, /'Force' : 'Accel'/, 'force mode relabels the accel vector');
-  assert.match(html, /'N' : 'm\/s²'/, 'force mode swaps the accel unit to newtons');
 });
 
 test('mavlink-move has one labeled row per parameter, not dual local/global rows', () => {

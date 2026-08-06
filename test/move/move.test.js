@@ -82,21 +82,21 @@ test('acceleration Move drives af* with the up-positive sign flipped once', () =
   assert.equal(message.fields.afx, 0.5);
   assert.equal(message.fields.afy, -0.25);
   assert.equal(message.fields.afz, -1);
-  // Ignore position (7) + velocity (56) + yaw + yaw rate; force bit clear.
+  // Ignore position (7) + velocity (56) + yaw + yaw rate.
   assert.equal(message.fields.type_mask, 7 + 56 + 1024 + 2048);
-  assert.equal(message.fields.type_mask & 512, 0);
 });
 
-test('force Move sends the same af* vector with the force bit (512) set', () => {
-  const message = buildMoveMessage({
-    mode: 'force',
-    target: { sysid: 2, compid: 1 },
-    accel: { north: 2, east: 0, up: 3 },
-  });
-
-  assert.equal(message.fields.afx, 2);
-  assert.equal(message.fields.afz, -3);
-  assert.equal(message.fields.type_mask, 7 + 56 + 512 + 1024 + 2048);
+test('force is not a Move mode — no firmware actuated the force bit (§14)', () => {
+  // Removed, not aliased (pre-1.0, no migrations): the mode throws naming the
+  // valid set rather than quietly building an acceleration setpoint.
+  assert.throws(
+    () => buildMoveMessage({
+      mode: 'force',
+      target: { sysid: 2, compid: 1 },
+      accel: { north: 2, east: 0, up: 3 },
+    }),
+    /unknown Move mode "force"/
+  );
 });
 
 test('yaw-only Move ignores every translation vector and requires yaw or yaw rate', () => {
@@ -232,8 +232,6 @@ test('global position with blank lat, lon or alt refuses — never 0,0 at ground
 
 test('advisoryFor fires only on measured-unsupported combos (§14, SITL 2026-08-05)', () => {
   const { advisoryFor } = require('../../lib/move');
-  // Confirmed by measurement: no useful actuation on either stack.
-  assert.match(advisoryFor({ mode: 'force', frame: 'LOCAL_NED' }), /force bit/i);
   // Confirmed: PX4 1.18 produced no motion at all for either OFFSET frame.
   for (const frame of ['LOCAL_OFFSET_NED', 'BODY_OFFSET_NED']) {
     assert.match(advisoryFor({ mode: 'position', frame, firmware: 'px4' }), /OFFSET/);
@@ -367,4 +365,47 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
   assert.equal(sends[2].message.fields.vy, 0);
   assert.equal(sends[2].message.fields.vz, 0);
   assert.equal(sends[2].options.band, BAND.STREAMING);
+});
+
+test('onExpire fires on TTL with the stop message, and never on a caller stop', () => {
+  const expiries = [];
+  let timer;
+  let now = 0;
+  const options = {
+    connection: { send() {} },
+    message: buildMoveMessage({
+      mode: 'velocity',
+      target: { sysid: 4, compid: 1 },
+      velocity: { north: 1, east: 0, up: 0 },
+    }),
+    target: { sysid: 4, compid: 1 },
+    intervalMs: 100,
+    ttlMs: 250,
+    now: () => now,
+    setInterval(fn) { timer = fn; return 'timer'; },
+    clearInterval() {},
+    onExpire: (stopMessage) => expiries.push(stopMessage),
+  };
+
+  // A caller-driven stop is already known to the caller — silent.
+  const replaced = createMoveStream(options);
+  replaced.start();
+  replaced.stop();
+  assert.equal(expiries.length, 0, 'stop() must not notify');
+
+  const expiring = createMoveStream(options);
+  expiring.start();
+  now = 260;
+  timer();
+
+  assert.equal(expiring.active, false);
+  assert.equal(expiries.length, 1, 'TTL expiry notifies exactly once');
+  // The stop packet the vehicle actually got, not the streamed setpoint.
+  assert.equal(expiries[0].name, 'SET_POSITION_TARGET_LOCAL_NED');
+  assert.equal(expiries[0].fields.type_mask, 3527);
+  assert.equal(expiries[0].fields.vx, 0);
+
+  // The timer firing again after expiry must not re-notify.
+  timer();
+  assert.equal(expiries.length, 1);
 });
