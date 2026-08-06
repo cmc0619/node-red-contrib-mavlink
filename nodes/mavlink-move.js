@@ -23,7 +23,7 @@ module.exports = function registerMavlinkMove(RED) {
     const node = this;
     let stream = null;
     const delivery = config.delivery;
-    const connAtDeploy = delivery === 'build' ? null : RED.nodes.getNode(config.connection);
+    const connAtDeploy = RED.nodes.getNode(config.connection);
 
     node.on('input', (msg, send, done) => {
       try {

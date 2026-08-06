@@ -133,7 +133,7 @@ module.exports = function registerMavlinkCommand(RED) {
     const completionKey = preset ? preset.completionKey : null;
     const requiresConfirmation = preset ? preset.requiresConfirmation : false;
 
-    const connNode = config.connection ? RED.nodes.getNode(config.connection) : null;
+    const connNode = RED.nodes.getNode(config.connection);
 
     const delivery = config.delivery;
 

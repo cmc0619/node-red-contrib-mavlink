@@ -55,7 +55,7 @@ module.exports = function registerMavlinkPayload(RED) {
     const timeoutMs = config.timeout === '' ? DEFAULT_TIMEOUT_MS : Number(config.timeout);
     const maxRetries = config.maxRetries === '' ? DEFAULT_MAX_RETRIES : Number(config.maxRetries);
     const delivery = config.delivery;
-    const connAtDeploy = delivery === 'build' ? null : RED.nodes.getNode(config.connection);
+    const connAtDeploy = RED.nodes.getNode(config.connection);
 
     function cancelWaiter() {
       if (activeWaiter) {
