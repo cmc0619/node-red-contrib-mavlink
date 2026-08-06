@@ -76,21 +76,28 @@ module.exports = function registerMavlinkMove(RED) {
           if (!connectionNode) {
             throw new Error('mavlink-move requires a Connection for send/stream delivery');
           }
-          if (stream) stream.stop();
           if (delivery === 'stream') {
+            // Validate the replacement fully before stopping the active
+            // stream: a rejected input must leave the running stream running,
+            // the same way a buildMoveMessage refusal above already does —
+            // never stop it as a side effect of a failed replacement.
+            // Payload overrides config (§6 runtime override of last resort);
+            // the editor default guarantees config when the payload is silent.
+            const intervalMs = streamMs(payload.intervalMs, config.intervalMs, 'intervalMs', 1);
+            const ttlMs = streamMs(payload.ttlMs, config.ttlMs, 'ttlMs', 0);
+            if (stream) stream.stop();
             stream = createMoveStream({
               connection: connectionNode,
               message,
               target,
               identityId,
-              // Payload overrides config (§6 runtime override of last resort);
-              // the editor default guarantees config when the payload is silent.
-              intervalMs: streamMs(payload.intervalMs, config.intervalMs, 'intervalMs', 1),
-              ttlMs: streamMs(payload.ttlMs, config.ttlMs, 'ttlMs', 0),
+              intervalMs,
+              ttlMs,
             });
             stream.start();
             completeResult(node, send, 'succeeded', 'streaming', message);
           } else {
+            if (stream) stream.stop();
             connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
             completeResult(node, send, 'succeeded', 'sent', message);
           }
@@ -148,7 +155,11 @@ function streamMs(payloadValue, configValue, name, minimum) {
   if (payloadValue === undefined || payloadValue === null || payloadValue === '') {
     return Number(configValue);
   }
-  const n = Number(payloadValue);
+  // Only numbers and numeric strings: bare Number() coercion turns `true`
+  // into a 1 ms flood and `false`/`[]` into 0.
+  const n = typeof payloadValue === 'number' || typeof payloadValue === 'string'
+    ? Number(payloadValue)
+    : NaN;
   if (!Number.isFinite(n) || n < minimum) {
     throw new Error(
       `payload.${name} must be a finite number of milliseconds >= ${minimum}, got ${JSON.stringify(payloadValue)}`

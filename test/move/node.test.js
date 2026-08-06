@@ -434,6 +434,11 @@ test('mavlink-move stream: malformed payload timing overrides refuse the input',
     { payload: { intervalMs: -5 }, why: 'negative interval' },
     { payload: { intervalMs: 0 }, why: 'zero interval' },
     { payload: { ttlMs: -1 }, why: 'negative ttl' },
+    // Bare Number() coercion would make these numeric: true → 1 ms flood,
+    // false/[] → 0. Only numbers and numeric strings are values.
+    { payload: { intervalMs: true }, why: 'boolean interval' },
+    { payload: { ttlMs: false }, why: 'boolean ttl' },
+    { payload: { intervalMs: [5] }, why: 'array interval' },
   ];
   for (const { payload, why } of bad) {
     let sent;
@@ -454,6 +459,53 @@ test('mavlink-move stream: malformed payload timing overrides refuse the input',
     assert.equal(sent[1].result, 'succeeded');
   }
   node.emit('close', () => {});
+});
+
+test('mavlink-move stream: rejected timing override leaves the active stream running', async () => {
+  const sends = [];
+  const conn = {
+    vehicle: {},
+    send(message) { sends.push(message); },
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    intervalMs: 5,
+    ttlMs: 0,
+  });
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  let deadline = Date.now() + 2000;
+  while (sends.length < 2 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.ok(sends.length >= 2, 'stream must be running before the bad input');
+
+  // The rejected replacement must not stop the running stream: validation
+  // happens before stream.stop(), same as a buildMoveMessage refusal.
+  let doneError;
+  node.emit('input', { payload: { ttlMs: 'forever' } }, () => {}, (err) => { doneError = err; });
+  assert.match(doneError.message, /milliseconds/);
+
+  const before = sends.length;
+  deadline = Date.now() + 2000;
+  while (sends.length < before + 2 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  node.emit('close', () => {});
+  assert.ok(
+    sends.length >= before + 2,
+    `stream must keep sending after a rejected override (got ${sends.length - before} further sends)`
+  );
 });
 
 function redStub(nodesById) {
