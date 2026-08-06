@@ -1203,8 +1203,9 @@ Frames: `LOCAL_NED`, `LOCAL_OFFSET_NED`, `BODY_OFFSET_NED` (ArduPilot GUIDED), `
 the bare member name; labels follow the frame (body frames read forward/right) and vertical
 inputs are up-positive everywhere — the sign flips once, at encode, per the NED rule above.
 A position with a blank coordinate refuses in every **absolute** frame (§10 "blank coordinates
-must not become 0,0"): global lat/lon must not become null island, and a local blank zero-filled
-into north/east/up commands the EKF origin. The measured OFFSET frames (`LOCAL_OFFSET_NED`,
+must not become 0,0"): global lat/lon must not become null island, a blank global alt must not
+become ground level (0 m above home in frame 6, 0 m AGL in frame 11 — or below ground at
+0 m MSL in frame 5), and a local blank zero-filled into north/east/up commands the EKF origin. The measured OFFSET frames (`LOCAL_OFFSET_NED`,
 `BODY_OFFSET_NED`) are the exception — a zero there is "no change" on every axis, so blanks pass
 as zero offsets (§14). `BODY_NED` keeps the guard: ArduPilot reads it as a body offset but PX4
 does not, so a zero is not provably inert. Velocity and acceleration blanks always stay 0 — a
@@ -1223,8 +1224,8 @@ noise, and noise gets ignored. Firmware comes from the connection's bound Vehicl
 `custom` opts out of firmware-specific advisories. Warn-not-block is deliberate: firmware support
 moves, and the advisory table is a snapshot, not a gate.
 
-There is **one vocabulary**: Move config, Fan-out's `moveMode`/`moveFrame`, and `msg.payload`
-overrides all speak these mode and frame names. The pre-frame names (`local-position` /
+There is **one vocabulary**: Move config and `msg.payload` overrides speak these mode and frame
+names (Fan-out no longer builds Move inputs at all — it replicates built messages, §10). The pre-frame names (`local-position` /
 `local-velocity` / `global-position`, which carried the frame inside the mode) are gone, not
 aliased — pre-1.0, unpublished, no migrations (AGENTS.md); an unknown mode or frame throws
 naming the valid set.
@@ -2625,8 +2626,9 @@ test/param/param.test.js`; no `normalizeTarget` / `parseUint8` under `lib/` or `
 downstream `numberOr(..., 1)`) must invent `{sysid: 1, compid: 1}` so a message always
 "works"; emitting `NaN` (or letting the uint8 codec reject a non-finite id) is a regression.
 *Fact:* Inventing `{1,1}` can arm/move the wrong airframe on a busy link. An empty ladder
-yielding non-finite ids fails at encode (`lib/codec/numeric` rejects non-finite integers) or
-leaves an unusable Build object — safer than a silent command to system 1. On Build with a
+yielding non-finite ids fails at encode — enforced at the wire boundary
+(`lib/connection/wire.js` `assignFields`), not by `lib/codec/numeric`, which the send path
+never crosses; see the 2026-08-06 broadcast-0 entry — safer than a silent command to system 1. On Build with a
 concrete dialect there is no profile inherit rung at all — targets must be stamped or stay
 unresolved. Companion compid `1` and fan-out broadcast `{sysid: 0, compid: 1}` remain
 matrix/spec addresses, not null-guards. Do not reintroduce target→`1` fallbacks in builders or
@@ -3167,3 +3169,47 @@ with nothing in the dialog able to clear it. **When a field is hidden, the check
 is hidden with it.** The one exception is the index, which is *stamped* to `-1` rather than left:
 `param_index` -1 means "use `param_id`", so a leftover index wins on the wire, while a leftover
 value or type is never read and clearing it would only discard the operator's typing.
+
+---
+
+**A non-finite integer field serialized as 0 — an unresolved NaN target hit the wire as
+broadcast, not as a broken encode (2026-08-06).**
+*Wrong belief:* the "unresolved target beats inventing drone 1" ruling assumed a `NaN` target
+id fails at encode (`lib/codec/numeric` rejects non-finite integers) or at worst leaves an
+unusable Build object.
+*Fact (measured):* the send path never crosses `lib/codec` — builder fields go raw through
+`wire.js` `assignFields` into `node-mavlink`, whose `Buffer.write*Int*` calls range-check with
+comparisons that `NaN` fails *falsely* (`NaN > max` and `NaN < min` are both false), so `NaN`
+and `±Infinity` write as **0**. Measured end-to-end: `buildMoveMessage` with a `NaN` target
+serialized and decoded back as `target_system 0` — the broadcast address every vehicle on the
+link acts on, strictly worse than the invented `{1,1}` the ruling exists to prevent.
+`assignFields` now refuses a non-finite number on any integer-kind field — the one choke point
+every outbound message crosses, and `Connection.send()`'s dry-run serialize turns it into a
+synchronous error in the sending node's error path. Floats are untouched: a `NaN` float is
+legal MAVLink ("field not used").
+*Check:* `node --test test/connection/wire-nonfinite.test.js`; the guard is
+`lib/connection/wire.js` `assignFields`.
+
+---
+
+**Move keeps the superseded `*_INT` global frames, `time_boot_ms` 0, and measurement-gated
+advisories — external-review findings ruled on (2026-08-06).**
+*Wrong belief (external review):* the node should speak the non-deprecated `MAV_FRAME`
+spellings (0/3/10) since common.xml superseded 5/6/11 in 2024-03; a streamed node should
+populate `time_boot_ms` from a clock; ArduPilot deserves advisories for yaw-only setpoints and
+one-shot velocity decay.
+*Fact (source-read, ArduPilot master b224a65 / PX4 main ae5ebc8 / MAVSDK):* PX4's
+`handle_message_set_position_target_global_int` accepts **only** 5/6/11 and rejects 0/3/10
+with "invalid coordinate frame"; ArduPilot's `mavlink_coordinate_frame_to_location_alt_frame`
+accepts both spellings; MAVSDK offboard sends only the `*_INT` set. The superseded spellings
+are the interoperable ones — the modern set would break PX4, and accepting both is an alias
+set (banned pre-1.0). Neither firmware reads `time_boot_ms` in these handlers (PX4 stamps its
+own `hrt_absolute_time()`); pymavlink/AP-autotest send 0, MAVSDK a local elapsed counter — 0
+stays, with `payload.timeBootMs` as the escape. Advisories stay measurement-only per the
+existing ruling; two source-read hypotheses are recorded here as **to-measure on the next SITL
+session, not advisories**: ArduPilot funnels an all-ignore pos/vel/accel mask (yaw-only) into
+`hold_position()` without ever reading yaw, and ArduPilot zeroes velocity/accel targets
+`GUID_TIMEOUT` (default 3 s) after the last setpoint — so a one-shot Send velocity move brakes
+after ~3 s by design.
+*Check:* `lib/move/index.js` `MAV_FRAME` table (5/6/11 only); `node --test
+test/move/move.test.js`.
