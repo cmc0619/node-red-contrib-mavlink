@@ -1587,7 +1587,10 @@ The spine above is in tree. What follows was skipped, stubbed, or left partial �
 by silence. Update this list when an item lands.
 
 **done** means it is in tree and the suite covers it. **done ✅** means more: the operator has
-driven it in a live editor and accepted it. The distinction earns its own mark — a green suite
+driven it in a live editor against the SITL lab — 5× ArduPilot and 5× PX4, the rig two rows
+down — and accepted it. That is not a weaker check than the suite, it is the stronger one: this
+project already treats a SITL measurement as the *authority* over ArduPilot's source, PX4's and
+pymavlink's, which are only the default hypothesis. The mark earns its place — a green suite
 says the code does what a test asked for, and only use says it does what the job needed. The
 first ✅ was awarded after four rounds of exactly that gap: a mode the dialog collected and
 threw away, an index read that could not be issued, a Value and a Type offered by actions that
