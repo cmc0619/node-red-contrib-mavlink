@@ -202,15 +202,19 @@ const PROFILE = {
     notes: 'mirrors SITL 13 list path on sysid 11; assert COM_RC_IN_MODE + MPC_XY_VEL_MAX',
   },
   '31-param-encoding-override': {
-    waitMs: 35000,
-    expect: 'paramEncoding override AP c-cast + PX4 bytewise',
-    injectGapMs: 2000,
-    notes: 'payload.paramEncoding on ARMING_OPTIONS / COM_RC_IN_MODE INT32 sets',
+    waitMs: 45000,
+    expect: 'paramEncoding override matching + crossed timeout',
+    // Matching sets finish in ~1 s; crossed AP bytewise waits the 5 s echo timeout.
+    injectGapMs: 8000,
+    notes:
+      'matching overrides (PX4 bytewise / AP c-cast) succeed; crossed AP bytewise must echo-timeout (proves override rung)',
   },
   '32-param-echo-timeout': {
-    waitMs: 20000,
-    expect: 'unknown WPNAV_SPEED echo timeout',
-    notes: 'Copter 4.7 has no WPNAV_SPEED — confirm must timed-out / echo timeout',
+    waitMs: 25000,
+    expect: 'known param then unknown WPNAV_SPEED echo timeout',
+    injectGapMs: 3000,
+    notes:
+      'LOIT_SPEED_MS confirm proves AP-1 reachable; then missing WPNAV_SPEED must timed-out / echo timeout',
   },
 };
 
@@ -574,13 +578,18 @@ function verdictFrom(profile, summary, log) {
     return { status: 'FAIL', reason: 'list collect / index-read assert not observed' };
   }
   if (/PARAM_SET fan-out|fan-out sequential confirm/i.test(expect)) {
+    // Fan-out silently drops absent peers — a 3/5 fleet can still report
+    // succeeded. Require the aggregate count to prove the ×5 path ran.
     const fanOk = summary.debug.some(
-      (d) => /fanout status/i.test(d.tag) && d.result === 'succeeded'
+      (d) =>
+        /fanout status/i.test(d.tag) &&
+        d.result === 'succeeded' &&
+        /count:\s*5\b/.test(d.excerpt || '')
     );
     if (fanOk) {
-      return { status: 'PASS', reason: 'PARAM_SET sequential fan-out confirm succeeded' };
+      return { status: 'PASS', reason: 'PARAM_SET sequential fan-out confirm succeeded ×5' };
     }
-    return { status: 'FAIL', reason: 'PARAM_SET fan-out succeeded status not observed' };
+    return { status: 'FAIL', reason: 'PARAM_SET fan-out succeeded×5 status not observed' };
   }
   if (/PX4 request-list collect/i.test(expect)) {
     const listOk = summary.debug.some(
@@ -601,28 +610,58 @@ function verdictFrom(profile, summary, log) {
     return { status: 'FAIL', reason: 'PX4 list collect not observed' };
   }
   if (/paramEncoding override/i.test(expect)) {
-    const apSet = summary.debug.some((d) => /ap set/i.test(d.tag) && d.result === 'succeeded');
-    const px4Set = summary.debug.some((d) => /px4 set/i.test(d.tag) && d.result === 'succeeded');
-    if (apSet && px4Set) {
-      return { status: 'PASS', reason: 'AP c-cast + PX4 bytewise encoding overrides echoed' };
-    }
-    if (apSet || px4Set) {
-      return { status: 'PARTIAL', reason: `encoding override: ap=${apSet} px4=${px4Set}` };
-    }
-    return { status: 'FAIL', reason: 'paramEncoding override echoes not observed' };
-  }
-  if (/WPNAV_SPEED echo timeout|unknown .*echo timeout/i.test(expect)) {
-    // Negative path: timed-out is the success. Generic verdict would FAIL it.
-    const echoTimedOut = summary.debug.some(
+    const apSet = summary.debug.some((d) => /ap set status/i.test(d.tag) && d.result === 'succeeded');
+    const px4Set = summary.debug.some((d) => /px4 set status/i.test(d.tag) && d.result === 'succeeded');
+    // Crossed override must fail: if payload.paramEncoding were ignored, AP would
+    // fall back to c-cast and this set would succeed.
+    const crossedTimedOut = summary.debug.some(
       (d) =>
-        /set status/i.test(d.tag) &&
+        /ap wrong status/i.test(d.tag) &&
         d.result === 'timed-out' &&
         /echo timeout/i.test(d.detail || d.excerpt || '')
     );
-    if (echoTimedOut) {
-      return { status: 'PASS', reason: 'unknown WPNAV_SPEED set surfaced echo timeout' };
+    if (apSet && px4Set && crossedTimedOut) {
+      return {
+        status: 'PASS',
+        reason: 'matching encoding overrides echoed; crossed AP bytewise timed out',
+      };
     }
-    return { status: 'FAIL', reason: 'expected echo timeout on unknown WPNAV_SPEED not observed' };
+    if (apSet || px4Set || crossedTimedOut) {
+      return {
+        status: 'PARTIAL',
+        reason: `encoding override: ap=${apSet} px4=${px4Set} crossedTimeout=${crossedTimedOut}`,
+      };
+    }
+    return { status: 'FAIL', reason: 'paramEncoding override path not observed' };
+  }
+  if (/WPNAV_SPEED echo timeout|unknown .*echo timeout/i.test(expect)) {
+    // Negative path: timed-out is the success — but only after a known-param
+    // confirm proves AP-1 is reachable (dead peer would also echo-timeout).
+    const knownOk = summary.debug.some(
+      (d) => /known set status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    const echoTimedOut = summary.debug.some(
+      (d) =>
+        /unknown set status/i.test(d.tag) &&
+        d.result === 'timed-out' &&
+        /echo timeout/i.test(d.detail || d.excerpt || '')
+    );
+    if (knownOk && echoTimedOut) {
+      return {
+        status: 'PASS',
+        reason: 'known LOIT_SPEED_MS confirmed; unknown WPNAV_SPEED echo-timed-out',
+      };
+    }
+    if (knownOk || echoTimedOut) {
+      return {
+        status: 'PARTIAL',
+        reason: `echo-timeout story: known=${knownOk} unknownTimeout=${echoTimedOut}`,
+      };
+    }
+    return {
+      status: 'FAIL',
+      reason: 'known-param confirm + unknown-id echo timeout not observed',
+    };
   }
 
   const bad = results.filter((r) =>

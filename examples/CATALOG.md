@@ -618,15 +618,16 @@ instances it needs. Filenames restart at `01` inside the folder.
 
 - **File:** `examples/sitl/31-param-encoding-override.json` · **Tab:** `SITL 31 Param encoding override`
 - **Story:** Explicit `msg.payload.paramEncoding` on both stacks — PX4 `bytewise` INT32
-  and ArduPilot `c-cast` INT32 — each echo-confirmed (§11 ladder).
-- **Nodes:** dual connections, 2× `param` set(confirm) with JSON inject payloads, `debug`.
+  and ArduPilot `c-cast` INT32 echo-confirm — plus a crossed AP `bytewise` set that must
+  echo-timeout so success depends on the override rung, not firmware fallback (§11).
+- **Nodes:** dual connections, 3× `param` set(confirm) with JSON inject payloads, `debug`.
 
 ### sitl/32 — Param echo timeout (unknown id)
 
 - **File:** `examples/sitl/32-param-echo-timeout.json` · **Tab:** `SITL 32 Param echo timeout`
-- **Story:** Deliberate set of missing `WPNAV_SPEED` on Copter 4.7.0; confirm must finish
-  as `timed-out` / `echo timeout` (negative twin of sitl/21).
-- **Nodes:** config triplet, `param` set(confirm, 5 s timeout), `inject`, `debug`.
+- **Story:** Confirm live `LOIT_SPEED_MS` first (AP-1 reachable), then set missing
+  `WPNAV_SPEED` on Copter 4.7.0; confirm must finish as `timed-out` / `echo timeout`.
+- **Nodes:** config triplet, 2× `param` set(confirm), `inject`, `debug`.
 
 ---
 

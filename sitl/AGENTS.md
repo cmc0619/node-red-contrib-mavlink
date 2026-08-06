@@ -125,11 +125,13 @@ local or paste a collapsed `<details>` block — do not land it in git.
   `s0 status`…`land status`), not a generic succeeded count.
 - Example **28**: list collect then index-read — verdict needs `list status` + `index assert`
   both `succeeded` (wire shape: `param_index ≥ 0`, empty `param_id`).
-- Example **29**: PARAM_SET fan-out — `fanout status` succeeded ×5; no arm prep.
+- Example **29**: PARAM_SET fan-out — `fanout status` succeeded with `count: 5` (subset
+  fleets also report succeeded; count is required).
 - Example **30**: PX4 list — `list status` + `list assert` (known ids present).
-- Example **31**: per-stack `ap set` / `px4 set` succeeded with payload `paramEncoding`.
-- Example **32**: unknown `WPNAV_SPEED` — `set status` must be `timed-out` / `echo timeout`
-  (dedicated verdict; generic path would FAIL a timeout).
+- Example **31**: matching `ap set` / `px4 set` succeeded **and** `ap wrong status`
+  `timed-out` (crossed bytewise on AP); matching-only would not prove the override rung.
+- Example **32**: `known set status` succeeded (LOIT_SPEED_MS) **then** `unknown set status`
+  `timed-out` / `echo timeout` on missing `WPNAV_SPEED` (dead peer alone must not PASS).
 
 ## Port / sysid map (quick)
 
