@@ -1230,6 +1230,11 @@ zero rate is inert, not a place. Yaw and yaw rate follow the same presence rule 
 else: blank is mask-ignored, and a blank arriving on `msg.payload` is normalised to unset rather
 than commanding a yaw of zero.
 
+**Blank means undefined, null, or a string holding nothing but whitespace** (`isBlank`). The
+whitespace arm is load-bearing: `Number(' ')` is a *finite* `0`, so a blank test of `=== ''`
+leaves every guard above open to a string that merely looks empty (§14). A padded number
+(`' 4 '`) is still `4` — only strings with no content are blank.
+
 **Known-unsupported combos send anyway, but never silently** (`advisoryFor`): a setpoint has no
 acknowledgement, so a `node.warn` is all the feedback the operator gets. The list is what
 measurement supports, nothing more (§14, SITL 2026-08-05): **PX4 + either OFFSET frame** (no
@@ -3267,3 +3272,29 @@ silent (replacement, redeploy): the general rule is **announce what the flow cou
 observe, and nothing else**, which is the same reasoning that keeps advisories from becoming
 noise.
 *Check:* `node --test test/move/node.test.js` — the TTL-expiry and silent-replacement tests.
+
+---
+
+**`Number(' ')` is a finite zero — a blank test of `=== ''` is not a blank test (2026-08-06).**
+*Wrong belief:* blank is `undefined | null | ''`, and that trio is what the §10 coordinate
+guards, the yaw presence rule, and the stream-timing override all test for. Anything else is a
+value and belongs downstream.
+*Fact:* `Number(' ') === 0`, and `Number.isFinite(0)` is true, so a whitespace-only string is
+neither blank nor rejected — it zero-fills, silently, wherever the blank test let it past. Four
+places, found when a review bot reported the least dangerous one:
+
+| input | became | guard defeated |
+|---|---|---|
+| `position.north: ' '` | `x = 0` | §10 local blank-coordinate — commands the EKF origin |
+| `position.alt: ' '` | `alt = 0` | the blank-alt guard added in the same PR — ground level |
+| `yaw: ' '` | ignore bit cleared, `yaw = 0` | yaw presence rule — commands north |
+| `payload.ttlMs: ' '` | ttl `0` = never expire | outlives the configured TTL |
+
+Fixed at the sentinel, not the four call sites: `isBlank` trims, and the node's `streamMs` uses
+the same test. Each hazard then resolves the way its neighbours already do — absolute
+coordinates refuse, yaw stays mask-ignored, a blank ttl inherits config — instead of growing a
+fourth bespoke rule. The general lesson is about *sentinels*: a guard is only as good as the
+predicate that decides what it guards against, so when a blank/empty/absent test protects
+something safety-relevant, check what the language quietly coerces into range. `Number('')`,
+`Number(null)`, and `Number([])` are all `0` too; only `''` and `null` were being caught.
+*Check:* `node --test test/move/move.test.js` — the whitespace-is-blank test walks all four.
