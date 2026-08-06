@@ -84,8 +84,6 @@ module.exports = function registerMavlinkBuild(RED) {
     // Repeat interval.
     const repeatMs = Number(config.repeatMs);
     let repeatTimer = null;
-    let lastFireMs = 0;
-    let fireCount = 0;
     let rateWindowStart = 0;
     let rateWindowCount = 0;
 
@@ -241,13 +239,11 @@ module.exports = function registerMavlinkBuild(RED) {
 
       // Track achieved rate.
       const now = Date.now();
-      fireCount += 1;
       rateWindowCount += 1;
       if (now - rateWindowStart >= 1000) {
         rateWindowStart = now;
         rateWindowCount = 1;
       }
-      lastFireMs = now;
 
       // §9: on the Send tier, output 0 is a pass-through trigger, not a Build
       // envelope — a downstream node advances on success and never inspects the
@@ -280,7 +276,9 @@ module.exports = function registerMavlinkBuild(RED) {
         return;
       }
 
-      if (execute(msg, done) && done) done();
+      // execute() returns false exactly on the paths where it already called
+      // done(err), so a true return is the only one still owing a done().
+      if (execute(msg, done)) done();
     });
 
     // Repeat timer.
@@ -296,8 +294,6 @@ module.exports = function registerMavlinkBuild(RED) {
         clearInterval(repeatTimer);
         repeatTimer = null;
       }
-      void fireCount;
-      void lastFireMs;
       done();
     });
   }
