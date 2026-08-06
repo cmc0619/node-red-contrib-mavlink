@@ -543,3 +543,93 @@ test('the Type select ships empty and is filled from the shared table', () => {
   assert.match(paramHtml, /RED\.mavlink\.PARAM_TYPE_OPTIONS/, 'filled from the shared table');
   assert.doesNotMatch(paramHtml, /_paramTypeOptions\s*=\s*\[/, 'and keeps no copy of its own');
 });
+
+/**
+ * Mount the real `applyActionRows` and report which rows it leaves visible.
+ *
+ * The row matrix is the whole point of the function, and it was previously
+ * asserted by matching `.toggle(` calls in the source — which proves the file
+ * says something, not that the combination of action and mode resolves the way
+ * the protocol requires.
+ *
+ * @param {string} action  the Action select's value
+ * @param {string} lookup  the persisted Identify-by value
+ * @returns {{visible: string[], index: string}}
+ */
+function mountActionRows(action, lookup) {
+  const start = paramHtml.indexOf('function applyActionRows() {');
+  assert.ok(start > 0, 'applyActionRows is present');
+  const end = paramHtml.indexOf('\n      }', start);
+  assert.ok(end > start, 'and terminates at the expected anchor');
+
+  const { element, $ } = makeDom({
+    '#node-input-action': action,
+    '#node-input-lookup': lookup,
+  });
+  const context = {
+    $,
+    RED: { mavlink: {} },
+    // The dialog's `node` closure; the stubbed indexAddressed ignores it.
+    node: {},
+    // The two collaborators, stubbed only because they are proven elsewhere:
+    // liveOr in mavlink-editor-resource.test.js, the results panel above.
+    indexAddressed: () => action === 'read' && lookup === 'index',
+    hideParamResults: () => {},
+  };
+  context.RED.mavlink.toggleRow = (selector, shown) => {
+    if (selector) element(selector).toggle(!!shown);
+  };
+  vm.runInNewContext(
+    `${paramHtml.slice(start, end + '\n      }'.length)}\nthis.run = applyActionRows;`,
+    context
+  );
+  context.run();
+
+  const rows = ['#row-param-lookup', '#row-paramId', '#row-paramIndex', '#row-value', '#row-paramType'];
+  return {
+    visible: rows.filter((r) => element(r).visible),
+    index: element('#node-input-paramIndex').val(),
+  };
+}
+
+test('each action shows exactly the fields its wire message carries', () => {
+  // read → PARAM_REQUEST_READ (param_id or param_index)
+  assert.deepEqual(
+    mountActionRows('read', 'name').visible,
+    ['#row-param-lookup', '#row-paramId'],
+    'by name: the choice and the name, no value and no type'
+  );
+  assert.deepEqual(
+    mountActionRows('read', 'index').visible,
+    ['#row-param-lookup', '#row-paramIndex'],
+    'by index: the index replaces the name rather than joining it'
+  );
+
+  // set → PARAM_SET (param_id, param_value, param_type). No param_index field
+  // exists, so the choice is not offered and the name is the only address.
+  for (const lookup of ['name', 'index']) {
+    assert.deepEqual(
+      mountActionRows('set', lookup).visible,
+      ['#row-paramId', '#row-value', '#row-paramType'],
+      `set with a saved lookup of ${lookup}`
+    );
+  }
+
+  // request-list → PARAM_REQUEST_LIST, which carries nothing but the target.
+  for (const lookup of ['name', 'index']) {
+    assert.deepEqual(
+      mountActionRows('request-list', lookup).visible, [],
+      `request-list with a saved lookup of ${lookup}: it names no parameter`
+    );
+  }
+});
+
+test('a hidden index carries the sentinel, and a hidden value is left alone', () => {
+  // param_index -1 means "use param_id", so a leftover index would win over
+  // the name on the wire — it is stamped every time the field is hidden.
+  for (const [action, lookup] of [['read', 'name'], ['set', 'index'], ['request-list', 'index']]) {
+    assert.equal(mountActionRows(action, lookup).index, '-1', `${action}/${lookup}`);
+  }
+  // …and never when the operator is the one editing it.
+  assert.notEqual(mountActionRows('read', 'index').index, '-1');
+});

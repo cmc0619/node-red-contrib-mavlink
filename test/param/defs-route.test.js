@@ -407,3 +407,69 @@ test('GET prefers the editor query over a stale deployed profile', async (t) => 
 
   assert.equal(res.body.defs.RC1_MIN.unit, 'us', 'PX4 units, not ArduPilot PWM');
 });
+
+test('GET names the catalog it resolved, not the one the query asked for', async (t) => {
+  // The reported case: a Connection named "PX4" whose Vehicle Profile is set
+  // to ArduPilot. Every symptom points elsewhere — the parameter you pick is
+  // unknown, and the Type field will not narrow — so the answer has to say
+  // which document it actually served. The dialog cannot compose this itself:
+  // it sends no firmware here, and the deployed profile supplies it.
+  const { routes } = captureRoutes(tempUserDir(t), {
+    'profile-copter': { firmware: 'ardupilot', vehicleFamily: 'copter' },
+  });
+  const res = mockRes();
+
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { vehicle: 'profile-copter' } },
+    res
+  );
+
+  assert.match(res.body.catalog, /^ArduPilot Copter · \d+ definitions \(shipped seed\)$/);
+  assert.equal(
+    res.body.catalog.includes(String(Object.keys(res.body.defs).length)), true,
+    'the count in the label is the count that was served'
+  );
+});
+
+test('GET names PX4 when PX4 is what answered', async (t) => {
+  const { routes } = captureRoutes(tempUserDir(t));
+  const res = mockRes();
+
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { dialect: 'development', firmware: 'px4' } },
+    res
+  );
+
+  assert.match(res.body.catalog, /^PX4 · \d+ definitions \(shipped seed\)$/);
+});
+
+test('a downloaded catalog says so, so the seed is not blamed for it', async (t) => {
+  const userDir = tempUserDir(t);
+  writeHoldingFile(userDir, 'profile-copter', {
+    Vehicle: {
+      RC1_MIN: { humanName: 'Mine', documentation: 'From my own vehicle.', fields: {} },
+    },
+  });
+  const { routes } = captureRoutes(userDir, {
+    'profile-copter': { firmware: 'ardupilot', vehicleFamily: 'copter' },
+  });
+  const res = mockRes();
+
+  await routes.get('GET /mavlink/param/defs').handler(
+    { query: { vehicle: 'profile-copter' } },
+    res
+  );
+
+  assert.match(res.body.catalog, /\(downloaded for this profile\)$/);
+});
+
+test('an empty answer carries a notice and no catalog to contradict it', async (t) => {
+  const { routes } = captureRoutes(tempUserDir(t));
+  const res = mockRes();
+
+  await routes.get('GET /mavlink/param/defs').handler({ query: {} }, res);
+
+  assert.equal(Object.keys(res.body.defs).length, 0);
+  assert.ok(res.body.notice, 'the notice explains the emptiness');
+  assert.equal(res.body.catalog, undefined, 'and nothing names a catalog that was not served');
+});

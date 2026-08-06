@@ -88,8 +88,12 @@ test('Param node titles come from loaded param defs, not baked HTML', () => {
   const html = readHtml('mavlink-param');
   // Composed from the loaded definition — description, then unit and range —
   // because the dialog carries this on hover rather than in a standing row.
-  assert.match(html, /#node-input-paramId'\)\.attr\('title', parts\.join/);
+  assert.match(html, /#node-input-paramId'\)\.attr\('title', hover\)/);
+  assert.match(html, /hover = parts\.length \? parts\.join/, 'the definition detail composes it');
   assert.match(html, /parts\.push\(def\.description\)/, 'sourced from the definition');
+  // …and the catalog that answered leads it, so "which definitions are these?"
+  // is answerable before a parameter has been picked.
+  assert.match(html, /_defsCatalog \+ '\\n' \+ hover/, 'the catalog line leads the hover');
   // The value field goes through the shared helper, which sets the title on the
   // input *and* its label and maintains the units hint — one mechanism, not a
   // hand-set attribute plus a private units span.

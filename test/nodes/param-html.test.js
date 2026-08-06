@@ -186,9 +186,10 @@ test('mavlink-param CompID reloads when catalog source changes', () => {
  *
  * @param {string} liveParamId  what the dialog's paramId field reports
  * @param {Function} [nodeFor]  RED.nodes.node stand-in
+ * @param {object} [fields]  other live dialog fields, keyed by selector
  * @returns {object} the VM context: validateForTest, keyForTest, seed
  */
-function mountValidator(liveParamId, nodeFor) {
+function mountValidator(liveParamId, nodeFor, fields = {}) {
   const start = html.indexOf('var _paramDefsByKey = {};');
   const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
   assert.ok(start >= 0 && end > start, 'the keyed cache and key helper are present');
@@ -213,11 +214,15 @@ function mountValidator(liveParamId, nodeFor) {
     // still returning a live value from `.val()`, which real jQuery never
     // does; code that checks `length` before reading, as the shared helpers
     // do, saw a closed dialog and an open one at the same time.
-    $: (selector) => (
-      selector === '#node-input-paramId' && liveParamId !== undefined
-        ? { val: () => liveParamId, length: 1 }
-        : { val: () => undefined, length: 0 }
-    ),
+    $: (selector) => {
+      if (selector === '#node-input-paramId' && liveParamId !== undefined) {
+        return { val: () => liveParamId, length: 1 };
+      }
+      if (Object.prototype.hasOwnProperty.call(fields, selector)) {
+        return { val: () => fields[selector], length: 1 };
+      }
+      return { val: () => undefined, length: 0 };
+    },
     Number,
     RED: { mavlink: {}, nodes: { node: nodeFor || (() => null) } },
   };
@@ -234,7 +239,9 @@ function mountValidator(liveParamId, nodeFor) {
 
 /** One definition set, under the key a dialog with no fields set would compute. */
 function mountValueValidator(defs, liveParamId) {
-  const context = mountValidator(liveParamId);
+  // Action `set`, because param_value exists only on PARAM_SET and the bounds
+  // check exists only for it — a read carries no value to check.
+  const context = mountValidator(liveParamId, undefined, { '#node-input-action': 'set' });
   context.seed({ [context.keyForTest({})]: defs });
   return context.validateForTest;
 }
@@ -255,6 +262,29 @@ test('mavlink-param value validator: refuses a value outside the documented rang
   assert.equal(validate(2200), true);
   assert.equal(validate(50), false, 'below min');
   assert.equal(validate(9000), false, 'above max');
+});
+
+test('a value only reaches the wire on a set, so only a set is checked for it', () => {
+  // PARAM_SET is the only message carrying param_value, and the Value row is
+  // shown only for a set. Configure a set with an out-of-range value, switch
+  // the action to Read one, and the row disappears — if the check did not go
+  // with it, the node would stay red over a field no longer on screen, with
+  // no way to fix it from the dialog.
+  const forAction = (action) => mountValidator('RC1_MIN', undefined, {
+    '#node-input-action': action,
+  });
+
+  const set = forAction('set');
+  set.seed({ [set.keyForTest({})]: RANGE_DEFS });
+  assert.equal(set.validateForTest(9000), false, 'a set is checked against the bounds');
+  assert.equal(set.validateForTest(1500), true);
+
+  for (const action of ['read', 'request-list']) {
+    const other = forAction(action);
+    other.seed({ [other.keyForTest({})]: RANGE_DEFS });
+    assert.equal(other.validateForTest(9000), true,
+      `${action}: a value left over from a set is not sent, so it is not refused`);
+  }
 });
 
 test('mavlink-param value validator: non-numeric always fails', () => {
@@ -285,7 +315,7 @@ test('mavlink-param value validator: with no definitions loaded it is the plain 
  * with 2000 would fail on a value that firmware accepts.
  */
 function mountKeyedValidator(byKey, editedNode, liveParamId) {
-  const context = mountValidator(liveParamId);
+  const context = mountValidator(liveParamId, undefined, { '#node-input-action': 'set' });
   context.seed(byKey);
   return context.validateForTest.bind(editedNode);
 }
@@ -472,8 +502,9 @@ test('the mode radios write through to the field that persists', () => {
     'and reopening checks the radio the saved field names'
   );
 
-  assert.match(html, /\$\('#row-paramId'\)\.toggle\(!byIndex\)/, 'name row follows the mode');
-  assert.match(html, /\$\('#row-paramIndex'\)\.toggle\(byIndex\)/, 'index row follows the mode');
+  // Which rows the mode shows is proven behaviourally in
+  // param-defs-editor.test.js — running the real applyActionRows against the
+  // whole action x mode matrix, rather than matching the toggle calls here.
   assert.match(
     html,
     /\$\('#node-input-paramIndex'\)\.val\(-1\)/,
