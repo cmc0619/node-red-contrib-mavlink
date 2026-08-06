@@ -85,8 +85,8 @@ module.exports = function registerMavlinkMove(RED) {
               identityId,
               // Payload overrides config (§6 runtime override of last resort);
               // the editor default guarantees config when the payload is silent.
-              intervalMs: Number(firstDefined(payload.intervalMs, config.intervalMs)),
-              ttlMs: Number(firstDefined(payload.ttlMs, config.ttlMs)),
+              intervalMs: streamMs(payload.intervalMs, config.intervalMs, 'intervalMs', 1),
+              ttlMs: streamMs(payload.ttlMs, config.ttlMs, 'ttlMs', 0),
             });
             stream.start();
             completeResult(node, send, 'succeeded', 'streaming', message);
@@ -128,4 +128,31 @@ function fail(node, send, err, msg, done) {
 
 function statusRecord(result, detail, extra = {}) {
   return makeStatusRecord({ node: 'mavlink-move', result, detail, ...extra });
+}
+
+/**
+ * Stream timing: config is editor-validated and trusted; a payload override is
+ * runtime-boundary data and must refuse rather than misbehave silently — a NaN
+ * ttl never satisfies the stream's `ttl > 0` expiry check (the stream runs
+ * forever), and setInterval coerces a negative or NaN interval to ~1 ms or the
+ * fallback. Minimum 0 keeps ttl 0 = "stream until replaced or closed";
+ * an interval needs at least 1 ms to be a rate at all.
+ *
+ * @param {*} payloadValue  ms from msg.payload, blank = inherit config
+ * @param {*} configValue   ms from the editor-validated config
+ * @param {string} name     payload property name, for the error
+ * @param {number} minimum  smallest valid ms value
+ * @returns {number}
+ */
+function streamMs(payloadValue, configValue, name, minimum) {
+  if (payloadValue === undefined || payloadValue === null || payloadValue === '') {
+    return Number(configValue);
+  }
+  const n = Number(payloadValue);
+  if (!Number.isFinite(n) || n < minimum) {
+    throw new Error(
+      `payload.${name} must be a finite number of milliseconds >= ${minimum}, got ${JSON.stringify(payloadValue)}`
+    );
+  }
+  return n;
 }

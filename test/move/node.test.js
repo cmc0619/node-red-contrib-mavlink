@@ -404,6 +404,58 @@ test('mavlink-move stream: payload intervalMs overrides config (§6 payload over
   assert.ok(sends.length >= 3, `payload interval override must re-send (got ${sends.length} sends)`);
 });
 
+test('mavlink-move stream: malformed payload timing overrides refuse the input', () => {
+  const conn = {
+    vehicle: {},
+    send() {},
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    intervalMs: 100,
+    ttlMs: 1000,
+  });
+
+  // A NaN ttl would never satisfy the stream's `ttl > 0` expiry check (the
+  // stream runs forever); a negative interval reaches setInterval as ~1 ms.
+  // Both must fail the input instead.
+  const bad = [
+    { payload: { ttlMs: 'forever' }, why: 'non-numeric ttl' },
+    { payload: { intervalMs: 'fast' }, why: 'non-numeric interval' },
+    { payload: { intervalMs: -5 }, why: 'negative interval' },
+    { payload: { intervalMs: 0 }, why: 'zero interval' },
+    { payload: { ttlMs: -1 }, why: 'negative ttl' },
+  ];
+  for (const { payload, why } of bad) {
+    let sent;
+    let doneError;
+    node.emit('input', { payload }, (m) => { sent = m; }, (err) => { doneError = err; });
+    assert.equal(sent[0], null, `${why} must not start a stream`);
+    assert.equal(sent[1].result, 'failed', `${why} fails the input`);
+    assert.match(doneError.message, /milliseconds/, `${why} names the timing rule`);
+  }
+
+  // Blank still inherits config, and an explicit payload ttl of 0 is a value
+  // ("stream until replaced or closed"), not a malformed override.
+  for (const payload of [{}, { intervalMs: '', ttlMs: null }, { ttlMs: 0 }]) {
+    let sent;
+    let doneError;
+    node.emit('input', { payload }, (m) => { sent = m; }, (err) => { doneError = err; });
+    assert.equal(doneError, undefined, `${JSON.stringify(payload)} must be accepted`);
+    assert.equal(sent[1].result, 'succeeded');
+  }
+  node.emit('close', () => {});
+});
+
 function redStub(nodesById) {
   return {
     nodes: {
