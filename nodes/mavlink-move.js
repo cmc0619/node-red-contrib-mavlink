@@ -130,23 +130,27 @@ function completeBuild(node, send, message) {
 
 function completeResult(node, send, result, action, message) {
   applyActionStatus(node, 'ok', action);
-  send([{ payload: { result, action, message } }, statusRecord(result, action, { message })]);
+  send([{ payload: { result, message } }, statusRecord(result, action, { message })]);
 }
 
 /**
  * A stream reached its TTL: the vehicle already has the stop packet, and this
- * is what tells the flow. `action` is what separates it from the `streaming`
- * message that opened the stream — both are successes on the same port.
+ * is what tells the flow.
+ *
+ * **Status port only.** Output 0 is a trigger, not a report (§9): one input
+ * fires it at most once, and a consumer never inspects the payload to decide
+ * whether to proceed. Starting the stream already fired it, so emitting again
+ * here would run the whole downstream chain a second time — the setpoint's own
+ * "then do X" would fire at t=0 as well as at expiry. Expiry is a lifecycle
+ * update, and lifecycle updates ride output 1, the same way Mission and Param
+ * progress does. Branch on it with a switch for `detail === 'expired'`.
  *
  * @param {object} node
  * @param {object} message  the zero-velocity stop message that was sent
  */
 function completeExpiry(node, message) {
   applyActionStatus(node, 'ok', 'stream expired');
-  node.send([
-    { payload: { result: 'succeeded', action: 'expired', message } },
-    statusRecord('succeeded', 'expired', { message }),
-  ]);
+  node.send([null, statusRecord('succeeded', 'expired', { message })]);
 }
 
 function fail(node, send, err, msg, done) {

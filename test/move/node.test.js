@@ -484,9 +484,7 @@ test('mavlink-move stream: TTL expiry emits an expired message the flow can chai
 
   let started;
   node.emit('input', { payload: {} }, (m) => { started = m; }, () => {});
-  // Both stream messages are successes on port 0; `action` is what separates
-  // "it started" from "it ended".
-  assert.equal(started[0].payload.action, 'streaming');
+  assert.ok(started[0], 'starting the stream fires the continue port');
 
   const deadline = Date.now() + 2000;
   while (!emitted.length && Date.now() < deadline) {
@@ -496,13 +494,15 @@ test('mavlink-move stream: TTL expiry emits an expired message the flow can chai
 
   assert.equal(emitted.length, 1, 'expiry emits exactly once');
   const [out, status] = emitted[0];
-  assert.equal(out.payload.result, 'succeeded');
-  assert.equal(out.payload.action, 'expired');
-  // Carries the stop packet the vehicle actually got: zero-velocity, not the
-  // all-ignore mask PX4 rejects (§14 / #115).
-  assert.equal(out.payload.message.fields.type_mask, 3527);
+  // §9: output 0 is a trigger fired at most once per input, and the stream's
+  // start already fired it. A second message here would run the downstream
+  // chain twice — once at t=0 and once at expiry.
+  assert.equal(out, null, 'expiry must not re-fire the continue port');
   assert.equal(status.result, 'succeeded');
   assert.equal(status.detail, 'expired');
+  // Carries the stop packet the vehicle actually got: zero-velocity, not the
+  // all-ignore mask PX4 rejects (§14 / #115).
+  assert.equal(status.message.fields.type_mask, 3527);
 });
 
 test('mavlink-move stream: a whitespace ttl inherits the configured TTL, never "run forever"', async () => {
@@ -537,7 +537,7 @@ test('mavlink-move stream: a whitespace ttl inherits the configured TTL, never "
   node.emit('close', () => {});
 
   assert.equal(emitted.length, 1, 'whitespace ttl still expires');
-  assert.equal(emitted[0][0].payload.action, 'expired');
+  assert.equal(emitted[0][1].detail, 'expired');
 });
 
 test('mavlink-move stream: a replaced or closed stream expires silently', async () => {
