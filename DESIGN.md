@@ -1591,7 +1591,7 @@ by silence. Update this list when an item lands.
 | **Custom dialect upload in the Vehicle editor** | deferred | Superseded by the dialect library (Seed + catalog dates). No path/upload UI and no path resolution behind it. Private-dialect library ingestion is future work. |
 | **Command node `COMMAND_INT`** | **done** | Carrier defaults to `COMMAND_INT` in the Command, Payload, and Fan-out editors; the only other choice is `COMMAND_LONG`, with no blank prompt or conditional editor validator. Runtime still refuses missing/invalid saved carrier data rather than repairing it. Every tier — build included — honours the configured carrier. Positional params are always degrees; the INT carrier scales ×1e7 per the dialect XML's own classification (`intCoordKinds`: `hasLocation` + not-degE7 → scale; natively-degE7 params carry raw; non-location param5/6 like gimbal flags never scale; unknown command → historical scaling). NaN in param5/6 refuses the INT build loud — the spec routes NaN-meaning commands to COMMAND_LONG, and coercion would aim at null island. On `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns and rebuilds once from the canonical degree params in the other form; second wrong-carrier fails loud (no auto-swap in Fan-out/Payload — homogeneous fleets per node, the named result tells the operator which way to flip). Fan-out command/payload actions and Payload command-backed verbs use the same `lib/command` builders; message-kind payload verbs ignore the carrier. |
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
-| **Param definition catalog** | **done** | 30,938 definitions ship in `seed/param-defs-*.seed.gz` (ArduPilot's six vehicle documents + PX4), keyed firmware × vehicle family, so the Build tier reaches definitions without naming a profile. A profile's own holding file still overrides the seed id by id, because it came from the firmware being flown; a corrupt one is reported *and* falls back to the seed. Authenticated GET stays local-only; the Vehicle editor's explicit authenticated Update downloads its optional `paramDefsUrl`, validates, and atomically replaces the file. Param id is a search panel matching name *and* description (the datalist could only match a name prefix), free entry preserved for parameters no metadata file lists. Value follows the definition: documented enumerations become a select with a Custom value escape, documented bounds are refused at edit time, units and increment ride along. An `unknown` vehicle gets the union of parameter *names* only — no bounds, no enumerations, because the documents disagree and there is no basis to pick (§14). Regenerate with `npm run generate-param-seed`. |
+| **Param definition catalog** | **done** | 30,938 definitions ship in `seed/param-defs-*.seed.gz` (ArduPilot's six vehicle documents + PX4), keyed firmware × vehicle family, so the Build tier reaches definitions without naming a profile. A profile's own holding file still overrides the seed id by id, because it came from the firmware being flown; a corrupt one is reported *and* falls back to the seed. Authenticated GET stays local-only; the Vehicle editor's explicit authenticated Update downloads its optional `paramDefsUrl`, validates, and atomically replaces the file. Param id is a search panel matching name *and* description (the datalist could only match a name prefix), free entry preserved for parameters no metadata file lists. Value follows the definition: documented enumerations become a select with a Custom value escape, documented bounds are refused at edit time, units and increment ride along. An `unknown` vehicle gets the union of parameter *names* only — no bounds, no enumerations, because the documents disagree and there is no basis to pick (§14). A parameter is addressed by name **or** by index, offered only on a read since `PARAM_SET` has no `param_index` and a by-index read sends no name; each action shows only the fields its message carries, and the checks are hidden with the rows (§14). Where the firmware publishes a wire type — PX4 does, for all 1836, and ArduPilot for none — Type narrows to that one option rather than being guessed. The Param id hover names the definition set that answered, composed by the route because only the route knows which document it resolved (§14). Regenerate with `npm run generate-param-seed`. |
 | **Full command-param `enum=` recovery** | **done** | Seed compile carries common.xml `<param enum=`> links into the bundle (e.g. Arm → `MAV_BOOL`). The old `hints.js` overlay is gone. |
 | **Move editor §6 reshape** | **done** | Per-field rows + mode/frame/delivery visibility in the Move dialog, full setpoint matrix (§ "Move setpoint matrix"). |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
@@ -3077,3 +3077,70 @@ console.log('px4',s.defsFor({firmware:'px4'}).size);
 console.log('RC1_MIN',JSON.stringify(s.defsFor({firmware:'px4'}).get('RC1_MIN')),
 JSON.stringify(s.defsFor({firmware:'ardupilot'}).get('RC1_MIN')))"` — `antenna-tracker` is 3617
 `blimp` 3127 and `unknown` 6827, and no union entry carries `min`.
+
+---
+
+**Which parameter definitions you are looking at is decided by the Vehicle Profile, and until
+2026-08-06 nothing on screen said so.**
+*Wrong belief:* the Connection names the stack — one called "connection PX4" is bound to a PX4
+vehicle — so the definitions the Param dialog offers are PX4's. When a chosen parameter then
+turns out to have no published type and the Type field will not narrow, the fault is in the
+type feature, because the catalog is obviously right.
+*Fact (measured 2026-08-06 against the shipped seed):* the Connection's *name* is free text and
+decides nothing. Definitions are keyed on the bound Vehicle Profile's `firmware` and
+`vehicleFamily` (`lib/param/seed.js` `defsFor`), so a Connection named "PX4" whose profile is
+set to ArduPilot is served ArduPilot's documents. The reported case picked
+`ACRO_BAL_PITCH`, which is ArduPilot Copter and **absent from PX4 entirely** — so the full
+seven-option Type list was correct under either reading, and correct for two *different*
+reasons: an id no catalog lists gets no narrowing because nothing may be guessed for it, and an
+ArduPilot id gets none because ArduPilot publishes no wire type in either of its metadata
+formats. Both correct answers are indistinguishable from a broken one.
+
+The silence was structural, not incidental: the definitions notice row rendered only when the
+lookup produced *nothing*, so a successful load of the *wrong* catalog had no surface at all.
+
+Re-check: `node -e "const s=require('./lib/param/seed');
+const g=(m,k)=>m.get(k);
+console.log('px4', !!g(s.defsFor({firmware:'px4'}),'ACRO_BAL_PITCH'));
+console.log('ardupilot', JSON.stringify(g(s.defsFor({firmware:'ardupilot',vehicleFamily:'copter'}),'ACRO_BAL_PITCH').type));
+console.log('px4 typed', [...s.defsFor({firmware:'px4'}).values()].filter(d=>d.type).length,
+'of', s.defsFor({firmware:'px4'}).size)"` — `false`, `undefined`, and 1836 of 1836.
+
+*Decision:* the answer names itself. `catalogLabel` composes "PX4 · 1836 definitions (shipped
+seed)" and the Param id hover leads with it, standing alone before a parameter is picked. It is
+built **in the route, never in the dialog**: the dialog sends the firmware it believes applies,
+while the route falls back to the deployed profile whenever the query omits one, so only the
+route knows which document actually answered — composing it client-side would rebuild the same
+mismatch inside the thing meant to expose it. An unnamed ArduPilot vehicle reads
+"(no vehicle named) · 6827 names", because *names* is the honest unit there and it also explains
+the absent bounds and choice lists, which otherwise read as a second fault.
+
+---
+
+**Each Param action is a different message, so each needs different fields — including the ones
+that do nothing.**
+*Wrong belief:* the Param node edits "a parameter", so one form describes it: an id, a value, a
+type. The action selects what to *do* with that description, and showing the whole form for
+every action is harmless because the unused parts are simply ignored.
+*Fact (read off the dialect, 2026-08-06):* the three actions build three messages carrying
+disjoint field sets — `PARAM_REQUEST_READ` has `param_id` and `param_index`, `PARAM_SET` has
+`param_id`, `param_value` and `param_type`, and `PARAM_REQUEST_LIST` has neither, only the
+target. So a *Request list* node offered a Param id, a Value and a Type of which **none** reach
+the wire, and a *Read one* node offered a Value and a Type that are equally dropped.
+`param_type` is consumed only by `buildParamMessage`'s set branch, and `matchesParamEcho` runs
+only for `delivery = confirm` **and** `action = set`, so nothing on the read path reads either.
+
+Re-check: `node -e "const {loadBundled}=require('./lib/metadata');
+const d=loadBundled('common');
+for (const n of ['PARAM_REQUEST_READ','PARAM_SET','PARAM_REQUEST_LIST'])
+console.log(n, d.messages[n].fields.map(f=>f.name).join(', '))"` — read `target_system,
+target_component, param_id, param_index`; set the same two plus `param_id, param_value,
+param_type`; list the two target fields and nothing else.
+
+*Decision:* row visibility follows the action (`applyActionRows`), and so does validation.
+Hiding a field without hiding what judges it is its own bug: a set configured with an
+out-of-range value and then switched to Read one stayed red over a row no longer on screen,
+with nothing in the dialog able to clear it. **When a field is hidden, the check that refuses it
+is hidden with it.** The one exception is the index, which is *stamped* to `-1` rather than left:
+`param_index` -1 means "use `param_id`", so a leftover index wins on the wire, while a leftover
+value or type is never read and clearing it would only discard the operator's typing.
