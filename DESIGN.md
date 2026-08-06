@@ -181,7 +181,7 @@ makes unreachable.
 | `mavlink-out` | Transmit content not constructed by an action node — raw buffers, messages forwarded from another connection, envelopes built in a Function node |
 | `mavlink-build` | Any message in the loaded dialect. Full Delivery tiers, plus an optional repeat interval that reports achieved rate against configured rate in status |
 | `mavlink-command` | `MAV_CMD`, grouped presets through to the full dialect |
-| `mavlink-move` | `SET_POSITION_TARGET_*` over the full mode × frame matrix (position, velocity, position+velocity, acceleration, force, yaw-only × local/body/global frames), streamed, with TTL and stop |
+| `mavlink-move` | `SET_POSITION_TARGET_*` over the full mode × frame matrix (position, velocity, position+velocity, acceleration, yaw-only × local/body/global frames), streamed, with TTL, stop, and an expiry message |
 | `mavlink-mission` | download / upload / clear × mission / fence / rally |
 | `mavlink-param` | read one, set one, request list |
 | `mavlink-payload` | camera, gimbal, servo, gripper, winch, parachute |
@@ -1015,6 +1015,19 @@ is governed by the role × tier matrix (§6).
 Move has no acknowledgement of any kind, so its third tier is **Stream** instead — sustained
 setpoints with TTL and stop, no confirmation possible.
 
+**A stream announces its own expiry.** When the TTL elapses the node sends the zero-velocity
+stop packet and then emits `{result, action: 'expired', message}` on output 0, with the matching
+status record on output 1 — `message` is the stop packet the vehicle actually got. Without it a
+timed move is unobservable: the vehicle halts, the flow hears nothing, and the node's status
+still reads "streaming", so the obvious use of a TTL — *move for N ms, then do the next thing* —
+cannot be built. Every other stop stays **silent**, because the flow caused it and already
+knows: a new input replaces the stream, and a redeploy closes it. That asymmetry is the rule —
+announce what the flow could not otherwise observe, and nothing else.
+
+Output 0 payloads name their `action` (`sent`, `streaming`, `expired`) precisely because
+`streaming` and `expired` are both successes arriving on the same port; the discriminator is
+what makes the second one usable.
+
 ### Three kinds of confirmation
 
 Not every message can be acknowledged, and the node must offer the right one:
@@ -1191,8 +1204,12 @@ carrier message (`lib/move/index.js` `MODES` / `MAV_FRAME`):
 | Velocity | vx/vy/vz | also the shape of the stream-stop packet |
 | Position + Velocity | both | feed-forward, PX4 offboard |
 | Acceleration | afx/afy/afz | |
-| Force | afx/afy/afz + force bit (512) | no firmware honors it today — advisory fires |
 | Yaw only | neither | requires yaw or yaw rate, else the packet is the all-ignore PX4 rejects (§14 / #115) |
+
+There is **no Force mode**. It was removed once measurement showed neither stack actuates on the
+force bit (512) — a mode that warns "expect this to be ignored" on every use is not a capability,
+it is a dead branch with a label. Removed, not aliased: the name throws. `mavlink-build` remains
+the escape hatch for anyone who genuinely wants the raw bit.
 
 Yaw and yaw rate are included **by presence** on every mode: blank means mask-ignored, a value —
 including 0 — means commanded.
@@ -1215,9 +1232,10 @@ than commanding a yaw of zero.
 
 **Known-unsupported combos send anyway, but never silently** (`advisoryFor`): a setpoint has no
 acknowledgement, so a `node.warn` is all the feedback the operator gets. The list is what
-measurement supports, nothing more (§14, SITL 2026-08-05): **Force** (firmware-independent —
-neither stack actuated on the force bit), **PX4 + either OFFSET frame** (no motion at all), and
-**PX4 + `BODY_NED`** (body frames carry velocity only; PX4 discards the position). Three earlier
+measurement supports, nothing more (§14, SITL 2026-08-05): **PX4 + either OFFSET frame** (no
+motion at all) and **PX4 + `BODY_NED`** (body frames carry velocity only; PX4 discards the
+position). Both surviving advisories are PX4-specific, so a Build-tier node — which has no
+connection and therefore no firmware — never warns. Three earlier
 advisories were *removed* when measurement refuted them — ArduPilot acceleration-only, ArduPilot
 `BODY_NED`, and PX4 terrain-altitude — because a warning that fires on working behaviour is
 noise, and noise gets ignored. Firmware comes from the connection's bound Vehicle Profile;
@@ -1787,7 +1805,8 @@ and never measured. Two of five were wrong:
 - **Confirmed — PX4 ignores both OFFSET frames** (items 2–3), now measured rather than assumed.
 - **Confirmed — the force bit (512) is not actuated** on either stack. ArduPilot is
   **negative-only** here (no motion, no complaint, actuation not instrumented); PX4 drifted
-  vertically with no `STATUSTEXT`. Kept, reworded to name the measurement.
+  vertically with no `STATUSTEXT`. Kept at the time, reworded to name the measurement —
+  and **later removed outright**; see the force-mode entry below.
 - **New — PX4 `BODY_NED` now warns** (item 4).
 
 *Mechanism (firmware source, read 2026-08-05 — consulted **after** the measurement, which is
@@ -3213,3 +3232,38 @@ session, not advisories**: ArduPilot funnels an all-ignore pos/vel/accel mask (y
 after ~3 s by design.
 *Check:* `lib/move/index.js` `MAV_FRAME` table (5/6/11 only); `node --test
 test/move/move.test.js`.
+
+---
+
+**A measured-dead mode is not a capability — Force is removed, not warned about (2026-08-06).**
+*Wrong belief:* once measurement showed neither stack actuates on the force bit, an advisory
+saying "expect it to be ignored" was the right resolution — the mode is legal MAVLink, keeping
+it costs little, and warn-not-block is the house style for firmware gaps.
+*Fact:* warn-not-block exists for combinations that *work somewhere* — a different firmware, a
+later release, a vehicle we did not measure. Force is not that: it is a mode whose every use
+fires a warning telling the operator it does nothing, while carrying a `MODES` entry, a mask
+bit, an editor option, conditional labels, a unit swap, and tests. That is a dead branch with a
+label on it, and the advisory table is not a graveyard for features measurement killed. Deleted
+(pre-1.0, no aliases — the name throws naming the valid set); the measurement stays recorded
+above, and `mavlink-build` remains the raw-`type_mask` escape hatch. The distinction to carry
+forward: **advise on what might work elsewhere, delete what is measured not to work anywhere.**
+*Check:* `grep -ri force lib/move nodes/mavlink-move.*` returns nothing; `node --test
+test/move/move.test.js`.
+
+---
+
+**Telling the vehicle is not telling the flow — a Move stream announces its own expiry
+(2026-08-06).**
+*Wrong belief:* TTL expiry is handled, because the stream sends the zero-velocity stop packet
+when it elapses. The stopping is the behaviour; there is nothing further to report.
+*Fact:* the vehicle halted and the flow never found out. The node emitted nothing and its status
+still read "streaming", so *move for N ms, then do the next thing* — the obvious reason to set a
+TTL at all — was unbuildable, and the node's own display lied about live state. Both reference
+implementations (`-ai`, `-kimi`) emit a stream-lifecycle message; ours was alone in staying
+quiet. Now TTL expiry emits `{result, action: 'expired', message}` on output 0 plus a status
+record on output 1, and the port-0 payload carries `action` throughout so `streaming` and
+`expired` — two successes on one port — are distinguishable. Stops the flow *caused* stay
+silent (replacement, redeploy): the general rule is **announce what the flow could not otherwise
+observe, and nothing else**, which is the same reasoning that keeps advisories from becoming
+noise.
+*Check:* `node --test test/move/node.test.js` — the TTL-expiry and silent-replacement tests.
