@@ -1015,18 +1015,23 @@ is governed by the role × tier matrix (§6).
 Move has no acknowledgement of any kind, so its third tier is **Stream** instead — sustained
 setpoints with TTL and stop, no confirmation possible.
 
-**A stream announces its own expiry.** When the TTL elapses the node sends the zero-velocity
-stop packet and then emits `{result, action: 'expired', message}` on output 0, with the matching
-status record on output 1 — `message` is the stop packet the vehicle actually got. Without it a
-timed move is unobservable: the vehicle halts, the flow hears nothing, and the node's status
-still reads "streaming", so the obvious use of a TTL — *move for N ms, then do the next thing* —
-cannot be built. Every other stop stays **silent**, because the flow caused it and already
-knows: a new input replaces the stream, and a redeploy closes it. That asymmetry is the rule —
-announce what the flow could not otherwise observe, and nothing else.
+**A stream announces its own expiry — on output 1.** When the TTL elapses the node sends the
+zero-velocity stop packet and emits a status record with `detail: 'expired'`, carrying the stop
+packet the vehicle actually got. Without it a timed move is unobservable: the vehicle halts, the
+flow hears nothing, and the node's status still reads "streaming", so the obvious use of a TTL —
+*move for N ms, then do the next thing* — cannot be built. Branch on it with a `switch`, the
+same way any other outcome is branched on.
 
-Output 0 payloads name their `action` (`sent`, `streaming`, `expired`) precisely because
-`streaming` and `expired` are both successes arriving on the same port; the discriminator is
-what makes the second one usable.
+**It must not go on output 0.** That port is a trigger fired at most once per input (§9
+"Two outputs"), and starting the stream already fired it; a second message there runs the whole
+downstream chain twice, so the "then do X" would fire at t=0 as well as at expiry. A payload
+discriminator does not rescue this — §9's guarantee is precisely that a consumer *never* has to
+inspect the payload to know whether to proceed. Expiry is a lifecycle update, and lifecycle
+updates ride output 1, exactly as Mission and Param progress does.
+
+Every other stop stays **silent** on both ports, because the flow caused it and already knows: a
+new input replaces the stream, and a redeploy closes it. That asymmetry is the rule — announce
+what the flow could not otherwise observe, and nothing else.
 
 ### Three kinds of confirmation
 
@@ -3265,13 +3270,21 @@ when it elapses. The stopping is the behaviour; there is nothing further to repo
 still read "streaming", so *move for N ms, then do the next thing* — the obvious reason to set a
 TTL at all — was unbuildable, and the node's own display lied about live state. Both reference
 implementations (`-ai`, `-kimi`) emit a stream-lifecycle message; ours was alone in staying
-quiet. Now TTL expiry emits `{result, action: 'expired', message}` on output 0 plus a status
-record on output 1, and the port-0 payload carries `action` throughout so `streaming` and
-`expired` — two successes on one port — are distinguishable. Stops the flow *caused* stay
-silent (replacement, redeploy): the general rule is **announce what the flow could not otherwise
-observe, and nothing else**, which is the same reasoning that keeps advisories from becoming
-noise.
-*Check:* `node --test test/move/node.test.js` — the TTL-expiry and silent-replacement tests.
+quiet. TTL expiry now emits a status record with `detail: 'expired'`. Stops the flow *caused*
+stay silent (replacement, redeploy): the general rule is **announce what the flow could not
+otherwise observe, and nothing else**, which is the same reasoning that keeps advisories from
+becoming noise.
+
+*Second wrong belief, caught in review before merge:* that the announcement belonged on output
+0 alongside the `streaming` message, and that adding an `action` field to distinguish them made
+that safe. It does not. Output 0 is a trigger fired **at most once per input**, and §9's whole
+guarantee is that a consumer never inspects the payload to decide whether to proceed — so a
+second message there runs the entire downstream chain a second time. The feature would have
+broken the exact use case that motivated it: *move for N ms then do X* would have done X
+immediately **and** at expiry. A discriminator field cannot fix a port whose contract is
+"arrival means proceed". Lifecycle updates belong on output 1, which is what Mission and Param
+already do with progress — the precedent was sitting in the same section of this document.
+*Check:* `node --test test/move/node.test.js` — the TTL-expiry test asserts output 0 is `null`.
 
 ---
 
