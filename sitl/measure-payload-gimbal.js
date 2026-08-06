@@ -237,15 +237,11 @@ async function probe() {
 }
 
 async function main() {
-  // Docs path: servo mount + --gimbal
-  console.log('starting vehicle (MNT1_TYPE=1 servo + --gimbal)');
+  // Same defaults as the Compose lab vehicle (mount + still camera + --gimbal).
+  const parmPath = path.join(__dirname, 'params', 'ap-payload-gimbal.parm');
+  console.log('starting vehicle with', parmPath);
   console.log('work dir', WORK_DIR);
-  startVehicle(`
-MNT1_TYPE 1
-SERVO6_FUNCTION 6
-SERVO7_FUNCTION 8
-SERVO8_FUNCTION 7
-`);
+  startVehicle(fs.readFileSync(parmPath, 'utf8'));
   await sleep(8000);
   await probe();
   console.log(fs.readFileSync(OUT, 'utf8'));
