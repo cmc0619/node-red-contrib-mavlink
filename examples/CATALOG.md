@@ -593,6 +593,42 @@ instances it needs. Filenames restart at `01` inside the folder.
   upload/download to sysid 2, `inject`, `debug`.
 - **Config/launch:** two ArduCopter instances (sysid 1, 2) both `--out=udp:127.0.0.1:14550`.
 
+### sitl/28 — Param read by index
+
+- **File:** `examples/sitl/28-param-read-by-index.json` · **Tab:** `SITL 28 Param read by index`
+- **Story:** Collect the AP param table, pick `LOIT_SPEED_MS` by index, then send
+  `PARAM_REQUEST_READ` with `param_index ≥ 0` and empty `param_id`.
+- **Nodes:** config triplet, `param` collect → function → `param` read(send) → assert, `debug`.
+
+### sitl/29 — Param fan-out set
+
+- **File:** `examples/sitl/29-param-fanout-set.json` · **Tab:** `SITL 29 Param fan-out set`
+- **Story:** Build-tier `PARAM_SET` of `LOIT_SPEED_MS=10` then sequential fan-out
+  echo-confirm across AP sysids 1–5 (§10 sequential-only for sets).
+- **Nodes:** config triplet, `param` (Build) → `fanout` (confirm), `inject`, `debug`.
+
+### sitl/30 — PX4 param list collect
+
+- **File:** `examples/sitl/30-px4-param-list.json` · **Tab:** `SITL 30 PX4 param list`
+- **Story:** PX4 `request-list` + collect (the AP-only path in sitl/13), asserting known
+  ids `COM_RC_IN_MODE` and `MPC_XY_VEL_MAX`.
+- **Nodes:** config triplet (PX4 sysid 11), `param` collect → assert, `inject`, `debug`.
+
+### sitl/31 — Param encoding override
+
+- **File:** `examples/sitl/31-param-encoding-override.json` · **Tab:** `SITL 31 Param encoding override`
+- **Story:** Explicit `msg.payload.paramEncoding` on both stacks — PX4 `bytewise` INT32
+  and ArduPilot `c-cast` INT32 echo-confirm — plus a crossed AP `bytewise` set that must
+  echo-timeout so success depends on the override rung, not firmware fallback (§11).
+- **Nodes:** dual connections, 3× `param` set(confirm) with JSON inject payloads, `debug`.
+
+### sitl/32 — Param echo timeout (unknown id)
+
+- **File:** `examples/sitl/32-param-echo-timeout.json` · **Tab:** `SITL 32 Param echo timeout`
+- **Story:** Confirm live `LOIT_SPEED_MS` first (AP-1 reachable), then set missing
+  `WPNAV_SPEED` on Copter 4.7.0; confirm must finish as `timed-out` / `echo timeout`.
+- **Nodes:** config triplet, 2× `param` set(confirm), `inject`, `debug`.
+
 ---
 
 ## 3. `examples/sitl/README.md` outline

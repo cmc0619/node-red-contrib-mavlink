@@ -67,6 +67,11 @@ without understanding each step.
 | `25-tcp-connection.json` | SITL 25 TCP connection (template) | TCP SITL on `:5760` (not in default Compose) |
 | `26-formation-basics.json` | SITL 26 Formation basics | 5× ArduPilot (line then circle) |
 | `27-lucy-in-the-sky.json` | SITL 27 Lucy in the Sky | 5× ArduPilot (sphere tumble + peel land) |
+| `28-param-read-by-index.json` | SITL 28 Param read by index | 1× ArduPilot (list → index read) |
+| `29-param-fanout-set.json` | SITL 29 Param fan-out set | 5× ArduPilot (PARAM_SET confirm) |
+| `30-px4-param-list.json` | SITL 30 PX4 param list | 1× PX4 (request-list collect) |
+| `31-param-encoding-override.json` | SITL 31 Param encoding override | 1× ArduPilot + 1× PX4 |
+| `32-param-echo-timeout.json` | SITL 32 Param echo timeout | 1× ArduPilot (unknown id) |
 
 ## Running the suite
 
