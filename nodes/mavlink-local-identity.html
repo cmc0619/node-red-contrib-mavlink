@@ -11,7 +11,7 @@
 <script type="text/javascript">
   (function () {
     function positiveNumberValidator(v, _opt) {
-      if (v === undefined || v === null || String(v).trim() === '') return true;
+      if (RED.mavlink.isBlank(v)) return true;
       var n = Number(v);
       if (!Number.isFinite(n) || n <= 0) return 'must be a positive number';
       return true;
@@ -26,7 +26,7 @@
       var rangeCheck = RED.mavlink.validateUint8(min);
       return function (v, opt) {
         var role = $('#node-config-input-role').val() || this.role || 'gcs';
-        var blank = v === undefined || v === null || String(v).trim() === '';
+        var blank = RED.mavlink.isBlank(v);
         if (role === 'companion') {
           return blank ? true : rangeCheck.call(this, v, opt);
         }

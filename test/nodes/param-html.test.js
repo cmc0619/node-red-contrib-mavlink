@@ -208,7 +208,16 @@ function mountValidator(liveParamId, nodeFor) {
   assert.match(body, /_paramDefsByKey/, 'the extracted body is the definition-aware validator');
 
   const context = {
-    $: () => ({ val: () => liveParamId, length: 0 }),
+    // Selector-aware, and `length` agrees with `val()`. The previous stub
+    // answered every selector with `length: 0` — "no such element" — while
+    // still returning a live value from `.val()`, which real jQuery never
+    // does; code that checks `length` before reading, as the shared helpers
+    // do, saw a closed dialog and an open one at the same time.
+    $: (selector) => (
+      selector === '#node-input-paramId' && liveParamId !== undefined
+        ? { val: () => liveParamId, length: 1 }
+        : { val: () => undefined, length: 0 }
+    ),
     Number,
     RED: { mavlink: {}, nodes: { node: nodeFor || (() => null) } },
   };

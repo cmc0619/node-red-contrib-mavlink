@@ -15,13 +15,9 @@
 
     function buildMessageDropdown(node, catalog) {
       var sel = $('#node-input-message');
-      var prefer = sel.val() || (
-        node.message !== undefined && node.message !== null
-          ? String(node.message)
-          : ''
-      );
       RED.mavlink.fillEnumSelect(sel, catalog.messages || [], {
-        saved: prefer,
+        saved: node.message,
+        preferLive: true,
         allowEmpty: true,
         emptyLabel: 'All messages',
         valueKey: 'name',

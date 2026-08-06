@@ -36,7 +36,7 @@
           // every target-id field wants and this one does not: in index mode
           // the index *is* the identifier, and an empty box reaches the wire
           // as Number('') — index 0, a different parameter, silently.
-          if (v === undefined || v === null || String(v).trim() === '') {
+          if (RED.mavlink.isBlank(v)) {
             return 'an index is required when identifying by index';
           }
           return RED.mavlink.validateIntRange(0, 32767)(v, opt);
@@ -56,7 +56,7 @@
          * is never rejected for being unknown.
          */
         validate: function (v) {
-          if (v === undefined || v === null || String(v).trim() === '') return true;
+          if (RED.mavlink.isBlank(v)) return true;
           var n = Number(v);
           if (!Number.isFinite(n)) return false;
           var defs = _paramDefsByKey[paramDefsKey(this)];
@@ -103,13 +103,6 @@
   }
 
   /**
-   * The parameter id currently being edited: the live field while the dialog is
-   * open, falling back to the saved value.
-   *
-   * @param {object} node
-   * @returns {string}
-   */
-  /**
    * Whether this node addresses its parameter by index.
    *
    * Two things have to be true, and the second is the protocol's, not the
@@ -119,27 +112,24 @@
    * addressed by name whatever the mode says. `PARAM_REQUEST_LIST` names no
    * parameter either way.
    *
-   * Live field first, saved value as the fallback — the same order every
-   * other Build-tier validator in the palette reads its cross-field state in
-   * (`buildTierDialectDefaults`), since validators also run with the dialog
-   * closed, where jQuery yields an empty set rather than throwing.
-   *
    * @param {object} node
    * @returns {boolean}
    */
   function indexAddressed(node) {
-    var action = $('#node-input-action').val() || (node && node.action) || 'read';
-    var lookup = $('#node-input-lookup').val() || (node && node.lookup) || 'name';
-    return action === 'read' && lookup === 'index';
+    return RED.mavlink.liveOr('#node-input-action', node && node.action, 'read') === 'read'
+      && RED.mavlink.liveOr('#node-input-lookup', node && node.lookup, 'name') === 'index';
   }
 
+  /**
+   * The parameter id currently being edited: the live field while the dialog is
+   * open, falling back to the saved value.
+   *
+   * @param {object} node
+   * @returns {string}
+   */
   function editedParamId(node) {
-    // Validators also run with the dialog closed (on import, and on deploy),
-    // where the field is absent — jQuery returns an empty set and `.val()`
-    // yields undefined rather than throwing, so the saved id is the fallback.
-    var live = $('#node-input-paramId').val();
-    if (!live && node && node.paramId) live = node.paramId;
-    return String(live || '').toUpperCase().trim();
+    return RED.mavlink.liveOr('#node-input-paramId', node && node.paramId)
+      .toUpperCase().trim();
   }
 
   RED.nodes.registerType('mavlink-param', {

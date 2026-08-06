@@ -1018,3 +1018,81 @@ test('PARAM_TYPE_OPTIONS omits the widths the codec cannot encode', () => {
   }
   assert.equal(names[0], 'MAV_PARAM_TYPE_REAL32', 'the field default leads the list');
 });
+
+// ── isBlank / liveOr / toggleRow / fillEnumSelect precedence ─────────────────
+
+test('isBlank is one spelling of "nothing was entered"', () => {
+  const { RED } = loadResource();
+  for (const blank of [undefined, null, '', '   ', '\t\n']) {
+    assert.equal(RED.mavlink.isBlank(blank), true, JSON.stringify(blank));
+  }
+  // 0 and false are values, not absences — an optional numeric field that
+  // treated 0 as blank would silently drop a legal sysid or index.
+  for (const filled of [0, false, '0', 'x', -1]) {
+    assert.equal(RED.mavlink.isBlank(filled), false, JSON.stringify(filled));
+  }
+});
+
+test('liveOr reads the open dialog, then the saved config, then the fallback', () => {
+  const open = loadResource({ '#node-input-action': 'set' }).RED;
+  assert.equal(open.mavlink.liveOr('#node-input-action', 'read'), 'set',
+    'the live field wins while the dialog is open');
+
+  // Dialog closed: the selector matches nothing, which is the state Node-RED
+  // runs `validate` in on import and on deploy.
+  const closed = loadResource().RED;
+  assert.equal(closed.mavlink.liveOr('#node-input-action', 'read'), 'read',
+    'the saved value carries it');
+  assert.equal(closed.mavlink.liveOr('#node-input-action', undefined, 'read'), 'read',
+    'and the fallback carries it when nothing was ever saved');
+  assert.equal(closed.mavlink.liveOr('#node-input-action', undefined), '');
+
+  // A field that exists but is empty is not an answer either.
+  const empty = loadResource({ '#node-input-action': '' }).RED;
+  assert.equal(empty.mavlink.liveOr('#node-input-action', 'read'), 'read');
+});
+
+test('toggleRow tolerates a row the dialog does not have', () => {
+  const { RED } = loadResource({}, {}, { trackToggle: true });
+  assert.doesNotThrow(() => RED.mavlink.toggleRow('#row-not-here', true));
+  assert.doesNotThrow(() => RED.mavlink.toggleRow('', true));
+  assert.doesNotThrow(() => RED.mavlink.toggleRow(undefined, false));
+});
+
+test('fillEnumSelect: preferLive decides which value survives a refill', () => {
+  const { makeDom } = require('../helpers/fake-dom');
+  const { installEditorHelpers } = require('../helpers/editor-resource');
+  const ENTRIES = [
+    { name: 'ALPHA', value: 1 },
+    { name: 'BRAVO', value: 2 },
+    { name: 'CHARLIE', value: 3 },
+  ];
+
+  /**
+   * @param {string} live     what the operator has already picked
+   * @param {*} saved         the node's pre-edit value
+   * @param {boolean} preferLive
+   * @returns {string} the selection after the refill
+   */
+  function refill(live, saved, preferLive) {
+    const { $ } = makeDom({ '#sel': live });
+    const context = { RED: { settings: { httpAdminRoot: '/' } }, $ };
+    installEditorHelpers(context);
+    const $sel = $('#sel');
+    context.RED.mavlink.fillEnumSelect($sel, ENTRIES, {
+      saved, preferLive, valueKey: 'value', triggerChange: false,
+    });
+    return $sel.val();
+  }
+
+  // The default is right for a one-time fill in oneditprepare: the saved value
+  // is what the node means, and the select has not been touched yet.
+  assert.equal(refill('3', 2, false), '2', 'saved wins by default');
+  // An async refill lands after the operator has moved the select. Snapping it
+  // back to the pre-edit value discards a choice they already made.
+  assert.equal(refill('3', 2, true), '3', 'preferLive keeps the in-progress pick');
+  // Nothing in progress: preferLive changes nothing.
+  assert.equal(refill('', 2, true), '2');
+  // Nothing saved either: the first entry, as before.
+  assert.equal(refill('', undefined, true), '1');
+});

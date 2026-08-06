@@ -13,7 +13,7 @@
         validate: function (v) {
           // Empty is fine when Selection isn't "list"; when the field is filled
           // (or list mode is active) every token must be a MAVLink sysid.
-          if (v === undefined || v === null || String(v).trim() === '') return true;
+          if (RED.mavlink.isBlank(v)) return true;
           return String(v).split(',').every(function (part) {
             part = part.trim();
             if (!part) return true;
@@ -70,13 +70,9 @@
         RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, function (catalog) {
           if (!catalog) return;
           var sel = $('#node-input-vehicleType');
-          var prefer = sel.val() || (
-            node.vehicleType !== undefined && node.vehicleType !== null
-              ? String(node.vehicleType)
-              : ''
-          );
           RED.mavlink.fillEnumSelect(sel, (catalog.enums && catalog.enums.MAV_TYPE) || [], {
-            saved: prefer,
+            saved: node.vehicleType,
+            preferLive: true,
             allowEmpty: true,
             emptyLabel: 'Any type',
             titleNamespace: 'mavTypeTip',

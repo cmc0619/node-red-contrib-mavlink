@@ -75,8 +75,9 @@ test('advanced catalog load ignores stale responses and keeps the in-progress se
   );
   assert.match(html, /_cmdCatalog\s*=\s*\{\s*seq:\s*0\s*\}/,
     'commands render state has only a request sequence');
-  assert.match(html, /const prefer = sel\.val\(\)/, 'in-progress select value is read');
-  assert.match(html, /saved:\s*prefer/, 'current-or-saved prefer is passed to fillEnumSelect');
+  assert.match(html, /saved:\s*node\.advancedCommand/, 'the saved MAV_CMD is offered');
+  assert.match(html, /preferLive:\s*true/,
+    'and an in-progress selection outranks it, so an async refill cannot snap it back');
 });
 
 test('Advanced mode populates commands before loading their parameter fields', () => {

@@ -306,15 +306,11 @@
       function buildAdvancedDropdown(catalog) {
         if (!catalog) return;
         const sel = $('#node-input-advancedCommand');
-        // Prefer the in-progress selection over the pre-edit saved value so a
-        // Connection change mid-dialog does not snap the MAV_CMD back.
-        const prefer = sel.val() || (
-          node.advancedCommand !== undefined && node.advancedCommand !== null
-            ? String(node.advancedCommand)
-            : ''
-        );
+        // preferLive: a Connection change mid-dialog must not snap the MAV_CMD
+        // back to the pre-edit value.
         RED.mavlink.fillEnumSelect(sel, catalog.commands || [], {
-          saved: prefer,
+          saved: node.advancedCommand,
+          preferLive: true,
           allowEmpty: true,
           emptyLabel: '\u2014 select MAV_CMD \u2014',
           titleNamespace: 'mavCmdTip'

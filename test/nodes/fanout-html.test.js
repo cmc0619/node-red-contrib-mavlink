@@ -58,8 +58,8 @@ test('vehicleType is a MAV_TYPE select loaded from the shared catalog (§6)', ()
   assert.match(html, /enums\.MAV_TYPE/, 'MAV_TYPE table is read from the catalog');
   assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'options are built via shared fillEnumSelect');
   assert.match(html, /Any type/, 'empty selection means any vehicle type');
-  assert.match(html, /var prefer = sel\.val\(\)/, 'in-progress selection wins over saved');
-  assert.match(html, /saved:\s*prefer/, 'prefer is passed to fillEnumSelect');
+  assert.match(html, /saved:\s*node\.vehicleType/, 'the saved MAV_TYPE is offered');
+  assert.match(html, /preferLive:\s*true/, 'in-progress selection wins over saved');
 });
 
 test('firmware filter is a small select (ArduPilot/PX4/custom)', () => {
