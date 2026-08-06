@@ -156,6 +156,42 @@ test('frame names select the carrier message and coordinate_frame value', () => 
   );
 });
 
+test('`frame` is the only frame spelling: member name or raw number', () => {
+  const global = {
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { lat: 47, lon: 8, alt: 10 },
+  };
+
+  // Both real spellings of `frame` keep working: member name and raw number.
+  for (const frame of ['GLOBAL_RELATIVE_ALT_INT', 6, '6']) {
+    const message = buildMoveMessage({ ...global, frame });
+    assert.equal(message.fields.coordinate_frame, 6, `frame ${JSON.stringify(frame)} resolves`);
+  }
+
+  // Blank still defaults; whitespace deliberately does *not* — it throws rather
+  // than silently defaulting past a configured frame (see the comment in
+  // resolveModeAndFrame, and #174).
+  for (const blank of [undefined, null, '']) {
+    const message = buildMoveMessage({
+      mode: 'position',
+      frame: blank,
+      target: { sysid: 2, compid: 1 },
+      position: { north: 1, east: 2, up: 3 },
+    });
+    assert.equal(message.fields.coordinate_frame, 1, `blank ${JSON.stringify(blank)} defaults`);
+  }
+  assert.throws(
+    () => buildMoveMessage({
+      mode: 'position',
+      frame: ' ',
+      target: { sysid: 2, compid: 1 },
+      position: { north: 1, east: 2, up: 3 },
+    }),
+    /unknown Move frame/
+  );
+});
+
 test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw', () => {
   const defaulted = buildMoveMessage({
     target: { sysid: 2, compid: 1 },
