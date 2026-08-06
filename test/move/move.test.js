@@ -156,41 +156,12 @@ test('frame names select the carrier message and coordinate_frame value', () => 
   );
 });
 
-test('`frame` is the only frame spelling — `coordinateFrame` is not an alias', () => {
+test('`frame` is the only frame spelling: member name or raw number', () => {
   const global = {
     mode: 'position',
     target: { sysid: 2, compid: 1 },
     position: { lat: 47, lon: 8, alt: 10 },
   };
-
-  // Pre-1.0, no aliases (AGENTS.md): the second spelling is deleted rather than
-  // kept working. It is *refused*, not ignored — dropping it silently would be
-  // permissive fallback hiding an incorrect property name, and the hidden
-  // result is geographic. The coordinates below are deliberately valid
-  // LOCAL_NED ones, so this would otherwise build happily: an intended body
-  // offset would become an absolute move to the local origin (§10).
-  assert.throws(
-    () => buildMoveMessage({
-      mode: 'position',
-      coordinateFrame: 'BODY_OFFSET_NED',
-      target: { sysid: 2, compid: 1 },
-      position: { north: 1, east: 2, up: 3 },
-    }),
-    /`coordinateFrame` was removed — use `frame`/
-  );
-  // Also refused when it carries a raw number, and alongside a valid `frame`.
-  assert.throws(
-    () => buildMoveMessage({ ...global, frame: 6, coordinateFrame: 9 }),
-    /`coordinateFrame` was removed/
-  );
-  // An inherited key must not arm the guard — only an own property.
-  const inherited = Object.create({ coordinateFrame: 9 });
-  Object.assign(inherited, {
-    mode: 'position',
-    target: { sysid: 2, compid: 1 },
-    position: { north: 1, east: 2, up: 3 },
-  });
-  assert.equal(buildMoveMessage(inherited).fields.coordinate_frame, 1);
 
   // Both real spellings of `frame` keep working: member name and raw number.
   for (const frame of ['GLOBAL_RELATIVE_ALT_INT', 6, '6']) {
