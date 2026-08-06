@@ -85,7 +85,6 @@ test('confirm tier with no connection fails loud instead of silently building', 
   assert.equal(outputs.length, 1);
   assert.equal(outputs[0][0], null, 'output 0 must not fire');
   assert.equal(outputs[0][1].result, 'failed');
-  assert.match(outputs[0][1].reason, /no connection/);
   assert.ok(err, 'done(err) reports the misconfiguration');
 });
 

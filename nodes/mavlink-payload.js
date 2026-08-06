@@ -15,7 +15,6 @@ const {
 } = require('../lib/command');
 const {
   resolveDeliveryContext,
-  missingConnectionGate,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -57,7 +56,6 @@ module.exports = function registerMavlinkPayload(RED) {
     const maxRetries = config.maxRetries === '' ? DEFAULT_MAX_RETRIES : Number(config.maxRetries);
     const delivery = config.delivery;
     const connAtDeploy = delivery === 'build' ? null : RED.nodes.getNode(config.connection);
-    missingConnectionGate(node, delivery, connAtDeploy);
 
     function cancelWaiter() {
       if (activeWaiter) {

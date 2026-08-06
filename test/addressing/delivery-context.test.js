@@ -4,7 +4,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   resolveDeliveryContext,
-  missingConnectionGate,
   dialectFromConnection,
 } = require('../../lib/addressing');
 
@@ -75,15 +74,6 @@ test('resolveDeliveryContext does not re-resolve a missing deploy-time Connectio
     payload: {},
   });
   assert.equal(ctx.connectionNode, null);
-});
-
-test('missingConnectionGate flags wire tiers without a connection', () => {
-  const statuses = [];
-  const node = { status: (s) => statuses.push(s) };
-  assert.equal(missingConnectionGate(node, 'confirm', null), true);
-  assert.equal(statuses[0].fill, 'red');
-  assert.equal(missingConnectionGate(node, 'build', null), false);
-  assert.deepEqual(statuses[1], {});
 });
 
 test('dialectFromConnection reads the bound profile node', () => {

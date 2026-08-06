@@ -10,7 +10,7 @@ const {
   valueFrom,
 } = require('../lib/move');
 const { BAND } = require('../lib/connection/bands');
-const { firstDefined, resolveDeliveryContext, missingConnectionGate } = require('../lib/addressing');
+const { firstDefined, resolveDeliveryContext } = require('../lib/addressing');
 const {
   shouldSuppress,
   makeStatusRecord,
@@ -24,7 +24,6 @@ module.exports = function registerMavlinkMove(RED) {
     let stream = null;
     const delivery = config.delivery;
     const connAtDeploy = delivery === 'build' ? null : RED.nodes.getNode(config.connection);
-    missingConnectionGate(node, delivery, connAtDeploy);
 
     node.on('input', (msg, send, done) => {
       try {

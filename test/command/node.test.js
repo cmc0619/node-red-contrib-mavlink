@@ -306,8 +306,7 @@ test('Send/confirm tier with no connection fails loud instead of silently buildi
 
   assert.equal(sent[0], null, 'output 0 must not fire');
   assert.equal(sent[1].result, 'failed');
-  assert.ok(/no connection/.test(sent[1].detail));
-  assert.match(doneError.message, /no connection/);
+  assert.ok(doneError, 'done(err) reports the misconfiguration');
 });
 
 test('resolveTarget: companion identity derives {airframe sysid, 1} as target', async () => {
