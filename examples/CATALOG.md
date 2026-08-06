@@ -629,6 +629,27 @@ instances it needs. Filenames restart at `01` inside the folder.
   `WPNAV_SPEED` on Copter 4.7.0; confirm must finish as `timed-out` / `echo timeout`.
 - **Nodes:** config triplet, 2× `param` set(confirm), `inject`, `debug`.
 
+### sitl/33 — Payload gimbal legacy (AP-31)
+
+- **File:** `examples/sitl/33-payload-gimbal-legacy.json` · **Tab:** `SITL 33 Payload gimbal legacy`
+- **Story:** Legacy mount aim / set-mode / ROI set+clear against dedicated payload
+  vehicle sysid 31 (`--gimbal` + servo mount) on bind `14570`.
+- **Nodes:** config triplet (sysid 31), 4× `payload` gimbal(confirm), `inject`, `debug`.
+
+### sitl/34 — Payload camera (AP-31)
+
+- **File:** `examples/sitl/34-payload-camera.json` · **Tab:** `SITL 34 Payload camera`
+- **Story:** `IMAGE_START_CAPTURE` ACCEPTED with `CAM1_TYPE=1`; `VIDEO_*` DENIED —
+  documents the measured servo-camera limit on Copter-4.7.0 SITL.
+- **Nodes:** config triplet (sysid 31), 3× `payload` camera(confirm), `inject`, `debug`.
+
+### sitl/35 — Payload gimbal manager (AP-31)
+
+- **File:** `examples/sitl/35-payload-gimbal-manager.json` · **Tab:** `SITL 35 Payload gimbal manager`
+- **Story:** `GIMBAL_MANAGER_SET_PITCHYAW` via delivery=send (no ack by design); proves
+  the wire path on AP-31 even though this stack emits no manager telemetry.
+- **Nodes:** config triplet (sysid 31), `payload` gimbal aim manager(send), `inject`, `debug`.
+
 ---
 
 ## 3. `examples/sitl/README.md` outline

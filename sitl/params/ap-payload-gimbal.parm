@@ -1,0 +1,18 @@
+# Payload lab vehicle (sysid 31): servo mount + still camera for mavlink-payload SITL.
+# Measured on Copter-4.7.0 with --gimbal (sitl/measure-payload-gimbal.js / DESIGN.md §14):
+#   DO_MOUNT_CONTROL / DO_MOUNT_CONFIGURE / ROI → ACCEPTED
+#   IMAGE_START_CAPTURE → ACCEPTED with CAM1_TYPE 1
+#   VIDEO_START/STOP_CAPTURE → DENIED (servo camera has no video path)
+#   GIMBAL_MANAGER_SET_PITCHYAW → send-only; no manager telemetry on this stack
+
+# Servo gimbal (docs + --gimbal): pan / roll / tilt functions
+MNT1_TYPE 1
+SERVO6_FUNCTION 6
+SERVO7_FUNCTION 8
+SERVO8_FUNCTION 7
+
+# Still camera on a spare servo (CAM1_TYPE 1 = Servo)
+CAM1_TYPE 1
+CAM1_SERVO_ON 1300
+CAM1_SERVO_OFF 1100
+SERVO9_FUNCTION 10
