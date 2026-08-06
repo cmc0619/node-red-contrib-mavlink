@@ -194,7 +194,7 @@ test('local position with a blank coordinate refuses — never the origin (§10)
   assert.equal(velocityBlanks.fields.vy, 0);
 });
 
-test('global position with blank lat or lon refuses — never 0,0 (§10)', () => {
+test('global position with blank lat, lon or alt refuses — never 0,0 at ground level (§10)', () => {
   assert.throws(
     () =>
       buildMoveMessage({
@@ -205,6 +205,29 @@ test('global position with blank lat or lon refuses — never 0,0 (§10)', () =>
       }),
     /blank coordinates must not become 0,0/
   );
+  // A blank alt zero-filled is the same hazard on the vertical axis: 0 m above
+  // home (frame 6) or 0 m AGL (frame 11) is the ground, 0 m MSL (frame 5) may
+  // be below it. An explicit 0 stays a value; blank refuses.
+  for (const frame of ['GLOBAL_RELATIVE_ALT_INT', 'GLOBAL_INT', 'GLOBAL_TERRAIN_ALT_INT']) {
+    assert.throws(
+      () =>
+        buildMoveMessage({
+          mode: 'position',
+          frame,
+          target: { sysid: 2, compid: 1 },
+          position: { lat: 47, lon: 8 },
+        }),
+      /blank coordinates must not become 0,0/,
+      `${frame} must refuse a blank alt`
+    );
+  }
+  const explicitZero = buildMoveMessage({
+    mode: 'position',
+    frame: 'GLOBAL_RELATIVE_ALT_INT',
+    target: { sysid: 2, compid: 1 },
+    position: { lat: 47, lon: 8, alt: 0 },
+  });
+  assert.equal(explicitZero.fields.alt, 0);
 });
 
 test('advisoryFor fires only on measured-unsupported combos (§14, SITL 2026-08-05)', () => {

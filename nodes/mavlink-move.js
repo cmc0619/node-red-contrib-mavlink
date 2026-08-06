@@ -10,7 +10,7 @@ const {
   valueFrom,
 } = require('../lib/move');
 const { BAND } = require('../lib/connection/bands');
-const { resolveDeliveryContext, missingConnectionGate } = require('../lib/addressing');
+const { firstDefined, resolveDeliveryContext, missingConnectionGate } = require('../lib/addressing');
 const {
   shouldSuppress,
   makeStatusRecord,
@@ -43,15 +43,18 @@ module.exports = function registerMavlinkMove(RED) {
         });
 
         const moveInput = {
-          mode: payload.mode || config.mode || 'position',
-          frame: payload.frame !== undefined ? payload.frame : config.frame,
+          // Blank means inherit (§6): a payload mode/frame of undefined, null,
+          // or '' falls back to the node's configured value, never to a
+          // hardcoded default that discards the configuration.
+          mode: firstDefined(payload.mode, config.mode),
+          frame: firstDefined(payload.frame, config.frame),
           target,
           position: payload.position || positionFrom(config),
           velocity: payload.velocity || velocityFrom(config),
           accel: payload.accel || accelFrom(config),
           yaw: valueFrom(payload, config, 'yaw'),
           yawRate: valueFrom(payload, config, 'yawRate'),
-          timeBootMs: payload.timeBootMs || config.timeBootMs || 0,
+          timeBootMs: payload.timeBootMs,
         };
         const message = buildMoveMessage(moveInput);
 
@@ -73,25 +76,22 @@ module.exports = function registerMavlinkMove(RED) {
           if (!connectionNode) {
             throw new Error('mavlink-move requires a Connection for send/stream delivery');
           }
-          const options = {
-            connection: connectionNode,
-            message,
-            target,
-            identityId,
-            intervalMs: Number(config.intervalMs || payload.intervalMs || 100),
-            ttlMs: Number(config.ttlMs || payload.ttlMs || 1000),
-          };
           if (stream) stream.stop();
           if (delivery === 'stream') {
-            stream = createMoveStream(options);
+            stream = createMoveStream({
+              connection: connectionNode,
+              message,
+              target,
+              identityId,
+              // Payload overrides config (§6 runtime override of last resort);
+              // the editor default guarantees config when the payload is silent.
+              intervalMs: Number(firstDefined(payload.intervalMs, config.intervalMs)),
+              ttlMs: Number(firstDefined(payload.ttlMs, config.ttlMs)),
+            });
             stream.start();
             completeResult(node, send, 'succeeded', 'streaming', message);
           } else {
-            connectionNode.send(message, {
-              band: BAND.STREAMING,
-              target: options.target,
-              identityId: options.identityId,
-            });
+            connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
             completeResult(node, send, 'succeeded', 'sent', message);
           }
         }

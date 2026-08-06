@@ -334,6 +334,76 @@ test('mavlink-move concrete Build dialect does not inherit stale Vehicle Profile
   assert.ok(Number.isNaN(sent[0].payload.fields.target_component), 'concrete Build dialect has no profile inheritance rung');
 });
 
+test('mavlink-move blank payload frame inherits the configured frame, not LOCAL_NED', () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'build',
+    dialect: 'common',
+    mode: 'position',
+    frame: 'GLOBAL_RELATIVE_ALT_INT',
+    lat: 47,
+    lon: 8,
+    alt: 10,
+    targetSystem: 5,
+    targetComponent: 1,
+  });
+
+  // Blank means inherit (§6): an unset/null/'' payload frame keeps the
+  // configured global frame rather than resetting to the LOCAL_NED default.
+  for (const blank of [undefined, null, '']) {
+    let sent;
+    node.emit('input', { payload: { frame: blank } }, (m) => { sent = m; }, () => {});
+    assert.equal(sent[0].payload.name, 'SET_POSITION_TARGET_GLOBAL_INT', `blank frame ${JSON.stringify(blank)} inherits config`);
+    assert.equal(sent[0].payload.fields.coordinate_frame, 6);
+  }
+
+  // An explicit payload frame still wins.
+  let sent;
+  node.emit(
+    'input',
+    { payload: { frame: 'LOCAL_NED', position: { north: 1, east: 2, up: 3 } } },
+    (m) => { sent = m; },
+    () => {}
+  );
+  assert.equal(sent[0].payload.name, 'SET_POSITION_TARGET_LOCAL_NED');
+});
+
+test('mavlink-move stream: payload intervalMs overrides config (§6 payload overrides values)', async () => {
+  const sends = [];
+  const conn = {
+    vehicle: {},
+    send(message, opts) { sends.push({ message, opts }); },
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    intervalMs: 60000,
+    ttlMs: 0,
+  });
+
+  node.emit('input', { payload: { intervalMs: 5, ttlMs: 0 } }, () => {}, () => {});
+
+  // At the configured 60 s interval no re-send would arrive inside the
+  // deadline; the payload's 5 ms override must produce several.
+  const deadline = Date.now() + 2000;
+  while (sends.length < 3 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  node.emit('close', () => {});
+  assert.ok(sends.length >= 3, `payload interval override must re-send (got ${sends.length} sends)`);
+});
+
 function redStub(nodesById) {
   return {
     nodes: {
