@@ -3,17 +3,20 @@
 
 /**
  * Probe Copter-4.7.0 SITL --gimbal for Payload-node verbs.
- * Writes /tmp/payload-gimbal-results.json
+ * Writes results under a private mkdtemp directory (see OUT).
  */
 
 const { spawnSync } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const BIND = 14570;
 const SYSID = 31;
-const OUT = '/tmp/payload-gimbal-results.json';
+const WORK_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-payload-measure-'));
+const OUT = path.join(WORK_DIR, 'payload-gimbal-results.json');
+const PARM_HOST = path.join(WORK_DIR, 'ap-payload.parm');
 const CONTAINER = 'nrc-measure-payload-31';
 const IMAGE = 'nrc-mavlink-ap-sitl:local';
 
@@ -39,9 +42,16 @@ function gatewayIp() {
   return ip;
 }
 
+function cleanupWorkDir() {
+  try {
+    fs.rmSync(WORK_DIR, { recursive: true, force: true });
+  } catch {
+    // best-effort; probe artifacts are local-only
+  }
+}
+
 function startVehicle(parmBody) {
-  const parmHost = '/tmp/ap-payload-measure.parm';
-  fs.writeFileSync(parmHost, `${parmBody.trim()}\n`);
+  fs.writeFileSync(PARM_HOST, `${parmBody.trim()}\n`, { mode: 0o600 });
   const gw = gatewayIp();
   sh(`docker rm -f ${CONTAINER} >/dev/null 2>&1 || true`);
   // Must join sitl_default so host→container UDP replies reach the vehicle
@@ -49,7 +59,7 @@ function startVehicle(parmBody) {
   const run = sh(
     `docker run -d --name ${CONTAINER} --platform linux/amd64 --network sitl_default ` +
       `--entrypoint bash ` +
-      `-v ${parmHost}:/params/ap-payload.parm:ro ` +
+      `-v ${PARM_HOST}:/params/ap-payload.parm:ro ` +
       `${IMAGE} -lc ` +
       `'set -e; mkdir -p /home/sitl/aircraft/lab-ap-${SYSID}; cd /home/sitl/aircraft/lab-ap-${SYSID}; ` +
       `rm -rf logs; ln -sfn /tmp logs; ` +
@@ -202,7 +212,7 @@ async function probe() {
           .slice(0, 40)
           .map((s) => ({ name: s.name, sysid: s.sysid, compid: s.compid })),
       };
-      require('fs').writeFileSync(${JSON.stringify(OUT)}, JSON.stringify(summary, null, 2));
+      require('fs').writeFileSync(${JSON.stringify(OUT)}, JSON.stringify(summary, null, 2), { mode: 0o600 });
       console.log('WROTE', ${JSON.stringify(OUT)});
       conn.close(() => process.exit(0));
       setTimeout(() => process.exit(0), 400);
@@ -229,6 +239,7 @@ async function probe() {
 async function main() {
   // Docs path: servo mount + --gimbal
   console.log('starting vehicle (MNT1_TYPE=1 servo + --gimbal)');
+  console.log('work dir', WORK_DIR);
   startVehicle(`
 MNT1_TYPE 1
 SERVO6_FUNCTION 6
@@ -239,10 +250,12 @@ SERVO8_FUNCTION 7
   await probe();
   console.log(fs.readFileSync(OUT, 'utf8'));
   sh(`docker rm -f ${CONTAINER} >/dev/null 2>&1 || true`);
+  cleanupWorkDir();
 }
 
 main().catch((err) => {
   console.error(err);
   sh(`docker rm -f ${CONTAINER} >/dev/null 2>&1 || true`);
+  cleanupWorkDir();
   process.exit(1);
 });
