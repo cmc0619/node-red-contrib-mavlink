@@ -186,6 +186,32 @@ const PROFILE = {
     prep: 'ap-arm-ready-fleet',
     notes: 'takeoff→line spread→sphere→pitch 0/45/90/135/180→sequential land',
   },
+  '28-param-read-by-index': {
+    waitMs: 45000,
+    expect: 'AP list collect then PARAM_REQUEST_READ by param_index',
+    notes: 'pick LOIT_SPEED_MS index from collect; assert empty param_id + index ≥ 0',
+  },
+  '29-param-fanout-set': {
+    waitMs: 40000,
+    expect: 'PARAM_SET fan-out sequential confirm ×5',
+    notes: 'build LOIT_SPEED_MS → fanout confirm on AP 1–5; no arm prep',
+  },
+  '30-px4-param-list': {
+    waitMs: 55000,
+    expect: 'PX4 request-list collect with known ids',
+    notes: 'mirrors SITL 13 list path on sysid 11; assert COM_RC_IN_MODE + MPC_XY_VEL_MAX',
+  },
+  '31-param-encoding-override': {
+    waitMs: 35000,
+    expect: 'paramEncoding override AP c-cast + PX4 bytewise',
+    injectGapMs: 2000,
+    notes: 'payload.paramEncoding on ARMING_OPTIONS / COM_RC_IN_MODE INT32 sets',
+  },
+  '32-param-echo-timeout': {
+    waitMs: 20000,
+    expect: 'unknown WPNAV_SPEED echo timeout',
+    notes: 'Copter 4.7 has no WPNAV_SPEED — confirm must timed-out / echo timeout',
+  },
 };
 
 function req(method, urlPath, body, headers = {}) {
@@ -528,6 +554,75 @@ function verdictFrom(profile, summary, log) {
       };
     }
     return { status: 'FAIL', reason: 'Lucy formation/land path not observed' };
+  }
+  if (/PARAM_REQUEST_READ by param_index|read by index/i.test(expect)) {
+    const listOk = summary.debug.some(
+      (d) => /list status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    const indexOk = summary.debug.some(
+      (d) => /index assert/i.test(d.tag) && d.result === 'succeeded'
+    );
+    if (listOk && indexOk) {
+      return { status: 'PASS', reason: 'list collect + index-addressed PARAM_REQUEST_READ' };
+    }
+    if (listOk || indexOk) {
+      return {
+        status: 'PARTIAL',
+        reason: `index-read incomplete: list=${listOk} assert=${indexOk}`,
+      };
+    }
+    return { status: 'FAIL', reason: 'list collect / index-read assert not observed' };
+  }
+  if (/PARAM_SET fan-out|fan-out sequential confirm/i.test(expect)) {
+    const fanOk = summary.debug.some(
+      (d) => /fanout status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    if (fanOk) {
+      return { status: 'PASS', reason: 'PARAM_SET sequential fan-out confirm succeeded' };
+    }
+    return { status: 'FAIL', reason: 'PARAM_SET fan-out succeeded status not observed' };
+  }
+  if (/PX4 request-list collect/i.test(expect)) {
+    const listOk = summary.debug.some(
+      (d) => /list status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    const assertOk = summary.debug.some(
+      (d) => /list assert/i.test(d.tag) && d.result === 'succeeded'
+    );
+    if (listOk && assertOk) {
+      return { status: 'PASS', reason: 'PX4 list collect + known ids present' };
+    }
+    if (listOk || assertOk) {
+      return {
+        status: 'PARTIAL',
+        reason: `px4-list incomplete: status=${listOk} assert=${assertOk}`,
+      };
+    }
+    return { status: 'FAIL', reason: 'PX4 list collect not observed' };
+  }
+  if (/paramEncoding override/i.test(expect)) {
+    const apSet = summary.debug.some((d) => /ap set/i.test(d.tag) && d.result === 'succeeded');
+    const px4Set = summary.debug.some((d) => /px4 set/i.test(d.tag) && d.result === 'succeeded');
+    if (apSet && px4Set) {
+      return { status: 'PASS', reason: 'AP c-cast + PX4 bytewise encoding overrides echoed' };
+    }
+    if (apSet || px4Set) {
+      return { status: 'PARTIAL', reason: `encoding override: ap=${apSet} px4=${px4Set}` };
+    }
+    return { status: 'FAIL', reason: 'paramEncoding override echoes not observed' };
+  }
+  if (/WPNAV_SPEED echo timeout|unknown .*echo timeout/i.test(expect)) {
+    // Negative path: timed-out is the success. Generic verdict would FAIL it.
+    const echoTimedOut = summary.debug.some(
+      (d) =>
+        /set status/i.test(d.tag) &&
+        d.result === 'timed-out' &&
+        /echo timeout/i.test(d.detail || d.excerpt || '')
+    );
+    if (echoTimedOut) {
+      return { status: 'PASS', reason: 'unknown WPNAV_SPEED set surfaced echo timeout' };
+    }
+    return { status: 'FAIL', reason: 'expected echo timeout on unknown WPNAV_SPEED not observed' };
   }
 
   const bad = results.filter((r) =>

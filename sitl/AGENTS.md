@@ -123,6 +123,13 @@ local or paste a collapsed `<details>` block — do not land it in git.
 - Examples **26/27**: formation + takeoff need `ap-arm-ready-fleet`; **27** wait is long
   (sphere pitch steps + peel land). Verdict keys on named debug tags (`line status`,
   `s0 status`…`land status`), not a generic succeeded count.
+- Example **28**: list collect then index-read — verdict needs `list status` + `index assert`
+  both `succeeded` (wire shape: `param_index ≥ 0`, empty `param_id`).
+- Example **29**: PARAM_SET fan-out — `fanout status` succeeded ×5; no arm prep.
+- Example **30**: PX4 list — `list status` + `list assert` (known ids present).
+- Example **31**: per-stack `ap set` / `px4 set` succeeded with payload `paramEncoding`.
+- Example **32**: unknown `WPNAV_SPEED` — `set status` must be `timed-out` / `echo timeout`
+  (dedicated verdict; generic path would FAIL a timeout).
 
 ## Port / sysid map (quick)
 

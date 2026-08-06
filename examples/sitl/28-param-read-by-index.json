@@ -1,0 +1,235 @@
+[
+  {
+    "id": "sitl28-tab",
+    "type": "tab",
+    "label": "SITL 28 Param read by index",
+    "disabled": false,
+    "info": "Collect the ArduPilot param list, pick LOIT_SPEED_MS by index, then PARAM_REQUEST_READ with param_index ≥ 0 and empty param_id.",
+    "env": []
+  },
+  {
+    "id": "sitl28-comment",
+    "type": "comment",
+    "z": "sitl28-tab",
+    "name": "Read by param_index after list collect",
+    "info": "1. request-list + collect → full PARAM_VALUE table.\n2. Function finds LOIT_SPEED_MS (safe on Copter 4.7.0; no WPNAV_SPEED) and sets msg.payload.paramIndex.\n3. Read (send) emits PARAM_REQUEST_READ; assert function checks param_index ≥ 0 and empty param_id.\n\nConnection: AP bind 0.0.0.0:14550 → 127.0.0.1:14551 sysid 1.",
+    "x": 280,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl28-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl28-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl28-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "sitl28-vehicle",
+    "localIdentity": "sitl28-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl28-inject",
+    "type": "inject",
+    "z": "sitl28-tab",
+    "name": "Collect then index-read",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 160,
+    "wires": [
+      [
+        "sitl28-list"
+      ]
+    ]
+  },
+  {
+    "id": "sitl28-list",
+    "type": "mavlink-param",
+    "z": "sitl28-tab",
+    "name": "Collect all params",
+    "connection": "sitl28-connection",
+    "delivery": "collect",
+    "action": "request-list",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "lookup": "name",
+    "paramId": "",
+    "paramIndex": -1,
+    "value": "",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "timeout": "30000",
+    "x": 420,
+    "y": 160,
+    "wires": [
+      [
+        "sitl28-pick-index"
+      ],
+      [
+        "sitl28-list-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl28-pick-index",
+    "type": "function",
+    "z": "sitl28-tab",
+    "name": "Pick LOIT_SPEED_MS index",
+    "func": "const list = Array.isArray(msg.payload) ? msg.payload : [];\nconst hit = list.find((p) => p && p.paramId === 'LOIT_SPEED_MS');\nif (!hit || !Number.isInteger(hit.index) || hit.index < 0) {\n  node.error('LOIT_SPEED_MS missing from collected list', msg);\n  return null;\n}\nmsg.payload = {\n  action: 'read',\n  paramIndex: hit.index,\n  paramId: ''\n};\nmsg._pickedIndex = hit.index;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 680,
+    "y": 140,
+    "wires": [
+      [
+        "sitl28-read"
+      ]
+    ]
+  },
+  {
+    "id": "sitl28-read",
+    "type": "mavlink-param",
+    "z": "sitl28-tab",
+    "name": "Read by index",
+    "connection": "sitl28-connection",
+    "delivery": "send",
+    "action": "read",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "lookup": "index",
+    "paramId": "",
+    "paramIndex": 0,
+    "value": "",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "x": 900,
+    "y": 140,
+    "wires": [
+      [
+        "sitl28-assert"
+      ],
+      [
+        "sitl28-read-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl28-assert",
+    "type": "function",
+    "z": "sitl28-tab",
+    "name": "Assert index wire shape",
+    "func": "const m = msg.payload;\nconst fields = m && m.fields ? m.fields : {};\nconst idx = Number(fields.param_index);\nconst id = fields.param_id == null ? '' : String(fields.param_id).replace(/\\0/g, '').trim();\nconst ok = m && m.name === 'PARAM_REQUEST_READ' && Number.isInteger(idx) && idx >= 0 && id === '';\nmsg.payload = {\n  result: ok ? 'succeeded' : 'failed',\n  detail: ok\n    ? ('index-read param_index=' + idx)\n    : ('index-read wire shape wrong name=' + (m && m.name) + ' index=' + fields.param_index + ' id=' + JSON.stringify(fields.param_id)),\n  pickedIndex: msg._pickedIndex,\n  message: m\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1120,
+    "y": 120,
+    "wires": [
+      [
+        "sitl28-index-assert"
+      ]
+    ]
+  },
+  {
+    "id": "sitl28-list-status",
+    "type": "debug",
+    "z": "sitl28-tab",
+    "name": "list status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 630,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl28-read-status",
+    "type": "debug",
+    "z": "sitl28-tab",
+    "name": "read status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1110,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "sitl28-index-assert",
+    "type": "debug",
+    "z": "sitl28-tab",
+    "name": "index assert",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1340,
+    "y": 120,
+    "wires": []
+  }
+]

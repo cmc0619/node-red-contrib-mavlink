@@ -1596,7 +1596,7 @@ by silence. Update this list when an item lands.
 | **Move editor §6 reshape** | **done** | Per-field rows + mode/frame/delivery visibility in the Move dialog, full setpoint matrix (§ "Move setpoint matrix"). |
 | **Payload verb field completeness** | **done** | Editor exposes streamId/statusFrequency, ROI lat/lon/alt, stabilize flags, cameraId/sequence/shutter/trigger, gimbal flags/device id; §6 show/hide per verb. |
 | **`httpAdminRoot` on non-enum admin routes** | **done** | Command/Build/In/Fan-out/Param/Vehicle editor catalogs use `RED.mavlink.adminApiUrl('/mavlink/…')`. |
-| **SITL example flows** | **done** | `examples/sitl/` 01–27 (companion, INT matrix, Move, param echo, In/Build/Out, inherit, TCP template, formation basics, Lucy in the Sky) + README; regular demos in `examples/` (see `CATALOG.md`). |
+| **SITL example flows** | **done** | `examples/sitl/` 01–32 (companion, INT matrix, Move, param echo / index / fan-out / PX4 list / encoding / echo-timeout, In/Build/Out, inherit, TCP template, formation basics, Lucy in the Sky) + README; regular demos in `examples/` (see `CATALOG.md`). |
 | **SITL Docker lab** | **done** | Compose under [`sitl/`](sitl/README.md): 5× AP + 5× PX4 + companions 20/21; arm-only logs; optional `nodered` profile. |
 | **SITL-backed tests (§13)** | open | Fixture suite in CI; firmware behaviour still needs the live five+five rig (local Docker lab). Live suite results are logged as GitHub Issues (`sitl-results`), not in-repo `testing.md` churn. |
 | **Cross-connection fan-out** | out of scope | As designed (§10): two Connections → two Fan-out nodes. |
@@ -2274,7 +2274,19 @@ decode bug.
 *Fact:* `PARAM_REQUEST_LIST` on lab AP-1 returns 1369 params with no `WPNAV_SPEED`
 (and no `WPNAV*` in `copter.parm`). Unknown names produce no `PARAM_VALUE` echo.
 Example 21 uses live `LOIT_SPEED_MS` (REAL32) instead; PX4 `MPC_XY_VEL_MAX` unchanged.
-*Check:* `examples/sitl/21-param-echo-float32.json`.
+Example 32 deliberately sets the missing id with confirm so the harness can prove
+`timed-out` / `echo timeout` (the negative twin of 21).
+*Check:* `examples/sitl/21-param-echo-float32.json`, `examples/sitl/32-param-echo-timeout.json`.
+
+**Param SITL coverage beyond set/read echo (05 / 13 / 21).**
+*Wrong belief:* the three early param examples already exercise every Param/Fan-out
+wire path that needs live firmware.
+*Fact:* index-addressed `PARAM_REQUEST_READ`, Build→Fan-out sequential `PARAM_SET`
+confirm, PX4 `request-list` collect, and explicit `msg.payload.paramEncoding` were
+uncovered until examples 28–31. Safe live ids remain `LOIT_SPEED_MS` /
+`ARMING_OPTIONS` (AP) and `COM_RC_IN_MODE` / `MPC_XY_VEL_MAX` (PX4).
+*Check:* `examples/sitl/28-param-read-by-index.json` …
+`examples/sitl/31-param-encoding-override.json`, `sitl/run-example-suite.js` PROFILE.
 
 **SITL signing example uses companion AP sysid 20 and joke passphrase `hunter11`.**
 *Wrong belief:* Admin API deploy cannot supply Connection signing credentials, so

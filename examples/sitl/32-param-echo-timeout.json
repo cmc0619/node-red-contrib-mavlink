@@ -1,0 +1,151 @@
+[
+  {
+    "id": "sitl32-tab",
+    "type": "tab",
+    "label": "SITL 32 Param echo timeout",
+    "disabled": false,
+    "info": "Deliberate unknown param id WPNAV_SPEED on Copter 4.7.0 — set+confirm must surface echo timeout, not a fake success.",
+    "env": []
+  },
+  {
+    "id": "sitl32-comment",
+    "type": "comment",
+    "z": "sitl32-tab",
+    "name": "Unknown id → echo timeout (by design)",
+    "info": "Copter 4.7.0 SITL has no WPNAV_SPEED (§14). A set+confirm against that id must finish as timed-out / echo timeout.\nThis is the negative twin of SITL 21's LOIT_SPEED_MS happy path — do not treat the timeout as a codec bug.\n\nConnection: AP bind 0.0.0.0:14550 → 127.0.0.1:14551 sysid 1. Timeout 5 s.",
+    "x": 280,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl32-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl32-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl32-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "sitl32-vehicle",
+    "localIdentity": "sitl32-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl32-inject",
+    "type": "inject",
+    "z": "sitl32-tab",
+    "name": "Set unknown WPNAV_SPEED",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 180,
+    "y": 160,
+    "wires": [
+      [
+        "sitl32-set"
+      ]
+    ]
+  },
+  {
+    "id": "sitl32-set",
+    "type": "mavlink-param",
+    "z": "sitl32-tab",
+    "name": "Set WPNAV_SPEED (expect timeout)",
+    "connection": "sitl32-connection",
+    "delivery": "confirm",
+    "action": "set",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "lookup": "name",
+    "paramId": "WPNAV_SPEED",
+    "paramIndex": -1,
+    "value": "500",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "timeout": "5000",
+    "x": 480,
+    "y": 160,
+    "wires": [
+      [
+        "sitl32-continue"
+      ],
+      [
+        "sitl32-set-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl32-continue",
+    "type": "debug",
+    "z": "sitl32-tab",
+    "name": "set continue (must stay quiet)",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 780,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "sitl32-set-status",
+    "type": "debug",
+    "z": "sitl32-tab",
+    "name": "set status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 740,
+    "y": 200,
+    "wires": []
+  }
+]

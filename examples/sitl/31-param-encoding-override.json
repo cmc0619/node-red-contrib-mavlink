@@ -1,0 +1,276 @@
+[
+  {
+    "id": "sitl31-tab",
+    "type": "tab",
+    "label": "SITL 31 Param encoding override",
+    "disabled": false,
+    "info": "Explicit msg.payload.paramEncoding on both stacks: PX4 bytewise INT32 and ArduPilot c-cast INT32, each echo-confirmed.",
+    "env": []
+  },
+  {
+    "id": "sitl31-comment",
+    "type": "comment",
+    "z": "sitl31-tab",
+    "name": "paramEncoding override → capabilities → firmware ladder",
+    "info": "Inject payloads carry paramEncoding so the §11 ladder does not invent a stack default.\n\nPX4: COM_RC_IN_MODE=4 INT32 with paramEncoding bytewise (same union story as SITL 05).\nArduPilot: ARMING_OPTIONS=1 INT32 with paramEncoding c-cast (ARMING_CHECK is gone on Copter 4.7).\n\nConnections mirror SITL 04/21: AP 14550→14551 sysid 1; PX4 14560→14561 sysid 11.",
+    "x": 320,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl31-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl31-vehicle-ap",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl31-vehicle-px4",
+    "type": "mavlink-vehicle",
+    "name": "PX4 sysid 11",
+    "vehicleFamily": "copter",
+    "firmware": "px4",
+    "dialect": "common",
+    "dialectSource": "bundled",
+    "defaultTargetSystem": 11,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl31-connection-ap",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcast": false,
+    "vehicle": "sitl31-vehicle-ap",
+    "localIdentity": "sitl31-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl31-connection-px4",
+    "type": "mavlink-connection",
+    "name": "UDP PX4",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14560,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14561,
+    "broadcast": false,
+    "vehicle": "sitl31-vehicle-px4",
+    "localIdentity": "sitl31-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "heartbeatInterval": 1000,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl31-inject-px4",
+    "type": "inject",
+    "z": "sitl31-tab",
+    "name": "PX4 bytewise set",
+    "props": [
+      {
+        "p": "payload",
+        "v": "{\"action\":\"set\",\"paramId\":\"COM_RC_IN_MODE\",\"value\":4,\"paramType\":\"MAV_PARAM_TYPE_INT32\",\"paramEncoding\":\"bytewise\"}",
+        "vt": "json"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 160,
+    "wires": [
+      [
+        "sitl31-px4-set"
+      ]
+    ]
+  },
+  {
+    "id": "sitl31-px4-set",
+    "type": "mavlink-param",
+    "z": "sitl31-tab",
+    "name": "PX4 set COM_RC_IN_MODE",
+    "connection": "sitl31-connection-px4",
+    "delivery": "confirm",
+    "action": "set",
+    "firmware": "px4",
+    "targetSystem": 11,
+    "targetComponent": 1,
+    "lookup": "name",
+    "paramId": "COM_RC_IN_MODE",
+    "paramIndex": -1,
+    "value": "4",
+    "paramType": "MAV_PARAM_TYPE_INT32",
+    "timeout": "15000",
+    "x": 420,
+    "y": 160,
+    "wires": [
+      [
+        "sitl31-px4-done"
+      ],
+      [
+        "sitl31-px4-set-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl31-inject-ap",
+    "type": "inject",
+    "z": "sitl31-tab",
+    "name": "AP c-cast set",
+    "props": [
+      {
+        "p": "payload",
+        "v": "{\"action\":\"set\",\"paramId\":\"ARMING_OPTIONS\",\"value\":1,\"paramType\":\"MAV_PARAM_TYPE_INT32\",\"paramEncoding\":\"c-cast\"}",
+        "vt": "json"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 300,
+    "wires": [
+      [
+        "sitl31-ap-set"
+      ]
+    ]
+  },
+  {
+    "id": "sitl31-ap-set",
+    "type": "mavlink-param",
+    "z": "sitl31-tab",
+    "name": "AP set ARMING_OPTIONS",
+    "connection": "sitl31-connection-ap",
+    "delivery": "confirm",
+    "action": "set",
+    "firmware": "ardupilot",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "lookup": "name",
+    "paramId": "ARMING_OPTIONS",
+    "paramIndex": -1,
+    "value": "1",
+    "paramType": "MAV_PARAM_TYPE_INT32",
+    "timeout": "15000",
+    "x": 420,
+    "y": 300,
+    "wires": [
+      [
+        "sitl31-ap-done"
+      ],
+      [
+        "sitl31-ap-set-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl31-px4-set-status",
+    "type": "debug",
+    "z": "sitl31-tab",
+    "name": "px4 set status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 430,
+    "y": 230,
+    "wires": []
+  },
+  {
+    "id": "sitl31-px4-done",
+    "type": "debug",
+    "z": "sitl31-tab",
+    "name": "px4 continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 680,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "sitl31-ap-set-status",
+    "type": "debug",
+    "z": "sitl31-tab",
+    "name": "ap set status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 430,
+    "y": 370,
+    "wires": []
+  },
+  {
+    "id": "sitl31-ap-done",
+    "type": "debug",
+    "z": "sitl31-tab",
+    "name": "ap continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 670,
+    "y": 280,
+    "wires": []
+  }
+]
