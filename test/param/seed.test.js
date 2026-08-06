@@ -13,7 +13,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { defsFor } = require('../../lib/param/seed');
+const { defsFor, catalogLabel } = require('../../lib/param/seed');
 const { VEHICLE_FAMILIES } = require('../../lib/vehicle');
 
 /* ---------- family → document ---------- */
@@ -128,5 +128,63 @@ test('the unknown-vehicle union carries no type either', () => {
   // vouch for a field that acts.
   for (const [id, def] of defsFor({ firmware: 'ardupilot', vehicleFamily: 'unknown' })) {
     assert.equal(def.type, undefined, `${id} must not carry a union type`);
+  }
+});
+
+test('catalogLabel names the definition set the operator is actually looking at', () => {
+  // The case this exists for: a Connection named "PX4" bound to a profile set
+  // to ArduPilot serves ArduPilot definitions, and every symptom — an unknown
+  // parameter, a Type field that will not narrow — points somewhere else.
+  assert.equal(
+    catalogLabel({ firmware: 'px4', vehicleFamily: 'copter', count: 1836, source: 'seed' }),
+    'PX4 · 1836 definitions (shipped seed)'
+  );
+  // The family is named only for ArduPilot, because only ArduPilot has a
+  // document per vehicle; printing it for PX4 would imply a distinction
+  // defsFor never makes.
+  assert.equal(
+    catalogLabel({ firmware: 'px4', vehicleFamily: 'plane', count: 1836 }),
+    'PX4 · 1836 definitions (shipped seed)'
+  );
+  assert.equal(
+    catalogLabel({ firmware: 'ardupilot', vehicleFamily: 'copter', count: 5719, source: 'seed' }),
+    'ArduPilot Copter · 5719 definitions (shipped seed)'
+  );
+
+  // An unnamed vehicle gets the union of names, so the label says "names" —
+  // it is why the Value field offers no bounds and no choice list, which
+  // otherwise reads as a second fault.
+  for (const family of ['unknown', '', undefined, 'drone']) {
+    assert.equal(
+      catalogLabel({ firmware: 'ardupilot', vehicleFamily: family, count: 6827 }),
+      'ArduPilot (no vehicle named) · 6827 names (shipped seed)',
+      `family ${JSON.stringify(family)}`
+    );
+  }
+
+  // A profile's own download outranks the seed, and says so.
+  assert.equal(
+    catalogLabel({ firmware: 'ardupilot', vehicleFamily: 'blimp', count: 3127, source: 'profile' }),
+    'ArduPilot Blimp · 3127 definitions (downloaded for this profile)'
+  );
+
+  assert.equal(catalogLabel({ firmware: 'custom', count: 1 }), 'Custom · 1 definition (shipped seed)');
+  assert.match(catalogLabel({ firmware: '', count: 0 }), /^Unknown firmware · 0 definitions/);
+});
+
+test('catalogLabel counts agree with what defsFor actually serves', () => {
+  // A label is worse than none if the number in it is not the number of
+  // definitions in play, so it is taken from the served map, never restated.
+  for (const target of [
+    { firmware: 'px4', vehicleFamily: 'copter' },
+    { firmware: 'ardupilot', vehicleFamily: 'copter' },
+    { firmware: 'ardupilot', vehicleFamily: 'unknown' },
+  ]) {
+    const served = defsFor(target);
+    assert.match(
+      catalogLabel({ ...target, count: served.size }),
+      new RegExp(`· ${served.size} `),
+      JSON.stringify(target)
+    );
   }
 });

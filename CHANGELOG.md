@@ -12,6 +12,34 @@ see AGENTS.md "no migrations, no compatibility shims".
 
 ### Added
 
+- **The Param dialog names the definitions it loaded.** Hovering Param id now
+  reads e.g. *PX4 · 1836 definitions (shipped seed)*, or *ArduPilot Copter ·
+  5719 definitions (downloaded for this profile)*. Definitions follow the
+  Vehicle Profile's Firmware and Vehicle, not the Connection's *name*, so a
+  Connection called "PX4" bound to an ArduPilot profile silently served
+  ArduPilot definitions — and the visible symptom was every parameter looking
+  unknown and the Type field refusing to narrow, which points at the Type
+  field rather than at the profile. The label is composed by the route rather
+  than the dialog, because the dialog sends the firmware it *thinks* applies
+  while the route falls back to the deployed profile when the query omits one;
+  only the route knows which document actually answered. An unnamed ArduPilot
+  vehicle reads *(no vehicle named) · 6827 names*, since that is the case
+  served the union of names with no bounds and no choice lists.
+
+### Fixed
+
+- **The action decides which fields the dialog shows.** Each action is a
+  different message and they carry different fields — `PARAM_REQUEST_READ` has
+  `param_id`/`param_index`, `PARAM_SET` has `param_id`, `param_value` and
+  `param_type`, and `PARAM_REQUEST_LIST` carries nothing but the target — but
+  Value and Type were shown for all three. A *Request list* node offered a
+  Param id, a Value and a Type, none of which reach the wire, and a *Read one*
+  node offered a Value and a Type that are equally dropped. Only the hidden
+  index is stamped back to `-1`; a hidden value or type is simply never read,
+  so clearing it would discard typing for no gain.
+
+### Added
+
 - **A parameter is identified by name or by index, not both at once.** The
   dialog showed Param id and Index side by side, with `-1` in Index meaning
   "ignore me, use the name" — a sentinel to know, dressed as a field to fill.

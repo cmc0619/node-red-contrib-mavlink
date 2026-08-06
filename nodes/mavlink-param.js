@@ -31,6 +31,7 @@ const {
   defsFor: seedDefsFor,
   seedStamp,
   seedError,
+  catalogLabel,
 } = require('../lib/param/seed');
 const { BAND } = require('../lib/connection/bands');
 const {
@@ -96,7 +97,16 @@ module.exports = function registerMavlinkParam(RED) {
 
         function answer(map, source) {
           if (map.size > 0) {
-            return res.json({ defs: Object.fromEntries(map), source, stamp: seedStamp() });
+            return res.json({
+              defs: Object.fromEntries(map),
+              source,
+              stamp: seedStamp(),
+              // Named here rather than in the dialog, because this is where
+              // the firmware was actually resolved: the query may have omitted
+              // it and been answered from the deployed profile, so only this
+              // side knows which document the operator is really looking at.
+              catalog: catalogLabel({ firmware, vehicleFamily, count: map.size, source }),
+            });
           }
           return res.json({
             defs: {},
@@ -123,6 +133,9 @@ module.exports = function registerMavlinkParam(RED) {
               defs: Object.fromEntries(seeded),
               source: 'seed',
               stamp: seedStamp(),
+              catalog: catalogLabel({
+                firmware, vehicleFamily, count: seeded.size, source: 'seed',
+              }),
               notice: `Downloaded definitions are unreadable, showing the shipped seed: ${err.message}`,
             });
           }

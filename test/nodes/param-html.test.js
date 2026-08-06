@@ -472,8 +472,9 @@ test('the mode radios write through to the field that persists', () => {
     'and reopening checks the radio the saved field names'
   );
 
-  assert.match(html, /\$\('#row-paramId'\)\.toggle\(!byIndex\)/, 'name row follows the mode');
-  assert.match(html, /\$\('#row-paramIndex'\)\.toggle\(byIndex\)/, 'index row follows the mode');
+  // Which rows the mode shows is proven behaviourally in
+  // param-defs-editor.test.js — running the real applyActionRows against the
+  // whole action x mode matrix, rather than matching the toggle calls here.
   assert.match(
     html,
     /\$\('#node-input-paramIndex'\)\.val\(-1\)/,

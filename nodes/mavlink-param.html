@@ -152,29 +152,46 @@
       }
 
       /**
-       * Show the one field that names the parameter, and keep the other
-       * honest.
+       * Show exactly the fields the chosen action puts on the wire.
        *
-       * The choice is offered only where the protocol can act on it. A read
-       * carries both fields and picks between them; a set has no
-       * `param_index` field to carry an index and a list request names no
-       * parameter at all, so for those the question is not asked and the
-       * answer is Name.
+       * Each action is a different message and they carry different things:
        *
-       * `param_index` -1 means "use param_id", so name-mode writes -1 into the
-       * hidden field rather than leaving whatever index was last typed —
-       * a stale index would win over the name on the wire.
+       *   read          PARAM_REQUEST_READ   param_id *or* param_index
+       *   set           PARAM_SET            param_id, param_value, param_type
+       *   request-list  PARAM_REQUEST_LIST   nothing but the target
+       *
+       * So only a read is asked which way to address the parameter, only a set
+       * is asked for a value and a type, and a list request is asked for
+       * neither — offering a Value and a Type beside "Request list" invites
+       * filling in fields that are then silently dropped.
+       *
+       * Only the index is *stamped* when hidden. `param_index` -1 means "use
+       * param_id", so a leftover index would win over the name on the wire;
+       * a leftover value or type is simply never read, and clearing it would
+       * throw away the operator's typing for no gain.
+       *
+       * A message may still drive a different action at runtime, and it
+       * carries its own value and type when it does (`requestFrom` in
+       * nodes/mavlink-param.js) — this governs what the node's *own*
+       * configuration needs.
        */
-      function applyLookupMode() {
-        var addressable = ($('#node-input-action').val() || 'read') === 'read';
+      function applyActionRows() {
+        var action = $('#node-input-action').val() || 'read';
+        var namesOne = action !== 'request-list';
         var byIndex = indexAddressed(node);
-        $('#row-param-lookup').toggle(addressable);
-        $('#row-paramId').toggle(!byIndex);
-        $('#row-paramIndex').toggle(byIndex);
+        var toggle = RED.mavlink.toggleRow;
+
+        toggle('#row-param-lookup', action === 'read');
+        toggle('#row-paramId', namesOne && !byIndex);
+        toggle('#row-paramIndex', namesOne && byIndex);
+        toggle('#row-value', action === 'set');
+        toggle('#row-paramType', action === 'set');
+
         if (!byIndex) {
           $('#node-input-paramIndex').val(-1);
           hideParamResults();
         }
+        if (!namesOne) hideParamResults();
       }
 
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
@@ -208,6 +225,14 @@
       var _paramDefs = {};
       var _defsLoaded = false;
       var _defsNotice = '';
+      /**
+       * Which definition set answered, in words -- composed by the route,
+       * because only the route knows what it resolved. A Connection whose
+       * profile names a different firmware than its own name suggests loads
+       * definitions that look wrong for every parameter at once, and the
+       * visible symptom is a Type field that will not narrow.
+       */
+      var _defsCatalog = '';
 
       /**
        * Tier-aware defs load: build tier reads vehicle from the vehicle field;
@@ -235,6 +260,9 @@
       function noParamDefs(notice) {
         _paramDefs = {};
         _paramDefsByKey[currentDefsKey()] = _paramDefs;
+        // Nothing was served, so there is no catalog to name — the notice row
+        // is what speaks here, and a stale label beside it would contradict it.
+        _defsCatalog = '';
         _defsNotice = notice;
         _defsLoaded = true;
         rebuildParamIndex();
@@ -287,6 +315,7 @@
           if (seq !== _defsSeq) return;
           _paramDefs = data.defs || {};
           _paramDefsByKey[key] = _paramDefs;
+          _defsCatalog = data.catalog || '';
           _defsNotice = data.notice || '';
           _defsLoaded = true;
           rebuildParamIndex();
@@ -295,6 +324,7 @@
           if (seq !== _defsSeq) return;
           _paramDefs = {};
           _paramDefsByKey[key] = _paramDefs;
+          _defsCatalog = '';
           _defsNotice = (xhr && xhr.responseJSON && xhr.responseJSON.error) ||
             'Parameter definitions unavailable.';
           _defsLoaded = true;
@@ -444,7 +474,12 @@
               ' – ' + (def.max !== undefined ? def.max : '?'));
           }
         }
-        if (parts.length) $('#node-input-paramId').attr('title', parts.join(' | '));
+        // The catalog line leads, and stands alone before a parameter is
+        // picked -- that is exactly when "which definitions are these?" is
+        // worth answering and there is nothing else to say.
+        var hover = parts.length ? parts.join(' | ') : '';
+        if (_defsCatalog) hover = hover ? _defsCatalog + '\n' + hover : _defsCatalog;
+        if (hover) $('#node-input-paramId').attr('title', hover);
         else $('#node-input-paramId').removeAttr('title');
 
         // A published type is shown and locked; an unpublished one is asked for.
@@ -617,7 +652,7 @@
         $('#node-input-lookup').val(
           $('input[name=mav-param-lookup]:checked').val() || 'name'
         );
-        applyLookupMode();
+        applyActionRows();
       });
 
       $('#node-input-firmware').on('change', function () {
@@ -654,10 +689,10 @@
         // move the caret instead of the selection.
         if (event.preventDefault) event.preventDefault();
       });
-      // The action decides whether a parameter can be addressed by index at
-      // all, so it redraws the mode rows as well as the Value field.
+      // The action decides which message is built, so it decides which rows
+      // exist at all — not just how the Value field is shaped.
       $('#node-input-action').on('change', function () {
-        applyLookupMode();
+        applyActionRows();
         refreshParamInfo();
       });
       $('#mav-param-value-select').on('change', function () {
@@ -682,7 +717,7 @@
       // the radios are ours to check off it.
       $('input[name=mav-param-lookup][value="' +
         ($('#node-input-lookup').val() || 'name') + '"]').prop('checked', true);
-      applyLookupMode();
+      applyActionRows();
       refreshVisibility();
       loadParamDefs();
     }
@@ -778,7 +813,7 @@
     <span id="mav-param-defs-tip-text" class="form-tips" style="font-size:0.85em;"></span>
   </div>
   <div class="form-row" id="row-paramIndex"><label for="node-input-paramIndex">Index</label><input type="number" id="node-input-paramIndex" min="0" max="32767" step="1" title="Position in the vehicle's parameter table, from 0. The vehicle reports how many it has in PARAM_VALUE param_count."></div>
-  <div class="form-row">
+  <div class="form-row" id="row-value">
     <label for="node-input-value">Value</label>
     <!--
       The select writes through to #node-input-value, which stays the persisted
@@ -790,7 +825,7 @@
          help text promises the documented increment becomes the step. -->
     <input type="number" id="node-input-value">
   </div>
-  <div class="form-row"><label for="node-input-paramType">Type</label><select id="node-input-paramType"></select></div>
+  <div class="form-row" id="row-paramType"><label for="node-input-paramType">Type</label><select id="node-input-paramType"></select></div>
   <div class="form-row" id="row-timeout"><label for="node-input-timeout">Timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="10000"></div>
 </script>
 
@@ -806,6 +841,13 @@
   text becomes hover help on both the id and the value. A name that is in no
   list still works: Lua scripts and custom builds declare parameters no metadata
   file has heard of.</p>
+  <p><b>The action decides which fields exist.</b> Each is a different message
+  and they carry different things: <i>Read one</i> sends
+  <code>PARAM_REQUEST_READ</code>, which names the parameter and nothing else;
+  <i>Set one</i> sends <code>PARAM_SET</code>, which adds a value and a type;
+  <i>Request list</i> sends <code>PARAM_REQUEST_LIST</code>, which carries only
+  the target. So Value and Type appear only for a set, and a list request asks
+  for no parameter at all.</p>
   <p><b>Identify by</b> picks name or index, and appears only on <i>Read one</i>.
   <code>PARAM_REQUEST_READ</code> carries both fields and uses the index unless
   it is <code>-1</code>, so they are alternatives rather than a pair; by index
@@ -820,6 +862,12 @@
   bounds are checked before you can deploy, units print beside the box, and the
   documented increment becomes the step. Leaving it blank is still how you defer
   the value to <code>msg.payload</code>.</p>
+  <p>Hovering <b>Param id</b> names the definition set that answered — for
+  example <i>PX4 &middot; 1836 definitions (shipped seed)</i>. Definitions follow
+  the <b>Vehicle Profile</b>'s Firmware and Vehicle, not the Connection's name,
+  so a Connection called "PX4" bound to a profile set to ArduPilot loads
+  ArduPilot definitions; every parameter then looks unknown and the Type field
+  will not narrow.</p>
   <p>Definitions ship with this package for ArduPilot (all six vehicle types)
   and PX4, chosen by the Vehicle Profile's <b>Firmware</b> and <b>Vehicle</b> —
   the same id differs between stacks, so <code>RC1_MIN</code> is microseconds on
