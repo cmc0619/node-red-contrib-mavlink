@@ -153,7 +153,7 @@ function representativeFlow() {
       type: 'mavlink-fanout',
       delivery: 'build',
       selectionMode: 'list',
-      sysids: '1,2',
+      members: [{ sysid: 1 }, { sysid: 2 }],
       identity: 'identity',
       wires: [[], []]
     }

@@ -64,7 +64,8 @@ curved path is either many setpoints from a Function node, `DO_ORBIT`, or a miss
 
 **Fan-out** is a replicator: wire a Build-tier action node into it and it retargets
 the built `{name, fields}` message per member. `selectionMode`: `all` \| `list`
-(`sysids: "1,2,3"`) \| `filter` (`vehicleType`/`firmwareFilter`/`armedFilter`);
+(`members` rows `{sysid, north?, east?, up?, patch?}` — offsets in metres, patch in wire
+units) \| `filter` (`vehicleType`/`firmwareFilter`/`armedFilter`);
 `executionMode`: `sequential` (`intervalMs`, `concurrency`) \| `broadcast`
 (`target_system=0`); `dryRun` bool. Payload wrapper `{message, targets}` patches
 wire fields per member.
@@ -358,7 +359,7 @@ importable tab per file with shared config nodes inline.
   reports per-vehicle send outcomes, not confirmations.
 - **Nodes:** config triplet, `move` (Build, velocity north 1 m/s) feeding 3× `fanout`
   (dry-run; `executionMode: "sequential"` `intervalMs: 150`; `broadcast`), `inject`, `debug`.
-- **Key config:** selection `list` `sysids: "1,2,3,4,5"` (broadcast uses `all`); the Move
+- **Key config:** selection `list` with member rows for sysids 1–5 (broadcast uses `all`); the Move
   node builds the setpoint, the fan-outs replicate it; broadcast pins `target_system=0`,
   single-stack only. Dry-run inject shows the expanded plan first. Comment references §10
   broadcast rules.

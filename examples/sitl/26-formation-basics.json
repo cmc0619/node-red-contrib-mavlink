@@ -121,7 +121,13 @@
     "name": "GUIDED \u00d75",
     "connection": "sitl26-connection",
     "selectionMode": "list",
-    "sysids": "1,2,3,4,5",
+    "members": [
+      { "sysid": 1 },
+      { "sysid": 2 },
+      { "sysid": 3 },
+      { "sysid": 4 },
+      { "sysid": 5 }
+    ],
     "vehicleType": "",
     "firmwareFilter": "",
     "armedFilter": "",
@@ -178,7 +184,13 @@
     "name": "Arm \u00d75",
     "connection": "sitl26-connection",
     "selectionMode": "list",
-    "sysids": "1,2,3,4,5",
+    "members": [
+      { "sysid": 1 },
+      { "sysid": 2 },
+      { "sysid": 3 },
+      { "sysid": 4 },
+      { "sysid": 5 }
+    ],
     "vehicleType": "",
     "firmwareFilter": "",
     "armedFilter": "",
@@ -235,7 +247,13 @@
     "name": "Takeoff 30 m \u00d75",
     "connection": "sitl26-connection",
     "selectionMode": "list",
-    "sysids": "1,2,3,4,5",
+    "members": [
+      { "sysid": 1 },
+      { "sysid": 2 },
+      { "sysid": 3 },
+      { "sysid": 4 },
+      { "sysid": 5 }
+    ],
     "vehicleType": "",
     "firmwareFilter": "",
     "armedFilter": "",

@@ -121,7 +121,13 @@
     "name": "Arm (dry run)",
     "connection": "ex07-connection",
     "selectionMode": "list",
-    "sysids": "1,2,3,4,5",
+    "members": [
+      { "sysid": 1 },
+      { "sysid": 2 },
+      { "sysid": 3 },
+      { "sysid": 4 },
+      { "sysid": 5 }
+    ],
     "vehicleType": "",
     "firmwareFilter": "",
     "armedFilter": "",
@@ -201,7 +207,13 @@
     "name": "Arm (live, confirm)",
     "connection": "ex07-connection",
     "selectionMode": "list",
-    "sysids": "1,2,3,4,5",
+    "members": [
+      { "sysid": 1 },
+      { "sysid": 2 },
+      { "sysid": 3 },
+      { "sysid": 4 },
+      { "sysid": 5 }
+    ],
     "vehicleType": "",
     "firmwareFilter": "",
     "armedFilter": "",
