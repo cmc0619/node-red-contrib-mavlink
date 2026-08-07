@@ -29,10 +29,15 @@ for (const name of NODES) {
       path.join(__dirname, '..', '..', 'nodes', `${name}.html`),
       'utf8'
     );
-    assert.match(
-      html,
-      /connection:\s*\{\s*value:\s*''\s*,\s*type:\s*'mavlink-connection'/,
-      `${name} must declare defaults.connection.type`
+    // Two legitimate routes to a typed connection descriptor: declared in the
+    // node, or merged in from buildTierDialectDefaults. The Build-tier senders
+    // take the shared one, which also carries the wire-tier requirement and
+    // the config-node reference check.
+    const declared = /connection:\s*\{\s*value:\s*''\s*,\s*type:\s*'mavlink-connection'/.test(html);
+    const shared = /buildTierDialectDefaults\(/.test(html);
+    assert.ok(
+      declared || shared,
+      `${name} must get defaults.connection.type from its own defaults or the shared factory`
     );
     assert.match(
       html,

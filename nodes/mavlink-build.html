@@ -94,16 +94,6 @@
     var buildDefaults = Object.assign(
       {
         name:        { value: '' },
-        connection:  {
-          value: '',
-          type: 'mavlink-connection',
-          validate: function (v) {
-            var $t = $('#node-input-tier');
-            var tier = ($t && $t.length) ? $t.val() : (this.tier || 'send');
-            if (tier !== 'build') return !!v;
-            return true;
-          },
-        },
         messageName: { value: 'HEARTBEAT' },
         fields:      { value: '{}' },
         tier:        { value: 'send' },

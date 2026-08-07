@@ -1283,10 +1283,39 @@
           return true;
         },
       },
+      connection: {
+        // The inverse of dialect: a Connection is required on the wire tiers
+        // and meaningless on Build. Same no-`required` rule as vehicle below.
+        //
+        // Two arguments is load-bearing: Node-RED honours a returned reason
+        // string only when the validator's arity is 2, and coerces it with
+        // `!!` otherwise — so a one-arg version of this would report every
+        // failure as valid (§14 "One-arg editor validators treat an error
+        // string as valid").
+        value: '',
+        type: 'mavlink-connection',
+        validate: function (v, _opt) {
+          if (currentMode(this) === 'build') return true;
+          // '_ADD_' is what the platform's "none" option carries until save
+          // rewrites it to ''; treat it as blank too, so the field reds while
+          // the dialog is still open rather than only after Done.
+          if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required on this tier';
+          // Declaring validate at all suppresses Node-RED's own config-node
+          // reference check, so restate it here — without this, a deleted or
+          // broken Connection stops being reported.
+          var cfg = RED.nodes.node(v);
+          if (!cfg) return 'no longer exists — reselect a Connection';
+          if (cfg.valid === false) return 'is not properly configured';
+          return true;
+        },
+      },
       vehicle: {
+        // No `required: false`. Paired with a validate, it short-circuits an
+        // empty value to valid *before* the validator runs (measured on the
+        // editor-client), so the Build + `__vehicle` rule below never fired on
+        // the blank it exists to catch.
         value: '',
         type: 'mavlink-vehicle',
-        required: false,
         validate: function (v) {
           if (currentMode(this) === 'build' && currentDialect(this) === '__vehicle') return !!v;
           return true;

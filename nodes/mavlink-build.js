@@ -145,6 +145,16 @@ module.exports = function registerMavlinkBuild(RED) {
 
     // No idle "ready" badge — the label already names the message (§6: action
     // nodes report last activity; pre-trigger status is only for misconfig).
+    //
+    // Clearing is not the same as badging, and it is required. Every bail
+    // above writes a red badge and returns; the runtime only publishes a
+    // status clear when a node is *removed* (@node-red/runtime
+    // flows/Flow.js:395-399), not when it is modified and restarted, and the
+    // editor just replays whatever status events arrive. So a node that was
+    // misconfigured, then fixed and redeployed, would keep displaying the dead
+    // badge until a message happened to flow through. Reaching here means the
+    // config resolved, so say so once.
+    node.status({});
 
     /**
      * Core action: merge fields, encode, and emit based on the tier.
