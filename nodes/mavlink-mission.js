@@ -306,7 +306,8 @@ function buildPlan(operation, missionType, target, items) {
 }
 
 /**
- * Resolve upload items from config JSON or the message payload.
+ * Resolve upload items: the payload overrides the configured JSON, which the
+ * editor validates (array or blank) — the runtime just reads it.
  *
  * @param {object} config
  * @param {object} payload
@@ -314,17 +315,7 @@ function buildPlan(operation, missionType, target, items) {
  */
 function resolveItems(config, payload) {
   if (Array.isArray(payload.items)) return payload.items;
-  if (typeof config.items === 'string' && config.items.trim()) {
-    let parsed;
-    try {
-      parsed = JSON.parse(config.items);
-    } catch (err) {
-      throw new Error(`mission items config is not valid JSON: ${err.message}`, { cause: err });
-    }
-    if (!Array.isArray(parsed)) throw new Error('mission items config must be a JSON array');
-    return parsed;
-  }
-  return [];
+  return config.items && config.items.trim() ? JSON.parse(config.items) : [];
 }
 
 /**
