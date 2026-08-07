@@ -8,7 +8,9 @@
       connection: RED.mavlink.connectionDefault(),
       identity: { value: '' },
       selectionMode: {
-        value: 'all',
+        // 'list' — the delivery default is Build, and Build requires the list,
+        // so a fresh node must not be born invalid behind a greyed dropdown.
+        value: 'list',
         // Build emits to a downstream mavlink-out, so the Connection's only
         // remaining job is the member directory — and an explicit list is the
         // one selection that does not need it. Requiring the list on Build is
