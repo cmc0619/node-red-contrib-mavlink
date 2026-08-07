@@ -11,12 +11,11 @@ module.exports = function registerMavlinkFanout(RED) {
     const node = this;
     const connectionNode = RED.nodes.getNode(config.connection);
 
-    // Build + explicit list resolves without a peer table (§6 exception): the
-    // sysids are known at deploy time. All other combinations — including
-    // build+all and build+filter — still need the live peer table.
-    const cfgIsBuildList =
-      config.delivery === 'build' && config.selectionMode === 'list';
-    applyConnectionStatus(node, !cfgIsBuildList, connectionNode);
+    // The editor requires an explicit sysid list on Build (#191), so config
+    // follows the standard rule: no Connection needed on Build, required on
+    // the wire tiers. Runtime payload overrides that ask for build+all or
+    // build+filter without a Connection are refused per message below.
+    applyConnectionStatus(node, config.delivery !== 'build', connectionNode);
 
     // Abort-on-close discipline: a redeploy aborts every run in flight and
     // waits for each to unwind. Rationale lives with delivery.inFlightTracker.

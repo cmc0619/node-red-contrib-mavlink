@@ -228,8 +228,10 @@ module.exports = function registerMavlinkMission(RED) {
             send([{ payload: rec }, rec]);
             done();
           } else if (outcome.result === 'cancelled') {
-            applyActionStatus(node, 'error', `${operation} ${outcome.result}`);
-            send([null, rec]);
+            // A redeploy cancelled the machine: the node is going away, so
+            // finish quietly — emitting here would land a record and an error
+            // badge on a closed node over a mere deploy (same rule as fanout,
+            // formation, command, and payload).
             done();
           } else {
             applyActionStatus(node, 'error', `${operation} ${outcome.result}`);

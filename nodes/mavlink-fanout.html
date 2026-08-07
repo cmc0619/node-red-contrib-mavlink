@@ -5,27 +5,50 @@
     color: '#ffe6cc',
     defaults: {
       name: { value: '' },
-      connection: { value: '', type: 'mavlink-connection', required: false },
+      connection: RED.mavlink.connectionDefault(),
       identity: { value: '' },
-      selectionMode: { value: 'all' },
+      selectionMode: {
+        // 'list' — the delivery default is Build, and Build requires the list,
+        // so a fresh node must not be born invalid behind a greyed dropdown.
+        value: 'list',
+        // Build emits to a downstream mavlink-out, so the Connection's only
+        // remaining job is the member directory — and an explicit list is the
+        // one selection that does not need it. Requiring the list on Build is
+        // what lets `connection` above share the standard blank-on-Build rule
+        // (#191). All/filter selection stays on the wire tiers, where a
+        // Connection is present anyway.
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr('#node-input-delivery', this.delivery) !== 'build') return true;
+          return v === 'list' || 'must be an explicit sysid list on Build';
+        },
+      },
       sysids: {
         value: '',
-        validate: function (v) {
-          // Empty is fine when Selection isn't "list"; when the field is filled
-          // (or list mode is active) every token must be a MAVLink sysid.
-          if (RED.mavlink.isBlank(v)) return true;
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr('#node-input-selectionMode', this.selectionMode) !== 'list') return true;
+          if (RED.mavlink.isBlank(v)) return 'is required for list selection';
           return String(v).split(',').every(function (part) {
             part = part.trim();
             if (!part) return true;
             var n = Number(part);
             return Number.isInteger(n) && n >= 1 && n <= 255;
-          });
+          }) || 'must be comma-separated sysids (1-255)';
         },
       },
       vehicleType: { value: '' },
       firmwareFilter: { value: '' },
       armedFilter: { value: '' },
-      executionMode: { value: 'sequential' },
+      executionMode: {
+        value: 'sequential',
+        // Broadcast only pairs with the "All" selection, which Build cannot
+        // choose — the reshape below also resets a retained Broadcast, but a
+        // hand-set value must still red rather than deploy a node the runtime
+        // refuses on every message.
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr('#node-input-delivery', this.delivery) !== 'build') return true;
+          return v !== 'broadcast' || 'Broadcast needs the "All" selection, which Build cannot use';
+        },
+      },
       intervalMs: { value: 100, validate: RED.validators.number() },
       concurrency: {
         value: 1,
@@ -91,6 +114,23 @@
         var d = $('#node-input-delivery').val() || 'build';
         var sel = $('#node-input-selectionMode').val() || 'all';
         var exec = $('#node-input-executionMode').val() || 'sequential';
+        // Build requires the explicit list (see defaults.selectionMode) — grey
+        // the selections that need a live peer table rather than red-ringing
+        // after the fact. Broadcast goes with them: it only pairs with the
+        // "All" selection, which Build cannot choose.
+        $('#node-input-selectionMode option[value="all"], #node-input-selectionMode option[value="filter"]')
+          .prop('disabled', d === 'build');
+        $('#node-input-executionMode option[value="broadcast"]').prop('disabled', d === 'build');
+        // Disabling greys the option but keeps a retained value — a node
+        // switched from a Broadcast wire tier would save Build+Broadcast and
+        // refuse every message. Move it to the only mode Build supports.
+        if (d === 'build' && exec === 'broadcast') {
+          exec = 'sequential';
+          $('#node-input-executionMode').val(exec);
+        }
+        // Build never uses a Connection now (the list is the directory), so
+        // the picker hides like every other sender's does on Build (§6).
+        $('#row-fanout-connection').toggle(d !== 'build');
         $('#row-fanout-identity').toggle(d !== 'build');
         $('#row-fanout-sysids').toggle(sel === 'list');
         $('#row-fanout-typeFilter').toggle(sel === 'filter');
@@ -144,7 +184,7 @@
   <p>What the message means is inferred from its name: <code>COMMAND_LONG</code>/<code>COMMAND_INT</code> confirm by COMMAND_ACK; <code>PARAM_SET</code> confirms by its PARAM_VALUE echo (sequential only); offboard setpoints (<code>SET_POSITION_TARGET_LOCAL_NED</code>/<code>_GLOBAL_INT</code>, <code>SET_ATTITUDE_TARGET</code>, <code>SET_ACTUATOR_CONTROL_TARGET</code>) carry no ack and ride the streaming band; everything else addressed is fire-and-forget. Mission <i>transfer steps</i> (<code>MISSION_COUNT</code>, <code>MISSION_ITEM(_INT)</code>, <code>MISSION_REQUEST*</code>, <code>MISSION_ACK</code>, the partial-list pair) and <code>PARAM_REQUEST_LIST</code> are refused — multi-message transactions cannot be replicated. Single-shot mission commands like <code>MISSION_SET_CURRENT</code> and <code>MISSION_CLEAR_ALL</code> replicate normally.</p>
   <p>Fan-out addresses each member's <b>autopilot</b>: the built message's <code>target_component</code> is replaced per member. A message hand-addressed to another component is re-addressed, not honoured — use the single-vehicle nodes for that.</p>
   <p>Sequential mode sends one retargeted message per member at the configured interval; <b>Concurrency</b> lets up to N confirm waits overlap so one slow vehicle doesn't delay the rest. <b>Stop on error</b> halts remaining members after the first failure — they report <code>skipped</code> in the aggregate rather than being commanded. Broadcast mode sends one packet with target_system 0 and target_component 1, and requires the <i>All active vehicles</i> selection — a broadcast reaches every vehicle on the link, so it cannot honour a subset, per-target patches, or a PARAM_SET.</p>
-  <p>On <b>Build</b> delivery output 0 emits the product — one retargeted message per member (or the single broadcast packet) for a downstream <b>mavlink-out</b>; no Connection is needed when the selection is an explicit list. On wire tiers output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail.</p>
+  <p>On <b>Build</b> delivery output 0 emits the product — one retargeted message per member for a downstream <b>mavlink-out</b>. Build requires an <i>Explicit sysid list</i> and needs no Connection: the downstream sender owns the wire, and the list already answers "which vehicles". All/filter selection (and Broadcast) live on the wire tiers, where the Connection's peer table is present to answer it. On wire tiers output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail.</p>
   <p><b>Send as</b> — selects the GCS or custom identity that stamps source SysID/CompID on outbound frames. Only identities with a <code>gcs</code> or <code>custom</code> role are offered. Hidden on Build delivery (source ids are stamped at the wire by the sending node).</p>
   <p>Safety commands (Flight Termination) are refused unless the <b>Confirm</b> box is ticked or <code>msg.confirmed = true</code> is set.</p>
 </script>

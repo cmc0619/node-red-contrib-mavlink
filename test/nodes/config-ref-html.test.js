@@ -24,6 +24,10 @@ const BUILD_TIER_SENDERS = [
   'mavlink-param',
   'mavlink-payload',
   'mavlink-mission',
+  // Fan-out joined the standard rule when #191 made Build require an explicit
+  // sysid list: blank on Build, required on the wire tiers, via the same
+  // shared connectionDefault descriptor.
+  'mavlink-fanout',
 ];
 const ALWAYS_REQUIRED = [
   'mavlink-in',
@@ -31,12 +35,7 @@ const ALWAYS_REQUIRED = [
   'mavlink-state',
   'mavlink-formation',
 ];
-// Fan-out is the odd one: build + an explicit target list needs no Connection
-// (§6/§9), so blank is legal, but it does not use the shared factory and
-// carries `required: false` instead. Recorded rather than normalised — moving
-// it onto the shared descriptor is a separate decision.
-const OPTIONAL_CONNECTION = ['mavlink-fanout'];
-const NODES = BUILD_TIER_SENDERS.concat(ALWAYS_REQUIRED, OPTIONAL_CONNECTION);
+const NODES = BUILD_TIER_SENDERS.concat(ALWAYS_REQUIRED);
 
 for (const name of NODES) {
   test(`${name}: connection is a typed config ref and ensureConfigNodePicker is called`, () => {
@@ -66,8 +65,6 @@ for (const name of NODES) {
         2,
         `${name} must register the shared (v, opt) validator`
       );
-    } else if (OPTIONAL_CONNECTION.includes(name)) {
-      assert.equal(connection.required, false, `${name} allows a blank Connection`);
     } else {
       assert.equal(connection.required, true, `${name} has no Build tier`);
     }

@@ -1262,6 +1262,47 @@
    * @param {boolean} [opts.withFirmware]  add the Param/Mission Firmware field
    * @returns {object} default descriptors to merge into registerType defaults
    */
+  /**
+   * The `connection` default descriptor: required on the wire tiers,
+   * meaningless on Build. Shared by the tier senders (via
+   * buildTierDialectDefaults) and Fan-out, which has no dialect field.
+   *
+   * Two arguments is load-bearing: Node-RED honours a returned reason
+   * string only when the validator's arity is 2, and coerces it with
+   * `!!` otherwise (§14 "One-arg editor validators treat an error string
+   * as valid"). No `required` key — an explicit `required: false` beside
+   * `validate` short-circuits an empty value to valid before the
+   * validator runs.
+   *
+   * @param {object} [opts]
+   * @param {'delivery'|'tier'} [opts.modeField='delivery']
+   * @param {string} [opts.modeSelector]  DOM selector override
+   * @returns {object} descriptor for defaults.connection
+   */
+  RED.mavlink.connectionDefault = function (opts) {
+    opts = opts || {};
+    var modeField = opts.modeField || 'delivery';
+    var modeSelector = opts.modeSelector || ('#node-input-' + modeField);
+    return {
+      value: '',
+      type: 'mavlink-connection',
+      validate: function (v, _opt) {
+        if (RED.mavlink.liveOr(modeSelector, this && this[modeField]) === 'build') return true;
+        // '_ADD_' is what the platform's "none" option carries until save
+        // rewrites it to ''; treat it as blank too, so the field reds while
+        // the dialog is still open rather than only after Done.
+        if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required on this tier';
+        // Declaring validate at all suppresses Node-RED's own config-node
+        // reference check, so restate it here — without this, a deleted or
+        // broken Connection stops being reported.
+        var cfg = RED.nodes.node(v);
+        if (!cfg) return 'no longer exists — reselect a Connection';
+        if (cfg.valid === false) return 'is not properly configured';
+        return true;
+      },
+    };
+  };
+
   RED.mavlink.buildTierDialectDefaults = function (opts) {
     opts = opts || {};
     var modeField = opts.modeField || 'delivery';
@@ -1283,32 +1324,7 @@
           return true;
         },
       },
-      connection: {
-        // The inverse of dialect: a Connection is required on the wire tiers
-        // and meaningless on Build. Same no-`required` rule as vehicle below.
-        //
-        // Two arguments is load-bearing: Node-RED honours a returned reason
-        // string only when the validator's arity is 2, and coerces it with
-        // `!!` otherwise — so a one-arg version of this would report every
-        // failure as valid (§14 "One-arg editor validators treat an error
-        // string as valid").
-        value: '',
-        type: 'mavlink-connection',
-        validate: function (v, _opt) {
-          if (currentMode(this) === 'build') return true;
-          // '_ADD_' is what the platform's "none" option carries until save
-          // rewrites it to ''; treat it as blank too, so the field reds while
-          // the dialog is still open rather than only after Done.
-          if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required on this tier';
-          // Declaring validate at all suppresses Node-RED's own config-node
-          // reference check, so restate it here — without this, a deleted or
-          // broken Connection stops being reported.
-          var cfg = RED.nodes.node(v);
-          if (!cfg) return 'no longer exists — reselect a Connection';
-          if (cfg.valid === false) return 'is not properly configured';
-          return true;
-        },
-      },
+      connection: RED.mavlink.connectionDefault({ modeField: modeField, modeSelector: modeSelector }),
       vehicle: {
         // No `required: false`. Paired with a validate, it short-circuits an
         // empty value to valid *before* the validator runs (measured on the
