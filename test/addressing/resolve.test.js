@@ -84,6 +84,18 @@ test('gcs identity: blank config inherits profile default', () => {
   assert.deepEqual(t, { sysid: 42, compid: 191 });
 });
 
+test('a whitespace payload target is blank — it inherits, never broadcast 0 (#174)', () => {
+  // Number(' ') is a finite 0, and sysid 0 is a real broadcast target: an
+  // untrimmed blank test turned a template-join artifact into a broadcast.
+  const t = resolveActionTarget({
+    payloadTarget: { sysid: ' ', compid: '\t' },
+    configSysid: 7,
+    configCompid: 100,
+    profile: PROFILE,
+  });
+  assert.deepEqual(t, { sysid: 7, compid: 100 });
+});
+
 test('configured 0 is broadcast and survives the chain', () => {
   const t = resolveActionTarget({
     configSysid: 0,

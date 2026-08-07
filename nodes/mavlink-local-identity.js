@@ -26,6 +26,7 @@ const {
   bindVehicleSysid,
   releaseVehicleSysid,
 } = require('../lib/identity');
+const { isBlank } = require('../lib/addressing');
 
 module.exports = function registerMavlinkLocalIdentity(RED) {
   /**
@@ -144,6 +145,6 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
  * @returns {number} interval in milliseconds; defaults to 1 Hz
  */
 function parseHeartbeatIntervalMs(value) {
-  if (value === undefined || value === null || String(value).trim() === '') return 1000;
+  if (isBlank(value)) return 1000;
   return Number(value);
 }

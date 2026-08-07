@@ -11,7 +11,7 @@ test('position Move flips operator up-positive altitude to NED down-positive exa
     mode: 'position',
     target: { sysid: 2, compid: 1 },
     position: { north: 4, east: -3, up: 12 },
-    yaw: 1.25,
+    yaw: 90,
     timeBootMs: 77,
   });
 
@@ -21,7 +21,8 @@ test('position Move flips operator up-positive altitude to NED down-positive exa
   assert.equal(message.fields.x, 4);
   assert.equal(message.fields.y, -3);
   assert.equal(message.fields.z, -12);
-  assert.equal(message.fields.yaw, 1.25);
+  // Operator yaw is degrees; the wire wants radians — 90 deg ≈ 1.5708 rad.
+  assert.ok(Math.abs(message.fields.yaw - Math.PI / 2) < 1e-9);
   assert.equal(message.fields.type_mask, 2552);
 });
 
@@ -103,11 +104,12 @@ test('yaw-only Move ignores every translation vector and requires yaw or yaw rat
   const message = buildMoveMessage({
     mode: 'yaw-only',
     target: { sysid: 2, compid: 1 },
-    yaw: 1.57,
+    yaw: 180,
   });
   // Ignore position (7) + velocity (56) + accel (448) + yaw rate (2048); yaw used.
   assert.equal(message.fields.type_mask, 7 + 56 + 448 + 2048);
-  assert.equal(message.fields.yaw, 1.57);
+  // Degrees in, radians out: 180 deg is exactly π.
+  assert.equal(message.fields.yaw, Math.PI);
 
   // Both blank would be the all-ignore packet PX4 rejects (§14 / #115).
   assert.throws(
@@ -169,10 +171,10 @@ test('`frame` is the only frame spelling: member name or raw number', () => {
     assert.equal(message.fields.coordinate_frame, 6, `frame ${JSON.stringify(frame)} resolves`);
   }
 
-  // Blank still defaults; whitespace deliberately does *not* — it throws rather
-  // than silently defaulting past a configured frame (see the comment in
-  // resolveModeAndFrame, and #174).
-  for (const blank of [undefined, null, '']) {
+  // Blank defaults, and whitespace is blank (#174): the node's payload→config
+  // resolution now trims, so a whitespace frame reaching the library never
+  // skipped a configured value — it is the same "nothing supplied" as ''.
+  for (const blank of [undefined, null, '', ' ']) {
     const message = buildMoveMessage({
       mode: 'position',
       frame: blank,
@@ -181,15 +183,6 @@ test('`frame` is the only frame spelling: member name or raw number', () => {
     });
     assert.equal(message.fields.coordinate_frame, 1, `blank ${JSON.stringify(blank)} defaults`);
   }
-  assert.throws(
-    () => buildMoveMessage({
-      mode: 'position',
-      frame: ' ',
-      target: { sysid: 2, compid: 1 },
-      position: { north: 1, east: 2, up: 3 },
-    }),
-    /unknown Move frame/
-  );
 });
 
 test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw', () => {
@@ -414,7 +407,7 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
     }),
     target: { sysid: 4, compid: 1 },
     identityId: 'gcs',
-    intervalMs: 100,
+    rateHz: 10,
     ttlMs: 250,
     now: () => now,
     setInterval(fn) {
@@ -457,7 +450,7 @@ test('onExpire fires on TTL with the stop message, and never on a caller stop', 
       velocity: { north: 1, east: 0, up: 0 },
     }),
     target: { sysid: 4, compid: 1 },
-    intervalMs: 100,
+    rateHz: 10,
     ttlMs: 250,
     now: () => now,
     setInterval(fn) { timer = fn; return 'timer'; },

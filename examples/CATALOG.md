@@ -41,8 +41,9 @@ keyed by param index (`"{\"7\":20}"` = param7 = 20).
 
 **Move** `mode`: `position`, `velocity`, `position-velocity`, `acceleration`,
 `yaw-only`; `frame` picks local (N/E/Up metres) vs global (`lat`/`lon` deg, `alt` m)
-and the body/offset/altitude-datum variants. `intervalMs`, `ttlMs` govern the stream.
-Up is up-positive in the UI; the node flips to NED at encode. **No arc primitive** — a
+and the body/offset/altitude-datum variants. `rateHz` (setpoints/s), `ttlMs` govern the
+stream. Up is up-positive and yaw is degrees in the UI; the node flips to NED and
+converts to radians at encode. **No arc primitive** — a
 curved path is either many setpoints from a Function node, `DO_ORBIT`, or a mission ring.
 
 **Payload** `topic`/`verb`: camera → `photo`, `start-video`, `stop-video`, `set-mode`,
@@ -140,7 +141,7 @@ importable tab per file with shared config nodes inline.
   show Move's freshness/stop behaviour.
 - **Nodes:** config triplet, `command` (arm/set_mode/takeoff/land), `inject`, one
   `function` (ring generator — the only computed part), `move` (`mode: "position"`,
-  `frame: "GLOBAL_RELATIVE_ALT_INT"`, `delivery: "stream"`, `intervalMs: 200`, `ttlMs: 1500`), `debug`.
+  `frame: "GLOBAL_RELATIVE_ALT_INT"`, `delivery: "stream"`, `rateHz: 5`, `ttlMs: 1500`), `debug`.
 - **Key config:** Function computes `lat = c_lat + (R·sinθ)/111320`,
   `lon = c_lon + (R·cosθ)/(111320·cos c_lat)` per §"Coordinate frames"; emits
   `{payload:{mode:"position",frame:"GLOBAL_RELATIVE_ALT_INT",position:{lat,lon,alt}}}`. Move TTL means the stream
@@ -338,7 +339,7 @@ importable tab per file with shared config nodes inline.
   stream lapse and the vehicle stops — the freshness-and-stop contract that keeps a
   streamed control from running away.
 - **Nodes:** config triplet, `command` arm→GUIDED, `move` (`mode: "velocity"`, `frame: "LOCAL_NED"`,
-  `delivery: "stream"`, `intervalMs: 100`, `ttlMs: 500`), `inject` (velocity presets),
+  `delivery: "stream"`, `rateHz: 10`, `ttlMs: 500`), `inject` (velocity presets),
   `debug`.
 - **Key config:** e.g. Forward `{velocity:{north:2,east:0,up:0}}`; Up
   `{velocity:{north:0,east:0,up:1}}`; a `Stop` inject sends `payload:false` (suppress) so

@@ -112,7 +112,7 @@
     "aUp": 0,
     "yaw": "",
     "yawRate": "",
-    "intervalMs": 100,
+    "rateHz": 10,
     "ttlMs": 1000,
     "x": 260,
     "y": 200,

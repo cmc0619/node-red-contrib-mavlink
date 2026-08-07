@@ -3,6 +3,7 @@
 const {
   buildMoveMessage,
   createMoveStream,
+  streamLocks,
   advisoryFor,
   positionFrom,
   velocityFrom,
@@ -10,7 +11,7 @@ const {
   valueFrom,
 } = require('../lib/move');
 const { BAND } = require('../lib/connection/bands');
-const { firstDefined, resolveDeliveryContext, applyConnectionStatus } = require('../lib/addressing');
+const { firstDefined, isBlank, resolveDeliveryContext, applyConnectionStatus } = require('../lib/addressing');
 const {
   shouldSuppress,
   makeStatusRecord,
@@ -23,9 +24,24 @@ module.exports = function registerMavlinkMove(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
     let stream = null;
+    let streamKey = null;
+    let releaseStream = null;
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
+
+    // Stop the active stream and free its single-owner scope (#176). Every
+    // stop the node causes — replacement, a non-stream input, close — routes
+    // through here so no path can leave the target locked with nothing
+    // streaming to it.
+    function stopStream() {
+      if (!stream) return;
+      stream.stop();
+      stream = null;
+      releaseStream();
+      releaseStream = null;
+      streamKey = null;
+    }
 
     node.on('input', (msg, send, done) => {
       try {
@@ -84,27 +100,66 @@ module.exports = function registerMavlinkMove(RED) {
             // never stop it as a side effect of a failed replacement.
             // Payload overrides config (§6 runtime override of last resort);
             // the editor default guarantees config when the payload is silent.
-            const intervalMs = streamMs(payload.intervalMs, config.intervalMs, 'intervalMs', 1);
-            const ttlMs = streamMs(payload.ttlMs, config.ttlMs, 'ttlMs', 0);
-            if (stream) stream.stop();
+            const rateHz = streamValue(payload.rateHz, config.rateHz, 'rateHz', 0.1, 'Hz');
+            const ttlMs = streamValue(payload.ttlMs, config.ttlMs, 'ttlMs', 0, 'milliseconds');
+            // One stream per (connection, target) (#176): a second node
+            // streaming to the same vehicle would alternate contradictory
+            // setpoints — the vehicle oscillates while both nodes report
+            // success. Fail closed, like the mission-transfer lock. This node
+            // replacing its own stream to the same target is legitimate
+            // single-flight: stopping it first frees the scope, so the
+            // synchronous re-acquire below cannot self-conflict. A conflict
+            // (necessarily another node's stream) refuses before stopStream,
+            // leaving the running stream running like any rejected input.
+            const key = streamLocks.key(connectionNode.id, target);
+            if (key === streamKey) stopStream();
+            const release = streamLocks.acquire(connectionNode.id, target);
+            if (!release) {
+              throw new Error(
+                `a setpoint stream to ${target.sysid}.${target.compid} is already running on this connection — stop it first or target it from one node`
+              );
+            }
+            stopStream();
             stream = createMoveStream({
               connection: connectionNode,
               message,
               target,
               identityId,
-              intervalMs,
+              rateHz,
               ttlMs,
               // TTL expiry is the only stop the flow did not cause, so it is
               // the only one it cannot observe: without this the node would
               // halt the vehicle and keep reporting "streaming" forever.
               // Async, so it uses node.send — the input that started the
-              // stream was completed long ago.
-              onExpire: (stopMessage) => completeExpiry(node, stopMessage),
+              // stream was completed long ago. The stream stopped itself, so
+              // only the bookkeeping is left: free the scope before telling
+              // the flow. A replaced stream's timer is already cleared, so
+              // this only ever fires for the stream currently in the slot.
+              onExpire: (stopMessage) => {
+                stream = null;
+                releaseStream = null;
+                streamKey = null;
+                release();
+                completeExpiry(node, stopMessage);
+              },
             });
-            stream.start();
+            streamKey = key;
+            releaseStream = release;
+            // start() sends synchronously before marking the stream active, and
+            // Connection.send throws loudly when the identity cannot resolve. A
+            // throw here must not strand the just-acquired lock on a stream
+            // that never ran — release before the error routes to failInput.
+            // stop() on a never-active stream sends nothing, so stopStream()
+            // here is purely the bookkeeping.
+            try {
+              stream.start();
+            } catch (err) {
+              stopStream();
+              throw err;
+            }
             completeResult(node, send, 'succeeded', 'streaming', message);
           } else {
-            if (stream) stream.stop();
+            stopStream();
             connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
             completeResult(node, send, 'succeeded', 'sent', message);
           }
@@ -116,7 +171,7 @@ module.exports = function registerMavlinkMove(RED) {
     });
 
     node.on('close', (done) => {
-      if (stream) stream.stop();
+      stopStream();
       done();
     });
   }
@@ -162,23 +217,23 @@ function statusRecord(result, detail, extra = {}) {
  * Stream timing: config is editor-validated and trusted; a payload override is
  * runtime-boundary data and must refuse rather than misbehave silently — a NaN
  * ttl never satisfies the stream's `ttl > 0` expiry check (the stream runs
- * forever), and setInterval coerces a negative or NaN interval to ~1 ms or the
- * fallback. Minimum 0 keeps ttl 0 = "stream until replaced or closed";
- * an interval needs at least 1 ms to be a rate at all.
+ * forever), and setInterval coerces a NaN or out-of-range interval to ~1 ms.
+ * Minimum 0 keeps ttl 0 = "stream until replaced or closed". The rate minimum
+ * is 0.1 Hz: a rate must be positive to be a rate at all, and a near-zero rate
+ * is the same hazard in disguise — its 1000/rate interval overflows
+ * setInterval's 32-bit ceiling, which Node clamps to 1 ms, turning "almost
+ * never" into a 1000 Hz flood. One setpoint per 10 s is already far below any
+ * firmware's setpoint watchdog, so nothing real is excluded.
  *
- * @param {*} payloadValue  ms from msg.payload, blank = inherit config
- * @param {*} configValue   ms from the editor-validated config
+ * @param {*} payloadValue  value from msg.payload, blank = inherit config
+ * @param {*} configValue   value from the editor-validated config
  * @param {string} name     payload property name, for the error
- * @param {number} minimum  smallest valid ms value
+ * @param {number} minimum  smallest valid value
+ * @param {string} unit     unit name, for the error
  * @returns {number}
  */
-function streamMs(payloadValue, configValue, name, minimum) {
-  // Blank is undefined/null/whitespace-only, the same sentinel lib/move uses:
-  // `Number(' ')` is a finite 0, so a whitespace ttl would otherwise read as
-  // "never expire" and silently outlive the configured TTL.
-  const blank = payloadValue === undefined || payloadValue === null
-    || (typeof payloadValue === 'string' && payloadValue.trim() === '');
-  if (blank) {
+function streamValue(payloadValue, configValue, name, minimum, unit) {
+  if (isBlank(payloadValue)) {
     return Number(configValue);
   }
   // Only numbers and numeric strings: bare Number() coercion turns `true`
@@ -188,7 +243,7 @@ function streamMs(payloadValue, configValue, name, minimum) {
     : NaN;
   if (!Number.isFinite(n) || n < minimum) {
     throw new Error(
-      `payload.${name} must be a finite number of milliseconds >= ${minimum}, got ${JSON.stringify(payloadValue)}`
+      `payload.${name} must be a finite number of ${unit} >= ${minimum}, got ${JSON.stringify(payloadValue)}`
     );
   }
   return n;
