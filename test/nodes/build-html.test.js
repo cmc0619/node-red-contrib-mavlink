@@ -9,6 +9,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { loadNodeDefaults } = require('./html-assert');
+
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-build.html'),
   'utf8'
@@ -31,17 +33,18 @@ test('Build dialect + vehicle defaults come from the shared Build-tier helper', 
   );
 });
 
-test('Build takes its connection descriptor from the shared factory', () => {
-  // The descriptor (type, and the required-on-wire-tiers rule) now comes from
-  // buildTierDialectDefaults, which is exercised directly in
-  // mavlink-editor-resource.test.js. The node must not redeclare it — a local
-  // copy would win the Object.assign and silently drop the shared reference
-  // check.
-  assert.match(html, /buildTierDialectDefaults\(\{ modeField: 'tier' \}\)/);
-  assert.ok(
-    !/connection:\s*\{/.test(html),
-    'connection must not be redeclared locally'
-  );
+test('Build registers the shared connection descriptor, not a local one', () => {
+  // Executed, not grepped. A node can mention buildTierDialectDefaults and
+  // still lose its descriptor — by redeclaring connection after the merge, or
+  // merging the arguments the other way round — and source text cannot tell.
+  const { connection } = loadNodeDefaults('mavlink-build');
+
+  assert.equal(connection.type, 'mavlink-connection');
+  // No `required` key: paired with a validate it would short-circuit the blank
+  // to valid before the validator ran (§14).
+  assert.equal(Object.prototype.hasOwnProperty.call(connection, 'required'), false);
+  // Arity 2 is what makes a returned reason string count as invalid (§14).
+  assert.equal(connection.validate.length, 2);
 });
 
 test('Build messageName defaults to HEARTBEAT and is a <select>', () => {
@@ -140,13 +143,20 @@ test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)',
   );
 });
 
-test('Build no longer hand-rolls the wire-tier connection rule', () => {
-  // Was `if (tier !== 'build') return !!v` inline. That form also disabled
-  // Node-RED's config-node reference check, so a deleted Connection stopped
-  // being reported on this node alone; the shared descriptor restates it.
-  assert.ok(
-    !/if \(tier !== ['"]build['"]\) return !!v/.test(html),
-    'the local connection validator must be gone'
+test('Build\'s registered validator is the shared one, by its behaviour', () => {
+  // The old local validator was `if (tier !== 'build') return !!v`, which also
+  // disabled Node-RED's config-node reference check — build was the only node
+  // that would not report a deleted Connection. Absence of that expression
+  // proves nothing; these three outcomes are only possible from the shared
+  // descriptor, and the last is the one the local version could not produce.
+  const { connection } = loadNodeDefaults('mavlink-build', { live: { valid: true } });
+
+  assert.equal(connection.validate.call({ tier: 'build' }, ''), true, 'blank is correct on Build');
+  assert.equal(connection.validate.call({ tier: 'send' }, 'live'), true, 'a live Connection passes');
+  assert.match(
+    String(connection.validate.call({ tier: 'send' }, 'deleted')),
+    /no longer exists/,
+    'a dangling reference is reported — the check a local validator suppresses'
   );
 });
 
