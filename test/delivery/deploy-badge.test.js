@@ -68,7 +68,6 @@ function deploy(moduleName, type, config, connectionNode) {
     settings: { userDir: '/tmp' },
   };
   require(`../../nodes/${moduleName}`)(RED);
-  // eslint-disable-next-line new-cap
   new RED.nodes.types[type](config);
   return statuses;
 }
