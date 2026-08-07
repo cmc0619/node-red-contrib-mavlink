@@ -22,6 +22,7 @@
  */
 
 const { capBadge } = require('../lib/delivery');
+const { applyConnectionStatus } = require('../lib/addressing');
 
 /**
  * Minimum interval (ms) between status-badge writes for an unchanged badge.
@@ -41,11 +42,12 @@ module.exports = function registerMavlinkIn(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
+    // A consumer node with no inputs: when the Connection does not resolve
+    // there is nothing to subscribe to and nothing to sink, so the badge-and-
+    // return is the whole story here.
     const connectionNode = RED.nodes.getNode(config.connection);
-    if (!connectionNode || !connectionNode.subscribe) {
-      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
-      return;
-    }
+    applyConnectionStatus(node, true, connectionNode);
+    if (!connectionNode) return;
 
     // Filter settings — null means "match all".
     const filterMessage = config.message ? String(config.message).trim() : null;

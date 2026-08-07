@@ -96,11 +96,20 @@ for (const s of SENDERS) {
     );
   });
 
-  test(`${s.type}: the Build tier needs no Connection and does not badge`, () => {
+  test(`${s.type}: the Build tier needs no Connection and clears rather than badges`, () => {
     const statuses = deploy(s.module, s.type, { ...s.build, connection: '' }, null);
     assert.ok(
       !statuses.some((x) => x && x.text === 'invalid config'),
       'Build sends nothing, so a blank Connection is the correct configuration'
+    );
+    // The absence of a badge is not enough to assert on its own: a node that
+    // wrote no status at all would satisfy it, and that is the stale-badge
+    // defect, not the fix. Switching a misconfigured wire tier to Build is the
+    // most likely way to reach here, so the dead badge is precisely what needs
+    // clearing.
+    assert.ok(
+      statuses.some((x) => x && Object.keys(x).length === 0),
+      'and must clear, or a stale badge from the previous deploy survives'
     );
   });
 }

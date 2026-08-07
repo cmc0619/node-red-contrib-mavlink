@@ -10,7 +10,23 @@
       missionType: { value: 'mission' },
       targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
       targetComponent: { value: '', validate: RED.validators.number(true) },
-      items: { value: '' },
+      items: {
+        value: '',
+        // Two args so a returned reason counts as invalid rather than being
+        // coerced truthy (§14). Blank means "items come from the payload".
+        // Operation-aware like the shared tier validators: only Upload reads
+        // items, so a leftover value must not red a Download or Clear node.
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr('#node-input-operation', this.operation) !== 'upload') return true;
+          if (RED.mavlink.isBlank(v)) return true;
+          try {
+            if (!Array.isArray(JSON.parse(v))) return 'must be a JSON array';
+          } catch {
+            return 'is not valid JSON';
+          }
+          return true;
+        },
+      },
       confirmClear: { value: false },
       timeout: { value: '', validate: RED.validators.number(true) },
       maxRetries: { value: '', validate: RED.validators.number(true) }

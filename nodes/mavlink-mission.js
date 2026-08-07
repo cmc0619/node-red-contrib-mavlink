@@ -28,6 +28,7 @@ const {
   makeStatusRecord,
   shouldSuppress,
   applyActionStatus,
+  failInput,
 } = require('../lib/delivery');
 const { BAND } = require('../lib/connection/bands');
 const {
@@ -56,7 +57,7 @@ module.exports = function registerMavlinkMission(RED) {
     const operation = config.operation || OPERATION.DOWNLOAD;
     const connNode = RED.nodes.getNode(config.connection);
     const delivery = config.delivery;
-    applyConnectionStatus(node, delivery, connNode);
+    applyConnectionStatus(node, delivery !== 'build', connNode);
     const timeoutMs = config.timeout ? Number(config.timeout) : undefined;
     const maxRetries = config.maxRetries !== undefined && config.maxRetries !== ''
       ? Number(config.maxRetries)
@@ -73,6 +74,19 @@ module.exports = function registerMavlinkMission(RED) {
     const activeByKey = new Map();
 
     node.on('input', function handleInput(msg, send, done) {
+      // A sync throw from an input handler is logged by Node-RED but never
+      // completes the message — done() is not called and output 1 stays
+      // silent. Everything below that can throw (items JSON, a wire tier
+      // whose Connection did not resolve) routes through failInput instead,
+      // like every other sender.
+      try {
+        handle(msg, send, done);
+      } catch (err) {
+        failInput(node, send, err, done);
+      }
+    });
+
+    function handle(msg, send, done) {
       if (shouldSuppress(msg)) {
         done();
         return;
@@ -235,7 +249,7 @@ module.exports = function registerMavlinkMission(RED) {
           })]);
           done(err);
         });
-    });
+    }
 
     node.on('close', (done) => {
       for (const machine of activeByKey.values()) machine.cancel();
@@ -292,7 +306,8 @@ function buildPlan(operation, missionType, target, items) {
 }
 
 /**
- * Resolve upload items from config JSON or the message payload.
+ * Resolve upload items: the payload overrides the configured JSON, which the
+ * editor validates (array or blank) — the runtime just reads it.
  *
  * @param {object} config
  * @param {object} payload
@@ -300,17 +315,7 @@ function buildPlan(operation, missionType, target, items) {
  */
 function resolveItems(config, payload) {
   if (Array.isArray(payload.items)) return payload.items;
-  if (typeof config.items === 'string' && config.items.trim()) {
-    let parsed;
-    try {
-      parsed = JSON.parse(config.items);
-    } catch (err) {
-      throw new Error(`mission items config is not valid JSON: ${err.message}`, { cause: err });
-    }
-    if (!Array.isArray(parsed)) throw new Error('mission items config must be a JSON array');
-    return parsed;
-  }
-  return [];
+  return config.items && config.items.trim() ? JSON.parse(config.items) : [];
 }
 
 /**

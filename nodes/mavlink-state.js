@@ -1,11 +1,12 @@
 'use strict';
 
 const { createStateFeed, snapshotPeers } = require('../lib/state');
-const { firstDefined } = require('../lib/addressing');
+const { firstDefined, applyConnectionStatus } = require('../lib/addressing');
 const {
   makeStatusRecord,
   applyActionStatus,
   shouldSuppress,
+  failInput,
 } = require('../lib/delivery');
 
 module.exports = function registerMavlinkState(RED) {
@@ -13,20 +14,14 @@ module.exports = function registerMavlinkState(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
     const connectionNode = RED.nodes.getNode(config.connection);
-    let feed = null;
+    applyConnectionStatus(node, true, connectionNode);
 
-    if (!connectionNode || !connectionNode.peerTable) {
-      applyActionStatus(node, 'invalid', 'invalid config');
-    } else if (config.mode === 'feed') {
+    let feed = null;
+    if (connectionNode && config.mode === 'feed') {
       feed = createStateFeed(connectionNode.peerTable, { events: selectedEvents(config) }, (record) => {
         node.send([{ payload: record }]);
       });
       node.status({ fill: 'grey', shape: 'ring', text: 'listening' });
-    } else {
-      // Every other good config wrote nothing at all, so a node that was
-      // misconfigured, then fixed and redeployed, kept showing the dead badge —
-      // the runtime clears status only on node removal (§14).
-      node.status({});
     }
 
     node.on('input', (msg, send, done) => {
@@ -35,8 +30,8 @@ module.exports = function registerMavlinkState(RED) {
           done();
           return;
         }
-        if (!connectionNode || !connectionNode.peerTable) {
-          throw new Error('mavlink-state requires a Connection with a peer table');
+        if (!connectionNode) {
+          throw new Error('mavlink-state requires a Connection');
         }
         const payload = msg.payload ?? {};
         const peers = snapshotPeers(connectionNode.peerTable, {
@@ -57,13 +52,7 @@ module.exports = function registerMavlinkState(RED) {
         ]);
         done();
       } catch (err) {
-        applyActionStatus(node, 'error', err.message);
-        send([null, makeStatusRecord({
-          node: 'mavlink-state',
-          result: 'failed',
-          detail: err.message,
-        })]);
-        done(err);
+        failInput(node, send, err, done);
       }
     });
 

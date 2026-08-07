@@ -2,6 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
+const { applyConnectionStatus } = require('../lib/addressing');
 const { formationTargets, finite } = require('../lib/formation');
 const {
   DEFAULT_TIMEOUT_MS,
@@ -51,11 +52,8 @@ module.exports = function registerMavlinkFormation(RED) {
   function MavlinkFormationNode(config) {
     RED.nodes.createNode(this, config);
     const node = this;
-    const connectionNode = config.connection ? RED.nodes.getNode(config.connection) : null;
-
-    if (!connectionNode || !connectionNode.peerTable) {
-      delivery.applyActionStatus(node, 'invalid', 'invalid config');
-    }
+    const connectionNode = RED.nodes.getNode(config.connection);
+    applyConnectionStatus(node, true, connectionNode);
 
     // Abort-on-close discipline shared with mavlink-fanout: a redeploy aborts
     // every run in flight and waits for each to unwind. Rationale lives with
@@ -68,8 +66,8 @@ module.exports = function registerMavlinkFormation(RED) {
           done();
           return;
         }
-        if (!connectionNode || !connectionNode.peerTable) {
-          throw new Error('mavlink-formation requires a Connection with a peer table');
+        if (!connectionNode) {
+          throw new Error('mavlink-formation requires a Connection');
         }
         const payload = msg.payload ?? {};
         const sysids = parseSysidList(
@@ -147,16 +145,7 @@ module.exports = function registerMavlinkFormation(RED) {
           done();
         }
       } catch (err) {
-        const record = delivery.makeStatusRecord({
-          node: 'mavlink-formation',
-          result: 'failed',
-          success: false,
-          continue: false,
-          detail: err.message,
-        });
-        delivery.applyActionStatus(node, 'error', err.message);
-        send([null, record]);
-        done(err);
+        delivery.failInput(node, send, err, done);
       }
     });
 

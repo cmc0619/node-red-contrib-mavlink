@@ -31,13 +31,13 @@
  *   `msg.payload === false`   → silent suppress; neither output fires
  */
 
-const { BAND } = require('../lib/connection');
 const {
   makeStatusRecord,
   shouldSuppress,
   applyActionStatus,
-  capBadge,
+  failInput,
 } = require('../lib/delivery');
+const { applyConnectionStatus } = require('../lib/addressing');
 
 module.exports = function registerMavlinkOut(RED) {
   /**
@@ -48,17 +48,10 @@ module.exports = function registerMavlinkOut(RED) {
     const node = this;
 
     const connectionNode = RED.nodes.getNode(config.connection);
-    if (!connectionNode || typeof connectionNode.send !== 'function') {
-      node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
-      return;
-    }
+    applyConnectionStatus(node, true, connectionNode);
 
-    // Default queue band: Control (2) for user-initiated sends.
-    const defaultBand = config.band !== undefined && config.band !== null && config.band !== ''
-      ? Number(config.band)
-      : BAND.CONTROL;
-
-    node.status({ fill: 'grey', shape: 'ring', text: '' });
+    // The editor owns the default ('2' = Control) — just convert it.
+    const defaultBand = Number(config.band);
 
     node.on('input', (msg, send, done) => {
       // §9 suppress: msg.payload === false → silent no-op.
@@ -67,56 +60,35 @@ module.exports = function registerMavlinkOut(RED) {
         return;
       }
 
-      const message = resolveMessage(msg);
-      if (!message) {
-        const sr = makeStatusRecord({
-          result: 'failed',
-          reason: 'unrecognised payload shape — expected { name, fields } or Build-tier envelope',
-          timestamp: Date.now(),
-        });
-        applyActionStatus(node, 'error', 'bad payload');
-        send([null, sr]);
-        done(new Error('mavlink-out: unrecognised payload shape'));
-        return;
-      }
-
-      const band = msg.band !== undefined ? Number(msg.band) : defaultBand;
-      const target = msg.target || null;
-      const identityId = msg.identityId || undefined;
-
-      // The queue send can throw synchronously — a full Control band, an
-      // unknown identity, a disabled connection. Route the failure through a
-      // status record + the input handler's Catch path so it never escapes as
-      // an uncaught throw (§2) and the chain halts (output 0 stays silent).
+      // Everything that can go wrong here — a missing Connection, a payload
+      // shape the wire cannot carry, a queue send throwing on a full band or
+      // unknown identity — exits through one terminal record plus done(err),
+      // so the chain halts and a Catch node hears about it (§2, §9).
       try {
-        connectionNode.send(message, { band, target, identityId });
-      } catch (err) {
-        const sr = makeStatusRecord({
-          result: 'failed',
-          reason: err.message,
+        if (!connectionNode) {
+          throw new Error('requires a Connection');
+        }
+        const message = resolveMessage(msg);
+        if (!message) {
+          throw new Error('unrecognised payload shape — expected { name, fields } or Build-tier envelope');
+        }
+        const band = msg.band !== undefined ? Number(msg.band) : defaultBand;
+        connectionNode.send(message, {
+          band,
+          target: msg.target || null,
+          identityId: msg.identityId || undefined,
+        });
+        applyActionStatus(node, 'ok', message.name);
+        send([msg, makeStatusRecord({
+          result: 'sent',
           message: message.name,
           band,
           timestamp: Date.now(),
-        });
-        applyActionStatus(node, 'error', capBadge(err.message));
-        send([null, sr]);
-        done(new Error(`mavlink-out: ${err.message}`));
-        return;
+        })]);
+        done();
+      } catch (err) {
+        failInput(node, send, err, done);
       }
-
-      const sr = makeStatusRecord({
-        result: 'sent',
-        message: message.name,
-        band,
-        timestamp: Date.now(),
-      });
-      applyActionStatus(node, 'ok', capBadge(message.name));
-      send([msg, sr]);
-      done();
-    });
-
-    node.on('close', (_done) => {
-      _done();
     });
   }
 

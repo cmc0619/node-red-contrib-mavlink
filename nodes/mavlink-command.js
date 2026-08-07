@@ -62,6 +62,7 @@ const {
 const {
   shouldSuppress,
   applyActionStatus,
+  failInput,
 } = require('../lib/delivery');
 const { BAND } = require('../lib/connection/bands');
 
@@ -135,7 +136,7 @@ module.exports = function registerMavlinkCommand(RED) {
     const requiresConfirmation = preset ? preset.requiresConfirmation : false;
 
     const connNode = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, config.delivery, connNode);
+    applyConnectionStatus(node, config.delivery !== 'build', connNode);
 
     const delivery = config.delivery;
 
@@ -558,30 +559,10 @@ module.exports = function registerMavlinkCommand(RED) {
       failDone(`${displayName} ${ackOutcome.result}`);
     }
 
-    // Wrap the async handler so any throw or rejection becomes a terminal
-    // status record on output 1 and one Catch-compatible error report.
     // Node-RED does not await async input handlers, so an uncaught rejection
-    // would otherwise crash the process or silently drop the flow.
+    // would otherwise crash the process — route it like every other sender.
     node.on('input', (msg, send, done) => {
-      Promise.resolve()
-        .then(() => handleInput(msg, send, done))
-        .catch((err) => {
-          const rec = makeStatusRecord({
-            result: 'failed',
-            resultCode: null,
-            confirmedBy: 'none',
-            command: commandName,
-            commandId,
-            detail: `command handler error: ${err && err.message ? err.message : String(err)}`,
-          });
-          applyActionStatus(node, 'error', `error ${displayName}`);
-          try {
-            send([null, rec]);
-          } catch {
-            /* send may be unavailable if the runtime already tore down */
-          }
-          done(err);
-        });
+      handleInput(msg, send, done).catch((err) => failInput(node, send, err, done));
     });
 
     node.on('close', (done) => {
