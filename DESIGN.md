@@ -122,7 +122,7 @@ ground truth, drift asserts — never as defensive branches in the shipping code
 
 | Job | The platform mechanism — and nothing else |
 |---|---|
-| "this field must be set / valid" | `required` / `validate` on the property definition. The editor reds the field and puts the missing-config marker on the node. No bespoke pending states, placeholder options, or hint rows for unconfigured fields |
+| "this field must be set / valid" | `required` / `validate` on the property definition. The editor reds the field and puts the missing-config marker on the node. No bespoke pending states, placeholder options, or hint rows for unconfigured fields. A *conditional* rule takes `validate` and **no** `required` key — `required: false` short-circuits the blank before the validator runs — and on a config-node property it must restate the reference lookup `validate` displaces (§14) |
 | dialog fields load and save | `node-input-<prop>` / `node-config-input-<prop>` ids auto-populate and auto-save. `oneditprepare`/`oneditsave` exist only for what that cannot do: dynamically built selects, TypedInput, reshaping. `oneditsave` runs before Node-RED copies those form values onto the node, so reshaping must update the editor fields rather than only mutating `this.<prop>` |
 | dialog layout and widgets | `form-row` rows, `red-ui-button`, `TypedInput`, `RED.editor.createEditor` — no custom widget where a stock one exists |
 | runtime state in the editor | `node.status({fill, shape, text})` — text under 20 characters, `{}` clears |
@@ -559,6 +559,12 @@ kinds of node. Do not mix them.
 
 The last row is the one exception: an action node shows a *state* before any message has arrived,
 because a node that cannot possibly work should say so without being triggered first.
+
+That badge has a second half. Node-RED clears a node's status only when the node is *removed*, and
+the editor holds the last status event it received, so a node fixed and redeployed keeps showing
+the stale red badge until something publishes a new one (§14). A constructor that can bail with
+`invalid config` must therefore call `node.status({})` on the path where the config resolved —
+clearing, not badging, so the rule above stays true in both directions.
 
 Shape carries meaning independently of colour — **ring is not-running or not-ok, dot is active or
 settled-good** — so the badge is still readable to anyone who cannot separate red from green.
@@ -1954,6 +1960,50 @@ validator's arity is 2 — `function (v, opt)`. A one-argument validator coerces
 every custom validator that returns a reason string must declare `(v, opt)`. (Measured on the
 editor-client in Node-RED 4/5; same rule since 3.x.)
 *Check:* `rg -n "validateUint8|function \(v, _?opt\)" nodes/mavlink-local-identity.html`
+
+**`required: false` beside a `validate` skips the validator on the empty value.**
+*Wrong belief:* `required: false` only means "blank is allowed by the built-in check", leaving a
+custom `validate` free to impose its own conditional rule on a blank.
+*Fact:* `validateNodeProperty` returns `true` immediately when the definition has
+`required === false` and the value is `''` — *before* `validate` is called. A conditional
+validator paired with that key therefore never sees the one value it exists to judge. Measured by
+extracting the editor-client's `validateNodeProperty` and executing it: the shared `vehicle`
+descriptor's "Build + `__vehicle` requires a Vehicle Profile" rule had never fired. The `dialect`
+descriptor beside it carries no `required` key and fires correctly — that pairing is the control.
+A conditional validator takes **no** `required` key at all; `required: true` is only for fields
+that are unconditionally mandatory.
+*Check:* `node --test test/nodes/mavlink-editor-resource.test.js`; in any install, the
+`required === false` short-circuit precedes the `validate` call in `validateNodeProperty`
+(`@node-red/editor-client/public/red/red.js`).
+
+**Declaring `validate` on a config-node property disables the built-in reference check.**
+*Wrong belief:* editor validation never checks whether a config-node reference resolves, so a
+dangling Connection or Vehicle id is invisible until runtime.
+*Fact:* it does — for a property whose `type` names a registered config type, `validateNodeProperty`
+resolves `RED.nodes.node(value)` and reports `missing-config` for an id with no node and
+`invalid-config` for one whose own properties are invalid. But that whole branch is guarded by
+`!("validate" in definition[property])`, so **adding any validator silently takes the reference
+check with it**. Measured across all four declaration shapes in this repo: a dangling id is
+invalid under `{value,type}`, `required:false` and `required:true`, and *valid* under a
+`validate`. Any conditional validator on a config-node property must restate the lookup.
+What the editor still cannot see is a config node that is *disabled* or whose runtime constructor
+threw — both resolve fine here and fail only in the runtime, which is what the deploy-time
+`invalid config` badge (§6) exists to report.
+*Check:* `node --test test/nodes/mavlink-editor-resource.test.js`
+
+**A node's status survives a redeploy; only removal clears it.**
+*Wrong belief:* a red badge written by a constructor is cleared when the flow is redeployed, so a
+node that sets status only on misconfiguration needs no success path.
+*Fact:* the runtime emits a status clear (`node-status` with no `status`) **only when a node is
+removed** — `@node-red/runtime` `lib/flows/Flow.js`, in the stop loop's `if (removedMap[...])`
+branch — not when a node is modified and restarted. The editor is pure event replay: it assigns
+whatever `status/#` message arrives and holds it (`red.js`, the `RED.comms.subscribe("status/#")`
+handler). So a node that was misconfigured, then fixed and redeployed, keeps displaying the dead
+badge until something publishes a new one. Any node whose constructor can bail with a red badge
+must call `node.status({})` on the path where the config resolved. That is not the idle "ready"
+badge §6 forbids — it is the clear that makes "pre-trigger status is only for misconfig" true, and
+it is the half of `missingConnectionGate` that was easy to miss when that helper was removed.
+*Check:* `node --test test/nodes/in-out-build.test.js`
 
 **`oneditsave` runs before Node-RED's generic form-to-node copy.**
 *Wrong belief:* assigning `this.someProperty` inside `oneditsave` overrides the value in its
