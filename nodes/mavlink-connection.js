@@ -90,38 +90,53 @@ module.exports = function registerMavlinkConnection(RED) {
       return idNode;
     });
 
-    const identities = node._identityNodes.map((idNode) =>
-      identitySnapshot(idNode, defaults, bundle, node.id)
-    );
+    // identitySnapshot claims this connection's sysid on the shared Local
+    // Identity node, and everything after it in this constructor can still
+    // throw (enum resolution, signing config, the Connection itself). A
+    // constructor throw means the close handler below never registers, so the
+    // claim would outlive the failed deploy and block the next one until
+    // Node-RED restarts. Release on the way out instead.
+    function releaseClaims() {
+      for (const idNode of node._identityNodes) {
+        if (idNode && idNode.releaseVehicleSysid) idNode.releaseVehicleSysid(node.id);
+      }
+    }
 
-    const config_ = {
-      disabled: false,
-      transport: buildTransportConfig(config),
-      vehicle: {
-        targetSystem: defaults.defaultTargetSystem,
-        targetComponent: defaults.defaultTargetComponent,
-        bundle,
-        firmware: defaults.firmware,
-        autopilot: autopilotForFirmware(defaults.firmware),
-      },
-      identities,
-      defaultIdentityId: config.localIdentity,
-      boundIdentityIds: identityIds,
-      signing: buildSigning(config, node.credentials),
-      heartbeat: {
-        staleMs: config.staleMs ? Number(config.staleMs) : undefined,
-        expireMs: config.expireMs ? Number(config.expireMs) : undefined,
-      },
-    };
+    try {
+      const identities = node._identityNodes.map((idNode) =>
+        identitySnapshot(idNode, defaults, bundle, node.id)
+      );
 
-    node.connection = new Connection(config_, {
-      logger: {
-        info: (m) => node.log(m),
-        warn: (m) => node.warn(m),
-        error: (m) => node.error(m),
-      },
-      resolveIdentity,
-    });
+      node.connection = new Connection({
+        disabled: false,
+        transport: buildTransportConfig(config),
+        vehicle: {
+          targetSystem: defaults.defaultTargetSystem,
+          targetComponent: defaults.defaultTargetComponent,
+          bundle,
+          firmware: defaults.firmware,
+          autopilot: autopilotForFirmware(defaults.firmware),
+        },
+        identities,
+        defaultIdentityId: config.localIdentity,
+        boundIdentityIds: identityIds,
+        signing: buildSigning(config, node.credentials),
+        heartbeat: {
+          staleMs: config.staleMs ? Number(config.staleMs) : undefined,
+          expireMs: config.expireMs ? Number(config.expireMs) : undefined,
+        },
+      }, {
+        logger: {
+          info: (m) => node.log(m),
+          warn: (m) => node.warn(m),
+          error: (m) => node.error(m),
+        },
+        resolveIdentity,
+      });
+    } catch (err) {
+      releaseClaims();
+      throw err;
+    }
 
     node.connection.on('state', (state) => applyStatus(node, state));
     node.connection.on('transport-error', () => {});
