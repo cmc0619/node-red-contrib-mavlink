@@ -37,7 +37,6 @@ const {
   makeStatusRecord,
   shouldSuppress,
   applyActionStatus,
-  capBadge,
 } = require('../lib/delivery');
 const { dialectFromVehicleId, dialectFromConnection } = require('../lib/addressing');
 const { loadMetadata } = require('../lib/metadata/load');
@@ -103,18 +102,18 @@ module.exports = function registerMavlinkBuild(RED) {
         try {
           bundle = dialectFromVehicleId(RED, config.vehicle, { rethrow: true });
         } catch (err) {
-          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+          applyActionStatus(node, 'invalid', 'dialect unavailable');
           node.error(`mavlink-build: ${err.message}`);
           return;
         }
         if (!bundle) {
-          node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+          applyActionStatus(node, 'invalid', 'invalid config');
           return;
         }
       } else {
         const { api } = loadMetadata('mavlink-build', RED);
         if (!api) {
-          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+          applyActionStatus(node, 'invalid', 'dialect unavailable');
           return;
         }
         bundle = api.loadBundled(dialectName);
@@ -124,19 +123,19 @@ module.exports = function registerMavlinkBuild(RED) {
       try {
         bundle = dialectFromConnection(RED, connectionNode, { rethrow: true });
       } catch (err) {
-        node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+        applyActionStatus(node, 'invalid', 'dialect unavailable');
         node.error(`mavlink-build: ${err.message}`);
         return;
       }
       if (!bundle) {
-        node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+        applyActionStatus(node, 'invalid', 'invalid config');
         return;
       }
     }
 
     const messageMeta = bundle.messages[messageName];
     if (!messageMeta) {
-      node.status({ fill: 'red', shape: 'ring', text: capBadge(`unknown: ${messageName}`) });
+      applyActionStatus(node, 'invalid', `unknown: ${messageName}`);
       return;
     }
 
@@ -187,7 +186,7 @@ module.exports = function registerMavlinkBuild(RED) {
           message: messageName,
           timestamp: Date.now(),
         });
-        applyActionStatus(node, 'error', capBadge(err.message));
+        applyActionStatus(node, 'error', err.message);
         node.send([null, sr]);
         if (triggerMsg) {
           done(new Error(`mavlink-build encode: ${err.message}`));
@@ -210,7 +209,7 @@ module.exports = function registerMavlinkBuild(RED) {
           tier: TIER.BUILD,
           timestamp: Date.now(),
         });
-        applyActionStatus(node, 'ok', capBadge(messageName));
+        applyActionStatus(node, 'ok', messageName);
         node.send([outMsg, sr]);
         return true;
       }
@@ -237,7 +236,7 @@ module.exports = function registerMavlinkBuild(RED) {
           band,
           timestamp: Date.now(),
         });
-        applyActionStatus(node, 'error', capBadge(err.message));
+        applyActionStatus(node, 'error', err.message);
         node.send([null, sr]);
         if (triggerMsg) {
           done(new Error(`mavlink-build send: ${err.message}`));
@@ -271,10 +270,9 @@ module.exports = function registerMavlinkBuild(RED) {
         timestamp: now,
       });
 
-      const rateLabel = repeatMs > 0
-        ? capBadge(`${messageName} ${rateWindowCount}/${Math.round(1000 / repeatMs)}Hz`)
-        : capBadge(messageName);
-      applyActionStatus(node, 'ok', rateLabel);
+      applyActionStatus(node, 'ok', repeatMs > 0
+        ? `${messageName} ${rateWindowCount}/${Math.round(1000 / repeatMs)}Hz`
+        : messageName);
       node.send([outMsg, sr]);
       return true;
     }
