@@ -22,7 +22,7 @@
  */
 
 const { capBadge } = require('../lib/delivery');
-const { applyConnectionStatus } = require('../lib/addressing');
+const { applyConnectionStatus, isBlank } = require('../lib/addressing');
 
 /**
  * Minimum interval (ms) between status-badge writes for an unchanged badge.
@@ -51,14 +51,8 @@ module.exports = function registerMavlinkIn(RED) {
 
     // Filter settings — null means "match all".
     const filterMessage = config.message ? String(config.message).trim() : null;
-    const filterSysid =
-      config.sysid !== undefined && config.sysid !== null && String(config.sysid).trim() !== ''
-        ? Number(config.sysid)
-        : null;
-    const filterCompid =
-      config.compid !== undefined && config.compid !== null && String(config.compid).trim() !== ''
-        ? Number(config.compid)
-        : null;
+    const filterSysid = isBlank(config.sysid) ? null : Number(config.sysid);
+    const filterCompid = isBlank(config.compid) ? null : Number(config.compid);
 
     const changedOnly = !!config.changedOnly;
     // Changed-only field subset: compare only these fields when set, so a
@@ -68,10 +62,7 @@ module.exports = function registerMavlinkIn(RED) {
     // Field predicate: pass only frames where `fieldName` exists — and, when a
     // value is given, string-equals it (enums and BigInts compare naturally).
     const fieldName = config.fieldName ? String(config.fieldName).trim() : null;
-    const fieldValue =
-      config.fieldValue === undefined || config.fieldValue === null || String(config.fieldValue).trim() === ''
-        ? null
-        : String(config.fieldValue).trim();
+    const fieldValue = isBlank(config.fieldValue) ? null : String(config.fieldValue).trim();
 
     // Rate limit: one Hz for everything, or per-message `NAME=Hz` pairs with
     // an optional bare Hz default for unlisted names. The editor validator is

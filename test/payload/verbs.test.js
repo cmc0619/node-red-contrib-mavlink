@@ -140,8 +140,9 @@ test('gimbal roi-set refuses a blank coordinate rather than aiming at 0,0 (#88)'
 });
 
 test('whitespace is blank for a required ROI coordinate (#141)', () => {
-  // hasValue() treated ' ' as present and Number(' ') is 0, so a whitespace
-  // latitude slipped past the required check and aimed at the equator.
+  // The pre-#141 presence check treated ' ' as a value and Number(' ') is 0,
+  // so a whitespace latitude slipped past the required check and aimed at the
+  // equator. slotValue now refuses via the shared isBlank sentinel.
   for (const blank of [' ', '   ', '\t']) {
     assert.throws(
       () => buildPayloadMessage({

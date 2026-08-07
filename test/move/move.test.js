@@ -169,10 +169,10 @@ test('`frame` is the only frame spelling: member name or raw number', () => {
     assert.equal(message.fields.coordinate_frame, 6, `frame ${JSON.stringify(frame)} resolves`);
   }
 
-  // Blank still defaults; whitespace deliberately does *not* — it throws rather
-  // than silently defaulting past a configured frame (see the comment in
-  // resolveModeAndFrame, and #174).
-  for (const blank of [undefined, null, '']) {
+  // Blank defaults, and whitespace is blank (#174): the node's payload→config
+  // resolution now trims, so a whitespace frame reaching the library never
+  // skipped a configured value — it is the same "nothing supplied" as ''.
+  for (const blank of [undefined, null, '', ' ']) {
     const message = buildMoveMessage({
       mode: 'position',
       frame: blank,
@@ -181,15 +181,6 @@ test('`frame` is the only frame spelling: member name or raw number', () => {
     });
     assert.equal(message.fields.coordinate_frame, 1, `blank ${JSON.stringify(blank)} defaults`);
   }
-  assert.throws(
-    () => buildMoveMessage({
-      mode: 'position',
-      frame: ' ',
-      target: { sysid: 2, compid: 1 },
-      position: { north: 1, east: 2, up: 3 },
-    }),
-    /unknown Move frame/
-  );
 });
 
 test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw', () => {
