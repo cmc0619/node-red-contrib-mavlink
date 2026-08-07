@@ -938,21 +938,33 @@ test('mavlink-build Send tier: a connection send throw becomes a failed status r
   assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
 });
 
-test('mavlink-build: malformed fields JSON marks invalid config instead of aborting deploy', () => {
+test('mavlink-build: unreadable fields JSON falls back to no defaults and still runs', () => {
+  // Was: "marks invalid config instead of aborting deploy" — it badged and
+  // returned *before* registering an input handler, so every message the node
+  // was wired to receive vanished with no output, no Catch and no error. The
+  // editor validates this field now, so unreadable JSON here means a
+  // hand-edited or imported flow; the parse falls back to the safe direction
+  // (no field defaults, codec supplies its own) rather than growing a second
+  // deploy-time error path (CLAUDE.md).
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
   require('../../nodes/mavlink-build')(RED);
   const Constructor = RED._nodeTypes['mavlink-build'];
   const node = makeNodeInstance({ vehicle: 'v1' });
-  assert.doesNotThrow(() => Constructor.call(node, {
+  Constructor.call(node, {
     vehicle: 'v1',
     dialect: '__vehicle',
     messageName: 'HEARTBEAT',
     tier: 'build',
     fields: '{ not valid json',
-  }));
-  assert.equal(node._status && node._status.fill, 'red');
-  assert.equal(node._status && node._status.text, 'invalid config');
+  });
+
+  node._input({ payload: { type: 6, autopilot: 3 } });
+
+  assert.equal(node._sends.length, 1, 'the node still accepts messages');
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0.payload.messageName, 'HEARTBEAT');
+  assert.equal(out1.result, 'built');
 });
 
 test('mavlink-build Send tier: a missing Connection is a misconfiguration, not a Build', () => {

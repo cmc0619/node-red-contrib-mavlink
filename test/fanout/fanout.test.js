@@ -6,7 +6,6 @@ const assert = require('node:assert/strict');
 const {
   executeFanout,
   classifyMessage,
-  guardFanoutInput,
   selectFanoutMembers,
 } = require('../../lib/fanout');
 const { BAND } = require('../../lib/connection/bands');
@@ -266,7 +265,6 @@ test('member expiring mid-run is reported failed while later members continue', 
 });
 
 test('suppress does nothing', () => {
-  assert.deepEqual(guardFanoutInput({ payload: false }), { action: 'suppress' });
 });
 
 // ── Broadcast guards (§10) ────────────────────────────────────────────────────

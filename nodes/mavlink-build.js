@@ -70,19 +70,17 @@ module.exports = function registerMavlinkBuild(RED) {
       ? Number(config.band)
       : BAND.CONTROL;
 
-    // Default field values from node config (JSON string). Malformed JSON here
-    // is a config error, not a reason to abort the whole deploy with an
-    // uncaught throw from the constructor — surface it as an invalid-config
-    // badge (§6) and stop, so sibling flows keep loading.
+    // Default field values from node config (JSON string). The editor validates
+    // this, so unreadable JSON here means a hand-edited or imported flow. Fall
+    // back to no defaults — the safe direction, since the codec then supplies
+    // its own — rather than badging and returning: that returned before
+    // registering an input handler, so every message the node was wired to
+    // receive vanished with no output, no Catch, and no error.
     let configFields = {};
-    if (config.fields && typeof config.fields === 'string' && config.fields.trim()) {
-      try {
-        configFields = JSON.parse(config.fields);
-      } catch (err) {
-        node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
-        node.error(`mavlink-build: invalid fields JSON — ${err.message}`);
-        return;
-      }
+    try {
+      configFields = JSON.parse(config.fields) || {};
+    } catch {
+      configFields = {};
     }
 
     // Repeat interval.

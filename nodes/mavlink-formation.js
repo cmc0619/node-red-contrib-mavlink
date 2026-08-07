@@ -63,12 +63,11 @@ module.exports = function registerMavlinkFormation(RED) {
     const inFlight = delivery.inFlightTracker();
 
     node.on('input', async (msg, send, done) => {
-      if (delivery.shouldSuppress(msg)) {
-        done();
-        return;
-      }
-
       try {
+        if (delivery.shouldSuppress(msg)) {
+          done();
+          return;
+        }
         if (!connectionNode || !connectionNode.peerTable) {
           throw new Error('mavlink-formation requires a Connection with a peer table');
         }

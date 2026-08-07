@@ -1,7 +1,7 @@
 'use strict';
 
 const delivery = require('../lib/delivery');
-const { executeFanout, guardFanoutInput, parseSysidList } = require('../lib/fanout');
+const { executeFanout, parseSysidList } = require('../lib/fanout');
 const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
 
 module.exports = function registerMavlinkFanout(RED) {
@@ -25,13 +25,11 @@ module.exports = function registerMavlinkFanout(RED) {
     const inFlight = delivery.inFlightTracker();
 
     node.on('input', async (msg, send, done) => {
-      const guard = guardFanoutInput(msg);
-      if (guard.action === 'suppress') {
-        done();
-        return;
-      }
-
       try {
+        if (delivery.shouldSuppress(msg)) {
+          done();
+          return;
+        }
         const { message, opts } = unwrapPayload(msg.payload);
         const selection = opts.selection || selectionFrom(config);
         const effectiveDelivery = opts.delivery || config.delivery;
