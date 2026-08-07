@@ -26,8 +26,23 @@
       yawRate: { value: '', validate: RED.validators.number(true) },
       // 0.1 Hz floor: the runtime divides 1000/rateHz to arm the timer, so a
       // zero or near-zero rate degenerates into a setInterval clamp flood.
-      rateHz: { value: 5, validate: function (v) { return Number.isFinite(Number(v)) && Number(v) >= 0.1; } },
-      ttlMs: { value: 1000, validate: RED.validators.number() }
+      // Both fields exist only on Stream delivery — a cleared value must not
+      // red a Build or Send node that never reads it (same liveOr gating as
+      // mission's items). Two args so the reasons render (§14).
+      rateHz: {
+        value: 5,
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr('#node-input-delivery', this.delivery) !== 'stream') return true;
+          return (Number.isFinite(Number(v)) && Number(v) >= 0.1) || 'must be at least 0.1 Hz';
+        },
+      },
+      ttlMs: {
+        value: 1000,
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr('#node-input-delivery', this.delivery) !== 'stream') return true;
+          return (Number.isFinite(Number(v)) && Number(v) >= 0) || 'must be a number of milliseconds (0 = no TTL)';
+        },
+      }
     },
     RED.mavlink.buildTierDialectDefaults()
   );

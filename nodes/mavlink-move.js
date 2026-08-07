@@ -145,7 +145,18 @@ module.exports = function registerMavlinkMove(RED) {
             });
             streamKey = key;
             releaseStream = release;
-            stream.start();
+            // start() sends synchronously before marking the stream active, and
+            // Connection.send throws loudly when the identity cannot resolve. A
+            // throw here must not strand the just-acquired lock on a stream
+            // that never ran — release before the error routes to failInput.
+            // stop() on a never-active stream sends nothing, so stopStream()
+            // here is purely the bookkeeping.
+            try {
+              stream.start();
+            } catch (err) {
+              stopStream();
+              throw err;
+            }
             completeResult(node, send, 'succeeded', 'streaming', message);
           } else {
             stopStream();
