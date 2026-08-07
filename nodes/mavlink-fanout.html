@@ -34,6 +34,11 @@
           // a row carrying both an offset and a raw patch of one of these
           // would make the runtime pick a winner, so it reds here instead.
           var POSITION_FIELDS = ['lat', 'lon', 'alt', 'x', 'y', 'z', 'lat_int', 'lon_int', 'param5', 'param6', 'param7'];
+          // Keys the runtime refuses per run (command — the run is classified
+          // and safety-gated once) or silently strips (target ids) — red the
+          // row at save time instead. Row sysid is the addressing.
+          var RESERVED_KEYS = ['command', 'sysid', 'target_system', 'target_component'];
+          var seen = {};
           for (var i = 0; i < v.length; i++) {
             var row = v[i];
             var where = 'row ' + (i + 1);
@@ -41,6 +46,10 @@
             if (!Number.isInteger(sysid) || sysid < 1 || sysid > 255) {
               return where + ': sysid must be an integer 1-255';
             }
+            if (seen[sysid]) {
+              return where + ': duplicate sysid ' + sysid + ' — one row per member, or the later row silently wins';
+            }
+            seen[sysid] = true;
             var hasOffset = false;
             var axes = ['north', 'east', 'up'];
             for (var a = 0; a < axes.length; a++) {
@@ -53,6 +62,12 @@
             if (row.patch !== undefined) {
               if (typeof row.patch !== 'object' || row.patch === null || Array.isArray(row.patch)) {
                 return where + ': patch must be a JSON object of wire-unit fields';
+              }
+              for (var r = 0; r < RESERVED_KEYS.length; r++) {
+                if (Object.prototype.hasOwnProperty.call(row.patch, RESERVED_KEYS[r])) {
+                  return where + ': patch may not set ' + RESERVED_KEYS[r]
+                    + ' — the row sysid addresses the member, and command is gated once from the base message';
+                }
               }
               for (var p = 0; p < POSITION_FIELDS.length; p++) {
                 if (hasOffset && Object.prototype.hasOwnProperty.call(row.patch, POSITION_FIELDS[p])) {
@@ -278,7 +293,7 @@
 <script type="text/html" data-help-name="mavlink-fanout">
   <p>Replicates one <b>built</b> MAVLink message across the active vehicles selected from a Connection peer table. Fan-out is a replicator, not an action node: wire any action node in <b>Build</b> delivery (Command, Move, Payload, Param — or mavlink-build) into it, and it retargets that message per member.</p>
   <p><code>msg.payload</code> is either the built message <code>{name, fields}</code> straight off a Build output, or the wrapper <code>{message, targets, ...options}</code>. <code>targets</code> is an array of sysids or <code>{sysid, ...fieldPatches}</code> objects — the patches overwrite message fields per member in <b>wire units</b> (Fan-out is a raw surface; a COMMAND_INT location patch is degE7), and the list itself becomes the selection. Runtime option overrides (<code>executionMode</code>, <code>delivery</code>, <code>intervalMs</code>, <code>concurrency</code>, …) ride the wrapper too.</p>
-  <p>With the <i>Explicit sysid list</i> selection the <b>Members</b> table holds one row per member: its <b>sysid</b>, optional <b>N / E / Up</b> offsets in <b>metres</b>, and an optional <b>raw patch</b> (a JSON object of message fields, wire units — exactly the <code>targets</code> patch shape). Metre offsets are applied at build time against the message's <i>own</i> position: COMMAND_INT <code>x/y/z</code>, COMMAND_LONG <code>param5/6/7</code>, SET_POSITION_TARGET_GLOBAL_INT <code>lat_int/lon_int/alt</code> (up adds to the up-positive altitude), and SET_POSITION_TARGET_LOCAL_NED <code>x/y/z</code> in plain metres (NED: up subtracts from z). A member with offsets on any other message is refused per message. A row may not combine offsets with a raw patch of position fields — the editor rejects the ambiguity. A <code>msg.payload.targets</code> array still overrides the configured members entirely.</p>
+  <p>With the <i>Explicit sysid list</i> selection the <b>Members</b> table holds one row per member: its <b>sysid</b>, optional <b>N / E / Up</b> offsets in <b>metres</b>, and an optional <b>raw patch</b> (a JSON object of message fields, wire units — exactly the <code>targets</code> patch shape). Metre offsets are applied at build time against the message's <i>own</i> position: COMMAND_INT <code>x/y/z</code>, COMMAND_LONG <code>param5/6/7</code> (location commands only — LONG carries no frame, so a non-location command's params cannot be told apart from coordinates, #196), SET_POSITION_TARGET_GLOBAL_INT <code>lat_int/lon_int/alt</code> (up adds to the up-positive altitude), and SET_POSITION_TARGET_LOCAL_NED <code>x/y/z</code> in plain metres (NED: up subtracts from z). Framed carriers must be in a global frame (or strictly LOCAL_NED for the NED setpoint) — local COMMAND_INT frames scale ×1e4 and body frames re-aim "north", so offsets there refuse; use a raw patch. A member with offsets on any other message is refused per message. A row may not combine offsets with a raw patch of position fields — the editor rejects the ambiguity. A <code>msg.payload.targets</code> array still overrides the configured members entirely.</p>
   <p>What the message means is inferred from its name: <code>COMMAND_LONG</code>/<code>COMMAND_INT</code> confirm by COMMAND_ACK; <code>PARAM_SET</code> confirms by its PARAM_VALUE echo (sequential only); offboard setpoints (<code>SET_POSITION_TARGET_LOCAL_NED</code>/<code>_GLOBAL_INT</code>, <code>SET_ATTITUDE_TARGET</code>, <code>SET_ACTUATOR_CONTROL_TARGET</code>) carry no ack and ride the streaming band; everything else addressed is fire-and-forget. Mission <i>transfer steps</i> (<code>MISSION_COUNT</code>, <code>MISSION_ITEM(_INT)</code>, <code>MISSION_REQUEST*</code>, <code>MISSION_ACK</code>, the partial-list pair) and <code>PARAM_REQUEST_LIST</code> are refused — multi-message transactions cannot be replicated. Single-shot mission commands like <code>MISSION_SET_CURRENT</code> and <code>MISSION_CLEAR_ALL</code> replicate normally.</p>
   <p>Fan-out addresses each member's <b>autopilot</b>: the built message's <code>target_component</code> is replaced per member. A message hand-addressed to another component is re-addressed, not honoured — use the single-vehicle nodes for that.</p>
   <p>Sequential mode sends one retargeted message per member at the configured interval; <b>Concurrency</b> lets up to N confirm waits overlap so one slow vehicle doesn't delay the rest. <b>Stop on error</b> halts remaining members after the first failure — they report <code>skipped</code> in the aggregate rather than being commanded. Broadcast mode sends one packet with target_system 0 and target_component 1, and requires the <i>All active vehicles</i> selection — a broadcast reaches every vehicle on the link, so it cannot honour a subset, per-target patches, or a PARAM_SET.</p>
