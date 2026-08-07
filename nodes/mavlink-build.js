@@ -31,7 +31,6 @@
  */
 
 const { encodeMessage } = require('../lib/codec');
-const { BAND } = require('../lib/connection');
 const {
   TIER,
   makeStatusRecord,
@@ -65,9 +64,8 @@ module.exports = function registerMavlinkBuild(RED) {
     const tier = config.tier || TIER.SEND;
 
     const messageName = config.messageName || 'HEARTBEAT';
-    const defaultBand = config.band !== undefined && config.band !== null && config.band !== ''
-      ? Number(config.band)
-      : BAND.CONTROL;
+    // The editor owns the default ('2' = Control) — just convert it.
+    const defaultBand = Number(config.band);
 
     // Default field values from node config. The editor validates this, so the
     // runtime just reads it.
@@ -240,8 +238,11 @@ module.exports = function registerMavlinkBuild(RED) {
       if (execute(msg, done)) done();
     });
 
-    // Repeat timer.
-    if (repeatMs > 0) {
+    // Repeat timer. Never armed for a config that already badged invalid —
+    // an autonomous tick against a dead config would flood output 1 and every
+    // Catch flow at the configured rate with the refusal the badge already
+    // reports. Manual triggers still fail loudly through the input handler.
+    if (repeatMs > 0 && messageMeta) {
       rateWindowStart = Date.now();
       repeatTimer = setInterval(() => {
         execute(null);

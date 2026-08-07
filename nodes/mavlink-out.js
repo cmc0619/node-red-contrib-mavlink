@@ -31,7 +31,6 @@
  *   `msg.payload === false`   → silent suppress; neither output fires
  */
 
-const { BAND } = require('../lib/connection');
 const {
   makeStatusRecord,
   shouldSuppress,
@@ -51,10 +50,8 @@ module.exports = function registerMavlinkOut(RED) {
     const connectionNode = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, true, connectionNode);
 
-    // Default queue band: Control (2) for user-initiated sends.
-    const defaultBand = config.band !== undefined && config.band !== null && config.band !== ''
-      ? Number(config.band)
-      : BAND.CONTROL;
+    // The editor owns the default ('2' = Control) — just convert it.
+    const defaultBand = Number(config.band);
 
     node.on('input', (msg, send, done) => {
       // §9 suppress: msg.payload === false → silent no-op.
