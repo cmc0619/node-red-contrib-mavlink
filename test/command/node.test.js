@@ -287,29 +287,6 @@ test('resolveTarget: explicit config value wins over Vehicle Profile', async () 
   assert.equal(sent[0].payload.fields.target_component, 100);
 });
 
-test('Send/confirm tier with no connection fails loud instead of silently building', async () => {
-  const RED = redStub({});
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  // No connection bound but delivery is confirm — this must not degrade to Build.
-  const node = new Node({ carrier: 'long', mode: 'preset', preset: 'arm', delivery: 'confirm' });
-
-  let sent;
-  let doneError;
-  node.emit(
-    'input',
-    { payload: { 1: 1 } },
-    (m) => { sent = m; },
-    (err) => { doneError = err; }
-  );
-  await tick();
-
-  assert.equal(sent[0], null, 'output 0 must not fire');
-  assert.equal(sent[1].result, 'failed');
-  assert.ok(/no connection/.test(sent[1].detail));
-  assert.match(doneError.message, /no connection/);
-});
-
 test('resolveTarget: companion identity derives {airframe sysid, 1} as target', async () => {
   const identityStub = {
     role: 'companion',

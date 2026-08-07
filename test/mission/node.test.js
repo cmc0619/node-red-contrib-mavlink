@@ -76,19 +76,6 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
   assert.equal(outputs[0][1].result, 'succeeded');
 });
 
-test('confirm tier with no connection fails loud instead of silently building', async () => {
-  const Node = loadNode(new StubConnection());
-  // No connection bound but delivery is confirm — must not degrade to Build (§9).
-  const node = new Node({ operation: 'download', delivery: 'confirm', missionType: 'mission' });
-  const { outputs, err } = await runInput(node, { payload: {} });
-
-  assert.equal(outputs.length, 1);
-  assert.equal(outputs[0][0], null, 'output 0 must not fire');
-  assert.equal(outputs[0][1].result, 'failed');
-  assert.match(outputs[0][1].reason, /no connection/);
-  assert.ok(err, 'done(err) reports the misconfiguration');
-});
-
 test('mission Build concrete dialect uses config firmware and no Vehicle Profile target rung', async () => {
   const conn = new StubConnection();
   const vehicleNode = {

@@ -38,6 +38,11 @@ class StubConnection {
     };
   }
 
+  /** @returns {number} live subscriptions, for asserting teardown */
+  subscriberCount() {
+    return this._subs.length;
+  }
+
   /**
    * @param {{name: string, fields: object}} message
    * @param {object} [options]

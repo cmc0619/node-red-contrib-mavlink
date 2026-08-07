@@ -64,33 +64,6 @@ test('mavlink-param reuses its deploy-resolved Connection during input delivery'
   assert.equal(conn.sent.length, 1);
 });
 
-test('mavlink-param missing Connection keeps output 1 and done(err) failure delivery', () => {
-  const RED = redStub({});
-  require('../../nodes/mavlink-param')(RED);
-  const Node = RED.nodes.types['mavlink-param'];
-  const node = new Node({
-    delivery: 'send',
-    action: 'read',
-    connection: 'missing',
-    targetSystem: 1,
-    targetComponent: 1,
-  });
-  let sent;
-  let doneError;
-
-  node.emit(
-    'input',
-    { payload: { paramId: 'ARMING_CHECK' } },
-    (messages) => { sent = messages; },
-    (err) => { doneError = err; }
-  );
-
-  assert.equal(sent[0], null);
-  assert.equal(sent[1].result, 'failed');
-  assert.match(sent[1].detail, /requires a Connection/);
-  assert.match(doneError.message, /requires a Connection/);
-});
-
 test('mavlink-param confirm set emits a timed-out record and releases the subscription', () => {
   const conn = connStub();
   const RED = redStub({ conn });

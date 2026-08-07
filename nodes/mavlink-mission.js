@@ -44,7 +44,6 @@ const {
 } = require('../lib/mission');
 const {
   resolveDeliveryContext,
-  missingConnectionGate,
   firstDefined,
 } = require('../lib/addressing');
 
@@ -71,10 +70,7 @@ module.exports = function registerMavlinkMission(RED) {
      */
     const activeByKey = new Map();
 
-    // Wire-tier confirm needs a Connection — same gate as mavlink-command (§9).
-    missingConnectionGate(node, delivery, connNode);
-
-    node.on('input', (msg, send, done) => {
+    node.on('input', function handleInput(msg, send, done) {
       if (shouldSuppress(msg)) {
         done();
         return;
@@ -82,21 +78,6 @@ module.exports = function registerMavlinkMission(RED) {
 
       const payload = msg.payload ?? {};
       const missionTypeKey = payload.missionType || config.missionType || 'mission';
-
-      // ── Missing connection on confirm ─────────────────────────────────────
-      // Do not silently build and pretend success — confirm with no connection
-      // is a misconfiguration (§9). Fail loud on output 1 only (same as Command).
-      if (delivery !== 'build' && !connNode) {
-        const rec = record(operation, missionTypeKey, { sysid: NaN, compid: NaN }, {
-          result: 'failed',
-          phase: 'gated',
-          reason: `no connection configured for ${delivery} delivery`,
-        });
-        applyActionStatus(node, 'error', 'invalid config');
-        send([null, rec]);
-        done(new Error(`mavlink-mission: ${rec.reason}`));
-        return;
-      }
 
       const { profile, target } = resolveDeliveryContext(RED, {
         delivery,

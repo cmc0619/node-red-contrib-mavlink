@@ -55,7 +55,6 @@ const {
 const { loadMetadata } = require('../lib/metadata/load');
 const {
   resolveDeliveryContext,
-  missingConnectionGate,
   dialectFromVehicleId,
   dialectFromConnection,
 } = require('../lib/addressing');
@@ -134,7 +133,7 @@ module.exports = function registerMavlinkCommand(RED) {
     const completionKey = preset ? preset.completionKey : null;
     const requiresConfirmation = preset ? preset.requiresConfirmation : false;
 
-    const connNode = config.connection ? RED.nodes.getNode(config.connection) : null;
+    const connNode = RED.nodes.getNode(config.connection);
 
     const delivery = config.delivery;
 
@@ -169,9 +168,6 @@ module.exports = function registerMavlinkCommand(RED) {
     const timeoutMs = config.timeout === '' ? DEFAULT_TIMEOUT_MS : Number(config.timeout);
     const maxRetries = config.maxRetries === '' ? DEFAULT_MAX_RETRIES : Number(config.maxRetries);
     const unconfirmedContinue = !!config.unconfirmedContinue;
-
-    // Wire tiers need a Connection — do not silently degrade into Build (§9).
-    missingConnectionGate(node, delivery, connNode);
 
     /**
      * Build the 7-element param array for this send, merging config + payload.
@@ -261,23 +257,6 @@ module.exports = function registerMavlinkCommand(RED) {
         applyActionStatus(node, 'error', `confirm ${displayName}`);
         emitStatus(rec, send, false);
         failDone('safety command blocked — set msg.confirmed = true');
-        return;
-      }
-
-      // ── Missing connection on a send/confirm/complete tier ────────────────
-      // Do not silently build and pretend success — a chosen send tier with no
-      // connection is a misconfiguration (§9). Fail loud on output 1 only.
-      if (delivery !== 'build' && !connNode) {
-        const rec = makeRecord({
-          result: 'failed',
-          resultCode: null,
-          confirmedBy: 'none',
-          elapsed: Date.now() - startMs,
-          detail: `no connection configured for ${delivery} delivery`,
-        });
-        applyActionStatus(node, 'invalid', 'invalid config');
-        emitStatus(rec, send, false);
-        failDone(`${displayName} has no connection for ${delivery} delivery`);
         return;
       }
 

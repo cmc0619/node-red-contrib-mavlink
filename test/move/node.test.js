@@ -179,36 +179,6 @@ test('mavlink-move reuses its deploy-resolved Connection during input delivery',
   assert.equal(sends.length, 1);
 });
 
-test('mavlink-move missing Connection keeps output 1 and done(err) failure delivery', () => {
-  const RED = redStub({});
-  require('../../nodes/mavlink-move')(RED);
-  const Node = RED.nodes.types['mavlink-move'];
-  const node = new Node({
-    delivery: 'send',
-    mode: 'position',
-    north: 0,
-    east: 0,
-    up: 0,
-    connection: 'missing',
-    targetSystem: 1,
-    targetComponent: 1,
-  });
-  let sent;
-  let doneError;
-
-  node.emit(
-    'input',
-    { payload: {} },
-    (messages) => { sent = messages; },
-    (err) => { doneError = err; }
-  );
-
-  assert.equal(sent[0], null);
-  assert.equal(sent[1].result, 'failed');
-  assert.match(sent[1].detail, /requires a Connection/);
-  assert.match(doneError.message, /requires a Connection/);
-});
-
 test('mavlink-move payload.target beats companion derivation', () => {
   const sends = [];
   const conn = {

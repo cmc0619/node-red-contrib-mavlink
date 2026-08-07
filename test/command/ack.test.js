@@ -136,3 +136,33 @@ test('broadcast target sysid 0 accepts an ack from any source system', async () 
   const outcome = await p;
   assert.equal(outcome.result, 'accepted');
 });
+
+test('a retry send that throws settles the transaction instead of escaping the timer', async () => {
+  // Connection.send throws synchronously by design — QueueOverflowError once
+  // the Control band hits its cap, or identity resolution failing on a dead
+  // link. The retry fires from a setTimeout, where nothing above it catches, so
+  // an escape is an uncaughtException rather than a failed command — and it
+  // lands on precisely the saturated or dropped link that provoked the retry.
+  const conn = stubConn();
+  let sends = 0;
+  const waiter = makeWaiter(conn, {
+    commandId: 400,
+    targetSystem: 1,
+    targetComponent: 1,
+    maxRetries: 2,
+    retryIntervalMs: 1,
+    sendFn: () => {
+      sends += 1;
+      if (sends > 1) throw new Error('queue overflow on control band');
+    },
+  });
+
+  const p = waiter.start();
+  // TEMPORARILY_REJECTED is the one result that schedules a retry send.
+  conn.injectAck({ command: 400, result: MAV_RESULT.TEMPORARILY_REJECTED }, 1, 1);
+
+  const outcome = await p;
+  assert.equal(outcome.result, 'send failed');
+  assert.match(outcome.detail, /queue overflow/);
+  assert.equal(sends, 2, 'the retry was attempted');
+});
