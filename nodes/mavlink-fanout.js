@@ -56,6 +56,7 @@ module.exports = function registerMavlinkFanout(RED) {
           connection: effectiveConnection,
           message,
           targets: opts.targets,
+          members: configMembersFor(config, opts),
           selection,
           mode: opts.executionMode || config.executionMode || 'sequential',
           delivery: effectiveDelivery,
@@ -136,11 +137,33 @@ function selectionFrom(config) {
   assignIfPresent(filter, 'type', config.vehicleType);
   assignIfPresent(filter, 'firmware', config.firmwareFilter);
   assignIfPresent(filter, 'armed', config.armedFilter);
+  const mode = config.selectionMode || 'all';
   return {
-    mode: config.selectionMode || 'all',
-    sysids: config.sysids,
+    mode,
+    // List selection reads its sysids from the members table rows (#163).
+    sysids: mode === 'list' ? config.members.map((member) => member.sysid) : undefined,
     filter,
   };
+}
+
+/**
+ * The config member rows for this run, or undefined when they do not apply:
+ * a payload `targets` array replaces them entirely (§6 — the override of last
+ * resort), a payload `selection` override picks its own group, and rows
+ * without any offset or patch are plain list selection, already covered by
+ * {@link selectionFrom}.
+ *
+ * @param {object} config
+ * @param {object} opts unwrapped payload options
+ * @returns {Array<object>|undefined}
+ */
+function configMembersFor(config, opts) {
+  if (opts.targets !== undefined || opts.selection !== undefined) return undefined;
+  if ((config.selectionMode || 'all') !== 'list') return undefined;
+  const patched = config.members.some((member) =>
+    member.north !== undefined || member.east !== undefined
+    || member.up !== undefined || member.patch !== undefined);
+  return patched ? config.members : undefined;
 }
 
 function applyAggregateStatus(node, aggregate) {
@@ -170,7 +193,8 @@ function numberOption(opts, config, key, fallback) {
  * so executeFanout can retarget messages without a live peer table (§6 Fan-out
  * exception).
  *
- * @param {string|Array} sysids  Raw sysids from config, or target sysids.
+ * @param {string|Array} sysids  Sysids from the members rows, a payload
+ *   selection, or a targets array.
  * @returns {object}
  */
 function buildListStub(sysids) {

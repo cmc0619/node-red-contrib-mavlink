@@ -22,17 +22,47 @@
           return v === 'list' || 'must be an explicit sysid list on Build';
         },
       },
-      sysids: {
-        value: '',
+      members: {
+        // One row per member: {sysid, north?, east?, up?, patch?}. Offsets are
+        // metres (blank = none), applied at build time against the message's
+        // own position; patch is a raw wire-unit field object (blank = none).
+        value: [],
         validate: function (v, _opt) {
           if (RED.mavlink.liveOr('#node-input-selectionMode', this.selectionMode) !== 'list') return true;
-          if (RED.mavlink.isBlank(v)) return 'is required for list selection';
-          return String(v).split(',').every(function (part) {
-            part = part.trim();
-            if (!part) return true;
-            var n = Number(part);
-            return Number.isInteger(n) && n >= 1 && n <= 255;
-          }) || 'must be comma-separated sysids (1-255)';
+          if (!Array.isArray(v) || v.length === 0) return 'needs at least one member row for list selection';
+          // The fields a metre offset would write on any supported carrier —
+          // a row carrying both an offset and a raw patch of one of these
+          // would make the runtime pick a winner, so it reds here instead.
+          var POSITION_FIELDS = ['lat', 'lon', 'alt', 'x', 'y', 'z', 'lat_int', 'lon_int', 'param5', 'param6', 'param7'];
+          for (var i = 0; i < v.length; i++) {
+            var row = v[i];
+            var where = 'row ' + (i + 1);
+            var sysid = Number(row.sysid);
+            if (!Number.isInteger(sysid) || sysid < 1 || sysid > 255) {
+              return where + ': sysid must be an integer 1-255';
+            }
+            var hasOffset = false;
+            var axes = ['north', 'east', 'up'];
+            for (var a = 0; a < axes.length; a++) {
+              if (row[axes[a]] === undefined) continue;
+              hasOffset = true;
+              if (typeof row[axes[a]] !== 'number' || !Number.isFinite(row[axes[a]])) {
+                return where + ': ' + axes[a] + ' offset must be a finite number of metres';
+              }
+            }
+            if (row.patch !== undefined) {
+              if (typeof row.patch !== 'object' || row.patch === null || Array.isArray(row.patch)) {
+                return where + ': patch must be a JSON object of wire-unit fields';
+              }
+              for (var p = 0; p < POSITION_FIELDS.length; p++) {
+                if (hasOffset && Object.prototype.hasOwnProperty.call(row.patch, POSITION_FIELDS[p])) {
+                  return where + ': metre offsets and a raw patch of position field '
+                    + POSITION_FIELDS[p] + ' conflict — use one or the other';
+                }
+              }
+            }
+          }
+          return true;
         },
       },
       vehicleType: { value: '' },
@@ -85,6 +115,42 @@
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
       }
 
+      // Members table (#163): one editableList row per member — sysid, N/E/Up
+      // offsets in metres, and an optional raw wire-unit patch. Same stock
+      // widget the Connection node uses for its extra identities.
+      var $members = $('#mav-fanout-members');
+      $members.editableList({
+        addButton: 'add member',
+        removable: true,
+        sortable: true,
+        height: 'auto',
+        addItem: function (container, _index, member) {
+          container.css({ display: 'flex', 'align-items': 'center', gap: '4px' });
+          function cell(cls, placeholder, title, grow) {
+            return $('<input>', { type: 'text', class: cls, placeholder: placeholder, title: title })
+              .css(grow ? { 'flex-grow': 1, width: '30px' } : { width: '52px', 'flex-shrink': 0 })
+              .appendTo(container);
+          }
+          var $sysid = cell('mav-fanout-member-sysid', 'sysid', 'System id (1-255)');
+          var $north = cell('mav-fanout-member-north', 'N m', 'North offset in metres, applied to the message’s own position (blank = none)');
+          var $east = cell('mav-fanout-member-east', 'E m', 'East offset in metres (blank = none)');
+          var $up = cell('mav-fanout-member-up', 'Up m', 'Up offset in metres (blank = none)');
+          var $patch = cell('mav-fanout-member-patch', 'raw patch JSON', 'Optional JSON object of message fields to overwrite for this member, in wire units (blank = none)', true);
+          if (member) {
+            if (member.sysid !== undefined) $sysid.val(member.sysid);
+            if (member.north !== undefined) $north.val(member.north);
+            if (member.east !== undefined) $east.val(member.east);
+            if (member.up !== undefined) $up.val(member.up);
+            if (member.patch !== undefined) {
+              $patch.val(typeof member.patch === 'string' ? member.patch : JSON.stringify(member.patch));
+            }
+          }
+        },
+      });
+      (node.members || []).forEach(function (member) {
+        $members.editableList('addItem', member);
+      });
+
       var _msgCatalog = { seq: 0 };
       function refreshVehicleTypeOptions() {
         // MAV_TYPE options come from the connection's profile catalog; without
@@ -132,7 +198,7 @@
         // the picker hides like every other sender's does on Build (§6).
         $('#row-fanout-connection').toggle(d !== 'build');
         $('#row-fanout-identity').toggle(d !== 'build');
-        $('#row-fanout-sysids').toggle(sel === 'list');
+        $('#row-fanout-members').toggle(sel === 'list');
         $('#row-fanout-typeFilter').toggle(sel === 'filter');
         $('#row-fanout-firmwareFilter').toggle(sel === 'filter');
         $('#row-fanout-armedFilter').toggle(sel === 'filter');
@@ -154,6 +220,31 @@
       refreshVehicleTypeOptions();
       RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: ['gcs', 'custom'] });
       refreshVisibility();
+    },
+    oneditsave: function () {
+      // Collect the member rows. Blank offset cells stay absent (no offset);
+      // a patch that parses to a JSON object is stored as the object so the
+      // runtime reads it directly; unparseable text is kept verbatim so the
+      // members validator reds the row instead of silently dropping it.
+      var members = [];
+      $('#mav-fanout-members').editableList('items').each(function () {
+        var row = $(this);
+        var member = { sysid: Number(row.find('.mav-fanout-member-sysid').val()) };
+        ['north', 'east', 'up'].forEach(function (axis) {
+          var raw = row.find('.mav-fanout-member-' + axis).val();
+          if (!RED.mavlink.isBlank(raw)) member[axis] = Number(raw);
+        });
+        var patchText = String(row.find('.mav-fanout-member-patch').val() || '').trim();
+        if (patchText !== '') {
+          try {
+            member.patch = JSON.parse(patchText);
+          } catch (_err) {
+            member.patch = patchText;
+          }
+        }
+        members.push(member);
+      });
+      this.members = members;
     }
   });
 </script>
@@ -163,7 +254,13 @@
   <div class="form-row" id="row-fanout-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-fanout-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-selectionMode">Selection</label><select id="node-input-selectionMode"><option value="all">All active vehicles</option><option value="list">Explicit sysid list</option><option value="filter">Filter</option></select></div>
-  <div class="form-row" id="row-fanout-sysids"><label for="node-input-sysids">Sysids</label><input type="text" id="node-input-sysids" placeholder="1,2,3"></div>
+  <div class="form-row" id="row-fanout-members">
+    <label style="vertical-align:top;">Members</label>
+    <div style="display:inline-block;width:70%;">
+      <ol id="mav-fanout-members"></ol>
+      <span class="form-tips">offsets are metres against the message's own position; patch is raw wire-unit fields</span>
+    </div>
+  </div>
   <div class="form-row" id="row-fanout-typeFilter"><label for="node-input-vehicleType">Type filter</label><select id="node-input-vehicleType"></select></div>
   <div class="form-row" id="row-fanout-firmwareFilter"><label for="node-input-firmwareFilter">Firmware</label><select id="node-input-firmwareFilter"><option value="">Any</option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
   <div class="form-row" id="row-fanout-armedFilter"><label for="node-input-armedFilter">Armed</label><select id="node-input-armedFilter"><option value="">Any</option><option value="true">Armed</option><option value="false">Disarmed</option></select></div>
@@ -181,6 +278,7 @@
 <script type="text/html" data-help-name="mavlink-fanout">
   <p>Replicates one <b>built</b> MAVLink message across the active vehicles selected from a Connection peer table. Fan-out is a replicator, not an action node: wire any action node in <b>Build</b> delivery (Command, Move, Payload, Param — or mavlink-build) into it, and it retargets that message per member.</p>
   <p><code>msg.payload</code> is either the built message <code>{name, fields}</code> straight off a Build output, or the wrapper <code>{message, targets, ...options}</code>. <code>targets</code> is an array of sysids or <code>{sysid, ...fieldPatches}</code> objects — the patches overwrite message fields per member in <b>wire units</b> (Fan-out is a raw surface; a COMMAND_INT location patch is degE7), and the list itself becomes the selection. Runtime option overrides (<code>executionMode</code>, <code>delivery</code>, <code>intervalMs</code>, <code>concurrency</code>, …) ride the wrapper too.</p>
+  <p>With the <i>Explicit sysid list</i> selection the <b>Members</b> table holds one row per member: its <b>sysid</b>, optional <b>N / E / Up</b> offsets in <b>metres</b>, and an optional <b>raw patch</b> (a JSON object of message fields, wire units — exactly the <code>targets</code> patch shape). Metre offsets are applied at build time against the message's <i>own</i> position: COMMAND_INT <code>x/y/z</code>, COMMAND_LONG <code>param5/6/7</code>, SET_POSITION_TARGET_GLOBAL_INT <code>lat_int/lon_int/alt</code> (up adds to the up-positive altitude), and SET_POSITION_TARGET_LOCAL_NED <code>x/y/z</code> in plain metres (NED: up subtracts from z). A member with offsets on any other message is refused per message. A row may not combine offsets with a raw patch of position fields — the editor rejects the ambiguity. A <code>msg.payload.targets</code> array still overrides the configured members entirely.</p>
   <p>What the message means is inferred from its name: <code>COMMAND_LONG</code>/<code>COMMAND_INT</code> confirm by COMMAND_ACK; <code>PARAM_SET</code> confirms by its PARAM_VALUE echo (sequential only); offboard setpoints (<code>SET_POSITION_TARGET_LOCAL_NED</code>/<code>_GLOBAL_INT</code>, <code>SET_ATTITUDE_TARGET</code>, <code>SET_ACTUATOR_CONTROL_TARGET</code>) carry no ack and ride the streaming band; everything else addressed is fire-and-forget. Mission <i>transfer steps</i> (<code>MISSION_COUNT</code>, <code>MISSION_ITEM(_INT)</code>, <code>MISSION_REQUEST*</code>, <code>MISSION_ACK</code>, the partial-list pair) and <code>PARAM_REQUEST_LIST</code> are refused — multi-message transactions cannot be replicated. Single-shot mission commands like <code>MISSION_SET_CURRENT</code> and <code>MISSION_CLEAR_ALL</code> replicate normally.</p>
   <p>Fan-out addresses each member's <b>autopilot</b>: the built message's <code>target_component</code> is replaced per member. A message hand-addressed to another component is re-addressed, not honoured — use the single-vehicle nodes for that.</p>
   <p>Sequential mode sends one retargeted message per member at the configured interval; <b>Concurrency</b> lets up to N confirm waits overlap so one slow vehicle doesn't delay the rest. <b>Stop on error</b> halts remaining members after the first failure — they report <code>skipped</code> in the aggregate rather than being commanded. Broadcast mode sends one packet with target_system 0 and target_component 1, and requires the <i>All active vehicles</i> selection — a broadcast reaches every vehicle on the link, so it cannot honour a subset, per-target patches, or a PARAM_SET.</p>

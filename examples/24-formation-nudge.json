@@ -132,7 +132,13 @@
     "name": "Nudge (dry run)",
     "connection": "ex24-connection",
     "selectionMode": "list",
-    "sysids": "1,2,3,4,5",
+    "members": [
+      { "sysid": 1 },
+      { "sysid": 2 },
+      { "sysid": 3 },
+      { "sysid": 4 },
+      { "sysid": 5 }
+    ],
     "vehicleType": "",
     "firmwareFilter": "",
     "armedFilter": "",
@@ -159,7 +165,13 @@
     "name": "Nudge (sequential)",
     "connection": "ex24-connection",
     "selectionMode": "list",
-    "sysids": "1,2,3,4,5",
+    "members": [
+      { "sysid": 1 },
+      { "sysid": 2 },
+      { "sysid": 3 },
+      { "sysid": 4 },
+      { "sysid": 5 }
+    ],
     "vehicleType": "",
     "firmwareFilter": "",
     "armedFilter": "",

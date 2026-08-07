@@ -9,6 +9,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { loadNodeDefaults } = require('./html-assert');
+
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-fanout.html'),
   'utf8'
@@ -106,13 +108,37 @@ test('identity is re-filled when connection selection changes', () => {
   );
 });
 
-test('sysids field validates each token as a MAVLink sysid (1..255)', () => {
-  assert.match(
-    html,
-    /sysids:\s*\{[\s\S]*?validate:\s*function/,
-    'sysids declares an editor validate function'
-  );
-  assert.match(html, /n >= 1 && n <= 255/, 'validator bounds each token to 1..255');
+test('members table replaces the sysids CSV: editableList rows saved through oneditsave (#163)', () => {
+  assert.ok(!html.includes('node-input-sysids'), 'the sysids CSV field is gone — pre-1.0 rename, no alias');
+  assert.match(html, /\$members\.editableList\(/, 'rows use the stock editableList widget');
+  assert.match(html, /oneditsave:/, 'a custom widget must save through oneditsave');
+});
+
+test('members validator: per-row reasons, offsets-vs-position-patch conflict reds (#163)', () => {
+  const defaults = loadNodeDefaults('mavlink-fanout');
+  // Cross-realm value (vm context), so shape checks rather than deepEqual.
+  assert.equal(Array.isArray(defaults.members.value), true, 'members defaults to a row array');
+  assert.equal(defaults.members.value.length, 0, 'the default row list is empty');
+  const validate = defaults.members.validate;
+  const onList = (v) => validate.call({ selectionMode: 'list' }, v, {});
+
+  assert.equal(validate.call({ selectionMode: 'all' }, [], {}), true,
+    'members is not required outside list selection');
+  assert.match(String(onList([])), /at least one member row/,
+    'empty table reds with a reason when list selection is live');
+  assert.equal(onList([{ sysid: 1 }, { sysid: 2, north: 5, up: -2, patch: { param1: 3 } }]), true,
+    'rows with metre offsets and a non-position patch pass');
+  assert.match(String(onList([{ sysid: 0 }])), /sysid must be an integer 1-255/);
+  assert.match(String(onList([{ sysid: 1, north: '5' }])), /finite number of metres/,
+    'a non-number offset reds (oneditsave stores numbers)');
+  assert.match(String(onList([{ sysid: 1, patch: 'not json' }])), /JSON object/,
+    'unparseable patch text is kept and reds rather than being dropped');
+  // A row carrying both a metre offset and a raw patch of a position field
+  // would make the runtime pick a winner — the editor reds it instead.
+  assert.match(String(onList([{ sysid: 1, up: 3, patch: { param7: 50 } }])), /conflict/);
+  assert.match(String(onList([{ sysid: 1, north: 1, patch: { lat_int: 5 } }])), /conflict/);
+  assert.equal(onList([{ sysid: 1, patch: { param7: 50 } }]), true,
+    'a position-field patch without offsets is legitimate');
 });
 
 test('concurrency is a bounded integer with a strictly-sequential default of 1', () => {
@@ -123,7 +149,7 @@ test('concurrency is a bounded integer with a strictly-sequential default of 1',
 
 test('rows reshape by selection, execution, and delivery (§6)', () => {
   assert.match(html, /function refreshVisibility/, 'refreshVisibility drives the reshape');
-  assert.match(html, /\$\('#row-fanout-sysids'\)\.toggle\(sel === 'list'\)/, 'sysids only for list selection');
+  assert.match(html, /\$\('#row-fanout-members'\)\.toggle\(sel === 'list'\)/, 'members table only for list selection');
   assert.match(html, /\$\('#row-fanout-typeFilter'\)\.toggle\(sel === 'filter'\)/, 'type filter only for filter selection');
   assert.match(html, /\$\('#row-fanout-interval'\)\.toggle\(exec === 'sequential'\)/, 'interval only for sequential');
   assert.match(
@@ -157,4 +183,7 @@ test('help documents targets patches as wire units and the mavlink-out handoff',
   assert.match(html, /wire units/i, 'raw-surface unit rule is stated');
   assert.match(html, /mavlink-out/, 'Build handoff to mavlink-out is documented');
   assert.match(html, /\{message, targets/, 'wrapper shape is documented');
+  assert.match(html, /offsets in <b>metres<\/b>/, 'member offsets are documented as metres');
+  assert.match(html, /message's <i>own<\/i> position/, 'offsets apply against the message\'s own position');
+  assert.match(html, /overrides the configured members entirely/, 'payload.targets precedence is documented');
 });

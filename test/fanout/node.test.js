@@ -34,7 +34,7 @@ test('build+list with no connection emits one retargeted message per member on o
     connection: '',
     delivery: 'build',
     selectionMode: 'list',
-    sysids: '1,2',
+    members: [{ sysid: 1 }, { sysid: 2 }],
     executionMode: 'sequential',
     intervalMs: 0,
   });
@@ -71,33 +71,16 @@ test('a payload that is not a built message fails loudly naming the contract', a
   assert.equal(connection.sends.length, 0);
 });
 
-test('sysid list rejects values outside 1..255 (config and wrapper selection)', async () => {
+test('wrapper selection sysids outside 1..255 are refused at the runtime boundary', async () => {
   const RED = redStub({});
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-
-  const fromConfig = new Node({
-    connection: '',
-    delivery: 'build',
-    selectionMode: 'list',
-    sysids: '1,256',
-    intervalMs: 0,
-  });
-  let sentConfig;
-  const errConfig = await emitInput(fromConfig, { payload: builtCommand() }, (m) => { sentConfig = m; }).then(
-    () => null,
-    (e) => e
-  );
-  assert.ok(errConfig, 'out-of-range config sysid fails the input');
-  assert.match(errConfig.message, /1\.\.255/, 'error names the valid range');
-  assert.match(errConfig.message, /256/, 'error names the bad token');
-  assert.equal(sentConfig[1].result, 'failed');
 
   const fromWrapper = new Node({
     connection: '',
     delivery: 'build',
     selectionMode: 'list',
-    sysids: '1,2',
+    members: [{ sysid: 1 }, { sysid: 2 }],
     intervalMs: 0,
   });
   let sentWrapper;
@@ -239,6 +222,39 @@ test('wrapper targets reach the replicator with per-member patches', async () =>
   assert.equal(bySysid[1].param6, 8.5);
   assert.equal(bySysid[2].param5, 47.5, 'patched target gets its own fields');
   assert.equal(bySysid[2].param6, 8.6);
+});
+
+test('config member rows patch per member, and payload.targets overrides them entirely (§6/#163)', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({
+    connection: 'conn',
+    selectionMode: 'list',
+    members: [{ sysid: 1 }, { sysid: 2, patch: { param1: 21 } }],
+    executionMode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  // Config members drive the run when the payload carries only the message.
+  await emitInput(node, { payload: builtCommand() }, () => {});
+  const bySysid = Object.fromEntries(
+    connection.sends.map((s) => [s.message.fields.target_system, s.message.fields])
+  );
+  assert.equal(bySysid[1].param1, 0, 'bare row keeps the shared message');
+  assert.equal(bySysid[2].param1, 21, 'row patch overwrites the field for its member');
+
+  // payload.targets is the override of last resort: config rows (including
+  // member 2's patch) are replaced wholesale, not merged.
+  connection.sends.length = 0;
+  await emitInput(node, {
+    payload: { message: builtCommand(), targets: [{ sysid: 1, param1: 7 }] },
+  }, () => {});
+  assert.deepEqual(connection.sends.map((s) => s.message.fields.target_system), [1],
+    'the targets list is the selection — config member 2 is not commanded');
+  assert.equal(connection.sends[0].message.fields.param1, 7);
 });
 
 function emitInput(node, msg, send) {
