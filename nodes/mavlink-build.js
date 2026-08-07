@@ -69,18 +69,9 @@ module.exports = function registerMavlinkBuild(RED) {
       ? Number(config.band)
       : BAND.CONTROL;
 
-    // Default field values from node config (JSON string). The editor validates
-    // this, so unreadable JSON here means a hand-edited or imported flow. Fall
-    // back to no defaults — the safe direction, since the codec then supplies
-    // its own — rather than badging and returning: that returned before
-    // registering an input handler, so every message the node was wired to
-    // receive vanished with no output, no Catch, and no error.
-    let configFields = {};
-    try {
-      configFields = JSON.parse(config.fields) || {};
-    } catch {
-      configFields = {};
-    }
+    // Default field values from node config. The editor validates this, so the
+    // runtime just reads it.
+    const configFields = JSON.parse(config.fields || '{}');
 
     // Repeat interval.
     const repeatMs = Number(config.repeatMs);

@@ -938,33 +938,30 @@ test('mavlink-build Send tier: a connection send throw becomes a failed status r
   assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
 });
 
-test('mavlink-build: unreadable fields JSON falls back to no defaults and still runs', () => {
-  // Was: "marks invalid config instead of aborting deploy" — it badged and
-  // returned *before* registering an input handler, so every message the node
-  // was wired to receive vanished with no output, no Catch and no error. The
-  // editor validates this field now, so unreadable JSON here means a
-  // hand-edited or imported flow; the parse falls back to the safe direction
-  // (no field defaults, codec supplies its own) rather than growing a second
-  // deploy-time error path (CLAUDE.md).
+test('mavlink-build: unreadable fields JSON is not caught — the editor already refused it', () => {
+  // Two guardrails have stood here. The original badged and returned before
+  // registering an input handler, so every message the node was wired to
+  // receive vanished. The replacement fell back to {}, which on a Send tier
+  // transmitted a blank-field message and reported success — worse.
+  //
+  // Neither is wanted. The editor validates this field, so reaching the
+  // constructor with bad JSON means a hand-edited flow or a deploy forced past
+  // a red field: AGENTS.md:520-529 classifies both as unsupported paths and
+  // says not to add the guard. Node-RED contains a throwing constructor, logs
+  // it, and loads the rest of the flow.
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
   require('../../nodes/mavlink-build')(RED);
   const Constructor = RED._nodeTypes['mavlink-build'];
   const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, {
+
+  assert.throws(() => Constructor.call(node, {
     vehicle: 'v1',
     dialect: '__vehicle',
     messageName: 'HEARTBEAT',
     tier: 'build',
     fields: '{ not valid json',
-  });
-
-  node._input({ payload: { type: 6, autopilot: 3 } });
-
-  assert.equal(node._sends.length, 1, 'the node still accepts messages');
-  const [out0, out1] = node._sends[0];
-  assert.equal(out0.payload.messageName, 'HEARTBEAT');
-  assert.equal(out1.result, 'built');
+  }), SyntaxError);
 });
 
 test('mavlink-build Send tier: a missing Connection is a misconfiguration, not a Build', () => {
