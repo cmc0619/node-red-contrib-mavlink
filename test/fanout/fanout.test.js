@@ -531,6 +531,78 @@ test('member metre offsets patch degE7 fields on COMMAND_INT with lib/formation\
   assert.equal(bySysid[2].z, 30);
 });
 
+test('an east offset scales through cos(lat), not the latitude divisor', async () => {
+  // The north-only case above leaves longitude untouched, so it never exercises
+  // the cos(lat) division or the longitude rounding — a sign flip or a missing
+  // cos(lat) on the east axis would pass it. At 47° a metre of easting is worth
+  // ~1.47x the degrees a metre of northing is.
+  const connection = connectionStub([peer(1)]);
+
+  await executeFanout({
+    connection,
+    message: {
+      name: 'COMMAND_INT',
+      fields: { target_system: 0, target_component: 0, command: 192, frame: 6, x: 470000000, y: 80000000, z: 30 },
+    },
+    members: [{ sysid: 1, east: 10 }],
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  const fields = connection.sends[0].message.fields;
+  const at = offsetLatLon(47, 8, 0, 10);
+  assert.equal(fields.y, Math.round(at.lon * 1e7));
+  assert.ok(fields.y > 80000000, 'east moves longitude positive');
+  assert.equal(fields.x, 470000000, 'an east-only offset leaves latitude alone');
+  const dLon = fields.y - 80000000;
+  assert.ok(dLon > 898 && dLon < 1400,
+    `10 m east at 47° is ~1318 degE7 (898 / cos 47°), got ${dLon}`);
+});
+
+test('offsets refuse a non-global COMMAND_INT frame rather than scaling degE7', async () => {
+  // Local-frame INT x/y are metres x 1e4 (§14-measured), so the degE7 path
+  // would turn a commanded 10 m into ~9 cm on the wire. Refuse instead.
+  const connection = connectionStub([peer(1)]);
+
+  const result = await executeFanout({
+    connection,
+    message: {
+      name: 'COMMAND_INT',
+      fields: { target_system: 0, target_component: 0, command: 192, frame: 1, x: 50000, y: 0, z: 30 },
+    },
+    members: [{ sysid: 1, north: 10 }],
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  assert.equal(result.result, 'refused');
+  assert.match(result.detail, /not a global frame/);
+  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
+});
+
+test('offsets refuse a body-framed LOCAL_NED setpoint — north is not the x axis there', async () => {
+  const connection = connectionStub([peer(1)]);
+
+  const result = await executeFanout({
+    connection,
+    message: {
+      name: 'SET_POSITION_TARGET_LOCAL_NED',
+      // MAV_FRAME_BODY_OFFSET_NED (9): x is body-forward, not north.
+      fields: { target_system: 0, target_component: 0, coordinate_frame: 9, x: 0, y: 0, z: -10 },
+    },
+    members: [{ sysid: 1, north: 5 }],
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  assert.equal(result.result, 'refused');
+  assert.match(result.detail, /not LOCAL_NED/);
+  assert.equal(connection.sends.length, 0);
+});
+
 test('member metre offsets on SET_POSITION_TARGET_LOCAL_NED apply directly with up = -z', async () => {
   const connection = connectionStub([peer(1)]);
 
