@@ -3,6 +3,7 @@
 const {
   buildMoveMessage,
   createMoveStream,
+  streamLocks,
   advisoryFor,
   positionFrom,
   velocityFrom,
@@ -23,9 +24,24 @@ module.exports = function registerMavlinkMove(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
     let stream = null;
+    let streamKey = null;
+    let releaseStream = null;
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
+
+    // Stop the active stream and free its single-owner scope (#176). Every
+    // stop the node causes — replacement, a non-stream input, close — routes
+    // through here so no path can leave the target locked with nothing
+    // streaming to it.
+    function stopStream() {
+      if (!stream) return;
+      stream.stop();
+      stream = null;
+      releaseStream();
+      releaseStream = null;
+      streamKey = null;
+    }
 
     node.on('input', (msg, send, done) => {
       try {
@@ -86,7 +102,24 @@ module.exports = function registerMavlinkMove(RED) {
             // the editor default guarantees config when the payload is silent.
             const rateHz = streamValue(payload.rateHz, config.rateHz, 'rateHz', 0.1, 'Hz');
             const ttlMs = streamValue(payload.ttlMs, config.ttlMs, 'ttlMs', 0, 'milliseconds');
-            if (stream) stream.stop();
+            // One stream per (connection, target) (#176): a second node
+            // streaming to the same vehicle would alternate contradictory
+            // setpoints — the vehicle oscillates while both nodes report
+            // success. Fail closed, like the mission-transfer lock. This node
+            // replacing its own stream to the same target is legitimate
+            // single-flight: stopping it first frees the scope, so the
+            // synchronous re-acquire below cannot self-conflict. A conflict
+            // (necessarily another node's stream) refuses before stopStream,
+            // leaving the running stream running like any rejected input.
+            const key = streamLocks.key(connectionNode.id, target);
+            if (key === streamKey) stopStream();
+            const release = streamLocks.acquire(connectionNode.id, target);
+            if (!release) {
+              throw new Error(
+                `a setpoint stream to ${target.sysid}.${target.compid} is already running on this connection — stop it first or target it from one node`
+              );
+            }
+            stopStream();
             stream = createMoveStream({
               connection: connectionNode,
               message,
@@ -98,13 +131,24 @@ module.exports = function registerMavlinkMove(RED) {
               // the only one it cannot observe: without this the node would
               // halt the vehicle and keep reporting "streaming" forever.
               // Async, so it uses node.send — the input that started the
-              // stream was completed long ago.
-              onExpire: (stopMessage) => completeExpiry(node, stopMessage),
+              // stream was completed long ago. The stream stopped itself, so
+              // only the bookkeeping is left: free the scope before telling
+              // the flow. A replaced stream's timer is already cleared, so
+              // this only ever fires for the stream currently in the slot.
+              onExpire: (stopMessage) => {
+                stream = null;
+                releaseStream = null;
+                streamKey = null;
+                release();
+                completeExpiry(node, stopMessage);
+              },
             });
+            streamKey = key;
+            releaseStream = release;
             stream.start();
             completeResult(node, send, 'succeeded', 'streaming', message);
           } else {
-            if (stream) stream.stop();
+            stopStream();
             connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
             completeResult(node, send, 'succeeded', 'sent', message);
           }
@@ -116,7 +160,7 @@ module.exports = function registerMavlinkMove(RED) {
     });
 
     node.on('close', (done) => {
-      if (stream) stream.stop();
+      stopStream();
       done();
     });
   }

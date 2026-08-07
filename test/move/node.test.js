@@ -591,6 +591,91 @@ test('mavlink-move stream: rejected timing override leaves the active stream run
   );
 });
 
+test('mavlink-move stream: one owner per (connection, target) — a second node is refused, the owner may replace itself (#176)', () => {
+  const conn = { id: 'conn', vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const cfg = {
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 200,
+    ttlMs: 0,
+  };
+  const a = new Node({ ...cfg });
+  const b = new Node({ ...cfg });
+
+  a.emit('input', { payload: {} }, () => {}, () => {});
+
+  // Another node streaming to the held target fails loudly — no takeover.
+  let sent;
+  let doneError;
+  b.emit('input', { payload: {} }, (m) => { sent = m; }, (err) => { doneError = err; });
+  assert.equal(sent[0], null, 'conflict must not fire the continue port');
+  assert.equal(sent[1].result, 'failed');
+  assert.match(doneError.message, /stream to 1\.1 is already running on this connection/);
+
+  // The owner replacing its own stream is single-flight, not a conflict.
+  let replaced;
+  a.emit('input', { payload: {} }, (m) => { replaced = m; }, () => {});
+  assert.equal(replaced[1].result, 'succeeded', 'same node re-acquires its own scope');
+
+  // A different target on the same connection is a different vehicle: free.
+  let other;
+  b.emit('input', { payload: { target: { sysid: 2, compid: 1 } } }, (m) => { other = m; }, () => {});
+  assert.equal(other[1].result, 'succeeded', 'other targets stay free');
+
+  // Close releases the scope for the next owner.
+  a.emit('close', () => {});
+  let after;
+  b.emit('input', { payload: {} }, (m) => { after = m; }, () => {});
+  assert.equal(after[1].result, 'succeeded', 'close freed the target');
+  b.emit('close', () => {});
+});
+
+test('mavlink-move stream: TTL expiry frees the target for another node (#176)', async () => {
+  const conn = { id: 'conn', vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const cfg = {
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 200,
+    ttlMs: 0,
+  };
+  const a = new Node({ ...cfg, ttlMs: 20 });
+  const b = new Node({ ...cfg });
+
+  const emitted = [];
+  a.send = (messages) => { emitted.push(messages); };
+  a.emit('input', { payload: {} }, () => {}, () => {});
+
+  const deadline = Date.now() + 2000;
+  while (!emitted.length && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.equal(emitted[0][1].detail, 'expired', 'stream expired');
+
+  let sent;
+  b.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
+  assert.equal(sent[1].result, 'succeeded', 'expiry freed the target');
+  a.emit('close', () => {});
+  b.emit('close', () => {});
+});
+
 function redStub(nodesById) {
   return {
     nodes: {
