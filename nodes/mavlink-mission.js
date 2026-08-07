@@ -45,6 +45,7 @@ const {
 const {
   resolveDeliveryContext,
   firstDefined,
+  applyConnectionStatus,
 } = require('../lib/addressing');
 
 module.exports = function registerMavlinkMission(RED) {
@@ -53,8 +54,9 @@ module.exports = function registerMavlinkMission(RED) {
     const node = this;
 
     const operation = config.operation || OPERATION.DOWNLOAD;
-    const connNode = config.connection ? RED.nodes.getNode(config.connection) : null;
+    const connNode = RED.nodes.getNode(config.connection);
     const delivery = config.delivery;
+    applyConnectionStatus(node, delivery, connNode);
     const timeoutMs = config.timeout ? Number(config.timeout) : undefined;
     const maxRetries = config.maxRetries !== undefined && config.maxRetries !== ''
       ? Number(config.maxRetries)

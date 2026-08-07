@@ -22,6 +22,11 @@ module.exports = function registerMavlinkState(RED) {
         node.send([{ payload: record }]);
       });
       node.status({ fill: 'grey', shape: 'ring', text: 'listening' });
+    } else {
+      // Every other good config wrote nothing at all, so a node that was
+      // misconfigured, then fixed and redeployed, kept showing the dead badge —
+      // the runtime clears status only on node removal (§14).
+      node.status({});
     }
 
     node.on('input', (msg, send, done) => {

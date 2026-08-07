@@ -95,7 +95,23 @@
       {
         name:        { value: '' },
         messageName: { value: 'HEARTBEAT' },
-        fields:      { value: '{}' },
+        fields:      {
+          value: '{}',
+          // Two args so a returned reason counts as invalid rather than being
+          // coerced truthy (§14).
+          validate: function (v, _opt) {
+            if (RED.mavlink.isBlank(v)) return true;
+            try {
+              var parsed = JSON.parse(v);
+              if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                return 'must be a JSON object';
+              }
+            } catch {
+              return 'is not valid JSON';
+            }
+            return true;
+          },
+        },
         tier:        { value: 'send' },
         band:        { value: '2' },
         repeatMs:    { value: 0 },

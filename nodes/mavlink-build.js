@@ -37,7 +37,6 @@ const {
   makeStatusRecord,
   shouldSuppress,
   applyActionStatus,
-  capBadge,
 } = require('../lib/delivery');
 const { dialectFromVehicleId, dialectFromConnection } = require('../lib/addressing');
 const { loadMetadata } = require('../lib/metadata/load');
@@ -56,30 +55,23 @@ module.exports = function registerMavlinkBuild(RED) {
 
     // Connection is optional — needed for Send tier.
     const connectionNode = config.connection ? RED.nodes.getNode(config.connection) : null;
-    const hasConnection = connectionNode && typeof connectionNode.send === 'function';
 
-    // Effective tier: clamp to Build when no connection is configured.
-    const tier = (hasConnection && config.tier !== TIER.BUILD) ? (config.tier || TIER.SEND) : TIER.BUILD;
+    // The operator's tier, as configured. A missing Connection does not mean
+    // they chose Build — silently rewriting a chosen Send into a Build emits a
+    // constructed message on output 0 and reports success for something that
+    // was never transmitted, which is the degrade §9 forbids everywhere else.
+    // A Send with no Connection is a misconfiguration; it says so at deploy and
+    // fails loud per message.
+    const tier = config.tier || TIER.SEND;
 
     const messageName = config.messageName || 'HEARTBEAT';
     const defaultBand = config.band !== undefined && config.band !== null && config.band !== ''
       ? Number(config.band)
       : BAND.CONTROL;
 
-    // Default field values from node config (JSON string). Malformed JSON here
-    // is a config error, not a reason to abort the whole deploy with an
-    // uncaught throw from the constructor — surface it as an invalid-config
-    // badge (§6) and stop, so sibling flows keep loading.
-    let configFields = {};
-    if (config.fields && typeof config.fields === 'string' && config.fields.trim()) {
-      try {
-        configFields = JSON.parse(config.fields);
-      } catch (err) {
-        node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
-        node.error(`mavlink-build: invalid fields JSON — ${err.message}`);
-        return;
-      }
-    }
+    // Default field values from node config. The editor validates this, so the
+    // runtime just reads it.
+    const configFields = JSON.parse(config.fields || '{}');
 
     // Repeat interval.
     const repeatMs = Number(config.repeatMs);
@@ -101,18 +93,18 @@ module.exports = function registerMavlinkBuild(RED) {
         try {
           bundle = dialectFromVehicleId(RED, config.vehicle, { rethrow: true });
         } catch (err) {
-          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+          applyActionStatus(node, 'invalid', 'dialect unavailable');
           node.error(`mavlink-build: ${err.message}`);
           return;
         }
         if (!bundle) {
-          node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+          applyActionStatus(node, 'invalid', 'invalid config');
           return;
         }
       } else {
         const { api } = loadMetadata('mavlink-build', RED);
         if (!api) {
-          node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+          applyActionStatus(node, 'invalid', 'dialect unavailable');
           return;
         }
         bundle = api.loadBundled(dialectName);
@@ -122,24 +114,19 @@ module.exports = function registerMavlinkBuild(RED) {
       try {
         bundle = dialectFromConnection(RED, connectionNode, { rethrow: true });
       } catch (err) {
-        node.status({ fill: 'red', shape: 'ring', text: 'dialect unavailable' });
+        applyActionStatus(node, 'invalid', 'dialect unavailable');
         node.error(`mavlink-build: ${err.message}`);
         return;
       }
       if (!bundle) {
-        node.status({ fill: 'red', shape: 'ring', text: 'invalid config' });
+        applyActionStatus(node, 'invalid', 'invalid config');
         return;
       }
     }
 
     const messageMeta = bundle.messages[messageName];
     if (!messageMeta) {
-      node.status({ fill: 'red', shape: 'ring', text: capBadge(`unknown: ${messageName}`) });
-      return;
-    }
-
-    if (!hasConnection && tier !== TIER.BUILD) {
-      node.status({ fill: 'red', shape: 'ring', text: 'no connection for Send' });
+      applyActionStatus(node, 'invalid', `unknown: ${messageName}`);
       return;
     }
 
@@ -153,7 +140,10 @@ module.exports = function registerMavlinkBuild(RED) {
     // editor just replays whatever status events arrive. So a node that was
     // misconfigured, then fixed and redeployed, would keep displaying the dead
     // badge until a message happened to flow through. Reaching here means the
-    // config resolved, so say so once.
+    // config resolved, so say so once. A wire tier reaching here necessarily
+    // has a working Connection — the dialect comes from its bound profile, so
+    // the branch above already bailed otherwise — which is why this is a plain
+    // clear rather than the shared applyConnectionStatus the senders use.
     node.status({});
 
     /**
@@ -187,7 +177,7 @@ module.exports = function registerMavlinkBuild(RED) {
           message: messageName,
           timestamp: Date.now(),
         });
-        applyActionStatus(node, 'error', capBadge(err.message));
+        applyActionStatus(node, 'error', err.message);
         node.send([null, sr]);
         if (triggerMsg) {
           done(new Error(`mavlink-build encode: ${err.message}`));
@@ -210,7 +200,7 @@ module.exports = function registerMavlinkBuild(RED) {
           tier: TIER.BUILD,
           timestamp: Date.now(),
         });
-        applyActionStatus(node, 'ok', capBadge(messageName));
+        applyActionStatus(node, 'ok', messageName);
         node.send([outMsg, sr]);
         return true;
       }
@@ -237,7 +227,7 @@ module.exports = function registerMavlinkBuild(RED) {
           band,
           timestamp: Date.now(),
         });
-        applyActionStatus(node, 'error', capBadge(err.message));
+        applyActionStatus(node, 'error', err.message);
         node.send([null, sr]);
         if (triggerMsg) {
           done(new Error(`mavlink-build send: ${err.message}`));
@@ -271,10 +261,9 @@ module.exports = function registerMavlinkBuild(RED) {
         timestamp: now,
       });
 
-      const rateLabel = repeatMs > 0
-        ? capBadge(`${messageName} ${rateWindowCount}/${Math.round(1000 / repeatMs)}Hz`)
-        : capBadge(messageName);
-      applyActionStatus(node, 'ok', rateLabel);
+      applyActionStatus(node, 'ok', repeatMs > 0
+        ? `${messageName} ${rateWindowCount}/${Math.round(1000 / repeatMs)}Hz`
+        : messageName);
       node.send([outMsg, sr]);
       return true;
     }

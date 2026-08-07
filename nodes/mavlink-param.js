@@ -42,6 +42,7 @@ const {
 const {
   resolveDeliveryContext,
   firstDefined,
+  applyConnectionStatus,
 } = require('../lib/addressing');
 const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
 
@@ -177,6 +178,7 @@ module.exports = function registerMavlinkParam(RED) {
     const timeoutMs = config.timeout === '' ? DEFAULT_TIMEOUT_MS : Number(config.timeout);
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
+    applyConnectionStatus(node, delivery, connAtDeploy);
 
     /**
      * In-flight transaction, or null. `gen` is the single-flight token: a

@@ -15,6 +15,7 @@ const {
 } = require('../lib/command');
 const {
   resolveDeliveryContext,
+  applyConnectionStatus,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -56,6 +57,7 @@ module.exports = function registerMavlinkPayload(RED) {
     const maxRetries = config.maxRetries === '' ? DEFAULT_MAX_RETRIES : Number(config.maxRetries);
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
+    applyConnectionStatus(node, delivery, connAtDeploy);
 
     function cancelWaiter() {
       if (activeWaiter) {

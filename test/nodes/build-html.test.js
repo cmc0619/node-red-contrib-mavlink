@@ -263,3 +263,17 @@ test('every palette node carries a bare paletteLabel (#106)', () => {
   assert.deepEqual(missing, [], 'every palette node declares a paletteLabel');
   assert.deepEqual(prefixed, [], 'the category already says "mavlink" — do not repeat it');
 });
+
+test('Build validates the fields JSON in the editor, so the runtime need not', () => {
+  // The free mechanism: Node-RED reds the field and marks the node. The runtime
+  // used to re-ask, badge, and return before registering an input handler.
+  const { fields } = loadNodeDefaults('mavlink-build');
+
+  assert.equal(fields.validate.length, 2, 'two args, or a reason string reads as valid (§14)');
+  assert.equal(fields.validate.call({}, '{}'), true);
+  assert.equal(fields.validate.call({}, '{"type": 6}'), true);
+  assert.equal(fields.validate.call({}, ''), true, 'blank is the documented empty');
+  assert.match(String(fields.validate.call({}, '{ not valid json')), /not valid JSON/);
+  assert.match(String(fields.validate.call({}, '[1,2]')), /JSON object/);
+  assert.match(String(fields.validate.call({}, '42')), /JSON object/);
+});

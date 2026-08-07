@@ -57,6 +57,7 @@ const {
   resolveDeliveryContext,
   dialectFromVehicleId,
   dialectFromConnection,
+  applyConnectionStatus,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -134,6 +135,7 @@ module.exports = function registerMavlinkCommand(RED) {
     const requiresConfirmation = preset ? preset.requiresConfirmation : false;
 
     const connNode = RED.nodes.getNode(config.connection);
+    applyConnectionStatus(node, config.delivery, connNode);
 
     const delivery = config.delivery;
 
