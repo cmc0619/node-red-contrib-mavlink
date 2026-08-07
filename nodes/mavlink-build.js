@@ -54,7 +54,7 @@ module.exports = function registerMavlinkBuild(RED) {
     const node = this;
 
     // Connection is optional — needed for Send tier.
-    const connectionNode = config.connection ? RED.nodes.getNode(config.connection) : null;
+    const connectionNode = RED.nodes.getNode(config.connection);
 
     // The operator's tier, as configured. A missing Connection does not mean
     // they chose Build — silently rewriting a chosen Send into a Build emits a
@@ -79,72 +79,32 @@ module.exports = function registerMavlinkBuild(RED) {
     let rateWindowStart = 0;
     let rateWindowCount = 0;
 
-    /** @type {import('../lib/metadata').DialectBundle|null} */
-    let bundle = null;
-
     // Resolve the dialect bundle per the role × tier matrix (§6).
     //   Build + plain dialect name → load from the bundled registry (no vehicle needed).
     //   Build + '__vehicle' → vehicle node's bundle.
     //   Wire tier → the connection's bound profile node's bundle (custom-safe).
+    // Null when any rung fails to resolve — badged below, refused per message.
+    /** @type {import('../lib/metadata').DialectBundle|null} */
+    let bundle;
     if (tier === TIER.BUILD) {
-      // Editor requires dialect on Build (§6) — trust config.dialect.
-      const dialectName = config.dialect;
-      if (dialectName === '__vehicle') {
-        try {
-          bundle = dialectFromVehicleId(RED, config.vehicle, { rethrow: true });
-        } catch (err) {
-          applyActionStatus(node, 'invalid', 'dialect unavailable');
-          node.error(`mavlink-build: ${err.message}`);
-          return;
-        }
-        if (!bundle) {
-          applyActionStatus(node, 'invalid', 'invalid config');
-          return;
-        }
+      if (config.dialect === '__vehicle') {
+        bundle = dialectFromVehicleId(RED, config.vehicle);
       } else {
         const { api } = loadMetadata('mavlink-build', RED);
-        if (!api) {
-          applyActionStatus(node, 'invalid', 'dialect unavailable');
-          return;
-        }
-        bundle = api.loadBundled(dialectName);
+        bundle = api ? api.loadBundled(config.dialect) : null;
       }
     } else {
-      // Wire tier: Connection's bound profile governs (§6 hidden-is-not-honored).
-      try {
-        bundle = dialectFromConnection(RED, connectionNode, { rethrow: true });
-      } catch (err) {
-        applyActionStatus(node, 'invalid', 'dialect unavailable');
-        node.error(`mavlink-build: ${err.message}`);
-        return;
-      }
-      if (!bundle) {
-        applyActionStatus(node, 'invalid', 'invalid config');
-        return;
-      }
+      bundle = dialectFromConnection(RED, connectionNode);
     }
+    const messageMeta = bundle ? bundle.messages[messageName] : null;
 
-    const messageMeta = bundle.messages[messageName];
-    if (!messageMeta) {
-      applyActionStatus(node, 'invalid', `unknown: ${messageName}`);
-      return;
-    }
-
-    // No idle "ready" badge — the label already names the message (§6: action
-    // nodes report last activity; pre-trigger status is only for misconfig).
-    //
-    // Clearing is not the same as badging, and it is required. Every bail
-    // above writes a red badge and returns; the runtime only publishes a
-    // status clear when a node is *removed* (@node-red/runtime
-    // flows/Flow.js:395-399), not when it is modified and restarted, and the
-    // editor just replays whatever status events arrive. So a node that was
-    // misconfigured, then fixed and redeployed, would keep displaying the dead
-    // badge until a message happened to flow through. Reaching here means the
-    // config resolved, so say so once. A wire tier reaching here necessarily
-    // has a working Connection — the dialect comes from its bound profile, so
-    // the branch above already bailed otherwise — which is why this is a plain
-    // clear rather than the shared applyConnectionStatus the senders use.
-    node.status({});
+    // §6: misconfigured at deploy → red ring; resolved → clear, because the
+    // runtime never publishes a status clear on redeploy and a fixed node
+    // would keep its dead badge otherwise (§14). Badge only — the handlers
+    // below register regardless, so a triggered message fails loudly through
+    // Catch instead of vanishing into a node that never listened.
+    if (messageMeta) node.status({});
+    else applyActionStatus(node, 'invalid', 'invalid config');
 
     /**
      * Core action: merge fields, encode, and emit based on the tier.
@@ -156,6 +116,33 @@ module.exports = function registerMavlinkBuild(RED) {
      * @returns {boolean} true when execution completed successfully
      */
     function execute(triggerMsg, done) {
+      /**
+       * Terminal failure for this execution: badge, status record, and the
+       * routed error — done(err) for a triggered run, node.error for a timer
+       * run, which has no done. Always returns false so callers can
+       * tail-return it.
+       */
+      function failRun(err, extra = {}) {
+        applyActionStatus(node, 'error', err.message);
+        node.send([null, makeStatusRecord({
+          result: 'failed',
+          reason: err.message,
+          message: messageName,
+          timestamp: Date.now(),
+          ...extra,
+        })]);
+        if (triggerMsg) {
+          done(new Error(`mavlink-build: ${err.message}`));
+        } else {
+          node.error(`mavlink-build: ${err.message}`, {});
+        }
+        return false;
+      }
+
+      if (!messageMeta) {
+        return failRun(new Error('dialect or message unresolved — fix the node config and redeploy'));
+      }
+
       // Merge config defaults with any per-message overrides from the trigger.
       const overrides =
         triggerMsg &&
@@ -171,20 +158,7 @@ module.exports = function registerMavlinkBuild(RED) {
       try {
         encodedFields = encodeMessage(messageMeta, rawFields, { enums: bundle.enums });
       } catch (err) {
-        const sr = makeStatusRecord({
-          result: 'failed',
-          reason: err.message,
-          message: messageName,
-          timestamp: Date.now(),
-        });
-        applyActionStatus(node, 'error', err.message);
-        node.send([null, sr]);
-        if (triggerMsg) {
-          done(new Error(`mavlink-build encode: ${err.message}`));
-        } else {
-          node.error(`mavlink-build encode: ${err.message}`, {});
-        }
-        return false;
+        return failRun(new Error(`encode: ${err.message}`));
       }
 
       const builtMessage = { name: messageName, fields: encodedFields };
@@ -213,28 +187,13 @@ module.exports = function registerMavlinkBuild(RED) {
       const identityId = (triggerMsg && triggerMsg.identityId) || undefined;
 
       // The queue send can throw synchronously (full Control band, unknown
-      // identity, disabled connection). Input-triggered failures go through the
-      // handler's Catch path; timer-triggered failures have no input `done`, so
-      // they use the legacy node.error path rather than escaping.
+      // identity, disabled connection). A Send with no Connection never gets
+      // here — its dialect resolves *through* the Connection, so it was
+      // already refused above as unresolved config.
       try {
         connectionNode.send(builtMessage, { band, target, identityId });
       } catch (err) {
-        const sr = makeStatusRecord({
-          result: 'failed',
-          reason: err.message,
-          message: messageName,
-          tier: TIER.SEND,
-          band,
-          timestamp: Date.now(),
-        });
-        applyActionStatus(node, 'error', err.message);
-        node.send([null, sr]);
-        if (triggerMsg) {
-          done(new Error(`mavlink-build send: ${err.message}`));
-        } else {
-          node.error(`mavlink-build send: ${err.message}`, {});
-        }
-        return false;
+        return failRun(new Error(`send: ${err.message}`), { tier: TIER.SEND, band });
       }
 
       // Track achieved rate.

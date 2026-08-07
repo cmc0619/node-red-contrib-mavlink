@@ -24,7 +24,7 @@ module.exports = function registerMavlinkMove(RED) {
     let stream = null;
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, delivery, connAtDeploy);
+    applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
 
     node.on('input', (msg, send, done) => {
       try {

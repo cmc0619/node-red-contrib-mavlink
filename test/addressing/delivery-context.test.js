@@ -99,7 +99,7 @@ test('applyConnectionStatus badges a wire tier whose Connection did not resolve'
   const statuses = [];
   const node = { status: (s) => statuses.push(s) };
 
-  applyConnectionStatus(node, 'confirm', null);
+  applyConnectionStatus(node, true, null);
   assert.equal(statuses[0].fill, 'red');
   assert.equal(statuses[0].shape, 'ring');
   assert.equal(statuses[0].text, 'invalid config');
@@ -113,9 +113,9 @@ test('applyConnectionStatus clears when the config resolves — both halves', ()
   const statuses = [];
   const node = { status: (s) => statuses.push(s) };
 
-  applyConnectionStatus(node, 'confirm', { id: 'conn' });
+  applyConnectionStatus(node, true, { id: 'conn' });
   assert.deepEqual(statuses[0], {}, 'a resolved Connection clears');
 
-  applyConnectionStatus(node, 'build', null);
-  assert.deepEqual(statuses[1], {}, 'Build needs no Connection, so nothing to report');
+  applyConnectionStatus(node, false, null);
+  assert.deepEqual(statuses[1], {}, 'a config that needs no Connection has nothing to report');
 });

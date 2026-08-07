@@ -135,7 +135,7 @@ module.exports = function registerMavlinkCommand(RED) {
     const requiresConfirmation = preset ? preset.requiresConfirmation : false;
 
     const connNode = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, config.delivery, connNode);
+    applyConnectionStatus(node, config.delivery !== 'build', connNode);
 
     const delivery = config.delivery;
 

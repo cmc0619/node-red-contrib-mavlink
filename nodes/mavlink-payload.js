@@ -57,7 +57,7 @@ module.exports = function registerMavlinkPayload(RED) {
     const maxRetries = config.maxRetries === '' ? DEFAULT_MAX_RETRIES : Number(config.maxRetries);
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, delivery, connAtDeploy);
+    applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
 
     function cancelWaiter() {
       if (activeWaiter) {

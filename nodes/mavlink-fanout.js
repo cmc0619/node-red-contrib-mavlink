@@ -2,23 +2,21 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
+const { applyConnectionStatus } = require('../lib/addressing');
 const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
 
 module.exports = function registerMavlinkFanout(RED) {
   function MavlinkFanoutNode(config) {
     RED.nodes.createNode(this, config);
     const node = this;
-    const connectionNode = config.connection ? RED.nodes.getNode(config.connection) : null;
+    const connectionNode = RED.nodes.getNode(config.connection);
 
     // Build + explicit list resolves without a peer table (§6 exception): the
     // sysids are known at deploy time. All other combinations — including
     // build+all and build+filter — still need the live peer table.
     const cfgIsBuildList =
       config.delivery === 'build' && config.selectionMode === 'list';
-
-    if (!cfgIsBuildList && (!connectionNode || !connectionNode.peerTable)) {
-      delivery.applyActionStatus(node, 'invalid', 'invalid config');
-    }
+    applyConnectionStatus(node, !cfgIsBuildList, connectionNode);
 
     // Abort-on-close discipline: a redeploy aborts every run in flight and
     // waits for each to unwind. Rationale lives with delivery.inFlightTracker.
@@ -36,7 +34,7 @@ module.exports = function registerMavlinkFanout(RED) {
         const listSelected = (selection.mode || 'all') === 'list' || Array.isArray(opts.targets);
 
         let effectiveConnection = connectionNode;
-        if (!connectionNode || !connectionNode.peerTable) {
+        if (!connectionNode) {
           if (effectiveDelivery === 'build' && listSelected) {
             // No connection needed: replicate for the explicit sysid list
             // without consulting a live peer table (§6 Fan-out exception).
