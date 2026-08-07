@@ -98,7 +98,7 @@ module.exports = function registerMavlinkConnection(RED) {
     // Node-RED restarts. Release on the way out instead.
     function releaseClaims() {
       for (const idNode of node._identityNodes) {
-        if (idNode && idNode.releaseVehicleSysid) idNode.releaseVehicleSysid(node.id);
+        idNode.releaseVehicleSysid(node.id);
       }
     }
 
@@ -153,9 +153,7 @@ module.exports = function registerMavlinkConnection(RED) {
     });
 
     node.on('close', (done) => {
-      for (const idNode of node._identityNodes) {
-        if (idNode && idNode.releaseVehicleSysid) idNode.releaseVehicleSysid(node.id);
-      }
+      releaseClaims();
       node.connection.close(done);
     });
   }

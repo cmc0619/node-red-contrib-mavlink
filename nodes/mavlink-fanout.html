@@ -36,7 +36,17 @@
       vehicleType: { value: '' },
       firmwareFilter: { value: '' },
       armedFilter: { value: '' },
-      executionMode: { value: 'sequential' },
+      executionMode: {
+        value: 'sequential',
+        // Broadcast only pairs with the "All" selection, which Build cannot
+        // choose — the reshape below also resets a retained Broadcast, but a
+        // hand-set value must still red rather than deploy a node the runtime
+        // refuses on every message.
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr('#node-input-delivery', this.delivery) !== 'build') return true;
+          return v !== 'broadcast' || 'Broadcast needs the "All" selection, which Build cannot use';
+        },
+      },
       intervalMs: { value: 100, validate: RED.validators.number() },
       concurrency: {
         value: 1,
@@ -109,6 +119,16 @@
         $('#node-input-selectionMode option[value="all"], #node-input-selectionMode option[value="filter"]')
           .prop('disabled', d === 'build');
         $('#node-input-executionMode option[value="broadcast"]').prop('disabled', d === 'build');
+        // Disabling greys the option but keeps a retained value — a node
+        // switched from a Broadcast wire tier would save Build+Broadcast and
+        // refuse every message. Move it to the only mode Build supports.
+        if (d === 'build' && exec === 'broadcast') {
+          exec = 'sequential';
+          $('#node-input-executionMode').val(exec);
+        }
+        // Build never uses a Connection now (the list is the directory), so
+        // the picker hides like every other sender's does on Build (§6).
+        $('#row-fanout-connection').toggle(d !== 'build');
         $('#row-fanout-identity').toggle(d !== 'build');
         $('#row-fanout-sysids').toggle(sel === 'list');
         $('#row-fanout-typeFilter').toggle(sel === 'filter');
