@@ -84,15 +84,15 @@ module.exports = function registerMavlinkMove(RED) {
             // never stop it as a side effect of a failed replacement.
             // Payload overrides config (§6 runtime override of last resort);
             // the editor default guarantees config when the payload is silent.
-            const intervalMs = streamMs(payload.intervalMs, config.intervalMs, 'intervalMs', 1);
-            const ttlMs = streamMs(payload.ttlMs, config.ttlMs, 'ttlMs', 0);
+            const rateHz = streamValue(payload.rateHz, config.rateHz, 'rateHz', 0.1, 'Hz');
+            const ttlMs = streamValue(payload.ttlMs, config.ttlMs, 'ttlMs', 0, 'milliseconds');
             if (stream) stream.stop();
             stream = createMoveStream({
               connection: connectionNode,
               message,
               target,
               identityId,
-              intervalMs,
+              rateHz,
               ttlMs,
               // TTL expiry is the only stop the flow did not cause, so it is
               // the only one it cannot observe: without this the node would
@@ -162,17 +162,22 @@ function statusRecord(result, detail, extra = {}) {
  * Stream timing: config is editor-validated and trusted; a payload override is
  * runtime-boundary data and must refuse rather than misbehave silently — a NaN
  * ttl never satisfies the stream's `ttl > 0` expiry check (the stream runs
- * forever), and setInterval coerces a negative or NaN interval to ~1 ms or the
- * fallback. Minimum 0 keeps ttl 0 = "stream until replaced or closed";
- * an interval needs at least 1 ms to be a rate at all.
+ * forever), and setInterval coerces a NaN or out-of-range interval to ~1 ms.
+ * Minimum 0 keeps ttl 0 = "stream until replaced or closed". The rate minimum
+ * is 0.1 Hz: a rate must be positive to be a rate at all, and a near-zero rate
+ * is the same hazard in disguise — its 1000/rate interval overflows
+ * setInterval's 32-bit ceiling, which Node clamps to 1 ms, turning "almost
+ * never" into a 1000 Hz flood. One setpoint per 10 s is already far below any
+ * firmware's setpoint watchdog, so nothing real is excluded.
  *
- * @param {*} payloadValue  ms from msg.payload, blank = inherit config
- * @param {*} configValue   ms from the editor-validated config
+ * @param {*} payloadValue  value from msg.payload, blank = inherit config
+ * @param {*} configValue   value from the editor-validated config
  * @param {string} name     payload property name, for the error
- * @param {number} minimum  smallest valid ms value
+ * @param {number} minimum  smallest valid value
+ * @param {string} unit     unit name, for the error
  * @returns {number}
  */
-function streamMs(payloadValue, configValue, name, minimum) {
+function streamValue(payloadValue, configValue, name, minimum, unit) {
   if (isBlank(payloadValue)) {
     return Number(configValue);
   }
@@ -183,7 +188,7 @@ function streamMs(payloadValue, configValue, name, minimum) {
     : NaN;
   if (!Number.isFinite(n) || n < minimum) {
     throw new Error(
-      `payload.${name} must be a finite number of milliseconds >= ${minimum}, got ${JSON.stringify(payloadValue)}`
+      `payload.${name} must be a finite number of ${unit} >= ${minimum}, got ${JSON.stringify(payloadValue)}`
     );
   }
   return n;

@@ -217,7 +217,7 @@
     "alt": "",
     "yaw": "",
     "yawRate": "",
-    "intervalMs": 200,
+    "rateHz": 5,
     "ttlMs": 1500,
     "x": 660,
     "y": 220,

@@ -31,7 +31,7 @@ const ROW_IDS = [
   'row-move-aUp',
   'row-move-yaw',
   'row-move-yawRate',
-  'row-move-interval',
+  'row-move-rate',
   'row-move-ttl',
 ];
 
@@ -63,7 +63,7 @@ test('mavlink-move editor reshapes fields by mode, frame, and delivery (§6)', (
   assert.match(html, /usesPosition && isGlobalFrame/, 'global position fields gated on mode + frame');
   assert.match(html, /vNorth: usesVelocity/, 'velocity fields gated on mode');
   assert.match(html, /aNorth: usesAccel/, 'accel fields gated on mode');
-  assert.match(html, /delivery === 'stream'/, 'stream interval and TTL gated on delivery');
+  assert.match(html, /delivery === 'stream'/, 'stream rate and TTL gated on delivery');
 });
 
 test('mavlink-move declares the frame default and the acceleration validators', () => {

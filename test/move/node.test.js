@@ -340,7 +340,7 @@ test('mavlink-move blank payload frame inherits the configured frame, not LOCAL_
   assert.equal(sent[0].payload.name, 'SET_POSITION_TARGET_LOCAL_NED');
 });
 
-test('mavlink-move stream: payload intervalMs overrides config (§6 payload overrides values)', async () => {
+test('mavlink-move stream: payload rateHz overrides config (§6 payload overrides values)', async () => {
   const sends = [];
   const conn = {
     vehicle: {},
@@ -358,14 +358,14 @@ test('mavlink-move stream: payload intervalMs overrides config (§6 payload over
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
-    intervalMs: 60000,
+    rateHz: 0.1,
     ttlMs: 0,
   });
 
-  node.emit('input', { payload: { intervalMs: 5, ttlMs: 0 } }, () => {}, () => {});
+  node.emit('input', { payload: { rateHz: 200, ttlMs: 0 } }, () => {}, () => {});
 
-  // At the configured 60 s interval no re-send would arrive inside the
-  // deadline; the payload's 5 ms override must produce several.
+  // At the configured 0.1 Hz (one send per 10 s) no re-send would arrive
+  // inside the deadline; the payload's 200 Hz override must produce several.
   const deadline = Date.now() + 2000;
   while (sends.length < 3 && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -391,37 +391,40 @@ test('mavlink-move stream: malformed payload timing overrides refuse the input',
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
-    intervalMs: 100,
+    rateHz: 10,
     ttlMs: 1000,
   });
 
   // A NaN ttl would never satisfy the stream's `ttl > 0` expiry check (the
-  // stream runs forever); a negative interval reaches setInterval as ~1 ms.
-  // Both must fail the input instead.
+  // stream runs forever); a zero or near-zero rate makes the derived
+  // 1000/rate interval degenerate into a setInterval clamp flood. Both must
+  // fail the input instead.
   const bad = [
-    { payload: { ttlMs: 'forever' }, why: 'non-numeric ttl' },
-    { payload: { intervalMs: 'fast' }, why: 'non-numeric interval' },
-    { payload: { intervalMs: -5 }, why: 'negative interval' },
-    { payload: { intervalMs: 0 }, why: 'zero interval' },
-    { payload: { ttlMs: -1 }, why: 'negative ttl' },
-    // Bare Number() coercion would make these numeric: true → 1 ms flood,
-    // false/[] → 0. Only numbers and numeric strings are values.
-    { payload: { intervalMs: true }, why: 'boolean interval' },
-    { payload: { ttlMs: false }, why: 'boolean ttl' },
-    { payload: { intervalMs: [5] }, why: 'array interval' },
+    { payload: { ttlMs: 'forever' }, why: 'non-numeric ttl', rule: /milliseconds/ },
+    { payload: { rateHz: 'fast' }, why: 'non-numeric rate', rule: /Hz/ },
+    { payload: { rateHz: -5 }, why: 'negative rate', rule: /Hz/ },
+    { payload: { rateHz: 0 }, why: 'zero rate', rule: /Hz/ },
+    { payload: { rateHz: 0.05 }, why: 'below-minimum rate', rule: /Hz/ },
+    { payload: { ttlMs: -1 }, why: 'negative ttl', rule: /milliseconds/ },
+    // Bare Number() coercion would make these numeric: true → a 1 Hz stream
+    // nobody asked for, false/[] → 0. Only numbers and numeric strings are
+    // values.
+    { payload: { rateHz: true }, why: 'boolean rate', rule: /Hz/ },
+    { payload: { ttlMs: false }, why: 'boolean ttl', rule: /milliseconds/ },
+    { payload: { rateHz: [5] }, why: 'array rate', rule: /Hz/ },
   ];
-  for (const { payload, why } of bad) {
+  for (const { payload, why, rule } of bad) {
     let sent;
     let doneError;
     node.emit('input', { payload }, (m) => { sent = m; }, (err) => { doneError = err; });
     assert.equal(sent[0], null, `${why} must not start a stream`);
     assert.equal(sent[1].result, 'failed', `${why} fails the input`);
-    assert.match(doneError.message, /milliseconds/, `${why} names the timing rule`);
+    assert.match(doneError.message, rule, `${why} names the timing rule`);
   }
 
   // Blank still inherits config, and an explicit payload ttl of 0 is a value
   // ("stream until replaced or closed"), not a malformed override.
-  for (const payload of [{}, { intervalMs: '', ttlMs: null }, { ttlMs: 0 }]) {
+  for (const payload of [{}, { rateHz: '', ttlMs: null }, { ttlMs: 0 }]) {
     let sent;
     let doneError;
     node.emit('input', { payload }, (m) => { sent = m; }, (err) => { doneError = err; });
@@ -445,7 +448,7 @@ test('mavlink-move stream: TTL expiry emits an expired message the flow can chai
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
-    intervalMs: 5,
+    rateHz: 200,
     ttlMs: 20,
   });
 
@@ -489,7 +492,7 @@ test('mavlink-move stream: a whitespace ttl inherits the configured TTL, never "
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
-    intervalMs: 5,
+    rateHz: 200,
     ttlMs: 20,
   });
 
@@ -524,7 +527,7 @@ test('mavlink-move stream: a replaced or closed stream expires silently', async 
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
-    intervalMs: 5,
+    rateHz: 200,
     ttlMs: 0,
   });
 
@@ -559,7 +562,7 @@ test('mavlink-move stream: rejected timing override leaves the active stream run
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
-    intervalMs: 5,
+    rateHz: 200,
     ttlMs: 0,
   });
 
