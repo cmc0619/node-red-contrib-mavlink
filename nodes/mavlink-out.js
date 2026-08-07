@@ -36,6 +36,7 @@ const {
   makeStatusRecord,
   shouldSuppress,
   applyActionStatus,
+  failInput,
 } = require('../lib/delivery');
 const { applyConnectionStatus } = require('../lib/addressing');
 
@@ -89,13 +90,7 @@ module.exports = function registerMavlinkOut(RED) {
         })]);
         done();
       } catch (err) {
-        applyActionStatus(node, 'error', err.message);
-        send([null, makeStatusRecord({
-          result: 'failed',
-          reason: err.message,
-          timestamp: Date.now(),
-        })]);
-        done(new Error(`mavlink-out: ${err.message}`));
+        failInput(node, send, err, done);
       }
     });
   }

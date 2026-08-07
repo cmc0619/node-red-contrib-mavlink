@@ -125,8 +125,9 @@ module.exports = function registerMavlinkBuild(RED) {
       function failRun(err, extra = {}) {
         applyActionStatus(node, 'error', err.message);
         node.send([null, makeStatusRecord({
+          node: node.type,
           result: 'failed',
-          reason: err.message,
+          detail: err.message,
           message: messageName,
           timestamp: Date.now(),
           ...extra,

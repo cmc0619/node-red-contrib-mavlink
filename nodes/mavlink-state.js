@@ -6,6 +6,7 @@ const {
   makeStatusRecord,
   applyActionStatus,
   shouldSuppress,
+  failInput,
 } = require('../lib/delivery');
 
 module.exports = function registerMavlinkState(RED) {
@@ -51,13 +52,7 @@ module.exports = function registerMavlinkState(RED) {
         ]);
         done();
       } catch (err) {
-        applyActionStatus(node, 'error', err.message);
-        send([null, makeStatusRecord({
-          node: 'mavlink-state',
-          result: 'failed',
-          detail: err.message,
-        })]);
-        done(err);
+        failInput(node, send, err, done);
       }
     });
 

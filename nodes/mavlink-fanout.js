@@ -47,7 +47,7 @@ module.exports = function registerMavlinkFanout(RED) {
             const rule = effectiveDelivery === 'build'
               ? `build+${selection.mode || 'all'} selection requires a Connection — ` +
                 'the live peer table is the only place that selection can resolve'
-              : 'requires a Connection with a peer table';
+              : 'requires a Connection';
             throw new Error(`mavlink-fanout: ${rule}`);
           }
         }
@@ -104,16 +104,7 @@ module.exports = function registerMavlinkFanout(RED) {
           done();
         }
       } catch (err) {
-        const record = delivery.makeStatusRecord({
-          node: 'mavlink-fanout',
-          result: 'failed',
-          success: false,
-          continue: false,
-          detail: err.message,
-        });
-        delivery.applyActionStatus(node, 'error', err.message);
-        send([null, record]);
-        done(err);
+        delivery.failInput(node, send, err, done);
       }
     });
 

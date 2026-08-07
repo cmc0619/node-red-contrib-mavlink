@@ -1009,7 +1009,7 @@ test('mavlink-build Build tier: codec error emits error status on output 1', () 
   const [out0, out1] = node._sends[0];
   assert.equal(out0, null, 'output 0 must not fire on codec error');
   assert.equal(out1.result, 'failed');
-  assert.ok(typeof out1.reason === 'string');
+  assert.ok(typeof out1.detail === 'string');
 });
 
 test('mavlink-build: close stops the repeat timer', () => {

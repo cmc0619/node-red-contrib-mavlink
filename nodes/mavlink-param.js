@@ -38,6 +38,7 @@ const {
   makeStatusRecord,
   shouldSuppress,
   applyActionStatus,
+  failInput,
 } = require('../lib/delivery');
 const {
   resolveDeliveryContext,
@@ -303,7 +304,7 @@ module.exports = function registerMavlinkParam(RED) {
 
         pending = { unsubscribe, timer, done, gen: myGen };
       } catch (err) {
-        fail(node, send, err, msg, done);
+        failInput(node, send, err, done);
       }
     });
 
@@ -389,12 +390,6 @@ function timeoutResult(node, send, detail, msg, done) {
   applyActionStatus(node, 'error', detail);
   send([null, statusRecord('timed-out', detail)]);
   done(new Error(`mavlink-param: ${detail}`));
-}
-
-function fail(node, send, err, msg, done) {
-  applyActionStatus(node, 'error', err.message);
-  send([null, statusRecord('failed', err.message)]);
-  done(err);
 }
 
 /**

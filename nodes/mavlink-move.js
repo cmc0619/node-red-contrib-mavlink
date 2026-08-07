@@ -15,6 +15,7 @@ const {
   shouldSuppress,
   makeStatusRecord,
   applyActionStatus,
+  failInput,
 } = require('../lib/delivery');
 
 module.exports = function registerMavlinkMove(RED) {
@@ -110,7 +111,7 @@ module.exports = function registerMavlinkMove(RED) {
         }
         done();
       } catch (err) {
-        fail(node, send, err, msg, done);
+        failInput(node, send, err, done);
       }
     });
 
@@ -151,12 +152,6 @@ function completeResult(node, send, result, action, message) {
 function completeExpiry(node, message) {
   applyActionStatus(node, 'ok', 'stream expired');
   node.send([null, statusRecord('succeeded', 'expired', { message })]);
-}
-
-function fail(node, send, err, msg, done) {
-  applyActionStatus(node, 'error', err.message);
-  send([null, statusRecord('failed', err.message)]);
-  done(err);
 }
 
 function statusRecord(result, detail, extra = {}) {

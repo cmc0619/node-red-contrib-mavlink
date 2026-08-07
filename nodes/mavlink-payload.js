@@ -21,6 +21,7 @@ const {
   shouldSuppress,
   makeStatusRecord,
   applyActionStatus,
+  failInput,
 } = require('../lib/delivery');
 const { loadMetadata } = require('../lib/metadata/load');
 const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
@@ -183,7 +184,7 @@ module.exports = function registerMavlinkPayload(RED) {
             })
             .catch((err) => {
               if (activeWaiter === waiter) activeWaiter = null;
-              fail(node, send, err, msg, done);
+              failInput(node, send, err, done);
             });
         }
 
@@ -202,7 +203,7 @@ module.exports = function registerMavlinkPayload(RED) {
         completeResult(node, send, 'succeeded', detail, built);
         done();
       } catch (err) {
-        fail(node, send, err, msg, done);
+        failInput(node, send, err, done);
       }
     });
 
@@ -348,12 +349,6 @@ function completeResult(node, send, result, detail, built) {
     { payload: { result, message: built.message } },
     statusRecord(result, detail, { confirmation: built.confirmation }),
   ]);
-}
-
-function fail(node, send, err, msg, done) {
-  applyActionStatus(node, 'error', err.message);
-  send([null, statusRecord('failed', err.message)]);
-  done(err);
 }
 
 function statusRecord(result, detail, extra = {}) {

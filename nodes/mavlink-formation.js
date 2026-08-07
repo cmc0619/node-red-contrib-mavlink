@@ -145,16 +145,7 @@ module.exports = function registerMavlinkFormation(RED) {
           done();
         }
       } catch (err) {
-        const record = delivery.makeStatusRecord({
-          node: 'mavlink-formation',
-          result: 'failed',
-          success: false,
-          continue: false,
-          detail: err.message,
-        });
-        delivery.applyActionStatus(node, 'error', err.message);
-        send([null, record]);
-        done(err);
+        delivery.failInput(node, send, err, done);
       }
     });
 
