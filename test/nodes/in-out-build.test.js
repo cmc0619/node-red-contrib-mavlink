@@ -955,7 +955,12 @@ test('mavlink-build: malformed fields JSON marks invalid config instead of abort
   assert.equal(node._status && node._status.text, 'invalid config');
 });
 
-test('mavlink-build Send tier: falls back to Build when no connection configured', () => {
+test('mavlink-build Send tier: a missing Connection is a misconfiguration, not a Build', () => {
+  // Was: "falls back to Build when no connection configured", asserting that a
+  // Send with no Connection emits a built message on output 0 and reports
+  // `built`. That is the silent degrade §9 forbids everywhere else — it reports
+  // success for something that was never transmitted, and it invents a tier the
+  // operator did not choose. The clamp that produced it is gone.
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
   require('../../nodes/mavlink-build')(RED);
@@ -969,13 +974,8 @@ test('mavlink-build Send tier: falls back to Build when no connection configured
     fields: JSON.stringify({ type: 6, autopilot: 3 }),
   });
 
-  node._input({ payload: {} });
-
-  // Should have built (not failed), because the effective tier is Build.
-  assert.equal(node._sends.length, 1);
-  const [out0, out1] = node._sends[0];
-  assert.ok(out0, 'output 0 must fire');
-  assert.equal(out1.result, 'built', 'effective tier is Build when no connection');
+  assert.equal(node._status && node._status.fill, 'red', 'says so at deploy (§6)');
+  assert.equal(node._sends.length, 0, 'and emits nothing it did not send');
 });
 
 test('mavlink-build Build tier: codec error emits error status on output 1', () => {

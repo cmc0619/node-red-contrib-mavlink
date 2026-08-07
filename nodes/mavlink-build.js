@@ -56,10 +56,14 @@ module.exports = function registerMavlinkBuild(RED) {
 
     // Connection is optional — needed for Send tier.
     const connectionNode = config.connection ? RED.nodes.getNode(config.connection) : null;
-    const hasConnection = connectionNode && typeof connectionNode.send === 'function';
 
-    // Effective tier: clamp to Build when no connection is configured.
-    const tier = (hasConnection && config.tier !== TIER.BUILD) ? (config.tier || TIER.SEND) : TIER.BUILD;
+    // The operator's tier, as configured. A missing Connection does not mean
+    // they chose Build — silently rewriting a chosen Send into a Build emits a
+    // constructed message on output 0 and reports success for something that
+    // was never transmitted, which is the degrade §9 forbids everywhere else.
+    // A Send with no Connection is a misconfiguration; it says so at deploy and
+    // fails loud per message.
+    const tier = config.tier || TIER.SEND;
 
     const messageName = config.messageName || 'HEARTBEAT';
     const defaultBand = config.band !== undefined && config.band !== null && config.band !== ''
@@ -138,11 +142,6 @@ module.exports = function registerMavlinkBuild(RED) {
       return;
     }
 
-    if (!hasConnection && tier !== TIER.BUILD) {
-      node.status({ fill: 'red', shape: 'ring', text: 'no connection for Send' });
-      return;
-    }
-
     // No idle "ready" badge — the label already names the message (§6: action
     // nodes report last activity; pre-trigger status is only for misconfig).
     //
@@ -153,7 +152,10 @@ module.exports = function registerMavlinkBuild(RED) {
     // editor just replays whatever status events arrive. So a node that was
     // misconfigured, then fixed and redeployed, would keep displaying the dead
     // badge until a message happened to flow through. Reaching here means the
-    // config resolved, so say so once.
+    // config resolved, so say so once. A wire tier reaching here necessarily
+    // has a working Connection — the dialect comes from its bound profile, so
+    // the branch above already bailed otherwise — which is why this is a plain
+    // clear rather than the shared applyConnectionStatus the senders use.
     node.status({});
 
     /**
