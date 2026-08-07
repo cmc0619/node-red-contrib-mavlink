@@ -768,6 +768,22 @@ test('mavlink-build: marks invalid config when vehicle is missing', () => {
   assert.equal(node._status && node._status.fill, 'red');
 });
 
+test('mavlink-build: a resolvable config clears any stale badge at deploy', () => {
+  // The runtime publishes a status clear only when a node is *removed*
+  // (@node-red/runtime flows/Flow.js:395-399), and the editor simply replays
+  // whatever status events arrive. A node that was misconfigured, then fixed
+  // and redeployed, therefore kept showing the dead red badge until a message
+  // happened to flow through. Constructing successfully must say so.
+  const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ vehicle: 'v1' });
+  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', tier: 'build' });
+
+  assert.deepEqual(node._status, {}, 'a good config clears rather than badges');
+});
+
 test('mavlink-build: defaults empty messageName to HEARTBEAT', () => {
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
