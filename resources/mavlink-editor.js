@@ -1297,15 +1297,15 @@
         validate: function (v, _opt) {
           if (currentMode(this) === 'build') return true;
           // '_ADD_' is what the platform's "none" option carries until save
-          // rewrites it to ''; treat both as empty so the field reds while the
-          // dialog is still open rather than only after Done.
-          if (!v || v === '_ADD_') return 'a Connection is required on this tier';
+          // rewrites it to ''; treat it as blank too, so the field reds while
+          // the dialog is still open rather than only after Done.
+          if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required on this tier';
           // Declaring validate at all suppresses Node-RED's own config-node
           // reference check, so restate it here — without this, a deleted or
           // broken Connection stops being reported.
           var cfg = RED.nodes.node(v);
-          if (!cfg) return 'the selected Connection no longer exists';
-          if (cfg.valid === false) return 'the selected Connection is not properly configured';
+          if (!cfg) return 'no longer exists — reselect a Connection';
+          if (cfg.valid === false) return 'is not properly configured';
           return true;
         },
       },
