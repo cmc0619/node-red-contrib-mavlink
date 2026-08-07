@@ -10,7 +10,7 @@ const {
   valueFrom,
 } = require('../lib/move');
 const { BAND } = require('../lib/connection/bands');
-const { firstDefined, resolveDeliveryContext } = require('../lib/addressing');
+const { firstDefined, resolveDeliveryContext, applyConnectionStatus } = require('../lib/addressing');
 const {
   shouldSuppress,
   makeStatusRecord,
@@ -24,6 +24,7 @@ module.exports = function registerMavlinkMove(RED) {
     let stream = null;
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
+    applyConnectionStatus(node, delivery, connAtDeploy);
 
     node.on('input', (msg, send, done) => {
       try {
