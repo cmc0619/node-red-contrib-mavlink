@@ -31,11 +31,16 @@ test('Build dialect + vehicle defaults come from the shared Build-tier helper', 
   );
 });
 
-test('Build connection default declares type mavlink-connection', () => {
-  assert.match(
-    html,
-    /connection:\s*\{\s*value:\s*''\s*,\s*type:\s*'mavlink-connection'/,
-    'defaults.connection.type must be mavlink-connection'
+test('Build takes its connection descriptor from the shared factory', () => {
+  // The descriptor (type, and the required-on-wire-tiers rule) now comes from
+  // buildTierDialectDefaults, which is exercised directly in
+  // mavlink-editor-resource.test.js. The node must not redeclare it — a local
+  // copy would win the Object.assign and silently drop the shared reference
+  // check.
+  assert.match(html, /buildTierDialectDefaults\(\{ modeField: 'tier' \}\)/);
+  assert.ok(
+    !/connection:\s*\{/.test(html),
+    'connection must not be redeclared locally'
   );
 });
 
@@ -135,10 +140,14 @@ test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)',
   );
 });
 
-test('Build connection stays required on wire tiers only (local validator)', () => {
-  // Connection is the inverse of the shared dialect rule — required on wire
-  // tiers, hidden on Build — so it keeps its own validator in the node.
-  assert.match(html, /if \(tier !== ['"]build['"]\) return !!v/, 'Connection is required on wire tiers');
+test('Build no longer hand-rolls the wire-tier connection rule', () => {
+  // Was `if (tier !== 'build') return !!v` inline. That form also disabled
+  // Node-RED's config-node reference check, so a deleted Connection stopped
+  // being reported on this node alone; the shared descriptor restates it.
+  assert.ok(
+    !/if \(tier !== ['"]build['"]\) return !!v/.test(html),
+    'the local connection validator must be gone'
+  );
 });
 
 test('Build dialect select uses the shared helper and includes __vehicle escape option', () => {

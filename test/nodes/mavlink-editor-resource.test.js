@@ -262,7 +262,7 @@ test('currentCatalogQuery prefers delivery over tier when both exist', () => {
 test('buildTierDialectDefaults returns dialect + vehicle descriptors (no firmware by default)', () => {
   const { RED } = loadResource();
   const defaults = RED.mavlink.buildTierDialectDefaults();
-  assert.deepEqual(Object.keys(defaults), ['dialect', 'vehicle']);
+  assert.deepEqual(Object.keys(defaults), ['dialect', 'connection', 'vehicle']);
   assert.equal(defaults.dialect.value, '');
   assert.equal(defaults.vehicle.type, 'mavlink-vehicle');
   assert.equal(defaults.vehicle.value, '');
@@ -288,7 +288,7 @@ test('buildTierDialectDefaults vehicle is required only for Build + __vehicle', 
 test('buildTierDialectDefaults withFirmware adds the Firmware XOR validator (§6)', () => {
   const { RED } = loadResource();
   const defaults = RED.mavlink.buildTierDialectDefaults({ withFirmware: true });
-  assert.deepEqual(Object.keys(defaults), ['dialect', 'vehicle', 'firmware']);
+  assert.deepEqual(Object.keys(defaults), ['dialect', 'connection', 'vehicle', 'firmware']);
   const { firmware } = defaults;
   // Concrete Build dialect ⇒ firmware required.
   assert.equal(firmware.validate.call({ delivery: 'build', dialect: 'common' }, ''), false);
@@ -1095,4 +1095,57 @@ test('fillEnumSelect: preferLive decides which value survives a refill', () => {
   assert.equal(refill('', 2, true), '2');
   // Nothing saved either: the first entry, as before.
   assert.equal(refill('', undefined, true), '1');
+});
+
+// ── shared Connection descriptor ─────────────────────────────────────────────
+
+test('buildTierDialectDefaults connection is required on wire tiers, never on Build', () => {
+  const { RED } = loadResource({}, { live: { valid: true } });
+  const { connection } = RED.mavlink.buildTierDialectDefaults();
+
+  // Build sends nothing, so a blank Connection is the correct configuration —
+  // this is the false positive the bare `{value, type}` declaration produced.
+  assert.equal(connection.validate.call({ delivery: 'build' }, ''), true);
+  assert.equal(connection.validate.call({ delivery: 'build' }, '_ADD_'), true);
+
+  // Wire tiers require one. The screenshot case: Connection set to "none" on a
+  // send tier must stay flagged.
+  assert.equal(typeof connection.validate.call({ delivery: 'confirm' }, ''), 'string');
+  assert.equal(typeof connection.validate.call({ delivery: 'confirm' }, '_ADD_'), 'string');
+  assert.equal(connection.validate.call({ delivery: 'confirm' }, 'live'), true);
+});
+
+test('buildTierDialectDefaults connection restates the config-node reference check', () => {
+  // Declaring any validate suppresses Node-RED's built-in reference check, so
+  // the descriptor has to carry it or a deleted Connection stops being flagged.
+  const { RED } = loadResource({}, { live: { valid: true }, broken: { valid: false } });
+  const { connection } = RED.mavlink.buildTierDialectDefaults();
+
+  assert.equal(connection.validate.call({ delivery: 'send' }, 'live'), true);
+  assert.match(connection.validate.call({ delivery: 'send' }, 'deleted'), /no longer exists/);
+  assert.match(connection.validate.call({ delivery: 'send' }, 'broken'), /not properly configured/);
+});
+
+test('buildTierDialectDefaults connection validator declares (v, opt)', () => {
+  // Arity 2 is what makes Node-RED treat a returned string as an invalid
+  // reason; a one-arg version coerces it with !! and every failure reads as
+  // valid (§14 "One-arg editor validators treat an error string as valid").
+  const { RED } = loadResource();
+  assert.equal(RED.mavlink.buildTierDialectDefaults().connection.validate.length, 2);
+});
+
+test('buildTierDialectDefaults connection follows the Build node tier field', () => {
+  const { RED } = loadResource();
+  const { connection } = RED.mavlink.buildTierDialectDefaults({ modeField: 'tier' });
+  assert.equal(connection.validate.call({ tier: 'build' }, ''), true);
+  assert.equal(typeof connection.validate.call({ tier: 'send' }, ''), 'string');
+});
+
+test('buildTierDialectDefaults vehicle carries no required key (it would skip validate)', () => {
+  // `required: false` beside a validate short-circuits an empty value to valid
+  // before the validator runs, which left the Build + __vehicle rule dead.
+  const { RED } = loadResource();
+  const { vehicle, connection } = RED.mavlink.buildTierDialectDefaults();
+  assert.equal(Object.prototype.hasOwnProperty.call(vehicle, 'required'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(connection, 'required'), false);
 });
