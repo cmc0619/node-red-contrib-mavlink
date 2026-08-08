@@ -91,6 +91,18 @@ Force-disarm alone does **not** reset AGL; without the fleet restart, a prior
 takeoff leaves sysid 1 airborne and the next `NAV_TAKEOFF` returns
 `MAV_RESULT_DENIED` (resultCode 4).
 
+### Targeted Move measurements (#175 / #179)
+
+```bash
+# AP :14550 + PX4 :14560; writes under /tmp/nrc-move-179-*/ (mode 0600).
+# Restarts are your job — free those UDP binds first (stop any suite run).
+node sitl/measure-move-179.js
+```
+
+Probes stream-replace halt visibility, AP yaw-only, GUID_TIMEOUT one-shot brake,
+PX4 OFFBOARD rate/silence (`COM_OF_LOSS_T`), and yaw+yaw_rate on both stacks.
+Findings land in `DESIGN.md` §14 — do not commit the JSON.
+
 ### Post results (no PR)
 
 ```bash

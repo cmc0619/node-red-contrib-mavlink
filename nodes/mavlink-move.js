@@ -78,8 +78,7 @@ module.exports = function registerMavlinkMove(RED) {
         // Known-unsupported firmware combos still send, but never silently
         // (§14: setpoints carry no ack, so this warning is all the feedback
         // the operator will get). Firmware comes from the connection's bound
-        // Vehicle Profile; every measured advisory is PX4-specific, so Build
-        // tier — which has no connection — never warns.
+        // Vehicle Profile; Build tier — which has no connection — never warns.
         const advisory = advisoryFor({
           mode: moveInput.mode,
           frame: moveInput.frame,
