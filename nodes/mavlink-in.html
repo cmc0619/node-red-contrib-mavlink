@@ -234,9 +234,14 @@
   leave the list empty and the ids blank to match all traffic on the connection.</p>
   <p>The status badge shows <code>&lt;count&gt; &lt;MESSAGE&gt;</code> — messages
   delivered since deploy, then the name of the one that just arrived. The count
-  is node-wide, not per message name, and resets on deploy. It is written at
-  most four times a second, so on a fast stream it jumps rather than counting
-  every frame; the number is still exact.</p>
+  is node-wide, not per message name, and resets on deploy.</p>
+  <p>The badge is <i>sampled</i>, not a running total: it is written at most
+  four times a second, so on a stream faster than that it jumps rather than
+  ticking every frame, and when traffic stops it keeps whatever it showed at
+  the last write — up to a quarter second of deliveries behind. Every number
+  shown was a true count when written; the one left on screen is a floor, not
+  the final total. Watch it move, and use <code>msg</code> counts downstream
+  if you need an exact figure.</p>
   <p><b>Changed only</b>: only forward a message when its field values differ
   from the previous delivery for the same (message, sysid, compid) tuple.
   <b>Compare fields</b> restricts the comparison to the listed fields (comma

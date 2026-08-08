@@ -300,6 +300,27 @@ test('mavlink-in: emits msg on matching inbound decoded message', () => {
   assert.equal(out.trusted, true);
 });
 
+/**
+ * Run `fn` with `Date.now` under test control, restoring it afterwards.
+ *
+ * The badge throttle is purely time-based, so a test that leaves the host
+ * clock running is flaky by construction: a slow runner crossing a
+ * STATUS_MIN_INTERVAL_MS boundary mid-loop produces an extra, entirely valid
+ * status write and fails the assertion. `advance(ms)` steps the clock instead.
+ *
+ * @param {(advance: (ms: number) => void) => void} fn
+ */
+function withClock(fn) {
+  const realNow = Date.now;
+  let t = realNow();
+  Date.now = () => t;
+  try {
+    fn((ms) => { t += ms; });
+  } finally {
+    Date.now = realNow;
+  }
+}
+
 test('mavlink-in: the badge counts deliveries, count first so it survives the cap', () => {
   const RED = makeRED();
   const { stub } = makeConnectionStub();
@@ -311,17 +332,12 @@ test('mavlink-in: the badge counts deliveries, count first so it survives the ca
 
   assert.deepEqual(node._status, { fill: 'grey', shape: 'ring', text: 'waiting' });
 
-  // Drive the clock: the badge is throttled unconditionally, so every
-  // assertion below has to step past STATUS_MIN_INTERVAL_MS to see a write.
-  const realNow = Date.now;
-  let clock = realNow();
-  Date.now = () => clock;
-  const deliver = (name) => {
-    clock += 300;
-    stub._deliver({ name, sysid: 1, compid: 1, fields: {}, trusted: true });
-  };
+  withClock((advance) => {
+    const deliver = (name) => {
+      advance(300);
+      stub._deliver({ name, sysid: 1, compid: 1, fields: {}, trusted: true });
+    };
 
-  try {
     deliver('HEARTBEAT');
     assert.equal(node._status.text, '1 HEARTBEAT');
     assert.equal(node._status.fill, 'green');
@@ -338,9 +354,7 @@ test('mavlink-in: the badge counts deliveries, count first so it survives the ca
     deliver('GLOBAL_POSITION_INT');
     assert.ok(node._status.text.startsWith('4 '), `count leads: ${node._status.text}`);
     assert.ok(node._status.text.length <= 24, `badge capped: ${node._status.text}`);
-  } finally {
-    Date.now = realNow;
-  }
+  });
 });
 
 test('mavlink-in: alternating message names do not bypass the badge throttle', () => {
@@ -360,22 +374,26 @@ test('mavlink-in: alternating message names do not bypass the badge throttle', (
   const writes = [];
   node.status = (s) => { node._status = s; writes.push(s.text); };
 
-  for (let i = 0; i < 200; i++) {
-    stub._deliver({
-      name: i % 2 ? 'ATTITUDE' : 'GLOBAL_POSITION_INT',
-      sysid: 1, compid: 1, fields: {}, trusted: true,
-    });
-  }
+  withClock(() => {
+    for (let i = 0; i < 200; i++) {
+      stub._deliver({
+        name: i % 2 ? 'ATTITUDE' : 'GLOBAL_POSITION_INT',
+        sysid: 1, compid: 1, fields: {}, trusted: true,
+      });
+    }
+  });
 
   assert.equal(node._sends.length, 200, 'every message is still delivered');
-  assert.ok(writes.length <= 2, `alternating names stay throttled: ${writes.length} writes`);
+  // The clock never moves, so exactly one write is correct: the first, which
+  // paints immediately. Before the fix this was 200.
+  assert.equal(writes.length, 1, `alternating names stay throttled: ${writes.length} writes`);
 });
 
 test('mavlink-in: a same-name burst is throttled, and the count still counts it', () => {
-  // The count changes on every delivery, so throttling on rendered text would
-  // never fire — a 50 Hz stream would rewrite the badge 50×/s. The throttle
-  // keys on the message name instead; deliveries are still counted while it
-  // holds, so the next badge write jumps to the true total.
+  // The throttle is time-only — no exemption for a changed name or changed
+  // badge text, both of which would differ on nearly every delivery. Frames
+  // arriving inside the window are still counted, so the next write shows the
+  // true total rather than undercounting.
   const RED = makeRED();
   const { stub } = makeConnectionStub();
   RED.nodes._register('conn-1', stub);
@@ -387,13 +405,18 @@ test('mavlink-in: a same-name burst is throttled, and the count still counts it'
   const writes = [];
   node.status = (s) => { node._status = s; writes.push(s.text); };
 
-  for (let i = 0; i < 40; i++) {
-    stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
-  }
+  withClock((advance) => {
+    for (let i = 0; i < 40; i++) {
+      stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
+    }
+    assert.equal(node._sends.length, 40, 'every message is still delivered');
+    assert.deepEqual(writes, ['1 ATTITUDE'], 'one write for the whole burst');
 
-  assert.equal(node._sends.length, 40, 'every message is still delivered');
-  assert.ok(writes.length < 40, `badge writes throttled: ${writes.length} for 40 messages`);
-  assert.equal(writes[0], '1 ATTITUDE', 'first delivery paints immediately');
+    // Past the interval the badge catches up to the true total, not to 2.
+    advance(300);
+    stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
+    assert.equal(node._status.text, '41 ATTITUDE');
+  });
 });
 
 test('mavlink-in: message filter rejects non-matching message names', () => {
