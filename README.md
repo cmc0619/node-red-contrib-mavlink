@@ -38,12 +38,17 @@ Requires Node.js 20+ and Node-RED 4.0+.
 | `mavlink-payload` | Camera, gimbal, servo, release |
 | `mavlink-state` | Peer table reads and transitions |
 | `mavlink-mission` | Upload, download, or clear mission/fence/rally |
-| `mavlink-fanout` | Fan-out one action across selected vehicles |
+| `mavlink-fanout` | Fan-out one action across selected vehicles, with optional per-member offsets |
+| `mavlink-formation` | Position a group into a geometric formation around an anchor |
 
 ## Examples
 
-Importable flows ship with the package. In the Node-RED editor:
-**Import → Examples → @cmc0619/node-red-contrib-mavlink**.
+Importable flows ship with the package — 22 of them, plus 35 more for a live SITL rig. In
+the Node-RED editor: **Import → Examples → @cmc0619/node-red-contrib-mavlink**.
+
+A few to start with; every flow is indexed in
+[`examples/CATALOG.md`](https://github.com/cmc0619/node-red-contrib-mavlink/blob/main/examples/CATALOG.md),
+which ships in the package too.
 
 | File | Demonstrates |
 |------|----------------|
@@ -52,6 +57,9 @@ Importable flows ship with the package. In the Node-RED editor:
 | `03-param-read-set.json` | Param read (MAV_SYSID) and set (FS_GCS_ENABLE) as separate injects |
 | `04-mission-upload-download.json` | Mission upload then download |
 | `05-fanout-arm.json` | Fan-out sequential arm — dry-run then live |
+| `10-sunday-stroll.json` | A full flight: arm, takeoff, waypoints, return |
+| `24-formation-nudge.json` | Formation node moving a group as one |
+| `27-safety-estop.json` | Flight termination behind a confirmation gate |
 | `sitl/01-completion-takeoff.json` | Arm + completion-tier takeoff against ArduPilot Copter SITL |
 | `sitl/08-fanout-sequential-five.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
 | `sitl/13-param-defs-live.json` | Param read, set, and list — with live definition catalog |
