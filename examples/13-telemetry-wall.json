@@ -66,7 +66,9 @@
     "z": "ex13-tab",
     "name": "HEARTBEAT",
     "connection": "ex13-connection",
-    "message": "HEARTBEAT",
+    "messages": [
+      "HEARTBEAT"
+    ],
     "sysid": "",
     "compid": "",
     "changedOnly": true,
@@ -85,7 +87,9 @@
     "z": "ex13-tab",
     "name": "GLOBAL_POSITION_INT",
     "connection": "ex13-connection",
-    "message": "GLOBAL_POSITION_INT",
+    "messages": [
+      "GLOBAL_POSITION_INT"
+    ],
     "sysid": "1",
     "compid": "",
     "changedOnly": false,
@@ -104,7 +108,9 @@
     "z": "ex13-tab",
     "name": "ATTITUDE",
     "connection": "ex13-connection",
-    "message": "ATTITUDE",
+    "messages": [
+      "ATTITUDE"
+    ],
     "sysid": "",
     "compid": "",
     "changedOnly": false,
@@ -123,7 +129,9 @@
     "z": "ex13-tab",
     "name": "SYS_STATUS",
     "connection": "ex13-connection",
-    "message": "SYS_STATUS",
+    "messages": [
+      "SYS_STATUS"
+    ],
     "sysid": "",
     "compid": "",
     "changedOnly": false,
@@ -142,7 +150,9 @@
     "z": "ex13-tab",
     "name": "VFR_HUD (no extra filters)",
     "connection": "ex13-connection",
-    "message": "VFR_HUD",
+    "messages": [
+      "VFR_HUD"
+    ],
     "sysid": "",
     "compid": "",
     "changedOnly": false,

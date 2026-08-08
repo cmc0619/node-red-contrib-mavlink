@@ -99,7 +99,7 @@
     "z": "ex26-tab",
     "name": "Telemetry in",
     "connection": "ex26-connection-src",
-    "message": "",
+    "messages": [],
     "sysid": "",
     "compid": "",
     "changedOnly": false,

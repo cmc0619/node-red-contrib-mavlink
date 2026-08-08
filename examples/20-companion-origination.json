@@ -114,7 +114,9 @@
     "z": "ex20-tab",
     "name": "HEARTBEAT",
     "connection": "ex20-connection",
-    "message": "HEARTBEAT",
+    "messages": [
+      "HEARTBEAT"
+    ],
     "sysid": "",
     "compid": "",
     "changedOnly": false,

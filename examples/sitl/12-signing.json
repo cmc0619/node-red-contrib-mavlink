@@ -67,7 +67,9 @@
     "z": "sitl12-tab",
     "name": "HEARTBEAT (signed link)",
     "connection": "sitl12-connection-signed",
-    "message": "HEARTBEAT",
+    "messages": [
+      "HEARTBEAT"
+    ],
     "sysid": "",
     "compid": "",
     "changedOnly": false,
