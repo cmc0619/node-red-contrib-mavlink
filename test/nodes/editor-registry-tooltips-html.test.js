@@ -207,19 +207,28 @@ test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
     else if (c === '}') depth -= 1;
   }
   const body = html.slice(bodyStart, i);
-  // jQuery stub: no rendered inputs on the (placeholder) form.
-  const $stub = () => ({ each() {} });
+  // jQuery stub: no rendered inputs on the (placeholder) form. `written`
+  // records what the save put into the hidden field.
+  let written;
+  const $stub = (selector) => ({
+    each() {},
+    val(value) { written[selector] = value; return this; },
+  });
   const save = new Function('$', body);
 
-  // Premature Done: the form never rendered → the saved params must survive.
-  const unrendered = { _mavParamsRendered: false, params: '{"5":47.1,"6":-122.5}' };
-  save.call(unrendered, $stub);
-  assert.equal(unrendered.params, '{"5":47.1,"6":-122.5}', 'premature save keeps stored params');
+  // Premature Done: the form never rendered → the hidden field is left alone,
+  // so Node-RED's edit pane copies the dialog-open params straight back.
+  written = {};
+  save.call({ _mavParamsRendered: false }, $stub);
+  assert.deepEqual(written, {}, 'premature save writes nothing');
 
   // A rendered zero-param form legitimately saves {}.
-  const rendered = { _mavParamsRendered: true, params: '{"5":47.1}' };
-  save.call(rendered, $stub);
-  assert.equal(rendered.params, '{}', 'a rendered empty form saves {}');
+  written = {};
+  save.call({ _mavParamsRendered: true }, $stub);
+  // The scrape must land in the hidden input: Node-RED runs oneditsave and
+  // then overwrites node.params from `#node-input-params`, so a save that
+  // only assigns `this.params` is discarded.
+  assert.equal(written['#node-input-params'], '{}', 'a rendered empty form saves {} to the hidden field');
 });
 
 test('Command catalog state keeps only its request sequence', () => {

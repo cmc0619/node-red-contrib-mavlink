@@ -719,7 +719,14 @@
         const val = String(raw || '').trim();
         if (val !== '') params[idx] = Number(val);
       });
-      this.params = JSON.stringify(params);
+      // Write the hidden input, not `this.params`. Node-RED runs oneditsave
+      // first, then its own edit pane walks `defaults` and copies
+      // `#node-input-<key>` over the node property (editor red.js
+      // handleEditSave → pane.apply). A `this.params` written here is
+      // overwritten a moment later by the hidden field's *dialog-open* value,
+      // so every param edit was silently discarded. Same shape as Build's
+      // fields blob (mavlink-build.html:566).
+      $('#node-input-params').val(JSON.stringify(params));
     },
 
     oneditcancel: function () {},
