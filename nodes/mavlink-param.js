@@ -378,7 +378,7 @@ function capabilitiesFromPeer(connectionNode, target) {
 
 function completeBuild(node, send, message) {
   applyActionStatus(node, 'ok', 'built param');
-  send([{ payload: message }, statusRecord('built', 'built', { message })]);
+  send([{ payload: message }, statusRecord('succeeded', 'built', { message })]);
 }
 
 function completeResult(node, send, result, detail, payload) {

@@ -36,7 +36,7 @@ test('mavlink-param node builds PARAM_SET from msg payload values', () => {
   assert.equal(sent[0].payload.fields.param_id, 'FOO');
   assert.equal(sent[0].payload.fields.param_value, 12);
   // The status record leaves output 1 as the top-level message, not msg.payload.
-  assert.equal(sent[1].result, 'built');
+  assert.equal(sent[1].result, 'succeeded');
 });
 
 test('mavlink-param reuses its deploy-resolved Connection during input delivery', () => {
