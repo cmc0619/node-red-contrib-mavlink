@@ -37,7 +37,9 @@ test('a list selection refuses a bad sysid instead of fanning out to the rest', 
   // would send to the members that did parse while reporting success — the
   // partial fan-out parseSysidList exists to prevent. Build tier already
   // refused these (test/fanout/node.test.js); this is the wire tier matching.
-  for (const bad of [[1, 'abc'], [1, 300], [1, 0], [1, 2.5]]) {
+  // Both spellings: parseSysidList tokenises an array and a comma string
+  // differently before the shared 1..255 check, so a bad id has two ways in.
+  for (const bad of [[1, 'abc'], [1, 300], [1, 0], [1, 2.5], '1, 300', '1, abc']) {
     assert.throws(
       () => selectFanoutMembers(peerTable, { mode: 'list', sysids: bad }),
       /1\.\.255/,
