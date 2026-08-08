@@ -621,7 +621,7 @@ them (§14 records the load-order fact and the picker API).
 
 **Runtime helpers are shared, not pasted.** Palette `nodes/*.js` call `lib/delivery`
 (`capBadge`, `makeStatusRecord`, `applyActionStatus`, `shouldSuppress`), `lib/addressing`
-(`firstDefined`, `resolveActionTarget`, `resolveDeliveryContext`, `missingConnectionGate`,
+(`firstDefined`, `isBlank`, `resolveActionTarget`, `resolveDeliveryContext`,
 `dialectFromVehicleId` / `dialectFromConnection`), `lib/command` (`mergeParams`,
 `DEFAULT_TIMEOUT_MS` / `DEFAULT_MAX_RETRIES`), `lib/connection/bands` (`BAND.*`),
 `lib/move` config mappers (`positionFrom` / `velocityFrom` / `valueFrom`), and
@@ -2990,7 +2990,8 @@ name its target fields `targetSysid` / `targetCompid` forever.
 *Fact:* `lib/metadata/admin-catalog.registerDialectCatalogRoute` owns the Command/Build/Vehicle
 catalog skeleton; `resolveCatalogSource({ soft: true })` covers Payload field-tips notices;
 `lib/addressing.resolveDeliveryContext` + `missingConnectionGate` own role×tier + the
-send-without-connection deploy badge; `dialectFromConnection` owns the profile `getDialect()`
+send-without-connection deploy badge (`missingConnectionGate` has since been removed —
+`applyConnectionStatus` carries the badge); `dialectFromConnection` owns the profile `getDialect()`
 hop. Command's editor fields are `targetSystem` / `targetComponent` like every other palette
 node — pre-1.0 means canonical keys only, not leftover-key readers or editor “migrate” paths.
 *Check:* `node --test test/metadata/admin-catalog.test.js test/addressing/delivery-context.test.js
@@ -3123,7 +3124,8 @@ round-trip through `resolveDialect` → `getDialect` → `resolveCatalogSource` 
 bundle. Do not design that path around install catastrophes (snapshot vanished,
 `BrokenVehicleNode`); those mean the checkout is already broken. Firmware↔autopilot
 is `lib/vehicle/firmware-autopilot`; Fan-out uses `DEFAULT_TIMEOUT_MS` from command;
-Param/Move/Payload call `missingConnectionGate` at deploy. Declined as non-dupes:
+Param/Move/Payload call `missingConnectionGate` at deploy (since removed; they call
+`applyConnectionStatus` now). Declined as non-dupes:
 `numberOr`/`valueOr`/`keepParam` family, GLOBAL_FRAMES/DEG_E7 tables, TCP/serial
 write-drain skeleton, move/fanout `sendOptions`, `sanitize` vs `urlToFilename`.
 *Check:* `node --test test/connection/queue.test.js test/state/state.test.js
