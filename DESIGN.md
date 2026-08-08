@@ -3373,3 +3373,42 @@ predicate that decides what it guards against, so when a blank/empty/absent test
 something safety-relevant, check what the language quietly coerces into range. `Number('')`,
 `Number(null)`, and `Number([])` are all `0` too; only `''` and `null` were being caught.
 *Check:* `node --test test/move/move.test.js` — the whitespace-is-blank test walks all four.
+
+---
+
+**MAVLink has never defined a Blimp flight-mode table, and "absent from the dialect" is not
+"unavailable" (2026-08-08).**
+*Wrong belief:* the dialect XML is the authority for what an operator can be offered, so a
+param whose enum the XML does not name gets a number box. `MAV_CMD_DO_SET_MODE` param2 is
+`custom_mode`, and no `enum=` can name its table — the right one depends on the airframe, not
+the command — so the family picks it: Copter, Plane, Rover, Boat, Sub and Antenna Tracker each
+have a `*_MODE` enum, and Blimp was recorded as having none.
+*Fact (measured 2026-08-08):* the absence is real and current. All 17 bundled dialects define
+zero `BLIMP_MODE`, and so does upstream `ArduPilot/mavlink` master fetched the same day —
+`grep -oE '<enum name="[A-Z_]*MODE[A-Z_]*"' ardupilotmega.xml` returns COPTER, PLANE, ROVER,
+SUB, TRACKER and nothing else, so this is not a stale bundle. DeepWiki's independent read of
+`mavlink/mavlink` agrees. The only blimp-adjacent identifier MAVLink carries is
+`MAV_TYPE_AIRSHIP = 7`, which says what the vehicle *is*, not what modes it can hold.
+
+But the modes exist and are knowable. `Blimp/mode.h` in `ArduPilot/ardupilot` defines
+`Mode::Number` — LAND 0, MANUAL 1, VELOCITY 2, LOITER 3, RTL 4, AUTO 5, HOLD 6, with 30
+reserved for external/Lua control — and `GCS_Blimp::custom_mode()` returns
+`(uint32_t)blimp.control_mode` verbatim, which is the HEARTBEAT `custom_mode` and therefore
+exactly what DO_SET_MODE param2 must carry. The upstream gap is an omission, not a statement
+that Blimp has no modes: ArduPilot already ships Blimp firmware, a Blimp parameter document,
+and — since the §14 entry above — a `blimp` family in this package.
+
+*Decision:* `BLIMP_MODE` is synthesised in `lib/metadata/commands-list.js` from ArduPilot
+source and injected into any catalog that already carries `COPTER_MODE`. That gate is the
+whole rule: a dialect with Copter's table is an ArduPilot dialect, so the one upstream forgot
+belongs beside the ones it wrote, and `common`/PX4 stay untouched — verified. It rides in
+`lib/`, not in editor code, so §6's "no baked protocol copy in editor HTML" holds without
+needing the `MAGIC_BOOLEAN_PARAMS` exception; the editor only maps `blimp → BLIMP_MODE` and
+reads the table like any other. The general lesson: when a vehicle family is first-class
+everywhere else in this package, an upstream metadata gap is a reason to cite a source, not a
+reason to hand the operator a bare integer. PX4 stays a number box for the opposite reason —
+its modes are a two-field encoding, not a flat enum, and nobody has measured that here.
+*Check:* `node -e "const m=require('./lib/metadata');for(const d of
+['ardupilotmega','storm32','common','development']){const b=m.listCommandsCatalog(d).enums.BLIMP_MODE;
+console.log(d,b?b.length+' → '+b.map(e=>e.value).join(','):'absent')}"` — 7 modes 0–6 on the two
+ArduPilot dialects, absent on the other two.
