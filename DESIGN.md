@@ -1250,7 +1250,8 @@ leaves every guard above open to a string that merely looks empty (§14). A padd
 acknowledgement, so a `node.warn` is all the feedback the operator gets. The list is what
 measurement supports, nothing more (§14): **PX4 + either OFFSET frame** (no motion at all),
 **PX4 + `BODY_NED`** (body frames carry velocity only; PX4 discards the position), and
-**ArduPilot + `yaw-only`** (GUIDED held heading under a yaw-only stream — SITL 2026-08-08 / #179).
+**ArduPilot + `yaw-only` with no yaw rate** (GUIDED held heading under an absolute-yaw stream,
+`type_mask` 2559 — SITL 2026-08-08 / #179; a rate rides a different mask and was not measured).
 Build-tier nodes have no connection firmware and never warn. Three earlier advisories were
 *removed* when measurement refuted them — ArduPilot acceleration-only, ArduPilot `BODY_NED`, and
 PX4 terrain-altitude — because a warning that fires on working behaviour is noise, and noise gets
@@ -3320,12 +3321,31 @@ on one stack.
 
 1. **Stream-replace halt is invisible (#175).** At 10 Hz, `stop()` then a new stream (same path
    as `mavlink-move`) kept horizontal speed ≈2 m/s across the replace window on both
-   `LOCAL_NED` and `GLOBAL_RELATIVE_ALT_INT` (pre-med ≈2.0 m/s, min-after ≈1.9 m/s; no collapse
-   below 0.35 m/s). Decline the mutate-in-place rewrite — TTL/close still need the deadman stop;
-   replacement does not earn a state-machine change.
-2. **ArduPilot yaw-only does nothing.** Streamed yaw-only (`type_mask` 2559) for 5 s changed
-   heading by ≈0.2°. Matches `hold_position()` never reading yaw. **Advisory** on
-   `firmware === 'ardupilot' && mode === 'yaw-only'`; use velocity/position + yaw.
+   `LOCAL_NED` (pre-med 2.008, min-after 1.935 → **3.6%** dip) and `GLOBAL_RELATIVE_ALT_INT`
+   (1.956 → 1.884, **3.7%**). A dip that size is telemetry noise, not a lurch. Decline the
+   mutate-in-place rewrite — TTL/close still need the deadman stop; replacement does not earn a
+   state-machine change.
+
+   *Strength of this one, stated honestly:* the probe's own pass criterion is
+   `minSpd < 0.35 m/s`, which only trips on an **82% collapse** — a 40% lurch an operator would
+   feel scores "invisible" against it. The conclusion rests on the measured ~4% dip, not on
+   clearing that threshold. The window is 400 ms and caught **4 NED samples** per frame, so this
+   is a thin null result: enough to decline a rewrite nobody is otherwise asking for, not enough
+   to call the halt harmless under a slower telemetry rate or a heavier airframe. Re-measure
+   before relying on it for anything beyond #175.
+
+   Note the halt is `SET_POSITION_TARGET_LOCAL_NED` even when the stream is `GLOBAL_INT` — the
+   run recorded both names. Different message names mean different Streaming coalescing keys
+   (§7), and `send()` pumps synchronously in any case, so the halt reaches the wire in every
+   mode. It is not hidden by the queue; the vehicle simply does not care.
+2. **ArduPilot *absolute-yaw* yaw-only does nothing.** Streamed yaw-only for 5 s changed heading
+   by ≈0.2°. Matches `hold_position()` never reading yaw. **Advisory** on `firmware ===
+   'ardupilot' && mode === 'yaw-only'` **and no yaw rate present** — the measured mask is
+   `type_mask` **2559** exactly. A yaw-only setpoint carrying a rate is mask **1535** (1024 = yaw
+   ignored), or **511** with both, and neither was measured; item 5 below clocked AP slewing at
+   ~60 °/s on a commanded rate, so a "no yaw change" warning there would contradict the same
+   run. Advisories are measurement-only (three were deleted for firing on working behaviour), and
+   that rule binds a *mask*, not a mode name. Use velocity/position + yaw.
 3. **ArduPilot one-shot velocity brakes after ~GUID_TIMEOUT.** Single Send velocity north ≈2 m/s:
    early median ≈1.9 m/s (0.5–2 s), late median ≈0.1 m/s (3.5–6 s) with the drop between ≈3.3–4.0 s.
    Document: sustained velocity needs **Stream**, not an `advisoryFor` on every Send.
