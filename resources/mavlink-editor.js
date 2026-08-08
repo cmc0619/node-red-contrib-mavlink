@@ -252,6 +252,44 @@
   };
 
   /**
+   * ArduPilot custom-mode tables by Vehicle Profile family.
+   *
+   * MAV_CMD_DO_SET_MODE param2 is `custom_mode`, and no `enum=` can name its
+   * table: which one is right depends on the airframe, not the command. The
+   * dialect already carries every table, so the family picks one.
+   *
+   * Boat is Rover firmware and reads ROVER_MODE. Blimp is absent because
+   * ardupilotmega.xml defines no BLIMP_MODE, and `unknown` because a wrong
+   * table is worse than a number box — both fall through to the number box,
+   * as does PX4, whose modes live in PX4 source rather than in MAVLink.
+   *
+   * @type {Object<string, string>}
+   */
+  RED.mavlink.CUSTOM_MODE_ENUMS = {
+    copter: 'COPTER_MODE',
+    plane: 'PLANE_MODE',
+    rover: 'ROVER_MODE',
+    boat: 'ROVER_MODE',
+    sub: 'SUB_MODE',
+    'antenna-tracker': 'TRACKER_MODE',
+  };
+
+  /**
+   * The custom-mode enum name for a command param, or null when the param is
+   * not `custom_mode` or the bound profile has no table.
+   *
+   * @param {string|number} commandId
+   * @param {string|number} paramIndex
+   * @returns {?string}
+   */
+  RED.mavlink.customModeEnum = function (commandId, paramIndex) {
+    if (Number(commandId) !== 176 || Number(paramIndex) !== 2) return null;
+    var target = RED.mavlink.resolveCatalogTarget();
+    if (target.firmware !== 'ardupilot') return null;
+    return RED.mavlink.CUSTOM_MODE_ENUMS[target.vehicleFamily] || null;
+  };
+
+  /**
    * Command params that are booleans in everything but their XML: no `enum=`,
    * just a magic number the description explains in prose. Keyed
    * `<commandId>:<paramIndex>`.

@@ -502,8 +502,14 @@
        */
       function advancedParamInput(spec, enums, commandId) {
         const saved = savedParams[spec.index];
-        if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
-          const entries = enums[spec.enum];
+        // DO_SET_MODE's custom_mode carries no `enum=` — its table is chosen
+        // by airframe, not by command — so the profile names one here. Same
+        // curated-by-(command, index) shape as magicBooleanValue below, and
+        // it sits on the shared render path so Advanced mode reads the same
+        // pulldown the Set Mode preset does.
+        const enumName = spec.enum || RED.mavlink.customModeEnum(commandId, spec.index);
+        if (enumName && enums[enumName] && enums[enumName].length) {
+          const entries = enums[enumName];
           const falseTrue = RED.mavlink.isFalseTrueEnum(entries);
           if (falseTrue) {
             return RED.mavlink.booleanEnumInput(entries, {
@@ -971,6 +977,14 @@
     params exposed. Build tier uses the Dialect picker; wire tiers use the
     bound connection's profile. Bitmask params render as multi-selects;
     Ctrl/Cmd-click multiple flags and the editor stores their numeric mask.
+  </p>
+  <p>
+    <b>Set Mode</b>'s <i>Custom Mode</i> becomes a pulldown of the airframe's
+    flight modes when the bound Vehicle Profile is ArduPilot and names a family
+    — Copter, Plane, Rover, Boat, Sub, or Antenna Tracker. Blimp, Unknown, and
+    PX4 keep the number box: MAVLink carries no table for them. Remember that
+    the autopilot only reads Custom Mode when <code>MAV_MODE_FLAG_CUSTOM_MODE_ENABLED</code>
+    is set in <i>Mode</i>.
   </p>
 
   <h3>Details</h3>
