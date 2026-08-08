@@ -251,12 +251,17 @@
       .prop('checked', checked);
   };
 
+  /** MAV_CMD_DO_SET_MODE, whose param2 is the custom_mode below. */
+  var DO_SET_MODE = 176;
+
   /**
    * ArduPilot custom-mode tables by Vehicle Profile family.
    *
    * MAV_CMD_DO_SET_MODE param2 is `custom_mode`, and no `enum=` can name its
    * table: which one is right depends on the airframe, not the command. The
-   * dialect already carries every table, so the family picks one.
+   * dialect already carries every table, so the family picks one — and
+   * `lib/metadata/commands-list.js` carries the same names, so every catalog
+   * has them on hand. Add a family here and add its table there.
    *
    * Boat is Rover firmware and reads ROVER_MODE. Blimp is absent because
    * ardupilotmega.xml defines no BLIMP_MODE, and `unknown` because a wrong
@@ -265,7 +270,7 @@
    *
    * @type {Object<string, string>}
    */
-  RED.mavlink.CUSTOM_MODE_ENUMS = {
+  var CUSTOM_MODE_ENUMS = {
     copter: 'COPTER_MODE',
     plane: 'PLANE_MODE',
     rover: 'ROVER_MODE',
@@ -283,10 +288,10 @@
    * @returns {?string}
    */
   RED.mavlink.customModeEnum = function (commandId, paramIndex) {
-    if (Number(commandId) !== 176 || Number(paramIndex) !== 2) return null;
+    if (Number(commandId) !== DO_SET_MODE || Number(paramIndex) !== 2) return null;
     var target = RED.mavlink.resolveCatalogTarget();
     if (target.firmware !== 'ardupilot') return null;
-    return RED.mavlink.CUSTOM_MODE_ENUMS[target.vehicleFamily] || null;
+    return CUSTOM_MODE_ENUMS[target.vehicleFamily] || null;
   };
 
   /**
