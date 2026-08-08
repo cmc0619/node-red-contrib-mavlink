@@ -19,6 +19,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "prepublishOnly": "npm run lint && npm test",
     "lint": "npm run test:lint-config && eslint . --max-warnings=0",
     "test": "node --test lib/**/test/*.test.js test/**/*.test.js",
     "test:lint-config": "node --test test/tooling/lint-coverage.check.js",
