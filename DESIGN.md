@@ -3359,7 +3359,29 @@ on one stack.
    while translating; velocity 0 + yaw 180° + yaw_rate 20°/s produced non-trivial yawspeed
    (AP median ≈60 °/s, PX4 ≈11 °/s) toward the commanded heading. Document as observed on
    AP/PX4, not as a MAVLink protocol guarantee (`POSITION_TARGET_TYPEMASK` leaves both-clear
-   undefined for third-party autopilots).
+   undefined for third-party autopilots — confirmed: `common.xml` defines nothing for the
+   both-bits-clear case, no deadman convention, and no minimum stream rate).
+
+   **The commanded rate is not a speed limit — measurement disagrees with source, 3×.**
+   ArduPilot source reads as though `AutoYaw::ANGLE_RATE` slews at exactly the commanded rate
+   (`_yaw_angle_rad += _yaw_rate_rads * dt`, no `ATC_SLEW_YAW` on that path). We commanded
+   **20 °/s** and measured a median of **59.5 °/s**. Measurement wins (AGENTS "measurement
+   outranks source"), so the operator-facing fact is: *a yaw rate does not bound how fast the
+   vehicle turns.*
+   *Hypothesis for the mechanism, source-derived and **not** measured:* `ANGLE_RATE` hands the
+   attitude controller both a moving angle target and a rate via `HeadingMode::Angle_And_Rate`;
+   the controller closes the angle error under its own gains and the commanded rate rides as
+   feedforward on top. The probe started 101° from the commanded heading, so the error term
+   dominated. That predicts the commanded rate and the actual rate converge once the error is
+   small — untested. PX4 measured 10.8 °/s on the same command, roughly half the commanded
+   rate, so the two stacks do not agree on magnitude either.
+   *To measure:* the same probe with a small initial yaw error (<10°), both stacks.
+
+6. **`GUID_TIMEOUT` also parks the yaw mode (source-read, unmeasured).** ArduPilot sets
+   `auto_yaw` from `RATE`/`ANGLE_RATE` to `HOLD` on the same timeout that zeroes velocity and
+   acceleration (item 3). Consequence if it holds: a **one-shot** yaw+rate command stops slewing
+   after ~3 s, exactly as a one-shot velocity brakes. Recorded as hypothesis, not advisory — it
+   was not part of the 2026-08-08 run. Sustained yaw slew needs **Stream**, same as velocity.
 
 *Check:* `node sitl/measure-move-179.js`; `lib/move/index.js` `advisoryFor`; `node --test
 test/move/move.test.js`.
