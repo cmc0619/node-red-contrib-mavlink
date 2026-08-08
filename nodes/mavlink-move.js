@@ -82,6 +82,9 @@ module.exports = function registerMavlinkMove(RED) {
         const advisory = advisoryFor({
           mode: moveInput.mode,
           frame: moveInput.frame,
+          // The ArduPilot yaw-only advisory was measured on absolute yaw only,
+          // so it needs to see whether a yaw rate is riding along (§14 / #179).
+          yawRate: moveInput.yawRate,
           firmware: connectionNode?.vehicle?.firmware,
         });
         if (advisory) node.warn(advisory);
