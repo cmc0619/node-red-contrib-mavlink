@@ -84,7 +84,7 @@ test('mavlink-param confirm set emits a timed-out record and releases the subscr
     setTimeout(() => {
       assert.ok(out, 'a terminal record was emitted on timeout');
       assert.equal(out[0], null, 'output 0 must not fire on timeout');
-      assert.equal(out[1].result, 'timeout');
+      assert.equal(out[1].result, 'timed-out');
       assert.equal(conn.activeCount(), 0, 'the subscription is torn down on timeout');
       resolve();
     }, 30);
