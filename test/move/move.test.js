@@ -301,7 +301,7 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
   assert.equal(padded.fields.x, 4);
 });
 
-test('advisoryFor fires only on measured-unsupported combos (§14, SITL 2026-08-05)', () => {
+test('advisoryFor fires only on measured-unsupported combos (§14)', () => {
   const { advisoryFor } = require('../../lib/move');
   // Confirmed: PX4 1.18 produced no motion at all for either OFFSET frame.
   for (const frame of ['LOCAL_OFFSET_NED', 'BODY_OFFSET_NED']) {
@@ -309,7 +309,22 @@ test('advisoryFor fires only on measured-unsupported combos (§14, SITL 2026-08-
   }
   // New from measurement: PX4 does not read BODY_NED as a body offset.
   assert.match(advisoryFor({ mode: 'position', frame: 'BODY_NED', firmware: 'px4' }), /BODY_NED/);
+  // Confirmed 2026-08-08: ArduPilot GUIDED held heading under an absolute-yaw
+  // yaw-only stream (type_mask 2559, 0.2° in 5 s).
+  assert.match(advisoryFor({ mode: 'yaw-only', frame: 'LOCAL_NED', firmware: 'ardupilot' }), /yaw-only/);
+  // ...but only that mask was measured. A yaw *rate* rides mask 1535 (or 511
+  // with both), and the same run clocked AP slewing ~60 °/s on a commanded
+  // rate — so the advisory must not claim "no yaw change" there (§14 / #179).
+  assert.equal(
+    advisoryFor({ mode: 'yaw-only', frame: 'LOCAL_NED', firmware: 'ardupilot', yawRate: 20 }),
+    null
+  );
+  assert.equal(
+    advisoryFor({ mode: 'yaw-only', frame: 'LOCAL_NED', firmware: 'ardupilot', yawRate: 0 }),
+    null
+  );
   // Supported combos and unknown firmware stay silent.
+  assert.equal(advisoryFor({ mode: 'yaw-only', frame: 'LOCAL_NED', firmware: 'px4' }), null);
   assert.equal(advisoryFor({ mode: 'position', frame: 'LOCAL_NED', firmware: 'px4' }), null);
   assert.equal(advisoryFor({ mode: 'acceleration', frame: 'LOCAL_NED', firmware: 'px4' }), null);
   assert.equal(advisoryFor({ mode: 'acceleration', frame: 'LOCAL_NED', firmware: 'custom' }), null);

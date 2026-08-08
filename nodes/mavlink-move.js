@@ -78,11 +78,13 @@ module.exports = function registerMavlinkMove(RED) {
         // Known-unsupported firmware combos still send, but never silently
         // (§14: setpoints carry no ack, so this warning is all the feedback
         // the operator will get). Firmware comes from the connection's bound
-        // Vehicle Profile; every measured advisory is PX4-specific, so Build
-        // tier — which has no connection — never warns.
+        // Vehicle Profile; Build tier — which has no connection — never warns.
         const advisory = advisoryFor({
           mode: moveInput.mode,
           frame: moveInput.frame,
+          // The ArduPilot yaw-only advisory was measured on absolute yaw only,
+          // so it needs to see whether a yaw rate is riding along (§14 / #179).
+          yawRate: moveInput.yawRate,
           firmware: connectionNode?.vehicle?.firmware,
         });
         if (advisory) node.warn(advisory);
