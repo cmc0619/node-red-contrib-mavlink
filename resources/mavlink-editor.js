@@ -263,10 +263,11 @@
    * `lib/metadata/commands-list.js` carries the same names, so every catalog
    * has them on hand. Add a family here and add its table there.
    *
-   * Boat is Rover firmware and reads ROVER_MODE. Blimp is absent because
-   * ardupilotmega.xml defines no BLIMP_MODE, and `unknown` because a wrong
-   * table is worse than a number box — both fall through to the number box,
-   * as does PX4, whose modes live in PX4 source rather than in MAVLink.
+   * Boat is Rover firmware and reads ROVER_MODE. BLIMP_MODE is the one table
+   * MAVLink never defined; `lib/metadata/commands-list.js` supplies it from
+   * ArduPilot source, so it reads like the rest from here. `unknown` is absent
+   * because a wrong table is worse than a number box, and so is PX4, whose
+   * modes live in PX4 source rather than in MAVLink.
    *
    * @type {Object<string, string>}
    */
@@ -276,6 +277,7 @@
     rover: 'ROVER_MODE',
     boat: 'ROVER_MODE',
     sub: 'SUB_MODE',
+    blimp: 'BLIMP_MODE',
     'antenna-tracker': 'TRACKER_MODE',
   };
 
