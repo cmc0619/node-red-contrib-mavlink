@@ -65,7 +65,7 @@ test('paramDefsUrl is persisted and shown as an input', () => {
 test('parameter definitions use an explicit profile-keyed Update workflow', () => {
   assert.match(html, /id="mav-param-defs-update"[^>]*>Update<\/button>/);
   assert.match(html, /id="mav-param-defs-status"/);
-  assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/param\/defs\/update['"]\)/);
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/param\/defs\/update['"]\)/);
   assert.match(html, /method:\s*'POST'/);
   assert.match(html, /vehicle:\s*node\.id/);
   assert.match(html, /const url = \$\('#node-config-input-paramDefsUrl'\)\.val\(\)\.trim\(\)/);
@@ -75,9 +75,9 @@ test('parameter definitions use an explicit profile-keyed Update workflow', () =
 });
 
 test('the XML-catalog admin endpoints are wired under mavlink/xml-catalog', () => {
-  assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/xml-catalog['"]\)/, 'list endpoint');
-  assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/xml-catalog\/update['"]\)/, 'update endpoint');
-  assert.match(html, /mavlinkAdminUrl\(['"]\/mavlink\/xml-catalog\/compare['"]\)/, 'compare endpoint');
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/xml-catalog['"]\)/, 'list endpoint');
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/xml-catalog\/update['"]\)/, 'update endpoint');
+  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/xml-catalog\/compare['"]\)/, 'compare endpoint');
 });
 
 test('catalog actions update and compare are present', () => {
@@ -92,8 +92,12 @@ test('update posts JSON to the update endpoint', () => {
 });
 
 test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
-  assert.match(html, /function mavlinkAdminUrl/, 'vehicle guards adminApiUrl availability');
-  assert.match(html, /RED\.mavlink\.adminApiUrl/, 'vehicle delegates to shared adminApiUrl helper');
+  // No local wrapper: the old one fell back to the unprefixed path when
+  // RED.mavlink was absent, which cannot happen (local-identity loads the
+  // resource first, package.json) and would have produced a wrong URL rather
+  // than a loud failure if it did.
+  assert.ok(!/function mavlinkAdminUrl/.test(html), 'no local admin-url wrapper');
+  assert.match(html, /RED\.mavlink\.adminApiUrl/, 'vehicle calls the shared adminApiUrl helper directly');
   assert.ok(
     !/\$\.getJSON\(\s*['"]mavlink\//.test(html),
     'bare relative mavlink getJSON paths must be gone'

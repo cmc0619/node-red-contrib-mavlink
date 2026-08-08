@@ -19,13 +19,6 @@
       oneditprepare: function () {
         const node = this;
 
-        function mavlinkAdminUrl(path) {
-          if (RED.mavlink && RED.mavlink.adminApiUrl) {
-            return RED.mavlink.adminApiUrl(path);
-          }
-          return path;
-        }
-
         const $dialect = $('#node-config-input-dialect');
         const $revision = $('#node-config-input-dialectRevision');
         const $components = $('#mav-component-dialects');
@@ -123,7 +116,7 @@
         }
 
         function loadLibrary(done) {
-          $.getJSON(mavlinkAdminUrl('/mavlink/xml-catalog'))
+          $.getJSON(RED.mavlink.adminApiUrl('/mavlink/xml-catalog'))
             .done(function (data) {
               library = (data && data.dialects) || [];
               $status.text(library.length ? '' : 'Dialect library empty — Update catalog when online.');
@@ -158,7 +151,7 @@
           e.preventDefault();
           $status.text('Downloading MAVLink XML from mavlink/mavlink...');
           $.ajax({
-            url: mavlinkAdminUrl('/mavlink/xml-catalog/update'),
+            url: RED.mavlink.adminApiUrl('/mavlink/xml-catalog/update'),
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({})
@@ -185,7 +178,7 @@
           e.preventDefault();
           $status.text('Rebuilding compiled dialects...');
           $.ajax({
-            url: mavlinkAdminUrl('/mavlink/dialect-cache/rebuild'),
+            url: RED.mavlink.adminApiUrl('/mavlink/dialect-cache/rebuild'),
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({})
@@ -210,7 +203,7 @@
             return;
           }
           $status.text('Comparing ' + entry + ' with seed...');
-          $.getJSON(mavlinkAdminUrl('/mavlink/xml-catalog/compare'), { file: entry, snapshot: rev })
+          $.getJSON(RED.mavlink.adminApiUrl('/mavlink/xml-catalog/compare'), { file: entry, snapshot: rev })
             .done(function (data) {
               const c = data && data.comparison;
               if (!c) {
@@ -253,7 +246,7 @@
           $update.prop('disabled', true);
           $paramDefsStatus.text('Downloading parameter definitions...');
           $.ajax({
-            url: mavlinkAdminUrl('/mavlink/param/defs/update'),
+            url: RED.mavlink.adminApiUrl('/mavlink/param/defs/update'),
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({ vehicle: node.id, url: url })

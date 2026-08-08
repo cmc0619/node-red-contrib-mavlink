@@ -131,8 +131,9 @@
 
   /**
    * Editor-side copy of lib/payload `PAYLOAD_VERBS`. Client HTML cannot
-   * require() the Node module, so the topic→verb catalog lives once here —
-   * Payload and Fan-out both read it. Pinned against the lib table by test.
+   * require() the Node module, so the topic→verb catalog is mirrored here and
+   * pinned against the lib table by test. Payload is the only reader — Fan-out
+   * takes a built message and never picks a verb.
    */
   RED.mavlink.PAYLOAD_VERBS = {
     camera: [
