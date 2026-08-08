@@ -126,9 +126,7 @@
     label: function () { return this.name || 'mavlink fanout'; },
     oneditprepare: function () {
       var node = this;
-      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-      }
+      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
       // Members table (#163): one editableList row per member — sysid, N/E/Up
       // offsets in metres, and an optional raw wire-unit patch. Same stock

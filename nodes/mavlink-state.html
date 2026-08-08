@@ -58,23 +58,19 @@
       label: function () { return this.name || 'mavlink state'; },
       oneditprepare: function () {
         var node = this;
-        if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-          RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-        }
+        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
         buildEventsMultiSelect(node);
         $('#mav-state-events-select').on('change', syncEventsHiddenFromSelect);
         syncEventsHiddenFromSelect();
         var enumLoadToken = { cancelled: false };
         node._mavEnumLoadToken = enumLoadToken;
-        if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
-          RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
-            RED.mavlink.fillCompIdSelect(
-              $('#node-input-targetComponent'),
-              ((catalog || {}).enums || {}).MAV_COMPONENT || [],
-              { allowEmpty: true, emptyLabel: 'Any component', saved: node.targetComponent }
-            );
-          }, enumLoadToken);
-        }
+        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
+          RED.mavlink.fillCompIdSelect(
+            $('#node-input-targetComponent'),
+            ((catalog || {}).enums || {}).MAV_COMPONENT || [],
+            { allowEmpty: true, emptyLabel: 'Any component', saved: node.targetComponent }
+          );
+        }, enumLoadToken);
       },
       oneditsave: function () {
         if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;

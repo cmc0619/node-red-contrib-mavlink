@@ -174,10 +174,8 @@
       const node = this;
       const container = $('#node-input-params-container');
 
-      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
-        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-      }
+      RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
+      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
       // ── Role × tier visibility matrix (DESIGN.md §6) ──────────────────────
       function refreshVisibility() {

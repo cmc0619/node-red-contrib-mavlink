@@ -269,7 +269,6 @@
            collapses to just the saved value marked "not in dialect". Reload on
            every catalog-source change, same rule the other dialogs follow. */
         function reloadCompIds() {
-          if (!(RED.mavlink && RED.mavlink.loadEnumsCatalog)) return;
           const $compid = $('#node-config-input-defaultTargetComponent');
           RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
             RED.mavlink.fillCompIdSelect(

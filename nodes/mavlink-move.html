@@ -59,10 +59,8 @@
     label: function () { return this.name || 'mavlink move'; },
     oneditprepare: function () {
       var node = this;
-      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
-      }
+      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+      RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
 
       RED.mavlink.refreshIdentitySelect(node);
 
@@ -178,12 +176,10 @@
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);
       });
-      if (RED.mavlink && RED.mavlink.populateDialectSelect) {
-        RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
-          saved: node.dialect || '',
-          includeVehicleEscape: true
-        });
-      }
+      RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
+        saved: node.dialect || '',
+        includeVehicleEscape: true
+      });
       RED.mavlink.reloadTargetCompId(node);
       refreshVisibility();
     }

@@ -50,10 +50,8 @@
       var node = this;
 
       /* ── Connection and vehicle pickers ───────────────────────── */
-      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
-      }
+      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+      RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
 
       // Mission types offered per firmware (§9 firmware gating, §11). ArduPilot
       // carries mission/fence/rally; PX4 (and unknown stacks) carry mission only.
@@ -172,12 +170,10 @@
       });
       $('#node-input-firmware').on('change', repopulateTypes);
       $op.on('change', refreshRows);
-      if (RED.mavlink && RED.mavlink.populateDialectSelect) {
-        RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
-          saved: node.dialect || '',
-          includeVehicleEscape: true
-        });
-      }
+      RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
+        saved: node.dialect || '',
+        includeVehicleEscape: true
+      });
       RED.mavlink.reloadTargetCompId(node);
 
       /* Initial state. */

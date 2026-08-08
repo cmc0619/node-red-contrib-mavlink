@@ -70,9 +70,7 @@
     label: function () { return this.name || 'mavlink formation'; },
     oneditprepare: function () {
       var node = this;
-      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-      }
+      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
       function refreshAnchorRows() {
         var mode = $('#node-input-anchorMode').val() || 'leader';

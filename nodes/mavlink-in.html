@@ -105,9 +105,7 @@
       },
       oneditprepare: function () {
         var node = this;
-        if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-          RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-        }
+        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
         // §6: the compare-fields row only exists while Changed only is on.
         function refreshChangedFieldsRow() {
@@ -134,15 +132,13 @@
 
         $('#node-input-connection').on('change', refreshMessageOptions);
         refreshMessageOptions();
-        if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
-          RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
-            RED.mavlink.fillCompIdSelect(
-              $('#node-input-compid'),
-              (catalog.enums || {}).MAV_COMPONENT || [],
-              { allowEmpty: true, emptyLabel: 'Any component', saved: node.compid }
-            );
-          });
-        }
+        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
+          RED.mavlink.fillCompIdSelect(
+            $('#node-input-compid'),
+            (catalog.enums || {}).MAV_COMPONENT || [],
+            { allowEmpty: true, emptyLabel: 'Any component', saved: node.compid }
+          );
+        });
       },
 
       oneditsave: function () {
