@@ -49,8 +49,10 @@ module.exports = function registerMavlinkIn(RED) {
     applyConnectionStatus(node, true, connectionNode);
     if (!connectionNode) return;
 
-    // Filter settings — null means "match all".
-    const filterMessage = config.message ? String(config.message).trim() : null;
+    // Message filters — an empty list means "match all" (#211).
+    const filterMessages = (Array.isArray(config.messages) ? config.messages : [])
+      .map((name) => String(name).trim())
+      .filter(Boolean);
     const filterSysid = isBlank(config.sysid) ? null : Number(config.sysid);
     const filterCompid = isBlank(config.compid) ? null : Number(config.compid);
 
@@ -81,15 +83,15 @@ module.exports = function registerMavlinkIn(RED) {
     let lastStatusText = null;
     let lastStatusMs = 0;
 
-    const subscribeFilter = {
-      message: filterMessage !== null ? filterMessage : undefined,
-      sysid: filterSysid !== null ? filterSysid : undefined,
-      compid: filterCompid !== null ? filterCompid : undefined,
-    };
-
     node.status({ fill: 'grey', shape: 'ring', text: 'waiting' });
 
-    const unsubscribe = connectionNode.subscribe(subscribeFilter, (decoded) => {
+    /**
+     * Deliver one decoded message, subject to the field predicate, the rate
+     * limit, and changed-only. Shared by every subscription this node holds.
+     *
+     * @param {object} decoded
+     */
+    const onDecoded = (decoded) => {
       const key = `${decoded.name}\u0000${decoded.sysid}\u0000${decoded.compid}`;
       const now = Date.now();
 
@@ -147,10 +149,23 @@ module.exports = function registerMavlinkIn(RED) {
         lastStatusText = badgeText;
         lastStatusMs = now;
       }
-    });
+    };
+
+    // One subscription per message name. The registry keys subscribers by id
+    // and matches each filter independently, so N names are N subscriptions
+    // sharing one handler — no change to the matcher, and a name can never
+    // match twice. An empty list is a single unfiltered subscription, which is
+    // what a blank message filter always meant.
+    const target = {
+      sysid: filterSysid !== null ? filterSysid : undefined,
+      compid: filterCompid !== null ? filterCompid : undefined,
+    };
+    const unsubscribes = filterMessages.length
+      ? filterMessages.map((name) => connectionNode.subscribe({ ...target, message: name }, onDecoded))
+      : [connectionNode.subscribe(target, onDecoded)];
 
     node.on('close', () => {
-      unsubscribe();
+      for (const unsubscribe of unsubscribes) unsubscribe();
     });
   }
 

@@ -307,13 +307,68 @@ test('mavlink-in: message filter rejects non-matching message names', () => {
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', message: 'HEARTBEAT' });
+  Constructor.call(node, { connection: 'conn-1', messages: ['HEARTBEAT'] });
 
   stub._deliver({ name: 'GLOBAL_POSITION_INT', sysid: 1, compid: 1, fields: { alt: 100 }, trusted: true });
   assert.equal(node._sends.length, 0);
 
   stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
   assert.equal(node._sends.length, 1);
+});
+
+test('mavlink-in: several message filters each deliver, once (#211)', () => {
+  const RED = makeRED();
+  const { stub, subscribers } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', messages: ['HEARTBEAT', 'ATTITUDE'] });
+
+  // One subscription per name, so a name can never match two filters and
+  // deliver twice.
+  assert.equal(subscribers.length, 2, 'one subscription per configured name');
+
+  stub._deliver({ name: 'GLOBAL_POSITION_INT', sysid: 1, compid: 1, fields: {}, trusted: true });
+  assert.equal(node._sends.length, 0, 'an unlisted message is still dropped');
+
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
+  stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0.1 }, trusted: true });
+  assert.equal(node._sends.length, 2, 'each listed message delivers exactly once');
+});
+
+test('mavlink-in: an empty message list receives everything (#211)', () => {
+  const RED = makeRED();
+  const { stub, subscribers } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', messages: [] });
+
+  assert.equal(subscribers.length, 1, 'one unfiltered subscription, not zero');
+  stub._deliver({ name: 'GLOBAL_POSITION_INT', sysid: 1, compid: 1, fields: {}, trusted: true });
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: {}, trusted: true });
+  assert.equal(node._sends.length, 2, 'an empty list is the old blank filter: match all');
+});
+
+test('mavlink-in: close releases every subscription, not just the first (#211)', () => {
+  const RED = makeRED();
+  const { stub, subscribers } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', messages: ['HEARTBEAT', 'ATTITUDE', 'SYS_STATUS'] });
+  assert.equal(subscribers.length, 3);
+
+  // Holding N unsubscribes means the close path has to walk them; keeping only
+  // the last would leave two subscribers dispatching into a torn-down node.
+  for (const fn of node._handlers.close || []) fn();
+  assert.equal(subscribers.length, 0, 'every subscription is torn down');
+
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: {}, trusted: true });
+  assert.equal(node._sends.length, 0, 'nothing is delivered after close');
 });
 
 test('mavlink-in: sysid filter drops messages from other systems', () => {
