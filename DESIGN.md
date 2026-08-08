@@ -1248,15 +1248,18 @@ leaves every guard above open to a string that merely looks empty (§14). A padd
 
 **Known-unsupported combos send anyway, but never silently** (`advisoryFor`): a setpoint has no
 acknowledgement, so a `node.warn` is all the feedback the operator gets. The list is what
-measurement supports, nothing more (§14, SITL 2026-08-05): **PX4 + either OFFSET frame** (no
-motion at all) and **PX4 + `BODY_NED`** (body frames carry velocity only; PX4 discards the
-position). Both surviving advisories are PX4-specific, so a Build-tier node — which has no
-connection and therefore no firmware — never warns. Three earlier
-advisories were *removed* when measurement refuted them — ArduPilot acceleration-only, ArduPilot
-`BODY_NED`, and PX4 terrain-altitude — because a warning that fires on working behaviour is
-noise, and noise gets ignored. Firmware comes from the connection's bound Vehicle Profile;
-`custom` opts out of firmware-specific advisories. Warn-not-block is deliberate: firmware support
-moves, and the advisory table is a snapshot, not a gate.
+measurement supports, nothing more (§14): **PX4 + either OFFSET frame** (no motion at all),
+**PX4 + `BODY_NED`** (body frames carry velocity only; PX4 discards the position), and
+**ArduPilot + `yaw-only` with no yaw rate** (GUIDED held heading under an absolute-yaw stream,
+`type_mask` 2559 — SITL 2026-08-08 / #179; a rate rides a different mask and was not measured).
+Build-tier nodes have no connection firmware and never warn. Three earlier advisories were
+*removed* when measurement refuted them — ArduPilot acceleration-only, ArduPilot `BODY_NED`, and
+PX4 terrain-altitude — because a warning that fires on working behaviour is noise, and noise gets
+ignored. A claimed "~2 Hz OFFBOARD floor" on PX4 was also **not** promoted: with
+`COM_OF_LOSS_T=1.0` the SIH held OFFBOARD at 1 Hz and left only on full setpoint silence (#179).
+Firmware comes from the connection's bound Vehicle Profile; `custom` opts out of
+firmware-specific advisories. Warn-not-block is deliberate: firmware support moves, and the
+advisory table is a snapshot, not a gate.
 
 There is **one vocabulary**: Move config and `msg.payload` overrides speak these mode and frame
 names (Fan-out no longer builds Move inputs at all — it replicates built messages, §10). The pre-frame names (`local-position` /
@@ -3299,12 +3302,66 @@ are the interoperable ones — the modern set would break PX4, and accepting bot
 set (banned pre-1.0). Neither firmware reads `time_boot_ms` in these handlers (PX4 stamps its
 own `hrt_absolute_time()`); pymavlink/AP-autotest send 0, MAVSDK a local elapsed counter — 0
 stays, with `payload.timeBootMs` as the escape. Advisories stay measurement-only per the
-existing ruling; two source-read hypotheses are recorded here as **to-measure on the next SITL
-session, not advisories**: ArduPilot funnels an all-ignore pos/vel/accel mask (yaw-only) into
-`hold_position()` without ever reading yaw, and ArduPilot zeroes velocity/accel targets
-`GUID_TIMEOUT` (default 3 s) after the last setpoint — so a one-shot Send velocity move brakes
-after ~3 s by design.
+existing ruling; two source-read hypotheses that were pending measurement are now settled in the
+**Move SITL queue (#175 / #179)** fact below — ArduPilot yaw-only is an advisory; GUID_TIMEOUT
+one-shot brake is documentation, not `advisoryFor`.
 *Check:* `lib/move/index.js` `MAV_FRAME` table (5/6/11 only); `node --test
+test/move/move.test.js`.
+
+---
+
+**Move SITL queue (#175 / #179) measured on Copter-4.7.0 GUIDED + PX4 1.18.0 SIH (2026-08-08).**
+*Wrong beliefs / open hypotheses:* (1) replacing a streaming Move must mutate in place because
+`stop()` interleaves a zero-velocity halt that visibly perturbs the vehicle (#175); (2) AP
+yaw-only might still yaw despite `hold_position()`; (3) GUID_TIMEOUT brake is only a source
+guess; (4) PX4 drops OFFBOARD below ~2 Hz as a hard floor; (5) yaw + yaw_rate might be exclusive
+on one stack.
+*Fact (SITL, `sitl/measure-move-179.js`, commit-era `3306d38`, raw
+`/tmp/nrc-move-179-*/move-179-results.json` on the test host):*
+
+1. **Stream-replace halt is invisible (#175).** At 10 Hz, `stop()` then a new stream (same path
+   as `mavlink-move`) kept horizontal speed ≈2 m/s across the replace window on both
+   `LOCAL_NED` (pre-med 2.008, min-after 1.935 → **3.6%** dip) and `GLOBAL_RELATIVE_ALT_INT`
+   (1.956 → 1.884, **3.7%**). A dip that size is telemetry noise, not a lurch. Decline the
+   mutate-in-place rewrite — TTL/close still need the deadman stop; replacement does not earn a
+   state-machine change.
+
+   *Strength of this one, stated honestly:* the probe's own pass criterion is
+   `minSpd < 0.35 m/s`, which only trips on an **82% collapse** — a 40% lurch an operator would
+   feel scores "invisible" against it. The conclusion rests on the measured ~4% dip, not on
+   clearing that threshold. The window is 400 ms and caught **4 NED samples** per frame, so this
+   is a thin null result: enough to decline a rewrite nobody is otherwise asking for, not enough
+   to call the halt harmless under a slower telemetry rate or a heavier airframe. Re-measure
+   before relying on it for anything beyond #175.
+
+   Note the halt is `SET_POSITION_TARGET_LOCAL_NED` even when the stream is `GLOBAL_INT` — the
+   run recorded both names. Different message names mean different Streaming coalescing keys
+   (§7), and `send()` pumps synchronously in any case, so the halt reaches the wire in every
+   mode. It is not hidden by the queue; the vehicle simply does not care.
+2. **ArduPilot *absolute-yaw* yaw-only does nothing.** Streamed yaw-only for 5 s changed heading
+   by ≈0.2°. Matches `hold_position()` never reading yaw. **Advisory** on `firmware ===
+   'ardupilot' && mode === 'yaw-only'` **and no yaw rate present** — the measured mask is
+   `type_mask` **2559** exactly. A yaw-only setpoint carrying a rate is mask **1535** (1024 = yaw
+   ignored), or **511** with both, and neither was measured; item 5 below clocked AP slewing at
+   ~60 °/s on a commanded rate, so a "no yaw change" warning there would contradict the same
+   run. Advisories are measurement-only (three were deleted for firing on working behaviour), and
+   that rule binds a *mask*, not a mode name. Use velocity/position + yaw.
+3. **ArduPilot one-shot velocity brakes after ~GUID_TIMEOUT.** Single Send velocity north ≈2 m/s:
+   early median ≈1.9 m/s (0.5–2 s), late median ≈0.1 m/s (3.5–6 s) with the drop between ≈3.3–4.0 s.
+   Document: sustained velocity needs **Stream**, not an `advisoryFor` on every Send.
+4. **PX4 "~2 Hz OFFBOARD floor" not confirmed as a hard drop.** With lab helpers
+   (`COM_DISARM_PRFLT`/`COM_DISARM_LAND` −1, `CBRK_SUPPLY_CHK`, `COM_RCL_EXCEPT`) and
+   `COM_OF_LOSS_T=1.0`, OFFBOARD (`DO_SET_MODE` param2=`6` main_mode — §14 encoding) **held at
+   5 Hz and 1 Hz** for 8 s; **full setpoint silence** left OFFBOARD (HEARTBEAT → AUTO/RTL pack
+   `84148224`). Do not ship a "<2 Hz" advisory; operators should stream faster than
+   `COM_OF_LOSS_T` with margin.
+5. **Yaw + yaw_rate are complementary on both stacks.** Velocity north + yaw 90° held heading
+   while translating; velocity 0 + yaw 180° + yaw_rate 20°/s produced non-trivial yawspeed
+   (AP median ≈60 °/s, PX4 ≈11 °/s) toward the commanded heading. Document as observed on
+   AP/PX4, not as a MAVLink protocol guarantee (`POSITION_TARGET_TYPEMASK` leaves both-clear
+   undefined for third-party autopilots).
+
+*Check:* `node sitl/measure-move-179.js`; `lib/move/index.js` `advisoryFor`; `node --test
 test/move/move.test.js`.
 
 ---
