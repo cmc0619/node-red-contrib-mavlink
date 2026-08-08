@@ -30,6 +30,28 @@ test('selection resolves all, explicit list, and filters while excluding stale p
   );
 });
 
+test('a list selection refuses a bad sysid instead of fanning out to the rest', () => {
+  const peerTable = peerTableStub([peer(1), peer(2), peer(4)]);
+
+  // The list can arrive on msg.payload, and dropping the unreadable entry
+  // would send to the members that did parse while reporting success — the
+  // partial fan-out parseSysidList exists to prevent. Build tier already
+  // refused these (test/fanout/node.test.js); this is the wire tier matching.
+  // Both spellings: parseSysidList tokenises an array and a comma string
+  // differently before the shared 1..255 check, so a bad id has two ways in.
+  for (const bad of [[1, 'abc'], [1, 300], [1, 0], [1, 2.5], '1, 300', '1, abc']) {
+    assert.throws(
+      () => selectFanoutMembers(peerTable, { mode: 'list', sysids: bad }),
+      /1\.\.255/,
+      `${JSON.stringify(bad)} must refuse, not silently drop`
+    );
+  }
+
+  // Readable lists are untouched, in either spelling.
+  assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'list', sysids: [1, 4] }).map((m) => m.sysid), [1, 4]);
+  assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'list', sysids: ['1', '4'] }).map((m) => m.sysid), [1, 4]);
+});
+
 // ── The replicator contract: message in, kind inferred from its name ──────────
 
 test('classifyMessage infers confirmation and band from the message name', () => {

@@ -145,8 +145,10 @@ test('advanced bitmask command params save one numeric mask value', () => {
   );
 
   assert.match(saver, /data-kind['"]\)\s*===\s*['"]bitmask['"]/, 'save path detects bitmask controls');
-  assert.match(saver, /Array\.isArray\(raw\)/, 'save path handles multi-select value arrays');
-  assert.match(saver, /mask\s*=\s*mask\s*\|/, 'selected entries are ORed into one mask');
+  // The fold itself — multi-select normalisation and the BigInt OR — lives in
+  // the shared helper and is tested there (mavlink-editor-resource.test.js).
+  assert.match(saver, /RED\.mavlink\.bitmaskFromSelection\(raw\)/, 'the fold comes from the shared helper');
+  assert.match(saver, /mask !== null/, 'nothing selected omits the param rather than saving 0');
   assert.match(saver, /params\[idx\]\s*=\s*mask/, 'params JSON stores a number, not an array');
 });
 

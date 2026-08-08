@@ -25,15 +25,6 @@
       RED.mavlink.buildTierDialectDefaults()
     );
 
-    /** Fold a multi-select bitmask's selected values into one number. */
-    function maskOf(raw) {
-      var values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-      if (!values.length) return '';
-      var mask = 0n;
-      values.forEach(function (value) { mask = mask | BigInt(String(value)); });
-      return Number(mask);
-    }
-
     /**
      * Label for a field the dialect does not name. Command params carry a
      * `label`; message fields (gimbal manager aiming) do not, so the recipe's
@@ -58,7 +49,11 @@
           return;
         }
         if (kind === 'bitmask') {
-          values[key] = maskOf($input.val());
+          // Blank, not 0, when nothing is selected: a blank slot takes the
+          // recipe default downstream, the same as every other empty control
+          // here — 0 would assert "no flags" as a deliberate choice.
+          var mask = RED.mavlink.bitmaskFromSelection($input.val());
+          values[key] = mask === null ? '' : mask;
           return;
         }
         values[key] = $input.val();

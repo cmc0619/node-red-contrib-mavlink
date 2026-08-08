@@ -717,14 +717,10 @@
         }
         const raw = $input.val();
         if ($input.attr('data-kind') === 'bitmask') {
-          const values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-          if (!values.length) return;
-          let mask = 0n;
-          for (const value of values) {
-            mask = mask | BigInt(String(value));
-          }
-          mask = Number(mask);
-          params[idx] = mask;
+          // Nothing selected omits the param, which resolves to 0 on the wire
+          // anyway — the same shape as the blank number field below.
+          const mask = RED.mavlink.bitmaskFromSelection(raw);
+          if (mask !== null) params[idx] = mask;
           return;
         }
         const val = String(raw || '').trim();
