@@ -234,11 +234,11 @@ const PROFILE = {
     notes: 'delivery=send; no COMMAND_ACK / no manager telemetry on Copter-4.7.0 --gimbal',
   },
   '36-peer-table-inflight': {
-    waitMs: 25000,
+    waitMs: 20000,
     expect: 'peer-table snapshot armed+position+gps while airborne',
     prep: 'ap-guided-1',
-    // Start flight (takeoff complete + 8 s move) then Snapshot — gap must cover climb.
-    injectGapMs: 55000,
+    // Start flight (stream request + takeoff complete + 8 s move) then Snapshot.
+    injectGapMs: 70000,
     notes:
       'Flow-level State snapshot after takeoff+move; hard §8 field asserts in sitl/measure-peer-table.js',
   },
@@ -705,17 +705,18 @@ function verdictFrom(profile, summary, log) {
     return { status: 'FAIL', reason: 'manager send/unconfirmed status not observed' };
   }
   if (/peer-table snapshot|peer table enrichment/i.test(expect)) {
+    // Node-RED console debug prints util.inspect objects (armed: true), not JSON.
     const takeoffOk = summary.debug.some(
       (d) =>
         /takeoff/i.test(d.tag) &&
         (d.result === 'succeeded' || d.result === 'accepted')
     );
     const snapTag = summary.debug.some((d) => /peer-table snapshot/i.test(d.tag));
-    const armed = /"armed"\s*:\s*true/.test(log);
-    const relAlt = /"relativeAlt"\s*:\s*[1-9]/.test(log);
-    const gps = /"fixType"\s*:\s*[3-9]/.test(log);
-    const battery = /"battery"\s*:\s*\{/.test(log);
-    const home = /"home"\s*:\s*\{/.test(log);
+    const armed = /\barmed:\s*true\b/.test(log);
+    const relAlt = /\brelativeAlt:\s*[1-9]/.test(log);
+    const gps = /\bfixType:\s*[3-9]/.test(log);
+    const battery = /\bbattery:\s*\{/.test(log) && !/\bbattery:\s*null\b/.test(log);
+    const home = /\bhome:\s*\{/.test(log) && !/\bhome:\s*null\b/.test(log);
     const fields = { takeoffOk, snapTag, armed, relAlt, gps, battery, home };
     const hits = Object.values(fields).filter(Boolean).length;
     if (hits >= 6) {

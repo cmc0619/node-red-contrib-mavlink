@@ -23,6 +23,13 @@ const OUT = path.join(WORK, 'peer-table-results.json');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** AUTOPILOT_VERSION.capabilities arrives as BigInt from the codec. */
+function jsonSafe(value) {
+  return JSON.parse(
+    JSON.stringify(value, (_key, v) => (typeof v === 'bigint' ? v.toString() : v))
+  );
+}
+
 /** Lab helpers so SIH stays armed for OFFBOARD flight (see Move measure / §14). */
 function prepPx4LabParams(container = 'nrc-px4-11') {
   const script = [
@@ -42,7 +49,7 @@ function prepPx4LabParams(container = 'nrc-px4-11') {
 }
 
 function note(results, name, ok, detail, extra) {
-  const row = { name, ok, detail, ...(extra || {}) };
+  const row = jsonSafe({ name, ok, detail, ...(extra || {}) });
   results.push(row);
   console.log(JSON.stringify(row));
   return row;
@@ -446,7 +453,7 @@ async function main() {
     failed: failed.map((r) => r.name),
     results,
   };
-  fs.writeFileSync(OUT, JSON.stringify(summary, null, 2), { mode: 0o600 });
+  fs.writeFileSync(OUT, JSON.stringify(jsonSafe(summary), null, 2), { mode: 0o600 });
   console.log('WROTE', OUT);
   console.log(JSON.stringify({
     requiredPass: summary.requiredPass,

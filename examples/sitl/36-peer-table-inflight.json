@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl36-tab",
     "name": "Peer table enrichment while airborne",
-    "info": "Chain: GUIDED (confirm) → Arm (confirm) → Takeoff 10 m (complete) → Move velocity stream north 1.5 m/s for 8 s.\n\nSecond inject: mavlink-state snapshot → debug \"peer-table snapshot\". Expect armed:true, position.relativeAlt, gps.fixType, battery, home, primary endpoint.\n\nConnection: bind 0.0.0.0:14550 → remote 127.0.0.1:14551, sysid 1.\n\nAuthoritative field checklist: node sitl/measure-peer-table.js (AP + PX4).",
+    "info": "Chain: GUIDED (confirm) → Arm (confirm) → SET_MESSAGE_INTERVAL for GLOBAL_POSITION_INT / GPS_RAW_INT / SYS_STATUS → Takeoff 10 m (complete) → Move velocity stream north 1.5 m/s for 8 s.\n\nIntervals matter: completion and the peer table need GLOBAL_POSITION_INT; without an explicit request this SITL often leaves position null and takeoff times out with \"no position data\".\n\nSecond inject: mavlink-state snapshot → debug \"peer-table snapshot\". Expect armed:true, position.relativeAlt, gps.fixType, battery, home.\n\nConnection: bind 0.0.0.0:14550 → remote 127.0.0.1:14551, sysid 1.\n\nAuthoritative field checklist: node sitl/measure-peer-table.js (AP + PX4).",
     "x": 250,
     "y": 40,
     "wires": []
@@ -135,11 +135,94 @@
     "y": 160,
     "wires": [
       [
-        "sitl36-takeoff"
+        "sitl36-stream-gpi"
       ],
       [
         "sitl36-arm-status"
       ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl36-stream-gpi",
+    "type": "mavlink-command",
+    "z": "sitl36-tab",
+    "name": "Stream GPI 10 Hz",
+    "mode": "preset",
+    "preset": "set_message_interval",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl36-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":33,\"2\":100000}",
+    "carrier": "long",
+    "x": 800,
+    "y": 160,
+    "wires": [
+      [
+        "sitl36-stream-gps"
+      ],
+      [
+        "sitl36-stream-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl36-stream-gps",
+    "type": "mavlink-command",
+    "z": "sitl36-tab",
+    "name": "Stream GPS 5 Hz",
+    "mode": "preset",
+    "preset": "set_message_interval",
+    "advancedCommand": "",
+    "delivery": "send",
+    "connection": "sitl36-connection",
+    "timeout": "5000",
+    "maxRetries": "0",
+    "unconfirmedContinue": true,
+    "completionTimeout": "0",
+    "params": "{\"1\":24,\"2\":200000}",
+    "carrier": "long",
+    "x": 1020,
+    "y": 160,
+    "wires": [
+      [
+        "sitl36-stream-sys"
+      ],
+      []
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl36-stream-sys",
+    "type": "mavlink-command",
+    "z": "sitl36-tab",
+    "name": "Stream SYS_STATUS 2 Hz",
+    "mode": "preset",
+    "preset": "set_message_interval",
+    "advancedCommand": "",
+    "delivery": "send",
+    "connection": "sitl36-connection",
+    "timeout": "5000",
+    "maxRetries": "0",
+    "unconfirmedContinue": true,
+    "completionTimeout": "0",
+    "params": "{\"1\":1,\"2\":500000}",
+    "carrier": "long",
+    "x": 1260,
+    "y": 160,
+    "wires": [
+      [
+        "sitl36-takeoff"
+      ],
+      []
     ],
     "targetSystem": "",
     "targetComponent": ""
@@ -160,8 +243,8 @@
     "completionTimeout": "120000",
     "params": "{\"7\":10}",
     "carrier": "long",
-    "x": 820,
-    "y": 160,
+    "x": 800,
+    "y": 280,
     "wires": [
       [
         "sitl36-move"
@@ -198,7 +281,7 @@
     "rateHz": 10,
     "ttlMs": 8000,
     "x": 1060,
-    "y": 160,
+    "y": 280,
     "wires": [
       [
         "sitl36-airborne"
@@ -289,6 +372,23 @@
     "wires": []
   },
   {
+    "id": "sitl36-stream-status",
+    "type": "debug",
+    "z": "sitl36-tab",
+    "name": "stream status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 800,
+    "y": 220,
+    "wires": []
+  },
+  {
     "id": "sitl36-takeoff-status",
     "type": "debug",
     "z": "sitl36-tab",
@@ -301,8 +401,8 @@
     "targetType": "full",
     "statusVal": "",
     "statusType": "auto",
-    "x": 820,
-    "y": 240,
+    "x": 800,
+    "y": 340,
     "wires": []
   },
   {
@@ -319,7 +419,7 @@
     "statusVal": "",
     "statusType": "auto",
     "x": 1060,
-    "y": 240,
+    "y": 340,
     "wires": []
   },
   {
@@ -336,7 +436,7 @@
     "statusVal": "",
     "statusType": "auto",
     "x": 1280,
-    "y": 160,
+    "y": 280,
     "wires": []
   },
   {
