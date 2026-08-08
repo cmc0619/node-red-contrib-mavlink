@@ -541,6 +541,11 @@
           if (isBitmask) {
             sel.val(RED.mavlink.selectedBitmaskValues(saved, entries));
           } else if (saved !== undefined && saved !== null && saved !== '') {
+            // A saved value the table lacks — a newer firmware's mode, Blimp's
+            // reserved 30, a dialect switch — must survive open-and-save, not
+            // deselect to null and resolve to 0 on the wire (Codex #198). The
+            // shared sentinel keeps it selectable until the operator changes it.
+            RED.mavlink.ensureSavedEnumOption(sel, String(saved));
             sel.val(String(saved));
           }
           return sel;
