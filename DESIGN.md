@@ -3412,3 +3412,45 @@ its modes are a two-field encoding, not a flat enum, and nobody has measured tha
 ['ardupilotmega','storm32','common','development']){const b=m.listCommandsCatalog(d).enums.BLIMP_MODE;
 console.log(d,b?b.length+' → '+b.map(e=>e.value).join(','):'absent')}"` — 7 modes 0–6 on the two
 ArduPilot dialects, absent on the other two.
+
+---
+
+**Two parsers for one sysid list, and the strict one was not on the path that
+needed it (2026-08-08).**
+*Wrong belief:* the fan-out sysid list had a deliberate strict/lenient split —
+`parseSysidList` refusing bad ids where an operator typed them, `parseSysids`
+being forgiving where the list is resolved against a live peer table. Believed
+deliberate on the strength of the two functions sitting a screen apart with
+only one carrying a docstring.
+*Fact (measured 2026-08-08):* nothing documented the split — `grep -rn
+'parseSysids\|lenient' DESIGN.md AGENTS.md` returns nothing — and the tiers
+had it backwards. `buildListStub` (`nodes/mavlink-fanout.js`) parsed **strictly**
+on the Build tier, while `selectFanoutMembers` parsed **leniently** on the wire
+tiers, where the send actually happens. The same `msg.payload` therefore behaved
+two ways:
+
+| `selection.sysids` | Build tier | Wire tiers (before) |
+|---|---|---|
+| `[1, 2, "abc", 4]` | refuses, `1..255` | sends to 1, 2, 4 — "3 succeeded" |
+| `[1, 2, 300]` | refuses | sends to 1, 2 — "2 succeeded" |
+
+The lenient array branch was `value.map(Number)`, so `"abc"` became `NaN`. That
+NaN never reached the wire — `wanted` is only a `Set` filtering the peer table,
+and no real `peer.sysid` is NaN — which is why this reads as *nothing wrong*
+rather than as an error. The failure is the silent narrowing: a fan-out told to
+reach four vehicles reaches three and reports success. Its own sibling's
+docstring already named the hazard — "silently dropping `256` would send a
+partial fan-out" — on the parser that was not being called. Note the string
+branch was no safer: its `.filter(Number.isInteger…)` *is* the silent drop,
+minus the NaN.
+
+*Decision:* one parser. `selectFanoutMembers` routes through `parseSysidList`,
+and the lenient `parseSysids` is deleted rather than left to be re-picked — it
+had exactly one caller. A bad id now refuses on every tier and routes through
+`failInput` like any other runtime-boundary refusal (§2 "no phantom success");
+editor-validated config lists pass untouched, so no validation is duplicated.
+The general lesson is about *pairs of parsers*: when two exist for one input,
+the question is not whether the strict one is correct but which path each one
+is actually on, and a split nobody wrote down is a coin toss, not a design.
+*Check:* `node --test test/fanout/fanout.test.js` — the list-selection test
+walks `"abc"`, `300`, `0` and `2.5` and asserts each refuses.
