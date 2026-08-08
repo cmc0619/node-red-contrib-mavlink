@@ -378,7 +378,7 @@ function capabilitiesFromPeer(connectionNode, target) {
 
 function completeBuild(node, send, message) {
   applyActionStatus(node, 'ok', 'built param');
-  send([{ payload: message }, statusRecord('built', 'built', { message })]);
+  send([{ payload: message }, statusRecord('succeeded', 'built', { message })]);
 }
 
 function completeResult(node, send, result, detail, payload) {
@@ -388,7 +388,7 @@ function completeResult(node, send, result, detail, payload) {
 
 function timeoutResult(node, send, detail, msg, done) {
   applyActionStatus(node, 'error', detail);
-  send([null, statusRecord('timed-out', detail)]);
+  send([null, statusRecord('timeout', detail)]);
   done(new Error(`mavlink-param: ${detail}`));
 }
 
