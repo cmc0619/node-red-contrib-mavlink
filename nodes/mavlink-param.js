@@ -339,7 +339,10 @@ module.exports = function registerMavlinkParam(RED) {
  */
 function requestFrom(config, payload, { target, profile, connectionNode }) {
   const firmware = firstDefined(payload.firmware, profile && profile.firmware);
-  const encoding = firstDefined(payload.paramEncoding, payload.encoding);
+  // `paramEncoding` only. The old `payload.encoding` rung was undocumented,
+  // unexampled and untested — nothing in the repo ever wrote it (1a79c88 removed
+  // the matching config-side alias).
+  const encoding = payload.paramEncoding;
   const capabilities = capabilitiesFromPeer(connectionNode, target);
   return {
     action: payload.action || config.action || 'read',
