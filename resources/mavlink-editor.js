@@ -379,6 +379,35 @@
   };
 
   /**
+   * Fold a bitmask multi-select's selection back into one number — the inverse
+   * of {@link RED.mavlink.selectedBitmaskValues}, and the direction Build,
+   * Command and Payload each used to spell out for themselves.
+   *
+   * `raw` is a jQuery `.val()` straight off the control, which is not an array
+   * on either edge: `null` when nothing is selected, and a bare string for a
+   * single selection. Normalising that is the half of this every caller was
+   * copying, and getting it wrong reads as a lost or corrupted mask rather than
+   * an error. Entries are OR-ed as BigInt because a dialect bitmask can carry a
+   * bit above 2^31, where `|` would wrap.
+   *
+   * Nothing selected returns null, so a caller can tell "no bits" from bits
+   * that fold to zero and pick its own empty spelling — `''` for a Payload
+   * slot, an omitted key for a Command param.
+   *
+   * @param {string|string[]|null|undefined} raw  jQuery `.val()` of the select
+   * @returns {?number} the mask, or null when nothing is selected
+   */
+  RED.mavlink.bitmaskFromSelection = function (raw) {
+    var values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    if (!values.length) return null;
+    var mask = 0n;
+    for (var i = 0; i < values.length; i++) {
+      mask = mask | BigInt(String(values[i]));
+    }
+    return Number(mask);
+  };
+
+  /**
    * Editor-side copy of lib/metadata/naming.js isFalseTrueEnum. Client HTML
    * cannot require() the Node module, so keep this rule mirrored here.
    * Exactly two entries: *_FALSE=0 and *_TRUE=1 (not mixed tables).

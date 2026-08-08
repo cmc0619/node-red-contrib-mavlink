@@ -597,6 +597,23 @@ test('selectedBitmaskValues returns the set flag values', () => {
   );
 });
 
+test('bitmaskFromSelection folds a multi-select back into one number', () => {
+  const { RED } = loadResource();
+  const fold = RED.mavlink.bitmaskFromSelection;
+
+  // Round-trips its own inverse above.
+  assert.equal(fold(['1', '4']), 5);
+  // jQuery hands back a bare string for one selection and null for none —
+  // the normalisation each caller used to spell out for itself.
+  assert.equal(fold('4'), 4);
+  assert.equal(fold(null), null);
+  assert.equal(fold([]), null);
+  // Null, not 0, so a caller can tell "nothing selected" from a zero fold.
+  assert.equal(fold(['0']), 0);
+  // BigInt, because `|` wraps above 2^31 and dialect bitmasks go there.
+  assert.equal(fold(['2147483648', '1']), 2147483649);
+});
+
 // ── select title-sync + missing-option sentinel ──────────────────────────────
 
 test('missingEnumOptionLabel is the single #N (not in dialect) wording', () => {
