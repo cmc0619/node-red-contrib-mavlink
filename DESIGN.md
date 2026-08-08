@@ -3388,6 +3388,21 @@ test/move/move.test.js`.
 
 ---
 
+**Peer-table §8 fields enrich from a live airborne vehicle (SITL 2026-08-08).**
+*Wrong belief:* suite examples that *use* the peer table (completion altitude, fan-out learning,
+example 11 armed snapshot) already prove every §8 field fills in flight.
+*Fact:* those paths only touch armed/mode/alt/endpoints. `sitl/measure-peer-table.js` flies AP
+GUIDED and PX4 OFFBOARD, requests the streams §8 needs, tours with velocity legs, and asserts
+identity, armed/`active`, primary endpoint, position (incl. heading), GPS fix, battery, home,
+section freshness, snapshot projection, and `AUTOPILOT_VERSION` (capabilities arrive as
+**BigInt** from the codec — JSON writers must stringify them). STATUSTEXT is best-effort (AP
+emitted lines; PX4 SIH often silent). Suite example **36** is the thinner State-snapshot
+regression; it must `SET_MESSAGE_INTERVAL` for `GLOBAL_POSITION_INT` before takeoff or
+completion times out with `no position data` on this lab image.
+*Check:* `node sitl/measure-peer-table.js`; `node sitl/run-example-suite.js --only 36`.
+
+---
+
 **A measured-dead mode is not a capability — Force is removed, not warned about (2026-08-06).**
 *Wrong belief:* once measurement showed neither stack actuates on the force bit, an advisory
 saying "expect it to be ignored" was the right resolution — the mode is legal MAVLink, keeping
