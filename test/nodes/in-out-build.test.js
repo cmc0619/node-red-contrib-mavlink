@@ -300,6 +300,62 @@ test('mavlink-in: emits msg on matching inbound decoded message', () => {
   assert.equal(out.trusted, true);
 });
 
+test('mavlink-in: the badge counts deliveries, count first so it survives the cap', () => {
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' });
+
+  assert.deepEqual(node._status, { fill: 'grey', shape: 'ring', text: 'waiting' });
+
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: {}, trusted: true });
+  assert.equal(node._status.text, '1 HEARTBEAT');
+  assert.equal(node._status.fill, 'green');
+
+  // A different name refreshes immediately — the badge must not lag behind
+  // which stream is arriving, even inside the throttle window.
+  stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
+  assert.equal(node._status.text, '2 ATTITUDE');
+
+  // The count is node-wide, not per message name.
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: {}, trusted: true });
+  assert.equal(node._status.text, '3 HEARTBEAT');
+
+  // Count leads so capBadge's tail truncation eats the name, never the number:
+  // GLOBAL_POSITION_INT is 19 of the 24 characters §6 allows.
+  stub._deliver({ name: 'GLOBAL_POSITION_INT', sysid: 1, compid: 1, fields: {}, trusted: true });
+  assert.ok(node._status.text.startsWith('4 '), `count leads: ${node._status.text}`);
+  assert.ok(node._status.text.length <= 24, `badge capped: ${node._status.text}`);
+});
+
+test('mavlink-in: a same-name burst is throttled, and the count still counts it', () => {
+  // The count changes on every delivery, so throttling on rendered text would
+  // never fire — a 50 Hz stream would rewrite the badge 50×/s. The throttle
+  // keys on the message name instead; deliveries are still counted while it
+  // holds, so the next badge write jumps to the true total.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' });
+
+  const writes = [];
+  node.status = (s) => { node._status = s; writes.push(s.text); };
+
+  for (let i = 0; i < 40; i++) {
+    stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
+  }
+
+  assert.equal(node._sends.length, 40, 'every message is still delivered');
+  assert.ok(writes.length < 40, `badge writes throttled: ${writes.length} for 40 messages`);
+  assert.equal(writes[0], '1 ATTITUDE', 'first delivery paints immediately');
+});
+
 test('mavlink-in: message filter rejects non-matching message names', () => {
   const RED = makeRED();
   const { stub } = makeConnectionStub();
