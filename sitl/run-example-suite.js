@@ -233,6 +233,15 @@ const PROFILE = {
     expect: 'AP-31 gimbal manager aim sent unconfirmed',
     notes: 'delivery=send; no COMMAND_ACK / no manager telemetry on Copter-4.7.0 --gimbal',
   },
+  '36-peer-table-inflight': {
+    waitMs: 25000,
+    expect: 'peer-table snapshot armed+position+gps while airborne',
+    prep: 'ap-guided-1',
+    // Start flight (takeoff complete + 8 s move) then Snapshot — gap must cover climb.
+    injectGapMs: 55000,
+    notes:
+      'Flow-level State snapshot after takeoff+move; hard §8 field asserts in sitl/measure-peer-table.js',
+  },
 };
 
 function req(method, urlPath, body, headers = {}) {
@@ -694,6 +703,40 @@ function verdictFrom(profile, summary, log) {
       return { status: 'PASS', reason: 'gimbal manager aim sent (unconfirmed) on AP-31' };
     }
     return { status: 'FAIL', reason: 'manager send/unconfirmed status not observed' };
+  }
+  if (/peer-table snapshot|peer table enrichment/i.test(expect)) {
+    const takeoffOk = summary.debug.some(
+      (d) =>
+        /takeoff/i.test(d.tag) &&
+        (d.result === 'succeeded' || d.result === 'accepted')
+    );
+    const snapTag = summary.debug.some((d) => /peer-table snapshot/i.test(d.tag));
+    const armed = /"armed"\s*:\s*true/.test(log);
+    const relAlt = /"relativeAlt"\s*:\s*[1-9]/.test(log);
+    const gps = /"fixType"\s*:\s*[3-9]/.test(log);
+    const battery = /"battery"\s*:\s*\{/.test(log);
+    const home = /"home"\s*:\s*\{/.test(log);
+    const fields = { takeoffOk, snapTag, armed, relAlt, gps, battery, home };
+    const hits = Object.values(fields).filter(Boolean).length;
+    if (hits >= 6) {
+      return {
+        status: 'PASS',
+        reason: `peer-table snapshot in flight (${Object.entries(fields)
+          .filter(([, v]) => v)
+          .map(([k]) => k)
+          .join(', ')})`,
+      };
+    }
+    if (hits >= 3) {
+      return {
+        status: 'PARTIAL',
+        reason: `peer-table inflight partial: ${JSON.stringify(fields)}`,
+      };
+    }
+    return {
+      status: 'FAIL',
+      reason: `peer-table inflight missing: ${JSON.stringify(fields)}`,
+    };
   }
   if (/WPNAV_SPEED echo timeout|unknown .*echo timeout/i.test(expect)) {
     // Negative path: timed-out is the success — but only after a known-param

@@ -103,6 +103,19 @@ Probes stream-replace halt visibility, AP yaw-only, GUID_TIMEOUT one-shot brake,
 PX4 OFFBOARD rate/silence (`COM_OF_LOSS_T`), and yaw+yaw_rate on both stacks.
 Findings land in `DESIGN.md` §14 — do not commit the JSON.
 
+### Peer-table enrichment while airborne (§8)
+
+```bash
+# Same ports; writes /tmp/nrc-peer-table-*/peer-table-results.json
+node sitl/measure-peer-table.js
+```
+
+Asserts every DESIGN.md §8 field (identity, armed/mode, endpoints, position,
+GPS, battery, home, section freshness, snapshot projection; AUTOPILOT_VERSION /
+STATUSTEXT best-effort) on AP GUIDED + PX4 OFFBOARD after takeoff and a short
+velocity tour. Suite example **36** is the thinner flow-level State snapshot
+regression (`run-example-suite.js --only 36`).
+
 ### Post results (no PR)
 
 ```bash
