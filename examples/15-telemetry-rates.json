@@ -153,7 +153,9 @@
     "z": "ex15-tab",
     "name": "GLOBAL_POSITION_INT",
     "connection": "ex15-connection",
-    "message": "GLOBAL_POSITION_INT",
+    "messages": [
+      "GLOBAL_POSITION_INT"
+    ],
     "sysid": "",
     "compid": "",
     "changedOnly": false,

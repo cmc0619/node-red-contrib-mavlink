@@ -14,15 +14,17 @@ const html = fs.readFileSync(
   'utf8'
 );
 
-test('message filter is a dialect <select>, not free-form text (§6)', () => {
-  assert.match(
-    html,
-    /<select id="node-input-message"/,
-    'Message filter must be a select dropdown'
-  );
+test('message filters are a list of dialect <select> rows, not free-form text (§6)', () => {
+  assert.match(html, /<ol id="mav-in-messages">/, 'the filter is an editableList');
+  assert.match(html, /addButton:\s*'add message'/, 'rows are added by button');
+  assert.match(html, /\$\('<select>'/, 'each row carries a select, not a text input');
   assert.ok(
     !html.includes('placeholder="e.g. HEARTBEAT'),
     'the free-form message placeholder must be gone'
+  );
+  assert.ok(
+    !/id="node-input-message"/.test(html),
+    'the single-message field is gone, not left orphaned beside the list'
   );
 });
 
@@ -32,10 +34,10 @@ test('message filter loads dialect messages from build/messages catalog', () => 
     /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/,
     'dialect message catalog uses shared loadCatalog'
   );
-  assert.match(html, /function buildMessageDropdown/, 'dropdown is rebuilt from catalog entries');
+  assert.match(html, /function paintRow/, 'rows are painted from catalog entries');
   assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'options are built via shared fillEnumSelect');
   assert.match(html, /valueKey:\s*['"]name['"]/, 'option values are message names');
-  assert.match(html, /All messages/, 'empty selection means all traffic');
+  assert.match(html, /empty to receive every message/i, 'an empty list means all traffic');
 });
 
 test('message filter resolves dialect from the Connection vehicle graph (wire-only, shared helper)', () => {
@@ -52,10 +54,19 @@ test('message filter resolves dialect from the Connection vehicle graph (wire-on
   assert.doesNotMatch(html, /dialect\s*=\s*['"]ardupilotmega['"]/, 'no invented default dialect');
 });
 
-test('message filter preserves the saved message name after async catalog load', () => {
-  assert.match(html, /node\.message/, 'saved message is re-applied');
-  assert.match(html, /saved:\s*node\.message/, 'the saved message is offered');
-  assert.match(html, /preferLive:\s*true/, 'in-progress selection wins over saved');
+test('message rows survive an async catalog load', () => {
+  // A row can exist before the catalog arrives, and a Connection change
+  // reloads it, so every existing row is repainted when one lands rather than
+  // only the rows added afterwards.
+  assert.match(html, /\(node\.messages \|\| \[\]\)\.forEach/, 'saved rows are restored');
+  assert.match(
+    html,
+    /editableList\('items'\)\.each\(function \(\) \{\s*\n\s*paintRow/,
+    'a catalog load repaints every existing row'
+  );
+  // paintRow captures the row's current value itself, so the fill is told what
+  // to select rather than reading the live control a second time.
+  assert.match(html, /var want = saved !== undefined \? saved : \$sel\.val\(\)/, 'the live selection is carried across a repaint');
   assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'unknown saved values use shared fillEnumSelect sentinel');
 });
 

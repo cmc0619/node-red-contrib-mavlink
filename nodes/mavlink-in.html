@@ -13,22 +13,37 @@
       });
     }
 
-    function buildMessageDropdown(node, catalog) {
-      var sel = $('#node-input-message');
-      RED.mavlink.fillEnumSelect(sel, catalog.messages || [], {
-        saved: node.message,
-        preferLive: true,
+    /** Catalog the loader last handed this dialog — rows paint from this. */
+    var _currentMsgCatalog = null;
+
+    /**
+     * Fill one row's select from the catalog, keeping whatever it already
+     * shows. A row can be added before the catalog arrives (or while a
+     * Connection change is reloading it), so painting is separate from adding
+     * and every existing row is repainted when a catalog lands.
+     *
+     * @param {JQuery} $sel  the row's select
+     * @param {string} [saved]  value to select, when restoring a saved row
+     */
+    function paintRow($sel, saved) {
+      var want = saved !== undefined ? saved : $sel.val();
+      RED.mavlink.fillEnumSelect($sel, (_currentMsgCatalog || {}).messages || [], {
+        saved: want,
+        preferLive: false,
         allowEmpty: true,
-        emptyLabel: 'All messages',
+        emptyLabel: '— select message —',
         valueKey: 'name',
         titleNamespace: 'mavMsgTip',
         triggerChange: false
       });
     }
 
-    function refreshMessageOptions(node) {
+    function refreshMessageOptions() {
       loadMessagesCatalog(function (catalog) {
-        buildMessageDropdown(node, catalog);
+        _currentMsgCatalog = catalog;
+        $('#mav-in-messages').editableList('items').each(function () {
+          paintRow($(this).find('select'));
+        });
       });
     }
 
@@ -38,7 +53,9 @@
       defaults: {
         name:        { value: '' },
         connection:  { value: '', type: 'mavlink-connection', required: true },
-        message:     { value: '' },
+        // A list, not a single name (#211). An empty list matches every
+        // message, which is what a blank single filter used to mean.
+        messages:    { value: [] },
         sysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
         compid:      { value: '' },
         changedOnly: { value: false },
@@ -77,8 +94,11 @@
       icon: 'font-awesome/fa-arrow-down',
       paletteLabel: 'in',
       label: function () {
-        var label = this.name || this.message || 'mavlink in';
-        return label;
+        if (this.name) return this.name;
+        var list = this.messages || [];
+        if (list.length === 1) return list[0];
+        if (list.length > 1) return list[0] + ' +' + (list.length - 1);
+        return 'mavlink in';
       },
       labelStyle: function () {
         return this.name ? 'node_label_italic' : '';
@@ -95,10 +115,25 @@
         }
         $('#node-input-changedOnly').on('change', refreshChangedFieldsRow);
         refreshChangedFieldsRow();
-        $('#node-input-connection').on('change', function () {
-          refreshMessageOptions(node);
+        // Message filters (#211): one catalog-backed select per row. Same
+        // stock widget the Connection and Fan-out dialogs use for their lists.
+        var $messages = $('#mav-in-messages');
+        $messages.editableList({
+          addButton: 'add message',
+          removable: true,
+          sortable: true,
+          height: 'auto',
+          addItem: function (container, _index, data) {
+            var $sel = $('<select>', { style: 'width:100%;' }).appendTo(container);
+            paintRow($sel, (data && data.name) || '');
+          },
         });
-        refreshMessageOptions(node);
+        (node.messages || []).forEach(function (name) {
+          $messages.editableList('addItem', { name: name });
+        });
+
+        $('#node-input-connection').on('change', refreshMessageOptions);
+        refreshMessageOptions();
         if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
           RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
             RED.mavlink.fillCompIdSelect(
@@ -108,6 +143,21 @@
             );
           });
         }
+      },
+
+      oneditsave: function () {
+        // Blank rows and duplicates are dropped rather than refused: a blank
+        // row is an unfinished thought, and a name repeated twice would
+        // subscribe twice and deliver the message twice.
+        var seen = {};
+        var names = [];
+        $('#mav-in-messages').editableList('items').each(function () {
+          var name = String($(this).find('select').val() || '').trim();
+          if (!name || seen[name]) return;
+          seen[name] = true;
+          names.push(name);
+        });
+        this.messages = names;
       },
     });
   }());
@@ -124,8 +174,14 @@
   </div>
   <hr/>
   <div class="form-row">
-    <label for="node-input-message"><i class="fa fa-filter"></i> Message</label>
-    <select id="node-input-message" style="width:70%"></select>
+    <label style="vertical-align:top;"><i class="fa fa-filter"></i> Messages</label>
+    <div style="display:inline-block;width:70%;">
+      <ol id="mav-in-messages"></ol>
+    </div>
+  </div>
+  <div class="form-tips" style="margin-bottom:8px;">
+    Leave the list empty to receive every message. The Sysid, Compid and rate
+    settings below apply to all of them.
   </div>
   <div class="form-row">
     <label for="node-input-sysid"><i class="fa fa-filter"></i> Sysid</label>

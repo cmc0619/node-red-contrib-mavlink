@@ -67,7 +67,9 @@
     "z": "sitl22-tab",
     "name": "GLOBAL_POSITION_INT",
     "connection": "sitl22-connection",
-    "message": "GLOBAL_POSITION_INT",
+    "messages": [
+      "GLOBAL_POSITION_INT"
+    ],
     "sysid": "",
     "compid": "",
     "changedOnly": false,

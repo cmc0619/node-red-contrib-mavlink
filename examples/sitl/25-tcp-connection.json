@@ -67,7 +67,9 @@
     "z": "sitl25-tab",
     "name": "HEARTBEAT over TCP",
     "connection": "sitl25-connection",
-    "message": "HEARTBEAT",
+    "messages": [
+      "HEARTBEAT"
+    ],
     "sysid": "",
     "compid": "",
     "changedOnly": false,

@@ -53,7 +53,8 @@ test('Command Advanced MAV_CMD select and enum options use catalog descriptions'
 
 test('In / Fan-out enum selects use shared fillEnumSelect', () => {
   const inn = readHtml('mavlink-in');
-  assert.match(inn, /RED\.mavlink\.fillEnumSelect\(sel,/);
+  // One select per message row (#211), so the fill takes the row's select.
+  assert.match(inn, /RED\.mavlink\.fillEnumSelect\(\$sel,/);
   assert.match(inn, /titleNamespace:\s*'mavMsgTip'/);
   assert.doesNotMatch(inn, /function syncMessageTitle/);
 

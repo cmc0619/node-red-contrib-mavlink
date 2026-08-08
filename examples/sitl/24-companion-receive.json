@@ -115,7 +115,9 @@
     "z": "sitl24-tab",
     "name": "Vehicle HEARTBEAT",
     "connection": "sitl24-connection",
-    "message": "HEARTBEAT",
+    "messages": [
+      "HEARTBEAT"
+    ],
     "sysid": "20",
     "compid": "1",
     "changedOnly": false,
@@ -134,7 +136,9 @@
     "z": "sitl24-tab",
     "name": "Vehicle STATUSTEXT",
     "connection": "sitl24-connection",
-    "message": "STATUSTEXT",
+    "messages": [
+      "STATUSTEXT"
+    ],
     "sysid": "20",
     "compid": "1",
     "changedOnly": false,

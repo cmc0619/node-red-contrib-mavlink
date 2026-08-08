@@ -115,7 +115,9 @@
         "z": "sitl15-tab",
         "name": "HEARTBEAT",
         "connection": "sitl15-connection",
-        "message": "HEARTBEAT",
+        "messages": [
+          "HEARTBEAT"
+        ],
         "sysid": "",
         "compid": "",
         "changedOnly": false,
