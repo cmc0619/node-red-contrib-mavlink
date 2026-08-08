@@ -2,7 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
-const { applyConnectionStatus } = require('../lib/addressing');
+const { applyConnectionStatus, isBlank, dialectFromConnection } = require('../lib/addressing');
 const { formationTargets, finite } = require('../lib/formation');
 const {
   DEFAULT_TIMEOUT_MS,
@@ -13,7 +13,6 @@ const {
   CARRIER,
   intCoordKinds,
 } = require('../lib/command');
-const { dialectFromConnection } = require('../lib/addressing');
 
 /**
  * mavlink-formation — position a group of vehicles into a geometric formation.
@@ -188,11 +187,9 @@ function resolveAnchor(config, payload, peerTable) {
   // config.headingDeg is editor-validated (trust it: Number() only, no
   // re-validation), and a leader's telemetry heading is projected to a finite
   // number or null by the peer table.
-  const payloadHeading = firstNonBlank(payload.headingDeg);
-  const configHeading = firstNonBlank(config.headingDeg);
-  let heading = payloadHeading !== null
-    ? finite(payloadHeading, 'payload.headingDeg')
-    : configHeading === null ? null : Number(configHeading);
+  let heading = !isBlank(payload.headingDeg)
+    ? finite(payload.headingDeg, 'payload.headingDeg')
+    : isBlank(config.headingDeg) ? null : Number(config.headingDeg);
 
   const explicit = payload.anchor
     || (config.anchorMode === 'fixed'
@@ -233,22 +230,8 @@ function resolveAnchor(config, payload, peerTable) {
  * @returns {number}
  */
 function resolvePitch(config, payload) {
-  const payloadPitch = firstNonBlank(payload.pitchDeg);
-  if (payloadPitch !== null) return finite(payloadPitch, 'payload.pitchDeg');
+  if (!isBlank(payload.pitchDeg)) return finite(payload.pitchDeg, 'payload.pitchDeg');
   // Editor default is 0 — trust config.pitchDeg (Number only, no second default).
   return Number(config.pitchDeg);
 }
 
-/**
- * First value that is not undefined, null, or blank string. `0` passes —
- * heading 0 (north) is a real heading and must not be swallowed.
- *
- * @param {...*} values
- * @returns {*} the first present value, or null
- */
-function firstNonBlank(...values) {
-  for (const value of values) {
-    if (value !== undefined && value !== null && value !== '') return value;
-  }
-  return null;
-}
