@@ -34,7 +34,6 @@
     "vehicleFamily": "copter",
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
-    "dialectSource": "bundled",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1
   },
@@ -45,7 +44,6 @@
     "vehicleFamily": "copter",
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
-    "dialectSource": "bundled",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1
   },
@@ -58,7 +56,6 @@
     "bindPort": 14550,
     "remoteHost": "127.0.0.1",
     "remotePort": 14551,
-    "broadcast": false,
     "vehicle": "ex26-vehicle-src",
     "localIdentity": "ex26-identity",
     "additionalIdentities": [],
@@ -66,7 +63,6 @@
     "requireSigned": false,
     "acceptInvalid": false,
     "linkId": 0,
-    "heartbeatInterval": 1000,
     "staleMs": "",
     "expireMs": "",
     "disabled": false
@@ -80,7 +76,6 @@
     "bindPort": 14560,
     "remoteHost": "127.0.0.1",
     "remotePort": 14561,
-    "broadcast": false,
     "vehicle": "ex26-vehicle-mirror",
     "localIdentity": "ex26-identity",
     "additionalIdentities": [],
@@ -88,7 +83,6 @@
     "requireSigned": false,
     "acceptInvalid": false,
     "linkId": 0,
-    "heartbeatInterval": 1000,
     "staleMs": "",
     "expireMs": "",
     "disabled": false

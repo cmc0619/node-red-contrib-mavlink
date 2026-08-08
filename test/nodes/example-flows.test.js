@@ -5,8 +5,22 @@
  *
  * The flows under `examples/` are data, not code, so a renamed config key
  * leaves them behind silently: the runtime reads the new key, finds nothing,
- * and falls back to its default. For `mavlink-in` that default is "no filter",
- * which turns an imported HEARTBEAT example into a firehose (#211).
+ * and falls back to its default. Three ways that has bitten already —
+ *
+ *   - `mavlink-in`'s `message` → `messages` (#211): default is "no filter", so
+ *     an imported HEARTBEAT example became a firehose.
+ *   - `mavlink-mission`'s `action` → `operation`: default is `download`, so a
+ *     SITL example labelled *upload* actually downloaded.
+ *   - `mavlink-payload`'s flat params → the `values` blob: default is `{}`, so
+ *     an example reading "aim pitch -45, yaw 90" sent 0, 0.
+ *
+ * Only the first was caught, and only because a test was written for it by
+ * name. This checks the shape instead: every key on a shipped mavlink node
+ * must be one the node actually declares.
+ *
+ * `defaults` comes from evaluating the real editor HTML (`loadNodeDefaults`),
+ * not from a list maintained here — so renaming a key updates this guard for
+ * free, and the examples are what break.
  */
 
 const test = require('node:test');
@@ -14,7 +28,19 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { loadNodeDefaults } = require('./html-assert');
+
 const EXAMPLES = path.join(__dirname, '..', '..', 'examples');
+
+/**
+ * Keys the Node-RED runtime puts on a node itself — never declared in
+ * `defaults`, and not the flow author's to get wrong.
+ */
+const STRUCTURAL = new Set([
+  'id', 'type', 'z', 'g', 'x', 'y', 'wires', 'credentials',
+  'info', 'd', 'l', 'icon', 'inputs', 'outputs',
+  'inputLabels', 'outputLabels', 'env',
+]);
 
 /** Every *.json under examples/, including examples/sitl/. */
 function exampleFiles(dir) {
@@ -38,21 +64,68 @@ function nodesOf(flow) {
   return found;
 }
 
-test('mavlink-in nodes in shipped examples use the messages list (#211)', () => {
+/** Declared `defaults` keys per node type, evaluated once. */
+const declaredCache = new Map();
+function declaredKeys(type) {
+  if (!declaredCache.has(type)) {
+    declaredCache.set(type, new Set(Object.keys(loadNodeDefaults(type))));
+  }
+  return declaredCache.get(type);
+}
+
+test('every key on a shipped mavlink node is one the node declares', () => {
   const files = exampleFiles(EXAMPLES);
   assert.ok(files.length > 0, 'there are example flows to check');
 
+  const unknown = [];
   for (const file of files) {
     const rel = path.relative(EXAMPLES, file);
-    const nodes = nodesOf(JSON.parse(fs.readFileSync(file, 'utf8')));
-    for (const node of nodes.filter((n) => n.type === 'mavlink-in')) {
+    for (const node of nodesOf(JSON.parse(fs.readFileSync(file, 'utf8')))) {
+      if (!node.type.startsWith('mavlink-')) continue;
+
+      let declared;
+      try {
+        declared = declaredKeys(node.type);
+      } catch {
+        unknown.push(`${rel}: ${node.id} — unregistered type "${node.type}"`);
+        continue;
+      }
+
+      for (const key of Object.keys(node)) {
+        if (STRUCTURAL.has(key) || declared.has(key)) continue;
+        unknown.push(`${rel}: ${node.id} (${node.type}) — undeclared key "${key}"`);
+      }
+    }
+  }
+
+  assert.deepEqual(unknown, [], `undeclared keys in shipped examples:\n${unknown.join('\n')}`);
+});
+
+test('mavlink-in nodes use the messages list, not the retired singular key (#211)', () => {
+  // Kept explicit on top of the shape check above: `messages` must be an
+  // *array*, which "is it a declared key" alone would not catch.
+  for (const file of exampleFiles(EXAMPLES)) {
+    const rel = path.relative(EXAMPLES, file);
+    for (const node of nodesOf(JSON.parse(fs.readFileSync(file, 'utf8')))) {
+      if (node.type !== 'mavlink-in') continue;
+      assert.ok(!('message' in node), `${rel}: ${node.id} still carries "message"`);
+      assert.ok(Array.isArray(node.messages), `${rel}: ${node.id} must set "messages" to an array`);
+    }
+  }
+});
+
+test('every payload node in an example resolves to a real recipe', () => {
+  // A topic/verb pair with no recipe throws at build time, so the example is
+  // dead on arrival — `examples/18` shipped three of them under a `release`
+  // topic that never existed.
+  const { recipeFor } = require('../../lib/payload');
+  for (const file of exampleFiles(EXAMPLES)) {
+    const rel = path.relative(EXAMPLES, file);
+    for (const node of nodesOf(JSON.parse(fs.readFileSync(file, 'utf8')))) {
+      if (node.type !== 'mavlink-payload') continue;
       assert.ok(
-        !('message' in node),
-        `${rel}: ${node.id} still carries the retired singular "message" key`
-      );
-      assert.ok(
-        Array.isArray(node.messages),
-        `${rel}: ${node.id} must set "messages" to an array`
+        recipeFor(node.topic, node.verb),
+        `${rel}: ${node.id} has no recipe for ${node.topic}/${node.verb}`
       );
     }
   }

@@ -34,7 +34,6 @@
     "vehicleFamily": "copter",
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
-    "dialectSource": "bundled",
     "defaultTargetSystem": 31,
     "defaultTargetComponent": 1,
     "paramDefsUrl": ""
@@ -48,7 +47,6 @@
     "bindPort": 14570,
     "remoteHost": "127.0.0.1",
     "remotePort": 14571,
-    "broadcast": false,
     "vehicle": "sitl35-vehicle",
     "localIdentity": "sitl35-identity",
     "additionalIdentities": [],
@@ -56,7 +54,6 @@
     "requireSigned": false,
     "acceptInvalid": false,
     "linkId": 0,
-    "heartbeatInterval": 1000,
     "staleMs": "",
     "expireMs": "",
     "disabled": false

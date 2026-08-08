@@ -34,7 +34,6 @@
     "vehicleFamily": "copter",
     "firmware": "px4",
     "dialect": "common",
-    "dialectSource": "bundled",
     "defaultTargetSystem": 11,
     "defaultTargetComponent": 1,
     "paramDefsUrl": ""
@@ -48,7 +47,6 @@
     "bindPort": 14560,
     "remoteHost": "127.0.0.1",
     "remotePort": 14561,
-    "broadcast": false,
     "vehicle": "sitl03-vehicle",
     "localIdentity": "sitl03-identity",
     "additionalIdentities": [],
@@ -56,7 +54,6 @@
     "requireSigned": false,
     "acceptInvalid": false,
     "linkId": 0,
-    "heartbeatInterval": 1000,
     "staleMs": "",
     "expireMs": "",
     "disabled": false
