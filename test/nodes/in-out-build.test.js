@@ -300,6 +300,211 @@ test('mavlink-in: emits msg on matching inbound decoded message', () => {
   assert.equal(out.trusted, true);
 });
 
+/**
+ * Run `fn` with `Date.now` under test control, restoring it afterwards.
+ *
+ * The badge throttle is purely time-based, so a test that leaves the host
+ * clock running is flaky by construction: a slow runner crossing a
+ * STATUS_MIN_INTERVAL_MS boundary mid-loop produces an extra, entirely valid
+ * status write and fails the assertion. `advance(ms)` steps the clock instead.
+ *
+ * @param {(advance: (ms: number) => void) => void} fn
+ */
+function withClock(fn) {
+  const realNow = Date.now;
+  const realSetTimeout = global.setTimeout;
+  let t = realNow();
+  /** @type {{fn: Function, ms: number}|null} the latched trailing flush */
+  let pending = null;
+  Date.now = () => t;
+  global.setTimeout = (cb, ms) => {
+    pending = { fn: cb, ms };
+    return { unref() {} };
+  };
+  try {
+    fn({
+      advance: (ms) => { t += ms; },
+      /** Fire the latched flush as the timer would, after its delay elapses. */
+      fireFlush: () => {
+        assert.ok(pending, 'expected a trailing flush to be scheduled');
+        const { fn: cb, ms } = pending;
+        pending = null;
+        t += ms;
+        cb();
+      },
+      pending: () => pending,
+    });
+  } finally {
+    Date.now = realNow;
+    global.setTimeout = realSetTimeout;
+  }
+}
+
+test('mavlink-in: the badge counts deliveries, count first so it survives the cap', () => {
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' });
+
+  assert.deepEqual(node._status, { fill: 'grey', shape: 'ring', text: 'waiting' });
+
+  withClock(({ advance }) => {
+    const deliver = (name) => {
+      advance(300);
+      stub._deliver({ name, sysid: 1, compid: 1, fields: {}, trusted: true });
+    };
+
+    deliver('HEARTBEAT');
+    assert.equal(node._status.text, '1 HEARTBEAT');
+    assert.equal(node._status.fill, 'green');
+
+    deliver('ATTITUDE');
+    assert.equal(node._status.text, '2 ATTITUDE');
+
+    // The count is node-wide, not per message name.
+    deliver('HEARTBEAT');
+    assert.equal(node._status.text, '3 HEARTBEAT');
+
+    // Count leads so capBadge's tail truncation eats the name, never the
+    // number: GLOBAL_POSITION_INT is 19 of the 24 characters §6 allows.
+    deliver('GLOBAL_POSITION_INT');
+    assert.ok(node._status.text.startsWith('4 '), `count leads: ${node._status.text}`);
+    assert.ok(node._status.text.length <= 24, `badge capped: ${node._status.text}`);
+  });
+});
+
+test('mavlink-in: alternating message names do not bypass the badge throttle', () => {
+  // Regression (Codex, #219): the throttle used to exempt a changed message
+  // name. With a multi-message filter (#211) the name alternates on nearly
+  // every frame, so the exemption fired every time and the throttle never
+  // engaged — measured at 200 status writes for 200 deliveries, i.e. two
+  // 50 Hz streams rewriting the badge 100x/s.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', messages: ['ATTITUDE', 'GLOBAL_POSITION_INT'] });
+
+  const writes = [];
+  node.status = (s) => { node._status = s; writes.push(s.text); };
+
+  withClock(() => {
+    for (let i = 0; i < 200; i++) {
+      stub._deliver({
+        name: i % 2 ? 'ATTITUDE' : 'GLOBAL_POSITION_INT',
+        sysid: 1, compid: 1, fields: {}, trusted: true,
+      });
+    }
+  });
+
+  assert.equal(node._sends.length, 200, 'every message is still delivered');
+  // The clock never moves, so exactly one write is correct: the first, which
+  // paints immediately. Before the fix this was 200.
+  assert.equal(writes.length, 1, `alternating names stay throttled: ${writes.length} writes`);
+});
+
+test('mavlink-in: a same-name burst is throttled, and the count still counts it', () => {
+  // The throttle is time-only — no exemption for a changed name or changed
+  // badge text, both of which would differ on nearly every delivery. Frames
+  // arriving inside the window are still counted, so the next write shows the
+  // true total rather than undercounting.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' });
+
+  const writes = [];
+  node.status = (s) => { node._status = s; writes.push(s.text); };
+
+  withClock(({ advance, fireFlush }) => {
+    for (let i = 0; i < 40; i++) {
+      stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
+    }
+    assert.equal(node._sends.length, 40, 'every message is still delivered');
+    assert.deepEqual(writes, ['1 ATTITUDE'], 'one write during the burst itself');
+
+    // Traffic stops here. The latched trailing write lands on the true total —
+    // the badge must not sit at "1 ATTITUDE" forever (Codex, #219).
+    fireFlush();
+    assert.equal(node._status.text, '40 ATTITUDE', 'trailing write settles on the total');
+    assert.deepEqual(writes, ['1 ATTITUDE', '40 ATTITUDE']);
+
+    // And the window reopens: a later delivery paints directly again.
+    advance(300);
+    stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
+    assert.equal(node._status.text, '41 ATTITUDE');
+  });
+});
+
+test('mavlink-in: only one flush is latched per window, not one per delivery', () => {
+  // A per-delivery clear+set would be ~100 timer operations a second at 50 Hz
+  // to avoid ~46 status writes — more work than it saves. One timer per window.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' });
+
+  let scheduled = 0;
+  const realSetTimeout = global.setTimeout;
+  const realNow = Date.now;
+  const t = realNow();
+  Date.now = () => t;
+  global.setTimeout = (cb, ms) => { scheduled++; return { unref() {}, _cb: cb, _ms: ms }; };
+  try {
+    for (let i = 0; i < 50; i++) {
+      stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
+    }
+  } finally {
+    global.setTimeout = realSetTimeout;
+    Date.now = realNow;
+  }
+
+  assert.equal(scheduled, 1, `one latched flush for 50 deliveries, got ${scheduled}`);
+});
+
+test('mavlink-in: close cancels a pending flush — a closed node never paints', () => {
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' });
+
+  const cleared = [];
+  const realSetTimeout = global.setTimeout;
+  const realClearTimeout = global.clearTimeout;
+  const realNow = Date.now;
+  const t = realNow();
+  const handle = { unref() {} };
+  Date.now = () => t;
+  global.setTimeout = () => handle;
+  global.clearTimeout = (h) => cleared.push(h);
+  try {
+    // Two deliveries in one window: the second latches the flush.
+    stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
+    stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
+    node._close();
+  } finally {
+    global.setTimeout = realSetTimeout;
+    global.clearTimeout = realClearTimeout;
+    Date.now = realNow;
+  }
+
+  assert.deepEqual(cleared, [handle], 'the pending flush is cleared on close');
+});
+
 test('mavlink-in: message filter rejects non-matching message names', () => {
   const RED = makeRED();
   const { stub } = makeConnectionStub();

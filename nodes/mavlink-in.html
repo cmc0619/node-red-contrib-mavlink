@@ -226,8 +226,16 @@
     <dd>Whether the frame passed signing verification on the connection.</dd>
   </dl>
   <h3>Details</h3>
-  <p><b>Message</b>, <b>Sysid</b>, and <b>Compid</b> filters are all optional;
-  leave blank to match all traffic on the connection.</p>
+  <p><b>Messages</b>, <b>Sysid</b>, and <b>Compid</b> filters are all optional;
+  leave the list empty and the ids blank to match all traffic on the connection.</p>
+  <p>The status badge shows <code>&lt;count&gt; &lt;MESSAGE&gt;</code> — messages
+  delivered since deploy, then the name of the one that just arrived. The count
+  is node-wide, not per message name, and resets on deploy.</p>
+  <p>The badge is written at most four times a second, so on a faster stream it
+  jumps rather than ticking every frame. Frames arriving between writes are
+  still counted, and a trailing write lands within a quarter second of the last
+  one — so when traffic stops the badge settles on the true total rather than
+  freezing part-way.</p>
   <p><b>Changed only</b>: only forward a message when its field values differ
   from the previous delivery for the same (message, sysid, compid) tuple.
   <b>Compare fields</b> restricts the comparison to the listed fields (comma

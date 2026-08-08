@@ -7,11 +7,13 @@ const assert = require('node:assert/strict');
 const {
   catalogMessagesFromBundle,
   listMessagesCatalog,
-  messageLabel,
+  commandLabel,
 } = require('../../lib/metadata');
 
-test('messageLabel shows the message id in parentheses (§6)', () => {
-  assert.equal(messageLabel('HEARTBEAT', 0), 'HEARTBEAT (0)');
+test('commandLabel renders a message id the same `NAME (value)` way (§6)', () => {
+  // messageLabel was an alias of commandLabel with no consumers; the shared
+  // label shape is what this pins.
+  assert.equal(commandLabel('HEARTBEAT', 0), 'HEARTBEAT (0)');
 });
 
 const FIXTURE_BUNDLE = {

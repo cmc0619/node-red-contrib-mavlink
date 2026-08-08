@@ -25,11 +25,19 @@ const { capBadge } = require('../lib/delivery');
 const { applyConnectionStatus, isBlank } = require('../lib/addressing');
 
 /**
- * Minimum interval (ms) between status-badge writes for an unchanged badge.
- * A high-rate stream (e.g. 50 Hz ATTITUDE) would otherwise rewrite the same
- * badge 50×/s and flood the editor; the message rate limit above governs wire
- * delivery, not the badge (§6). The badge still updates immediately whenever
- * its text changes so it never lags behind the actual traffic.
+ * Minimum interval (ms) between status-badge writes.
+ * A high-rate stream (e.g. 50 Hz ATTITUDE) would otherwise rewrite the badge
+ * 50×/s and flood the editor; the message rate limit above governs wire
+ * delivery, not the badge (§6).
+ *
+ * The interval applies unconditionally — no exemption for a changed message
+ * name, and none for changed badge text. Either would fire on essentially every
+ * frame: the delivery count differs every time, and with a multi-message filter
+ * (#211) so does the arriving name.
+ *
+ * Writes suppressed inside a window are not lost: one trailing write is latched
+ * for the end of it, so the badge settles on the true total within an interval
+ * of the last delivery rather than freezing wherever the burst happened to be.
  * @type {number}
  */
 const STATUS_MIN_INTERVAL_MS = 250;
@@ -80,10 +88,38 @@ module.exports = function registerMavlinkIn(RED) {
     const lastDeliveryMs = new Map();
 
     /** Badge throttling state (§6 — do not flood status on high-rate streams). */
-    let lastStatusText = null;
     let lastStatusMs = 0;
+    /** Pending trailing write, so a burst's last frames still reach the badge. */
+    let flushTimer = null;
+    /** Message name most recently delivered — what a trailing write names. */
+    let lastName = null;
+    /**
+     * Messages this node has delivered since deploy, across every subscription.
+     * A node-wide total, not per message name: with a multi-message filter the
+     * badge names the message that just arrived and the count is the node's
+     * throughput. Resets on deploy because the node is reconstructed.
+     */
+    let delivered = 0;
 
     node.status({ fill: 'grey', shape: 'ring', text: 'waiting' });
+
+    /**
+     * Write the badge and open a fresh throttle window.
+     *
+     * Count first: capBadge truncates the tail and §6 caps badges at 24
+     * characters, so with a long name (GLOBAL_POSITION_INT is 19) a trailing
+     * count would be exactly the part that got cut.
+     *
+     * @param {number} at  timestamp to treat as the write time
+     */
+    function paintBadge(at) {
+      node.status({
+        fill: 'green',
+        shape: 'dot',
+        text: capBadge(`${delivered} ${lastName}`),
+      });
+      lastStatusMs = at;
+    }
 
     /**
      * Deliver one decoded message, subject to the field predicate, the rate
@@ -140,14 +176,33 @@ module.exports = function registerMavlinkIn(RED) {
         trusted: decoded.trusted,
       });
 
-      // Rate-limit status writes: refresh only when the badge text changes or
-      // after the minimum interval, so a steady high-rate stream does not
-      // rewrite an identical badge on every frame.
-      const badgeText = capBadge(decoded.name);
-      if (badgeText !== lastStatusText || now - lastStatusMs >= STATUS_MIN_INTERVAL_MS) {
-        node.status({ fill: 'green', shape: 'dot', text: badgeText });
-        lastStatusText = badgeText;
-        lastStatusMs = now;
+      delivered += 1;
+
+      lastName = decoded.name;
+
+      // Rate-limit status writes to STATUS_MIN_INTERVAL_MS, unconditionally.
+      //
+      // No "refresh immediately when the name changes" exemption: with a
+      // multi-message filter (#211) the arriving name alternates on nearly
+      // every frame, so that exemption fired every time and the throttle never
+      // engaged — two 50 Hz streams wrote the badge 100×/s. Measured at 200 of
+      // 200 deliveries before that came out.
+      //
+      // Suppressed writes are not simply dropped: one trailing write is latched
+      // for the end of the window, so when a burst stops the badge lands on the
+      // true total instead of whatever it happened to show mid-burst.
+      if (now - lastStatusMs >= STATUS_MIN_INTERVAL_MS) {
+        paintBadge(now);
+      } else if (flushTimer === null) {
+        // Latched, not rescheduled per delivery: at 50 Hz a per-message
+        // clear+set would be ~100 timer operations a second to avoid ~46 status
+        // writes — more work than it saves. One timer per window is four a
+        // second, and later deliveries in the window ride the timer already set.
+        flushTimer = setTimeout(() => {
+          flushTimer = null;
+          paintBadge(Date.now());
+        }, STATUS_MIN_INTERVAL_MS - (now - lastStatusMs));
+        if (typeof flushTimer.unref === 'function') flushTimer.unref();
       }
     };
 
@@ -165,6 +220,10 @@ module.exports = function registerMavlinkIn(RED) {
       : [connectionNode.subscribe(target, onDecoded)];
 
     node.on('close', () => {
+      if (flushTimer !== null) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
       for (const unsubscribe of unsubscribes) unsubscribe();
     });
   }
