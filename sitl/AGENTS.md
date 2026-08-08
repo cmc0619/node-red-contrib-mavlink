@@ -14,6 +14,7 @@ and does not open a results-only PR. See [`../testing.md`](../testing.md).
 |----|--------|
 | Use the official prebuilt AP binary (Dockerfile already does) | `waf copter` / clone ArduPilot in the image (~40 min in nested Docker) |
 | `docker compose --profile sitl --profile nodered up -d --build` | Hunt for a standalone Node-RED if Compose can host it |
+| Recreate `nodered` after pulling package changes on `main` (`docker compose --profile nodered up -d --force-recreate nodered`) | Leave a long-lived `nrc-nodered` up across `git pull` — `/data` keeps the install from container start (`install-and-start.sh`), so runtime can still be on the old `sysids` CSV while flows already use `members` |
 | Wait for HEARTBEATs, then `node sitl/run-example-suite.js` | Deploy all example flows at once (UDP bind exclusivity) |
 | Post curated verdicts to a **GitHub Issue** (`sitl-results`) | Open a docs PR that only updates `testing.md` / results JSON |
 | Close the previous `sitl-results` issue after posting | Leave a trail of open result issues |
