@@ -149,7 +149,11 @@ test('concurrency is a bounded integer with a strictly-sequential default of 1',
 
 test('rows reshape by selection, execution, and delivery (§6)', () => {
   assert.match(html, /function refreshVisibility/, 'refreshVisibility drives the reshape');
-  assert.match(html, /\$\('#row-fanout-members'\)\.toggle\(sel === 'list'\)/, 'members table only for list selection');
+  assert.match(
+    html,
+    /\$\('#row-fanout-members, #tip-fanout-members'\)\.toggle\(sel === 'list'\)/,
+    'members table and its tip only for list selection'
+  );
   assert.match(html, /\$\('#row-fanout-typeFilter'\)\.toggle\(sel === 'filter'\)/, 'type filter only for filter selection');
   assert.match(html, /\$\('#row-fanout-interval'\)\.toggle\(exec === 'sequential'\)/, 'interval only for sequential');
   assert.match(

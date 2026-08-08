@@ -150,7 +150,7 @@
           var $north = cell('mav-fanout-member-north', 'N m', 'North offset in metres, applied to the message’s own position (blank = none)');
           var $east = cell('mav-fanout-member-east', 'E m', 'East offset in metres (blank = none)');
           var $up = cell('mav-fanout-member-up', 'Up m', 'Up offset in metres (blank = none)');
-          var $patch = cell('mav-fanout-member-patch', 'raw patch JSON', 'Optional JSON object of message fields to overwrite for this member, in wire units (blank = none)', true);
+          var $patch = cell('mav-fanout-member-patch', 'patch JSON', 'Optional JSON object of message fields to overwrite for this member, in wire units (blank = none)', true);
           if (member) {
             if (member.sysid !== undefined) $sysid.val(member.sysid);
             if (member.north !== undefined) $north.val(member.north);
@@ -213,7 +213,7 @@
         // the picker hides like every other sender's does on Build (§6).
         $('#row-fanout-connection').toggle(d !== 'build');
         $('#row-fanout-identity').toggle(d !== 'build');
-        $('#row-fanout-members').toggle(sel === 'list');
+        $('#row-fanout-members, #tip-fanout-members').toggle(sel === 'list');
         $('#row-fanout-typeFilter').toggle(sel === 'filter');
         $('#row-fanout-firmwareFilter').toggle(sel === 'filter');
         $('#row-fanout-armedFilter').toggle(sel === 'filter');
@@ -273,8 +273,11 @@
     <label style="vertical-align:top;">Members</label>
     <div style="display:inline-block;width:70%;">
       <ol id="mav-fanout-members"></ol>
-      <span class="form-tips">offsets are metres against the message's own position; patch is raw wire-unit fields</span>
     </div>
+  </div>
+  <div class="form-tips" id="tip-fanout-members" style="margin-bottom:8px;">
+    Offsets are metres against the message&rsquo;s own position; <b>patch</b> is a JSON
+    object of raw wire-unit fields.
   </div>
   <div class="form-row" id="row-fanout-typeFilter"><label for="node-input-vehicleType">Type filter</label><select id="node-input-vehicleType"></select></div>
   <div class="form-row" id="row-fanout-firmwareFilter"><label for="node-input-firmwareFilter">Firmware</label><select id="node-input-firmwareFilter"><option value="">Any</option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
