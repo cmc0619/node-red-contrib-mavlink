@@ -117,16 +117,45 @@ test('mavlink-in nodes use the messages list, not the retired singular key (#211
 test('every payload node in an example resolves to a real recipe', () => {
   // A topic/verb pair with no recipe throws at build time, so the example is
   // dead on arrival — `examples/18` shipped three of them under a `release`
-  // topic that never existed.
+  // topic that never existed. `path` matters: gimbal/aim has separate legacy
+  // and manager recipes, so resolve exactly as buildPayloadMessage does.
   const { recipeFor } = require('../../lib/payload');
   for (const file of exampleFiles(EXAMPLES)) {
     const rel = path.relative(EXAMPLES, file);
     for (const node of nodesOf(JSON.parse(fs.readFileSync(file, 'utf8')))) {
       if (node.type !== 'mavlink-payload') continue;
       assert.ok(
-        recipeFor(node.topic, node.verb),
-        `${rel}: ${node.id} has no recipe for ${node.topic}/${node.verb}`
+        recipeFor(node.topic, node.verb, node.path),
+        `${rel}: ${node.id} has no recipe for ${node.topic}/${node.verb}/${node.path || ''}`
       );
     }
   }
+});
+
+test('no example overrides a pinned recipe slot', () => {
+  // A pinned slot carries the only value that makes the command work — the
+  // legacy gimbal aim pins MAV_MOUNT_MODE_MAVLINK_TARGETING (2), because any
+  // other mode makes the requested pitch/roll/yaw a no-op. `slotValue` does not
+  // consult `pinned`, so a value in `values` silently wins: this shipped as
+  // modeValue 0 and emitted param7 = 0, aiming nowhere (Codex, #224).
+  const { recipeFor } = require('../../lib/payload');
+  const offenders = [];
+  for (const file of exampleFiles(EXAMPLES)) {
+    const rel = path.relative(EXAMPLES, file);
+    for (const node of nodesOf(JSON.parse(fs.readFileSync(file, 'utf8')))) {
+      if (node.type !== 'mavlink-payload' || !node.values) continue;
+      const recipe = recipeFor(node.topic, node.verb, node.path);
+      for (const slot of (recipe && recipe.params) || []) {
+        if (!slot || !slot.pinned) continue;
+        for (const key of [slot.valueKey, slot.field].filter(Boolean)) {
+          if (key in node.values) {
+            offenders.push(
+              `${rel}: ${node.id} sets pinned "${key}" to ${node.values[key]} (recipe pins ${slot.default})`
+            );
+          }
+        }
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], `pinned slots must come from the recipe:\n${offenders.join('\n')}`);
 });
