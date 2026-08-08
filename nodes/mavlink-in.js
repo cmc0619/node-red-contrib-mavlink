@@ -33,8 +33,11 @@ const { applyConnectionStatus, isBlank } = require('../lib/addressing');
  * The interval applies unconditionally — no exemption for a changed message
  * name, and none for changed badge text. Either would fire on essentially every
  * frame: the delivery count differs every time, and with a multi-message filter
- * (#211) so does the arriving name. The badge is therefore a sample of the most
- * recent delivery, at most four times a second, not a record of each one.
+ * (#211) so does the arriving name.
+ *
+ * Writes suppressed inside a window are not lost: one trailing write is latched
+ * for the end of it, so the badge settles on the true total within an interval
+ * of the last delivery rather than freezing wherever the burst happened to be.
  * @type {number}
  */
 const STATUS_MIN_INTERVAL_MS = 250;
@@ -86,6 +89,10 @@ module.exports = function registerMavlinkIn(RED) {
 
     /** Badge throttling state (§6 — do not flood status on high-rate streams). */
     let lastStatusMs = 0;
+    /** Pending trailing write, so a burst's last frames still reach the badge. */
+    let flushTimer = null;
+    /** Message name most recently delivered — what a trailing write names. */
+    let lastName = null;
     /**
      * Messages this node has delivered since deploy, across every subscription.
      * A node-wide total, not per message name: with a multi-message filter the
@@ -95,6 +102,24 @@ module.exports = function registerMavlinkIn(RED) {
     let delivered = 0;
 
     node.status({ fill: 'grey', shape: 'ring', text: 'waiting' });
+
+    /**
+     * Write the badge and open a fresh throttle window.
+     *
+     * Count first: capBadge truncates the tail and §6 caps badges at 24
+     * characters, so with a long name (GLOBAL_POSITION_INT is 19) a trailing
+     * count would be exactly the part that got cut.
+     *
+     * @param {number} at  timestamp to treat as the write time
+     */
+    function paintBadge(at) {
+      node.status({
+        fill: 'green',
+        shape: 'dot',
+        text: capBadge(`${delivered} ${lastName}`),
+      });
+      lastStatusMs = at;
+    }
 
     /**
      * Deliver one decoded message, subject to the field predicate, the rate
@@ -153,27 +178,31 @@ module.exports = function registerMavlinkIn(RED) {
 
       delivered += 1;
 
+      lastName = decoded.name;
+
       // Rate-limit status writes to STATUS_MIN_INTERVAL_MS, unconditionally.
       //
       // No "refresh immediately when the name changes" exemption: with a
       // multi-message filter (#211) the arriving name alternates on nearly
       // every frame, so that exemption fired every time and the throttle never
       // engaged — two 50 Hz streams wrote the badge 100×/s. Measured at 200 of
-      // 200 deliveries before this changed.
+      // 200 deliveries before that came out.
       //
-      // The badge is a sampled indicator, not a log: whichever message was most
-      // recent at each write is the one shown, at most four times a second.
-      //
-      // Count first: capBadge truncates the tail, and the count is the part
-      // worth keeping — a long name (GLOBAL_POSITION_INT is 19 of the 24
-      // characters §6 allows) would otherwise push it off the badge.
+      // Suppressed writes are not simply dropped: one trailing write is latched
+      // for the end of the window, so when a burst stops the badge lands on the
+      // true total instead of whatever it happened to show mid-burst.
       if (now - lastStatusMs >= STATUS_MIN_INTERVAL_MS) {
-        node.status({
-          fill: 'green',
-          shape: 'dot',
-          text: capBadge(`${delivered} ${decoded.name}`),
-        });
-        lastStatusMs = now;
+        paintBadge(now);
+      } else if (flushTimer === null) {
+        // Latched, not rescheduled per delivery: at 50 Hz a per-message
+        // clear+set would be ~100 timer operations a second to avoid ~46 status
+        // writes — more work than it saves. One timer per window is four a
+        // second, and later deliveries in the window ride the timer already set.
+        flushTimer = setTimeout(() => {
+          flushTimer = null;
+          paintBadge(Date.now());
+        }, STATUS_MIN_INTERVAL_MS - (now - lastStatusMs));
+        if (typeof flushTimer.unref === 'function') flushTimer.unref();
       }
     };
 
@@ -191,6 +220,10 @@ module.exports = function registerMavlinkIn(RED) {
       : [connectionNode.subscribe(target, onDecoded)];
 
     node.on('close', () => {
+      if (flushTimer !== null) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
       for (const unsubscribe of unsubscribes) unsubscribe();
     });
   }

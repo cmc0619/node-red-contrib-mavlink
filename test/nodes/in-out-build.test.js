@@ -312,12 +312,31 @@ test('mavlink-in: emits msg on matching inbound decoded message', () => {
  */
 function withClock(fn) {
   const realNow = Date.now;
+  const realSetTimeout = global.setTimeout;
   let t = realNow();
+  /** @type {{fn: Function, ms: number}|null} the latched trailing flush */
+  let pending = null;
   Date.now = () => t;
+  global.setTimeout = (cb, ms) => {
+    pending = { fn: cb, ms };
+    return { unref() {} };
+  };
   try {
-    fn((ms) => { t += ms; });
+    fn({
+      advance: (ms) => { t += ms; },
+      /** Fire the latched flush as the timer would, after its delay elapses. */
+      fireFlush: () => {
+        assert.ok(pending, 'expected a trailing flush to be scheduled');
+        const { fn: cb, ms } = pending;
+        pending = null;
+        t += ms;
+        cb();
+      },
+      pending: () => pending,
+    });
   } finally {
     Date.now = realNow;
+    global.setTimeout = realSetTimeout;
   }
 }
 
@@ -332,7 +351,7 @@ test('mavlink-in: the badge counts deliveries, count first so it survives the ca
 
   assert.deepEqual(node._status, { fill: 'grey', shape: 'ring', text: 'waiting' });
 
-  withClock((advance) => {
+  withClock(({ advance }) => {
     const deliver = (name) => {
       advance(300);
       stub._deliver({ name, sysid: 1, compid: 1, fields: {}, trusted: true });
@@ -405,18 +424,85 @@ test('mavlink-in: a same-name burst is throttled, and the count still counts it'
   const writes = [];
   node.status = (s) => { node._status = s; writes.push(s.text); };
 
-  withClock((advance) => {
+  withClock(({ advance, fireFlush }) => {
     for (let i = 0; i < 40; i++) {
       stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
     }
     assert.equal(node._sends.length, 40, 'every message is still delivered');
-    assert.deepEqual(writes, ['1 ATTITUDE'], 'one write for the whole burst');
+    assert.deepEqual(writes, ['1 ATTITUDE'], 'one write during the burst itself');
 
-    // Past the interval the badge catches up to the true total, not to 2.
+    // Traffic stops here. The latched trailing write lands on the true total —
+    // the badge must not sit at "1 ATTITUDE" forever (Codex, #219).
+    fireFlush();
+    assert.equal(node._status.text, '40 ATTITUDE', 'trailing write settles on the total');
+    assert.deepEqual(writes, ['1 ATTITUDE', '40 ATTITUDE']);
+
+    // And the window reopens: a later delivery paints directly again.
     advance(300);
     stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
     assert.equal(node._status.text, '41 ATTITUDE');
   });
+});
+
+test('mavlink-in: only one flush is latched per window, not one per delivery', () => {
+  // A per-delivery clear+set would be ~100 timer operations a second at 50 Hz
+  // to avoid ~46 status writes — more work than it saves. One timer per window.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' });
+
+  let scheduled = 0;
+  const realSetTimeout = global.setTimeout;
+  const realNow = Date.now;
+  const t = realNow();
+  Date.now = () => t;
+  global.setTimeout = (cb, ms) => { scheduled++; return { unref() {}, _cb: cb, _ms: ms }; };
+  try {
+    for (let i = 0; i < 50; i++) {
+      stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
+    }
+  } finally {
+    global.setTimeout = realSetTimeout;
+    Date.now = realNow;
+  }
+
+  assert.equal(scheduled, 1, `one latched flush for 50 deliveries, got ${scheduled}`);
+});
+
+test('mavlink-in: close cancels a pending flush — a closed node never paints', () => {
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' });
+
+  const cleared = [];
+  const realSetTimeout = global.setTimeout;
+  const realClearTimeout = global.clearTimeout;
+  const realNow = Date.now;
+  const t = realNow();
+  const handle = { unref() {} };
+  Date.now = () => t;
+  global.setTimeout = () => handle;
+  global.clearTimeout = (h) => cleared.push(h);
+  try {
+    // Two deliveries in one window: the second latches the flush.
+    stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
+    stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
+    node._close();
+  } finally {
+    global.setTimeout = realSetTimeout;
+    global.clearTimeout = realClearTimeout;
+    Date.now = realNow;
+  }
+
+  assert.deepEqual(cleared, [handle], 'the pending flush is cleared on close');
 });
 
 test('mavlink-in: message filter rejects non-matching message names', () => {
