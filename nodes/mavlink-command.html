@@ -502,8 +502,14 @@
        */
       function advancedParamInput(spec, enums, commandId) {
         const saved = savedParams[spec.index];
-        if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
-          const entries = enums[spec.enum];
+        // DO_SET_MODE's custom_mode carries no `enum=` — its table is chosen
+        // by airframe, not by command — so the profile names one here. Same
+        // curated-by-(command, index) shape as magicBooleanValue below, and
+        // it sits on the shared render path so Advanced mode reads the same
+        // pulldown the Set Mode preset does.
+        const enumName = spec.enum || RED.mavlink.customModeEnum(commandId, spec.index);
+        if (enumName && enums[enumName] && enums[enumName].length) {
+          const entries = enums[enumName];
           const falseTrue = RED.mavlink.isFalseTrueEnum(entries);
           if (falseTrue) {
             return RED.mavlink.booleanEnumInput(entries, {
@@ -535,6 +541,11 @@
           if (isBitmask) {
             sel.val(RED.mavlink.selectedBitmaskValues(saved, entries));
           } else if (saved !== undefined && saved !== null && saved !== '') {
+            // A saved value the table lacks — a newer firmware's mode, Blimp's
+            // reserved 30, a dialect switch — must survive open-and-save, not
+            // deselect to null and resolve to 0 on the wire (Codex #198). The
+            // shared sentinel keeps it selectable until the operator changes it.
+            RED.mavlink.ensureSavedEnumOption(sel, String(saved));
             sel.val(String(saved));
           }
           return sel;
@@ -719,7 +730,14 @@
         const val = String(raw || '').trim();
         if (val !== '') params[idx] = Number(val);
       });
-      this.params = JSON.stringify(params);
+      // Write the hidden input, not `this.params`. Node-RED runs oneditsave
+      // first, then its own edit pane walks `defaults` and copies
+      // `#node-input-<key>` over the node property (editor red.js
+      // handleEditSave → pane.apply). A `this.params` written here is
+      // overwritten a moment later by the hidden field's *dialog-open* value,
+      // so every param edit was silently discarded. Same shape as Build's
+      // fields blob (mavlink-build.html:566).
+      $('#node-input-params').val(JSON.stringify(params));
     },
 
     oneditcancel: function () {},
@@ -964,6 +982,14 @@
     params exposed. Build tier uses the Dialect picker; wire tiers use the
     bound connection's profile. Bitmask params render as multi-selects;
     Ctrl/Cmd-click multiple flags and the editor stores their numeric mask.
+  </p>
+  <p>
+    <b>Set Mode</b>'s <i>Custom Mode</i> becomes a pulldown of the airframe's
+    flight modes when the bound Vehicle Profile is ArduPilot and names a family
+    — Copter, Plane, Rover, Boat, Sub, Blimp, or Antenna Tracker. Unknown and
+    PX4 keep the number box: no table can be chosen for them. Remember that the
+    autopilot only reads Custom Mode when <code>MAV_MODE_FLAG_CUSTOM_MODE_ENABLED</code>
+    is set in <i>Mode</i>.
   </p>
 
   <h3>Details</h3>

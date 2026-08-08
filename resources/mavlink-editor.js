@@ -251,6 +251,51 @@
       .prop('checked', checked);
   };
 
+  /** MAV_CMD_DO_SET_MODE, whose param2 is the custom_mode below. */
+  var DO_SET_MODE = 176;
+
+  /**
+   * ArduPilot custom-mode tables by Vehicle Profile family.
+   *
+   * MAV_CMD_DO_SET_MODE param2 is `custom_mode`, and no `enum=` can name its
+   * table: which one is right depends on the airframe, not the command. The
+   * dialect already carries every table, so the family picks one — and
+   * `lib/metadata/commands-list.js` carries the same names, so every catalog
+   * has them on hand. Add a family here and add its table there.
+   *
+   * Boat is Rover firmware and reads ROVER_MODE. BLIMP_MODE is the one table
+   * MAVLink never defined; `lib/metadata/commands-list.js` supplies it from
+   * ArduPilot source, so it reads like the rest from here. `unknown` is absent
+   * because a wrong table is worse than a number box, and so is PX4, whose
+   * modes live in PX4 source rather than in MAVLink.
+   *
+   * @type {Object<string, string>}
+   */
+  var CUSTOM_MODE_ENUMS = {
+    copter: 'COPTER_MODE',
+    plane: 'PLANE_MODE',
+    rover: 'ROVER_MODE',
+    boat: 'ROVER_MODE',
+    sub: 'SUB_MODE',
+    blimp: 'BLIMP_MODE',
+    'antenna-tracker': 'TRACKER_MODE',
+  };
+
+  /**
+   * The custom-mode enum name for a command param, or null when the param is
+   * not `custom_mode` or the bound profile has no table.
+   *
+   * @param {string|number} commandId
+   * @param {string|number} paramIndex
+   * @returns {?string}
+   */
+  RED.mavlink.customModeEnum = function (commandId, paramIndex) {
+    if (Number(commandId) !== DO_SET_MODE || Number(paramIndex) !== 2) return null;
+    var target = RED.mavlink.resolveCatalogTarget();
+    if (target.firmware !== 'ardupilot') return null;
+    return CUSTOM_MODE_ENUMS[target.vehicleFamily] || null;
+  };
+
   /**
    * Command params that are booleans in everything but their XML: no `enum=`,
    * just a magic number the description explains in prose. Keyed

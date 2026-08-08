@@ -124,6 +124,20 @@ test('advanced bitmask command params render as multi-select controls', () => {
   assert.match(renderer, /RED\.mavlink\.bitmaskTitle/, 'multi-select title comes from the shared helper');
 });
 
+test('a saved enum value the table lacks survives open-and-save (Codex #198)', () => {
+  const renderer = html.slice(
+    html.indexOf('function advancedParamInput'),
+    html.indexOf('function refreshParamFields')
+  );
+  // Without the sentinel, .val(saved) on an absent option deselects, oneditsave
+  // reads null, and the param resolves to 0 on the wire — a silent mode change.
+  assert.match(
+    renderer,
+    /RED\.mavlink\.ensureSavedEnumOption\(sel, String\(saved\)\);\s*\n\s*sel\.val\(String\(saved\)\)/,
+    'the shared sentinel runs before the saved value is applied'
+  );
+});
+
 test('advanced bitmask command params save one numeric mask value', () => {
   const saver = html.slice(
     html.indexOf('oneditsave: function'),
