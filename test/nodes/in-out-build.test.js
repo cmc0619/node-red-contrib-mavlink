@@ -311,24 +311,64 @@ test('mavlink-in: the badge counts deliveries, count first so it survives the ca
 
   assert.deepEqual(node._status, { fill: 'grey', shape: 'ring', text: 'waiting' });
 
-  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: {}, trusted: true });
-  assert.equal(node._status.text, '1 HEARTBEAT');
-  assert.equal(node._status.fill, 'green');
+  // Drive the clock: the badge is throttled unconditionally, so every
+  // assertion below has to step past STATUS_MIN_INTERVAL_MS to see a write.
+  const realNow = Date.now;
+  let clock = realNow();
+  Date.now = () => clock;
+  const deliver = (name) => {
+    clock += 300;
+    stub._deliver({ name, sysid: 1, compid: 1, fields: {}, trusted: true });
+  };
 
-  // A different name refreshes immediately — the badge must not lag behind
-  // which stream is arriving, even inside the throttle window.
-  stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: {}, trusted: true });
-  assert.equal(node._status.text, '2 ATTITUDE');
+  try {
+    deliver('HEARTBEAT');
+    assert.equal(node._status.text, '1 HEARTBEAT');
+    assert.equal(node._status.fill, 'green');
 
-  // The count is node-wide, not per message name.
-  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: {}, trusted: true });
-  assert.equal(node._status.text, '3 HEARTBEAT');
+    deliver('ATTITUDE');
+    assert.equal(node._status.text, '2 ATTITUDE');
 
-  // Count leads so capBadge's tail truncation eats the name, never the number:
-  // GLOBAL_POSITION_INT is 19 of the 24 characters §6 allows.
-  stub._deliver({ name: 'GLOBAL_POSITION_INT', sysid: 1, compid: 1, fields: {}, trusted: true });
-  assert.ok(node._status.text.startsWith('4 '), `count leads: ${node._status.text}`);
-  assert.ok(node._status.text.length <= 24, `badge capped: ${node._status.text}`);
+    // The count is node-wide, not per message name.
+    deliver('HEARTBEAT');
+    assert.equal(node._status.text, '3 HEARTBEAT');
+
+    // Count leads so capBadge's tail truncation eats the name, never the
+    // number: GLOBAL_POSITION_INT is 19 of the 24 characters §6 allows.
+    deliver('GLOBAL_POSITION_INT');
+    assert.ok(node._status.text.startsWith('4 '), `count leads: ${node._status.text}`);
+    assert.ok(node._status.text.length <= 24, `badge capped: ${node._status.text}`);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('mavlink-in: alternating message names do not bypass the badge throttle', () => {
+  // Regression (Codex, #219): the throttle used to exempt a changed message
+  // name. With a multi-message filter (#211) the name alternates on nearly
+  // every frame, so the exemption fired every time and the throttle never
+  // engaged — measured at 200 status writes for 200 deliveries, i.e. two
+  // 50 Hz streams rewriting the badge 100x/s.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', messages: ['ATTITUDE', 'GLOBAL_POSITION_INT'] });
+
+  const writes = [];
+  node.status = (s) => { node._status = s; writes.push(s.text); };
+
+  for (let i = 0; i < 200; i++) {
+    stub._deliver({
+      name: i % 2 ? 'ATTITUDE' : 'GLOBAL_POSITION_INT',
+      sysid: 1, compid: 1, fields: {}, trusted: true,
+    });
+  }
+
+  assert.equal(node._sends.length, 200, 'every message is still delivered');
+  assert.ok(writes.length <= 2, `alternating names stay throttled: ${writes.length} writes`);
 });
 
 test('mavlink-in: a same-name burst is throttled, and the count still counts it', () => {

@@ -28,12 +28,13 @@ const { applyConnectionStatus, isBlank } = require('../lib/addressing');
  * Minimum interval (ms) between status-badge writes.
  * A high-rate stream (e.g. 50 Hz ATTITUDE) would otherwise rewrite the badge
  * 50×/s and flood the editor; the message rate limit above governs wire
- * delivery, not the badge (§6). The badge still refreshes immediately whenever
- * the *message name* changes so it never lags behind which stream is arriving.
+ * delivery, not the badge (§6).
  *
- * Note the throttle keys on the name, not on the rendered text: the delivery
- * count below changes on every message, so a text comparison would differ every
- * time and the throttle would never fire.
+ * The interval applies unconditionally — no exemption for a changed message
+ * name, and none for changed badge text. Either would fire on essentially every
+ * frame: the delivery count differs every time, and with a multi-message filter
+ * (#211) so does the arriving name. The badge is therefore a sample of the most
+ * recent delivery, at most four times a second, not a record of each one.
  * @type {number}
  */
 const STATUS_MIN_INTERVAL_MS = 250;
@@ -84,7 +85,6 @@ module.exports = function registerMavlinkIn(RED) {
     const lastDeliveryMs = new Map();
 
     /** Badge throttling state (§6 — do not flood status on high-rate streams). */
-    let lastStatusName = null;
     let lastStatusMs = 0;
     /**
      * Messages this node has delivered since deploy, across every subscription.
@@ -153,20 +153,26 @@ module.exports = function registerMavlinkIn(RED) {
 
       delivered += 1;
 
-      // Rate-limit status writes: refresh when the message name changes, else
-      // at most every STATUS_MIN_INTERVAL_MS, so a steady high-rate stream does
-      // not rewrite the badge on every frame.
+      // Rate-limit status writes to STATUS_MIN_INTERVAL_MS, unconditionally.
+      //
+      // No "refresh immediately when the name changes" exemption: with a
+      // multi-message filter (#211) the arriving name alternates on nearly
+      // every frame, so that exemption fired every time and the throttle never
+      // engaged — two 50 Hz streams wrote the badge 100×/s. Measured at 200 of
+      // 200 deliveries before this changed.
+      //
+      // The badge is a sampled indicator, not a log: whichever message was most
+      // recent at each write is the one shown, at most four times a second.
       //
       // Count first: capBadge truncates the tail, and the count is the part
       // worth keeping — a long name (GLOBAL_POSITION_INT is 19 of the 24
       // characters §6 allows) would otherwise push it off the badge.
-      if (decoded.name !== lastStatusName || now - lastStatusMs >= STATUS_MIN_INTERVAL_MS) {
+      if (now - lastStatusMs >= STATUS_MIN_INTERVAL_MS) {
         node.status({
           fill: 'green',
           shape: 'dot',
           text: capBadge(`${delivered} ${decoded.name}`),
         });
-        lastStatusName = decoded.name;
         lastStatusMs = now;
       }
     };
