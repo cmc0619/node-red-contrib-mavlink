@@ -104,7 +104,11 @@
         },
         tier:        { value: 'send' },
         band:        { value: '2' },
-        repeatMs:    { value: 0 },
+        // A typo here fails silently rather than loudly: Number('10OO') is NaN,
+        // NaN > 0 is false, and the repeat timer simply never arms — the node
+        // looks configured and does nothing. Blank is 0, which is the real
+        // "off" value, so blank stays legal.
+        repeatMs:    { value: 0, validate: RED.validators.number(true) },
       },
       RED.mavlink.buildTierDialectDefaults({ modeField: 'tier' })
     );
