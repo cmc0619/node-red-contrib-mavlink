@@ -143,10 +143,8 @@
           COMMAND_PARAM_KEYS.forEach(function (key) { delete savedFields[key]; });
         }
 
-        if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-          RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
-          RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-        }
+        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
+        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
         var $tier = $('#node-input-tier');
         $tier.empty();
@@ -222,12 +220,10 @@
               .attr('data-field', spec.name)
               .attr('data-kind', 'enum')
               .attr('title', spec.description || '');
-            if (RED.mavlink && RED.mavlink.reloadCompIdSelect) {
-              RED.mavlink.reloadCompIdSelect($comp, {
-                initialSaved: saved,
-                emptyLabel: '\u2014',
-              });
-            }
+            RED.mavlink.reloadCompIdSelect($comp, {
+              initialSaved: saved,
+              emptyLabel: '\u2014',
+            });
             return $comp;
           }
           if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {

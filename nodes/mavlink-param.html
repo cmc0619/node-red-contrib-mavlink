@@ -153,10 +153,8 @@
       var node = this;
 
       /* ── Connection and vehicle pickers ───────────────────────── */
-      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
-      }
+      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
+      RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
 
       /**
        * Show exactly the fields the chosen action puts on the wire.
@@ -672,12 +670,10 @@
 
       // Pin/populate dialect BEFORE the first enum catalog fetch so Build-tier
       // currentCatalogQuery sees the saved dialect (not an empty select).
-      if (RED.mavlink && RED.mavlink.populateDialectSelect) {
-        RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
-          saved: node.dialect || '',
-          includeVehicleEscape: true
-        });
-      }
+      RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
+        saved: node.dialect || '',
+        includeVehicleEscape: true
+      });
       RED.mavlink.reloadTargetCompId(node);
 
       $('#node-input-paramId').on('input change', refreshParamInfo);

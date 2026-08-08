@@ -83,33 +83,29 @@
         // CompID is an empty <select> until /mavlink/enums returns. Node-RED
         // validates immediately after oneditprepare — seed the saved numeric
         // id first so GCS/custom do not flash `required for this role`.
-        if (RED.mavlink && typeof RED.mavlink.fillCompIdSelect === 'function') {
-          RED.mavlink.fillCompIdSelect($compid, [], {
+        RED.mavlink.fillCompIdSelect($compid, [], {
+          saved: $compid.val() || node.sourceComponentId
+        });
+
+        // Local Identity has no Connection/Dialect row — request `common`
+        // explicitly (owns MAV_TYPE / MAV_AUTOPILOT / MAV_COMPONENT).
+        RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMPONENT'], function (catalog) {
+          var enums = (catalog && catalog.enums) || {};
+          // Prefer live dialog values so a role change before the catalog
+          // resolves is not overwritten by the pre-edit saved snapshot.
+          RED.mavlink.fillEnumSelect($hbType, enums.MAV_TYPE || [], {
+            valueKey: 'name',
+            allowEmpty: true,
+            saved: $hbType.val() || node.heartbeatType
+          });
+          RED.mavlink.fillEnumSelect($hbAp, enums.MAV_AUTOPILOT || [], {
+            valueKey: 'name',
+            saved: $hbAp.val() || node.heartbeatAutopilot
+          });
+          RED.mavlink.fillCompIdSelect($compid, enums.MAV_COMPONENT || [], {
             saved: $compid.val() || node.sourceComponentId
           });
-        }
-
-        if (RED.mavlink && RED.mavlink.loadEnumsCatalog) {
-          // Local Identity has no Connection/Dialect row — request `common`
-          // explicitly (owns MAV_TYPE / MAV_AUTOPILOT / MAV_COMPONENT).
-          RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMPONENT'], function (catalog) {
-            var enums = (catalog && catalog.enums) || {};
-            // Prefer live dialog values so a role change before the catalog
-            // resolves is not overwritten by the pre-edit saved snapshot.
-            RED.mavlink.fillEnumSelect($hbType, enums.MAV_TYPE || [], {
-              valueKey: 'name',
-              allowEmpty: true,
-              saved: $hbType.val() || node.heartbeatType
-            });
-            RED.mavlink.fillEnumSelect($hbAp, enums.MAV_AUTOPILOT || [], {
-              valueKey: 'name',
-              saved: $hbAp.val() || node.heartbeatAutopilot
-            });
-            RED.mavlink.fillCompIdSelect($compid, enums.MAV_COMPONENT || [], {
-              saved: $compid.val() || node.sourceComponentId
-            });
-          }, enumLoadToken, { dialect: 'common' });
-        }
+        }, enumLoadToken, { dialect: 'common' });
 
         function preset(role) {
           return ROLE_PRESETS[role] || ROLE_PRESETS.custom;

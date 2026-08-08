@@ -1018,7 +1018,6 @@
    */
   RED.mavlink.reloadCompIdSelect = function ($select, opts) {
     opts = opts || {};
-    if (!(RED.mavlink && typeof RED.mavlink.loadEnumsCatalog === 'function')) return;
     if (!$select || !$select.length) return;
 
     var seqKey = 'mavCompIdSeq';

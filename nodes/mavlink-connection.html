@@ -67,15 +67,13 @@
       return this.name || 'MAVLink ' + mode + where;
     },
     oneditprepare: function () {
-      if (RED.mavlink && RED.mavlink.ensureConfigNodePicker) {
-        RED.mavlink.ensureConfigNodePicker(this, 'vehicle', 'mavlink-vehicle', 'node-config-input');
-        RED.mavlink.ensureConfigNodePicker(
-          this,
-          'localIdentity',
-          'mavlink-local-identity',
-          'node-config-input'
-        );
-      }
+      RED.mavlink.ensureConfigNodePicker(this, 'vehicle', 'mavlink-vehicle', 'node-config-input');
+      RED.mavlink.ensureConfigNodePicker(
+        this,
+        'localIdentity',
+        'mavlink-local-identity',
+        'node-config-input'
+      );
 
       // Extra identities (issue #94): additionalIdentities is a *list* of
       // Local Identity config refs, and the stock config picker handles one
