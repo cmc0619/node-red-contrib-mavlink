@@ -98,7 +98,7 @@ module.exports = function registerMavlinkFanout(RED) {
             ? [{ payload: aggregate }, aggregate]
             : [null, aggregate]);
         }
-        if (!aggregate.success && aggregate.result !== 'dry_run') {
+        if (!aggregate.success && aggregate.result !== 'dry_run' && !quietEmpty(aggregate)) {
           done(new Error(`mavlink-fanout: ${aggregate.result}`));
         } else {
           done();
@@ -166,11 +166,29 @@ function configMembersFor(config, opts) {
   return patched ? config.members : undefined;
 }
 
+/**
+ * A filter matching zero vehicles is the correct answer, not a fault (#226):
+ * the run reports quietly — grey badge, no done(err) — while output 1 still
+ * carries the empty aggregate with success:false, so nothing downstream sees
+ * a phantom success (§2). An empty explicit list or an empty 'all' stays
+ * loud: the operator named vehicles (or expected a fleet) and reached none.
+ *
+ * @param {object} aggregate
+ * @returns {boolean}
+ */
+function quietEmpty(aggregate) {
+  return aggregate.result === 'empty' && aggregate.selection === 'filter';
+}
+
 function applyAggregateStatus(node, aggregate) {
   if (aggregate.result === 'dry_run') {
     delivery.applyActionStatus(node, 'preview', `${aggregate.count} preview`);
   } else if (aggregate.success) {
     delivery.applyActionStatus(node, 'ok', `${aggregate.count} succeeded`);
+  } else if (quietEmpty(aggregate)) {
+    // Not a §6 action situation: neither an error nor a success — grey ring,
+    // matching the palette's other idle/none badges.
+    node.status({ fill: 'grey', shape: 'ring', text: '0 matched' });
   } else {
     delivery.applyActionStatus(node, 'error', aggregate.result);
   }

@@ -52,6 +52,32 @@ test('a list selection refuses a bad sysid instead of fanning out to the rest', 
   assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'list', sysids: ['1', '4'] }).map((m) => m.sysid), [1, 4]);
 });
 
+test('an empty resolution records which selection produced it (#226)', async () => {
+  // The node's loud/quiet decision branches on the field: a filter matching
+  // zero vehicles is an answer, a named list reaching nobody is a fault.
+  const emptyFilter = await executeFanout({
+    connection: connectionStub([peer(1, { firmware: 'ardupilot' })]),
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'send',
+    selection: { mode: 'filter', filter: { firmware: 'px4' } },
+  });
+  assert.equal(emptyFilter.result, 'empty');
+  assert.equal(emptyFilter.success, false);
+  assert.equal(emptyFilter.continue, false, 'no phantom success (§2)');
+  assert.equal(emptyFilter.selection, 'filter');
+
+  const emptyList = await executeFanout({
+    connection: connectionStub([peer(1)]),
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'send',
+    selection: { mode: 'list', sysids: '9' },
+  });
+  assert.equal(emptyList.result, 'empty');
+  assert.equal(emptyList.selection, 'list');
+});
+
 // ── The replicator contract: message in, kind inferred from its name ──────────
 
 test('classifyMessage infers confirmation and band from the message name', () => {
