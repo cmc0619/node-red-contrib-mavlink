@@ -26,6 +26,10 @@ module.exports = function registerMavlinkMove(RED) {
     let stream = null;
     let streamKey = null;
     let releaseStream = null;
+    // Last advisory warned, for per-streak dedup (C8): a refresh-fed stream
+    // repeating the same combo would spam the debug sidebar, and noise gets
+    // ignored. Redeploy resets naturally — new node instance.
+    let lastAdvisory = null;
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
@@ -110,6 +114,11 @@ module.exports = function registerMavlinkMove(RED) {
           yaw: valueFrom(payload, config, 'yaw'),
           yawRate: valueFrom(payload, config, 'yawRate'),
           timeBootMs: payload.timeBootMs,
+          // Deployment property, deliberately no payload override: the global
+          // wire numbering is the operator's standing compatibility choice
+          // (§ "Move setpoint matrix"), not a per-message knob. A missing
+          // value resolves true at encode — the safe direction.
+          px4Compat: config.px4Compat,
         };
         const message = buildMoveMessage(moveInput);
 
@@ -123,9 +132,14 @@ module.exports = function registerMavlinkMove(RED) {
           // The ArduPilot yaw-only advisory was measured on absolute yaw only,
           // so it needs to see whether a yaw rate is riding along (§14 / #179).
           yawRate: moveInput.yawRate,
+          px4Compat: moveInput.px4Compat,
           firmware: connectionNode?.vehicle?.firmware,
         });
-        if (advisory) node.warn(advisory);
+        // One warn per advisory streak (C8): a stream feed repeating the same
+        // combo warns once; a clean input clears the memory so the advisory's
+        // next appearance warns again.
+        if (advisory && advisory !== lastAdvisory) node.warn(advisory);
+        lastAdvisory = advisory;
 
         if (delivery === 'build') {
           completeBuild(node, send, message);

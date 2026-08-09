@@ -31,6 +31,7 @@ const ROW_IDS = [
   'row-move-aUp',
   'row-move-yaw',
   'row-move-yawRate',
+  'row-move-px4Compat',
   'row-move-rate',
   'row-move-ttl',
 ];
@@ -90,14 +91,33 @@ test('mavlink-move offers the full mode and frame matrix', () => {
     'LOCAL_OFFSET_NED',
     'BODY_OFFSET_NED',
     'BODY_NED',
-    'GLOBAL_RELATIVE_ALT_INT',
-    'GLOBAL_INT',
-    'GLOBAL_TERRAIN_ALT_INT',
+    'GLOBAL_RELATIVE_ALT',
+    'GLOBAL',
+    'GLOBAL_TERRAIN_ALT',
   ]) {
     assert.match(html, new RegExp(`option value="${frame}"`), `frame ${frame} offered`);
   }
+  // The deprecated *_INT spellings are accepted at runtime as aliases, never
+  // advertised: the editor offers only the canonical names (owner-ruled
+  // 2026-08-09).
+  for (const deprecated of ['GLOBAL_INT', 'GLOBAL_RELATIVE_ALT_INT', 'GLOBAL_TERRAIN_ALT_INT']) {
+    assert.doesNotMatch(
+      html,
+      new RegExp(`option value="${deprecated}"`),
+      `deprecated frame ${deprecated} not offered`
+    );
+  }
   // No raw type_mask input — named modes only; raw masks live in mavlink-build.
   assert.doesNotMatch(html, /type_?[mM]ask"|node-input-typeMask/, 'no raw type_mask field');
+});
+
+test('mavlink-move PX4-compat checkbox: default checked, shown only for global frames', () => {
+  // Default on is the byte-identical wire choice (owner-ruled 2026-08-09):
+  // checked emits the *_INT numbers 5/6/11; unchecked the spec-current 0/3/10.
+  assert.match(html, /px4Compat:\s*\{\s*value:\s*true\s*\}/, 'px4Compat defaults to checked');
+  assert.match(html, /type="checkbox" id="node-input-px4Compat"/, 'px4Compat is a checkbox');
+  assert.match(html, /id="row-move-px4Compat"/, 'px4Compat row has ID for frame-driven toggling');
+  assert.match(html, /px4Compat:\s*isGlobalFrame/, 'px4Compat shown only when a global frame is selected');
 });
 
 test('mavlink-move speaks one canonical vocabulary and labels body frames forward/right', () => {

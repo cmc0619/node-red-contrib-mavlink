@@ -991,6 +991,86 @@ test('mavlink-move stream: {action:"stop"} releases the target for a new stream 
   a.emit('close', () => {});
 });
 
+test('mavlink-move advisory dedup: one warn per streak, cleared by a clean input (C8)', () => {
+  const conn = { vehicle: { firmware: 'px4' }, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const make = () => {
+    const node = new Node({
+      delivery: 'send',
+      mode: 'position',
+      north: 1,
+      east: 2,
+      up: 3,
+      connection: 'conn',
+      targetSystem: 1,
+      targetComponent: 1,
+    });
+    const warns = [];
+    node.warn = (text) => { warns.push(text); };
+    return { node, warns };
+  };
+  const offset = { frame: 'LOCAL_OFFSET_NED' };
+  const body = { frame: 'BODY_NED' };
+  const clean = { frame: 'LOCAL_NED' };
+
+  // A refresh-fed stream repeating the same combo must not spam the sidebar —
+  // noise gets ignored, which defeats the advisory's whole purpose.
+  let s = make();
+  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  assert.equal(s.warns.length, 1, 'same advisory twice → exactly one warn');
+  assert.match(s.warns[0], /OFFSET/);
+
+  // Only consecutive repeats dedup: a change is news, and so is the return.
+  s = make();
+  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  s.node.emit('input', { payload: body }, () => {}, () => {});
+  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  assert.equal(s.warns.length, 3, 'advisory A, B, A → three warns');
+  assert.match(s.warns[1], /BODY_NED/);
+
+  // A clean input clears the memory, so the advisory's next appearance warns.
+  s = make();
+  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  s.node.emit('input', { payload: clean }, () => {}, () => {});
+  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  assert.equal(s.warns.length, 2, 'advisory, clean, same advisory → two warns');
+});
+
+test('mavlink-move passes px4Compat from config: missing sends *_INT, false sends spec-current and warns', () => {
+  const sends = [];
+  const conn = { vehicle: { firmware: 'px4' }, send(message) { sends.push(message); } };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const cfg = {
+    delivery: 'send',
+    mode: 'position',
+    frame: 'GLOBAL_RELATIVE_ALT',
+    lat: 47,
+    lon: 8,
+    alt: 10,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+  };
+
+  // A saved config missing the value parses as checked — the safe direction.
+  const legacy = new Node({ ...cfg });
+  legacy.emit('input', { payload: {} }, () => {}, () => {});
+  assert.equal(sends[0].fields.coordinate_frame, 6, 'missing px4Compat keeps the *_INT wire number');
+
+  const optedOut = new Node({ ...cfg, px4Compat: false });
+  const warns = [];
+  optedOut.warn = (text) => { warns.push(text); };
+  optedOut.emit('input', { payload: {} }, () => {}, () => {});
+  assert.equal(sends[1].fields.coordinate_frame, 3, 'opt-out sends the spec-current number');
+  assert.equal(warns.length, 1, 'opt-out under a px4 profile draws the advisory');
+  assert.match(warns[0], /source-read/);
+});
+
 function redStub(nodesById) {
   return {
     nodes: {

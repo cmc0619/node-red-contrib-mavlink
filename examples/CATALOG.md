@@ -142,10 +142,10 @@ importable tab per file with shared config nodes inline.
   show Move's freshness/stop behaviour.
 - **Nodes:** config triplet, `command` (arm/set_mode/takeoff/land), `inject`, one
   `function` (ring generator — the only computed part), `move` (`mode: "position"`,
-  `frame: "GLOBAL_RELATIVE_ALT_INT"`, `delivery: "stream"`, `rateHz: 5`, `ttlMs: 1500`), `debug`.
+  `frame: "GLOBAL_RELATIVE_ALT"`, `delivery: "stream"`, `rateHz: 5`, `ttlMs: 1500`), `debug`.
 - **Key config:** Function computes `lat = c_lat + (R·sinθ)/111320`,
   `lon = c_lon + (R·cosθ)/(111320·cos c_lat)` per §"Coordinate frames"; emits
-  `{payload:{mode:"position",frame:"GLOBAL_RELATIVE_ALT_INT",position:{lat,lon,alt}}}`. Move TTL means the stream
+  `{payload:{mode:"position",frame:"GLOBAL_RELATIVE_ALT",position:{lat,lon,alt}}}`. Move TTL means the stream
   self-stops if injects stop arriving. Comment states plainly: no arc primitive exists;
   the ring is the flow author's maths.
 - **Inject buttons:** **`Arm+GUIDED+Takeoff`**, **`◯ Fly circle`** (repeat inject at 5 Hz

@@ -185,6 +185,129 @@ test('`frame` is the only frame spelling: member name or raw number', () => {
   }
 });
 
+test('global frame vocabulary: every alias spelling builds the same message (owner-ruled 2026-08-09)', () => {
+  const base = {
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { lat: 47, lon: 8, alt: 10 },
+  };
+  // One canon per frame; the deprecated *_INT names and numbers are MAVLink's
+  // protocol surface and resolve as aliases — accepted, never advertised.
+  const spellings = {
+    GLOBAL: ['GLOBAL', 'GLOBAL_INT', 0, '0', 5, '5'],
+    GLOBAL_RELATIVE_ALT: ['GLOBAL_RELATIVE_ALT', 'GLOBAL_RELATIVE_ALT_INT', 3, '3', 6, '6'],
+    GLOBAL_TERRAIN_ALT: ['GLOBAL_TERRAIN_ALT', 'GLOBAL_TERRAIN_ALT_INT', 10, '10', 11, '11'],
+  };
+  for (const [canon, frames] of Object.entries(spellings)) {
+    const reference = buildMoveMessage({ ...base, frame: canon });
+    for (const frame of frames) {
+      assert.deepEqual(
+        buildMoveMessage({ ...base, frame }),
+        reference,
+        `frame ${JSON.stringify(frame)} builds the same message as ${canon}`
+      );
+    }
+  }
+});
+
+test('px4Compat picks the global wire number: default *_INT (5/6/11), opted out spec-current (0/3/10)', () => {
+  const base = {
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { lat: 47, lon: 8, alt: 10 },
+  };
+  const wire = { GLOBAL: [5, 0], GLOBAL_RELATIVE_ALT: [6, 3], GLOBAL_TERRAIN_ALT: [11, 10] };
+  for (const [frame, [compat, spec]] of Object.entries(wire)) {
+    // Missing, blank, and explicit true all resolve on — the safe direction —
+    // so the default wire stays byte-identical to what was measured.
+    for (const px4Compat of [undefined, '', true]) {
+      assert.equal(
+        buildMoveMessage({ ...base, frame, px4Compat }).fields.coordinate_frame,
+        compat,
+        `${frame} with px4Compat ${JSON.stringify(px4Compat)} transmits the *_INT twin`
+      );
+    }
+    assert.equal(
+      buildMoveMessage({ ...base, frame, px4Compat: false }).fields.coordinate_frame,
+      spec,
+      `${frame} opted out transmits the spec-current number`
+    );
+  }
+  // Local frames carry their own number; px4Compat is a global-frame choice.
+  const local = buildMoveMessage({
+    mode: 'position',
+    frame: 'LOCAL_NED',
+    px4Compat: false,
+    target: { sysid: 2, compid: 1 },
+    position: { north: 1, east: 2, up: 3 },
+  });
+  assert.equal(local.fields.coordinate_frame, 1);
+});
+
+test('unknown Move frame error names the canonical set, not the accepted aliases', () => {
+  try {
+    buildMoveMessage({ mode: 'position', frame: 'GLOBAL_FRD', target: { sysid: 2, compid: 1 } });
+    assert.fail('unknown frame must throw');
+  } catch (err) {
+    assert.match(err.message, /unknown Move frame "GLOBAL_FRD"/);
+    assert.match(err.message, /GLOBAL_RELATIVE_ALT/);
+    assert.match(err.message, /GLOBAL_TERRAIN_ALT/);
+    assert.doesNotMatch(err.message, /_INT/, 'aliases are accepted, not advertised');
+  }
+});
+
+test('global lat/lon out of range refuses — the degE7 int32 ceiling is ±214.7° (C4)', () => {
+  const base = { mode: 'position', frame: 'GLOBAL_RELATIVE_ALT', target: { sysid: 2, compid: 1 } };
+  // An out-of-range longitude still fits degE7's int32 and scales into a
+  // garbage coordinate the vehicle would accept — same hazard class as the
+  // blank guards.
+  for (const position of [
+    { lat: 90.0001, lon: 8, alt: 10 },
+    { lat: -90.0001, lon: 8, alt: 10 },
+  ]) {
+    assert.throws(
+      () => buildMoveMessage({ ...base, position }),
+      /lat must be within \[-90, 90\]/,
+      `lat ${position.lat} must refuse`
+    );
+  }
+  for (const position of [
+    { lat: 47, lon: 180.0001, alt: 10 },
+    { lat: 47, lon: -180.0001, alt: 10 },
+  ]) {
+    assert.throws(
+      () => buildMoveMessage({ ...base, position }),
+      /lon must be within \[-180, 180\]/,
+      `lon ${position.lon} must refuse`
+    );
+  }
+  // Exact boundaries are valid coordinates.
+  const poles = buildMoveMessage({ ...base, position: { lat: 90, lon: -180, alt: 10 } });
+  assert.equal(poles.fields.lat_int, 900000000);
+  assert.equal(poles.fields.lon_int, -1800000000);
+  const antipode = buildMoveMessage({ ...base, position: { lat: -90, lon: 180, alt: 10 } });
+  assert.equal(antipode.fields.lat_int, -900000000);
+  assert.equal(antipode.fields.lon_int, 1800000000);
+});
+
+test('PX4-compat opt-out advisory fires only on the exact (global, px4Compat false, px4) triple', () => {
+  const { advisoryFor } = require('../../lib/move');
+  for (const frame of ['GLOBAL', 'GLOBAL_RELATIVE_ALT', 'GLOBAL_TERRAIN_ALT']) {
+    const text = advisoryFor({ mode: 'position', frame, firmware: 'px4', px4Compat: false });
+    assert.match(text, /spec-current global frames \(0\/3\/10\)/);
+    // Source-read tier, not measurement: the text must say so rather than
+    // borrow §14's authority.
+    assert.match(text, /source-read/);
+    assert.doesNotMatch(text, /\(§14\)/);
+  }
+  // Any leg of the triple missing stays silent.
+  assert.equal(advisoryFor({ mode: 'position', frame: 'GLOBAL_RELATIVE_ALT', firmware: 'px4' }), null);
+  assert.equal(advisoryFor({ mode: 'position', frame: 'GLOBAL_RELATIVE_ALT', firmware: 'px4', px4Compat: true }), null);
+  assert.equal(advisoryFor({ mode: 'position', frame: 'GLOBAL_RELATIVE_ALT', firmware: 'ardupilot', px4Compat: false }), null);
+  assert.equal(advisoryFor({ mode: 'position', frame: 'GLOBAL_RELATIVE_ALT', px4Compat: false }), null);
+  assert.equal(advisoryFor({ mode: 'position', frame: 'LOCAL_NED', firmware: 'px4', px4Compat: false }), null);
+});
+
 test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw', () => {
   const defaulted = buildMoveMessage({
     target: { sysid: 2, compid: 1 },
