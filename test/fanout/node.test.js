@@ -194,6 +194,111 @@ test('mavlink-fanout node gates DO_FLIGHTTERMINATION on msg.confirmed / node con
   assert.equal(conn2.sends[0].message.fields.command, 185);
 });
 
+test('an unknown selection mode on the payload refuses — never the whole fleet (#231)', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({ connection: 'conn', delivery: 'send', intervalMs: 0 });
+
+  let sent;
+  const err = await emitInput(
+    node,
+    { payload: { message: builtCommand(), selection: { mode: 'lists' } } },
+    (m) => { sent = m; }
+  ).then(() => null, (e) => e);
+
+  assert.ok(err, 'refused unknown selection is passed to done(err)');
+  assert.equal(sent[0], null, 'no continue output');
+  assert.equal(sent[1].result, 'refused');
+  assert.match(sent[1].detail, /"lists"/, 'detail names the unreadable value');
+  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
+});
+
+test('an unknown selection mode in config refuses the same way (#231)', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({
+    connection: 'conn',
+    delivery: 'send',
+    selectionMode: 'everything',
+    intervalMs: 0,
+  });
+
+  let sent;
+  const err = await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; })
+    .then(() => null, (e) => e);
+
+  assert.ok(err, 'refused unknown selection is passed to done(err)');
+  assert.equal(sent[0], null);
+  assert.equal(sent[1].result, 'refused');
+  assert.match(sent[1].detail, /"everything"/);
+  assert.equal(connection.sends.length, 0);
+});
+
+test('a filter matching zero vehicles reports quietly — empty aggregate, no error (#226)', async () => {
+  // The stub peers are ArduPilot (autopilot 3), so a px4 firmware filter is a
+  // correct zero-match answer, not a fault: no done(err), no red badge.
+  const connection = connectionStub([peer(1)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({
+    connection: 'conn',
+    delivery: 'send',
+    selectionMode: 'filter',
+    firmwareFilter: 'px4',
+    intervalMs: 0,
+  });
+
+  let sent;
+  await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; });
+
+  assert.equal(sent[0], null, 'output 0 stays null — no phantom continue');
+  assert.equal(sent[1].result, 'empty');
+  assert.equal(sent[1].success, false, 'no phantom success (§2)');
+  assert.notEqual(node._status.fill, 'red', 'zero matches is an answer, not a fault');
+  assert.equal(connection.sends.length, 0);
+});
+
+test('an empty list or empty fleet stays loud — someone was named and nobody answered (#226)', async () => {
+  // list: the operator named sysid 9 and reached none.
+  const RED = redStub({ conn: connectionStub([peer(1), peer(2)]) });
+  require('../../nodes/mavlink-fanout')(RED);
+  const listNode = new (RED.nodes.types['mavlink-fanout'])({
+    connection: 'conn',
+    delivery: 'send',
+    selectionMode: 'list',
+    members: [{ sysid: 9 }],
+    intervalMs: 0,
+  });
+  let listSent;
+  const listErr = await emitInput(listNode, { payload: builtCommand() }, (m) => { listSent = m; })
+    .then(() => null, (e) => e);
+  assert.ok(listErr, 'list-empty is passed to done(err)');
+  assert.match(listErr.message, /mavlink-fanout: empty/);
+  assert.equal(listSent[1].result, 'empty');
+  assert.equal(listNode._status.fill, 'red');
+
+  // all: ambiguous between fleet-not-up and misconfig — silence on an arm
+  // that reached nobody is the worse failure.
+  const RED2 = redStub({ conn: connectionStub([]) });
+  require('../../nodes/mavlink-fanout')(RED2);
+  const allNode = new (RED2.nodes.types['mavlink-fanout'])({
+    connection: 'conn',
+    delivery: 'send',
+    selectionMode: 'all',
+    intervalMs: 0,
+  });
+  const allErr = await emitInput(allNode, { payload: builtCommand() }, () => {})
+    .then(() => null, (e) => e);
+  assert.ok(allErr, 'all-empty is passed to done(err)');
+  assert.match(allErr.message, /mavlink-fanout: empty/);
+  assert.equal(allNode._status.fill, 'red');
+});
+
 test('wrapper targets reach the replicator with per-member patches', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
   const RED = redStub({ conn: connection });
@@ -323,7 +428,8 @@ function redStub(nodesById) {
         Object.setPrototypeOf(node, EventEmitter.prototype);
         EventEmitter.call(node);
         node.id = config.id || 'node';
-        node.status = () => {};
+        node._status = null;
+        node.status = (status) => { node._status = status; };
         node.error = () => {};
       },
       registerType(name, ctor) {
