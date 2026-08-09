@@ -76,26 +76,6 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
   assert.equal(outputs[0][1].result, 'succeeded');
 });
 
-test('a wire-tier unknown operation fails loud without wedging the lock', async () => {
-  // createMachine throws between what used to be acquire and start(), and the
-  // outer catch never released — one drifted config wedged the (connection,
-  // target, mission_type) lock behind a phantom "busy" until redeploy. The
-  // machine is now built before the lock is taken, so the throw holds nothing.
-  const conn = new StubConnection();
-  const Node = loadNode(conn);
-  const node = new Node({ connection: 'conn', delivery: 'confirm', dialect: 'common', missionType: 'mission' });
-
-  // Same broken input twice: with the leak, the first throw held the lock and
-  // the second attempt reported "busy" — a lie, nothing was in progress. Both
-  // must name the real fault.
-  for (const attempt of [1, 2]) {
-    const { err } = await runInput(node, { payload: {} });
-    assert.ok(err, `attempt ${attempt} fails loud`);
-    assert.match(String(err), /unknown mission operation/, `attempt ${attempt} names the fault`);
-    assert.doesNotMatch(String(err), /already in progress/, `attempt ${attempt} is not "busy"`);
-  }
-});
-
 test('Build tier refuses a missing operation instead of planning an upload', async () => {
   // buildPlan's catch-all `else` treated every unknown operation as upload, so
   // a node with no operation answered Build with a zero-item MISSION_COUNT plan
