@@ -63,7 +63,10 @@ module.exports = function registerMavlinkBuild(RED) {
     // fails loud per message.
     const tier = config.tier || TIER.SEND;
 
-    const messageName = config.messageName || 'HEARTBEAT';
+    // No `|| 'HEARTBEAT'`: an absent name leaves messageMeta null, which
+    // badges the node invalid at deploy and fails loud on input. Building a
+    // heartbeat nobody asked for is the phantom §9 forbids (#222).
+    const messageName = config.messageName;
     // The editor owns the default ('2' = Control) — just convert it.
     const defaultBand = Number(config.band);
 
