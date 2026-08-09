@@ -139,14 +139,14 @@
       frame:             { value: '' },
       identity:          { value: '' },
       targetSystem:       { value: '', validate: RED.mavlink.validateUint8(0) },
-      targetComponent:      { value: '' },
+      targetComponent:      { value: '', validate: RED.validators.number(true) },
       // Blank allowed: the runtime reads '' as "use the default"
       // (mavlink-command.js — `config.timeout === '' ? DEFAULT_TIMEOUT_MS`),
       // so the validator must accept it. Same shape as Mission, Move, Payload.
       timeout:           { value: '10000', validate: RED.validators.number(true) },
       maxRetries:        { value: '3', validate: RED.validators.number(true) },
       unconfirmedContinue: { value: false },
-      completionTimeout: { value: '60000' },
+      completionTimeout: { value: '60000', validate: RED.validators.number(true) },
       params:            { value: '{}' },
     },
     RED.mavlink.buildTierDialectDefaults()

@@ -438,11 +438,11 @@ test('exact-wire comparison is strict — a near-integer request does not confir
   );
 });
 
-test('an echo with no usable type declines the match instead of guessing REAL32', () => {
-  // The distinguishing case: the frame's param_type is unusable, but its bytes
-  // *would* decode as a matching REAL32. Guessing the type confirms a set from a
-  // frame whose type cannot be trusted; declining reports an honest echo
-  // timeout. Both sides silent on the type means there is nothing to compare.
+test('an unusable echo type falls back to the request type; typeless fails loud', () => {
+  // The frame's param_type is unusable, but its bytes *would* decode as a
+  // matching REAL32 — the fallback must come from the request's declared type,
+  // never a guess. A typeless request cannot exist via the node path (build
+  // throws first, #222); a direct caller's lands on resolveParamType's throw.
   const echo = {
     name: 'PARAM_VALUE',
     sysid: 1,
@@ -460,12 +460,7 @@ test('an echo with no usable type declines the match instead of guessing REAL32'
     capabilities: CAP_PARAM_ENCODE_BYTEWISE,
   };
 
-  // Guard: under a guessed REAL32 these bytes decode to exactly the expected 1,
-  // so a match here could only come from the guess.
   assert.equal(paramValueFromWire(echo.fields.param_value, 'MAV_PARAM_TYPE_REAL32'), 1);
-
-  assert.equal(matchesParamEcho(request, echo), false);
-
-  // A request that does name its type still decodes and confirms.
   assert.equal(matchesParamEcho({ ...request, paramType: 'MAV_PARAM_TYPE_REAL32' }, echo), true);
+  assert.throws(() => matchesParamEcho(request, echo), /MAV_PARAM_TYPE/);
 });

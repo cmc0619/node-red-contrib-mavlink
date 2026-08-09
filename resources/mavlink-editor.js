@@ -1091,7 +1091,6 @@
    * @param {function(object):void} cb
    * @param {object} [opts]
    * @param {boolean} [opts.isBuild]  resolveCatalogTarget override
-   * @param {object} [opts.resolve]   full resolveCatalogTarget opts (wins over isBuild)
    * @param {'messages'|'commands'} opts.listKey  empty/success list property
    */
   RED.mavlink.loadCatalog = function (endpoint, state, cb, opts) {
