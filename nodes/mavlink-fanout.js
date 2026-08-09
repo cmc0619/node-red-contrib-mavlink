@@ -137,7 +137,9 @@ function selectionFrom(config) {
   assignIfPresent(filter, 'type', config.vehicleType);
   assignIfPresent(filter, 'firmware', config.firmwareFilter);
   assignIfPresent(filter, 'armed', config.armedFilter);
-  const mode = config.selectionMode || 'all';
+  // Absence-only default, matching executeFanout: `||` would launder a
+  // drifted '' into 'all' before the lib's allowlist could refuse it (#231).
+  const mode = config.selectionMode === undefined ? 'all' : config.selectionMode;
   return {
     mode,
     // List selection reads its sysids from the members table rows (#163).

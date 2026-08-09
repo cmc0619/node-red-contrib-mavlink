@@ -71,6 +71,33 @@ test('an unknown selection mode refuses instead of commanding every active peer 
   assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
 });
 
+test('a supplied-but-falsy selection mode refuses — only absence means all (#231)', async () => {
+  // `|| 'all'` laundered '' and null into 'all' before the allowlist saw
+  // them (Codex): an upstream `{ mode: flow.get('x') }` with an unset var
+  // widened to the whole fleet. Absent (undefined) still defaults to 'all'.
+  const connection = connectionStub([peer(1), peer(2)]);
+  for (const mode of ['', null]) {
+    const result = await executeFanout({
+      connection,
+      message: builtCommand(),
+      mode: 'sequential',
+      delivery: 'send',
+      selection: { mode },
+    });
+    assert.equal(result.result, 'refused', `mode ${JSON.stringify(mode)} must refuse`);
+    assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
+  }
+
+  const absent = await executeFanout({
+    connection,
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'send',
+    selection: {},
+  });
+  assert.notEqual(absent.result, 'refused', 'an absent mode still means all');
+});
+
 test('an empty resolution records which selection produced it (#226)', async () => {
   // The node's loud/quiet decision branches on the field: a filter matching
   // zero vehicles is an answer, a named list reaching nobody is a fault.
