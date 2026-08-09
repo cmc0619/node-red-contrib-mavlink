@@ -728,11 +728,55 @@ test('ack settle and close in one synchronous stack cannot spawn a zombie wait (
 
   // The wait must be dead: checkCompletion reads peerTable._peers, so count
   // reads through a proxy and confirm no zombie keeps polling after close.
+  // The window must exceed DEFAULT_POLL_MS (500 ms): the node does not pass
+  // pollMs, so a leaked interval first fires at 500 ms (CodeRabbit, #236).
   let reads = 0;
   const realPeers = conn.peerTable._peers;
   Object.defineProperty(conn.peerTable, '_peers', { get() { reads += 1; return realPeers; } });
-  await new Promise((resolve) => setTimeout(resolve, 30));
+  await new Promise((resolve) => setTimeout(resolve, 550));
   assert.equal(reads, 0, 'no completion polling after close');
+});
+
+test('a completion already satisfied at the ack cannot emit through a same-stack close (Codex)', async () => {
+  // The settle-before-cancel variant: the peer state already satisfies the
+  // completion when the ACCEPTED ack arrives, so waitForCompletion() resolves
+  // success from its immediate poll at creation. The settle-once cancel() is
+  // then a no-op — only the post-await generation check keeps the stale run
+  // from emitting that success onto the torn-down node.
+  const conn = connStubWithInject();
+  conn.peerTable = new StubPeerTable();
+  conn.peerTable.setComponent(1, 1, { armed: true }); // ARM already satisfied
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    connection: 'conn',
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'complete',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '60000',
+    maxRetries: '0',
+  });
+
+  let emitted = false;
+  let doneErr = 'not-called';
+  node.emit('input', { payload: {} }, () => { emitted = true; }, (err) => { doneErr = err; });
+  await tick();
+
+  // Same stack: settle ACCEPTED, then close, with no tick between.
+  let closed = false;
+  conn.injectAck({ command: 400, result: 0 }, 1, 1);
+  node.emit('close', () => { closed = true; });
+
+  await tick();
+  await tick();
+
+  assert.equal(closed, true, 'close completed');
+  assert.equal(doneErr, undefined, 'the stale run finishes quietly');
+  assert.equal(emitted, false, 'a pre-settled success is not emitted onto the closed node');
 });
 
 test('a redeploy-cancelled completion wait finishes quietly (accepted-risk M1)', async () => {

@@ -526,9 +526,12 @@ module.exports = function registerMavlinkCommand(RED) {
           }
 
           // A redeploy cancelled the wait (close() calls the completion
-          // cancel). The node is being torn down, so finish quietly — same
-          // rule as the ack cancel above (accepted-risk M1).
-          if (compOutcome.cancelled) {
+          // cancel), or the wait settled before any cancel could land —
+          // waitForCompletion polls once at creation, so an already-satisfied
+          // completion resolves synchronously and the settle-once cancel()
+          // becomes a no-op (Codex, #236). Either way this run is stale:
+          // finish quietly, same rule as the ack cancel above (M1).
+          if (compOutcome.cancelled || myGen !== _generation) {
             done();
             return;
           }
