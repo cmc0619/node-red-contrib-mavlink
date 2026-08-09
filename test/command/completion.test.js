@@ -12,8 +12,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { checkCompletion, COMPLETION } = require('../../lib/command');
+const { checkCompletion, waitForCompletion, COMPLETION } = require('../../lib/command');
 const { StubPeerTable } = require('../../lib/command/test/stubs/connection');
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function peerWithMode(sysid, compid, flightMode) {
   const pt = new StubPeerTable();
@@ -94,6 +96,77 @@ test('TAKEOFF completion stays pending on an absolute frame until the AMSL targe
   const pt = peerWithAlts(1, 1, 505000, 5000); // only 5 m up: 505 m AMSL
   const res = checkCompletion(COMPLETION.TAKEOFF, amslParams, pt, 1, 1, 5);
   assert.equal(res.done, false);
+});
+
+// ── waitForCompletion cancel handle (accepted-risk M1) ───────────────────────
+
+/** Peer table that counts every poll's peer lookup and never satisfies. */
+function countingPeerTable() {
+  const counter = { polls: 0 };
+  counter.table = { _peers: { get() { counter.polls++; return undefined; } } };
+  return counter;
+}
+
+test('waitForCompletion cancel settles promptly with cancelled: true and clears both timers', async () => {
+  const counter = countingPeerTable();
+  const wait = waitForCompletion({
+    completionKey: COMPLETION.ARM,
+    params: [1, 0, 0, 0, 0, 0, 0],
+    peerTable: counter.table,
+    sysid: 1,
+    compid: 1,
+    pollMs: 5,
+    timeoutMs: 1000,
+  });
+
+  wait.cancel();
+  const outcome = await wait.promise;
+  assert.equal(outcome.cancelled, true);
+  assert.equal(outcome.success, false);
+  assert.equal(outcome.confirmedBy, 'none');
+
+  // Cleared timers: no poll runs after cancel, and no timeout is pending to
+  // hold the process open for the remaining timeoutMs.
+  const pollsAtCancel = counter.polls;
+  await sleep(25);
+  assert.equal(counter.polls, pollsAtCancel, 'no late poll after cancel');
+});
+
+test('waitForCompletion settles once: a second cancel after cancel is a no-op', async () => {
+  const counter = countingPeerTable();
+  const wait = waitForCompletion({
+    completionKey: COMPLETION.ARM,
+    params: [1, 0, 0, 0, 0, 0, 0],
+    peerTable: counter.table,
+    sysid: 1,
+    compid: 1,
+    pollMs: 5,
+    timeoutMs: 1000,
+  });
+
+  wait.cancel();
+  wait.cancel();
+  const outcome = await wait.promise;
+  assert.equal(outcome.cancelled, true);
+});
+
+test('waitForCompletion settles once: cancel after a normal settle does not rewrite the outcome', async () => {
+  const pt = new StubPeerTable();
+  pt.setComponent(1, 1, { armed: true }); // ARM satisfied on the immediate poll
+  const wait = waitForCompletion({
+    completionKey: COMPLETION.ARM,
+    params: [1, 0, 0, 0, 0, 0, 0],
+    peerTable: pt,
+    sysid: 1,
+    compid: 1,
+    pollMs: 5,
+    timeoutMs: 1000,
+  });
+
+  wait.cancel();
+  const outcome = await wait.promise;
+  assert.equal(outcome.success, true, 'first settle wins');
+  assert.equal(outcome.cancelled, undefined);
 });
 
 test('TAKEOFF completion reports missing AMSL position data for an absolute frame', () => {

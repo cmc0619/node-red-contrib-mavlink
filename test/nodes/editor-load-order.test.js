@@ -47,6 +47,15 @@ test('registration dereferences RED.mavlink unguarded — the guarantee is load-
   );
 });
 
+test('mavlink-local-identity is the first node-red.nodes entry — it loads the editor resource (§6)', () => {
+  // The other half of the guarantee: mavlink-local-identity is the only node
+  // HTML that loads resources/mavlink-editor.js, and Node-RED appends node
+  // HTML sequentially. Measured on Node-RED 5.0.1: moving it last leaves 2 of
+  // 10 palette nodes registered, with a TypeError on RED.mavlink.validateUint8.
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
+  assert.equal(Object.keys(pkg['node-red'].nodes)[0], 'mavlink-local-identity');
+});
+
 test('no editor-API existence guards — they can only degrade a hard failure (§6)', () => {
   // Same rule for the platform's own editor APIs: `RED.nodes`, `RED.editor`,
   // and `$` are unconditionally present in any editor that rendered the

@@ -109,8 +109,13 @@ module.exports = function registerMavlinkCommand(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    // Active transaction tracker — at most one in flight per node.
+    // Active transaction trackers — at most one in flight per node.
     let _activeWaiter = null;
+    let _activeCompletion = null;
+    // Bumped by close and by each new input: a run that resumes from its ack
+    // await into a stale generation was swept before it could record its
+    // completion handle, and must not start (or keep) a live wait.
+    let _generation = 0;
 
     /** Validate configuration at deploy time. */
     const commandId = resolveCommandId(config);
@@ -326,6 +331,11 @@ module.exports = function registerMavlinkCommand(RED) {
         _activeWaiter.cancel();
         _activeWaiter = null;
       }
+      if (_activeCompletion) {
+        _activeCompletion.cancel();
+        _activeCompletion = null;
+      }
+      const myGen = ++_generation;
 
       applyActionStatus(node, 'sending', `${displayName}\u2026`);
 
@@ -489,7 +499,7 @@ module.exports = function registerMavlinkCommand(RED) {
         // ── Complete tier: poll peer table for actual completion. ──────────
         if (delivery === 'complete' && completionKey && connNode.peerTable) {
           applyActionStatus(node, 'sending', `${displayName} climbing\u2026`);
-          const compOutcome = await waitForCompletion({
+          const completionWait = waitForCompletion({
             completionKey,
             params: paramArray,
             peerTable: connNode.peerTable,
@@ -498,6 +508,33 @@ module.exports = function registerMavlinkCommand(RED) {
             frame: completionFrame,
             timeoutMs: config.completionTimeout ? Number(config.completionTimeout) : 60000,
           });
+          if (myGen === _generation) {
+            _activeCompletion = completionWait;
+          } else {
+            // The ack settled and a close or new input ran in the same
+            // synchronous stack: the sweep fired before this continuation
+            // could record its handle, so nothing else can cancel the wait
+            // it just created — cancel it here (Codex, #236). Also keeps a
+            // stale run from clobbering the newer run's handle.
+            completionWait.cancel();
+          }
+          let compOutcome;
+          try {
+            compOutcome = await completionWait.promise;
+          } finally {
+            if (_activeCompletion === completionWait) _activeCompletion = null;
+          }
+
+          // A redeploy cancelled the wait (close() calls the completion
+          // cancel), or the wait settled before any cancel could land —
+          // waitForCompletion polls once at creation, so an already-satisfied
+          // completion resolves synchronously and the settle-once cancel()
+          // becomes a no-op (Codex, #236). Either way this run is stale:
+          // finish quietly, same rule as the ack cancel above (M1).
+          if (compOutcome.cancelled || myGen !== _generation) {
+            done();
+            return;
+          }
 
           if (compOutcome.success) {
             const rec = makeRecord({
@@ -566,9 +603,14 @@ module.exports = function registerMavlinkCommand(RED) {
     });
 
     node.on('close', (done) => {
+      _generation += 1;
       if (_activeWaiter) {
         _activeWaiter.cancel();
         _activeWaiter = null;
+      }
+      if (_activeCompletion) {
+        _activeCompletion.cancel();
+        _activeCompletion = null;
       }
       done();
     });
