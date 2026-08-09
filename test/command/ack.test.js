@@ -166,3 +166,24 @@ test('a retry send that throws settles the transaction instead of escaping the t
   assert.match(outcome.detail, /queue overflow/);
   assert.equal(sends, 2, 'the retry was attempted');
 });
+
+test('an initial send that throws rejects AND cleans up — no timer or subscription outlives it (Codex, #237)', async () => {
+  // Connection.send throws by design (queue overflow, disabled link). The
+  // rejection is the contract; the leak was the armed timeout and ack
+  // subscription surviving it — the caller's finally drops its cancel handle
+  // on rejection, so nothing else could ever clear them.
+  let unsubscribed = 0;
+  const waiter = new AckWaiter({
+    subscribe: () => () => { unsubscribed += 1; },
+    sendFn: () => { throw new Error('connection disabled'); },
+    commandId: 400,
+    targetSystem: 1,
+    targetComponent: 1,
+    timeoutMs: 5000,
+  });
+
+  await assert.rejects(waiter.start(), /connection disabled/);
+  assert.equal(unsubscribed, 1, 'the ack subscription is released');
+  assert.equal(waiter._timeoutHandle, null, 'the armed timeout is cleared');
+  assert.equal(waiter._settled, true, 'settled — a late timeout cannot resurrect the transaction');
+});
