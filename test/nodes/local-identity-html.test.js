@@ -246,16 +246,14 @@ test('isFalseTrueEnum mirrors metadata false/true enum detection', () => {
 });
 
 test('populateDialectSelect loads dialects, appends vehicle escape, and keeps empty unsaved selection', () => {
+  // No `includeVehicleEscape` and no `onReady`: the escape is unconditional
+  // (all six callers asked for it) and the callback had no caller at all, so
+  // both options went with #221. Asserting on them here was the only thing
+  // keeping them alive.
   const context = loadHelpers();
   const select = new FakeSelect();
-  let ready = 0;
 
-  context.RED.mavlink.populateDialectSelect(select, {
-    includeVehicleEscape: true,
-    onReady() {
-      ready += 1;
-    },
-  });
+  context.RED.mavlink.populateDialectSelect(select, {});
 
   assert.deepEqual(plain(context.$.lastRequest), {
     url: '/mavlink/dialects',
@@ -271,7 +269,6 @@ test('populateDialectSelect loads dialects, appends vehicle escape, and keeps em
   );
   assert.equal(select.selected, '');
   assert.deepEqual(select.triggered, ['change']);
-  assert.equal(ready, 1);
 });
 
 test('reloadCompIdSelect uses initialSaved on first fill and preserves blank later', () => {

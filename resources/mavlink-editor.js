@@ -168,8 +168,8 @@
    */
   RED.mavlink.refreshVerbOptions = function (opts) {
     opts = opts || {};
-    var topicSelector = opts.topicSelector || '#node-input-topic';
-    var verbSelector = opts.verbSelector || '#node-input-verb';
+    var topicSelector = '#node-input-topic';
+    var verbSelector = '#node-input-verb';
     var topic = $(topicSelector).val() || 'camera';
     var $verb = $(verbSelector);
     var verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
@@ -596,10 +596,12 @@
    */
   RED.mavlink.resolveCatalogTarget = function (opts) {
     opts = opts || {};
-    var dialectSelector = opts.dialectSelector || '#node-input-dialect';
-    var vehicleSelector = opts.vehicleSelector || '#node-input-vehicle';
-    var connectionSelector = opts.connectionSelector || '#node-input-connection';
-    var firmwareSelector = opts.firmwareSelector || '#node-input-firmware';
+    // Selectors are fixed, not options: every dialog uses the stock
+    // `#node-input-<key>` ids, and no caller has ever overridden one (#221).
+    var dialectSelector = '#node-input-dialect';
+    var vehicleSelector = '#node-input-vehicle';
+    var connectionSelector = '#node-input-connection';
+    var firmwareSelector = '#node-input-firmware';
     var source = opts.source;
 
     function read(field, selector) {
@@ -612,8 +614,8 @@
     if (typeof opts.isBuild === 'boolean') {
       isBuild = opts.isBuild;
     } else {
-      var deliverySelector = opts.deliverySelector || '#node-input-delivery';
-      var tierSelector = opts.tierSelector || '#node-input-tier';
+      var deliverySelector = '#node-input-delivery';
+      var tierSelector = '#node-input-tier';
       var hasDelivery = source
         ? source.delivery !== undefined
         : !!$(deliverySelector).length;
@@ -710,14 +712,13 @@
    * concrete dialect or the Vehicle Profile escape (§6).
    *
    * @param {object} $select  jQuery select
-   * @param {{saved?: string, includeVehicleEscape?: boolean, onReady?: function}} [opts]
+   * @param {{saved?: string}} [opts]
    */
   RED.mavlink.populateDialectSelect = function ($select, opts) {
     opts = opts || {};
     var saved = opts.saved !== undefined && opts.saved !== null
       ? String(opts.saved)
       : String($select.val() || '');
-    var includeVehicleEscape = opts.includeVehicleEscape !== false;
 
     function appendOption(value, label) {
       $select.append($('<option></option>').val(value).text(label));
@@ -733,18 +734,13 @@
       (dialects || []).forEach(function (dialect) {
         appendOption(String(dialect), String(dialect));
       });
-      if (includeVehicleEscape) {
-        appendOption('__vehicle', 'from Vehicle Profile\u2026');
-      }
+      appendOption('__vehicle', 'from Vehicle Profile\u2026');
       if (saved && !hasOption(saved)) {
         appendOption(saved, saved);
       }
       $select.val(saved || '');
       if (typeof $select.trigger === 'function') {
         $select.trigger('change');
-      }
-      if (typeof opts.onReady === 'function') {
-        opts.onReady();
       }
     }
 
@@ -1114,14 +1110,14 @@
    */
   RED.mavlink.loadCatalog = function (endpoint, state, cb, opts) {
     opts = opts || {};
-    cb = typeof cb === 'function' ? cb : function () {};
     state = state || {};
     if (typeof state.seq !== 'number') state.seq = 0;
 
-    var listKey = opts.listKey
-      || (String(endpoint).indexOf('/messages') !== -1 ? 'messages' : 'commands');
-    var resolveOpts = opts.resolve
-      || (typeof opts.isBuild === 'boolean' ? { isBuild: opts.isBuild } : {});
+    // `listKey` is required, not sniffed from the endpoint: all six call sites
+    // pass it, and guessing from the URL would silently pick the wrong list for
+    // a new endpoint (#221). Same for `cb` — every caller supplies one.
+    var listKey = opts.listKey;
+    var resolveOpts = typeof opts.isBuild === 'boolean' ? { isBuild: opts.isBuild } : {};
     var target = RED.mavlink.resolveCatalogTarget(resolveOpts);
     state.seq += 1;
     var seq = state.seq;
@@ -1236,9 +1232,9 @@
    */
   RED.mavlink.refreshIdentitySelect = function (node, opts) {
     opts = opts || {};
-    var connectionId = $(opts.connectionSelector || '#node-input-connection').val() || '';
+    var connectionId = $('#node-input-connection').val() || '';
     return RED.mavlink.fillIdentitySelect(
-      $(opts.identitySelector || '#node-input-identity'),
+      $('#node-input-identity'),
       connectionId,
       { saved: node.identity, rolesAllowed: opts.rolesAllowed }
     );
@@ -1380,8 +1376,11 @@
   RED.mavlink.buildTierDialectDefaults = function (opts) {
     opts = opts || {};
     var modeField = opts.modeField || 'delivery';
-    var modeSelector = opts.modeSelector || ('#node-input-' + modeField);
-    var dialectSelector = opts.dialectSelector || '#node-input-dialect';
+    // Derived, not an option: no caller overrides either selector (#221).
+    // connectionDefault below still *takes* modeSelector — that pass-through
+    // is live, which is why its option stays.
+    var modeSelector = '#node-input-' + modeField;
+    var dialectSelector = '#node-input-dialect';
 
     function currentMode(self) {
       return RED.mavlink.liveOr(modeSelector, self && self[modeField]);
