@@ -276,8 +276,17 @@
       Object.keys(RED.mavlink.PAYLOAD_VERBS).forEach(function (topic) {
         $topic.append($('<option></option>').val(topic).text(humanize(topic)));
       });
+      // A saved topic the verb table no longer offers keeps its own sentinel
+      // option rather than being rewritten to `camera` (#220). Silently
+      // reassigning it would move the node to a different *device class* — a
+      // gimbal node quietly becomes a camera node — and the operator would have
+      // no way to tell. Same `#N (not in dialect)` convention the enum selects
+      // use for a saved value the catalog does not know.
       $topic.val(node.topic || 'camera');
-      if (!$topic.val()) $topic.val('camera');
+      if (!$topic.val()) {
+        RED.mavlink.ensureSavedEnumOption($topic, node.topic);
+        $topic.val(node.topic || 'camera');
+      }
 
       $topic.on('change', function () {
         RED.mavlink.refreshVerbOptions();
