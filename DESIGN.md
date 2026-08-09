@@ -1226,10 +1226,30 @@ Yaw and yaw rate are included **by presence** on every mode: blank means mask-ig
 including 0 — means commanded.
 
 Frames: `LOCAL_NED`, `LOCAL_OFFSET_NED`, `BODY_OFFSET_NED` (ArduPilot GUIDED), `BODY_NED`
-(PX4 OFFBOARD) ride `SET_POSITION_TARGET_LOCAL_NED`; `GLOBAL_RELATIVE_ALT_INT` (default),
-`GLOBAL_INT`, `GLOBAL_TERRAIN_ALT_INT` ride `SET_POSITION_TARGET_GLOBAL_INT`. The editor stores
+(PX4 OFFBOARD) ride `SET_POSITION_TARGET_LOCAL_NED`; `GLOBAL_RELATIVE_ALT` (default),
+`GLOBAL`, `GLOBAL_TERRAIN_ALT` ride `SET_POSITION_TARGET_GLOBAL_INT`. The editor stores
 the bare member name; labels follow the frame (body frames read forward/right) and vertical
 inputs are up-positive everywhere — the sign flips once, at encode, per the NED rule above.
+
+**Global frame vocabulary is the current spec's; the wire number is an explicit
+compatibility choice** (owner-ruled 2026-08-09). common.xml deprecated the `*_INT` global
+frames (5/6/11) in 2024 as synonyms of `GLOBAL`/`GLOBAL_RELATIVE_ALT`/`GLOBAL_TERRAIN_ALT`
+(0/3/10) — but PX4 `main` exact-matches 5/6/11 in
+`handle_message_set_position_target_global_int` and discards any other frame with a critical
+`invalid coordinate frame` log (source-read 2026-08-09; hypothesis tier, not §14-measured —
+the default path keeps the wire bytes that were already measured, so nothing changed needed
+measuring). ArduPilot maps both numbering sets to the same alt frames; MAVSDK transmits the
+`*_INT` values. Canonical names are the modern spellings; the deprecated `*_INT` names and
+both numeric sets are accepted on input as aliases — MAVLink's protocol surface, not our
+vocabulary, so the pre-1.0 no-aliases rule (which governs our own renames) does not apply.
+The wire number is a per-node **PX4-compat checkbox, default on**: checked emits 5/6/11
+(accepted by every current stack), unchecked emits the spec-current 0/3/10 — an informed
+opt-out, warn-not-block: unchecking under a `px4` profile draws an advisory naming the
+rejection. Deliberately operator-held, not firmware-keyed: Build has no connection to ask and
+`custom` declines firmware-specific behavior, but a checkbox is decidable everywhere. A saved
+config missing the value parses as checked — the safe direction. Unchecked-on-ArduPilot is
+source-read only; a SITL pin is wanted before the opt-out is leaned on (§14). When PX4
+accepts 0/3/10 the default flips, and eventually the checkbox retires.
 A position with a blank coordinate refuses in every **absolute** frame (§10 "blank coordinates
 must not become 0,0"): global lat/lon must not become null island, a blank global alt must not
 become ground level (0 m above home in frame 6, 0 m AGL in frame 11 — or below ground at
