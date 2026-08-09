@@ -253,15 +253,19 @@ test('INT-first contradictory INT_ONLY fails loud without swapping', async () =>
   assert.match(sent[1].detail, /already sent/);
 });
 
-test('missing carrier config: node reds out and inputs do nothing', async () => {
+test('missing carrier config: node reds out and inputs fail loud through Catch', async () => {
   const { node, conn } = deploy([MAV_RESULT.ACCEPTED], { carrier: '' });
 
   let sent;
-  node.emit('input', { payload: { 5: 47.1 } }, (m) => { sent = m; }, () => {});
+  let doneErr;
+  node.emit('input', { payload: { 5: 47.1 } }, (m) => { sent = m; }, (err) => { doneErr = err; });
   await tick();
 
   assert.equal(conn.sent.length, 0, 'nothing sent without a carrier choice');
   assert.equal(sent, undefined, 'no outputs fire from an invalid config');
+  // The message must not vanish silently (house rule, nodes/mavlink-build.js:105).
+  assert.ok(doneErr, 'done(err) fires so Catch hears about it');
+  assert.match(doneErr.message, /invalid config/);
 });
 
 test('msg.mavFrame selects a non-global frame so INT x/y scale by 1e4, not 1e7', async () => {

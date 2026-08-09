@@ -122,14 +122,6 @@ test('TIER.SEND is the string "send"', () => {
   assert.equal(TIER.SEND, 'send');
 });
 
-test('TIER.SEND_CONFIRM is the string "sendConfirm"', () => {
-  assert.equal(TIER.SEND_CONFIRM, 'sendConfirm');
-});
-
-test('TIER.SEND_AWAIT is the string "sendAwait"', () => {
-  assert.equal(TIER.SEND_AWAIT, 'sendAwait');
-});
-
 // ---------------------------------------------------------------------------
 // BADGE_MAX
 // ---------------------------------------------------------------------------

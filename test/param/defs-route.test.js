@@ -81,12 +81,12 @@ function writeHoldingFile(userDir, profileId, document) {
   fs.writeFileSync(file, JSON.stringify(document));
 }
 
-test('parameter definition read and update routes both require mavlink.read', (t) => {
+test('parameter definition routes gate read on mavlink.read and update on mavlink.write', (t) => {
   const { routes, permissions } = captureRoutes(tempUserDir(t));
 
   assert.ok(routes.has('GET /mavlink/param/defs'));
   assert.ok(routes.has('POST /mavlink/param/defs/update'));
-  assert.deepEqual(permissions, ['mavlink.read', 'mavlink.read']);
+  assert.deepEqual(permissions, ['mavlink.read', 'mavlink.write']);
 });
 
 test('GET reads a profile holding file without fetching or requiring a deployed profile', async (t) => {

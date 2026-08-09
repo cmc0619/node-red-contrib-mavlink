@@ -93,7 +93,9 @@ test('a disabled Connection still exposes an empty peer table', () => {
   // when the truth is "the link is switched off and nobody is on it".
   assert.ok(node.peerTable, 'peer table is present');
   assert.equal(typeof node.subscribe, 'function');
-  assert.equal(typeof node.send, 'function');
+  // send refuses rather than no-ops: swallowing the frame would let the
+  // sender report "sent" over a link that moved nothing (§2).
+  assert.throws(() => node.send({ name: 'HEARTBEAT', fields: {} }, {}), /disabled/);
   assert.equal(typeof node.resolveSourceIds, 'function', 'ack-attribution accessor is part of the wrapper contract');
   assert.equal(node.resolveSourceIds(), null, 'a disabled connection resolves no source ids — the gate stays off');
 });

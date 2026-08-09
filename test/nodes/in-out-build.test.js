@@ -1015,6 +1015,30 @@ test('mavlink-out: a connection send throw becomes a failed status record, not a
   assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
 });
 
+test('mavlink-out: a disabled connection fails the send, not a phantom "sent"', () => {
+  // The real disabled-connection stub used to swallow sends, so mavlink-out
+  // reported sent/green over a switched-off link — the §2 phantom success.
+  const RED = makeRED();
+  require('../../nodes/mavlink-connection')(RED);
+  const connNode = makeNodeInstance({ id: 'conn-1' });
+  RED._nodeTypes['mavlink-connection'].call(connNode, { disabled: true });
+  RED.nodes._register('conn-1', connNode);
+  require('../../nodes/mavlink-out')(RED);
+  const Constructor = RED._nodeTypes['mavlink-out'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' });
+
+  node._input({ payload: { name: 'HEARTBEAT', fields: {} } });
+
+  assert.equal(node._sends.length, 1);
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null, 'output 0 must not fire over a disabled link');
+  assert.equal(out1.result, 'failed');
+  assert.notEqual(out1.result, 'sent', 'no phantom success record');
+  assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
+  assert.match(node._doneErrors[0].message, /disabled/);
+});
+
 // ---------------------------------------------------------------------------
 // mavlink-build tests
 // ---------------------------------------------------------------------------
