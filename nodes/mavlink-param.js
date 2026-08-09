@@ -150,7 +150,7 @@ module.exports = function registerMavlinkParam(RED) {
 
     RED.httpAdmin.post(
       PARAM_DEFS_UPDATE_ROUTE,
-      RED.auth.needsPermission('mavlink.read'),
+      RED.auth.needsPermission('mavlink.write'),
       async (req, res) => {
         const body = req.body && typeof req.body === 'object' ? req.body : {};
         const profileId = typeof body.vehicle === 'string' ? body.vehicle.trim() : '';

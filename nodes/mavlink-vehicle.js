@@ -184,12 +184,11 @@ module.exports = function registerMavlinkVehicle(RED) {
       }
     );
 
-    // POST update: downloads (network + disk write). No `mavlink.write` scope
-    // exists in this package, so it shares the read guard, matching the rest of
-    // the admin routes here.
+    // POST update: downloads (network + disk write), so it gates on the write
+    // scope — read-scoped users can list and compare, not mutate.
     RED.httpAdmin.post(
       `${XML_CATALOG_ROUTE}/update`,
-      RED.auth.needsPermission('mavlink.read'),
+      RED.auth.needsPermission('mavlink.write'),
       (req, res) => {
         if (!catalogApi) {
           return catalogUnavailable(res);
@@ -241,7 +240,7 @@ module.exports = function registerMavlinkVehicle(RED) {
     // the only way an entry is replaced. Local and offline, unlike /update.
     RED.httpAdmin.post(
       `${DIALECT_CACHE_ROUTE}/rebuild`,
-      RED.auth.needsPermission('mavlink.read'),
+      RED.auth.needsPermission('mavlink.write'),
       (_req, res) => {
         if (!catalogApi) {
           return catalogUnavailable(res);
