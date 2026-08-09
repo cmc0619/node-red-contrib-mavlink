@@ -80,6 +80,13 @@ function representativeFlow() {
       z: 'flow',
       type: 'mavlink-command',
       connection: 'connection',
+      // Without a carrier the node reds out and its inputs do nothing. The
+      // smoke test only asserts each node was *created*, so an invalid node
+      // passed it silently — the flow has to be genuinely valid for the check
+      // to mean anything (#223).
+      mode: 'preset',
+      preset: 'arm',
+      carrier: 'long',
       wires: [[], []]
     },
     {
