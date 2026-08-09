@@ -15,6 +15,8 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+const { StubPeerTable } = require('../../lib/command/test/stubs/connection');
+
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 test('Build tier: output 0 carries the COMMAND_LONG and output 1 a top-level status record', async () => {
@@ -674,6 +676,47 @@ test('a redeploy-cancelled ack wait finishes quietly, not as a command failure (
   await tick();
 
   // The redeploy.
+  await new Promise((resolve) => node.emit('close', resolve));
+  await tick();
+  await tick();
+
+  assert.equal(doneErr, undefined, 'done() called with no error — a cancel is not a failure');
+  assert.equal(emitted, false, 'nothing is emitted onto a node being torn down');
+});
+
+test('a redeploy-cancelled completion wait finishes quietly (accepted-risk M1)', async () => {
+  // Complete tier: after ACCEPTED the node awaits waitForCompletion. Without a
+  // cancel handle, close() left its poll + timeout running for up to
+  // completionTimeout (60 s default), after which the handler resumed and
+  // emitted status/records onto the closed node.
+  const conn = connStubWithInject();
+  conn.peerTable = new StubPeerTable();
+  conn.peerTable.setComponent(1, 1, { armed: false }); // ARM never satisfies
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    connection: 'conn',
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'complete',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '60000',
+    maxRetries: '0',
+  });
+
+  let emitted = false;
+  let doneErr = 'not-called';
+  node.emit('input', { payload: {} }, () => { emitted = true; }, (err) => { doneErr = err; });
+  await tick();
+
+  // ACCEPTED moves the run into the completion wait.
+  conn.injectAck({ command: 400, result: 0 }, 1, 1);
+  await tick();
+
+  // The redeploy, mid-wait.
   await new Promise((resolve) => node.emit('close', resolve));
   await tick();
   await tick();
