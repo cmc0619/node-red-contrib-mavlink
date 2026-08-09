@@ -52,7 +52,7 @@ test('no editor-API existence guards — they can only degrade a hard failure (�
   // and `$` are unconditionally present in any editor that rendered the
   // dialog, so guarding them (`RED.nodes && …`, `typeof $ !== 'undefined'`)
   // converts a loud failure into a silently degraded dialog too.
-  const GUARD = /RED\.(mavlink|nodes|editor)\s*&&|typeof\s+(\$|RED\.(nodes|editor))[.\w]*\s*[!=]==/;
+  const GUARD = /RED\.(mavlink|nodes|editor)\s*&&|typeof\s+(\$|RED\.(mavlink|nodes|editor))[.\w]*\s*[!=]==/;
   const offenders = [];
   for (const [name, src] of nodeFiles()) {
     src.split('\n').forEach((line, i) => {
