@@ -176,10 +176,7 @@
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);
       });
-      RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
-        saved: node.dialect || '',
-        includeVehicleEscape: true
-      });
+      RED.mavlink.populateDialectSelect($('#node-input-dialect'), { saved: node.dialect || '' });
       RED.mavlink.reloadTargetCompId(node);
       refreshVisibility();
     }

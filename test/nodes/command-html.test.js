@@ -286,7 +286,6 @@ test('command Build dialect select uses shared helper and includes __vehicle esc
   // populateDialectSelect — proven in mavlink-editor-resource.test.js. Command
   // pins the call site, not a pasted copy of the option.
   assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
-  assert.match(html, /includeVehicleEscape:\s*true/, 'dialect select must request Vehicle Profile escape');
   assert.match(html, /row-cmd-dialect/, 'template must have a dialect row');
   assert.match(html, /id="node-input-dialect"/, 'template must have the dialect select');
 });

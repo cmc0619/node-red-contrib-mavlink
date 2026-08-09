@@ -47,18 +47,23 @@ test('registration dereferences RED.mavlink unguarded — the guarantee is load-
   );
 });
 
-test('no RED.mavlink existence guards — they can only degrade a hard failure (§6)', () => {
+test('no editor-API existence guards — they can only degrade a hard failure (§6)', () => {
+  // Same rule for the platform's own editor APIs: `RED.nodes`, `RED.editor`,
+  // and `$` are unconditionally present in any editor that rendered the
+  // dialog, so guarding them (`RED.nodes && …`, `typeof $ !== 'undefined'`)
+  // converts a loud failure into a silently degraded dialog too.
+  const GUARD = /RED\.(mavlink|nodes|editor)\s*&&|typeof\s+(\$|RED\.(nodes|editor))[.\w]*\s*[!=]==/;
   const offenders = [];
   for (const [name, src] of nodeFiles()) {
     src.split('\n').forEach((line, i) => {
-      if (/RED\.mavlink\s*&&/.test(line)) offenders.push(`nodes/${name}:${i + 1}`);
+      if (GUARD.test(line)) offenders.push(`nodes/${name}:${i + 1}`);
     });
   }
   // mavlink-editor.js must not guard itself either: a function assigned to
   // RED.mavlink cannot run without RED.mavlink existing.
   fs.readFileSync(EDITOR, 'utf8').split('\n').forEach((line, i) => {
-    if (/RED\.mavlink\s*&&/.test(line)) offenders.push(`resources/mavlink-editor.js:${i + 1}`);
+    if (GUARD.test(line)) offenders.push(`resources/mavlink-editor.js:${i + 1}`);
   });
 
-  assert.deepEqual(offenders, [], `RED.mavlink existence guards must not come back:\n${offenders.join('\n')}`);
+  assert.deepEqual(offenders, [], `editor-API existence guards must not come back:\n${offenders.join('\n')}`);
 });

@@ -59,7 +59,6 @@ test('mavlink-mission Build dialect select uses shared helper with Vehicle Profi
   assert.match(html, /id="row-mission-dialect"/, 'template must have a dialect row');
   assert.match(html, /id="node-input-dialect"/, 'template must have a dialect select');
   assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
-  assert.match(html, /includeVehicleEscape:\s*true/, 'dialect helper must include Vehicle Profile escape');
   // Runtime firmware path still gates on the escape value (getEffectiveFirmware).
   assert.match(html, /dialect\s*!==\s*'__vehicle'/, 'Vehicle Profile escape gates profile firmware');
 });

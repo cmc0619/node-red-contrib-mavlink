@@ -66,9 +66,7 @@
       return;
     }
 
-    if (typeof RED.editor.prepareConfigNodeSelect === 'function') {
-      RED.editor.prepareConfigNodeSelect(node, property, type, prefix);
-    }
+    RED.editor.prepareConfigNodeSelect(node, property, type, prefix);
   };
 
   /**
@@ -164,12 +162,12 @@
    * over the live select value; otherwise keep the current selection if still
    * valid for the new topic.
    *
-   * @param {{saved?: string, topicSelector?: string, verbSelector?: string}} [opts]
+   * @param {{saved?: string}} [opts]
    */
   RED.mavlink.refreshVerbOptions = function (opts) {
     opts = opts || {};
-    var topicSelector = opts.topicSelector || '#node-input-topic';
-    var verbSelector = opts.verbSelector || '#node-input-verb';
+    var topicSelector = '#node-input-topic';
+    var verbSelector = '#node-input-verb';
     var topic = $(topicSelector).val() || 'camera';
     var $verb = $(verbSelector);
     var verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
@@ -500,7 +498,7 @@
     // Build-tier detection must match resolveCatalogTarget: most action nodes
     // use `#node-input-delivery`, but mavlink-build uses `#node-input-tier`.
     // Prefer delivery when that control exists; otherwise read tier (Codex #118).
-    var mode = (typeof $ !== 'undefined' && $('#node-input-delivery').length)
+    var mode = $('#node-input-delivery').length
       ? valueFromSelector('#node-input-delivery')
       : valueFromSelector('#node-input-tier');
     var buildTier = mode === 'build';
@@ -512,10 +510,8 @@
         var buildVehicle = valueFromSelector('#node-input-vehicle');
         if (buildVehicle) {
           query.vehicle = buildVehicle;
-          if (RED.nodes && typeof RED.nodes.node === 'function') {
-            var buildProfile = RED.nodes.node(buildVehicle);
-            if (buildProfile && buildProfile.dialect) query.dialect = buildProfile.dialect;
-          }
+          var buildProfile = RED.nodes.node(buildVehicle);
+          if (buildProfile && buildProfile.dialect) query.dialect = buildProfile.dialect;
         }
       }
       if (!query.dialect && !query.vehicle) return query;
@@ -536,7 +532,7 @@
     var vehicle = '';
     var dialect = '';
     var connection = valueFromSelector('#node-input-connection');
-    if (connection && RED.nodes && typeof RED.nodes.node === 'function') {
+    if (connection) {
       var conn = RED.nodes.node(connection);
       vehicle = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
       var connProfile = vehicle ? RED.nodes.node(vehicle) : null;
@@ -585,21 +581,17 @@
    * @param {object} [opts.source]  saved config read instead of the DOM
    * @param {boolean} [opts.isBuild]  explicit Build-tier override; when omitted
    *   the delivery/tier selector value === 'build' decides.
-   * @param {string} [opts.deliverySelector='#node-input-delivery']
-   * @param {string} [opts.tierSelector='#node-input-tier']  Build node uses tier
-   * @param {string} [opts.dialectSelector='#node-input-dialect']
-   * @param {string} [opts.vehicleSelector='#node-input-vehicle']
-   * @param {string} [opts.connectionSelector='#node-input-connection']
-   * @param {string} [opts.firmwareSelector='#node-input-firmware']
    * @returns {{key: string, query: object|null, dialect: string, vehicleId: string,
    *   firmware: string, vehicleFamily: string}}
    */
   RED.mavlink.resolveCatalogTarget = function (opts) {
     opts = opts || {};
-    var dialectSelector = opts.dialectSelector || '#node-input-dialect';
-    var vehicleSelector = opts.vehicleSelector || '#node-input-vehicle';
-    var connectionSelector = opts.connectionSelector || '#node-input-connection';
-    var firmwareSelector = opts.firmwareSelector || '#node-input-firmware';
+    // Selectors are fixed, not options: every dialog uses the stock
+    // `#node-input-<key>` ids, and no caller has ever overridden one (#221).
+    var dialectSelector = '#node-input-dialect';
+    var vehicleSelector = '#node-input-vehicle';
+    var connectionSelector = '#node-input-connection';
+    var firmwareSelector = '#node-input-firmware';
     var source = opts.source;
 
     function read(field, selector) {
@@ -612,8 +604,8 @@
     if (typeof opts.isBuild === 'boolean') {
       isBuild = opts.isBuild;
     } else {
-      var deliverySelector = opts.deliverySelector || '#node-input-delivery';
-      var tierSelector = opts.tierSelector || '#node-input-tier';
+      var deliverySelector = '#node-input-delivery';
+      var tierSelector = '#node-input-tier';
       var hasDelivery = source
         ? source.delivery !== undefined
         : !!$(deliverySelector).length;
@@ -638,9 +630,7 @@
     // vehicle family — joins its key, so editing any of them on an undeployed
     // profile misses the cache instead of being served the previous catalog.
     function forProfile(vehicleId) {
-      var profile = (vehicleId && RED.nodes && typeof RED.nodes.node === 'function')
-        ? RED.nodes.node(vehicleId)
-        : null;
+      var profile = vehicleId ? RED.nodes.node(vehicleId) : null;
       var dialect = (profile && profile.dialect) || '';
       var firmware = (profile && profile.firmware) || '';
       var family = (profile && profile.vehicleFamily) || '';
@@ -683,7 +673,7 @@
 
     // Wire tier: the connection's bound Vehicle Profile is the catalog source.
     var connectionId = read('connection', connectionSelector);
-    if (connectionId && RED.nodes && typeof RED.nodes.node === 'function') {
+    if (connectionId) {
       var conn = RED.nodes.node(connectionId);
       var vehicleRef = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
       if (vehicleRef) return forProfile(vehicleRef);
@@ -710,14 +700,13 @@
    * concrete dialect or the Vehicle Profile escape (§6).
    *
    * @param {object} $select  jQuery select
-   * @param {{saved?: string, includeVehicleEscape?: boolean, onReady?: function}} [opts]
+   * @param {{saved?: string}} [opts]
    */
   RED.mavlink.populateDialectSelect = function ($select, opts) {
     opts = opts || {};
     var saved = opts.saved !== undefined && opts.saved !== null
       ? String(opts.saved)
       : String($select.val() || '');
-    var includeVehicleEscape = opts.includeVehicleEscape !== false;
 
     function appendOption(value, label) {
       $select.append($('<option></option>').val(value).text(label));
@@ -733,19 +722,12 @@
       (dialects || []).forEach(function (dialect) {
         appendOption(String(dialect), String(dialect));
       });
-      if (includeVehicleEscape) {
-        appendOption('__vehicle', 'from Vehicle Profile\u2026');
-      }
+      appendOption('__vehicle', 'from Vehicle Profile\u2026');
       if (saved && !hasOption(saved)) {
         appendOption(saved, saved);
       }
       $select.val(saved || '');
-      if (typeof $select.trigger === 'function') {
-        $select.trigger('change');
-      }
-      if (typeof opts.onReady === 'function') {
-        opts.onReady();
-      }
+      $select.trigger('change');
     }
 
     // Pin the saved dialect synchronously before the /mavlink/dialects round-trip.
@@ -914,7 +896,7 @@
     RED.mavlink.bindSelectTitleSync($select, { namespace: opts.titleNamespace || 'mavEnumTip' });
     // Node-RED attaches change→validateNodeEditor before oneditprepare; async
     // fills must re-fire change or a pre-fill `input-error` sticks (§6).
-    if (opts.triggerChange !== false && typeof $select.trigger === 'function') {
+    if (opts.triggerChange !== false) {
       $select.trigger('change');
     }
   };
@@ -1110,18 +1092,18 @@
    * @param {object} [opts]
    * @param {boolean} [opts.isBuild]  resolveCatalogTarget override
    * @param {object} [opts.resolve]   full resolveCatalogTarget opts (wins over isBuild)
-   * @param {'messages'|'commands'} [opts.listKey]  empty/success list property
+   * @param {'messages'|'commands'} opts.listKey  empty/success list property
    */
   RED.mavlink.loadCatalog = function (endpoint, state, cb, opts) {
     opts = opts || {};
-    cb = typeof cb === 'function' ? cb : function () {};
     state = state || {};
     if (typeof state.seq !== 'number') state.seq = 0;
 
-    var listKey = opts.listKey
-      || (String(endpoint).indexOf('/messages') !== -1 ? 'messages' : 'commands');
-    var resolveOpts = opts.resolve
-      || (typeof opts.isBuild === 'boolean' ? { isBuild: opts.isBuild } : {});
+    // `listKey` is required, not sniffed from the endpoint: all six call sites
+    // pass it, and guessing from the URL would silently pick the wrong list for
+    // a new endpoint (#221). Same for `cb` — every caller supplies one.
+    var listKey = opts.listKey;
+    var resolveOpts = typeof opts.isBuild === 'boolean' ? { isBuild: opts.isBuild } : {};
     var target = RED.mavlink.resolveCatalogTarget(resolveOpts);
     state.seq += 1;
     var seq = state.seq;
@@ -1167,9 +1149,7 @@
    * @returns {'gcs'|'companion'|'custom'}
    */
   RED.mavlink.identityRole = function (identityId) {
-    var idNode = identityId && RED.nodes && typeof RED.nodes.node === 'function'
-      ? RED.nodes.node(identityId)
-      : null;
+    var idNode = identityId ? RED.nodes.node(identityId) : null;
     var role = idNode && idNode.role;
     return role === 'companion' || role === 'custom' ? role : 'gcs';
   };
@@ -1184,7 +1164,7 @@
    */
   RED.mavlink.identityOptionsFor = function (connectionId, rolesAllowed) {
     var out = [];
-    if (!connectionId || !RED.nodes || typeof RED.nodes.node !== 'function') return out;
+    if (!connectionId) return out;
     var conn = RED.nodes.node(connectionId);
     if (!conn) return out;
     var ids = [conn.localIdentity].concat(conn.additionalIdentities || []);
@@ -1231,14 +1211,14 @@
    * `rolesAllowed: ['gcs','custom']`; everyone else keeps the full set.
    *
    * @param {object} node
-   * @param {{rolesAllowed?: string[], connectionSelector?: string, identitySelector?: string}} [opts]
+   * @param {{rolesAllowed?: string[]}} [opts]
    * @returns {string} selected identity id
    */
   RED.mavlink.refreshIdentitySelect = function (node, opts) {
     opts = opts || {};
-    var connectionId = $(opts.connectionSelector || '#node-input-connection').val() || '';
+    var connectionId = $('#node-input-connection').val() || '';
     return RED.mavlink.fillIdentitySelect(
-      $(opts.identitySelector || '#node-input-identity'),
+      $('#node-input-identity'),
       connectionId,
       { saved: node.identity, rolesAllowed: opts.rolesAllowed }
     );
@@ -1331,8 +1311,6 @@
    *
    * @param {object} [opts]
    * @param {'delivery'|'tier'} [opts.modeField='delivery']  Build node uses tier
-   * @param {string} [opts.modeSelector]  DOM selector override
-   * @param {string} [opts.dialectSelector='#node-input-dialect']
    * @param {boolean} [opts.withFirmware]  add the Param/Mission Firmware field
    * @returns {object} default descriptors to merge into registerType defaults
    */
@@ -1350,13 +1328,12 @@
    *
    * @param {object} [opts]
    * @param {'delivery'|'tier'} [opts.modeField='delivery']
-   * @param {string} [opts.modeSelector]  DOM selector override
    * @returns {object} descriptor for defaults.connection
    */
   RED.mavlink.connectionDefault = function (opts) {
     opts = opts || {};
     var modeField = opts.modeField || 'delivery';
-    var modeSelector = opts.modeSelector || ('#node-input-' + modeField);
+    var modeSelector = '#node-input-' + modeField;
     return {
       value: '',
       type: 'mavlink-connection',
@@ -1380,8 +1357,9 @@
   RED.mavlink.buildTierDialectDefaults = function (opts) {
     opts = opts || {};
     var modeField = opts.modeField || 'delivery';
-    var modeSelector = opts.modeSelector || ('#node-input-' + modeField);
-    var dialectSelector = opts.dialectSelector || '#node-input-dialect';
+    // Derived, not an option: no caller overrides either selector (#221).
+    var modeSelector = '#node-input-' + modeField;
+    var dialectSelector = '#node-input-dialect';
 
     function currentMode(self) {
       return RED.mavlink.liveOr(modeSelector, self && self[modeField]);
@@ -1398,7 +1376,7 @@
           return true;
         },
       },
-      connection: RED.mavlink.connectionDefault({ modeField: modeField, modeSelector: modeSelector }),
+      connection: RED.mavlink.connectionDefault({ modeField: modeField }),
       vehicle: {
         // No `required: false`. Paired with a validate, it short-circuits an
         // empty value to valid *before* the validator runs (measured on the

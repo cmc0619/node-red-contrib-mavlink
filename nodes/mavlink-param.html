@@ -298,8 +298,7 @@
         }
         var connectionId = $('#node-input-connection').val() || '';
         if (!connectionId) return 'Pick a Connection to load parameter definitions.';
-        var connectionNode = RED.nodes && typeof RED.nodes.node === 'function'
-          ? RED.nodes.node(connectionId) : null;
+        var connectionNode = RED.nodes.node(connectionId);
         if (!connectionNode) return 'The selected Connection could not be resolved.';
         if (!target.vehicleId) {
           return 'This Connection has no Vehicle Profile, which is where parameter definitions live.';
@@ -670,10 +669,7 @@
 
       // Pin/populate dialect BEFORE the first enum catalog fetch so Build-tier
       // currentCatalogQuery sees the saved dialect (not an empty select).
-      RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
-        saved: node.dialect || '',
-        includeVehicleEscape: true
-      });
+      RED.mavlink.populateDialectSelect($('#node-input-dialect'), { saved: node.dialect || '' });
       RED.mavlink.reloadTargetCompId(node);
 
       $('#node-input-paramId').on('input change', refreshParamInfo);

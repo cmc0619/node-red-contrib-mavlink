@@ -76,14 +76,14 @@
           if (dialect && dialect !== '__vehicle') return $('#node-input-firmware').val() || '';
           if (dialect !== '__vehicle') return '';
           var vehicleId = $('#node-input-vehicle').val() || '';
-          if (vehicleId && RED.nodes && typeof RED.nodes.node === 'function') {
+          if (vehicleId) {
             var v = RED.nodes.node(vehicleId);
             if (v && v.firmware) return v.firmware;
           }
           return '';
         }
         var connectionId = $('#node-input-connection').val() || '';
-        if (connectionId && RED.nodes && typeof RED.nodes.node === 'function') {
+        if (connectionId) {
           var conn = RED.nodes.node(connectionId);
           if (conn && conn.vehicle) {
             var vNode = RED.nodes.node(conn.vehicle);
@@ -170,10 +170,7 @@
       });
       $('#node-input-firmware').on('change', repopulateTypes);
       $op.on('change', refreshRows);
-      RED.mavlink.populateDialectSelect($('#node-input-dialect'), {
-        saved: node.dialect || '',
-        includeVehicleEscape: true
-      });
+      RED.mavlink.populateDialectSelect($('#node-input-dialect'), { saved: node.dialect || '' });
       RED.mavlink.reloadTargetCompId(node);
 
       /* Initial state. */

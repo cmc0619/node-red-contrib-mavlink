@@ -544,10 +544,7 @@
           updateVisibility();
           reloadCatalogs();
         });
-        RED.mavlink.populateDialectSelect($dialect, {
-          saved: node.dialect || '',
-          includeVehicleEscape: true,
-        });
+        RED.mavlink.populateDialectSelect($dialect, { saved: node.dialect || '' });
       },
       oneditsave: function () {
         var $root = $('#node-input-fields-container');
