@@ -178,26 +178,11 @@ module.exports = function registerMavlinkMission(RED) {
         return;
       }
 
-      // ── Lock per (connection, target, mission_type) (§9). ─────────────────
-      const release = locks.acquire(connNode.id, target, missionType);
-      if (!release) {
-        const rec = record(operation, missionTypeKey, target, {
-          result: 'failed',
-          phase: 'locked',
-          reason: `a ${missionTypeKey} transfer is already in progress for this target`,
-        });
-        applyActionStatus(node, 'error', `${missionTypeKey} busy`);
-        send([null, rec]);
-        done(new Error(`mavlink-mission: ${rec.reason}`));
-        return;
-      }
-
-      // Key the in-flight handle the same way as the lock so a fence upload
-      // does not cancel an in-flight mission download on this node (§9).
-      const lockKey = locks.key(connNode.id, target, missionType);
-
-      applyActionStatus(node, 'sending', `${operation} ${missionTypeKey}\u2026`);
-
+      // Built before the lock is taken: createMachine throws on an unknown
+      // operation (#222), and a throw between acquire and start() would
+      // leave the lock held until redeploy — every later op on this target
+      // reporting "busy" over a transfer that never started. Constructors
+      // are store-only; the subscription only opens in start().
       const machine = createMachine(operation, {
         send: (message) =>
           connNode.send(message, {
@@ -218,6 +203,26 @@ module.exports = function registerMavlinkMission(RED) {
           ]);
         },
       });
+
+      // ── Lock per (connection, target, mission_type) (§9). ─────────────────
+      const release = locks.acquire(connNode.id, target, missionType);
+      if (!release) {
+        const rec = record(operation, missionTypeKey, target, {
+          result: 'failed',
+          phase: 'locked',
+          reason: `a ${missionTypeKey} transfer is already in progress for this target`,
+        });
+        applyActionStatus(node, 'error', `${missionTypeKey} busy`);
+        send([null, rec]);
+        done(new Error(`mavlink-mission: ${rec.reason}`));
+        return;
+      }
+
+      // Key the in-flight handle the same way as the lock so a fence upload
+      // does not cancel an in-flight mission download on this node (§9).
+      const lockKey = locks.key(connNode.id, target, missionType);
+
+      applyActionStatus(node, 'sending', `${operation} ${missionTypeKey}\u2026`);
       activeByKey.set(lockKey, machine);
 
       machine
