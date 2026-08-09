@@ -25,6 +25,14 @@ test('orbit params with JSON "NaN" center coerce to numeric NaN in the param arr
   assert.ok(Number.isNaN(arr[6]), 'param7 alt must be NaN');
 });
 
+test('unreadable params JSON throws — drifted config must not send preset defaults', () => {
+  // The editor always saves valid JSON, so a string that no longer parses is
+  // drift. The old catch laundered it into {} and the command went out with
+  // preset defaults instead of what was configured — same class as the #222
+  // removals; callers route the throw through failInput → done(err).
+  assert.throws(() => mergeParams({ params: '{ not valid json' }, null), SyntaxError);
+});
+
 test('absent orbit center defaults to 0 — examples must send NaN explicitly', () => {
   const user = mergeParams({ params: '{"1":100,"2":5,"3":0}' }, null);
   const arr = buildParamArray(getPreset('orbit'), user);

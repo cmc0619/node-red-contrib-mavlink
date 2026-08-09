@@ -36,15 +36,21 @@ module.exports = function registerMavlinkConnection(RED) {
     // Disabled means no runtime is constructed at all: no dialing, listening,
     // or timers (§7). Show the grey disabled badge and stop.
     //
-    // The stubs still answer, because a disabled Connection is a valid choice,
-    // not a broken reference. An empty peer table (no timers — sweeping is
-    // driven by the runtime, which does not exist here) lets action nodes
-    // report "no members" instead of "invalid config", which is the honest
-    // answer: the flow is configured correctly and the link is switched off.
+    // The read-side stubs still answer, because a disabled Connection is a
+    // valid choice, not a broken reference. An empty peer table (no timers —
+    // sweeping is driven by the runtime, which does not exist here) lets
+    // action nodes report "no members" instead of "invalid config", which is
+    // the honest answer: the flow is configured correctly and the link is
+    // switched off. `send` refuses instead — swallowing a frame would let the
+    // sender report "sent" over a link that moved nothing (§2).
     if (node.disabled) {
       node.status({ fill: 'grey', shape: 'ring', text: 'disabled' });
       node.subscribe = () => () => {};
-      node.send = () => {};
+      node.send = () => {
+        throw new Error(
+          'mavlink-connection: connection disabled — enable it in the connection config and redeploy'
+        );
+      };
       node.resolveSourceIds = () => null;
       node.peerTable = new PeerTable({});
       node.on('close', (done) => done());
