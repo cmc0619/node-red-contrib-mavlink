@@ -495,3 +495,131 @@ test('onExpire fires on TTL with the stop message, and never on a caller stop', 
   timer();
   assert.equal(expiries.length, 1);
 });
+
+test('stop({brake:false}) hands over without a brake; a default stop brakes', () => {
+  // GCS practice (§ "Move setpoint matrix"): the brake marks the *end* of
+  // control — a replacement handover sends nothing between old and new.
+  const sends = [];
+  let timer;
+  const make = () =>
+    createMoveStream({
+      connection: { send(message) { sends.push(message); } },
+      message: buildMoveMessage({
+        mode: 'velocity',
+        target: { sysid: 4, compid: 1 },
+        velocity: { north: 1, east: 0, up: 0 },
+      }),
+      target: { sysid: 4, compid: 1 },
+      rateHz: 10,
+      ttlMs: 0,
+      now: () => 0,
+      setInterval(fn) { timer = fn; return 'timer'; },
+      clearInterval() {},
+    });
+
+  const handover = make();
+  handover.start();
+  assert.equal(sends.length, 1);
+  assert.equal(handover.stop({ brake: false }), null, 'no brake, so no brake message');
+  assert.equal(sends.length, 1, 'handover stop sends nothing');
+  assert.equal(handover.active, false);
+  timer();
+  assert.equal(sends.length, 1, 'a cleared stream never sends again');
+
+  const ending = make();
+  ending.start();
+  const brake = ending.stop();
+  assert.equal(sends.length, 3);
+  assert.equal(brake.fields.type_mask, 3527);
+  assert.equal(sends[2].fields.vx, 0, 'default stop is the zero-velocity brake');
+});
+
+test('a tick send that throws is contained: keep cadence, one report per streak, count only deliveries', () => {
+  // Connection.send throws by design (identity resolution on a dead link);
+  // uncaught inside the interval callback that is a process crash. The stream
+  // never quits on send failure — the firmware setpoint watchdog is the
+  // failsafe (§ "Move setpoint matrix").
+  let timer;
+  let fail = false;
+  const attempts = [];
+  const errors = [];
+  let recoveries = 0;
+  const stream = createMoveStream({
+    connection: {
+      send(message) {
+        attempts.push(message);
+        if (fail) throw new Error('identity unresolved');
+      },
+    },
+    message: buildMoveMessage({
+      mode: 'velocity',
+      target: { sysid: 4, compid: 1 },
+      velocity: { north: 1, east: 0, up: 0 },
+    }),
+    target: { sysid: 4, compid: 1 },
+    rateHz: 10,
+    ttlMs: 0,
+    now: () => 0,
+    setInterval(fn) { timer = fn; return 'timer'; },
+    clearInterval() {},
+    onSendError: (err) => errors.push(err.message),
+    onSendRecovery: () => recoveries++,
+  });
+
+  stream.start();
+  assert.equal(stream.sent, 1, 'the initial send counts');
+
+  fail = true;
+  timer();
+  timer();
+  timer();
+  assert.equal(errors.length, 1, 'one report per streak, not per tick');
+  assert.match(errors[0], /identity unresolved/);
+  assert.equal(attempts.length, 4, 'the stream kept its cadence through the streak');
+  assert.equal(stream.active, true, 'send failure never stops the stream');
+
+  fail = false;
+  timer();
+  assert.equal(recoveries, 1, 'first success after a streak reports recovery');
+
+  fail = true;
+  timer();
+  assert.equal(errors.length, 2, 'fail, fail, succeed, fail → two reports');
+  assert.equal(stream.sent, 2, 'failed attempts do not count as sent');
+});
+
+test('a throwing expiry brake still completes expiry bookkeeping', () => {
+  let timer;
+  let now = 0;
+  let brakeFail = false;
+  const expiries = [];
+  const stream = createMoveStream({
+    connection: {
+      send() {
+        if (brakeFail) throw new Error('link down');
+      },
+    },
+    message: buildMoveMessage({
+      mode: 'velocity',
+      target: { sysid: 4, compid: 1 },
+      velocity: { north: 1, east: 0, up: 0 },
+    }),
+    target: { sysid: 4, compid: 1 },
+    rateHz: 10,
+    ttlMs: 100,
+    now: () => now,
+    setInterval(fn) { timer = fn; return 'timer'; },
+    clearInterval() {},
+    onExpire: (stopMessage, brakeError) => expiries.push({ stopMessage, brakeError }),
+  });
+
+  stream.start();
+  brakeFail = true;
+  now = 150;
+  timer();
+
+  assert.equal(stream.active, false, 'the stream still ended');
+  assert.equal(expiries.length, 1, 'expiry still notified');
+  assert.equal(expiries[0].stopMessage, null, 'no brake reached the wire');
+  assert.match(expiries[0].brakeError.message, /link down/);
+});

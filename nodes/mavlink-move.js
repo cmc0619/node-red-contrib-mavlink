@@ -31,16 +31,24 @@ module.exports = function registerMavlinkMove(RED) {
     applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
 
     // Stop the active stream and free its single-owner scope (#176). Every
-    // stop the node causes — replacement, a non-stream input, close — routes
-    // through here so no path can leave the target locked with nothing
-    // streaming to it.
-    function stopStream() {
-      if (!stream) return;
-      stream.stop();
-      stream = null;
-      releaseStream();
-      releaseStream = null;
-      streamKey = null;
+    // stop the node causes — replacement, a non-stream input, an explicit
+    // stop, close — routes through here so no path can leave the target
+    // locked with nothing streaming to it. `brake` follows GCS practice
+    // (§ "Move setpoint matrix"): the brake marks the end of control, so
+    // replace/supersede handovers pass false — the new setpoint IS the next
+    // command. The bookkeeping runs in `finally` because a brake send can
+    // throw (dead link): the lock must come free even when the brake never
+    // reached the wire, and each caller owns where that throw lands.
+    function stopStream({ brake = true } = {}) {
+      if (!stream) return null;
+      try {
+        return stream.stop({ brake });
+      } finally {
+        stream = null;
+        releaseStream();
+        releaseStream = null;
+        streamKey = null;
+      }
     }
 
     node.on('input', (msg, send, done) => {
@@ -51,6 +59,36 @@ module.exports = function registerMavlinkMove(RED) {
         }
 
         const payload = msg.payload ?? {};
+        // Actions are handled before target resolution: a stop names no
+        // target — it halts whatever this node is streaming — so nothing a
+        // resolver could refuse may refuse an otherwise-valid stop. Runtime-
+        // boundary data fails loud: an unknown action throws naming the valid
+        // set, and only the stream tier owns streams.
+        if (payload.action !== undefined) {
+          if (payload.action !== 'stop') {
+            throw new Error(
+              `unknown Move action ${JSON.stringify(payload.action)} — expected one of: stop`
+            );
+          }
+          if (delivery !== 'stream') {
+            throw new Error('Move action "stop" requires stream delivery — only the stream tier owns streams');
+          }
+          if (stream) {
+            const sent = stream.sent;
+            // brake: true — an explicit stop is an end of control. A brake
+            // send that throws routes to failInput below: that input
+            // genuinely failed (the lock is still freed by stopStream).
+            const stopMessage = stopStream();
+            completeStop(node, send, 'stopped', { message: stopMessage, sent });
+          } else {
+            // A stop with nothing running succeeds with a distinguishing
+            // detail — a stop control must not punish a second press
+            // (§ "Move setpoint matrix").
+            completeStop(node, send, 'no stream', {});
+          }
+          done();
+          return;
+        }
         // Move: companion hides both sysid and compid — no compidFromConfig.
         const { connectionNode, target, identityId } = resolveDeliveryContext(RED, {
           delivery,
@@ -113,15 +151,19 @@ module.exports = function registerMavlinkMove(RED) {
             // synchronous re-acquire below cannot self-conflict. A conflict
             // (necessarily another node's stream) refuses before stopStream,
             // leaving the running stream running like any rejected input.
+            // Replacement is a direct handover, no brake between old and new
+            // (§ "Move setpoint matrix": MAVSDK/QGC never brake between
+            // consecutive targets) — the setpoint sent by start() below is
+            // the next command.
             const key = streamLocks.key(connectionNode.id, target);
-            if (key === streamKey) stopStream();
+            if (key === streamKey) stopStream({ brake: false });
             const release = streamLocks.acquire(connectionNode.id, target);
             if (!release) {
               throw new Error(
                 `a setpoint stream to ${target.sysid}.${target.compid} is already running on this connection — stop it first or target it from one node`
               );
             }
-            stopStream();
+            stopStream({ brake: false });
             stream = createMoveStream({
               connection: connectionNode,
               message,
@@ -137,12 +179,27 @@ module.exports = function registerMavlinkMove(RED) {
               // only the bookkeeping is left: free the scope before telling
               // the flow. A replaced stream's timer is already cleared, so
               // this only ever fires for the stream currently in the slot.
-              onExpire: (stopMessage) => {
+              onExpire: (stopMessage, brakeError) => {
+                const sent = stream.sent;
                 stream = null;
                 releaseStream = null;
                 streamKey = null;
                 release();
-                completeExpiry(node, stopMessage);
+                completeExpiry(node, stopMessage, sent, brakeError);
+              },
+              // A tick send that throws is contained in the stream — it
+              // keeps cadence and retries (§ "Move setpoint matrix"). One
+              // report per failure streak, status output only: the input
+              // that started the stream completed long ago, same as expiry.
+              onSendError: (err) => {
+                applyActionStatus(node, 'error', err.message);
+                node.send([null, statusRecord('failed', `setpoint send failed: ${err.message}`)]);
+              },
+              // First success after a failed streak restores the badge the
+              // stream started with. No record — recovery is the absence of
+              // failure, not an event.
+              onSendRecovery: () => {
+                applyActionStatus(node, 'ok', 'streaming');
               },
             });
             streamKey = key;
@@ -161,7 +218,10 @@ module.exports = function registerMavlinkMove(RED) {
             }
             completeResult(node, send, 'succeeded', 'streaming', message);
           } else {
-            stopStream();
+            // A non-stream input superseding a running stream is the same
+            // direct handover as replacement: the message below is the next
+            // command, no brake between.
+            stopStream({ brake: false });
             connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
             completeResult(node, send, 'succeeded', 'sent', message);
           }
@@ -173,7 +233,14 @@ module.exports = function registerMavlinkMove(RED) {
     });
 
     node.on('close', (done) => {
-      stopStream();
+      // Close is an end of control, so it brakes — but the brake is the last
+      // thing this node ever sends, and a dead link at teardown must not stop
+      // the teardown (the firmware's setpoint watchdog covers the vehicle).
+      try {
+        stopStream();
+      } catch (err) {
+        node.warn(`Move stream brake failed on close: ${err.message}`);
+      }
       done();
     });
   }
@@ -204,11 +271,34 @@ function completeResult(node, send, result, action, message) {
  * progress does. Branch on it with a switch for `detail === 'expired'`.
  *
  * @param {object} node
- * @param {object} message  the zero-velocity stop message that was sent
+ * @param {object|null} message  the zero-velocity brake that was sent, or null when its send threw
+ * @param {number} sent  setpoints the stream delivered (successful sends only)
+ * @param {Error} [brakeError]  set when the expiry brake send threw
  */
-function completeExpiry(node, message) {
+function completeExpiry(node, message, sent, brakeError) {
   applyActionStatus(node, 'ok', 'stream expired');
-  node.send([null, statusRecord('succeeded', 'expired', { message })]);
+  // A brake that never reached the wire must not break the expiry
+  // bookkeeping; the fact rides the record's detail instead.
+  const detail = brakeError
+    ? `expired (brake send failed: ${brakeError.message})`
+    : 'expired';
+  node.send([null, statusRecord('succeeded', detail, { message, sent })]);
+}
+
+/**
+ * An `{action: 'stop'}` input completed. One input, one trigger (§9): a stop
+ * that succeeded fires output 0 like any other completed input, plus the
+ * status record. Detail 'stopped' carries the brake and the sent count;
+ * 'no stream' distinguishes the second press.
+ *
+ * @param {object} node
+ * @param {Function} send
+ * @param {string} detail  'stopped' | 'no stream'
+ * @param {object} extra   record fields (message, sent)
+ */
+function completeStop(node, send, detail, extra) {
+  applyActionStatus(node, 'ok', detail);
+  send([{ payload: { result: 'succeeded', ...extra } }, statusRecord('succeeded', detail, extra)]);
 }
 
 function statusRecord(result, detail, extra = {}) {
