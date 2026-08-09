@@ -1226,10 +1226,38 @@ Yaw and yaw rate are included **by presence** on every mode: blank means mask-ig
 including 0 — means commanded.
 
 Frames: `LOCAL_NED`, `LOCAL_OFFSET_NED`, `BODY_OFFSET_NED` (ArduPilot GUIDED), `BODY_NED`
-(PX4 OFFBOARD) ride `SET_POSITION_TARGET_LOCAL_NED`; `GLOBAL_RELATIVE_ALT_INT` (default),
-`GLOBAL_INT`, `GLOBAL_TERRAIN_ALT_INT` ride `SET_POSITION_TARGET_GLOBAL_INT`. The editor stores
+(PX4 OFFBOARD) ride `SET_POSITION_TARGET_LOCAL_NED`; `GLOBAL_RELATIVE_ALT` (default),
+`GLOBAL`, `GLOBAL_TERRAIN_ALT` ride `SET_POSITION_TARGET_GLOBAL_INT`. The editor stores
 the bare member name; labels follow the frame (body frames read forward/right) and vertical
 inputs are up-positive everywhere — the sign flips once, at encode, per the NED rule above.
+
+**Global frame vocabulary is the current spec's; the wire value is the fleet's** (ruled
+2026-08-09). common.xml deprecated the `*_INT` global frames (5/6/11) in 2024 as synonyms of
+`GLOBAL`/`GLOBAL_RELATIVE_ALT`/`GLOBAL_TERRAIN_ALT` (0/3/10) — but PX4 `main`
+exact-matches 5/6/11 in `handle_message_set_position_target_global_int` and discards any
+other frame with a critical `invalid coordinate frame` log (source-read 2026-08-09;
+hypothesis tier, not §14-measured — the recommended path never changes the wire, so nothing
+new needed measuring). ArduPilot maps both numbering sets to the same alt frames, so the two
+are indistinguishable there, and MAVSDK transmits the `*_INT` values for the same reason.
+Ruling: canonical names are the modern spellings; the deprecated `*_INT` names and both
+numeric sets are accepted on input as aliases — this is the MAVLink protocol's surface, not
+our vocabulary, so the pre-1.0 no-aliases rule (which governs our own renames) does not
+apply — and encode translates to the 5/6/11 the fleet accepts, next to the sign flip and
+deg→rad. **No firmware-keyed dual wire path**: it would transmit bytes no receiver
+distinguishes, fork on a firmware the Build tier cannot know and `custom` refuses to state,
+and abandon the measured 5/6/11 baseline for nothing. When PX4 accepts 0/3/10, the wire map
+is one table line.
+
+**Stream lifecycle follows GCS practice** (ruled 2026-08-09): replacing a running stream
+hands over old→new directly with **no brake between** — MAVSDK and QGC never brake between
+consecutive targets; the zero-velocity brake marks the *end* of control, and fires only on
+TTL expiry, an explicit `{action: 'stop'}` input, and node close. The stop input halts the
+stream, sends the brake, and reports on the status output; a stop with nothing running
+succeeds with a record saying so — a stop control must not punish a second press. A send that
+throws inside the stream timer is contained: the stream keeps its cadence and reports once
+per failure streak on the status output, never deciding on its own to quit — the operator
+chose to stream, and the firmware's own setpoint watchdog is the failsafe on a truly dead
+link.
 A position with a blank coordinate refuses in every **absolute** frame (§10 "blank coordinates
 must not become 0,0"): global lat/lon must not become null island, a blank global alt must not
 become ground level (0 m above home in frame 6, 0 m AGL in frame 11 — or below ground at
