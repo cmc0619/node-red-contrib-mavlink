@@ -76,6 +76,25 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
   assert.equal(outputs[0][1].result, 'succeeded');
 });
 
+test('Build tier refuses a missing operation instead of planning an upload', async () => {
+  // buildPlan's catch-all `else` treated every unknown operation as upload, so
+  // a node with no operation answered Build with a zero-item MISSION_COUNT plan
+  // and `succeeded` — the wire tier's createMachine rejects the same input.
+  // Build must not be the softer of the two doors (Codex, #222).
+  const conn = new StubConnection();
+  const Node = loadNode(conn);
+  const node = new Node({ connection: 'conn', delivery: 'build', dialect: 'common', missionType: 'mission' });
+  const { outputs, err } = await runInput(node, { payload: {} });
+
+  assert.ok(err, 'a missing operation must fail loud');
+  assert.match(String(err), /unknown mission operation/);
+  assert.equal(conn.sent.length, 0);
+  assert.ok(
+    !outputs.some((o) => o[0] && o[0].payload && o[0].payload.messages),
+    'no plan is emitted on output 0'
+  );
+});
+
 test('mission Build concrete dialect uses config firmware and no Vehicle Profile target rung', async () => {
   const conn = new StubConnection();
   const vehicleNode = {
