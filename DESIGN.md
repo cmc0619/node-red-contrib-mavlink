@@ -3403,20 +3403,22 @@ completion times out with `no position data` on this lab image.
 
 ---
 
-**Fan-out selection: unreadable refuses, and only a filter may be quietly empty (2026-08-09).**
-*Wrong belief:* the runtime trusts the saved config, so an unrecognised `selectionMode` is not
-worth guarding, and "selection resolved to no active vehicles" is one condition deserving one
-loudness.
-*Fact:* two rulings (#231, #226). First — the selection arrives on `msg.payload` as well as
-config, so its mode is runtime input, and the fall-open direction is the whole fleet: anything
-other than `all`/`list`/`filter` fell through the `mode === 'list'` narrowing and commanded
-every active peer. Where the fall-open direction is a *wider permission*, the guard stays —
-an unreadable mode refuses (`unknown fan-out selection …`), absent still means `all` by design.
-Second — an empty resolution means three different things: a `filter` matching nothing is a
-correct answer (quiet: grey `0 matched` badge, no `done(err)`, output 1 still carries
-`success: false` so §2 holds); an empty explicit `list` or an empty `all` is someone named or
-expected vehicles and reached none (loud: red badge, Catch-routable). Loudness follows whether
-the operator asserted that vehicles exist, not whether the count is zero.
+**Fan-out selection: the flow author is trusted end to end; only a filter may be quietly
+empty (2026-08-09).**
+*Wrong belief:* an unrecognised `selectionMode` must refuse, because a garbled mode falls open
+to the whole fleet and the fall-open direction is a wider permission. (An earlier revision of
+this entry recorded that as the ruling; the owner reversed it the same day — #231 declined.)
+*Fact:* the flow author is trusted on both surfaces. `msg.payload` is golden — a hand-built
+payload with a garbage selection is the author's bug to fix, not the runtime's to catch — and
+saved config is the editor's to validate, as everywhere else. Runtime validation is kept only
+when it comes free (an existing throw the value lands on); the fan-out allowlist was *bought*
+— three logic lines and four tests for a state a trusted author does not produce — so it came
+out. An unrecognised mode behaves as `all`.
+The empty-selection ruling (#226) stands: a `filter` matching nothing is a correct answer
+(quiet: grey `0 matched` badge, no `done(err)`, output 1 still carries `success: false` so §2
+holds); an empty explicit `list` or an empty `all` is someone named or expected vehicles and
+reached none (loud: red badge, Catch-routable). Loudness follows whether the operator asserted
+that vehicles exist, not whether the count is zero.
 *Check:* `node --test test/fanout/fanout.test.js test/fanout/node.test.js`.
 
 ---
