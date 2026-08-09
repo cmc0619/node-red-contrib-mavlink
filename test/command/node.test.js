@@ -684,6 +684,57 @@ test('a redeploy-cancelled ack wait finishes quietly, not as a command failure (
   assert.equal(emitted, false, 'nothing is emitted onto a node being torn down');
 });
 
+test('ack settle and close in one synchronous stack cannot spawn a zombie wait (Codex)', async () => {
+  // The handoff race: the ACCEPTED ack settles the waiter, and close() runs in
+  // the SAME synchronous stack — before the async continuation can record
+  // _activeCompletion. The sweep then has nothing to cancel, and the
+  // continuation would create a live 60 s wait on a torn-down node. The
+  // generation guard cancels it at creation instead.
+  const conn = connStubWithInject();
+  conn.peerTable = new StubPeerTable();
+  conn.peerTable.setComponent(1, 1, { armed: false }); // ARM never satisfies
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    connection: 'conn',
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'complete',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '60000',
+    maxRetries: '0',
+  });
+
+  let emitted = false;
+  let doneErr = 'not-called';
+  node.emit('input', { payload: {} }, () => { emitted = true; }, (err) => { doneErr = err; });
+  await tick();
+
+  // Same stack: settle ACCEPTED, then close, with no tick between — the
+  // continuation has not run yet when the close sweep fires.
+  let closed = false;
+  conn.injectAck({ command: 400, result: 0 }, 1, 1);
+  node.emit('close', () => { closed = true; });
+
+  await tick();
+  await tick();
+
+  assert.equal(closed, true, 'close completed');
+  assert.equal(doneErr, undefined, 'the stale run finishes quietly');
+  assert.equal(emitted, false, 'nothing is emitted onto the closed node');
+
+  // The wait must be dead: checkCompletion reads peerTable._peers, so count
+  // reads through a proxy and confirm no zombie keeps polling after close.
+  let reads = 0;
+  const realPeers = conn.peerTable._peers;
+  Object.defineProperty(conn.peerTable, '_peers', { get() { reads += 1; return realPeers; } });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(reads, 0, 'no completion polling after close');
+});
+
 test('a redeploy-cancelled completion wait finishes quietly (accepted-risk M1)', async () => {
   // Complete tier: after ACCEPTED the node awaits waitForCompletion. Without a
   // cancel handle, close() left its poll + timeout running for up to

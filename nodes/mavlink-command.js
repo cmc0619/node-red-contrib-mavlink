@@ -112,6 +112,10 @@ module.exports = function registerMavlinkCommand(RED) {
     // Active transaction trackers — at most one in flight per node.
     let _activeWaiter = null;
     let _activeCompletion = null;
+    // Bumped by close and by each new input: a run that resumes from its ack
+    // await into a stale generation was swept before it could record its
+    // completion handle, and must not start (or keep) a live wait.
+    let _generation = 0;
 
     /** Validate configuration at deploy time. */
     const commandId = resolveCommandId(config);
@@ -331,6 +335,7 @@ module.exports = function registerMavlinkCommand(RED) {
         _activeCompletion.cancel();
         _activeCompletion = null;
       }
+      const myGen = ++_generation;
 
       applyActionStatus(node, 'sending', `${displayName}\u2026`);
 
@@ -503,7 +508,16 @@ module.exports = function registerMavlinkCommand(RED) {
             frame: completionFrame,
             timeoutMs: config.completionTimeout ? Number(config.completionTimeout) : 60000,
           });
-          _activeCompletion = completionWait;
+          if (myGen === _generation) {
+            _activeCompletion = completionWait;
+          } else {
+            // The ack settled and a close or new input ran in the same
+            // synchronous stack: the sweep fired before this continuation
+            // could record its handle, so nothing else can cancel the wait
+            // it just created — cancel it here (Codex, #236). Also keeps a
+            // stale run from clobbering the newer run's handle.
+            completionWait.cancel();
+          }
           let compOutcome;
           try {
             compOutcome = await completionWait.promise;
@@ -586,6 +600,7 @@ module.exports = function registerMavlinkCommand(RED) {
     });
 
     node.on('close', (done) => {
+      _generation += 1;
       if (_activeWaiter) {
         _activeWaiter.cancel();
         _activeWaiter = null;
