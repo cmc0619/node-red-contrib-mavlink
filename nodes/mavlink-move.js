@@ -83,12 +83,12 @@ module.exports = function registerMavlinkMove(RED) {
             // send that throws routes to failInput below: that input
             // genuinely failed (the lock is still freed by stopStream).
             const stopMessage = stopStream();
-            completeStop(node, send, 'stopped', { message: stopMessage, sent });
+            completeResult(node, send, 'succeeded', 'stopped', { message: stopMessage, sent });
           } else {
             // A stop with nothing running succeeds with a distinguishing
             // detail — a stop control must not punish a second press
             // (§ "Move setpoint matrix").
-            completeStop(node, send, 'no stream', {});
+            completeResult(node, send, 'succeeded', 'no stream', {});
           }
           done();
           return;
@@ -230,14 +230,14 @@ module.exports = function registerMavlinkMove(RED) {
               stopStream();
               throw err;
             }
-            completeResult(node, send, 'succeeded', 'streaming', message);
+            completeResult(node, send, 'succeeded', 'streaming', { message });
           } else {
             // A non-stream input superseding a running stream is the same
             // direct handover as replacement: the message below is the next
             // command, no brake between.
             stopStream({ brake: false });
             connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
-            completeResult(node, send, 'succeeded', 'sent', message);
+            completeResult(node, send, 'succeeded', 'sent', { message });
           }
         }
         done();
@@ -267,9 +267,21 @@ function completeBuild(node, send, message) {
   send([{ payload: message }, statusRecord('succeeded', 'built', { message })]);
 }
 
-function completeResult(node, send, result, action, message) {
-  applyActionStatus(node, 'ok', action);
-  send([{ payload: { result, message } }, statusRecord(result, action, { message })]);
+/**
+ * A completed input: badge, output 0 trigger, status record — one shape for
+ * the sent/streaming/stopped outcomes. One input, one trigger (§9): a stop
+ * that succeeded fires output 0 like any other completed input; its
+ * 'no stream' detail distinguishes the second press.
+ *
+ * @param {object} node
+ * @param {Function} send
+ * @param {string} result  'succeeded'
+ * @param {string} detail  'sent' | 'streaming' | 'stopped' | 'no stream'
+ * @param {object} fields  payload/record fields (message, and `sent` on stops)
+ */
+function completeResult(node, send, result, detail, fields) {
+  applyActionStatus(node, 'ok', detail);
+  send([{ payload: { result, ...fields } }, statusRecord(result, detail, fields)]);
 }
 
 /**
@@ -297,22 +309,6 @@ function completeExpiry(node, message, sent, brakeError) {
     ? `expired (brake send failed: ${brakeError.message})`
     : 'expired';
   node.send([null, statusRecord('succeeded', detail, { message, sent })]);
-}
-
-/**
- * An `{action: 'stop'}` input completed. One input, one trigger (§9): a stop
- * that succeeded fires output 0 like any other completed input, plus the
- * status record. Detail 'stopped' carries the brake and the sent count;
- * 'no stream' distinguishes the second press.
- *
- * @param {object} node
- * @param {Function} send
- * @param {string} detail  'stopped' | 'no stream'
- * @param {object} extra   record fields (message, sent)
- */
-function completeStop(node, send, detail, extra) {
-  applyActionStatus(node, 'ok', detail);
-  send([{ payload: { result: 'succeeded', ...extra } }, statusRecord('succeeded', detail, extra)]);
 }
 
 function statusRecord(result, detail, extra = {}) {
