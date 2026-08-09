@@ -202,7 +202,7 @@ module.exports = function registerMavlinkIn(RED) {
           flushTimer = null;
           paintBadge(Date.now());
         }, STATUS_MIN_INTERVAL_MS - (now - lastStatusMs));
-        if (typeof flushTimer.unref === 'function') flushTimer.unref();
+        flushTimer.unref();
       }
     };
 
