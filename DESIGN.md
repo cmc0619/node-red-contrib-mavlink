@@ -3403,6 +3403,24 @@ completion times out with `no position data` on this lab image.
 
 ---
 
+**Fan-out selection: unreadable refuses, and only a filter may be quietly empty (2026-08-09).**
+*Wrong belief:* the runtime trusts the saved config, so an unrecognised `selectionMode` is not
+worth guarding, and "selection resolved to no active vehicles" is one condition deserving one
+loudness.
+*Fact:* two rulings (#231, #226). First — the selection arrives on `msg.payload` as well as
+config, so its mode is runtime input, and the fall-open direction is the whole fleet: anything
+other than `all`/`list`/`filter` fell through the `mode === 'list'` narrowing and commanded
+every active peer. Where the fall-open direction is a *wider permission*, the guard stays —
+an unreadable mode refuses (`unknown fan-out selection …`), absent still means `all` by design.
+Second — an empty resolution means three different things: a `filter` matching nothing is a
+correct answer (quiet: grey `0 matched` badge, no `done(err)`, output 1 still carries
+`success: false` so §2 holds); an empty explicit `list` or an empty `all` is someone named or
+expected vehicles and reached none (loud: red badge, Catch-routable). Loudness follows whether
+the operator asserted that vehicles exist, not whether the count is zero.
+*Check:* `node --test test/fanout/fanout.test.js test/fanout/node.test.js`.
+
+---
+
 **A measured-dead mode is not a capability — Force is removed, not warned about (2026-08-06).**
 *Wrong belief:* once measurement showed neither stack actuates on the force bit, an advisory
 saying "expect it to be ignored" was the right resolution — the mode is legal MAVLink, keeping
