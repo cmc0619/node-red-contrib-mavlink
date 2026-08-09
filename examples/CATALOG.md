@@ -689,37 +689,3 @@ Short README to drop into the folder. Suggested sections:
    doesn't need firmware. Cross-connection fan-out is out of scope (§10).
 8. **Safety** — SITL only; several flows arm, fly, flip, terminate, or force-disarm. Never
    point these at a real vehicle without understanding each step.
-
----
-
-## 4. Renames / moves of 06–09
-
-Recommendation: **move the rig-specific 06–09 into `examples/sitl/`**, leave the general
-demos 01–05 at top level. Rationale — 01–05 illustrate a node/contract against any single
-link and belong in the front-door example set; 06–09 assume the §13 rig (five instances,
-two stacks, live completion/param/mission behaviour) and are pain-tests, which is exactly
-what `sitl/` is for.
-
-| Current | Action | New path | Why |
-|---|---|---|---|
-| `01-udp-heartbeat.json` | **keep** | `examples/01-udp-heartbeat.json` | general first-contact demo; any link |
-| `02-arm-takeoff-chain.json` | **keep** | `examples/02-arm-takeoff-chain.json` | general chain-model demo |
-| `03-param-read-set.json` | **keep** | `examples/03-param-read-set.json` | general Param demo |
-| `04-mission-upload-download.json` | **keep** | `examples/04-mission-upload-download.json` | general Mission demo |
-| `05-fanout-arm.json` | **keep** | `examples/05-fanout-arm.json` | general Fan-out demo (small list) |
-| `06-sitl-completion-takeoff.json` | **move + renumber** | `examples/sitl/01-completion-takeoff.json` | completion timing is firmware behaviour (§13) |
-| `07-ardupilot-swarm-sequential.json` | **move + renumber** | `examples/sitl/08-fanout-sequential-five.json` | needs the five-instance rig |
-| `08-param-read-set-defs.json` | **move + renumber** | `examples/sitl/13-param-defs-live.json` | live param read/set + defs against real firmware |
-| `09-command-mission.json` | **move + renumber** | `examples/sitl/14-command-mission-basics.json` | assumes two SITL instances / rig routing |
-
-Notes for the mover:
-
-- Update each moved flow's **tab `label`** to the new `SITL NN …` form and keep the exact
-  launch command already present in its comment (06/07/09 already carry `sim_vehicle.py`
-  lines; 08 should gain one).
-- Renumbering is cosmetic — Node-RED imports by node `id`, not filename — but keeping the
-  `sitl/NN` order aligned with this catalog helps the reader.
-- If the package's `package.json` enumerates examples under `node-red.examples`, add the
-  `sitl/` entries there so they appear in the editor's import menu.
-- The new regular examples continue at **10–27**; the `sitl/` set is numbered **01–14**
-  within its own folder.

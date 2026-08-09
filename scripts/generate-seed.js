@@ -297,11 +297,9 @@ function writeSeed(opts) {
     }));
 
   const payload = {
-    schemaVersion: 3,
     stamp,
     notice: MIT_NOTICE,
     manifest: {
-      schemaVersion: 3,
       stamp,
       repo,
       ref,
