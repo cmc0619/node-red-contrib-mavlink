@@ -250,7 +250,6 @@ test('mavlink-move Build dialect select uses shared helper with Vehicle Profile 
   assert.match(html, /id="row-move-dialect"/, 'template must have a dialect row');
   assert.match(html, /id="node-input-dialect"/, 'template must have a dialect select');
   assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
-  assert.match(html, /includeVehicleEscape:\s*true/, 'dialect helper must include Vehicle Profile escape');
 });
 
 test('mavlink-move has no Firmware row and no silent ardupilotmega default', () => {

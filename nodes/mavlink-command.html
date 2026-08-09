@@ -419,10 +419,7 @@
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
         if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });
-      RED.mavlink.populateDialectSelect($dialect, {
-        saved: node.dialect || '',
-        includeVehicleEscape: true,
-      });
+      RED.mavlink.populateDialectSelect($dialect, { saved: node.dialect || '' });
       // Compid catalog must run after the dialect select is pinned (see
       // populateDialectSelect); the earlier CompID reload at prepare
       // start raced an empty select on Build.

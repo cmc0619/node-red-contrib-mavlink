@@ -216,7 +216,6 @@ test('mavlink-payload Build dialect picker keeps empty invalid and offers Vehicl
     'Payload defaults must merge buildTierDialectDefaults()'
   );
   assert.match(payloadHtml, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
-  assert.match(payloadHtml, /includeVehicleEscape:\s*true/, 'dialect select must include Vehicle Profile escape');
 });
 
 test('mavlink-payload Build catalog calls do not invent a dialect while dialect is empty', () => {

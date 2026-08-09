@@ -348,10 +348,7 @@ test('populateDialectSelect pins saved dialect before the dialects GET returns',
     return originalGetJSON.call(this, url, query, cb);
   };
 
-  context.RED.mavlink.populateDialectSelect(select, {
-    saved: 'development',
-    includeVehicleEscape: true,
-  });
+  context.RED.mavlink.populateDialectSelect(select, { saved: 'development' });
 
   assert.equal(sawPin, true);
   assert.equal(select.selected, 'development');
@@ -363,10 +360,7 @@ test('populateDialectSelect re-selects saved dialect without defaulting unsaved 
   const context = loadHelpers();
   const select = new FakeSelect();
 
-  context.RED.mavlink.populateDialectSelect(select, {
-    saved: 'common',
-    includeVehicleEscape: true,
-  });
+  context.RED.mavlink.populateDialectSelect(select, { saved: 'common' });
 
   assert.equal(select.selected, 'common');
   assert.deepEqual(select.triggered, ['change']);

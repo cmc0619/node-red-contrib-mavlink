@@ -312,10 +312,7 @@
         refreshFields();
         reloadCompIds();
       });
-      RED.mavlink.populateDialectSelect($dialect, {
-        saved: node.dialect || '',
-        includeVehicleEscape: true
-      });
+      RED.mavlink.populateDialectSelect($dialect, { saved: node.dialect || '' });
 
       node._payloadSave = function () {
         return Object.assign({}, stash, collectValues());
