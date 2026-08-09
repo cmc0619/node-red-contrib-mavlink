@@ -259,7 +259,11 @@ test('a filter matching zero vehicles reports quietly — empty aggregate, no er
   assert.equal(sent[0], null, 'output 0 stays null — no phantom continue');
   assert.equal(sent[1].result, 'empty');
   assert.equal(sent[1].success, false, 'no phantom success (§2)');
-  assert.notEqual(node._status.fill, 'red', 'zero matches is an answer, not a fault');
+  assert.deepEqual(
+    node._status,
+    { fill: 'grey', shape: 'ring', text: '0 matched' },
+    'zero matches is an answer, not a fault — the exact quiet badge'
+  );
   assert.equal(connection.sends.length, 0);
 });
 

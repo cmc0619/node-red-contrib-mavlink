@@ -95,7 +95,8 @@ test('a supplied-but-falsy selection mode refuses — only absence means all (#2
     delivery: 'send',
     selection: {},
   });
-  assert.notEqual(absent.result, 'refused', 'an absent mode still means all');
+  assert.equal(absent.result, 'succeeded', 'an absent mode still means all');
+  assert.equal(connection.sends.length, 2, 'both active peers are commanded');
 });
 
 test('an empty resolution records which selection produced it (#226)', async () => {
