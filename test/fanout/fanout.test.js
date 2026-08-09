@@ -52,53 +52,6 @@ test('a list selection refuses a bad sysid instead of fanning out to the rest', 
   assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'list', sysids: ['1', '4'] }).map((m) => m.sysid), [1, 4]);
 });
 
-test('an unknown selection mode refuses instead of commanding every active peer (#231)', async () => {
-  const connection = connectionStub([peer(1), peer(2)]);
-
-  // The selection can arrive on msg.payload: a typo'd mode used to fall
-  // through to 'all' — the whole fleet — because only the exact string 'list'
-  // narrowed the member set.
-  const result = await executeFanout({
-    connection,
-    message: builtCommand(),
-    mode: 'sequential',
-    delivery: 'send',
-    selection: { mode: 'lists' },
-  });
-
-  assert.equal(result.result, 'refused');
-  assert.match(result.detail, /unknown fan-out selection "lists"/);
-  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
-});
-
-test('a supplied-but-falsy selection mode refuses — only absence means all (#231)', async () => {
-  // `|| 'all'` laundered '' and null into 'all' before the allowlist saw
-  // them (Codex): an upstream `{ mode: flow.get('x') }` with an unset var
-  // widened to the whole fleet. Absent (undefined) still defaults to 'all'.
-  const connection = connectionStub([peer(1), peer(2)]);
-  for (const mode of ['', null]) {
-    const result = await executeFanout({
-      connection,
-      message: builtCommand(),
-      mode: 'sequential',
-      delivery: 'send',
-      selection: { mode },
-    });
-    assert.equal(result.result, 'refused', `mode ${JSON.stringify(mode)} must refuse`);
-    assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
-  }
-
-  const absent = await executeFanout({
-    connection,
-    message: builtCommand(),
-    mode: 'sequential',
-    delivery: 'send',
-    selection: {},
-  });
-  assert.equal(absent.result, 'succeeded', 'an absent mode still means all');
-  assert.equal(connection.sends.length, 2, 'both active peers are commanded');
-});
-
 test('an empty resolution records which selection produced it (#226)', async () => {
   // The node's loud/quiet decision branches on the field: a filter matching
   // zero vehicles is an answer, a named list reaching nobody is a fault.

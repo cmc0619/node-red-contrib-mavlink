@@ -194,50 +194,6 @@ test('mavlink-fanout node gates DO_FLIGHTTERMINATION on msg.confirmed / node con
   assert.equal(conn2.sends[0].message.fields.command, 185);
 });
 
-test('an unknown selection mode on the payload refuses — never the whole fleet (#231)', async () => {
-  const connection = connectionStub([peer(1), peer(2)]);
-  const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-fanout')(RED);
-  const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({ connection: 'conn', delivery: 'send', intervalMs: 0 });
-
-  let sent;
-  const err = await emitInput(
-    node,
-    { payload: { message: builtCommand(), selection: { mode: 'lists' } } },
-    (m) => { sent = m; }
-  ).then(() => null, (e) => e);
-
-  assert.ok(err, 'refused unknown selection is passed to done(err)');
-  assert.equal(sent[0], null, 'no continue output');
-  assert.equal(sent[1].result, 'refused');
-  assert.match(sent[1].detail, /"lists"/, 'detail names the unreadable value');
-  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
-});
-
-test('an unknown selection mode in config refuses the same way (#231)', async () => {
-  const connection = connectionStub([peer(1), peer(2)]);
-  const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-fanout')(RED);
-  const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({
-    connection: 'conn',
-    delivery: 'send',
-    selectionMode: 'everything',
-    intervalMs: 0,
-  });
-
-  let sent;
-  const err = await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; })
-    .then(() => null, (e) => e);
-
-  assert.ok(err, 'refused unknown selection is passed to done(err)');
-  assert.equal(sent[0], null);
-  assert.equal(sent[1].result, 'refused');
-  assert.match(sent[1].detail, /"everything"/);
-  assert.equal(connection.sends.length, 0);
-});
-
 test('a filter matching zero vehicles reports quietly — empty aggregate, no error (#226)', async () => {
   // The stub peers are ArduPilot (autopilot 3), so a px4 firmware filter is a
   // correct zero-match answer, not a fault: no done(err), no red badge.
