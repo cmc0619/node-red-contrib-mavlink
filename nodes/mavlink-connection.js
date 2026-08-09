@@ -205,7 +205,10 @@ function identitySnapshot(idNode, defaults, bundle, connectionId) {
  * @returns {object}
  */
 function buildTransportConfig(config) {
-  const mode = config.mode || 'udp';
+  // No `|| 'udp'`: transport/index.js throws `unknown transport mode` on
+  // undefined, and a link silently bound to the wrong transport is worse
+  // than one that refuses to start (#222).
+  const mode = config.mode;
   if (mode === 'serial') {
     return {
       mode: 'serial',

@@ -64,6 +64,24 @@ test('mavlink-param reuses its deploy-resolved Connection during input delivery'
   assert.equal(conn.sent.length, 1);
 });
 
+test('a set with no paramType fails loud rather than guessing REAL32', () => {
+  // lib/param removed the node-level fallback but kept its own
+  // `input.paramType || 'MAV_PARAM_TYPE_REAL32'`, so the node still sent a
+  // REAL32 PARAM_SET for a missing type — silently mis-encoding an INT32
+  // parameter. The editor always saves a type; an absent one is drift
+  // (Codex, #222).
+  const { buildParamMessage } = require('../../lib/param');
+  assert.throws(
+    () => buildParamMessage({
+      action: 'set',
+      paramId: 'BAT_N_CELLS',
+      value: 3,
+      target: { sysid: 1, compid: 1 },
+    }),
+    /MAV_PARAM_TYPE/
+  );
+});
+
 test('mavlink-param confirm set emits a timed-out record and releases the subscription', () => {
   const conn = connStub();
   const RED = redStub({ conn });
@@ -72,6 +90,7 @@ test('mavlink-param confirm set emits a timed-out record and releases the subscr
   const node = new Node({
     delivery: 'confirm',
     action: 'set',
+    paramType: 'MAV_PARAM_TYPE_REAL32',
     connection: 'conn',
     targetSystem: 6,
     targetComponent: 1,
@@ -99,6 +118,7 @@ test('mavlink-param confirm set scopes its PARAM_VALUE subscription to the targe
   const node = new Node({
     delivery: 'confirm',
     action: 'set',
+    paramType: 'MAV_PARAM_TYPE_REAL32',
     connection: 'conn',
     targetSystem: 6,
     targetComponent: 1,
@@ -172,6 +192,7 @@ test('mavlink-param cancels a prior in-flight subscription when a second op star
   const node = new Node({
     delivery: 'confirm',
     action: 'set',
+    paramType: 'MAV_PARAM_TYPE_REAL32',
     connection: 'conn',
     targetSystem: 6,
     targetComponent: 1,
@@ -198,6 +219,7 @@ test('mavlink-param companion identity derives sysid; echo from sysid 42 confirm
   const node = new Node({
     delivery: 'confirm',
     action: 'set',
+    paramType: 'MAV_PARAM_TYPE_REAL32',
     connection: 'conn',
     identity: 'identity',
     targetSystem: '',
@@ -233,6 +255,7 @@ test('mavlink-param payload.target overrides companion derivation', () => {
   const node = new Node({
     delivery: 'confirm',
     action: 'set',
+    paramType: 'MAV_PARAM_TYPE_REAL32',
     connection: 'conn',
     identity: 'identity',
     targetSystem: '',

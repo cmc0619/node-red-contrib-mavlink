@@ -54,7 +54,11 @@ module.exports = function registerMavlinkMission(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    const operation = config.operation || OPERATION.DOWNLOAD;
+    // No `|| DOWNLOAD`. The editor always saves an operation, so an absent
+    // one is drift — and this default is the one that made a SITL node named
+    // `ex09-upload` silently *download* (#224). Both tiers now reject it:
+    // createMachine on the wire, buildPlan on Build.
+    const operation = config.operation;
     const connNode = RED.nodes.getNode(config.connection);
     const delivery = config.delivery;
     applyConnectionStatus(node, delivery !== 'build', connNode);
@@ -298,11 +302,16 @@ function buildPlan(operation, missionType, target, items) {
     messages = [buildRequestList(target, missionType)];
   } else if (operation === OPERATION.CLEAR) {
     messages = [buildClearAll(target, missionType)];
-  } else {
+  } else if (operation === OPERATION.UPLOAD) {
     messages = [
       buildCount(target, items.length, missionType),
       ...items.map((item, seq) => buildItemInt(item, target, seq, missionType)),
     ];
+  } else {
+    // Same rejection createMachine makes on the wire tier. A catch-all `else`
+    // here made every unknown operation an upload, so Build answered a missing
+    // one with a zero-item plan and `succeeded` (Codex, #222).
+    throw new Error(`unknown mission operation ${JSON.stringify(operation)}`);
   }
   return { operation, missionType, target, messages };
 }

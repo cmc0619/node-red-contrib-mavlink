@@ -1039,12 +1039,16 @@ test('mavlink-build: a resolvable config clears any stale badge at deploy', () =
   require('../../nodes/mavlink-build')(RED);
   const Constructor = RED._nodeTypes['mavlink-build'];
   const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', tier: 'build' });
+  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', tier: 'build', messageName: 'HEARTBEAT' });
 
   assert.deepEqual(node._status, {}, 'a good config clears rather than badges');
 });
 
-test('mavlink-build: defaults empty messageName to HEARTBEAT', () => {
+test('mavlink-build: a blank messageName is invalid config, not a silent HEARTBEAT', () => {
+  // This replaces a test that pinned `messageName || 'HEARTBEAT'` (#222). The
+  // editor always saves a name, so a blank one is drift — and defaulting it
+  // built and transmitted a heartbeat nobody configured, which is the phantom
+  // §9 forbids. Refusing is the honest answer.
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
   require('../../nodes/mavlink-build')(RED);
@@ -1052,12 +1056,12 @@ test('mavlink-build: defaults empty messageName to HEARTBEAT', () => {
   const node = makeNodeInstance({ vehicle: 'v1' });
   Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', messageName: '', tier: 'build' });
 
-  node._input({ payload: { type: 6, autopilot: 3 } });
+  assert.equal(node._status && node._status.fill, 'red', 'says so at deploy (§6)');
 
-  assert.equal(node._sends.length, 1);
-  const [out0, out1] = node._sends[0];
-  assert.equal(out0.payload.messageName, 'HEARTBEAT');
-  assert.equal(out1.result, 'built');
+  // And it stays loud on input rather than vanishing: the handler is still
+  // registered, so the failure reaches Catch.
+  node._input({ payload: { type: 6, autopilot: 3 } });
+  assert.ok(node._doneErrors.length > 0 || node._errors.length > 0, 'fails loud on input');
 });
 
 test('mavlink-build: marks invalid config when messageName is not in dialect', () => {
