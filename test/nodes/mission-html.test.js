@@ -127,6 +127,12 @@ test('mavlink-mission items validator rejects a configured empty array (#241)', 
   assert.match(itemsValidator[0], /isBlank\(v\)\)\s*return true/, 'blank stays valid');
   assert.match(itemsValidator[0], /length === 0/, 'empty array is checked');
   assert.match(itemsValidator[0], /must not be empty[^']*Clear/, 'refusal names the Clear operation');
+  // The placeholder must not advertise the one value the validator rejects.
+  const itemsInput = /<input[^>]*id="node-input-items"[^>]*>/.exec(html);
+  assert.ok(itemsInput, 'items input must be extractable');
+  assert.doesNotMatch(itemsInput[0], /placeholder="\[\]/, 'placeholder no longer offers []');
+  assert.match(itemsInput[0], /placeholder="non-empty JSON array, or set msg\.payload\.items"/,
+    'placeholder asks for a non-empty array or the payload');
 });
 
 test('mavlink-mission confirmClear stays visible for clear on every tier', () => {

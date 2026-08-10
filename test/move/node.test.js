@@ -1550,6 +1550,57 @@ test('mavlink-move reposition confirm: close cancels the wait quietly', async ()
   assert.equal(out, undefined, 'no outcome is emitted for a torn-down node');
 });
 
+test('mavlink-move reposition confirm: a second goto supersedes the first wait quietly', async () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({ ...repositionCfg, delivery: 'confirm', connection: 'conn' });
+
+  const first = { out: undefined, err: undefined, done: false };
+  node.emit(
+    'input',
+    { payload: {} },
+    (m) => { first.out = m; },
+    (err) => { first.done = true; first.err = err; }
+  );
+  assert.equal(conn.sends.length, 1, 'the first goto is on the wire');
+
+  // A new goto arrives while the first is still waiting for its ack: the
+  // superseded wait is not a failed command, and the new one is a fresh
+  // COMMAND_INT with its own ack wait.
+  const second = { out: undefined, err: undefined, done: false };
+  node.emit(
+    'input',
+    { payload: { position: { lat: 47.5, lon: 8.5, alt: 30 } } },
+    (m) => { second.out = m; },
+    (err) => { second.done = true; second.err = err; }
+  );
+
+  assert.equal(conn.sends.length, 2, 'the second goto sent its own COMMAND_INT');
+  assert.equal(conn.sends[1].message.name, 'COMMAND_INT');
+  assert.equal(conn.sends[1].message.fields.x, 475000000, 'the new position is what went out');
+  assert.equal(conn.subs.length, 2, 'the second wait has its own subscription');
+
+  conn.subs[1].handler({ sysid: 1, compid: 1, fields: { command: 192, result: 0 } });
+  const deadline = Date.now() + 2000;
+  while (!(first.done && second.done) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  // The superseded input completes through the 'cancelled' branch: no error,
+  // no record, nothing on continue.
+  assert.ok(first.done, 'the superseded input still completes');
+  assert.equal(first.err, undefined);
+  assert.equal(first.out, undefined, 'no outcome is emitted for the superseded goto');
+  // The replacement runs to its ack normally.
+  assert.equal(second.err, undefined);
+  assert.equal(second.out[0].payload.result, 'succeeded');
+  assert.equal(second.out[1].result, 'succeeded');
+  assert.equal(second.out[1].detail, 'accepted');
+  node.emit('close', () => {});
+});
+
 test('mavlink-move reposition CHANGE_MODE wiring: config opt-in, payload boolean override', () => {
   const conn = repositionConn();
   const RED = redStub({ conn });

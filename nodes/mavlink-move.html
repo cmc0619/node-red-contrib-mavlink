@@ -20,7 +20,17 @@
       // a mode change, so an explicit opt-in, default off.
       changeMode: { value: false },
       // Blank inherits the AckWaiter default (10 s), like mavlink-command.
-      ackTimeout: { value: '', validate: RED.validators.number(true) },
+      // Zero or negative is not a shorter wait, it is an ack timer that fires
+      // before the vehicle can answer, so the wait must be positive. Two args
+      // so the reason renders (§14).
+      ackTimeout: {
+        value: '',
+        validate: function (v, _opt) {
+          if (RED.mavlink.isBlank(v)) return true;
+          return (Number.isFinite(Number(v)) && Number(v) > 0)
+            || 'must be a number of milliseconds greater than 0';
+        },
+      },
       // Default on: checked emits the deprecated *_INT global frame numbers
       // (5/6/11) PX4 requires; unchecked emits the spec-current 0/3/10
       // (§ "Move setpoint matrix", owner-ruled 2026-08-09).

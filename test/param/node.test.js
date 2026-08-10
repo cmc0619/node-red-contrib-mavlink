@@ -715,6 +715,31 @@ test('collect re-requests a dropped index on inactivity and completes on its rep
   assert.deepEqual(terminal[0].payload.map((p) => p.index), [0, 1, 2]);
 });
 
+test('a 65535 set-echo stream cannot postpone the refill (#249)', async () => {
+  const conn = connStubFull();
+  // Timeout 400 → inactivity window 100 ms. A concurrent set echoes every
+  // 25 ms; the collector ignores those frames (index 65535 is not a list
+  // member), so they must not push the stall detector back — re-arming on
+  // them postponed the refill forever while a real index was missing.
+  const node = collectNode(redStub({ conn }), 400);
+
+  const outs = [];
+  node.emit('input', { payload: {} }, (m) => outs.push(m), () => {});
+  conn.inject(listValue(0, 2)); // index 1 never arrives on its own
+  const echoes = setInterval(() => conn.inject(listValue(65535, 2)), 25);
+  await sleep(160);
+  clearInterval(echoes);
+
+  const reads = conn.sent.filter((s) => s.message.name === 'PARAM_REQUEST_READ');
+  assert.ok(reads.length >= 1, 'the missing index is re-requested despite the echo stream');
+  assert.ok(reads.every((s) => s.message.fields.param_index === 1), 'only the gap is re-requested');
+
+  conn.inject(listValue(1, 2));
+  const terminal = outs[outs.length - 1];
+  assert.equal(terminal[1].detail, 'list-complete');
+  assert.deepEqual(terminal[0].payload.map((p) => p.index), [0, 1]);
+});
+
 test('collect refill is bounded; the overall timeout stays the terminal authority', async () => {
   const conn = connStubFull();
   // Timeout 400 → inactivity window 100 ms: three refill rounds fit inside.

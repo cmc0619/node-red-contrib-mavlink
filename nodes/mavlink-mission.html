@@ -196,7 +196,7 @@
   <div class="form-row"><label for="node-input-missionType">Type</label><select id="node-input-missionType"></select></div>
   <div class="form-row" id="row-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
   <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
-  <div class="form-row mavlink-mission-items"><label for="node-input-items">Items (JSON)</label><input type="text" id="node-input-items" placeholder="[] or set msg.payload.items"></div>
+  <div class="form-row mavlink-mission-items"><label for="node-input-items">Items (JSON)</label><input type="text" id="node-input-items" placeholder="non-empty JSON array, or set msg.payload.items"></div>
   <div class="form-row mavlink-mission-confirm"><label for="node-input-confirmClear">Confirm</label><input type="checkbox" id="node-input-confirmClear" style="display:inline-block; width:auto; vertical-align:top;"> <span>Yes, permanently erase this plan</span></div>
   <div class="form-row" id="row-timeout"><label for="node-input-timeout">Step timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="1500"></div>
   <div class="form-row" id="row-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" placeholder="5"></div>

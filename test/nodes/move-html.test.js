@@ -361,13 +361,22 @@ test('mavlink-move reposition reshapes the form: position-only, global frames on
 });
 
 test('mavlink-move reposition params: blank-sentinel fields and the CHANGE_MODE opt-in', () => {
-  for (const field of ['speed', 'radius', 'ackTimeout']) {
+  for (const field of ['speed', 'radius']) {
     assert.match(
       html,
       new RegExp(`${field}:\\s*\\{\\s*value:\\s*'',\\s*validate:\\s*RED\\.validators\\.number\\(true\\)`),
       `${field} defaults blank with the blank-allowed numeric validator`
     );
   }
+  // ackTimeout is blank-allowed too, but 0 and negatives are not a shorter
+  // wait — they fire the ack timer before the vehicle can answer — so its
+  // validator requires a positive number rather than any number.
+  const ackValidator = /ackTimeout:\s*\{[\s\S]*?\n {6}\},/.exec(html);
+  assert.ok(ackValidator, 'ackTimeout validate function must be extractable');
+  assert.match(ackValidator[0], /value:\s*''/, 'ackTimeout defaults blank (inherit the 10 s default)');
+  assert.match(ackValidator[0], /isBlank\(v\)\)\s*return true/, 'blank stays valid');
+  assert.match(ackValidator[0], /Number\(v\) > 0/, 'zero and negatives are rejected');
+  assert.doesNotMatch(ackValidator[0], /RED\.validators\.number\(true\)/, 'the any-number validator is gone');
   // Blank speed/radius/yaw encode the spec sentinels at runtime; the
   // placeholders say so instead of implying zero.
   assert.match(html, /id="node-input-speed"[^>]*placeholder="\(vehicle default\)"/, 'speed placeholder names the sentinel');

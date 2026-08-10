@@ -343,11 +343,15 @@ module.exports = function registerMavlinkParam(RED) {
               finishDone();
             });
           } else {
-            // Any frame on the scoped subscription is list activity — push the
-            // stall detector back whether or not the collector keeps it.
-            armInactivity();
             const params = collector.accept(decoded);
-            if (!params) return;
+            // Only a frame the collector kept is list progress: re-arming on a
+            // 65535 set echo or an out-of-range index lets a steady echo
+            // stream postpone the refill while a real index is still missing.
+            if (params === null) return;
+            if (params === true) {
+              armInactivity();
+              return;
+            }
             settle((finishDone) => {
               completeResult(node, send, 'succeeded', 'list-complete', params);
               finishDone();

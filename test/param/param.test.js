@@ -238,12 +238,15 @@ test('PARAM_SET explicit c-cast overrides PX4 firmware', () => {
 
 test('request-list collector emits a complete ordered parameter snapshot', () => {
   const collector = createParamListCollector();
+  // A stored member that does not complete the collect reports `true`; only an
+  // ignored frame reports null (nodes/mavlink-param.js reads that distinction
+  // to decide whether the refill timer may be postponed).
   assert.equal(
     collector.accept({
       name: 'PARAM_VALUE',
       fields: { param_id: 'B', param_index: 1, param_count: 2, param_value: 2, param_type: 9 },
     }),
-    null
+    true
   );
   const complete = collector.accept({
     name: 'PARAM_VALUE',
@@ -267,7 +270,7 @@ function listFrame(index, count, paramId) {
 test('collector pins the first advertised count; later differing counts do not move the target', () => {
   const warns = [];
   const collector = createParamListCollector({ warn: (t) => warns.push(t) });
-  assert.equal(collector.accept(listFrame(0, 2)), null);
+  assert.equal(collector.accept(listFrame(0, 2)), true);
   // A frame claiming count 3 arrives mid-stream: its index 2 is outside the
   // pinned count and must not extend the collect.
   assert.equal(collector.accept(listFrame(2, 3)), null);
@@ -285,7 +288,7 @@ test('collector skips index 65535 as a member but pins its count', () => {
   // A concurrent set's echo (index 65535) interleaving with the collect
   // carries the true count; it is not itself a list member.
   const collector = createParamListCollector();
-  assert.equal(collector.accept(listFrame(65535, 1, 'SET_ECHO')), null);
+  assert.equal(collector.accept(listFrame(65535, 1, 'SET_ECHO')), null, 'the echo is ignored, not stored');
   const complete = collector.accept(listFrame(0, 1, 'A'));
   assert.deepEqual(complete.map((p) => p.paramId), ['A']);
 });
@@ -296,7 +299,7 @@ test('an out-of-range index never satisfies the completion check, and warns once
   // and long one bogus one (#242).
   const warns = [];
   const collector = createParamListCollector({ warn: (t) => warns.push(t) });
-  assert.equal(collector.accept(listFrame(0, 2)), null);
+  assert.equal(collector.accept(listFrame(0, 2)), true);
   assert.equal(collector.accept(listFrame(5, 2)), null, 'out-of-range frame is ignored');
   assert.equal(collector.accept(listFrame(5, 2)), null, 'and stays ignored');
   assert.equal(warns.length, 1, 'the warn is deduped per index');
