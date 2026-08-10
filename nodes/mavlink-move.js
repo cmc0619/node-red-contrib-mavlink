@@ -13,6 +13,7 @@ const {
   valueFrom,
 } = require('../lib/move');
 const { AckWaiter } = require('../lib/command');
+const { DEFAULT_MAX_RESENDS } = require('../lib/command/ack');
 const { BAND } = require('../lib/connection/bands');
 const { firstDefined, isBlank, resolveDeliveryContext, applyConnectionStatus } = require('../lib/addressing');
 const {
@@ -86,6 +87,9 @@ module.exports = function registerMavlinkMove(RED) {
         sourceIds: connectionNode.resolveSourceIds(identityId),
         // Blank inherits the AckWaiter default, like the Command node's field.
         timeoutMs: isBlank(config.ackTimeout) ? undefined : Number(config.ackTimeout),
+        // A re-sent goto is the same goto, so this carrier opts into the
+        // timeout re-send the library leaves off by default (#249).
+        maxResends: DEFAULT_MAX_RESENDS,
       });
       activeWaiter = waiter;
       let outcome;

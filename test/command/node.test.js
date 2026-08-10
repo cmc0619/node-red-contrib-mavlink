@@ -624,6 +624,38 @@ test('silent ACK windows re-send an INT as-is — no confirmation byte, identica
   node.emit('close', () => {});
 });
 
+test('Advanced mode sends once on a silent window — a raw MAV_CMD id never opts into re-send (#249)', async (t) => {
+  installAckTimerHarness(t);
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    carrier: 'long',
+    mode: 'advanced',
+    advancedCommand: '246', // PREFLIGHT_REBOOT_SHUTDOWN — silence IS the success
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '1000',
+    maxRetries: '3',
+  });
+  let output;
+  let doneErr;
+
+  node.emit('input', { payload: { 1: 1 } }, (messages) => { output = messages; }, (err) => { doneErr = err; });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(conn.sent.length, 1, 'a rebooting vehicle must not be rebooted three more times');
+  // The §9 classification after that single window is unchanged.
+  assert.equal(output[0], null, 'output 0 must not fire');
+  assert.equal(output[1].result, 'unconfirmed');
+  assert.equal(output[1].retries, 0);
+  assert.ok(doneErr instanceof Error, 'the timeout still fails through Catch');
+  node.emit('close', () => {});
+});
+
 function installAckTimerHarness(t) {
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;

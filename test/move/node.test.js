@@ -1519,6 +1519,10 @@ test('mavlink-move reposition confirm: a missing ack reports timeout', async () 
   assert.equal(out[0], null, 'timeout must not fire continue');
   assert.equal(out[1].result, 'timeout');
   assert.equal(out[1].resultCode, null);
+  // A re-sent goto is the same goto, so this carrier opts into the timeout
+  // re-send the library leaves off by default (#249): initial send plus 3.
+  assert.equal(conn.sends.length, 4, 'the silent windows re-send the reposition');
+  assert.equal(out[1].retries, 3);
   assert.match(doneError.message, /timed out waiting for COMMAND_ACK/);
   node.emit('close', () => {});
 });
