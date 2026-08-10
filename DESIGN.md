@@ -1344,6 +1344,23 @@ field with units and range. Pinned params are hidden.
 that `NaN` is a sentinel only in fields whose metadata declares it, and the editor must be able
 to express it.
 
+**A blank param must not become a command** (owner-directed GCS parity, ruled 2026-08-10).
+Where the spec defines a no-change sentinel, an *absent* exposed param encodes it — the #98b
+land-yaw fix generalized into a per-preset `blankParams` layer under the pins, which is also
+exactly what QGC and MAVSDK transmit for unspecified fields. The table: Go To / Reposition
+blank speed → −1 (vehicle default) and blank yaw → `NaN` (current heading mode) — the zero-fill
+commanded 0 m/s and yaw-to-north on every goto; Change Speed blank speed/throttle → −1 ("no
+change") — the zero-fill commanded zero speed and zero throttle; Takeoff blank yaw → `NaN`
+(the editor renders no yaw field, the exact #98b shape); Orbit blank velocity/altitude → `NaN`
+(`DO_ORBIT` blesses both) — the zero-fill orbited at ground level with zero tangential
+velocity. Explicit values, including 0, are typed and win. `DO_REPOSITION` altitude has **no**
+documented blank sentinel, so a blank alt refuses instead (`requireAltitude` — the Move F1
+ground-level rule on the command path, §10). Open, not ruled: Takeoff's blank *altitude* still
+zero-fills (its completion flow was measured with an altitude set — changing it wants a SITL
+answer for what each stack does with 0/NaN), and `DO_REPOSITION`'s change-mode flag (param 2)
+defaults to 0 where QGC sends 1 to auto-enter Guided — an implicit mode switch is an owner
+decision, not a parity default.
+
 **Mission**
 
 | Preset | Command | Pinned | Exposed |
