@@ -90,6 +90,11 @@ module.exports = function registerMavlinkMove(RED) {
         // A re-sent goto is the same goto, so this carrier opts into the
         // timeout re-send the library leaves off by default (#249).
         maxResends: DEFAULT_MAX_RESENDS,
+        // A long reposition answers IN_PROGRESS repeatedly (§9); the badge
+        // follows the vehicle's own progress instead of standing still.
+        onInProgress: (progress) => {
+          applyActionStatus(node, 'sending', progress === null ? 'reposition…' : `reposition ${progress}%…`);
+        },
       });
       activeWaiter = waiter;
       let outcome;
@@ -104,7 +109,13 @@ module.exports = function registerMavlinkMove(RED) {
         done();
         return;
       }
-      const shared = { message, resultCode: outcome.resultCode, retries: outcome.retries, elapsed: outcome.elapsed };
+      const shared = {
+        message,
+        resultCode: outcome.resultCode,
+        resultParam2: outcome.resultParam2,
+        retries: outcome.retries,
+        elapsed: outcome.elapsed,
+      };
       if (outcome.result === 'accepted') {
         completeResult(node, send, 'succeeded', 'accepted', shared);
         done();

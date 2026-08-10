@@ -82,6 +82,119 @@ test('a set with no paramType fails loud rather than guessing REAL32', () => {
   );
 });
 
+test('mavlink-param refuses a configured broadcast target (sysid 0): nothing sent, no subscription, failed record, done(err)', () => {
+  const conn = connStubFull();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'confirm',
+    action: 'set',
+    paramType: 'MAV_PARAM_TYPE_REAL32',
+    connection: 'conn',
+    targetSystem: 0,
+    targetComponent: 1,
+  });
+
+  let out;
+  let err;
+  node.emit(
+    'input',
+    { payload: { paramId: 'FOO', value: 1 } },
+    (m) => { out = m; },
+    (e) => { err = e; }
+  );
+
+  assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
+  assert.equal(conn.subs.length, 0, 'no PARAM_VALUE subscription opened');
+  assert.equal(out[0], null, 'output 0 must not fire');
+  assert.equal(out[1].result, 'failed');
+  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
+  assert.ok(err instanceof Error, 'done() is called with an error');
+  assert.match(err.message, /broadcast \(sysid 0\)/);
+});
+
+test('mavlink-param refuses a dynamic payload target of sysid 0, overriding a real configured sysid', () => {
+  const conn = connStubFull();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'send',
+    action: 'read',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 1,
+  });
+
+  let out;
+  let err;
+  node.emit(
+    'input',
+    { payload: { paramId: 'ARMING_CHECK', target: { sysid: 0, compid: 1 } } },
+    (m) => { out = m; },
+    (e) => { err = e; }
+  );
+
+  assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
+  assert.equal(out[1].result, 'failed');
+  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
+  assert.ok(err instanceof Error);
+});
+
+test('mavlink-param Build tier also refuses a broadcast target (sysid 0) — a built broadcast PARAM_SET forwarded to mavlink-out is the same fleet write', () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'build',
+    action: 'set',
+    targetSystem: 0,
+    targetComponent: 1,
+  });
+
+  let out;
+  let err;
+  node.emit(
+    'input',
+    { payload: { paramId: 'FOO', value: 1, paramType: 'MAV_PARAM_TYPE_REAL32', firmware: 'ardupilot' } },
+    (m) => { out = m; },
+    (e) => { err = e; }
+  );
+
+  assert.equal(out[0], null, 'nothing built or sent on output 0');
+  assert.equal(out[1].result, 'failed');
+  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
+  assert.ok(err instanceof Error);
+});
+
+test('mavlink-param confirm set works end to end with a broadcast COMPONENT (compid 0) and a real sysid — deliberate, supported behavior', () => {
+  const conn = connStubFull();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'confirm',
+    action: 'set',
+    paramType: 'MAV_PARAM_TYPE_REAL32',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 0,
+  });
+
+  let out;
+  node.emit('input', { payload: { paramId: 'FOO', value: 1 } }, (m) => { out = m; }, () => {});
+
+  assert.equal(conn.sent.length, 1, 'PARAM_SET was sent');
+  assert.equal(conn.subs.length, 1, 'subscription opened');
+  assert.equal(conn.subs[0].filter.compid, undefined, 'compid 0 leaves the subscription unscoped by component');
+
+  conn.inject({ name: 'PARAM_VALUE', sysid: 6, compid: 3, fields: { param_id: 'FOO', param_value: 1, param_count: 1, param_index: 0, param_type: 9 } });
+
+  assert.ok(out, 'the echo from any component at sysid 6 confirmed the set');
+  assert.equal(out[1].result, 'succeeded');
+});
+
 test('mavlink-param confirm set emits a timed-out record and releases the subscription', () => {
   const conn = connStub();
   const RED = redStub({ conn });
@@ -99,14 +212,23 @@ test('mavlink-param confirm set emits a timed-out record and releases the subscr
 
   return new Promise((resolve) => {
     let out;
-    node.emit('input', { payload: { paramId: 'FOO', value: 1 } }, (m) => { out = m; }, () => {});
-    setTimeout(() => {
-      assert.ok(out, 'a terminal record was emitted on timeout');
-      assert.equal(out[0], null, 'output 0 must not fire on timeout');
-      assert.equal(out[1].result, 'timed-out');
-      assert.equal(conn.activeCount(), 0, 'the subscription is torn down on timeout');
-      resolve();
-    }, 30);
+    // Wait for the node's own done() rather than a wall clock. The bounded
+    // re-send (#249) emits a 'progress' record per attempt before the terminal
+    // one, so a fixed delay races the attempts and caught 'progress' on a
+    // loaded runner; timeoutResult calls done() immediately after the terminal
+    // emit, which is the event this test actually means.
+    node.emit(
+      'input',
+      { payload: { paramId: 'FOO', value: 1 } },
+      (m) => { out = m; },
+      () => {
+        assert.ok(out, 'a terminal record was emitted on timeout');
+        assert.equal(out[0], null, 'output 0 must not fire on timeout');
+        assert.equal(out[1].result, 'timed-out');
+        assert.equal(conn.activeCount(), 0, 'the subscription is torn down on timeout');
+        resolve();
+      }
+    );
   });
 });
 

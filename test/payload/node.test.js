@@ -174,6 +174,38 @@ test('mavlink-payload confirm tier halts the chain on a DENIED ack', async () =>
   node.emit('close', () => {});
 });
 
+test('a denied Payload verb carries the ack\'s result_param2 (§9, Codex)', async () => {
+  // §9 requires *every* ack-confirmed status record to carry the terminal
+  // ack's result_param2 — not just Command's and Move's. A gimbal denial that
+  // came with a reason must not reach the operator as a bare 'denied'.
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    carrier: 'long',
+    delivery: 'confirm',
+    topic: 'servo',
+    verb: 'set',
+    connection: 'conn',
+    targetSystem: 7,
+    targetComponent: 1,
+    timeout: 2000,
+  });
+
+  let sent;
+  node.emit('input', { payload: { values: { servo: 8, pwm: 1600 } } }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  conn.injectAck({ command: 183, result: 2, result_param2: 9 }, 7, 1);
+  await tick();
+
+  assert.equal(sent[1].result, 'denied');
+  assert.equal(sent[1].resultParam2, 9, 'the denial reason reaches the Payload record');
+
+  node.emit('close', () => {});
+});
+
 test('blank Payload timeout keeps the 10000 ms ACK window', async (t) => {
   const timers = installAckTimerHarness(t);
   const conn = connStub();

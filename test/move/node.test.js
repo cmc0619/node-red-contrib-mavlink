@@ -1618,3 +1618,31 @@ test('mavlink-move reposition CHANGE_MODE wiring: config opt-in, payload boolean
   node.emit('input', { payload: { changeMode: 'yes' } }, () => {}, (err) => { doneError = err; });
   assert.match(doneError.message, /changeMode must be boolean/, 'a truthy token refuses');
 });
+
+test('mavlink-move reposition confirm: IN_PROGRESS moves the badge and result_param2 joins the record (§9)', async () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({ ...repositionCfg, delivery: 'confirm', connection: 'conn' });
+  const statuses = [];
+  node.status = (s) => statuses.push(s.text);
+
+  let out;
+  let doneCalled = false;
+  node.emit('input', { payload: {} }, (m) => { out = m; }, () => { doneCalled = true; });
+
+  conn.subs[0].handler({ sysid: 1, compid: 1, fields: { command: 192, result: 5, progress: 60 } });
+  assert.ok(statuses.some((text) => text.includes('reposition 60%')), 'badge follows the vehicle');
+
+  conn.subs[0].handler({ sysid: 1, compid: 1, fields: { command: 192, result: 2, result_param2: 4 } });
+  const deadline = Date.now() + 2000;
+  while (!doneCalled && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  assert.equal(out[1].result, 'failed');
+  assert.equal(out[1].resultCode, 2);
+  assert.equal(out[1].resultParam2, 4, 'the denial reason reaches the status record');
+  node.emit('close', () => {});
+});

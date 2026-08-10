@@ -27,6 +27,7 @@ test('makeStatusRecord returns the default plain-object shape', () => {
   assert.deepEqual(rec, {
     result: 'accepted',
     resultCode: null,
+    resultParam2: null,
     confirmedBy: 'none',
     target: null,
     elapsed: 0,
@@ -41,6 +42,7 @@ test('makeStatusRecord includes all required fields', () => {
   const rec = makeStatusRecord({
     result: 'accepted',
     resultCode: MAV_RESULT.ACCEPTED,
+    resultParam2: 3,
     confirmedBy: 'ack',
     target: { sysid: 1, compid: 1 },
     elapsed: 1234,
@@ -51,6 +53,7 @@ test('makeStatusRecord includes all required fields', () => {
   });
   assert.equal(rec.result, 'accepted');
   assert.equal(rec.resultCode, 0);
+  assert.equal(rec.resultParam2, 3);
   assert.equal(rec.confirmedBy, 'ack');
   assert.deepEqual(rec.target, { sysid: 1, compid: 1 });
   assert.equal(rec.elapsed, 1234);
