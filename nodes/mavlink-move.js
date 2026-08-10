@@ -239,7 +239,11 @@ module.exports = function registerMavlinkMove(RED) {
               } catch (err) {
                 node.warn(`Move stream brake failed on retarget: ${err.message}`);
               } finally {
-                if (!sameKey && releaseStream) releaseStream();
+                // No truthiness guard: stream and releaseStream are assigned
+                // and cleared together, so inside `if (stream)` the release
+                // always exists — and if that invariant ever broke, throwing
+                // here beats silently stranding the old target's lock.
+                if (!sameKey) releaseStream();
               }
             }
             stream = next;
