@@ -14,7 +14,7 @@ function fakeClock() {
   };
 }
 
-test('early-exits when verdict becomes PASS', async () => {
+test('early-exits when verdict becomes specialized PASS', async () => {
   const clock = fakeClock();
   let calls = 0;
   const statuses = ['UNKNOWN', 'UNKNOWN', 'PASS'];
@@ -27,12 +27,36 @@ test('early-exits when verdict becomes PASS', async () => {
       calls += 1;
       return { summary: { debug: [], errors: [] }, log: `tick-${calls}` };
     },
-    verdict: () => ({ status: statuses[Math.min(calls - 1, statuses.length - 1)], reason: 'x' }),
+    verdict: () => ({
+      status: statuses[Math.min(calls - 1, statuses.length - 1)],
+      reason: 'Lucy: spread + sphere pitch steps + peel land succeeded',
+    }),
   });
   assert.equal(result.ready, true);
   assert.equal(result.verdict.status, 'PASS');
   assert.equal(calls, 3);
   assert.ok(result.waitedMs < 10_000);
+});
+
+test('does not early-exit on generic results: PASS (first ack)', async () => {
+  const clock = fakeClock();
+  let calls = 0;
+  const result = await waitUntilReady({
+    waitMs: 1000,
+    pollMs: 400,
+    now: clock.now,
+    sleep: clock.sleep,
+    snapshot: () => {
+      calls += 1;
+      return { summary: {}, log: '' };
+    },
+    verdict: () => ({ status: 'PASS', reason: 'results: accepted' }),
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.verdict.status, 'PASS');
+  assert.equal(result.verdict.reason, 'results: accepted');
+  assert.ok(result.waitedMs >= 1000);
+  assert.ok(calls >= 2);
 });
 
 test('does not early-exit on PARTIAL or FAIL', async () => {
@@ -92,10 +116,15 @@ test('timeout returns final verdict without ready', async () => {
       calls += 1;
       return { summary: {}, log: '' };
     },
-    verdict: () => ({ status: 'UNKNOWN', reason: 'never' }),
+    // Distinct status only on the post-deadline snapshot proves the final eval ran.
+    verdict: () =>
+      clock.now() >= 1000
+        ? { status: 'FAIL', reason: 'deadline snapshot' }
+        : { status: 'UNKNOWN', reason: 'never' },
   });
   assert.equal(result.ready, false);
-  assert.equal(result.verdict.status, 'UNKNOWN');
+  assert.equal(result.verdict.status, 'FAIL');
+  assert.equal(result.verdict.reason, 'deadline snapshot');
   assert.ok(result.waitedMs >= 1000);
   assert.ok(calls >= 2);
 });

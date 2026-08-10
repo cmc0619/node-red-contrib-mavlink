@@ -1,11 +1,28 @@
 'use strict';
 
 /**
+ * Default ready: specialized PASS only.
+ *
+ * The suite's generic fallback (`reason: "results: accepted|…"`) fires on the
+ * first good ack while multi-step chains (arm→GUIDED→takeoff) are still
+ * running — that must not end the wait. Specialized verdicts return distinct
+ * reasons and are safe to early-exit on.
+ *
+ * @param {{ status: string, reason?: string }} verdict
+ * @returns {boolean}
+ */
+function isSpecializedPass(verdict) {
+  if (!verdict || verdict.status !== 'PASS') return false;
+  const reason = verdict.reason || '';
+  return !/^results:\s*/i.test(reason);
+}
+
+/**
  * Poll until the example looks done, or waitMs elapses.
  *
- * Default ready signal: verdict status === 'PASS' only.
- * PARTIAL / FAIL / UNKNOWN keep polling so in-progress stories (Lucy, formation)
- * are not frozen early. Optional readyWhen overrides that rule.
+ * Default ready signal: specialized `verdict.status === 'PASS'` only (see
+ * `isSpecializedPass`). PARTIAL / FAIL / UNKNOWN / generic `results:` PASS
+ * keep polling. Optional readyWhen overrides that rule.
  *
  * @param {object} opts
  * @param {() => { summary: object, log: string }} opts.snapshot
@@ -25,15 +42,17 @@ async function waitUntilReady(opts) {
   const started = now();
   const deadline = started + waitMs;
 
-  let last = { summary: { debug: [], errors: [] }, log: '' };
-  let lastVerdict = { status: 'UNKNOWN', reason: 'not polled' };
+  /** @type {{ summary: object, log: string }} */
+  let last;
+  /** @type {{ status: string, reason?: string }} */
+  let lastVerdict;
 
   while (now() < deadline) {
     last = opts.snapshot();
     lastVerdict = opts.verdict(last.summary, last.log);
     const ready = opts.readyWhen
       ? Boolean(opts.readyWhen(last.summary, last.log))
-      : lastVerdict.status === 'PASS';
+      : isSpecializedPass(lastVerdict);
     if (ready) {
       // Re-run verdict so readyWhen overrides still record the final classification.
       lastVerdict = opts.verdict(last.summary, last.log);
@@ -61,4 +80,4 @@ async function waitUntilReady(opts) {
   };
 }
 
-module.exports = { waitUntilReady };
+module.exports = { waitUntilReady, isSpecializedPass };

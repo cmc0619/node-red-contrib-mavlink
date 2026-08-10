@@ -9,7 +9,8 @@
  * disarm alone leaves AGL and makes NAV_TAKEOFF DENIED. See sitl/AGENTS.md.
  *
  * After injects, PROFILE.waitMs is a max wait: the harness polls Node-RED
- * logs and early-exits when verdictFrom returns PASS (optional readyWhen).
+ * logs and early-exits on specialized verdictFrom PASS (optional readyWhen;
+ * generic "results: …" PASS does not early-exit).
  *
  * Post curated verdicts to a GitHub Issue (label sitl-results), close the prior
  * issue, and keep the JSON out of git — see sitl/AGENTS.md.
@@ -46,8 +47,8 @@ const OUT =
 /**
  * Per-example harness profile.
  * `waitMs` is a hard ceiling (max wait after injects), not a fixed sleep —
- * the suite polls logs and early-exits when verdict status is PASS (or when
- * optional `readyWhen` returns true). See sitl/lib/wait-until-ready.js.
+ * the suite polls logs and early-exits on specialized PASS (or optional
+ * `readyWhen`). See sitl/lib/wait-until-ready.js.
  *
  * @type {Record<string, {waitMs: number, expect: string, notes?: string, prep?: string, readyWhen?: Function, injectGapMs?: number, skip?: boolean}>}
  */
@@ -1231,7 +1232,7 @@ async function runOne(file) {
     await sleep(injectGapMs);
   }
 
-  // Event-driven: poll until PASS (or readyWhen), capped by waitMs.
+  // Event-driven: poll until specialized PASS (or readyWhen), capped by waitMs.
   // Cover the whole example (prep gaps + injectGapMs + wait), not only waitMs —
   // otherwise long multi-inject stories (e.g. 13) scrape an empty idle window.
   const pollMs =
