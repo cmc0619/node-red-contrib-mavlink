@@ -293,6 +293,128 @@ test('mission resolveTarget explicit config wins over Vehicle Profile', async ()
   assert.equal(terminal[1].target.compid, 100);
 });
 
+test('upload end-to-end: items from msg.payload.items reach the vehicle and succeed', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_COUNT') {
+      deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } });
+    } else if (message.name === 'MISSION_ITEM_INT') {
+      deliver({ name: 'MISSION_ACK', fields: { type: 0, mission_type: 0 } });
+    }
+  });
+
+  const Node = loadNode(conn);
+  const node = new Node({ operation: 'upload', connection: 'conn', delivery: 'confirm', missionType: 'mission' });
+  const { outputs, err } = await runInput(node, {
+    payload: { items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }] },
+  });
+
+  assert.equal(err, undefined);
+  const terminal = outputs.at(-1);
+  assert.equal(terminal[0].payload.result, 'succeeded');
+  assert.equal(terminal[1].count, 1);
+  assert.equal(conn.sentNames()[0], 'MISSION_COUNT');
+  assert.equal(conn.sent[0].message.fields.count, 1);
+});
+
+test('an upload that resolves zero items is refused before any packet — empty upload is not a clear (#241)', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  const Node = loadNode(conn);
+  const node = new Node({ operation: 'upload', connection: 'conn', delivery: 'confirm', missionType: 'mission', items: '' });
+
+  // Config blank, payload without items → resolves to [].
+  let res = await runInput(node, { payload: {} });
+  assert.ok(res.err, 'empty upload must fail loud');
+  assert.equal(res.outputs[0][0], null);
+  assert.equal(res.outputs[0][1].phase, 'empty');
+  assert.match(res.outputs[0][1].reason, /Clear/, 'error names the Clear operation as the intended path');
+  assert.equal(conn.sent.length, 0, 'no MISSION_COUNT 0 — nothing was sent');
+
+  // Payload explicitly resolving to [] refuses the same way.
+  res = await runInput(node, { payload: { items: [] } });
+  assert.equal(res.outputs[0][1].phase, 'empty');
+  assert.equal(conn.sent.length, 0);
+});
+
+test('the empty-upload refusal covers the Build tier — no zero-count plan is emitted (#241)', async () => {
+  const conn = new StubConnection();
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'upload',
+    connection: 'conn',
+    delivery: 'build',
+    dialect: 'common',
+    firmware: 'ardupilot',
+    missionType: 'mission',
+    items: '',
+  });
+
+  const { outputs, err } = await runInput(node, { payload: {} });
+  assert.ok(err, 'Build must not be the softer door');
+  assert.equal(outputs[0][0], null, 'no MISSION_COUNT(0) plan on output 0');
+  assert.equal(outputs[0][1].phase, 'empty');
+});
+
+test('broadcast sysid 0 is refused for download and upload on every tier (#246)', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  const Node = loadNode(conn);
+
+  // Configured broadcast target, wire tier.
+  const download = new Node({ operation: 'download', connection: 'conn', delivery: 'confirm', missionType: 'mission', targetSystem: 0 });
+  let res = await runInput(download, { payload: {} });
+  assert.ok(res.err, 'broadcast download must fail loud');
+  assert.equal(res.outputs[0][0], null);
+  assert.equal(res.outputs[0][1].phase, 'broadcast');
+  assert.match(res.outputs[0][1].reason, /broadcast/);
+  assert.equal(conn.sent.length, 0, 'no transfer opened toward the fleet');
+  assert.equal(conn.subscriberCount(), 0, 'no machine subscribed on sysid 0');
+
+  // Dynamic broadcast target on an upload.
+  const upload = new Node({ operation: 'upload', connection: 'conn', delivery: 'confirm', missionType: 'mission' });
+  res = await runInput(upload, {
+    payload: { target: { sysid: 0 }, items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }] },
+  });
+  assert.equal(res.outputs[0][1].phase, 'broadcast');
+  assert.equal(conn.sent.length, 0);
+
+  // Build refuses too: a built broadcast plan forwarded to mavlink-out is the
+  // same fleet-wide transfer.
+  const build = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'build',
+    dialect: 'common',
+    firmware: 'ardupilot',
+    missionType: 'mission',
+    targetSystem: 0,
+  });
+  res = await runInput(build, { payload: {} });
+  assert.equal(res.outputs[0][0], null, 'no broadcast plan on output 0');
+  assert.equal(res.outputs[0][1].phase, 'broadcast');
+});
+
+test('broadcast clear still builds — MISSION_CLEAR_ALL is an addressed single message that fans out (§10)', async () => {
+  const conn = new StubConnection();
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'clear',
+    connection: 'conn',
+    delivery: 'build',
+    dialect: 'common',
+    firmware: 'ardupilot',
+    missionType: 'mission',
+    targetSystem: 0,
+    confirmClear: true,
+  });
+
+  const { outputs, err } = await runInput(node, { payload: {} });
+  assert.equal(err, undefined);
+  assert.deepEqual(outputs[0][0].payload.messages.map((m) => m.name), ['MISSION_CLEAR_ALL']);
+});
+
 test('a busy lock refuses a second same-type transfer on the node', async () => {
   const conn = new StubConnection();
   // First transfer never completes (no reply), so the lock stays held.
