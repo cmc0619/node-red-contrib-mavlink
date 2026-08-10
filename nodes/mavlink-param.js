@@ -277,6 +277,22 @@ module.exports = function registerMavlinkParam(RED) {
           profile,
           connectionNode: connNode,
         });
+
+        // No real vehicle sources sysid 0, so a PARAM_SET aimed at broadcast
+        // writes every vehicle on the link while the echo matcher — which
+        // scopes the confirm subscription to the target sysid, lib/param —
+        // can never see a reply from "sysid 0" to settle it: the node reports
+        // timed-out only after already doing the fleet-wide write, and a
+        // retry repeats it (mirrors the mission node's broadcast gate, #246).
+        // Read and list share the same subscription scoping, so every action
+        // is refused here, before anything is built — including Build: a
+        // built broadcast PARAM_SET forwarded to mavlink-out is the same
+        // fleet write. Broadcast COMPONENT (compid 0) is untouched — that is
+        // deliberate, supported behavior in the echo matcher, not a bug.
+        if (target.sysid === 0) {
+          throw new Error(`mavlink-param ${request.action} cannot target broadcast (sysid 0) — no vehicle answers as sysid 0; address one vehicle`);
+        }
+
         const message = buildParamMessage(request);
 
         if (delivery === 'build') {
