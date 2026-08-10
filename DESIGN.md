@@ -1201,11 +1201,14 @@ defaults). At the ceiling the running window is left to expire and the timeout c
 proceeds — with no trailing re-sends, per the ack-retires-re-send rule above.
 
 **Confirm surfaces both MAVLink 2 ack extensions rather than discarding them.** Each
-`IN_PROGRESS` ack drives the status badge with the vehicle's own `progress` (255 and an absent
-field both read as unknown, so the badge shows the plain wait, never "255%"), and every
-ack-confirmed status record carries the terminal ack's `result_param2` — command-specific detail,
-usually the reason behind a denial — as `resultParam2`, null when the ack carried none or when
-nothing acked at all. The raw int32 is the deliverable: no per-command decoding tables.
+`IN_PROGRESS` ack drives the status badge with the vehicle's own `progress` (255, the spec's
+"unknown" sentinel, shows the plain wait, never "255%"), and every ack-confirmed status record
+carries the terminal ack's `result_param2` — command-specific detail, usually the reason behind
+a denial — as `resultParam2`. An ack cannot signal "field absent": MAVLink 2 truncation makes an
+omitted extension byte-identical to an explicit zero, so both decode as 0 (§14) — and 0 is the
+honest value, in MAVLink usage already "no additional information". `resultParam2` is null only
+on a settle with no ack at all, a genuine absence. The raw int32 is the deliverable: no
+per-command decoding tables.
 
 ### The vehicle answers "can you do this right now"
 
@@ -3823,3 +3826,33 @@ the question is not whether the strict one is correct but which path each one
 is actually on, and a split nobody wrote down is a coin toss, not a design.
 *Check:* `node --test test/fanout/fanout.test.js` — the list-selection test
 walks `"abc"`, `300`, `0` and `2.5` and asserts each refuses.
+
+---
+
+**A decoded message field is never "absent" — omitted MAVLink 2 extensions arrive as 0.**
+*Wrong belief:* an extension field the vehicle did not populate decodes as `undefined`, so a
+consumer can normalize it to `null` and records can distinguish "the ack said 0" from "the ack
+said nothing". The first cut of `COMMAND_ACK` `progress`/`result_param2` surfacing (#252) was
+built on this, and its tests passed — because the test stub handed hand-built fields objects
+straight to the subscriber, asserting a shape the wire cannot produce.
+*Fact (measured 2026-08-10, this package's own wire — serialize→decode round-trip, flagged by
+the #252 Codex review):* three regimes, one conclusion.
+
+| ack sent as | payload | decodes to |
+|---|---|---|
+| `command`+`result` only | 3 B | `progress: 0`, `result_param2: 0` |
+| extensions explicitly 0 | 3 B — **same bytes** | `progress: 0`, `result_param2: 0` |
+| addressed ack (`target_system` set) | 10 B, zeros pinned on the wire | `progress: 0`, `result_param2: 0` |
+
+Absence is destroyed at the *sender*: MAVLink 2 requires trailing zero-byte truncation, so
+"omitted" and "explicitly zero" serialize identically and no decode-side presence tracking can
+recover the difference. The deserializer (`node-mavlink` `protocol.data`) then zero-pads the
+short payload and assigns every field, and generated classes default numerics to 0 besides —
+`extractFields` yields numbers, never `undefined`. This is the same absent-or-zero unification
+`ackAddressedTo` already encoded for the targeting extensions ("absent fields or 0 mean
+unaddressed", §9/§10). Consumers surface the number the wire gives (0 already means "nothing to
+report"); `null` is reserved for in-band sentinels the spec defines (progress 255) and for
+records of transactions where *no message arrived at all*. Test fields objects for decoded
+messages must round-trip through `createWire` serialize→decode, not be hand-built.
+*Check:* `node -e "const{loadBundled}=require('./lib/metadata');const{createWire}=require('./lib/connection/wire');const w=createWire({bundle:loadBundled('common')});const f=w.decode(w.serialize({name:'COMMAND_ACK',fields:{command:22,result:5}},{sysid:1,compid:1,seq:0}),{address:'x',port:1})[0].fields;console.log(f.progress,f.result_param2)"`
+— prints `0 0`, not `undefined undefined`.
