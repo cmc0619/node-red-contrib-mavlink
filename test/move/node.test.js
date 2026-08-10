@@ -1266,3 +1266,299 @@ test('mavlink-move stream: a failed retarget frees only the new scope, old strea
   a.emit('close', () => {});
   b.emit('close', () => {});
 });
+
+// ── Reposition carrier (#239): COMMAND_INT / DO_REPOSITION ─────────────────
+
+/** Fake wire connection with the subscribe/resolveSourceIds surface the
+ *  confirm tier's AckWaiter consumes. */
+function repositionConn() {
+  const sends = [];
+  const subs = [];
+  return {
+    id: 'conn',
+    vehicle: {},
+    sends,
+    subs,
+    send(message, opts) { sends.push({ message, opts }); },
+    subscribe(filter, handler) { subs.push({ filter, handler }); return () => {}; },
+    resolveSourceIds() { return { sysid: 255, compid: 190 }; },
+  };
+}
+
+const repositionCfg = {
+  carrier: 'reposition',
+  mode: 'position',
+  frame: 'GLOBAL_RELATIVE_ALT',
+  lat: 47.1234567,
+  lon: 8.5,
+  alt: 25,
+  targetSystem: 1,
+  targetComponent: 1,
+};
+
+test('mavlink-move reposition Build tier emits the COMMAND_INT without sending', () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({ ...repositionCfg, delivery: 'build', dialect: 'common' });
+
+  let sent;
+  node.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
+
+  assert.equal(sent[0].payload.name, 'COMMAND_INT');
+  assert.equal(sent[0].payload.fields.command, 192);
+  assert.equal(sent[0].payload.fields.frame, 3);
+  assert.equal(sent[0].payload.fields.x, 471234567);
+  assert.equal(sent[0].payload.fields.y, 85000000);
+  assert.equal(sent[0].payload.fields.z, 25);
+  assert.equal(sent[0].payload.fields.param1, -1, 'blank speed sentinel');
+  assert.ok(Number.isNaN(sent[0].payload.fields.param4), 'blank yaw sentinel');
+  assert.equal(sent[1].result, 'succeeded');
+  assert.equal(sent[1].detail, 'built');
+});
+
+test('mavlink-move reposition Send tier rides the Control band, not Streaming', () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({ ...repositionCfg, delivery: 'send', connection: 'conn' });
+
+  let sent;
+  node.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
+
+  assert.equal(conn.sends.length, 1);
+  assert.equal(conn.sends[0].message.name, 'COMMAND_INT');
+  // BAND.CONTROL is 2; setpoints ride STREAMING (3).
+  assert.equal(conn.sends[0].opts.band, 2, 'commands ride the Control band');
+  assert.equal(sent[1].result, 'succeeded');
+  assert.equal(sent[1].detail, 'sent');
+});
+
+test('mavlink-move payload.carrier overrides config like mode/frame; unknown carrier refuses', () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  // A setpoint-configured Send node: the payload flips the carrier per input.
+  const node = new Node({
+    delivery: 'send',
+    mode: 'position',
+    frame: 'GLOBAL_RELATIVE_ALT',
+    lat: 47,
+    lon: 8,
+    alt: 10,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+  });
+
+  node.emit('input', { payload: { carrier: 'reposition' } }, () => {}, () => {});
+  assert.equal(conn.sends[0].message.name, 'COMMAND_INT');
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  assert.equal(conn.sends[1].message.name, 'SET_POSITION_TARGET_GLOBAL_INT', 'blank inherits the configured setpoint carrier');
+
+  let out;
+  let doneError;
+  node.emit('input', { payload: { carrier: 'teleport' } }, (m) => { out = m; }, (err) => { doneError = err; });
+  assert.equal(out[0], null);
+  assert.equal(out[1].result, 'failed');
+  assert.match(doneError.message, /unknown Move carrier "teleport"/);
+  assert.match(doneError.message, /setpoint, reposition/, 'names the valid set');
+});
+
+test('mavlink-move reposition refuses Stream delivery and leaves a running stream untouched', async () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 200,
+    ttlMs: 0,
+  });
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  let deadline = Date.now() + 2000;
+  while (conn.sends.length < 2 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.ok(conn.sends.length >= 2, 'stream running before the reposition input');
+
+  // COMMAND_INT has no streaming semantics: the refusal is thrown before any
+  // stream bookkeeping, so the running stream keeps going.
+  let out;
+  let doneError;
+  node.emit(
+    'input',
+    { payload: { carrier: 'reposition', position: { lat: 47, lon: 8, alt: 10 }, frame: 'GLOBAL_RELATIVE_ALT' } },
+    (m) => { out = m; },
+    (err) => { doneError = err; }
+  );
+  assert.equal(out[0], null);
+  assert.match(doneError.message, /Move reposition cannot stream/);
+
+  const before = conn.sends.length;
+  deadline = Date.now() + 2000;
+  while (conn.sends.length < before + 2 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  node.emit('close', () => {});
+  assert.ok(conn.sends.length >= before + 2, 'the stream survived the refused reposition');
+});
+
+test('mavlink-move setpoint carrier refuses Send & confirm — setpoints carry no ack', () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  // Editor-valid config (confirm is only offered on reposition); the payload
+  // flips the carrier back to setpoint, which must refuse loudly.
+  const node = new Node({ ...repositionCfg, delivery: 'confirm', connection: 'conn' });
+
+  let out;
+  let doneError;
+  node.emit('input', { payload: { carrier: 'setpoint' } }, (m) => { out = m; }, (err) => { doneError = err; });
+  assert.equal(out[0], null);
+  assert.equal(out[1].result, 'failed');
+  assert.match(doneError.message, /setpoints carry no acknowledgement/);
+  assert.equal(conn.sends.length, 0, 'nothing reached the wire');
+});
+
+test('mavlink-move reposition confirm: ACCEPTED fires continue with resultCode 0', async () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({ ...repositionCfg, delivery: 'confirm', connection: 'conn' });
+
+  let out;
+  let doneError;
+  let doneCalled = false;
+  node.emit('input', { payload: {} }, (m) => { out = m; }, (err) => { doneCalled = true; doneError = err; });
+
+  // The waiter sends synchronously and subscribes to COMMAND_ACK.
+  assert.equal(conn.sends.length, 1);
+  assert.equal(conn.sends[0].message.name, 'COMMAND_INT');
+  assert.equal(conn.subs.length, 1);
+  assert.equal(conn.subs[0].filter.message, 'COMMAND_ACK');
+
+  conn.subs[0].handler({ sysid: 1, compid: 1, fields: { command: 192, result: 0 } });
+  const deadline = Date.now() + 2000;
+  while (!doneCalled && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  assert.equal(doneError, undefined);
+  assert.ok(out[0], 'ACCEPTED fires the continue port');
+  assert.equal(out[0].payload.result, 'succeeded');
+  assert.equal(out[0].payload.resultCode, 0);
+  assert.equal(out[1].result, 'succeeded');
+  assert.equal(out[1].detail, 'accepted');
+  assert.equal(out[1].resultCode, 0);
+  assert.equal(out[1].message.fields.command, 192);
+  node.emit('close', () => {});
+});
+
+test('mavlink-move reposition confirm: COMMAND_INT_ONLY and UNSUPPORTED_MAV_FRAME surface as failures', async () => {
+  // The two wrong-carrier/wrong-frame answers the issue names must fail with
+  // their MAV_RESULT name and code — never silence, never a silent resend.
+  const cases = [
+    { result: 8, name: 'command_int_only' },
+    { result: 9, name: 'command_unsupported_mav_frame' },
+    { result: 2, name: 'denied' },
+  ];
+  for (const { result, name } of cases) {
+    const conn = repositionConn();
+    const RED = redStub({ conn });
+    require('../../nodes/mavlink-move')(RED);
+    const Node = RED.nodes.types['mavlink-move'];
+    const node = new Node({ ...repositionCfg, delivery: 'confirm', connection: 'conn' });
+
+    let out;
+    let doneError;
+    node.emit('input', { payload: {} }, (m) => { out = m; }, (err) => { doneError = err; });
+    conn.subs[0].handler({ sysid: 1, compid: 1, fields: { command: 192, result } });
+    const deadline = Date.now() + 2000;
+    while (!doneError && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    assert.equal(out[0], null, `${name} must not fire continue`);
+    assert.equal(out[1].result, 'failed');
+    assert.equal(out[1].resultCode, result, `${name} carries its MAV_RESULT code`);
+    assert.match(out[1].detail, new RegExp(name));
+    assert.match(doneError.message, new RegExp(name));
+    node.emit('close', () => {});
+  }
+});
+
+test('mavlink-move reposition confirm: a missing ack reports timeout', async () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  // ackTimeout is the Command-style bound on the wait; blank inherits 10 s.
+  const node = new Node({ ...repositionCfg, delivery: 'confirm', connection: 'conn', ackTimeout: 20 });
+
+  let out;
+  let doneError;
+  node.emit('input', { payload: {} }, (m) => { out = m; }, (err) => { doneError = err; });
+  const deadline = Date.now() + 2000;
+  while (!doneError && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  assert.equal(out[0], null, 'timeout must not fire continue');
+  assert.equal(out[1].result, 'timeout');
+  assert.equal(out[1].resultCode, null);
+  assert.match(doneError.message, /timed out waiting for COMMAND_ACK/);
+  node.emit('close', () => {});
+});
+
+test('mavlink-move reposition confirm: close cancels the wait quietly', async () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({ ...repositionCfg, delivery: 'confirm', connection: 'conn' });
+
+  let out;
+  let doneError;
+  let doneCalled = false;
+  node.emit('input', { payload: {} }, (m) => { out = m; }, (err) => { doneCalled = true; doneError = err; });
+  node.emit('close', () => {});
+  const deadline = Date.now() + 2000;
+  while (!doneCalled && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  // A redeploy is not a failed command: no error, no record.
+  assert.ok(doneCalled, 'the cancelled input still completes');
+  assert.equal(doneError, undefined);
+  assert.equal(out, undefined, 'no outcome is emitted for a torn-down node');
+});
+
+test('mavlink-move reposition CHANGE_MODE wiring: config opt-in, payload boolean override', () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({ ...repositionCfg, delivery: 'send', connection: 'conn', changeMode: true });
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  assert.equal(conn.sends[0].message.fields.param2, 1, 'checkbox opt-in sets the flag');
+  node.emit('input', { payload: { changeMode: false } }, () => {}, () => {});
+  assert.equal(conn.sends[1].message.fields.param2, 0, 'payload false overrides the checkbox');
+
+  let doneError;
+  node.emit('input', { payload: { changeMode: 'yes' } }, () => {}, (err) => { doneError = err; });
+  assert.match(doneError.message, /changeMode must be boolean/, 'a truthy token refuses');
+});
