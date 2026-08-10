@@ -187,3 +187,76 @@ test('an initial send that throws rejects AND cleans up — no timer or subscrip
   assert.equal(waiter._timeoutHandle, null, 'the armed timeout is cleared');
   assert.equal(waiter._settled, true, 'settled — a late timeout cannot resurrect the transaction');
 });
+
+// -- progress / result_param2 surfacing (§9) ---------------------------------
+
+test('resultParam2 rides every ack-confirmed settle; null when the frame lacks the field', async () => {
+  const conn = stubConn();
+  const accepted = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 });
+  const acceptedPromise = accepted.start();
+  conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED, result_param2: 7 }, 1, 1);
+  assert.equal((await acceptedPromise).resultParam2, 7);
+
+  // A denial's result_param2 is usually the *why* — the reason a bare
+  // 'denied' throws away.
+  const denied = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 });
+  const deniedPromise = denied.start();
+  conn.injectAck({ command: 400, result: MAV_RESULT.DENIED, result_param2: -3 }, 1, 1);
+  const deniedOutcome = await deniedPromise;
+  assert.equal(deniedOutcome.result, 'denied');
+  assert.equal(deniedOutcome.resultParam2, -3);
+
+  // MAVLink 1 / a frame without the extension decodes as undefined; records
+  // carry null, never undefined.
+  const old = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 });
+  const oldPromise = old.start();
+  conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 1, 1);
+  assert.equal((await oldPromise).resultParam2, null);
+});
+
+test('a settle with no ack carries resultParam2 null', async () => {
+  const conn = stubConn();
+  const waiter = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1, timeoutMs: 10 });
+  const outcome = await waiter.start();
+  assert.equal(outcome.result, 'timeout');
+  assert.equal(outcome.resultParam2, null);
+
+  const cancelled = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 });
+  const cancelledPromise = cancelled.start();
+  cancelled.cancel();
+  assert.equal((await cancelledPromise).resultParam2, null);
+});
+
+test('onInProgress reports (progress, resultParam2) per IN_PROGRESS ack; 255 and absent are null', async () => {
+  const conn = stubConn();
+  const reported = [];
+  const waiter = makeWaiter(conn, {
+    commandId: 400,
+    targetSystem: 1,
+    targetComponent: 1,
+    onInProgress: (progress, resultParam2) => reported.push([progress, resultParam2]),
+  });
+  const p = waiter.start();
+
+  conn.injectAck({ command: 400, result: MAV_RESULT.IN_PROGRESS, progress: 0, result_param2: 2 }, 1, 1);
+  conn.injectAck({ command: 400, result: MAV_RESULT.IN_PROGRESS, progress: 45 }, 1, 1);
+  // 255 is the spec's "unknown" sentinel, not a percentage.
+  conn.injectAck({ command: 400, result: MAV_RESULT.IN_PROGRESS, progress: 255 }, 1, 1);
+  // No extension fields at all.
+  conn.injectAck({ command: 400, result: MAV_RESULT.IN_PROGRESS }, 1, 1);
+  conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 1, 1);
+
+  assert.equal((await p).result, 'accepted');
+  assert.deepEqual(reported, [[0, 2], [45, null], [null, null], [null, null]]);
+});
+
+test('IN_PROGRESS without an onInProgress callback behaves exactly as before', async () => {
+  const conn = stubConn();
+  const waiter = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1, timeoutMs: 30 });
+  const p = waiter.start();
+  conn.injectAck({ command: 400, result: MAV_RESULT.IN_PROGRESS, progress: 10 }, 1, 1);
+  conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 1, 1);
+  const outcome = await p;
+  assert.equal(outcome.result, 'accepted');
+  assert.equal(outcome.confirmedBy, 'ack');
+});

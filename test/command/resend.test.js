@@ -85,12 +85,14 @@ test('a silent window re-sends 3 times with incremented confirmation, then settl
   const outcome = await waiter.start();
 
   assert.deepEqual(confirmations, [0, 1, 2, 3], 'each re-send increments the confirmation byte');
-  // Terminal shape byte-identical to the pre-#248 settle, except `retries` now
-  // carries the re-transmission count — deliberately no new field.
+  // Terminal shape: the pre-#248 settle plus `retries` carrying the
+  // re-transmission count, and `resultParam2` — null here, because nothing
+  // acked at all.
   assert.deepEqual(
     Object.keys(outcome).sort(),
-    ['confirmedBy', 'detail', 'elapsed', 'result', 'resultCode', 'retries']
+    ['confirmedBy', 'detail', 'elapsed', 'result', 'resultCode', 'resultParam2', 'retries']
   );
+  assert.equal(outcome.resultParam2, null);
   assert.equal(outcome.result, 'timeout');
   assert.equal(outcome.resultCode, null);
   assert.equal(outcome.confirmedBy, 'none');

@@ -943,3 +943,75 @@ test('a redeploy-cancelled completion wait finishes quietly (accepted-risk M1)',
   assert.equal(doneErr, undefined, 'done() called with no error — a cancel is not a failure');
   assert.equal(emitted, false, 'nothing is emitted onto a node being torn down');
 });
+
+test('IN_PROGRESS moves the badge and the terminal record carries result_param2 (§9)', async () => {
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '10000',
+    maxRetries: '0',
+  });
+  const statuses = [];
+  node.status = (s) => statuses.push(s.text);
+  let output;
+
+  node.emit('input', { payload: null }, (messages) => { output = messages; }, () => {});
+  await tick();
+
+  // A takeoff-style command answers IN_PROGRESS for seconds before its
+  // terminal ack: the badge tracks the vehicle's own percentage, and 255
+  // (unknown) reports the plain wait rather than "255%".
+  conn.injectAck({ command: 400, result: 5, progress: 45 }, 1, 1);
+  conn.injectAck({ command: 400, result: 5, progress: 255 }, 1, 1);
+  await tick();
+  assert.ok(statuses.some((text) => text.includes('in progress 45%')), 'badge reports the percentage');
+  assert.ok(
+    statuses.some((text) => text.startsWith('in progress ') && !/\d/.test(text)),
+    'unknown progress drops the percentage instead of showing 255%'
+  );
+
+  conn.injectAck({ command: 400, result: 0, result_param2: 12 }, 1, 1);
+  await tick();
+
+  assert.equal(output[1].result, 'accepted');
+  assert.equal(output[1].resultParam2, 12, 'the ack detail reaches the status record');
+  node.emit('close', () => {});
+});
+
+test('a denial reports its result_param2 rather than a bare name (§9)', async () => {
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '10000',
+    maxRetries: '0',
+  });
+  node.status = () => {};
+  let output;
+
+  node.emit('input', { payload: null }, (messages) => { output = messages; }, () => {});
+  await tick();
+  conn.injectAck({ command: 400, result: 2, result_param2: -5 }, 1, 1);
+  await tick();
+
+  assert.equal(output[1].result, 'denied');
+  assert.equal(output[1].resultParam2, -5);
+  node.emit('close', () => {});
+});

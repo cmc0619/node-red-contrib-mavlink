@@ -930,6 +930,9 @@
         <dd>Outcome name (<code>accepted</code>, <code>failed</code>, <code>unconfirmed</code>, …).</dd>
         <dt>resultCode <span class="property-type">number | null</span></dt>
         <dd>MAV_RESULT code when the outcome came from COMMAND_ACK.</dd>
+        <dt>resultParam2 <span class="property-type">number | null</span></dt>
+        <dd>The ack's <code>result_param2</code> — command-specific detail, often the
+            reason for a denial. <code>null</code> when the ack carried none.</dd>
         <dt>confirmedBy <span class="property-type">string</span></dt>
         <dd><code>ack</code>, <code>state</code>, or <code>none</code>.</dd>
         <dt>target <span class="property-type">object</span></dt>
@@ -957,7 +960,8 @@
     <li><b>Send</b> — fire-and-forget; no acknowledgement waiting.</li>
     <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; retry on TEMPORARILY_REJECTED,
         and for presets that tolerate re-issue re-send up to 3 times when a window closes with
-        no ack at all.</li>
+        no ack at all. While the vehicle answers IN_PROGRESS the status badge shows the
+        progress it reports.</li>
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
         vehicle state satisfies the command's completion condition (Arm, Takeoff, Land, Set Mode).</li>
   </ul>
