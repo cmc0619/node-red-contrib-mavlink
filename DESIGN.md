@@ -3866,12 +3866,15 @@ messages must round-trip through `createWire` serialize→decode, not be hand-bu
 **SITL suite `waitMs` is a max wait, not a fixed sleep (2026-08-10).**
 *Wrong belief:* after injects the harness must always sleep the full `PROFILE.waitMs`
 before scraping logs, because only then is the example “done.”
-*Fact:* most examples become decidable as soon as `verdictFrom` can return `PASS`.
-The suite polls `docker logs nrc-nodered` every `SITL_READY_POLL_MS` (default 500)
-and early-exits on `PASS` only — never on `PARTIAL`/`FAIL`/`UNKNOWN`, which specialized
-verdicts emit while multi-step stories (Lucy, formation) are still incomplete.
-Optional `PROFILE.readyWhen` can override; none ship in v1. `waitMs` remains the hard
-ceiling (timeout-shaped examples 02/32 still wait until their timeout signal appears).
-Fleet restart, prep, and `injectGapMs` are unchanged.
+*Fact:* examples with a *specialized* `verdictFrom` PASS become decidable as soon as
+that signal appears. The suite polls `docker logs nrc-nodered` every
+`SITL_READY_POLL_MS` (default 500) and early-exits on specialized `PASS` only —
+never on `PARTIAL`/`FAIL`/`UNKNOWN`, and never on the generic fallback
+`reason: "results: …"` (measured: example 01 arm/`GUIDED` `accepted` at 0.1 s would
+otherwise freeze before takeoff completion). Optional `PROFILE.readyWhen` can
+override; none ship in v1. `waitMs` remains the hard ceiling. Spot lab:
+Lucy **27** ready at ~90 s vs 260 s ceiling; **02** still waits for the takeoff
+completion-timeout signal. Fleet restart, prep, and `injectGapMs` are unchanged.
 *Check:* `sitl/lib/wait-until-ready.js`, `node --test test/sitl/wait-until-ready.test.js`,
+`sitl/run-example-suite.js`, `sitl/AGENTS.md`.
 `sitl/run-example-suite.js`, `sitl/AGENTS.md`.
