@@ -828,7 +828,8 @@
   <div class="form-row" id="row-cmd-frame" style="display:none">
     <label for="node-input-frame" style="width:120px">Frame</label>
     <select id="node-input-frame" style="width:280px">
-      <option value="">Global, absolute alt (default)</option>
+      <option value="">Global, relative alt (default)</option>
+      <option value="0">Global, absolute alt (AMSL)</option>
       <option value="3">Global, relative alt</option>
       <option value="10">Global, terrain alt</option>
       <option value="1">Local NED (metres)</option>
@@ -936,7 +937,8 @@
         <dt>elapsed <span class="property-type">number</span></dt>
         <dd>Milliseconds from start to terminal outcome.</dd>
         <dt>retries <span class="property-type">number</span></dt>
-        <dd>COMMAND_ACK retries performed.</dd>
+        <dd>Re-transmissions beyond the first send — TEMPORARILY_REJECTED
+            back-offs plus timeout re-sends.</dd>
         <dt>command <span class="property-type">string</span></dt>
         <dd>Friendly command name when known.</dd>
         <dt>commandId <span class="property-type">number</span></dt>
@@ -953,7 +955,8 @@
         <em>Dialect</em>, or choose <em>from Vehicle Profile…</em> to use a custom XML dialect
         and that profile's default target. Identity and connection are not used.</li>
     <li><b>Send</b> — fire-and-forget; no acknowledgement waiting.</li>
-    <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; retry on TEMPORARILY_REJECTED.</li>
+    <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; retry on TEMPORARILY_REJECTED,
+        re-send up to 3 times when a window closes with no ack at all.</li>
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
         vehicle state satisfies the command's completion condition (Arm, Takeoff, Land, Set Mode).</li>
   </ul>
@@ -999,9 +1002,12 @@
     <code>msg.payload === false</code> when you need an explicit hold.
   </p>
   <p>
-    On ACK timeout the node checks the peer table. If the completion condition is
-    satisfied, the command is confirmed by observed state. Otherwise the result is
-    <em>unconfirmed</em>; output 0 does not fire unless <em>Continue chain if unconfirmed</em> is enabled.
+    A silent ACK window is re-sent up to 3 times (idempotent recovery — a command
+    lost on the way out and an ack lost on the way back are indistinguishable);
+    commands that never auto-retry skip this. After the final window the node
+    checks the peer table. If the completion condition is satisfied, the command is
+    confirmed by observed state. Otherwise the result is <em>unconfirmed</em>;
+    output 0 does not fire unless <em>Continue chain if unconfirmed</em> is enabled.
   </p>
   <p>
     COMMAND_ACK matching keys on the same resolved target as the send: a companion

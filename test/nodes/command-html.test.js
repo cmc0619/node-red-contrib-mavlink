@@ -452,6 +452,20 @@ test('frame row binds to the frame property and follows the INT carrier', () => 
   );
 });
 
+test('frame dropdown: blank names the wire default (relative alt); frame 0 reachable (#247)', () => {
+  // Blank wires the carrier module's DEFAULT_FRAME — GLOBAL_RELATIVE_ALT (3),
+  // §14 — so the label must say relative alt, and AMSL (frame 0) must be its
+  // own option rather than a claim the default never honoured.
+  const { DEFAULT_FRAME, MAV_FRAME } = require('../../lib/command/carrier');
+  assert.equal(DEFAULT_FRAME, MAV_FRAME.GLOBAL_RELATIVE_ALT, 'the blank label below pins to this default');
+  assert.match(html, /<option value="">Global, relative alt \(default\)<\/option>/);
+  assert.match(html, /<option value="0">Global, absolute alt \(AMSL\)<\/option>/);
+  assert.ok(
+    !html.includes('Global, absolute alt (default)'),
+    'the old label promised AMSL while blank wired 3'
+  );
+});
+
 test('preset positional params are labelled degrees, not degE7 (§9 canonical units)', () => {
   assert.ok(
     !/units: 'degE7'/.test(html),

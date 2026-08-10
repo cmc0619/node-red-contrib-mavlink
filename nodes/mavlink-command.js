@@ -23,7 +23,8 @@
  *              no send.
  *   send     — fire-and-forget; no acknowledgement waiting.
  *   confirm  — wait for COMMAND_ACK, handle retry/backoff for
- *              TEMPORARILY_REJECTED; timeout triggers peer-table check.
+ *              TEMPORARILY_REJECTED and bounded re-send on a silent window
+ *              (#248); only the final timeout triggers the peer-table check.
  *   complete — after ACCEPTED, poll peer table until completion condition met.
  *              Only offered for commands that have a completion condition (§9).
  *
@@ -272,8 +273,8 @@ module.exports = function registerMavlinkCommand(RED) {
 
       // Frame for the COMMAND_INT carrier (§9 "Coordinate frames"): shared
       // precedence chain — msg.mavFrame beats node config, blank falls to the
-      // carrier module's documented default (GLOBAL). Resolved here so every
-      // delivery tier — build included — honours it.
+      // carrier module's documented default (GLOBAL_RELATIVE_ALT, §14).
+      // Resolved here so every delivery tier — build included — honours it.
       const frame = resolveFrame(msg.mavFrame, config.frame);
 
       /**
@@ -363,6 +364,11 @@ module.exports = function registerMavlinkCommand(RED) {
           timeoutMs,
           maxRetries: noAutoRetry ? 0 : maxRetries,
           noAutoRetry,
+          // Per-attempt telemetry on the badge only (#248) — same channel as
+          // the carrier-swap retry; outputs stay terminal-only.
+          onResend: (attempt, max) => {
+            applyActionStatus(node, 'sending', `retrying (${attempt}/${max}) ${displayName}\u2026`);
+          },
         });
         _activeWaiter = waiter;
         try {
