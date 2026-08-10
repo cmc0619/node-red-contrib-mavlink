@@ -8,6 +8,9 @@
  * Node-RED) so altitude / EKF / arm state cannot leak across tests — force-
  * disarm alone leaves AGL and makes NAV_TAKEOFF DENIED. See sitl/AGENTS.md.
  *
+ * After injects, PROFILE.waitMs is a max wait: the harness polls Node-RED
+ * logs and early-exits when verdictFrom returns PASS (optional readyWhen).
+ *
  * Post curated verdicts to a GitHub Issue (label sitl-results), close the prior
  * issue, and keep the JSON out of git — see sitl/AGENTS.md.
  *
@@ -18,6 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { spawnSync } = require('child_process');
+const { waitUntilReady } = require('./lib/wait-until-ready');
 
 const ROOT = path.join(__dirname, '..');
 const SITL_DIR = path.join(ROOT, 'examples', 'sitl');
@@ -39,7 +43,14 @@ const OUT =
     ? process.argv[process.argv.indexOf('--out') + 1]
     : path.join('/tmp', 'sitl-example-suite-results.json');
 
-/** @type {Record<string, {waitMs: number, expect: string, notes?: string, prep?: string, afterInject?: Function}>} */
+/**
+ * Per-example harness profile.
+ * `waitMs` is a hard ceiling (max wait after injects), not a fixed sleep —
+ * the suite polls logs and early-exits when verdict status is PASS (or when
+ * optional `readyWhen` returns true). See sitl/lib/wait-until-ready.js.
+ *
+ * @type {Record<string, {waitMs: number, expect: string, notes?: string, prep?: string, readyWhen?: Function, injectGapMs?: number, skip?: boolean}>}
+ */
 const PROFILE = {
   '01-completion-takeoff': {
     waitMs: 45000,
@@ -1220,14 +1231,30 @@ async function runOne(file) {
     await sleep(injectGapMs);
   }
 
-  await sleep(profile.waitMs);
-
+  // Event-driven: poll until PASS (or readyWhen), capped by waitMs.
   // Cover the whole example (prep gaps + injectGapMs + wait), not only waitMs —
   // otherwise long multi-inject stories (e.g. 13) scrape an empty idle window.
-  const log = nrLogSince(Math.max(15, Math.floor(Date.now() / 1000) - mark + 5));
-  const blocks = extractDebugBlocks(log);
-  const summary = summarizeBlocks(blocks);
-  const verdict = verdictFrom(profile, summary, log);
+  const pollMs =
+    Number(process.env.SITL_READY_POLL_MS) > 0
+      ? Number(process.env.SITL_READY_POLL_MS)
+      : 500;
+  const waited = await waitUntilReady({
+    waitMs: profile.waitMs,
+    pollMs,
+    readyWhen: profile.readyWhen,
+    snapshot: () => {
+      const log = nrLogSince(Math.max(15, Math.floor(Date.now() / 1000) - mark + 5));
+      return { summary: summarizeBlocks(extractDebugBlocks(log)), log };
+    },
+    verdict: (summary, log) => verdictFrom(profile, summary, log),
+  });
+  console.log(
+    waited.ready
+      ? `  ready after ${(waited.waitedMs / 1000).toFixed(1)}s`
+      : `  waitMs timeout after ${(waited.waitedMs / 1000).toFixed(1)}s`
+  );
+  const verdict = waited.verdict;
+  const summary = waited.summary;
 
   // Clear flows first so cleanup can bind 14550.
   await req(

@@ -3860,3 +3860,18 @@ records of transactions where *no message arrived at all*. Test fields objects f
 messages must round-trip through `createWire` serialize→decode, not be hand-built.
 *Check:* `node -e "const{loadBundled}=require('./lib/metadata');const{createWire}=require('./lib/connection/wire');const w=createWire({bundle:loadBundled('common')});const f=w.decode(w.serialize({name:'COMMAND_ACK',fields:{command:22,result:5}},{sysid:1,compid:1,seq:0}),{address:'x',port:1})[0].fields;console.log(f.progress,f.result_param2)"`
 — prints `0 0`, not `undefined undefined`.
+
+---
+
+**SITL suite `waitMs` is a max wait, not a fixed sleep (2026-08-10).**
+*Wrong belief:* after injects the harness must always sleep the full `PROFILE.waitMs`
+before scraping logs, because only then is the example “done.”
+*Fact:* most examples become decidable as soon as `verdictFrom` can return `PASS`.
+The suite polls `docker logs nrc-nodered` every `SITL_READY_POLL_MS` (default 500)
+and early-exits on `PASS` only — never on `PARTIAL`/`FAIL`/`UNKNOWN`, which specialized
+verdicts emit while multi-step stories (Lucy, formation) are still incomplete.
+Optional `PROFILE.readyWhen` can override; none ship in v1. `waitMs` remains the hard
+ceiling (timeout-shaped examples 02/32 still wait until their timeout signal appears).
+Fleet restart, prep, and `injectGapMs` are unchanged.
+*Check:* `sitl/lib/wait-until-ready.js`, `node --test test/sitl/wait-until-ready.test.js`,
+`sitl/run-example-suite.js`, `sitl/AGENTS.md`.
