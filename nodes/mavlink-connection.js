@@ -108,6 +108,11 @@ module.exports = function registerMavlinkConnection(RED) {
       }
     }
 
+    // Built before the identity claims — a signing misconfig throws with
+    // nothing to release yet — and kept: the rejected/status wiring below
+    // needs hasKey and acceptInvalid (#243).
+    const signing = buildSigning(config, node.credentials);
+
     try {
       const identities = node._identityNodes.map((idNode) =>
         identitySnapshot(idNode, defaults, bundle, node.id)
@@ -126,7 +131,7 @@ module.exports = function registerMavlinkConnection(RED) {
         identities,
         defaultIdentityId: config.localIdentity,
         boundIdentityIds: identityIds,
-        signing: buildSigning(config, node.credentials),
+        signing,
         heartbeat: {
           staleMs: config.staleMs ? Number(config.staleMs) : undefined,
           expireMs: config.expireMs ? Number(config.expireMs) : undefined,
@@ -144,17 +149,18 @@ module.exports = function registerMavlinkConnection(RED) {
       throw err;
     }
 
-    node.connection.on('state', (state) => applyStatus(node, state));
+    node.connection.on('state', (state) => applyStatus(node, state, signing.acceptInvalid));
     node.connection.on('transport-error', () => {});
+    node.connection.on('rejected', makeRejectedHandler(node, signing));
 
     node.subscribe = (filter, handler) => node.connection.subscribe(filter, handler);
     node.send = (message, options) => node.connection.send(message, options);
     node.resolveSourceIds = (identityId) => node.connection.resolveSourceIds(identityId);
     Object.defineProperty(node, 'peerTable', { get: () => node.connection.peerTable });
 
-    applyStatus(node, STATE.CONNECTING);
+    applyStatus(node, STATE.CONNECTING, signing.acceptInvalid);
     node.connection.start().catch((err) => {
-      applyStatus(node, STATE.ERROR);
+      applyStatus(node, STATE.ERROR, signing.acceptInvalid);
       node.error(err.message);
     });
 
@@ -172,6 +178,8 @@ module.exports = function registerMavlinkConnection(RED) {
 // Exposed for direct unit testing (test/nodes/connection-signing.test.js) —
 // same pattern as mavlink-vehicle.js's FIRMWARE_TYPES/VEHICLE_FAMILIES export.
 module.exports.buildSigning = buildSigning;
+module.exports.makeRejectedHandler = makeRejectedHandler;
+module.exports.applyStatus = applyStatus;
 
 /**
  * Build the runtime identity snapshot from a Local Identity config node,
@@ -295,6 +303,64 @@ function buildSigning(config, credentials) {
 }
 
 /**
+ * Consume the runtime's 'rejected' event (issue #243). Rejection is the
+ * fail-closed policy working as designed; dropping traffic *silently* is not —
+ * a signing vehicle pointed at a key-less connection would otherwise read as
+ * total silence, with no hint that the recovery override even exists. One warn
+ * plus badge per consecutive same-reason streak (the mavlink-move advisory
+ * dedup pattern); redeploy resets naturally — new node instance.
+ *
+ * @param {object} node
+ * @param {{hasKey: boolean, acceptInvalid: boolean}} signing  buildSigning result
+ * @returns {(event: {reason: string}) => void}
+ */
+function makeRejectedHandler(node, signing) {
+  let lastReason = null;
+  return ({ reason }) => {
+    if (reason === lastReason) return;
+    lastReason = reason;
+    const surface = rejectedSurface(reason, signing.hasKey);
+    node.warn(surface.log);
+    // The conspicuous UNTRUSTED badge (applyStatus) outranks per-reason drop
+    // badges while the recovery override is on; the warn still lands.
+    if (!signing.acceptInvalid) {
+      node.status({ fill: 'yellow', shape: 'ring', text: capBadge(surface.badge) });
+    }
+  };
+}
+
+/**
+ * Operator-facing text for an inbound rejection verdict — reasons from
+ * lib/connection/signing.js. The log names the exact cause; the badge is a
+ * §6-capped short form. The no-key case is called out by name: with no key
+ * every signed frame verifies false, so "invalid signature" alone would point
+ * the operator at the vehicle instead of at this connection's missing key.
+ *
+ * @param {string} reason  verdict reason tag
+ * @param {boolean} hasKey  whether a verification key is configured
+ * @returns {{log: string, badge: string}}
+ */
+function rejectedSurface(reason, hasKey) {
+  if (reason === 'invalid-signature') {
+    return hasKey
+      ? { log: 'dropping signed traffic — signature verification failed', badge: 'drop: invalid signature' }
+      : {
+          log: 'dropping signed traffic — no key configured (set a signing passphrase or raw key on this connection)',
+          badge: 'drop: no signing key',
+        };
+  }
+  if (reason === 'unsigned-rejected-require-signed') {
+    return { log: 'dropping unsigned traffic — require signed inbound is on', badge: 'drop: unsigned inbound' };
+  }
+  if (reason === 'replay-or-out-of-order') {
+    return { log: 'dropping signed traffic — replayed or out-of-order timestamp', badge: 'drop: replayed frame' };
+  }
+  // 'too-old' / 'first-contact-too-old', and any future verdict: the tag is
+  // already the message.
+  return { log: `dropping signed traffic — ${reason}`, badge: `drop: ${reason}` };
+}
+
+/**
  * Resolve an enum entry's screaming name to its numeric value from the bundle.
  *
  * @param {object} bundle
@@ -318,8 +384,17 @@ function enumValue(bundle, enumName, entryName) {
  *
  * @param {object} node
  * @param {string} state
+ * @param {boolean} untrusted  the accept-invalid recovery override is on
  */
-function applyStatus(node, state) {
+function applyStatus(node, state, untrusted) {
+  if (untrusted && state === STATE.CONNECTED) {
+    // DESIGN §7 "Accept invalid signatures": with the recovery override on,
+    // status must show the connection as untrusted conspicuously — red dot,
+    // not the settled green — whenever the override is enabled, not only when
+    // an invalid frame happens to arrive.
+    node.status({ fill: 'red', shape: 'dot', text: capBadge('connected — UNTRUSTED') });
+    return;
+  }
   const badge = STATUS_BADGES[state] || { fill: 'grey', shape: 'ring', text: state };
   node.status({ fill: badge.fill, shape: badge.shape, text: capBadge(badge.text) });
 }
