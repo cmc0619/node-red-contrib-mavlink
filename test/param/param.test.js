@@ -7,6 +7,7 @@ const { paramValueToWire, paramValueFromWire } = require('../../lib/codec');
 const {
   buildParamMessage,
   matchesParamEcho,
+  matchesParamReadReply,
   createParamListCollector,
   resolveParamEncoding,
   PARAM_ENCODING,
@@ -253,6 +254,89 @@ test('request-list collector emits a complete ordered parameter snapshot', () =>
     complete.map((p) => p.paramId),
     ['A', 'B']
   );
+});
+
+/** One list-member PARAM_VALUE, fields only where the test cares. */
+function listFrame(index, count, paramId) {
+  return {
+    name: 'PARAM_VALUE',
+    fields: { param_id: paramId || `P${index}`, param_index: index, param_count: count, param_value: index, param_type: 9 },
+  };
+}
+
+test('collector pins the first advertised count; later differing counts do not move the target', () => {
+  const warns = [];
+  const collector = createParamListCollector({ warn: (t) => warns.push(t) });
+  assert.equal(collector.accept(listFrame(0, 2)), null);
+  // A frame claiming count 3 arrives mid-stream: its index 2 is outside the
+  // pinned count and must not extend the collect.
+  assert.equal(collector.accept(listFrame(2, 3)), null);
+  const complete = collector.accept(listFrame(1, 3));
+  assert.deepEqual(complete.map((p) => p.index), [0, 1], 'completes at the pinned count');
+  assert.equal(warns.length, 1, 'the out-of-range frame was warned about');
+});
+
+test('collector completes count 0 as an empty list', () => {
+  const collector = createParamListCollector();
+  assert.deepEqual(collector.accept(listFrame(65535, 0)), [], 'the count-0 frame is the whole answer');
+});
+
+test('collector skips index 65535 as a member but pins its count', () => {
+  // A concurrent set's echo (index 65535) interleaving with the collect
+  // carries the true count; it is not itself a list member.
+  const collector = createParamListCollector();
+  assert.equal(collector.accept(listFrame(65535, 1, 'SET_ECHO')), null);
+  const complete = collector.accept(listFrame(0, 1, 'A'));
+  assert.deepEqual(complete.map((p) => p.paramId), ['A']);
+});
+
+test('an out-of-range index never satisfies the completion check, and warns once', () => {
+  // The old collector stored any non-negative index, so a bogus index inflated
+  // byIndex.size and a "complete" snapshot could ship short one real parameter
+  // and long one bogus one (#242).
+  const warns = [];
+  const collector = createParamListCollector({ warn: (t) => warns.push(t) });
+  assert.equal(collector.accept(listFrame(0, 2)), null);
+  assert.equal(collector.accept(listFrame(5, 2)), null, 'out-of-range frame is ignored');
+  assert.equal(collector.accept(listFrame(5, 2)), null, 'and stays ignored');
+  assert.equal(warns.length, 1, 'the warn is deduped per index');
+  const complete = collector.accept(listFrame(1, 2));
+  assert.deepEqual(complete.map((p) => p.index), [0, 1], 'only real members ship');
+});
+
+test('collector.missing() names the advertised-but-unreceived indexes', () => {
+  const collector = createParamListCollector();
+  assert.deepEqual(collector.missing(), [], 'no count yet — nothing to name');
+  collector.accept(listFrame(0, 3));
+  collector.accept(listFrame(2, 3));
+  assert.deepEqual(collector.missing(), [1]);
+});
+
+test('matchesParamReadReply matches by name, by index, and scopes to the target', () => {
+  const reply = {
+    name: 'PARAM_VALUE',
+    sysid: 1,
+    compid: 1,
+    fields: { param_id: 'RC1_MIN', param_index: 7, param_count: 100, param_value: 1100, param_type: 9 },
+  };
+
+  const byName = { target: { sysid: 1, compid: 1 }, paramId: 'RC1_MIN' };
+  assert.equal(matchesParamReadReply(byName, reply), true);
+  assert.equal(
+    matchesParamReadReply({ ...byName, paramId: 'RC2_MIN' }, reply),
+    false,
+    'a different parameter does not answer the read'
+  );
+  assert.equal(
+    matchesParamReadReply(byName, { ...reply, sysid: 2 }),
+    false,
+    'another vehicle does not answer it either'
+  );
+
+  // An index read sends no param_id, so the index is the only identity.
+  const byIndex = { target: { sysid: 1, compid: 1 }, paramIndex: 7 };
+  assert.equal(matchesParamReadReply(byIndex, reply), true);
+  assert.equal(matchesParamReadReply({ ...byIndex, paramIndex: 8 }, reply), false);
 });
 
 test('echo decodes by the vehicle-declared param_type, not the request type', () => {
