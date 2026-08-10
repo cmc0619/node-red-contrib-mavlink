@@ -932,7 +932,8 @@
         <dd>MAV_RESULT code when the outcome came from COMMAND_ACK.</dd>
         <dt>resultParam2 <span class="property-type">number | null</span></dt>
         <dd>The ack's <code>result_param2</code> — command-specific detail, often the
-            reason for a denial. <code>null</code> when the ack carried none.</dd>
+            reason for a denial; 0 when the vehicle reported nothing.
+            <code>null</code> when no ack arrived.</dd>
         <dt>confirmedBy <span class="property-type">string</span></dt>
         <dd><code>ack</code>, <code>state</code>, or <code>none</code>.</dd>
         <dt>target <span class="property-type">object</span></dt>

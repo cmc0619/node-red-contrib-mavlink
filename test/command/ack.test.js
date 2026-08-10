@@ -190,28 +190,43 @@ test('an initial send that throws rejects AND cleans up — no timer or subscrip
 
 // -- progress / result_param2 surfacing (§9) ---------------------------------
 
-test('resultParam2 rides every ack-confirmed settle; null when the frame lacks the field', async () => {
+// Round-trip ack fields through the real wire before injecting them. MAVLink 2
+// truncation makes an omitted extension byte-identical to an explicit zero, so
+// the decoder zero-fills and always supplies a number — a hand-built fields
+// object with the extension left out asserts a state the wire cannot produce
+// (Codex, #252; the first version of these tests did exactly that).
+const { loadBundled } = require('../../lib/metadata');
+const { createWire } = require('../../lib/connection/wire');
+const wire = createWire({ bundle: loadBundled('common') });
+
+function wireAck(fields) {
+  const frame = wire.serialize({ name: 'COMMAND_ACK', fields }, { sysid: 1, compid: 1, seq: 0 });
+  return wire.decode(frame, { address: 'ack-test', port: 1 })[0].fields;
+}
+
+test('resultParam2 rides every ack-confirmed settle; an omitted extension arrives as 0', async () => {
   const conn = stubConn();
   const accepted = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 });
   const acceptedPromise = accepted.start();
-  conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED, result_param2: 7 }, 1, 1);
+  conn.injectAck(wireAck({ command: 400, result: MAV_RESULT.ACCEPTED, result_param2: 7 }), 1, 1);
   assert.equal((await acceptedPromise).resultParam2, 7);
 
   // A denial's result_param2 is usually the *why* — the reason a bare
   // 'denied' throws away.
   const denied = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 });
   const deniedPromise = denied.start();
-  conn.injectAck({ command: 400, result: MAV_RESULT.DENIED, result_param2: -3 }, 1, 1);
+  conn.injectAck(wireAck({ command: 400, result: MAV_RESULT.DENIED, result_param2: -3 }), 1, 1);
   const deniedOutcome = await deniedPromise;
   assert.equal(deniedOutcome.result, 'denied');
   assert.equal(deniedOutcome.resultParam2, -3);
 
-  // MAVLink 1 / a frame without the extension decodes as undefined; records
-  // carry null, never undefined.
-  const old = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 });
-  const oldPromise = old.start();
-  conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 1, 1);
-  assert.equal((await oldPromise).resultParam2, null);
+  // A command+result-only ack truncates to the same bytes as one carrying
+  // explicit zeros (measured, §14): 0 arrives, and 0 is the record's honest
+  // value — in MAVLink it already means "no additional information".
+  const minimal = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 });
+  const minimalPromise = minimal.start();
+  conn.injectAck(wireAck({ command: 400, result: MAV_RESULT.ACCEPTED }), 1, 1);
+  assert.equal((await minimalPromise).resultParam2, 0);
 });
 
 test('a settle with no ack carries resultParam2 null', async () => {
@@ -227,7 +242,7 @@ test('a settle with no ack carries resultParam2 null', async () => {
   assert.equal((await cancelledPromise).resultParam2, null);
 });
 
-test('onInProgress reports (progress, resultParam2) per IN_PROGRESS ack; 255 and absent are null', async () => {
+test('onInProgress reports (progress, resultParam2) per IN_PROGRESS ack; only 255 reads unknown', async () => {
   const conn = stubConn();
   const reported = [];
   const waiter = makeWaiter(conn, {
@@ -238,16 +253,17 @@ test('onInProgress reports (progress, resultParam2) per IN_PROGRESS ack; 255 and
   });
   const p = waiter.start();
 
-  conn.injectAck({ command: 400, result: MAV_RESULT.IN_PROGRESS, progress: 0, result_param2: 2 }, 1, 1);
-  conn.injectAck({ command: 400, result: MAV_RESULT.IN_PROGRESS, progress: 45 }, 1, 1);
+  conn.injectAck(wireAck({ command: 400, result: MAV_RESULT.IN_PROGRESS, progress: 0, result_param2: 2 }), 1, 1);
+  conn.injectAck(wireAck({ command: 400, result: MAV_RESULT.IN_PROGRESS, progress: 45 }), 1, 1);
   // 255 is the spec's "unknown" sentinel, not a percentage.
-  conn.injectAck({ command: 400, result: MAV_RESULT.IN_PROGRESS, progress: 255 }, 1, 1);
-  // No extension fields at all.
-  conn.injectAck({ command: 400, result: MAV_RESULT.IN_PROGRESS }, 1, 1);
-  conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 1, 1);
+  conn.injectAck(wireAck({ command: 400, result: MAV_RESULT.IN_PROGRESS, progress: 255 }), 1, 1);
+  // No extension fields at all — same bytes as explicit zeros (§14), so the
+  // badge honestly shows 0%, not the plain wait.
+  conn.injectAck(wireAck({ command: 400, result: MAV_RESULT.IN_PROGRESS }), 1, 1);
+  conn.injectAck(wireAck({ command: 400, result: MAV_RESULT.ACCEPTED }), 1, 1);
 
   assert.equal((await p).result, 'accepted');
-  assert.deepEqual(reported, [[0, 2], [45, null], [null, null], [null, null]]);
+  assert.deepEqual(reported, [[0, 2], [45, 0], [null, 0], [0, 0]]);
 });
 
 test('IN_PROGRESS without an onInProgress callback behaves exactly as before', async () => {
