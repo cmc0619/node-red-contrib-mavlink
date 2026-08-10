@@ -1568,10 +1568,13 @@ Rules across all three:
 - **Retry per item, with a ceiling**, then abort the whole transfer with the sequence number
   that stalled. A transfer that hangs forever is worse than one that fails. The ceiling is per
   item by design, so it resets on every advance — and upload's steps are driven by the vehicle, so
-  a peer re-requesting the *same* sequence forever resets it indefinitely. An overall transfer
-  deadline (60 s, constant) is the bound that ends that livelock. It is generous on purpose: it
-  exists to terminate a transfer making no progress, not to race a large mission over a slow link,
-  and the per-step ceiling is unchanged beneath it.
+  a peer re-requesting the *same* sequence forever resets it indefinitely. A **no-progress
+  deadline** (60 s, constant) is the bound that ends that livelock: it re-arms whenever the
+  transfer advances to a *distinct* step, and never on a same-step re-entry — so the same-seq
+  livelock terminates at 60 s of no progress while a large mission advancing items over a slow
+  link runs as long as it keeps advancing (an absolute bound would race legitimate transfers,
+  the Codex #249 finding). Download's INT→legacy fallback is a distinct step and starts on
+  fresh budget. The per-step ceiling is unchanged beneath it.
 - **Download prefers `MISSION_REQUEST_INT`, falling back once to the legacy form.** A pre-INT
   autopilot answers `MISSION_REQUEST_LIST` with a count and then ignores INT item requests
   entirely, so an INT-only walk stalls at item 0. When exactly that step exhausts its retries, the
