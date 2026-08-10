@@ -1128,6 +1128,42 @@ test('broadcast confirm matches COMMAND_ACK on sysid AND component (§10)', asyn
   assert.equal(member.confirmedBy, 'ack');
 });
 
+test('a fan-out member record carries the terminal ack\'s result_param2 (§9, Codex)', async () => {
+  // Same §9 rule as Command and Payload: the member record is an ack-confirmed
+  // status record, so a denial that came with a reason must not flatten to a
+  // bare result on the way through the fan-out.
+  const handlers = [];
+  const connection = {
+    peerTable: peerTableStub([peer(1)]),
+    sends: [],
+    send(message, options) {
+      this.sends.push({ message, options });
+    },
+    resolveSourceIds: () => null,
+    subscribe(filter, handler) {
+      handlers.push(handler);
+      return () => {};
+    },
+  };
+  const deliver = (decoded) => handlers.forEach((h) => h(decoded));
+
+  const promise = executeFanout({
+    connection,
+    message: builtCommand({ fields: { param1: 1 } }),
+    mode: 'broadcast',
+    delivery: 'confirm',
+    selection: { mode: 'all' },
+    timeoutMs: 1000,
+  });
+
+  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 2, result_param2: 11 } });
+
+  const result = await promise;
+  const member = result.members.find((m) => m.sysid === 1);
+  assert.equal(member.resultCode, 2);
+  assert.equal(member.resultParam2, 11, 'the denial reason survives the member record');
+});
+
 test('an ack explicitly addressed to another GCS never settles our wait (§9/§10)', async () => {
   const handlers = [];
   const connection = {

@@ -313,6 +313,7 @@ function completeAck(node, send, built, outcome) {
     statusRecord('succeeded', 'command-ack accepted', {
       confirmation: built.confirmation,
       resultCode: outcome.resultCode,
+      resultParam2: outcome.resultParam2,
       confirmedBy: outcome.confirmedBy,
       retries: outcome.retries,
       elapsed: outcome.elapsed,
@@ -327,6 +328,7 @@ function failAck(node, send, built, outcome, msg, done) {
     statusRecord(outcome.result, outcome.detail || 'command not accepted', {
       confirmation: built.confirmation,
       resultCode: outcome.resultCode,
+      resultParam2: outcome.resultParam2,
       confirmedBy: outcome.confirmedBy,
       retries: outcome.retries,
       elapsed: outcome.elapsed,

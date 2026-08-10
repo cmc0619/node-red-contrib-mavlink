@@ -933,7 +933,9 @@
         <dt>resultParam2 <span class="property-type">number | null</span></dt>
         <dd>The ack's <code>result_param2</code> — command-specific detail, often the
             reason for a denial; 0 when the vehicle reported nothing.
-            <code>null</code> when no ack arrived.</dd>
+            <code>null</code> when no <i>terminal</i> ack arrived — a run that saw only
+            <code>IN_PROGRESS</code> acks and then timed out reports <code>null</code> too,
+            since the vehicle never stated a result.</dd>
         <dt>confirmedBy <span class="property-type">string</span></dt>
         <dd><code>ack</code>, <code>state</code>, or <code>none</code>.</dd>
         <dt>target <span class="property-type">object</span></dt>
