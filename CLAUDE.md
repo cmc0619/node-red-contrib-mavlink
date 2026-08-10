@@ -7,6 +7,12 @@ be lost that way are repeated here, in context, where they cannot be missed.
 
 ## Rules that get broken
 
+**Every report of a diff includes the runtime-logic line count** (owner standing order,
+2026-08-10): additions/deletions across `lib/**/*.js` + `nodes/*.js`, with tests and editor
+`.html` broken out separately — `git diff --numstat <base> -- 'lib/*' 'nodes/*.js'`. Total
+diff size buries the number that matters; the runtime delta is what the net-code-budget
+rule (`AGENTS.md`) governs.
+
 **PRs are opened as drafts. Only the repo owner marks them ready.** (`AGENTS.md:57`) Bot
 reviews are a finite resource and the org has a spending cap; a ready-for-review PR spends
 it on work in progress. A `PreToolUse` hook in `.claude/settings.json` enforces this and
