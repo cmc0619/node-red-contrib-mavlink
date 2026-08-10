@@ -657,7 +657,7 @@ test('stop({brake:false}) hands over without a brake; a default stop brakes', ()
   assert.equal(sends[2].fields.vx, 0, 'default stop is the zero-velocity brake');
 });
 
-test('a tick send that throws is contained: keep cadence, one report per streak, count only deliveries', () => {
+test('a tick send that throws is contained: keep cadence, one report per streak, count only accepted sends', () => {
   // Connection.send throws by design (identity resolution on a dead link);
   // uncaught inside the interval callback that is a process crash. The stream
   // never quits on send failure — the firmware setpoint watchdog is the

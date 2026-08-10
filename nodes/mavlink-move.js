@@ -316,7 +316,7 @@ function completeResult(node, send, result, detail, fields) {
  *
  * @param {object} node
  * @param {object|null} message  the zero-velocity brake that was sent, or null when its send threw
- * @param {number} sent  setpoints the stream delivered (successful sends only)
+ * @param {number} sent  setpoints the connection accepted (not wire deliveries — the streaming band coalesces under backpressure)
  * @param {Error} [brakeError]  set when the expiry brake send threw
  */
 function completeExpiry(node, message, sent, brakeError) {

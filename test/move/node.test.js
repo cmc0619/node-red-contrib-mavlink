@@ -482,7 +482,8 @@ test('mavlink-move stream: TTL expiry emits an expired message the flow can chai
   const brake = sends[sends.length - 1];
   assert.equal(brake.fields.type_mask, 3527, 'TTL expiry sends the brake');
   assert.equal(brake.fields.vx, 0);
-  // C11-lite: the record counts setpoints delivered (the brake is not one).
+  // C11-lite: the record counts setpoints the connection accepted (the
+  // brake is not one; the streaming band may coalesce before the wire).
   assert.equal(status.sent, sends.length - 1);
   assert.ok(status.sent >= 1, 'the initial send counts');
 });
@@ -861,7 +862,7 @@ test('mavlink-move stream: {action:"stop"} halts the stream, brakes, and records
   assert.equal(out[1].result, 'succeeded');
   assert.equal(out[1].detail, 'stopped');
   assert.equal(out[1].message.fields.type_mask, 3527, 'record carries the brake');
-  // Every send before the brake was a delivered setpoint.
+  // Every send before the brake was an accepted setpoint.
   assert.equal(out[1].sent, sends.length - 1, 'sent counts setpoints, not the brake');
 
   const after = sends.length;
