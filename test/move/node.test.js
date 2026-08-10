@@ -1095,3 +1095,173 @@ function redStub(nodesById) {
     },
   };
 }
+
+test('mavlink-move stream: expiry brake failure keeps the documented discriminator (Codex, #240)', async () => {
+  // A flow following the node help switches on detail === 'expired'. The one
+  // moment recovery matters most — the brake never reached the wire — is
+  // exactly when that switch must still match; the failure rides its own
+  // brakeError field instead.
+  const conn = {
+    id: 'conn',
+    vehicle: {},
+    // The brake is deliberately shaped like a velocity setpoint (same mask
+    // 3527), so the stub tells them apart by the commanded velocity: the
+    // streamed setpoint carries vx=1, the brake vx=0.
+    send(message) {
+      if (message.fields.vx === 0) throw new Error('link down');
+    },
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 200,
+    ttlMs: 20,
+  });
+
+  const emitted = [];
+  node.send = (messages) => { emitted.push(messages); };
+  node.emit('input', { payload: {} }, () => {}, () => {});
+
+  const deadline = Date.now() + 2000;
+  while (!emitted.length && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.equal(emitted[0][1].detail, 'expired', 'the discriminator survives the brake failure');
+  assert.match(emitted[0][1].brakeError, /link down/);
+  assert.equal(typeof emitted[0][1].sent, 'number');
+  node.emit('close', () => {});
+});
+
+test('mavlink-move stream: a failed handover send leaves the old stream running (Codex, #240)', () => {
+  // The replacement's initial send throwing must not leave the vehicle with
+  // no retrying stream and no brake — the old stream keeps the slot.
+  const sends = [];
+  let failNext = false;
+  const conn = {
+    id: 'conn',
+    vehicle: {},
+    send(message) {
+      if (failNext) { failNext = false; throw new Error('identity unresolved'); }
+      sends.push(message);
+    },
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 0.1,
+    ttlMs: 0,
+  });
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  assert.equal(sends.length, 1, 'old stream started');
+
+  failNext = true;
+  let failed;
+  let doneErr;
+  node.emit('input', { payload: { velocity: { north: 2, east: 0, up: 0 } } }, (m) => { failed = m; }, (err) => { doneErr = err; });
+  assert.match(doneErr.message, /identity unresolved/);
+  assert.equal(failed[1].result, 'failed');
+
+  // The old stream still owns the slot: close brakes it — a dead stream
+  // would have nothing to brake.
+  node.emit('close', () => {});
+  assert.equal(sends.length, 2, 'close braked the surviving stream');
+  assert.equal(sends[1].fields.type_mask, 3527);
+  assert.equal(sends[1].fields.vx, 0);
+});
+
+test('mavlink-move stream: a retarget brakes the old target after the new stream is live (Codex, #240)', () => {
+  // Same-target replacement hands over brakeless; a retarget ends control of
+  // the OLD target, so that vehicle gets the brake — after the new stream's
+  // first send succeeded.
+  const sends = [];
+  const conn = { id: 'conn', vehicle: {}, send(message) { sends.push(message); } };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 0.1,
+    ttlMs: 0,
+  });
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  node.emit('input', { payload: { target: { sysid: 2, compid: 1 } } }, () => {}, () => {});
+
+  assert.equal(sends.length, 3, 'setpoint, handover setpoint, old-target brake');
+  assert.equal(sends[0].fields.target_system, 1);
+  assert.equal(sends[1].fields.target_system, 2, 'the new stream sends before the old is stopped');
+  assert.equal(sends[2].fields.target_system, 1, 'the brake goes to the abandoned target');
+  assert.equal(sends[2].fields.type_mask, 3527);
+  node.emit('close', () => {});
+});
+
+test('mavlink-move stream: a failed retarget frees only the new scope, old stream keeps its own (Codex, #240)', () => {
+  let failNext = false;
+  const conn = {
+    id: 'conn',
+    vehicle: {},
+    send() {
+      if (failNext) { failNext = false; throw new Error('identity unresolved'); }
+    },
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const cfg = {
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 0.1,
+    ttlMs: 0,
+  };
+  const a = new Node({ ...cfg });
+  const b = new Node({ ...cfg });
+
+  a.emit('input', { payload: {} }, () => {}, () => {});
+  failNext = true;
+  let doneErr;
+  a.emit('input', { payload: { target: { sysid: 2, compid: 1 } } }, () => {}, (err) => { doneErr = err; });
+  assert.match(doneErr.message, /identity unresolved/);
+
+  // Target 1 is still held by a's surviving stream; target 2 was released on
+  // the way out of the failed retarget.
+  let held;
+  b.emit('input', { payload: {} }, (m) => { held = m; }, () => {});
+  assert.match(held[1].detail, /already running/);
+  let freed;
+  b.emit('input', { payload: { target: { sysid: 2, compid: 1 } } }, (m) => { freed = m; }, () => {});
+  assert.equal(freed[1].result, 'succeeded', 'the failed retarget freed its scope');
+  a.emit('close', () => {});
+  b.emit('close', () => {});
+});

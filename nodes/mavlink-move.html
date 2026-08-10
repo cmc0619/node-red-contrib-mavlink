@@ -68,6 +68,21 @@
 
       RED.mavlink.refreshIdentitySelect(node);
 
+      // One explicit compatibility boundary (AGENTS.md "Backward
+      // compatibility"): flows saved before the 2026-08-09 frame ruling store
+      // the deprecated *_INT global frame names. The select has no such
+      // option, so without this the value falls through to the LOCAL_NED
+      // fallback and saving silently reinterprets a global move as a
+      // local-origin move. The runtime accepts these same aliases.
+      var FRAME_COMPAT = {
+        GLOBAL_INT: 'GLOBAL',
+        GLOBAL_RELATIVE_ALT_INT: 'GLOBAL_RELATIVE_ALT',
+        GLOBAL_TERRAIN_ALT_INT: 'GLOBAL_TERRAIN_ALT'
+      };
+      if (FRAME_COMPAT[node.frame]) {
+        $('#node-input-frame').val(FRAME_COMPAT[node.frame]);
+      }
+
 
       /**
        * §6: only the fields for the selected mode, delivery, and identity role

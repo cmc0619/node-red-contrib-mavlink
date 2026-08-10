@@ -276,3 +276,27 @@ test('mavlink-move has no Firmware row and no silent ardupilotmega default', () 
   assert.doesNotMatch(html, /node-input-firmware|row-move-firmware|Firmware/, 'Move must not add a Firmware row');
   assert.doesNotMatch(html, /ardupilotmega/, 'Move editor must not invent a default dialect');
 });
+
+test('mavlink-move editor canonicalizes legacy *_INT global frames on open (Codex, #240)', () => {
+  // One explicit compatibility boundary (AGENTS.md "Backward compatibility"):
+  // flows saved before the 2026-08-09 frame ruling store the deprecated *_INT
+  // names. Without the map, the select has no matching option, refreshVisibility
+  // falls back to LOCAL_NED, and saving silently reinterprets a global move as
+  // a local-origin move.
+  assert.match(html, /var FRAME_COMPAT = \{/, 'the compatibility map exists');
+  assert.match(html, /GLOBAL_INT: 'GLOBAL'/, 'GLOBAL_INT canonicalizes');
+  assert.match(html, /GLOBAL_RELATIVE_ALT_INT: 'GLOBAL_RELATIVE_ALT'/, 'GLOBAL_RELATIVE_ALT_INT canonicalizes');
+  assert.match(html, /GLOBAL_TERRAIN_ALT_INT: 'GLOBAL_TERRAIN_ALT'/, 'GLOBAL_TERRAIN_ALT_INT canonicalizes');
+  assert.match(
+    html,
+    /if \(FRAME_COMPAT\[node\.frame\]\) \{\s*\$\('#node-input-frame'\)\.val\(FRAME_COMPAT\[node\.frame\]\);/,
+    'the saved frame is canonicalized into the select before anything reads it'
+  );
+  // The boundary must run before the visibility pass that would otherwise
+  // read the unmatched select as LOCAL_NED.
+  const compatAt = html.indexOf('var FRAME_COMPAT');
+  const visibilityCallAt = html.indexOf('refreshVisibility()');
+  assert.ok(compatAt > -1 && compatAt < visibilityCallAt, 'canonicalization precedes the first visibility pass');
+  // And the legacy names must not be select options — accepted, never offered.
+  assert.doesNotMatch(html, /<option value="GLOBAL_RELATIVE_ALT_INT"/, 'legacy options are not offered');
+});
