@@ -1594,6 +1594,7 @@ test('mavlink-move reposition confirm: a second goto supersedes the first wait q
   assert.equal(first.err, undefined);
   assert.equal(first.out, undefined, 'no outcome is emitted for the superseded goto');
   // The replacement runs to its ack normally.
+  assert.ok(second.done, 'the replacement input completes after its ACK');
   assert.equal(second.err, undefined);
   assert.equal(second.out[0].payload.result, 'succeeded');
   assert.equal(second.out[1].result, 'succeeded');
