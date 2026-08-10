@@ -1255,7 +1255,7 @@ accepts 0/3/10 the default flips, and eventually the checkbox retires.
 stream hands over old→new directly with **no brake between** — MAVSDK and QGC never brake
 between consecutive targets; the zero-velocity brake marks the *end* of control, and fires
 only on TTL expiry, an explicit `{action: 'stop'}` input, and node close. The stop input
-halts the stream, brakes, and reports with the delivered-setpoint count; a stop with nothing
+halts the stream, brakes, and reports with the count of setpoints the connection accepted; a stop with nothing
 running succeeds with a record saying so — a stop control must not punish a second press,
 and unknown actions or a stop on a non-stream tier fail loud. A send that throws inside the
 stream timer is contained: the stream keeps its cadence and reports once per
