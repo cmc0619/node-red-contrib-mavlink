@@ -81,7 +81,9 @@ Harness: **docker-restarts the vehicle fleet** (AP 1–5, PX4 11–15, companion
 20/21 — not `nrc-nodered`) before each non-SKIP example, waits for GPS/EKF
 settle (`SITL_FLEET_SETTLE_MS`, default 8s), re-applies PX4 lab helpers, then
 deploys one `examples/sitl/*.json` → enable debug→console → fire injects →
-scrape `docker logs nrc-nodered` → write JSON under `/tmp/` (default). Example
+**poll** `docker logs nrc-nodered` until `verdictFrom` returns `PASS` (or
+`PROFILE.readyWhen`) capped by `waitMs` (a max wait, not a fixed sleep;
+`SITL_READY_POLL_MS`, default 500) → write JSON under `/tmp/` (default). Example
 **12** (signing) targets companion AP sysid 20: harness sends `SETUP_SIGNING` with
 `sha256(hunter11)` and injects `{ signingPassphrase: "hunter11" }` on Admin API
 deploy (`hunter11` is a joke lab passphrase, not a secret). Example **25** (TCP)
