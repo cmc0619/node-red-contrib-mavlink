@@ -1128,6 +1128,13 @@ no retransmission of its own, so each tier recovers by repeating its idempotent 
   32 indexes, because refill repairs gaps rather than re-implementing the transfer; a stream
   needing more is reported honestly by the list timeout. Echo-scoping and the single-flight
   generation token are unchanged — only loss recovery moved.
+- **Param refuses a broadcast target (sysid 0), every action, every tier including Build.** No
+  vehicle sources sysid 0, so the confirm echo — scoped by target sysid — could never settle a
+  fleet-wide write: the node would do the wide thing and then report timed-out, inviting a retry
+  that writes the fleet again. A built broadcast `PARAM_SET` forwarded to `mavlink-out` is the
+  same fleet write, hence the Build-tier refusal (mirrors the mission node's broadcast gate and
+  fan-out's broadcast `PARAM_SET` refusal, §10). Broadcast *component* (compid 0) remains
+  deliberate, supported echo-matcher behavior.
 
 **`COMMAND_ACK` can arrive twice.** A takeoff commonly acks `IN_PROGRESS`, then `ACCEPTED`
 seconds later. Treating the first as final reports success early or times out on a command that
@@ -1192,6 +1199,13 @@ Repeated `IN_PROGRESS` keeps the wait alive, but not forever: each one re-arms t
 only up to an aggregate ceiling of 6× the configured timeout from the first send (60 s at
 defaults). At the ceiling the running window is left to expire and the timeout classification
 proceeds — with no trailing re-sends, per the ack-retires-re-send rule above.
+
+**Confirm surfaces both MAVLink 2 ack extensions rather than discarding them.** Each
+`IN_PROGRESS` ack drives the status badge with the vehicle's own `progress` (255 and an absent
+field both read as unknown, so the badge shows the plain wait, never "255%"), and every
+ack-confirmed status record carries the terminal ack's `result_param2` — command-specific detail,
+usually the reason behind a denial — as `resultParam2`, null when the ack carried none or when
+nothing acked at all. The raw int32 is the deliverable: no per-command decoding tables.
 
 ### The vehicle answers "can you do this right now"
 
