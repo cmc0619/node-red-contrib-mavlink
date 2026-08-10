@@ -1155,12 +1155,32 @@ semantics are: arming an armed vehicle acks `ACCEPTED`. It is not safe for comma
 or toggle — `MISSION_START` and `PREFLIGHT_REBOOT_SHUTDOWN` among them — and those never
 auto-retry.
 
-**Retransmit precedes the classification.** A command lost on the way out and an ack lost on the
-way back are indistinguishable, and the command microservice's recovery for both is idempotent
-re-send: a silent ack window is re-sent up to 3 times (MAVSDK parity), the confirmation byte
-incrementing on each `COMMAND_LONG` transmission (`COMMAND_INT` has no confirmation byte and
-re-sends byte-identical). Commands that never auto-retry skip re-send for the same reason they
-skip the `TEMPORARILY_REJECTED` retry — re-sending a reboot on a lost ack would double-execute.
+**Retransmit precedes the classification — where re-issue is affirmatively known safe.** A
+command lost on the way out and an ack lost on the way back are indistinguishable, and the
+command microservice's recovery for both is idempotent re-send: a silent ack window is re-sent up
+to 3 times (MAVSDK parity), the confirmation byte incrementing on each `COMMAND_LONG`
+transmission (`COMMAND_INT` has no confirmation byte and re-sends byte-identical). Two limits
+bound it (#249 Codex review, owner-ruled):
+
+- **Re-send is opt-in, not the default.** The waiter's `maxResends` defaults to 0; a caller opts
+  in only where idempotency is affirmatively known — a preset that does not set `noAutoRetry` is
+  a curated statement that re-issue is safe, and a re-sent reposition goto is the same goto.
+  Advanced mode is a raw `MAV_CMD` id that says nothing about whether a second
+  `REBOOT_SHUTDOWN`, `MISSION_START`, parachute or camera trigger is harmless — and a silent
+  window is the *normal success outcome* of a reboot, since a rebooting vehicle cannot ack — so
+  it never re-sends, and neither do fan-out's replicated commands or the Payload verbs. A
+  per-command exemption list was considered and refused: it covers only the commands already
+  known about, and the unknown ones are the point.
+- **An observed ack of any kind retires the re-send for the transaction**, `IN_PROGRESS` and
+  `TEMPORARILY_REJECTED` included. Re-sending is premised on the loss being indistinguishable;
+  any ack proves the command arrived, and re-sending then re-commands a running operation.
+
+The receive side offers no safety net for this: the confirmation byte's spec intent is
+retransmission marking, but ArduPilot never reads it — `GCS_Common.cpp` contains no reference to
+the field (source-read AP master 2026-08-10, not SITL-measured) — so every received
+`COMMAND_LONG` executes independently and the *sender* is the only layer where non-idempotent
+re-send can be prevented.
+
 Only when the final window closes does the classification above run, unchanged: peer-table check,
 then **unconfirmed**. The two rulings are ordered, not in tension — this paragraph governs
 recovery *before* the timeout outcome exists; the classification governs what the outcome
@@ -1171,7 +1191,7 @@ confirmation byte; there is deliberately no second counter field.
 Repeated `IN_PROGRESS` keeps the wait alive, but not forever: each one re-arms the ack window
 only up to an aggregate ceiling of 6× the configured timeout from the first send (60 s at
 defaults). At the ceiling the running window is left to expire and the timeout classification
-proceeds.
+proceeds — with no trailing re-sends, per the ack-retires-re-send rule above.
 
 ### The vehicle answers "can you do this right now"
 
