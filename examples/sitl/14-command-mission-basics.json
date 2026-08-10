@@ -173,7 +173,7 @@
     "name": "Upload mission sysid 2",
     "props": [
       {
-        "p": "payload",
+        "p": "payload.items",
         "v": "[{\"command\":16,\"frame\":3,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":47.397742,\"y\":8.545594,\"z\":0,\"autocontinue\":true},{\"command\":16,\"frame\":3,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":47.398,\"y\":8.546,\"z\":20,\"autocontinue\":true},{\"command\":16,\"frame\":3,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":47.399,\"y\":8.546,\"z\":20,\"autocontinue\":true}]",
         "vt": "json"
       }
