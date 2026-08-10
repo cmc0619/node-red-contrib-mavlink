@@ -1250,6 +1250,22 @@ rejection. Deliberately operator-held, not firmware-keyed: Build has no connecti
 config missing the value parses as checked — the safe direction. Unchecked-on-ArduPilot is
 source-read only; a SITL pin is wanted before the opt-out is leaned on (§14). When PX4
 accepts 0/3/10 the default flips, and eventually the checkbox retires.
+
+**Stream lifecycle follows GCS practice** (owner-ruled 2026-08-09): replacing a running
+stream hands over old→new directly with **no brake between** — MAVSDK and QGC never brake
+between consecutive targets; the zero-velocity brake marks the *end* of control, and fires
+only on TTL expiry, an explicit `{action: 'stop'}` input, and node close. The stop input
+halts the stream, brakes, and reports with the delivered-setpoint count; a stop with nothing
+running succeeds with a record saying so — a stop control must not punish a second press,
+and unknown actions or a stop on a non-stream tier fail loud. A send that throws inside the
+stream timer is contained: the stream keeps its cadence and reports once per
+consecutive-failure streak on the status output, never deciding on its own to quit — the
+operator chose to stream, and the firmware's own setpoint watchdog is the failsafe on a
+truly dead link. `expired` and `stopped` records carry `sent`, the delivered-setpoint count;
+a brake send that throws at expiry rides the record's detail rather than breaking the
+bookkeeping, and the single-owner scope (#176) is freed in `finally` so no throw can strand
+the target locked.
+
 A position with a blank coordinate refuses in every **absolute** frame (§10 "blank coordinates
 must not become 0,0"): global lat/lon must not become null island, a blank global alt must not
 become ground level (0 m above home in frame 6, 0 m AGL in frame 11 — or below ground at
