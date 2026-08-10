@@ -1261,10 +1261,14 @@ and unknown actions or a stop on a non-stream tier fail loud. A send that throws
 stream timer is contained: the stream keeps its cadence and reports once per
 consecutive-failure streak on the status output, never deciding on its own to quit — the
 operator chose to stream, and the firmware's own setpoint watchdog is the failsafe on a
-truly dead link. `expired` and `stopped` records carry `sent`, the delivered-setpoint count;
-a brake send that throws at expiry rides the record's detail rather than breaking the
-bookkeeping, and the single-owner scope (#176) is freed in `finally` so no throw can strand
-the target locked.
+truly dead link. `expired` and `stopped` records carry `sent`, the delivered-setpoint count. A brake send
+that throws at expiry rides the record's own `brakeError` field — `detail` stays the
+documented `expired` discriminator, matching exactly when downstream recovery matters most —
+and the single-owner scope (#176) is freed in `finally` so no throw can strand the target
+locked. The handover itself is failure-ordered: the old stream keeps the slot until the
+replacement's first send succeeds, so a transient link failure leaves the vehicle its
+retrying stream, and a retarget brakes the old target only after the new stream is live —
+that target's control ended.
 
 A position with a blank coordinate refuses in every **absolute** frame (§10 "blank coordinates
 must not become 0,0"): global lat/lon must not become null island, a blank global alt must not
