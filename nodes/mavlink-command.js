@@ -582,6 +582,11 @@ module.exports = function registerMavlinkCommand(RED) {
             const rec = makeRecord({
               result: 'timeout',
               resultCode: null,
+              // This branch is gated on an ACCEPTED ack: the vehicle answered,
+              // then the state never arrived. `null` is reserved for settles
+              // with no ack at all, so the ack's field rides through here the
+              // same way its retry count does (CodeRabbit).
+              resultParam2: ackOutcome.resultParam2,
               confirmedBy: 'none',
               retries: ackOutcome.retries,
               elapsed: Date.now() - startMs,

@@ -580,7 +580,7 @@ test('silent ACK windows re-send a LONG with incremented confirmation, badge tel
   assert.equal(output[1].resultCode, null);
   assert.equal(output[1].confirmedBy, 'none');
   assert.equal(output[1].retries, 3);
-  assert.equal(output[1].detail, 'no COMMAND_ACK received within timeout');
+  assert.equal(output[1].detail, 'no terminal COMMAND_ACK received within timeout');
   assert.ok(doneErr instanceof Error, 'the timeout still fails through Catch');
   node.emit('close', () => {});
 });
@@ -1013,5 +1013,42 @@ test('a denial reports its result_param2 rather than a bare name (§9)', async (
 
   assert.equal(output[1].result, 'denied');
   assert.equal(output[1].resultParam2, -5);
+  node.emit('close', () => {});
+});
+
+test('a completion timeout keeps the accepted ack\'s result_param2 (CodeRabbit)', async () => {
+  // Complete tier reaches the completion wait only through an ACCEPTED ack, so
+  // this settle had an ack — it was the vehicle *state* that never arrived.
+  // `null` is the contract's "no ack at all", which would misreport this path.
+  const conn = connStubWithInject();
+  conn.peerTable = new StubPeerTable();
+  conn.peerTable.setComponent(1, 1, { armed: false }); // ARM never satisfies
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    connection: 'conn',
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'complete',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '60000',
+    maxRetries: '0',
+    completionTimeout: '60',
+  });
+  node.status = () => {};
+  let output;
+
+  node.emit('input', { payload: {} }, (messages) => { output = messages; }, () => {});
+  await tick();
+
+  conn.injectAck({ command: 400, result: 0, result_param2: 7 }, 1, 1);
+  await new Promise((resolve) => setTimeout(resolve, 120));
+
+  assert.equal(output[1].result, 'timeout');
+  assert.equal(output[1].confirmedBy, 'none', 'nothing confirmed the completion');
+  assert.equal(output[1].resultParam2, 7, 'the ack that did arrive is not erased by the state timeout');
   node.emit('close', () => {});
 });

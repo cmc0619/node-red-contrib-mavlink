@@ -97,7 +97,7 @@ test('a silent window re-sends 3 times with incremented confirmation, then settl
   assert.equal(outcome.resultCode, null);
   assert.equal(outcome.confirmedBy, 'none');
   assert.equal(outcome.retries, 3);
-  assert.equal(outcome.detail, 'no COMMAND_ACK received within timeout');
+  assert.equal(outcome.detail, 'no terminal COMMAND_ACK received within timeout');
 });
 
 test('an ack landing after a re-send settles normally, retries counting the re-sends', async () => {
