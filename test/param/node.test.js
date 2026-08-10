@@ -212,14 +212,23 @@ test('mavlink-param confirm set emits a timed-out record and releases the subscr
 
   return new Promise((resolve) => {
     let out;
-    node.emit('input', { payload: { paramId: 'FOO', value: 1 } }, (m) => { out = m; }, () => {});
-    setTimeout(() => {
-      assert.ok(out, 'a terminal record was emitted on timeout');
-      assert.equal(out[0], null, 'output 0 must not fire on timeout');
-      assert.equal(out[1].result, 'timed-out');
-      assert.equal(conn.activeCount(), 0, 'the subscription is torn down on timeout');
-      resolve();
-    }, 30);
+    // Wait for the node's own done() rather than a wall clock. The bounded
+    // re-send (#249) emits a 'progress' record per attempt before the terminal
+    // one, so a fixed delay races the attempts and caught 'progress' on a
+    // loaded runner; timeoutResult calls done() immediately after the terminal
+    // emit, which is the event this test actually means.
+    node.emit(
+      'input',
+      { payload: { paramId: 'FOO', value: 1 } },
+      (m) => { out = m; },
+      () => {
+        assert.ok(out, 'a terminal record was emitted on timeout');
+        assert.equal(out[0], null, 'output 0 must not fire on timeout');
+        assert.equal(out[1].result, 'timed-out');
+        assert.equal(conn.activeCount(), 0, 'the subscription is torn down on timeout');
+        resolve();
+      }
+    );
   });
 });
 
