@@ -1207,8 +1207,12 @@ carries the terminal ack's `result_param2` — command-specific detail, usually 
 a denial — as `resultParam2`. An ack cannot signal "field absent": MAVLink 2 truncation makes an
 omitted extension byte-identical to an explicit zero, so both decode as 0 (§14) — and 0 is the
 honest value, in MAVLink usage already "no additional information". `resultParam2` is null only
-on a settle with no ack at all, a genuine absence. The raw int32 is the deliverable: no
-per-command decoding tables.
+on a settle with no *terminal* ack, a genuine absence — and it survives a later state timeout,
+because the Complete tier reaches its completion wait only through an `ACCEPTED` ack, so the
+vehicle's answer is known even when the state it promised never arrives. An `IN_PROGRESS` ack is
+not a terminal ack for this purpose: its `result_param2` is delivered live to the badge and
+never promoted into a timeout record, where a decoded 0 would read as a statement the vehicle
+never made. The raw int32 is the deliverable: no per-command decoding tables.
 
 ### The vehicle answers "can you do this right now"
 
