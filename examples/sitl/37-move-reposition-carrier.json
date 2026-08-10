@@ -1,0 +1,281 @@
+[
+  {
+    "id": "sitl37-tab",
+    "type": "tab",
+    "label": "SITL 37 Move reposition carrier",
+    "disabled": false,
+    "info": "Move's reposition carrier (#239) against ArduCopter sysid 1: the same DO_REPOSITION goto SITL 19 flies through the Command node, routed instead through mavlink-move with carrier=reposition. Same target coordinates as 19 on purpose — the carrier is the only variable, so a difference in outcome isolates it.",
+    "env": []
+  },
+  {
+    "id": "sitl37-comment",
+    "type": "comment",
+    "z": "sitl37-tab",
+    "name": "Move carrier=reposition — ACKed guided goto",
+    "info": "Flow: Arm (COMMAND_LONG) -> Takeoff 10 m (COMMAND_LONG) -> delay -> Move reposition (COMMAND_INT / DO_REPOSITION, GLOBAL_RELATIVE_ALT).\n\nPrerequisite: ArduCopter in GUIDED before the chain fires (harness prep ap-guided-1). CHANGE_MODE is deliberately OFF here — this measures the plain guided goto; the without-GUIDED and CHANGE_MODE cases are separate runs.\n\nWhat this run measures (§14 — nothing ships as an advisory until it does):\n1. AP accepts DO_REPOSITION from Move and the COMMAND_ACK reaches output 1 with resultCode 0.\n2. param4 yaw is RADIANS on the wire. Yaw is set to 90 degrees, so a correct encode turns the vehicle EAST (pi/2 rad). The dialect and MAVSDK both say radians but that is source-read, not measured; if the vehicle ends on any other heading the conversion is wrong.\n3. Blank speed and blank radius encode the spec sentinels (-1 = vehicle default, 0 = ignored) without disturbing the goto.\n\nCompare against SITL 19, which sends the identical goto via mavlink-command."
+  },
+  {
+    "id": "sitl37-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl37-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl37-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "vehicle": "sitl37-vehicle",
+    "localIdentity": "sitl37-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl37-inject",
+    "type": "inject",
+    "z": "sitl37-tab",
+    "name": "Arm + takeoff + Move reposition",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 160,
+    "wires": [
+      [
+        "sitl37-arm"
+      ]
+    ]
+  },
+  {
+    "id": "sitl37-arm",
+    "type": "mavlink-command",
+    "z": "sitl37-tab",
+    "name": "Arm (confirm ACK)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl37-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "carrier": "long",
+    "frame": "",
+    "x": 420,
+    "y": 160,
+    "wires": [
+      [
+        "sitl37-takeoff"
+      ],
+      [
+        "sitl37-arm-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl37-takeoff",
+    "type": "mavlink-command",
+    "z": "sitl37-tab",
+    "name": "Takeoff 10 m (confirm ACK)",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl37-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"7\":10}",
+    "carrier": "long",
+    "frame": "",
+    "x": 660,
+    "y": 160,
+    "wires": [
+      [
+        "sitl37-climb"
+      ],
+      [
+        "sitl37-takeoff-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl37-climb",
+    "type": "delay",
+    "z": "sitl37-tab",
+    "name": "let the climb finish",
+    "pauseType": "delay",
+    "timeout": "8",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 890,
+    "y": 160,
+    "wires": [
+      [
+        "sitl37-reposition"
+      ]
+    ]
+  },
+  {
+    "id": "sitl37-reposition",
+    "type": "mavlink-move",
+    "z": "sitl37-tab",
+    "name": "Move goto (carrier reposition)",
+    "identity": "",
+    "connection": "sitl37-connection",
+    "delivery": "confirm",
+    "carrier": "reposition",
+    "mode": "position",
+    "frame": "GLOBAL_RELATIVE_ALT",
+    "speed": "",
+    "radius": "",
+    "changeMode": false,
+    "ackTimeout": "",
+    "px4Compat": true,
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "north": 0,
+    "east": 0,
+    "up": 0,
+    "vNorth": 0,
+    "vEast": 0,
+    "vUp": 0,
+    "aNorth": 0,
+    "aEast": 0,
+    "aUp": 0,
+    "lat": -35.3591,
+    "lon": 149.16,
+    "alt": 20,
+    "yaw": 90,
+    "yawRate": "",
+    "rateHz": 5,
+    "ttlMs": 3000,
+    "x": 1140,
+    "y": 160,
+    "wires": [
+      [
+        "sitl37-success"
+      ],
+      [
+        "sitl37-reposition-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl37-arm-status",
+    "type": "debug",
+    "z": "sitl37-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 420,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl37-takeoff-status",
+    "type": "debug",
+    "z": "sitl37-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 660,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl37-reposition-status",
+    "type": "debug",
+    "z": "sitl37-tab",
+    "name": "reposition status (resultCode + retries)",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1140,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl37-success",
+    "type": "debug",
+    "z": "sitl37-tab",
+    "name": "Move reposition accepted",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1420,
+    "y": 160,
+    "wires": []
+  }
+]

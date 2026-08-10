@@ -242,6 +242,13 @@ const PROFILE = {
     notes:
       'Flow-level State snapshot after takeoff+move; hard §8 field asserts in sitl/measure-peer-table.js',
   },
+  '37-move-reposition-carrier': {
+    waitMs: 55000,
+    expect: 'Move carrier=reposition goto accepted; yaw 90 deg turns east',
+    prep: 'ap-guided-1',
+    notes:
+      'Same goto as 19 through mavlink-move instead of mavlink-command — carrier is the only variable. Measures: ACK reaches output 1 with resultCode 0; param4 yaw is radians (90 deg must end EAST, not some wrapped heading); blank speed/radius encode the -1/0 sentinels. CHANGE_MODE off — without-GUIDED and CHANGE_MODE are separate runs.',
+  },
 };
 
 function req(method, urlPath, body, headers = {}) {
