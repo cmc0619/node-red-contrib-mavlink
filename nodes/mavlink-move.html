@@ -6,8 +6,31 @@
       name: { value: '' },
       identity: { value: '' },
       delivery: { value: 'build' },
+      // setpoint = SET_POSITION_TARGET_* (streams, offboard); reposition =
+      // COMMAND_INT / DO_REPOSITION, the ACKed guided goto (#239).
+      carrier: { value: 'setpoint' },
       mode: { value: 'position' },
       frame: { value: 'LOCAL_NED' },
+      // Reposition params. Blank encodes the spec's no-change sentinel at
+      // runtime (speed −1 = vehicle default, radius 0 = ignored, yaw NaN =
+      // current heading mode — the command-preset blankParams convention).
+      speed: { value: '', validate: RED.validators.number(true) },
+      radius: { value: '', validate: RED.validators.number(true) },
+      // MAV_DO_REPOSITION_FLAGS_CHANGE_MODE: flies the vehicle into guided —
+      // a mode change, so an explicit opt-in, default off.
+      changeMode: { value: false },
+      // Blank inherits the AckWaiter default (10 s), like mavlink-command.
+      // Zero or negative is not a shorter wait, it is an ack timer that fires
+      // before the vehicle can answer, so the wait must be positive. Two args
+      // so the reason renders (§14).
+      ackTimeout: {
+        value: '',
+        validate: function (v, _opt) {
+          if (RED.mavlink.isBlank(v)) return true;
+          return (Number.isFinite(Number(v)) && Number(v) > 0)
+            || 'must be a number of milliseconds greater than 0';
+        },
+      },
       // Default on: checked emits the deprecated *_INT global frame numbers
       // (5/6/11) PX4 requires; unchecked emits the spec-current 0/3/10
       // (§ "Move setpoint matrix", owner-ruled 2026-08-09).
@@ -92,6 +115,35 @@
        * Companion (wire) → target sysid AND compid hidden (derived from airframe).
        */
       function refreshVisibility() {
+        var carrier = $('#node-input-carrier').val() || 'setpoint';
+        var isReposition = carrier === 'reposition';
+
+        // Reposition implies position semantics on a global frame: the mode
+        // select is coerced (and hidden below) so a stale setpoint mode never
+        // deploys into a per-input refusal, and the frame select keeps only
+        // the two frames DO_REPOSITION rides (COMMAND_INT wants the
+        // spec-current 0/3 — no *_INT twin, so no PX4-compat checkbox either).
+        if (isReposition) {
+          $('#node-input-mode').val('position');
+          var savedFrame = $('#node-input-frame').val();
+          if (savedFrame !== 'GLOBAL' && savedFrame !== 'GLOBAL_RELATIVE_ALT') {
+            $('#node-input-frame').val('GLOBAL_RELATIVE_ALT');
+          }
+        }
+        $('#node-input-frame optgroup[label="Local"]').toggle(!isReposition).prop('disabled', isReposition);
+        $('#node-input-frame option[value="GLOBAL_TERRAIN_ALT"]').toggle(!isReposition).prop('disabled', isReposition);
+
+        // Delivery tiers follow the carrier (§9: tiers are computed, not
+        // fixed): setpoints stream and carry no ack; reposition confirms via
+        // COMMAND_ACK and cannot stream. An option invalid for the carrier
+        // falls back to Send — still a wire tier.
+        $('#node-input-delivery option[value="stream"]').toggle(!isReposition).prop('disabled', isReposition);
+        $('#node-input-delivery option[value="confirm"]').toggle(isReposition).prop('disabled', !isReposition);
+        var liveDelivery = $('#node-input-delivery').val();
+        if ((isReposition && liveDelivery === 'stream') || (!isReposition && liveDelivery === 'confirm')) {
+          $('#node-input-delivery').val('send');
+        }
+
         var mode = $('#node-input-mode').val() || 'position';
         var frame = $('#node-input-frame').val() || 'LOCAL_NED';
         var delivery = $('#node-input-delivery').val() || 'build';
@@ -122,6 +174,7 @@
           identity: isWire,
           targetSystem: tgt.targetSystem,
           targetComponent: tgt.targetComponent,
+          mode: !isReposition,
           north: usesPosition && !isGlobalFrame,
           east: usesPosition && !isGlobalFrame,
           up: usesPosition && !isGlobalFrame,
@@ -135,13 +188,22 @@
           aEast: usesAccel,
           aUp: usesAccel,
           yaw: true,
-          yawRate: true,
-          px4Compat: isGlobalFrame,
+          yawRate: !isReposition,
+          speed: isReposition,
+          radius: isReposition,
+          changeMode: isReposition,
+          px4Compat: isGlobalFrame && !isReposition,
           rate: delivery === 'stream',
-          ttl: delivery === 'stream'
+          ttl: delivery === 'stream',
+          ackTimeout: delivery === 'confirm'
         };
 
         $('#row-move-identity').toggle(!!show.identity);
+        $('#row-move-mode').toggle(!!show.mode);
+        $('#row-move-speed').toggle(!!show.speed);
+        $('#row-move-radius').toggle(!!show.radius);
+        $('#row-move-changeMode').toggle(!!show.changeMode);
+        $('#row-move-ackTimeout').toggle(!!show.ackTimeout);
         $('#row-move-north').toggle(!!show.north);
         $('#row-move-east').toggle(!!show.east);
         $('#row-move-up').toggle(!!show.up);
@@ -177,6 +239,7 @@
         );
       }
 
+      $('#node-input-carrier').on('change', refreshVisibility);
       $('#node-input-mode').on('change', refreshVisibility);
       $('#node-input-frame').on('change', refreshVisibility);
       $('#node-input-delivery').on('change', function () {
@@ -210,8 +273,12 @@
   <div class="form-row" id="row-move-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-move-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
   <div class="form-row" id="row-move-identity"><label for="node-input-identity">Send as</label><select id="node-input-identity" style="width:70%"></select></div>
-  <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="stream">Stream</option></select></div>
-  <div class="form-row"><label for="node-input-mode">Mode</label><select id="node-input-mode">
+  <div class="form-row" id="row-move-carrier"><label for="node-input-carrier">Carrier</label><select id="node-input-carrier">
+    <option value="setpoint">Setpoint (stream / offboard)</option>
+    <option value="reposition">Reposition (guided goto, ACKed)</option>
+  </select></div>
+  <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option><option value="stream">Stream</option></select></div>
+  <div class="form-row" id="row-move-mode"><label for="node-input-mode">Mode</label><select id="node-input-mode">
     <option value="position">Position</option>
     <option value="velocity">Velocity</option>
     <option value="position-velocity">Position + Velocity</option>
@@ -248,19 +315,26 @@
   <div class="form-row" id="row-move-aUp"><label for="node-input-aUp" id="label-move-aUp">Accel up</label><input type="text" id="node-input-aUp" step="any" style="width:120px"> m/s²</div>
   <div class="form-row" id="row-move-yaw"><label for="node-input-yaw">Yaw</label><input type="text" id="node-input-yaw" step="any" style="width:120px"> deg</div>
   <div class="form-row" id="row-move-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="text" id="node-input-yawRate" step="any" style="width:120px"> deg/s</div>
+  <div class="form-row" id="row-move-speed"><label for="node-input-speed">Ground speed</label><input type="text" id="node-input-speed" step="any" style="width:120px" placeholder="(vehicle default)"> m/s</div>
+  <div class="form-row" id="row-move-radius"><label for="node-input-radius">Loiter radius</label><input type="text" id="node-input-radius" step="any" style="width:120px" placeholder="(ignored)"> m</div>
+  <div class="form-row" id="row-move-changeMode"><label for="node-input-changeMode">Change mode</label><input type="checkbox" id="node-input-changeMode" style="display:inline-block;width:auto;"> <span class="form-tips">fly the vehicle into guided mode to execute the goto — a mode change, off by default</span></div>
+  <div class="form-row" id="row-move-ackTimeout"><label for="node-input-ackTimeout">ACK timeout</label><input type="number" id="node-input-ackTimeout" style="width:80px" placeholder="10000"> ms</div>
   <div class="form-row" id="row-move-rate"><label for="node-input-rateHz">Stream rate</label><input type="number" id="node-input-rateHz" min="0.1" step="any" style="width:80px"> Hz</div>
   <div class="form-row" id="row-move-ttl"><label for="node-input-ttlMs">TTL</label><input type="number" id="node-input-ttlMs" style="width:80px"> ms</div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-move">
-  <p>Builds or sends SET_POSITION_TARGET_* messages. Vertical inputs — altitude, climb, vertical acceleration — are entered up-positive everywhere; the node flips them once to MAVLink NED down-positive values. The type_mask is computed from the mode; you never enter a bitmask. For a one-shot GCS-style "go to" with an acknowledgement, use mavlink-command's <b>Go To / Reposition</b> preset instead — setpoints carry no ack; Move is the streaming/offboard path.</p>
+  <p>Builds or sends vehicle movement commands. Vertical inputs — altitude, climb, vertical acceleration — are entered up-positive everywhere; the node flips them once to MAVLink NED down-positive values. The type_mask is computed from the mode; you never enter a bitmask.</p>
+  <p><b>Carrier</b> picks the wire message. <i>Setpoint</i> (default) sends SET_POSITION_TARGET_* — the streaming/offboard path; setpoints carry no acknowledgement. <i>Reposition</i> sends <code>MAV_CMD_DO_REPOSITION</code> as <code>COMMAND_INT</code> — the one-shot GCS-style guided goto, and the vehicle answers with a COMMAND_ACK. A <code>msg.payload.carrier</code> of <code>"setpoint"</code> or <code>"reposition"</code> overrides the configured carrier, like mode and frame.</p>
+  <p>The reposition carrier is position-only on frames <i>Global, altitude above home</i> (3) or <i>Global, absolute altitude</i> (0): setpoint modes (velocity, acceleration, yaw only), local and terrain frames, yaw rate, and Stream delivery all refuse with named errors. Latitude/longitude are entered in degrees; yaw is entered in degrees and converted once to the radians the dialect declares for DO_REPOSITION. Blank optional params send the spec's no-change sentinels, matching what QGC and MAVSDK transmit: blank <b>Ground speed</b> → −1 (vehicle default), blank <b>Loiter radius</b> → 0 (ignored), blank <b>Yaw</b> → NaN (keep the current heading mode; an explicit 0 commands north). <b>Change mode</b> sets MAV_DO_REPOSITION_FLAGS_CHANGE_MODE, telling the vehicle to fly itself into guided mode to execute the goto — it is a mode change and therefore an explicit opt-in (checkbox, or boolean <code>msg.payload.changeMode</code>).</p>
+  <p>On <b>Send &amp; confirm</b> delivery (reposition only) the node waits for the terminal COMMAND_ACK: output 0 fires on <code>ACCEPTED</code> with a <code>succeeded</code> record carrying <code>resultCode</code> 0; every other terminal result — <code>DENIED</code>, <code>COMMAND_INT_ONLY</code>, <code>COMMAND_UNSUPPORTED_MAV_FRAME</code>, … — fails on output 1 with its MAV_RESULT name and code, and a missing ack reports <code>timeout</code>. <code>TEMPORARILY_REJECTED</code> retries with back-off before failing. <b>ACK timeout</b> (blank = 10 s) bounds the wait.</p>
   <p><b>Mode</b> picks what drives the vehicle: <i>Position</i>, <i>Velocity</i>, <i>Position + Velocity</i> (feed-forward), <i>Acceleration</i>, or <i>Yaw only</i>. Yaw and yaw rate are entered in degrees (deg, deg/s) and converted once to the radians on the wire. Both are optional on every mode — blank means ignored, a value (including 0) means commanded; Yaw only requires at least one of them.</p>
-  <p><b>Frame</b> picks the reference and the carrier message: local frames (world NED, offset-from-current, body offset, body NED) send <code>SET_POSITION_TARGET_LOCAL_NED</code>; global frames (altitude above home, absolute MSL, terrain) send <code>SET_POSITION_TARGET_GLOBAL_INT</code> with lat/lon entered in degrees. Field labels follow the frame — body frames read forward/right.</p>
+  <p><b>Frame</b> picks the reference and, on the setpoint carrier, the wire message: local frames (world NED, offset-from-current, body offset, body NED) send <code>SET_POSITION_TARGET_LOCAL_NED</code>; global frames (altitude above home, absolute MSL, terrain) send <code>SET_POSITION_TARGET_GLOBAL_INT</code> with lat/lon entered in degrees. Field labels follow the frame — body frames read forward/right.</p>
   <p><b>PX4 compat</b> (default on, global frames only) transmits each global frame as its deprecated <code>*_INT</code> number (5/6/11) — what PX4 requires and every current stack accepts. Untick to transmit the spec-current numbers (0/3/10): PX4 rejects those on <code>SET_POSITION_TARGET_GLOBAL_INT</code> and discards the setpoint (source-read, not yet measured), so unticking under a PX4 profile raises a warning. The message is still sent as configured.</p>
   <p><b>Frame semantics differ per firmware</b> (measured in SITL, §14). ArduPilot reads <i>offset from current</i>, <i>body offset</i> and <i>body NED</i> all as offsets from where the vehicle is now; PX4 ignores both OFFSET frames outright and does <i>not</i> treat body NED as an offset. On PX4, prefer <b>Local NED</b> for position setpoints. Because a zero is "no change" only in a true offset frame, a blank coordinate is accepted (as a zero offset) in <i>offset from current</i> and <i>body offset</i>, and refused everywhere else rather than silently commanding the local origin.</p>
   <p>Combinations measured as unsupported — OFFSET or body-NED frames on PX4 — are still sent but raise a node warning, since setpoints carry no acknowledgement.</p>
-  <p>Mode, frame, and delivery reshape the form (§6): only the parameters for the selection are shown. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
-  <p>On <b>Build</b> delivery the Dialect dropdown selects the bundled dialect used for catalogs; choose <i>from Vehicle Profile…</i> to inherit dialect and target defaults from a Vehicle Profile. On <b>Send</b> or <b>Stream</b> delivery a Connection is required and the Send-as identity determines addressing: a companion identity derives the target sysid from its airframe and pins compid to 1 (the autopilot).</p>
+  <p>Carrier, mode, frame, and delivery reshape the form (§6): only the parameters for the selection are shown. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery; the reposition params and ACK timeout only for their carrier and tier.</p>
+  <p>On <b>Build</b> delivery the Dialect dropdown selects the bundled dialect used for catalogs; choose <i>from Vehicle Profile…</i> to inherit dialect and target defaults from a Vehicle Profile. On <b>Send</b>, <b>Send &amp; confirm</b>, or <b>Stream</b> delivery a Connection is required and the Send-as identity determines addressing: a companion identity derives the target sysid from its airframe and pins compid to 1 (the autopilot).</p>
   <p>Output 0 continues only on success, once per input. Output 1 carries the status record for every outcome.</p>
   <p>On <b>Stream</b> delivery a running stream ends three ways. When the <b>TTL</b> elapses the node sends the zero-velocity brake and reports on output 1 with <code>detail: "expired"</code> and <code>sent</code> (setpoints handed to the connection — the streaming link may coalesce under backpressure, so this counts sends, not wire deliveries) — switch on the detail to run whatever follows a timed move; deliberately not on output 0, since that port is a trigger and the stream's start already fired it. If the expiry brake send itself fails, <code>detail</code> stays <code>"expired"</code> and the failure rides a <code>brakeError</code> field. An input of <code>{action: "stop"}</code> halts the stream, sends the brake, and completes like any input — output 0 fires once, and the status record carries <code>detail: "stopped"</code> with <code>sent</code>; a stop with nothing streaming succeeds with <code>detail: "no stream"</code>, and the action is refused on Build and Send delivery. A <b>new input</b> replaces the stream as a direct handover — no brake between consecutive targets, matching GCS practice; retargeting a different vehicle brakes the abandoned target once the new stream is live. A redeploy closes the node and brakes. A stream that keeps running through send failures reports once per failure streak on output 1 and never quits on its own — the firmware's setpoint watchdog is the failsafe on a dead link.</p>
 </script>

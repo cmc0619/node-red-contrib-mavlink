@@ -126,10 +126,47 @@ module.exports = function registerMavlinkMission(RED) {
       }
       const missionType = missionTypeValue(missionTypeKey);
 
+      // A download or upload is a two-way conversation with one vehicle: the
+      // machine subscribes exact-match on the target sysid, and no vehicle
+      // sources sysid 0 — a broadcast transfer starts the protocol on every
+      // vehicle on the link and can never match a reply (§10 refuses mission
+      // transfer steps for fan-out for the same reason). Refused on every
+      // tier: a built broadcast plan forwarded to mavlink-out is the same
+      // fleet-wide transfer. Clear stays a single addressed message that
+      // legitimately fans out (§10) and is not gated here.
+      if (target.sysid === 0 && operation !== OPERATION.CLEAR) {
+        const rec = record(operation, missionTypeKey, target, {
+          result: 'failed',
+          phase: 'broadcast',
+          reason: `mission ${operation} cannot target broadcast (sysid 0) — no vehicle answers as sysid 0; address one vehicle`,
+        });
+        applyActionStatus(node, 'error', `no broadcast ${operation}`);
+        send([null, rec]);
+        done(new Error(`mavlink-mission: ${rec.reason}`));
+        return;
+      }
+
       // Upload item source: msg.payload.items overrides configured items.
       let uploadItems = [];
       if (operation === OPERATION.UPLOAD) {
         uploadItems = resolveItems(config, payload);
+        // MISSION_COUNT 0 is the wire's "erase the plan": an empty upload
+        // would silently clear the vehicle mission and report success,
+        // bypassing the confirmation gate the explicit Clear path has (#241).
+        // The items source is dynamic (payload overrides config), so this is
+        // a runtime boundary; refused before anything is built or sent, on
+        // every tier.
+        if (uploadItems.length === 0) {
+          const rec = record(operation, missionTypeKey, target, {
+            result: 'failed',
+            phase: 'empty',
+            reason: 'upload requires at least one item — an empty upload would erase the plan; use the Clear operation instead',
+          });
+          applyActionStatus(node, 'error', 'no items to upload');
+          send([null, rec]);
+          done(new Error(`mavlink-mission: ${rec.reason}`));
+          return;
+        }
         const check = validateItems(uploadItems, missionType);
         if (!check.ok) {
           const rec = record(operation, missionTypeKey, target, {
@@ -323,7 +360,7 @@ function buildPlan(operation, missionType, target, items) {
 
 /**
  * Resolve upload items: the payload overrides the configured JSON, which the
- * editor validates (array or blank) — the runtime just reads it.
+ * editor validates (non-empty array or blank) — the runtime just reads it.
  *
  * @param {object} config
  * @param {object} payload

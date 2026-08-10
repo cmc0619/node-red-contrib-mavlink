@@ -5,11 +5,15 @@ const {
   createMoveStream,
   streamLocks,
   advisoryFor,
+  resolveMoveCarrier,
+  buildRepositionMessage,
   positionFrom,
   velocityFrom,
   accelFrom,
   valueFrom,
 } = require('../lib/move');
+const { AckWaiter } = require('../lib/command');
+const { DEFAULT_MAX_RESENDS } = require('../lib/command/ack');
 const { BAND } = require('../lib/connection/bands');
 const { firstDefined, isBlank, resolveDeliveryContext, applyConnectionStatus } = require('../lib/addressing');
 const {
@@ -26,6 +30,9 @@ module.exports = function registerMavlinkMove(RED) {
     let stream = null;
     let streamKey = null;
     let releaseStream = null;
+    // Reposition-carrier confirm transaction — at most one in flight per node,
+    // like the Command node's waiter (§9).
+    let activeWaiter = null;
     // Last advisory warned, for per-streak dedup (C8): a refresh-fed stream
     // repeating the same combo would spam the debug sidebar, and noise gets
     // ignored. Redeploy resets naturally — new node instance.
@@ -53,6 +60,72 @@ module.exports = function registerMavlinkMove(RED) {
         releaseStream = null;
         streamKey = null;
       }
+    }
+
+    // Wait for the DO_REPOSITION COMMAND_ACK on the shared Command machinery
+    // (§9): AckWaiter matches by (command, source), retries
+    // TEMPORARILY_REJECTED, and re-arms on IN_PROGRESS. A goto re-sent is the
+    // same goto, so auto-retry is safe. Every non-accepted terminal —
+    // COMMAND_INT_ONLY (8) and UNSUPPORTED_MAV_FRAME (9) included — is a
+    // failure with its MAV_RESULT name, never silence; Move does no carrier
+    // swap, because DO_REPOSITION is COMMAND_INT-only by spec and ArduPilot.
+    async function confirmReposition(message, target, identityId, connectionNode, send, done) {
+      if (activeWaiter) {
+        activeWaiter.cancel();
+        activeWaiter = null;
+      }
+      applyActionStatus(node, 'sending', 'reposition…');
+      const waiter = new AckWaiter({
+        subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
+        // COMMAND_INT has no confirmation byte, so the retry counter is unused.
+        sendFn: () => connectionNode.send(message, { band: BAND.CONTROL, target, identityId }),
+        commandId: message.fields.command,
+        targetSystem: target.sysid,
+        targetComponent: target.compid,
+        // Ack attribution (§9): ignore an ack explicitly addressed to a
+        // different GCS on a shared link.
+        sourceIds: connectionNode.resolveSourceIds(identityId),
+        // Blank inherits the AckWaiter default, like the Command node's field.
+        timeoutMs: isBlank(config.ackTimeout) ? undefined : Number(config.ackTimeout),
+        // A re-sent goto is the same goto, so this carrier opts into the
+        // timeout re-send the library leaves off by default (#249).
+        maxResends: DEFAULT_MAX_RESENDS,
+      });
+      activeWaiter = waiter;
+      let outcome;
+      try {
+        outcome = await waiter.start();
+      } finally {
+        if (activeWaiter === waiter) activeWaiter = null;
+      }
+      if (outcome.result === 'cancelled') {
+        // A redeploy cancelled the wait (close() below): the node is being
+        // torn down, so finish quietly — same rule as mavlink-command.
+        done();
+        return;
+      }
+      const shared = { message, resultCode: outcome.resultCode, retries: outcome.retries, elapsed: outcome.elapsed };
+      if (outcome.result === 'accepted') {
+        completeResult(node, send, 'succeeded', 'accepted', shared);
+        done();
+        return;
+      }
+      if (outcome.result === 'timeout') {
+        // No completion condition exists for a goto in this node, so a lost
+        // ack stays what it is: an unanswered wait, reported as timeout.
+        applyActionStatus(node, 'error', 'reposition timeout');
+        send([null, statusRecord('timeout', outcome.detail, shared)]);
+        done(new Error('Move reposition timed out waiting for COMMAND_ACK'));
+        return;
+      }
+      // Terminal failure — the record's detail names the MAV_RESULT
+      // ('denied', 'command_int_only', 'command_unsupported_mav_frame', …).
+      applyActionStatus(node, 'error', `reposition ${outcome.result}`);
+      send([
+        null,
+        statusRecord('failed', outcome.detail ? `${outcome.result}: ${outcome.detail}` : outcome.result, shared),
+      ]);
+      done(new Error(`Move reposition ${outcome.result}`));
     }
 
     node.on('input', (msg, send, done) => {
@@ -100,6 +173,61 @@ module.exports = function registerMavlinkMove(RED) {
           payload,
           connectionNode: connAtDeploy,
         });
+
+        // Carrier: setpoint (SET_POSITION_TARGET_*) or reposition
+        // (COMMAND_INT / DO_REPOSITION, #239). Payload override inherits like
+        // mode/frame; blank resolves setpoint — the safe direction for a flow
+        // saved before the field existed.
+        const carrier = resolveMoveCarrier(firstDefined(payload.carrier, config.carrier));
+
+        if (carrier === 'reposition') {
+          if (delivery === 'stream') {
+            // A streamed reposition is a setpoint's job — COMMAND_INT has no
+            // streaming semantics. Thrown before any stream bookkeeping, so a
+            // payload-carrier override never disturbs a running stream.
+            throw new Error('Move reposition cannot stream — DO_REPOSITION is a one-shot command; use the setpoint carrier for streams');
+          }
+          const message = buildRepositionMessage({
+            mode: firstDefined(payload.mode, config.mode),
+            frame: firstDefined(payload.frame, config.frame),
+            target,
+            position: payload.position || positionFrom(config),
+            speed: valueFrom(payload, config, 'speed'),
+            radius: valueFrom(payload, config, 'radius'),
+            yaw: valueFrom(payload, config, 'yaw'),
+            yawRate: valueFrom(payload, config, 'yawRate'),
+            // CHANGE_MODE flies the vehicle into guided — an explicit boolean
+            // opt-in (editor checkbox, payload override), never a truthy token.
+            changeMode: firstDefined(payload.changeMode, config.changeMode),
+          });
+          // No advisories on this carrier: the ack is the feedback channel,
+          // and every advisory candidate still needs SITL measurement (§14).
+          if (delivery === 'build') {
+            completeBuild(node, send, message);
+          } else {
+            if (!connectionNode) {
+              throw new Error('mavlink-move requires a Connection for send/confirm delivery');
+            }
+            if (delivery === 'confirm') {
+              // Async: the ack arrives later. done() is owned by the confirm
+              // flow; a throw anywhere in it fails this input like any other.
+              confirmReposition(message, target, identityId, connectionNode, send, done)
+                .catch((err) => failInput(node, send, err, done));
+              return;
+            }
+            // Send tier: commands ride the Control band, not Streaming.
+            connectionNode.send(message, { band: BAND.CONTROL, target, identityId });
+            completeResult(node, send, 'succeeded', 'sent', { message });
+          }
+          done();
+          return;
+        }
+
+        if (delivery === 'confirm') {
+          // Setpoints carry no acknowledgement of any kind (§9) — there is
+          // nothing for confirm to wait on.
+          throw new Error('Move setpoints carry no acknowledgement — Send & confirm requires the reposition carrier');
+        }
 
         const moveInput = {
           // Blank means inherit (§6): a payload mode/frame of undefined, null,
@@ -265,6 +393,12 @@ module.exports = function registerMavlinkMove(RED) {
     });
 
     node.on('close', (done) => {
+      // An in-flight reposition confirm resolves 'cancelled' and finishes
+      // quietly — a redeploy is not a failed command.
+      if (activeWaiter) {
+        activeWaiter.cancel();
+        activeWaiter = null;
+      }
       // Close is an end of control, so it brakes — but the brake is the last
       // thing this node ever sends, and a dead link at teardown must not stop
       // the teardown (the firmware's setpoint watchdog covers the vehicle).
@@ -294,8 +428,9 @@ function completeBuild(node, send, message) {
  * @param {object} node
  * @param {Function} send
  * @param {string} result  'succeeded'
- * @param {string} detail  'sent' | 'streaming' | 'stopped' | 'no stream'
- * @param {object} fields  payload/record fields (message, and `sent` on stops)
+ * @param {string} detail  'sent' | 'streaming' | 'stopped' | 'no stream' | 'accepted'
+ * @param {object} fields  payload/record fields (message, `sent` on stops,
+ *   resultCode/retries/elapsed on reposition confirms)
  */
 function completeResult(node, send, result, detail, fields) {
   applyActionStatus(node, 'ok', detail);

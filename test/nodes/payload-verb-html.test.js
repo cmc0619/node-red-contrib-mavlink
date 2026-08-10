@@ -297,7 +297,7 @@ test('payload frame row binds to the frame property and follows the INT carrier 
   assert.match(
     payloadHtml,
     /frame:\s*\{ value: '' \}/,
-    'frame is declared in defaults (blank = builder default GLOBAL) so the selection persists'
+    'frame is declared in defaults (blank = builder default GLOBAL_RELATIVE_ALT) so the selection persists'
   );
   assert.match(payloadHtml, /row-payload-frame/, 'frame row id must exist');
   assert.match(payloadHtml, /\$\('#node-input-carrier'\)\.on\('change'/, 'carrier change re-evaluates the frame row');
@@ -311,6 +311,20 @@ test('payload frame row binds to the frame property and follows the INT carrier 
     (payloadHtml.match(/#row-payload-frame'\)\.toggle/g) || []).length,
     1,
     'the frame-row rule is written once'
+  );
+});
+
+test('payload frame dropdown: blank names the wire default (relative alt); frame 0 reachable (#247)', () => {
+  // Blank wires the carrier module's DEFAULT_FRAME — GLOBAL_RELATIVE_ALT (3),
+  // §14 — so the label must say relative alt, and AMSL (frame 0) must be its
+  // own option rather than a claim the default never honoured.
+  const { DEFAULT_FRAME, MAV_FRAME } = require('../../lib/command/carrier');
+  assert.equal(DEFAULT_FRAME, MAV_FRAME.GLOBAL_RELATIVE_ALT, 'the blank label below pins to this default');
+  assert.match(payloadHtml, /<option value="">Global, relative alt \(default\)<\/option>/);
+  assert.match(payloadHtml, /<option value="0">Global, absolute alt \(AMSL\)<\/option>/);
+  assert.ok(
+    !payloadHtml.includes('Global, absolute alt (default)'),
+    'the old label promised AMSL while blank wired 3'
   );
 });
 

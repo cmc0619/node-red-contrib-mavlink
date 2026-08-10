@@ -6,12 +6,25 @@
  * require-signed checkboxes — those two remain independent policy switches
  * (outbound signing, inbound rejection), not gates on whether a key exists to
  * verify against at all.
+ *
+ * Also the verdict→surface wiring (issue #243): rejected inbound frames must
+ * produce an operator-visible signal — a per-streak deduped warn and a badge
+ * naming the reason — and the accept-invalid recovery override must show the
+ * connection as untrusted conspicuously (DESIGN.md §7).
  */
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
-const { buildSigning } = require('../../nodes/mavlink-connection');
+const {
+  buildSigning,
+  makeRejectedHandler,
+  applyStatus,
+} = require('../../nodes/mavlink-connection');
+const { SigningState, timestampFromMs, ONE_MINUTE_UNITS, STATE } = require('../../lib/connection');
+const { BADGE_MAX } = require('../../lib/delivery');
 
 test('a passphrase alone (both checkboxes off) still derives a key', () => {
   const signing = buildSigning(
@@ -66,4 +79,162 @@ test('a malformed raw key fails loud naming the requirement', () => {
   // Too short, and non-hex characters — both must reject, never truncate/pad.
   assert.throws(() => buildSigning({}, { signingKeyHex: 'abc123' }), /64 hex characters/);
   assert.throws(() => buildSigning({}, { signingKeyHex: 'zz'.repeat(32) }), /64 hex characters/);
+});
+
+// ── issue #243: rejected-frame surfacing and the untrusted badge ─────────────
+
+/** @returns {{node: object, warns: string[], statuses: object[]}} */
+function statusNode() {
+  const warns = [];
+  const statuses = [];
+  return {
+    node: { warn: (m) => warns.push(m), status: (s) => statuses.push(s) },
+    warns,
+    statuses,
+  };
+}
+
+test('rejections warn once per consecutive same-reason streak (#243)', () => {
+  const { node, warns, statuses } = statusNode();
+  const handler = makeRejectedHandler(node, { hasKey: false, acceptInvalid: false });
+
+  handler({ reason: 'invalid-signature' });
+  handler({ reason: 'invalid-signature' });
+  handler({ reason: 'invalid-signature' });
+  assert.equal(warns.length, 1, 'a stream of same-reason drops warns exactly once');
+  assert.equal(statuses.length, 1);
+
+  // A different reason starts a new streak, and the first reason returning
+  // after it warns again — dedup is per streak, not per deploy.
+  handler({ reason: 'unsigned-rejected-require-signed' });
+  handler({ reason: 'invalid-signature' });
+  assert.equal(warns.length, 3);
+});
+
+test('no key configured: the surface names the missing key, not the vehicle (#243)', () => {
+  // With no key every signed frame verifies false, so "invalid signature"
+  // alone would send the operator to the vehicle. The gap is on this side.
+  const { node, warns, statuses } = statusNode();
+  makeRejectedHandler(node, { hasKey: false, acceptInvalid: false })({
+    reason: 'invalid-signature',
+  });
+  assert.match(warns[0], /dropping signed traffic — no key configured/);
+  assert.deepEqual(statuses[0], { fill: 'yellow', shape: 'ring', text: 'drop: no signing key' });
+});
+
+test('with a key present the same verdict reads as verification failure', () => {
+  const { node, warns, statuses } = statusNode();
+  makeRejectedHandler(node, { hasKey: true, acceptInvalid: false })({
+    reason: 'invalid-signature',
+  });
+  assert.match(warns[0], /signature verification failed/);
+  assert.equal(statuses[0].text, 'drop: invalid signature');
+});
+
+/**
+ * Drive SigningState through every rejecting path so the surface is pinned to
+ * the verdict vocabulary that actually exists, not to a hand-copied list.
+ *
+ * @returns {string[]} every distinct reject reason
+ */
+function liveRejectReasons() {
+  const now = 4_000_000_000_000; // any modern clock ms
+  const signed = (timestamp) => ({
+    sysid: 1, compid: 1, linkId: 0, timestamp,
+    signaturePresent: true, signatureValid: true, messageName: 'ATTITUDE',
+  });
+  const reasons = [];
+
+  reasons.push(
+    new SigningState({ requireSigned: true }).acceptInbound(
+      { ...signed(0), signaturePresent: false }, now
+    ).reason
+  );
+  reasons.push(
+    new SigningState({}).acceptInbound({ ...signed(0), signatureValid: false }, now).reason
+  );
+  reasons.push(new SigningState({}).acceptInbound(signed(0), now).reason); // first contact, stale
+
+  const fresh = timestampFromMs(now);
+  let state = new SigningState({});
+  state.acceptInbound(signed(fresh), now);
+  reasons.push(state.acceptInbound(signed(fresh), now).reason); // not greater than last
+
+  state = new SigningState({});
+  const floorEdge = timestampFromMs(now) - ONE_MINUTE_UNITS;
+  state.acceptInbound(signed(floorEdge), now);
+  const later = now + 10 * 60 * 1000;
+  reasons.push(state.acceptInbound(signed(floorEdge + 1), later).reason); // monotonic but stale
+
+  return reasons;
+}
+
+test('every live reject reason surfaces with a badge inside the §6 cap', () => {
+  const reasons = liveRejectReasons();
+  assert.deepEqual(
+    [...new Set(reasons)].sort(),
+    [
+      'first-contact-too-old',
+      'invalid-signature',
+      'replay-or-out-of-order',
+      'too-old',
+      'unsigned-rejected-require-signed',
+    ],
+    'the harness exercised the whole reject vocabulary of signing.js'
+  );
+  for (const reason of reasons) {
+    const { node, warns, statuses } = statusNode();
+    makeRejectedHandler(node, { hasKey: true, acceptInvalid: false })({ reason });
+    assert.equal(warns.length, 1, `${reason} must warn`);
+    assert.match(warns[0], /dropping/, `${reason} warn text names a drop`);
+    assert.equal(statuses.length, 1, `${reason} must badge`);
+    assert.ok(
+      statuses[0].text.length <= BADGE_MAX,
+      `${reason} badge '${statuses[0].text}' exceeds the §6 cap`
+    );
+  }
+});
+
+test('accept-invalid on: drop badges yield to the untrusted badge, warns still land', () => {
+  const { node, warns, statuses } = statusNode();
+  const handler = makeRejectedHandler(node, { hasKey: true, acceptInvalid: true });
+  handler({ reason: 'replay-or-out-of-order' });
+  assert.equal(warns.length, 1, 'the warn is not suppressed');
+  assert.equal(statuses.length, 0, 'the conspicuous UNTRUSTED badge must stay visible');
+});
+
+test('accept-invalid on shows connected as conspicuously untrusted (DESIGN §7)', () => {
+  const { node, statuses } = statusNode();
+  applyStatus(node, STATE.CONNECTED, true);
+  assert.deepEqual(
+    statuses[0],
+    { fill: 'red', shape: 'dot', text: 'connected — UNTRUSTED' },
+    'red dot, not the settled green — and without waiting for a frame'
+  );
+
+  applyStatus(node, STATE.CONNECTED, false);
+  assert.deepEqual(statuses[1], { fill: 'green', shape: 'dot', text: 'connected' });
+
+  // The override changes only the connected badge — error stays error.
+  applyStatus(node, STATE.ERROR, true);
+  assert.deepEqual(statuses[2], { fill: 'red', shape: 'ring', text: 'error' });
+});
+
+test('the node wires the rejected handler and the untrusted flag into the runtime', () => {
+  // Same source-scan style as connection-node-guards' resolveSourceIds pin:
+  // the helpers alone are not enough — the constructor must attach them.
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'nodes', 'mavlink-connection.js'),
+    'utf8'
+  );
+  assert.match(
+    source,
+    /node\.connection\.on\('rejected', makeRejectedHandler\(node, signing\)\)/,
+    'the rejected event has a consumer in the node'
+  );
+  assert.match(
+    source,
+    /node\.connection\.on\('state', \(state\) => applyStatus\(node, state, signing\.acceptInvalid\)\)/,
+    'every state badge carries the untrusted flag'
+  );
 });

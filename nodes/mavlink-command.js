@@ -23,7 +23,9 @@
  *              no send.
  *   send     — fire-and-forget; no acknowledgement waiting.
  *   confirm  — wait for COMMAND_ACK, handle retry/backoff for
- *              TEMPORARILY_REJECTED; timeout triggers peer-table check.
+ *              TEMPORARILY_REJECTED and — for presets that tolerate re-issue —
+ *              bounded re-send on a silent window (#248/#249); only the final
+ *              timeout triggers the peer-table check.
  *   complete — after ACCEPTED, poll peer table until completion condition met.
  *              Only offered for commands that have a completion condition (§9).
  *
@@ -52,6 +54,7 @@ const {
   DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
 
+const { DEFAULT_MAX_RESENDS } = require('../lib/command/ack');
 const { loadMetadata } = require('../lib/metadata/load');
 const {
   resolveDeliveryContext,
@@ -272,8 +275,8 @@ module.exports = function registerMavlinkCommand(RED) {
 
       // Frame for the COMMAND_INT carrier (§9 "Coordinate frames"): shared
       // precedence chain — msg.mavFrame beats node config, blank falls to the
-      // carrier module's documented default (GLOBAL). Resolved here so every
-      // delivery tier — build included — honours it.
+      // carrier module's documented default (GLOBAL_RELATIVE_ALT, §14).
+      // Resolved here so every delivery tier — build included — honours it.
       const frame = resolveFrame(msg.mavFrame, config.frame);
 
       /**
@@ -363,6 +366,18 @@ module.exports = function registerMavlinkCommand(RED) {
           timeoutMs,
           maxRetries: noAutoRetry ? 0 : maxRetries,
           noAutoRetry,
+          // Timeout re-send is opt-in (#249). A preset that does not set
+          // noAutoRetry is a curated statement that re-issuing this command is
+          // safe. Advanced mode is a raw MAV_CMD id — nothing says whether a
+          // second REBOOT_SHUTDOWN or MISSION_START is harmless, and a silent
+          // window is the *normal* outcome for a rebooting vehicle — so it
+          // passes nothing and inherits the library's no-resend default.
+          maxResends: preset && !noAutoRetry ? DEFAULT_MAX_RESENDS : undefined,
+          // Per-attempt telemetry on the badge only (#248) — same channel as
+          // the carrier-swap retry; outputs stay terminal-only.
+          onResend: (attempt, max) => {
+            applyActionStatus(node, 'sending', `retrying (${attempt}/${max}) ${displayName}\u2026`);
+          },
         });
         _activeWaiter = waiter;
         try {

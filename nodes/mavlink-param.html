@@ -831,6 +831,15 @@
 <script type="text/html" data-help-name="mavlink-param">
   <p>Reads one parameter, sets one parameter, or requests a full list. Set confirmation is by matching the PARAM_VALUE echo, not COMMAND_ACK.</p>
   <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — pick a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Send-as</b> identity stamps the source address.</p>
+  <p><b>Confirm and collect.</b> On a set, <i>Send and echo-confirm</i> waits for
+  the vehicle's <code>PARAM_VALUE</code> echo and re-sends the
+  <code>PARAM_SET</code> on silence — three attempts in all, each waiting the
+  configured timeout; the attempts made are reported in the terminal status
+  record. On a read it waits for the <code>PARAM_VALUE</code> reply and emits
+  it. <i>Request list and collect</i> keeps the timeout as the overall bound
+  and, when the stream goes quiet inside it, re-requests the missing indexes by
+  <code>PARAM_REQUEST_READ</code> a bounded number of times; a vehicle
+  advertising zero parameters completes as an empty list.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). For GCS/custom identities, fill target sysid/compid or leave blank to inherit the profile default.</p>
   <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast.</p>
   <p><b>Param id</b> searches shipped parameter definitions — type any part of a

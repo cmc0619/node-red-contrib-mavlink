@@ -20,7 +20,11 @@
           if (RED.mavlink.liveOr('#node-input-operation', this.operation) !== 'upload') return true;
           if (RED.mavlink.isBlank(v)) return true;
           try {
-            if (!Array.isArray(JSON.parse(v))) return 'must be a JSON array';
+            var arr = JSON.parse(v);
+            if (!Array.isArray(arr)) return 'must be a JSON array';
+            // A configured [] would upload MISSION_COUNT 0 — the wire's
+            // "erase the plan" — not a no-op (#241). Use Clear for that.
+            if (arr.length === 0) return 'must not be empty — use the Clear operation to erase a plan';
           } catch {
             return 'is not valid JSON';
           }
@@ -192,7 +196,7 @@
   <div class="form-row"><label for="node-input-missionType">Type</label><select id="node-input-missionType"></select></div>
   <div class="form-row" id="row-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
   <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
-  <div class="form-row mavlink-mission-items"><label for="node-input-items">Items (JSON)</label><input type="text" id="node-input-items" placeholder="[] or set msg.payload.items"></div>
+  <div class="form-row mavlink-mission-items"><label for="node-input-items">Items (JSON)</label><input type="text" id="node-input-items" placeholder="non-empty JSON array, or set msg.payload.items"></div>
   <div class="form-row mavlink-mission-confirm"><label for="node-input-confirmClear">Confirm</label><input type="checkbox" id="node-input-confirmClear" style="display:inline-block; width:auto; vertical-align:top;"> <span>Yes, permanently erase this plan</span></div>
   <div class="form-row" id="row-timeout"><label for="node-input-timeout">Step timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="1500"></div>
   <div class="form-row" id="row-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" placeholder="5"></div>
@@ -203,7 +207,7 @@
   <p>Output 0 (continue) fires only on a successful <code>MISSION_ACK</code>. Output 1 (status) carries progress records (phase and item counts) as they happen and the terminal record either way.</p>
   <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on output 0 without sending. Choose a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. <i>Send and confirm</i> runs the transfer to its acknowledgement over the selected <b>Connection</b>.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type list is gated by the effective firmware — the Build Firmware field, the Build Vehicle Profile escape, or the connection's bound profile on wire tiers — because PX4 does not carry fence and rally the same way as ArduPilot.</p>
-  <p><b>Upload</b> answers whatever sequence the vehicle requests. A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>.</p>
+  <p><b>Upload</b> answers whatever sequence the vehicle requests. A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>; an upload that resolves zero items is refused, because a zero count erases the plan on the vehicle — use <b>Clear</b> for that.</p>
   <p><b>Clear</b> is destructive and requires confirmation: tick the box or set <code>msg.confirmed = true</code>.</p>
   <p>Set <code>msg.payload === false</code> to suppress. Status records are plain objects on output 1; they are not refused if wired into another action input — chain control is silence on output 0.</p>
 </script>

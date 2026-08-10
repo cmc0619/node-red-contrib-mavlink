@@ -842,3 +842,146 @@ test('a swarm address works before any peer is heard', async () => {
   assert.equal(sends.length, 1);
   assert.equal(sends[0].address, '239.255.145.50', 'not the configured remote');
 });
+
+// ── issue #244: per-write timeout on the outbound pump ───────────────────────
+
+const { WRITE_TIMEOUT_MS } = require('../../lib/connection/runtime');
+
+/**
+ * A transport whose writes are accepted but never complete — the callbacks are
+ * captured for the test to (mis)fire — plus captured one-shot timers so the
+ * write timeout is driven explicitly instead of waiting wall-clock seconds.
+ *
+ * @returns {{connection: Connection, sent: Buffer[], writeCallbacks: Function[],
+ *   timeouts: object[], errors: string[], timers: object}}
+ */
+function hangingWriteBuild() {
+  const { EventEmitter } = require('node:events');
+  const sent = [];
+  const writeCallbacks = [];
+  const timeouts = [];
+  const errors = [];
+  const timers = fakeTimers();
+  const transportFactory = () => {
+    const t = new EventEmitter();
+    t.mode = 'udp';
+    t.open = async () => {};
+    t.close = (cb) => cb && cb();
+    t.send = (buffer, _endpoint, cb) => {
+      sent.push(buffer);
+      writeCallbacks.push(cb);
+    };
+    return t;
+  };
+  const { connection } = build(
+    {},
+    {
+      transportFactory,
+      logger: { info() {}, warn() {}, error: (m) => errors.push(m) },
+      setInterval: timers.setInterval,
+      clearInterval: timers.clearInterval,
+      setTimeout: (fn, ms) => {
+        const handle = { fn, ms, cleared: false, unref() {} };
+        timeouts.push(handle);
+        return handle;
+      },
+      clearTimeout: (handle) => {
+        if (handle) handle.cleared = true;
+      },
+    }
+  );
+  return { connection, sent, writeCallbacks, timeouts, errors, timers };
+}
+
+test('a stuck transport write faults the link within the documented bound (#244)', async () => {
+  const { connection, timeouts, errors } = hangingWriteBuild();
+  await connection.start();
+  const transportErrors = [];
+  connection.on('transport-error', (err) => transportErrors.push(err));
+
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
+
+  const timer = timeouts.find((t) => t.ms === WRITE_TIMEOUT_MS);
+  assert.ok(timer, 'every in-flight write is covered by one timer at the module bound');
+  assert.equal(WRITE_TIMEOUT_MS, 5000, 'the bound stays order-of-seconds');
+
+  timer.fn(); // the write never completed — the bound expires
+
+  assert.equal(connection.getState(), STATE.ERROR, 'the wedge surfaces as the existing fault state');
+  assert.equal(transportErrors.length, 1);
+  assert.equal(transportErrors[0].code, 'WRITE_TIMEOUT');
+  assert.ok(
+    errors.some((m) => /timed out after 5000ms/.test(m)),
+    'the log names the timeout and rides the existing transport-error path'
+  );
+  connection.close();
+});
+
+test('a late completion callback after expiry is inert (#244)', async () => {
+  const { connection, sent, writeCallbacks, timeouts, errors } = hangingWriteBuild();
+  await connection.start();
+
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
+  connection.send({ name: 'PARAM_SET', fields: {} }, { band: BAND.CONTROL });
+  assert.equal(sent.length, 1, 'the second item queues behind the stuck write');
+
+  timeouts.find((t) => t.ms === WRITE_TIMEOUT_MS).fn();
+  const errorCount = errors.length;
+
+  // The transport finally answers, long after the link was declared dead.
+  writeCallbacks[0]();
+
+  assert.equal(sent.length, 1, 'a late completion must not restart the pump into a faulted link');
+  assert.equal(connection.getState(), STATE.ERROR, 'the fault is not un-declared');
+  assert.equal(errors.length, errorCount, 'no second fault, no double bookkeeping');
+  connection.close();
+});
+
+test('a completing write disarms its timer and the pump keeps draining (#244)', async () => {
+  const { connection, sent, writeCallbacks, timeouts } = hangingWriteBuild();
+  await connection.start();
+
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
+  const timer = timeouts.find((t) => t.ms === WRITE_TIMEOUT_MS);
+  writeCallbacks[0](); // healthy completion inside the bound
+
+  assert.equal(timer.cleared, true, 'the healthy path leaves no armed timer behind');
+  assert.equal(connection.getState(), STATE.CONNECTED);
+
+  connection.send({ name: 'PARAM_SET', fields: {} }, { band: BAND.CONTROL });
+  assert.equal(sent.length, 2, 'the release still dequeues the next item');
+  connection.close();
+});
+
+test('heartbeats fail with the wedged link — the fault stops the scheduler (#244)', async () => {
+  // Deliberate: heartbeats ride the same queue as everything else, so a wedged
+  // link stops them via the same fault → heartbeats.stop() path a socket error
+  // takes (#93); going quiet is the signal every other participant reads, and
+  // recovery is a redeploy like any other terminal transport ERROR.
+  const { connection, timeouts, timers } = hangingWriteBuild();
+  await connection.start();
+  const running = timers.active();
+  assert.ok(running >= 2, 'heartbeat and sweep timers run while connected');
+
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
+  timeouts.find((t) => t.ms === WRITE_TIMEOUT_MS).fn();
+
+  assert.equal(
+    timers.active(),
+    running - 1,
+    'only the heartbeat scheduler stops — the sweep keeps driving stale/expired'
+  );
+  connection.close();
+});
+
+test('close() disarms a pending write timer (#244)', async () => {
+  const { connection, timeouts } = hangingWriteBuild();
+  await connection.start();
+
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
+  const timer = timeouts.find((t) => t.ms === WRITE_TIMEOUT_MS);
+  connection.close();
+
+  assert.equal(timer.cleared, true, 'teardown must not leave a timer that flips CLOSED to ERROR');
+  assert.equal(connection.getState(), STATE.CLOSED);
+});

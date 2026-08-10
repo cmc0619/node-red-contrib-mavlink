@@ -118,6 +118,23 @@ test('mavlink-mission target sysid/compid default to empty (inherit profile)', (
   assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid uses shared reloadTargetCompId');
 });
 
+test('mavlink-mission items validator rejects a configured empty array (#241)', () => {
+  // A configured [] would upload MISSION_COUNT 0 — the wire's "erase the
+  // plan" — so the editor rejects it statically; blank stays valid (items may
+  // come from the payload, whose empty case the runtime refuses).
+  const itemsValidator = /items:\s*\{[\s\S]*?validate:\s*function[\s\S]*?\n {6}\},/.exec(html);
+  assert.ok(itemsValidator, 'items validate function must be extractable');
+  assert.match(itemsValidator[0], /isBlank\(v\)\)\s*return true/, 'blank stays valid');
+  assert.match(itemsValidator[0], /length === 0/, 'empty array is checked');
+  assert.match(itemsValidator[0], /must not be empty[^']*Clear/, 'refusal names the Clear operation');
+  // The placeholder must not advertise the one value the validator rejects.
+  const itemsInput = /<input[^>]*id="node-input-items"[^>]*>/.exec(html);
+  assert.ok(itemsInput, 'items input must be extractable');
+  assert.doesNotMatch(itemsInput[0], /placeholder="\[\]/, 'placeholder no longer offers []');
+  assert.match(itemsInput[0], /placeholder="non-empty JSON array, or set msg\.payload\.items"/,
+    'placeholder asks for a non-empty array or the payload');
+});
+
 test('mavlink-mission confirmClear stays visible for clear on every tier', () => {
   // The runtime confirm gate guards construction (it runs before the Build
   // branch), so the checkbox must not hide on the build tier — hidden is not

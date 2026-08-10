@@ -2,15 +2,17 @@
 
 /**
  * Mission download state-machine tests (DESIGN.md §9 "Download", §13). Covers
- * the happy path with N items, the count-zero short-circuit, and mission_type
- * mismatch rejection. Fixtures only — a scripted stub plays the vehicle side.
+ * the happy path with N items, the count-zero short-circuit, mission_type
+ * mismatch rejection, error-ack handling at any phase (§14), and the one-shot
+ * legacy request fallback. Fixtures only — a scripted stub plays the vehicle
+ * side.
  */
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { MissionDownload, MISSION_TYPE, MAV_MISSION_RESULT, buildItemInt } = require('../../lib/mission');
-const { StubConnection } = require('./stubs/connection');
+const { StubConnection, FakeTimers, fakeDeps } = require('./stubs/connection');
 
 const TARGET = { sysid: 1, compid: 1 };
 
@@ -49,6 +51,8 @@ test('download requests each item by sequence and acks (happy path, N items)', a
   assert.equal(stub.sentNames()[0], 'MISSION_REQUEST_LIST');
   assert.equal(stub.sentNames().at(-1), 'MISSION_ACK');
   assert.equal(stub.sent.filter((s) => s.message.name === 'MISSION_REQUEST_INT').length, 3);
+  // An INT-speaking vehicle never sees the legacy request form.
+  assert.equal(stub.sentNames().includes('MISSION_REQUEST'), false);
 });
 
 test('download with count zero acks immediately and waits for no items', async () => {
@@ -132,18 +136,47 @@ test('a duplicate MISSION_COUNT mid-walk is ignored — no restart, no truncatio
   assert.deepEqual(requested, [0, 1, 2]);
 });
 
-test('a MISSION_ACK arriving mid-download (after the count) is ignored, not an abort (§9)', async () => {
+test('a mid-download error MISSION_ACK fails immediately with its result code (§14)', async () => {
   const stub = new StubConnection();
-  const count = 2;
+  let laterRequests = 0;
   stub.onSend((message, deliver) => {
     if (message.name === 'MISSION_REQUEST_LIST') {
-      deliver({ name: 'MISSION_COUNT', fields: { count, mission_type: 0 } });
+      deliver({ name: 'MISSION_COUNT', fields: { count: 2, mission_type: 0 } });
     } else if (message.name === 'MISSION_REQUEST_INT') {
       const seq = message.fields.seq;
       if (seq === 0) {
-        // A stray/duplicate MISSION_ACK once items are already flowing is stale
-        // (only the ack *we* send closes a download). It must not abort.
-        deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.ERROR, mission_type: 0 } });
+        deliver({ name: 'MISSION_ITEM_INT', fields: { seq, command: 16, mission_type: 0 } });
+      } else {
+        // The vehicle abandons the transfer mid-walk. Its only channel for the
+        // reason is an error MISSION_ACK — gating it on phase discarded the
+        // code and stalled through the retry ceiling (§14 "An early error
+        // MISSION_ACK is the rejection"; download mirrors upload).
+        laterRequests += 1;
+        deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.DENIED, mission_type: 0 } });
+      }
+    }
+  });
+
+  const outcome = await new MissionDownload(machineOpts(stub)).start();
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.resultCode, MAV_MISSION_RESULT.DENIED);
+  assert.match(outcome.reason, /DENIED/);
+  // The ack ended the transfer on the spot — no retries of the refused step.
+  assert.equal(laterRequests, 1);
+});
+
+test('a mid-download INVALID_SEQUENCE ack is dropped and the walk completes (upload exemption mirrored)', async () => {
+  const stub = new StubConnection();
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 2, mission_type: 0 } });
+    } else if (message.name === 'MISSION_REQUEST_INT') {
+      const seq = message.fields.seq;
+      if (seq === 0) {
+        // ArduPilot emits INVALID_SEQUENCE mid-transfer for a duplicated
+        // request while keeping the transfer alive — non-terminal.
+        deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.INVALID_SEQUENCE, mission_type: 0 } });
       }
       deliver({ name: 'MISSION_ITEM_INT', fields: { seq, command: 16, mission_type: 0 } });
     }
@@ -152,7 +185,29 @@ test('a MISSION_ACK arriving mid-download (after the count) is ignored, not an a
   const outcome = await new MissionDownload(machineOpts(stub)).start();
 
   assert.equal(outcome.result, 'succeeded');
-  assert.equal(outcome.count, 2);
+  assert.equal(outcome.items.length, 2);
+});
+
+test('a stray vehicle ACCEPTED ack mid-download is ignored — the closing ack is ours to send', async () => {
+  const stub = new StubConnection();
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 2, mission_type: 0 } });
+    } else if (message.name === 'MISSION_REQUEST_INT') {
+      const seq = message.fields.seq;
+      if (seq === 0) {
+        // ACCEPTED from the vehicle is never a download's answer: it cannot
+        // fake a success (we settle on our own closing ack), so treating it
+        // as terminal could only abort a healthy walk.
+        deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: 0 } });
+      }
+      deliver({ name: 'MISSION_ITEM_INT', fields: { seq, command: 16, mission_type: 0 } });
+    }
+  });
+
+  const outcome = await new MissionDownload(machineOpts(stub)).start();
+
+  assert.equal(outcome.result, 'succeeded');
   assert.equal(outcome.items.length, 2);
 });
 
@@ -216,4 +271,61 @@ test('non-global-frame MISSION_ITEM_INT x/y (metres) pass through unscaled', asy
   const outcome = await new MissionDownload(machineOpts(stub)).start();
   assert.equal(outcome.items[0].x, 12);
   assert.equal(outcome.items[0].y, -7);
+});
+
+test('a pre-INT vehicle: the first item step falls back once to legacy MISSION_REQUEST and sticks', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  const maxRetries = 2;
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      // A pre-INT autopilot answers the list request but ignores
+      // MISSION_REQUEST_INT entirely — only the legacy form gets items.
+      deliver({ name: 'MISSION_COUNT', fields: { count: 2, mission_type: 0 } });
+    } else if (message.name === 'MISSION_REQUEST') {
+      const seq = message.fields.seq;
+      deliver({ name: 'MISSION_ITEM', fields: { seq, command: 16, x: seq, y: seq, mission_type: 0 } });
+    }
+  });
+
+  const machine = new MissionDownload(machineOpts(stub, { maxRetries, timeoutMs: 1000, ...fakeDeps(clock) }));
+  const done = machine.start();
+  clock.flush();
+  const outcome = await done;
+
+  assert.equal(outcome.result, 'succeeded');
+  assert.equal(outcome.items.length, 2);
+  // INT tried to its ceiling (1 + maxRetries sends of seq 0), then legacy —
+  // and the rest of the walk stays legacy.
+  const intSeqs = stub.sent
+    .filter((s) => s.message.name === 'MISSION_REQUEST_INT')
+    .map((s) => s.message.fields.seq);
+  const legacySeqs = stub.sent
+    .filter((s) => s.message.name === 'MISSION_REQUEST')
+    .map((s) => s.message.fields.seq);
+  assert.deepEqual(intSeqs, [0, 0, 0]);
+  assert.deepEqual(legacySeqs, [0, 1]);
+});
+
+test('no fallback once an INT request was answered — a later stall aborts naming the sequence', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 2, mission_type: 0 } });
+    } else if (message.name === 'MISSION_REQUEST_INT' && message.fields.seq === 0) {
+      // Item 0 arrives over INT — the vehicle speaks INT; item 1 never comes.
+      deliver({ name: 'MISSION_ITEM_INT', fields: { seq: 0, command: 16, mission_type: 0 } });
+    }
+  });
+
+  const machine = new MissionDownload(machineOpts(stub, { maxRetries: 2, timeoutMs: 1000, ...fakeDeps(clock) }));
+  const done = machine.start();
+  clock.flush();
+  const outcome = await done;
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.phase, 'aborted');
+  assert.equal(outcome.seq, 1);
+  assert.equal(stub.sentNames().includes('MISSION_REQUEST'), false, 'silence mid-walk is not a carrier problem');
 });

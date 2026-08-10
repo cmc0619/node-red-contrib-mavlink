@@ -16,7 +16,13 @@ const html = fs.readFileSync(
 );
 
 const ROW_IDS = [
+  'row-move-carrier',
+  'row-move-mode',
   'row-move-frame',
+  'row-move-speed',
+  'row-move-radius',
+  'row-move-changeMode',
+  'row-move-ackTimeout',
   'row-move-north',
   'row-move-east',
   'row-move-up',
@@ -299,4 +305,96 @@ test('mavlink-move editor canonicalizes legacy *_INT global frames on open (Code
   assert.ok(compatAt > -1 && compatAt < visibilityCallAt, 'canonicalization precedes the first visibility pass');
   // And the legacy names must not be select options — accepted, never offered.
   assert.doesNotMatch(html, /<option value="GLOBAL_RELATIVE_ALT_INT"/, 'legacy options are not offered');
+});
+
+// ── Reposition carrier (#239) ───────────────────────────────────────────────
+
+test('mavlink-move carrier field: setpoint default, both carriers offered, change refreshes', () => {
+  // A wrong or missing default flips every existing Move node onto the
+  // command path; setpoint is the pre-#239 behavior and must stay the default.
+  assert.match(html, /carrier:\s*\{\s*value:\s*'setpoint'\s*\}/, 'carrier defaults to setpoint');
+  assert.match(html, /option value="setpoint"/, 'setpoint carrier offered');
+  assert.match(html, /option value="reposition"/, 'reposition carrier offered');
+  assert.match(
+    html,
+    /\$\('#node-input-carrier'\)\.on\('change', refreshVisibility\)/,
+    'carrier change refreshes visibility'
+  );
+});
+
+test('mavlink-move delivery tiers follow the carrier (§9: tiers are computed, not fixed)', () => {
+  assert.match(html, /option value="confirm">Send &amp; confirm/, 'Send & confirm offered');
+  // Stream is setpoint-only (COMMAND_INT has no streaming semantics); confirm
+  // is reposition-only (setpoints carry no ack). An invalid saved selection
+  // falls back to Send rather than deploying a per-input refusal.
+  assert.match(
+    html,
+    /option\[value="stream"\]'\)\.toggle\(!isReposition\)/,
+    'stream option hidden on reposition'
+  );
+  assert.match(
+    html,
+    /option\[value="confirm"\]'\)\.toggle\(isReposition\)/,
+    'confirm option shown only on reposition'
+  );
+  assert.match(
+    html,
+    /isReposition && liveDelivery === 'stream'\) \|\| \(!isReposition && liveDelivery === 'confirm'/,
+    'invalid carrier/delivery combos coerce'
+  );
+});
+
+test('mavlink-move reposition reshapes the form: position-only, global frames only', () => {
+  // Reposition implies position semantics: the mode select is coerced and its
+  // row hidden, so a stale setpoint mode never deploys into a refusal.
+  assert.match(html, /if \(isReposition\) \{\s*\$\('#node-input-mode'\)\.val\('position'\)/, 'mode coerced to position');
+  assert.match(html, /mode:\s*!isReposition/, 'mode row hidden on reposition');
+  // DO_REPOSITION rides frames 0/3 only: the Local optgroup and terrain
+  // option are withdrawn and a non-global saved frame coerces to relative-alt.
+  assert.match(html, /optgroup\[label="Local"\]'\)\.toggle\(!isReposition\)/, 'local frames withdrawn on reposition');
+  assert.match(html, /option\[value="GLOBAL_TERRAIN_ALT"\]'\)\.toggle\(!isReposition\)/, 'terrain frame withdrawn on reposition');
+  assert.match(html, /\.val\('GLOBAL_RELATIVE_ALT'\)/, 'non-global saved frame coerces to GLOBAL_RELATIVE_ALT');
+  // COMMAND_INT wants the spec-current 0/3 — no *_INT twin, so no PX4-compat
+  // checkbox; yaw rate has no DO_REPOSITION field.
+  assert.match(html, /px4Compat:\s*isGlobalFrame && !isReposition/, 'px4Compat hidden on reposition');
+  assert.match(html, /yawRate:\s*!isReposition/, 'yaw rate hidden on reposition');
+});
+
+test('mavlink-move reposition params: blank-sentinel fields and the CHANGE_MODE opt-in', () => {
+  for (const field of ['speed', 'radius']) {
+    assert.match(
+      html,
+      new RegExp(`${field}:\\s*\\{\\s*value:\\s*'',\\s*validate:\\s*RED\\.validators\\.number\\(true\\)`),
+      `${field} defaults blank with the blank-allowed numeric validator`
+    );
+  }
+  // ackTimeout is blank-allowed too, but 0 and negatives are not a shorter
+  // wait — they fire the ack timer before the vehicle can answer — so its
+  // validator requires a positive number rather than any number.
+  const ackValidator = /ackTimeout:\s*\{[\s\S]*?\n {6}\},/.exec(html);
+  assert.ok(ackValidator, 'ackTimeout validate function must be extractable');
+  assert.match(ackValidator[0], /value:\s*''/, 'ackTimeout defaults blank (inherit the 10 s default)');
+  assert.match(ackValidator[0], /isBlank\(v\)\)\s*return true/, 'blank stays valid');
+  assert.match(ackValidator[0], /Number\(v\) > 0/, 'zero and negatives are rejected');
+  assert.doesNotMatch(ackValidator[0], /RED\.validators\.number\(true\)/, 'the any-number validator is gone');
+  // Blank speed/radius/yaw encode the spec sentinels at runtime; the
+  // placeholders say so instead of implying zero.
+  assert.match(html, /id="node-input-speed"[^>]*placeholder="\(vehicle default\)"/, 'speed placeholder names the sentinel');
+  assert.match(html, /id="node-input-radius"[^>]*placeholder="\(ignored\)"/, 'radius placeholder names the sentinel');
+  // CHANGE_MODE is a mode change: an explicit opt-in checkbox, default off,
+  // documented as such in the help.
+  assert.match(html, /changeMode:\s*\{\s*value:\s*false\s*\}/, 'changeMode defaults off');
+  assert.match(html, /type="checkbox" id="node-input-changeMode"/, 'changeMode is a checkbox');
+  assert.match(html, /speed:\s*isReposition/, 'speed shown only on reposition');
+  assert.match(html, /radius:\s*isReposition/, 'radius shown only on reposition');
+  assert.match(html, /changeMode:\s*isReposition/, 'changeMode shown only on reposition');
+  assert.match(html, /ackTimeout:\s*delivery === 'confirm'/, 'ACK timeout shown only on confirm');
+});
+
+test('mavlink-move help documents the reposition carrier and the mode-change flag', () => {
+  assert.match(html, /DO_REPOSITION/, 'help names the command');
+  assert.match(html, /COMMAND_INT/, 'help names the wire message');
+  assert.match(html, /MAV_DO_REPOSITION_FLAGS_CHANGE_MODE/, 'help names the flag');
+  assert.match(html, /mode change/, 'the flag is documented as a mode change');
+  assert.match(html, /COMMAND_INT_ONLY/, 'help names the failure surfacing');
 });
