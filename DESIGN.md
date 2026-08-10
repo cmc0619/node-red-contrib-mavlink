@@ -669,6 +669,16 @@ trusting it. When on, node status must show the connection as untrusted conspicu
 packets never advance the timestamp store, and they are advisory only — they must never drive
 control.
 
+**Rejection is never silent.** The runtime emits a `rejected` event for every frame the policy
+drops, and the Connection node consumes it: one warning per consecutive same-reason streak (the
+move-advisory dedup pattern) plus a status badge naming the reason. The no-key case is named
+explicitly — with no key configured every signed frame verifies false, so a signing vehicle
+against a key-less connection would otherwise read as total silence; the surface says "no key
+configured" rather than pointing the operator at the vehicle. The *untrusted conspicuously* rule
+above is a status property of the **override being enabled**: the connected badge reads red
+`connected — UNTRUSTED` from the moment of deploy, not only once an invalid frame arrives, and it
+outranks per-reason drop badges while the override is on.
+
 **v1 needs no special rule.** A v1 frame carries no signature block and arrives identical to an
 unsigned v2 frame, so it lands in the third row automatically. There is no v1 branch to write.
 
@@ -901,6 +911,18 @@ in background — which genuinely reorders frames on the air. Across the public 
 routinely remarked or cleared, so treat DSCP as an optimisation on links you control, never as a
 guarantee. Nothing in the band scheme may depend on the mark being honoured.
 
+**A write completion is bounded.** All three transports gate the driver's release callback on an
+unbounded event (TCP and serial `drain`, dgram's callback), so a peer that stops reading — a full
+TCP window to a black-holed peer, a serial flow-control stall — would wedge the queue forever with
+the node still showing connected. One timer at the pump layer bounds every in-flight write at
+**5 s** (`WRITE_TIMEOUT_MS`, a module constant, not an editor setting); expiry faults the link
+through the same transport-error machinery a socket error uses, and a completion arriving after
+expiry is inert. **Heartbeats fail with the link, deliberately:** they ride the same queue, the
+fault stops the scheduler exactly as a socket error does, and going quiet is the signal every other
+participant already knows how to read — a wedged link that kept heartbeating would advertise a live
+GCS over a link that moves nothing. ERROR remains terminal until redeploy; the peer-table sweep
+stays alive so "vehicle lost" still fires.
+
 ## 8. Peer table
 
 Connection builds and owns it. Populated from HEARTBEAT, enriched from everything else.
@@ -1018,8 +1040,10 @@ Build's output goes to `mavlink-out`.
 Which config references and address fields a tier shows — and where blank targets inherit from —
 is governed by the role × tier matrix (§6).
 
-Move has no acknowledgement of any kind, so its third tier is **Stream** instead — sustained
-setpoints with TTL and stop, no confirmation possible.
+Move's setpoint carrier has no acknowledgement of any kind, so its third tier is **Stream**
+instead — sustained setpoints with TTL and stop, no confirmation possible. Its reposition carrier
+(§ "Move reposition carrier") is the inverse: a one-shot ACKed command, so it offers **Send and
+confirm** and refuses Stream.
 
 **A stream announces its own expiry — on output 1.** When the TTL elapses the node sends the
 zero-velocity stop packet and emits a status record with `detail: 'expired'`, carrying the stop
@@ -1049,7 +1073,7 @@ Not every message can be acknowledged, and the node must offer the right one:
 | Mission | `MISSION_ACK`, via the mission protocol |
 | Param | none — confirm by matching the `PARAM_VALUE` the vehicle broadcasts back |
 | Payload | per verb — command-backed verbs ack; `GIMBAL_MANAGER_SET_PITCHYAW` is a message with none |
-| Move | none, ever — setpoints carry no acknowledgement |
+| Move | per carrier — setpoints carry no acknowledgement, ever; the reposition carrier is a real `COMMAND_ACK` |
 
 Param is echo-confirm, not ack. Different mechanism, different failure mode, and it must not be
 presented as the same checkbox.
@@ -1078,6 +1102,33 @@ type and the request never named one, the bytes cannot be decoded and there is n
 trusted; a confirm that never fires is reported honestly as an echo timeout. A real vehicle
 always populates `param_type`, so this is the malformed-frame path.
 
+**Param loss recovery re-sends the question, never invents the answer.** The param protocol has
+no retransmission of its own, so each tier recovers by repeating its idempotent request:
+
+- **Set and confirm re-sends `PARAM_SET` on echo silence** — common.xml: it "should be re-sent if
+  no PARAM_VALUE is received". Three attempts total, the initial send included, each waiting the
+  configured timeout for the echo. The count is pinned in code, not a config knob — the timeout
+  already sizes the wait, and a retry dial would be a second control for the same failure.
+  Attempts ride the terminal status record; each re-send is a progress record on output 1.
+- **Read and confirm waits for the `PARAM_VALUE` reply and emits it.** The reply is matched by
+  whichever field the request put on the wire — the index when one was sent, the name otherwise —
+  under the same target scoping as the set echo. One attempt; silence reports a read timeout,
+  never success. The prior behaviour (immediate success, reply discarded) was fire-and-forget
+  wearing confirm's label.
+- **Collect pins the FIRST advertised `param_count`** as the completion target; a mid-stream frame
+  that disagrees is that frame's defect and must not move the target. Index 65535 marks a
+  `PARAM_VALUE` outside the indexed list (an interleaved set echo) — skipped as a member, though
+  its count still pins. An index at or past the pinned count is ignored with a per-index deduped
+  warn and never stored: a stored out-of-range frame would inflate the received count and let
+  completion pass while a real index was still missing. A count of 0 completes immediately as an
+  empty list.
+- **Collect gap refill nests inside the overall timeout, which remains the only terminal
+  authority.** Silence for a quarter of the configured timeout (capped at 1.5 s) marks the stream
+  stalled and re-requests missing indexes by index on the Bulk band — at most 3 rounds of at most
+  32 indexes, because refill repairs gaps rather than re-implementing the transfer; a stream
+  needing more is reported honestly by the list timeout. Echo-scoping and the single-flight
+  generation token are unchanged — only loss recovery moved.
+
 **`COMMAND_ACK` can arrive twice.** A takeoff commonly acks `IN_PROGRESS`, then `ACCEPTED`
 seconds later. Treating the first as final reports success early or times out on a command that
 was working. Wait for a terminal result.
@@ -1103,6 +1154,24 @@ Retry follows the same logic. It is safe where the command is idempotent, which 
 semantics are: arming an armed vehicle acks `ACCEPTED`. It is not safe for commands that restart
 or toggle — `MISSION_START` and `PREFLIGHT_REBOOT_SHUTDOWN` among them — and those never
 auto-retry.
+
+**Retransmit precedes the classification.** A command lost on the way out and an ack lost on the
+way back are indistinguishable, and the command microservice's recovery for both is idempotent
+re-send: a silent ack window is re-sent up to 3 times (MAVSDK parity), the confirmation byte
+incrementing on each `COMMAND_LONG` transmission (`COMMAND_INT` has no confirmation byte and
+re-sends byte-identical). Commands that never auto-retry skip re-send for the same reason they
+skip the `TEMPORARILY_REJECTED` retry — re-sending a reboot on a lost ack would double-execute.
+Only when the final window closes does the classification above run, unchanged: peer-table check,
+then **unconfirmed**. The two rulings are ordered, not in tension — this paragraph governs
+recovery *before* the timeout outcome exists; the classification governs what the outcome
+*means*. The status record's `retries` counts every re-transmission beyond the first send —
+`TEMPORARILY_REJECTED` back-offs and timeout re-sends alike — so it stays equal to the final
+confirmation byte; there is deliberately no second counter field.
+
+Repeated `IN_PROGRESS` keeps the wait alive, but not forever: each one re-arms the ack window
+only up to an aggregate ceiling of 6× the configured timeout from the first send (60 s at
+defaults). At the ceiling the running window is left to expire and the timeout classification
+proceeds.
 
 ### The vehicle answers "can you do this right now"
 
@@ -1308,6 +1377,44 @@ names (Fan-out no longer builds Move inputs at all — it replicates built messa
 aliased — pre-1.0, unpublished, no migrations (AGENTS.md); an unknown mode or frame throws
 naming the valid set.
 
+### Move reposition carrier
+
+Move has a second carrier for one-shot goto (#239): `carrier: reposition` sends
+`MAV_CMD_DO_REPOSITION` (192) as `COMMAND_INT` — the guided goto every reference implementation
+converges on, and the only reposition ArduPilot accepts (INT-only; a `COMMAND_LONG` attempt acks
+`COMMAND_INT_ONLY`). Same node, same mode and frame vocabulary, same §10 coordinate guards — with
+the one thing no setpoint offers: a `COMMAND_ACK`. The editor field defaults to `setpoint`;
+`msg.payload.carrier` overrides per input like mode and frame, and a saved config without the
+field parses as setpoint — the safe direction.
+
+The carrier is position-only on frames `GLOBAL` (0) and `GLOBAL_RELATIVE_ALT` (3), sent in
+`COMMAND_INT`'s own frame field as the spec-current numbers — no `*_INT` twin exists on this path,
+so the PX4-compat checkbox does not apply. Everything else fails closed with named errors: setpoint
+modes (velocity, position-velocity, acceleration, yaw-only), local frames (ArduPilot denied LOCAL
+in the SITL 18 matrix), terrain (unmeasured), yaw rate (DO_REPOSITION carries a heading only), and
+Stream delivery (`COMMAND_INT` has no streaming semantics). Lat/lon enter in degrees and scale to
+degE7 in `x`/`y`; alt rides `z` unscaled.
+
+Blank params encode the spec sentinels, the same `blankParams` convention as the command presets:
+blank speed → −1 (vehicle default), blank radius → 0 (ignored), blank yaw → `NaN` (current heading
+mode — an explicit 0 commands north). **The dialect declares param4 in radians** — unlike
+`NAV_WAYPOINT`'s degrees, and matching MAVSDK's deg→rad conversion in `goto_location` — so the
+operator's degrees convert exactly once at encode, `NaN` surviving the scale.
+`MAV_DO_REPOSITION_FLAGS_CHANGE_MODE` (param2 = 1) flies the vehicle into guided to execute the
+goto: a mode change, therefore a strict boolean opt-in (editor checkbox or
+`msg.payload.changeMode === true`; truthy tokens refuse), default off.
+
+Delivery tiers follow the carrier (§9: tiers are computed, not fixed): Build and Send map
+naturally; **Send and confirm** replaces Stream, riding the Command node's AckWaiter unchanged —
+retry on `TEMPORARILY_REJECTED`, re-arm on `IN_PROGRESS`, ack attribution by source and GCS
+address. `ACCEPTED` fires Continue with `resultCode` 0; every other terminal — `COMMAND_INT_ONLY`
+(8) and `COMMAND_UNSUPPORTED_MAV_FRAME` (9) included — fails on the status output with its
+`MAV_RESULT` name and code, never silence, and no carrier swap is attempted (an INT-only command's
+wrong-carrier ack is a contradiction to fail loudly, not resolve). A missing ack reports `timeout`
+— no completion condition exists for a goto in this node. No advisories ship on this carrier: the
+ack is the feedback channel, and every candidate (ArduPilot outside GUIDED, PX4 outside OFFBOARD,
+`CONDITION_YAW` interplay, param4 actuation) awaits SITL measurement (§14).
+
 ### Command presets
 
 A preset is not a separate command. It is **(command, pinned params, exposed params, friendly
@@ -1426,8 +1533,30 @@ Rules across all three:
 
 - **A failed upload fails.** It must never degrade into a clear. A vehicle left with a partial
   mission is recoverable; one silently emptied is not.
+- **An empty upload is refused, never sent.** `MISSION_COUNT` 0 is the wire's "erase the plan": an
+  upload that resolves zero items — blank config, `[]`, or a payload resolving to `[]` — would
+  clear the vehicle silently and report success, bypassing the confirmation gate the explicit
+  Clear path has. The node refuses it at the item-resolution layer, before any packet and on every
+  tier including Build, naming Clear as the intended path; the editor additionally rejects a
+  configured empty array. Empty upload ≠ clear, on the same footing as the rule above.
+- **Download and upload refuse a broadcast target (sysid 0), on every tier.** A transfer is a
+  two-way conversation matched by an exact-sysid subscription, and no vehicle sources sysid 0: a
+  broadcast transfer starts the protocol on every vehicle on the link and can never match a reply
+  — guaranteed stall with fleet mission state perturbed. This is §10's "mission transfer steps are
+  refused for fan-out" applied at the node's own door. Clear is exempt: `MISSION_CLEAR_ALL` remains
+  an addressed single message that fans out (§10).
 - **Retry per item, with a ceiling**, then abort the whole transfer with the sequence number
-  that stalled. A transfer that hangs forever is worse than one that fails.
+  that stalled. A transfer that hangs forever is worse than one that fails. The ceiling is per
+  item by design, so it resets on every advance — and upload's steps are driven by the vehicle, so
+  a peer re-requesting the *same* sequence forever resets it indefinitely. An overall transfer
+  deadline (60 s, constant) is the bound that ends that livelock. It is generous on purpose: it
+  exists to terminate a transfer making no progress, not to race a large mission over a slow link,
+  and the per-step ceiling is unchanged beneath it.
+- **Download prefers `MISSION_REQUEST_INT`, falling back once to the legacy form.** A pre-INT
+  autopilot answers `MISSION_REQUEST_LIST` with a count and then ignores INT item requests
+  entirely, so an INT-only walk stalls at item 0. When exactly that step exhausts its retries, the
+  walk falls back to `MISSION_REQUEST` once and sticks. Any later stall aborts normally — a vehicle
+  that has answered an INT request speaks INT, and its silence means something else.
 - **Item validation is per type, and reserves families — it does not allowlist commands.** A
   mission item may carry *any* command except the fence and rally families; fence items are only
   `MAV_CMD_NAV_FENCE_*`; rally is only `MAV_CMD_NAV_RALLY_POINT`. Three validators, not one with a
@@ -1546,6 +1675,25 @@ never gated (a `command: 185` patch under an ARM base put Flight Termination on 
 unconfirmed). A per-member command is a different message, not a replication. Broadcast refuses
 `targets` (uniform messages only, below). Safety: `DO_FLIGHTTERMINATION` (185) in a replicated command
 still requires `msg.confirmed === true` or the node's Confirm — the gate reads the wire fields.
+The same gate covers a **broadcast position setpoint**: a `SET_POSITION_TARGET_*` packet whose
+`type_mask` leaves any position bit (x/y/z) commanded, broadcast at `target_system 0`, converges
+the whole fleet on one coordinate — a commanded collision, not a formation. Refused unless
+confirmed, checked at the wire plane from the built message's fields; a mask that cannot be read
+gates (fail closed). Velocity/acceleration-only setpoints are fleet momentum, not convergence, and
+broadcast ungated — as do `SET_ATTITUDE_TARGET` and `SET_ACTUATOR_CONTROL_TARGET`, whose masks
+carry no coordinate.
+
+**Setpoint streams are single-owner.** The `(connection, target)` stream lock (`streamLocks`,
+lib/delivery/lock, #176) is a process-wide invariant, not a Move implementation detail: two
+producers feeding one vehicle alternate contradictory setpoints — the vehicle oscillates while
+both report success — regardless of what each setpoint commands. Every persistent setpoint stream
+acquires it (Move does); every one-shot setpoint producer checks it at dispatch. Fan-out setpoints
+are one-shots: on the wire tiers a member whose lock is held is refused fail-closed by name
+(sequential refuses that member and continues, per the continue doctrine; broadcast cannot exclude
+the locked vehicle from the packet, so one held lock refuses the whole broadcast). One-shots hold
+nothing themselves — a hold needs a lifetime and a one-shot has none, and a stream starting *after*
+a one-shot supersedes it exactly as a Move handover setpoint supersedes its predecessor. Build and
+dry-run tiers do not consult the lock: it guards sends.
 
 **Concurrency.** Sequential fan-out dispatches up to `concurrency` members at once (default 1 —
 strictly sequential, the historical cadence). Where it earns its keep is the confirm tier: at
@@ -2945,6 +3093,16 @@ after 8 s of silence from the GCS the vehicle abandoned the transfer with `type=
 `NO_SPACE` was dropped and the transfer stalled through the full count-retry ceiling before
 failing with the vehicle's reason discarded.
 *Check:* `node --test test/mission/upload.test.js`
+*Amendment (#246):* download carried the identical phase gate this entry removed from upload — its
+inline comment asserted the reverse rationale and the behaviour was even test-pinned as intended.
+Download now fails on any error `MISSION_ACK` at any phase with its `MAV_MISSION_RESULT`, same as
+upload. The `INVALID_SEQUENCE` exemption is mirrored (ArduPilot emits it mid-transfer for a
+duplicated request while keeping the transfer alive — the same stack behaviour already documented
+for the retransmitted `MISSION_COUNT` during downloads). Upload's premature-`ACCEPTED`-is-a-
+protocol-error rule is **not** mirrored: in a download the closing ack is the one the GCS sends, so
+a vehicle `ACCEPTED` is never that transfer's answer and cannot fake a success — treating it as
+terminal could only abort a healthy walk on stray noise, so it is ignored.
+*Check:* `node --test test/mission/download.test.js`
 
 **COMMAND_INT x/y has no *cross-fleet* keep-current sentinel — PX4 honors one, ArduPilot NAKs it.**
 *Wrong belief (round 1):* per common.xml, NaN lat/lon should encode as `INT32_MAX` ("keep
