@@ -26,21 +26,33 @@ module.exports = function registerMavlinkMove(RED) {
     let stream = null;
     let streamKey = null;
     let releaseStream = null;
+    // Last advisory warned, for per-streak dedup (C8): a refresh-fed stream
+    // repeating the same combo would spam the debug sidebar, and noise gets
+    // ignored. Redeploy resets naturally — new node instance.
+    let lastAdvisory = null;
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
 
     // Stop the active stream and free its single-owner scope (#176). Every
-    // stop the node causes — replacement, a non-stream input, close — routes
-    // through here so no path can leave the target locked with nothing
-    // streaming to it.
-    function stopStream() {
-      if (!stream) return;
-      stream.stop();
-      stream = null;
-      releaseStream();
-      releaseStream = null;
-      streamKey = null;
+    // stop the node causes — replacement, a non-stream input, an explicit
+    // stop, close — routes through here so no path can leave the target
+    // locked with nothing streaming to it. `brake` follows GCS practice
+    // (§ "Move setpoint matrix"): the brake marks the end of control, so
+    // replace/supersede handovers pass false — the new setpoint IS the next
+    // command. The bookkeeping runs in `finally` because a brake send can
+    // throw (dead link): the lock must come free even when the brake never
+    // reached the wire, and each caller owns where that throw lands.
+    function stopStream({ brake = true } = {}) {
+      if (!stream) return null;
+      try {
+        return stream.stop({ brake });
+      } finally {
+        stream = null;
+        releaseStream();
+        releaseStream = null;
+        streamKey = null;
+      }
     }
 
     node.on('input', (msg, send, done) => {
@@ -51,6 +63,36 @@ module.exports = function registerMavlinkMove(RED) {
         }
 
         const payload = msg.payload ?? {};
+        // Actions are handled before target resolution: a stop names no
+        // target — it halts whatever this node is streaming — so nothing a
+        // resolver could refuse may refuse an otherwise-valid stop. Runtime-
+        // boundary data fails loud: an unknown action throws naming the valid
+        // set, and only the stream tier owns streams.
+        if (payload.action !== undefined) {
+          if (payload.action !== 'stop') {
+            throw new Error(
+              `unknown Move action ${JSON.stringify(payload.action)} — expected one of: stop`
+            );
+          }
+          if (delivery !== 'stream') {
+            throw new Error('Move action "stop" requires stream delivery — only the stream tier owns streams');
+          }
+          if (stream) {
+            const sent = stream.sent;
+            // brake: true — an explicit stop is an end of control. A brake
+            // send that throws routes to failInput below: that input
+            // genuinely failed (the lock is still freed by stopStream).
+            const stopMessage = stopStream();
+            completeResult(node, send, 'succeeded', 'stopped', { message: stopMessage, sent });
+          } else {
+            // A stop with nothing running succeeds with a distinguishing
+            // detail — a stop control must not punish a second press
+            // (§ "Move setpoint matrix").
+            completeResult(node, send, 'succeeded', 'no stream', {});
+          }
+          done();
+          return;
+        }
         // Move: companion hides both sysid and compid — no compidFromConfig.
         const { connectionNode, target, identityId } = resolveDeliveryContext(RED, {
           delivery,
@@ -72,6 +114,11 @@ module.exports = function registerMavlinkMove(RED) {
           yaw: valueFrom(payload, config, 'yaw'),
           yawRate: valueFrom(payload, config, 'yawRate'),
           timeBootMs: payload.timeBootMs,
+          // Deployment property, deliberately no payload override: the global
+          // wire numbering is the operator's standing compatibility choice
+          // (§ "Move setpoint matrix"), not a per-message knob. A missing
+          // value resolves true at encode — the safe direction.
+          px4Compat: config.px4Compat,
         };
         const message = buildMoveMessage(moveInput);
 
@@ -85,9 +132,14 @@ module.exports = function registerMavlinkMove(RED) {
           // The ArduPilot yaw-only advisory was measured on absolute yaw only,
           // so it needs to see whether a yaw rate is riding along (§14 / #179).
           yawRate: moveInput.yawRate,
+          px4Compat: moveInput.px4Compat,
           firmware: connectionNode?.vehicle?.firmware,
         });
-        if (advisory) node.warn(advisory);
+        // One warn per advisory streak (C8): a stream feed repeating the same
+        // combo warns once; a clean input clears the memory so the advisory's
+        // next appearance warns again.
+        if (advisory && advisory !== lastAdvisory) node.warn(advisory);
+        lastAdvisory = advisory;
 
         if (delivery === 'build') {
           completeBuild(node, send, message);
@@ -108,21 +160,23 @@ module.exports = function registerMavlinkMove(RED) {
             // streaming to the same vehicle would alternate contradictory
             // setpoints — the vehicle oscillates while both nodes report
             // success. Fail closed, like the mission-transfer lock. This node
-            // replacing its own stream to the same target is legitimate
-            // single-flight: stopping it first frees the scope, so the
-            // synchronous re-acquire below cannot self-conflict. A conflict
-            // (necessarily another node's stream) refuses before stopStream,
-            // leaving the running stream running like any rejected input.
+            // replacing its own stream keeps the lock it already holds — no
+            // release/re-acquire, so no self-conflict window. A retarget
+            // acquires its new scope first: a conflict (necessarily another
+            // node's stream) refuses before the running stream is touched,
+            // like any rejected input.
             const key = streamLocks.key(connectionNode.id, target);
-            if (key === streamKey) stopStream();
-            const release = streamLocks.acquire(connectionNode.id, target);
-            if (!release) {
-              throw new Error(
-                `a setpoint stream to ${target.sysid}.${target.compid} is already running on this connection — stop it first or target it from one node`
-              );
+            const sameKey = key === streamKey;
+            let release = releaseStream;
+            if (!sameKey) {
+              release = streamLocks.acquire(connectionNode.id, target);
+              if (!release) {
+                throw new Error(
+                  `a setpoint stream to ${target.sysid}.${target.compid} is already running on this connection — stop it first or target it from one node`
+                );
+              }
             }
-            stopStream();
-            stream = createMoveStream({
+            const next = createMoveStream({
               connection: connectionNode,
               message,
               target,
@@ -137,33 +191,71 @@ module.exports = function registerMavlinkMove(RED) {
               // only the bookkeeping is left: free the scope before telling
               // the flow. A replaced stream's timer is already cleared, so
               // this only ever fires for the stream currently in the slot.
-              onExpire: (stopMessage) => {
+              onExpire: (stopMessage, brakeError) => {
+                const sent = next.sent;
                 stream = null;
                 releaseStream = null;
                 streamKey = null;
                 release();
-                completeExpiry(node, stopMessage);
+                completeExpiry(node, stopMessage, sent, brakeError);
+              },
+              // A tick send that throws is contained in the stream — it
+              // keeps cadence and retries (§ "Move setpoint matrix"). One
+              // report per failure streak, status output only: the input
+              // that started the stream completed long ago, same as expiry.
+              onSendError: (err) => {
+                applyActionStatus(node, 'error', err.message);
+                node.send([null, statusRecord('failed', `setpoint send failed: ${err.message}`)]);
+              },
+              // First success after a failed streak restores the badge the
+              // stream started with. No record — recovery is the absence of
+              // failure, not an event.
+              onSendRecovery: () => {
+                applyActionStatus(node, 'ok', 'streaming');
               },
             });
-            streamKey = key;
-            releaseStream = release;
-            // start() sends synchronously before marking the stream active, and
-            // Connection.send throws loudly when the identity cannot resolve. A
-            // throw here must not strand the just-acquired lock on a stream
-            // that never ran — release before the error routes to failInput.
-            // stop() on a never-active stream sends nothing, so stopStream()
-            // here is purely the bookkeeping.
+            // The old stream keeps running until the handover setpoint is
+            // accepted: start() sends synchronously, and a throw must leave
+            // the vehicle with the retrying stream it already had, not
+            // nothing (Codex, #240). Only a retarget's freshly acquired
+            // scope needs freeing on the way out.
             try {
-              stream.start();
+              next.start();
             } catch (err) {
-              stopStream();
+              if (!sameKey) release();
               throw err;
             }
-            completeResult(node, send, 'succeeded', 'streaming', message);
+            // Handover after the new stream is live. Same target: no brake —
+            // the setpoint just sent is the next command (§ "Move setpoint
+            // matrix": MAVSDK/QGC never brake between consecutive targets).
+            // A retarget ends control of the OLD target, so that one brakes;
+            // a brake throw must not undo the already-running replacement
+            // (warn, like close — the lock still frees via finally).
+            if (stream) {
+              const old = stream;
+              stream = null;
+              try {
+                old.stop({ brake: !sameKey });
+              } catch (err) {
+                node.warn(`Move stream brake failed on retarget: ${err.message}`);
+              } finally {
+                // No truthiness guard: stream and releaseStream are assigned
+                // and cleared together, so inside `if (stream)` the release
+                // always exists — and if that invariant ever broke, throwing
+                // here beats silently stranding the old target's lock.
+                if (!sameKey) releaseStream();
+              }
+            }
+            stream = next;
+            streamKey = key;
+            releaseStream = release;
+            completeResult(node, send, 'succeeded', 'streaming', { message });
           } else {
-            stopStream();
+            // Send tier. No stopStream here: `delivery` is fixed per node, so
+            // a send-delivery node can never own a stream — the guard would
+            // protect an unreachable state (AGENTS "Proof-of-possibility").
             connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
-            completeResult(node, send, 'succeeded', 'sent', message);
+            completeResult(node, send, 'succeeded', 'sent', { message });
           }
         }
         done();
@@ -173,7 +265,14 @@ module.exports = function registerMavlinkMove(RED) {
     });
 
     node.on('close', (done) => {
-      stopStream();
+      // Close is an end of control, so it brakes — but the brake is the last
+      // thing this node ever sends, and a dead link at teardown must not stop
+      // the teardown (the firmware's setpoint watchdog covers the vehicle).
+      try {
+        stopStream();
+      } catch (err) {
+        node.warn(`Move stream brake failed on close: ${err.message}`);
+      }
       done();
     });
   }
@@ -186,9 +285,21 @@ function completeBuild(node, send, message) {
   send([{ payload: message }, statusRecord('succeeded', 'built', { message })]);
 }
 
-function completeResult(node, send, result, action, message) {
-  applyActionStatus(node, 'ok', action);
-  send([{ payload: { result, message } }, statusRecord(result, action, { message })]);
+/**
+ * A completed input: badge, output 0 trigger, status record — one shape for
+ * the sent/streaming/stopped outcomes. One input, one trigger (§9): a stop
+ * that succeeded fires output 0 like any other completed input; its
+ * 'no stream' detail distinguishes the second press.
+ *
+ * @param {object} node
+ * @param {Function} send
+ * @param {string} result  'succeeded'
+ * @param {string} detail  'sent' | 'streaming' | 'stopped' | 'no stream'
+ * @param {object} fields  payload/record fields (message, and `sent` on stops)
+ */
+function completeResult(node, send, result, detail, fields) {
+  applyActionStatus(node, 'ok', detail);
+  send([{ payload: { result, ...fields } }, statusRecord(result, detail, fields)]);
 }
 
 /**
@@ -204,11 +315,19 @@ function completeResult(node, send, result, action, message) {
  * progress does. Branch on it with a switch for `detail === 'expired'`.
  *
  * @param {object} node
- * @param {object} message  the zero-velocity stop message that was sent
+ * @param {object|null} message  the zero-velocity brake that was sent, or null when its send threw
+ * @param {number} sent  setpoints the connection accepted (not wire deliveries — the streaming band coalesces under backpressure)
+ * @param {Error} [brakeError]  set when the expiry brake send threw
  */
-function completeExpiry(node, message) {
+function completeExpiry(node, message, sent, brakeError) {
   applyActionStatus(node, 'ok', 'stream expired');
-  node.send([null, statusRecord('succeeded', 'expired', { message })]);
+  // `detail` is the documented discriminator (`detail === 'expired'`) and
+  // must survive a brake failure — the one moment downstream recovery matters
+  // most is exactly when the switch must still match (Codex, #240). The
+  // failure rides its own field instead.
+  const extra = { message, sent };
+  if (brakeError) extra.brakeError = brakeError.message;
+  node.send([null, statusRecord('succeeded', 'expired', extra)]);
 }
 
 function statusRecord(result, detail, extra = {}) {

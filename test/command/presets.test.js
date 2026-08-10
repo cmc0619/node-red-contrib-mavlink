@@ -228,12 +228,19 @@ test('location presets refuse blank lat/lon rather than sending 0,0 (#88)', () =
   const reposition = getPreset('reposition');
   assert.match(
     blankLocationRefusal(reposition, { 1: 5, 5: '', 6: 8.5 }),
-    /requires latitude and longitude/
+    /requires latitude, longitude and altitude/
   );
-  assert.equal(blankLocationRefusal(reposition, { 5: 47.4, 6: 8.5 }), null);
+  // Reposition also refuses a blank altitude (requireAltitude): DO_REPOSITION
+  // documents no blank-alt sentinel, and a zero-fill is ground level — the
+  // Move F1 rule on the command path (§10).
+  assert.match(
+    blankLocationRefusal(reposition, { 5: 47.4, 6: 8.5 }),
+    /altitude.*ground level/
+  );
+  assert.equal(blankLocationRefusal(reposition, { 5: 47.4, 6: 8.5, 7: 30 }), null);
 
   // An explicit 0 is a real coordinate, deliberately typed, and passes.
-  assert.equal(blankLocationRefusal(reposition, { 5: 0, 6: 0 }), null);
+  assert.equal(blankLocationRefusal(reposition, { 5: 0, 6: 0, 7: 0 }), null);
 
   // Orbit carries the same rule.
   assert.match(
@@ -277,11 +284,50 @@ test('a blank msg.payload override stays blank instead of coercing to 0 (Greptil
     assert.equal(merged[5], undefined, `${JSON.stringify(blank)} must not become a coordinate`);
     assert.match(
       blankLocationRefusal(getPreset('reposition'), merged),
-      /requires latitude and longitude/
+      /requires latitude, longitude and altitude/
     );
   }
 
   // A real override still lands, and an explicit 0 still counts as typed.
   assert.equal(mergeParams({}, { 5: 47.4 })[5], 47.4);
   assert.equal(mergeParams({}, { 5: 0 })[5], 0);
+});
+
+test('GCS parity: blank reposition speed and yaw encode the spec sentinels (#240)', () => {
+  // QGC/MAVSDK transmit speed -1 (vehicle default) and yaw NaN (current
+  // heading mode) for unspecified fields. The old zero-fill commanded 0 m/s
+  // and yaw-to-north on every goto — the #98b land-yaw hazard, on the goto
+  // primitive.
+  const arr = buildParamArray(getPreset('reposition'), mergeParams({ params: '{"5":47.4,"6":8.5,"7":30}' }, null));
+  assert.equal(arr[0], -1, 'blank speed encodes -1 (vehicle default)');
+  assert.ok(Number.isNaN(arr[3]), 'blank yaw encodes NaN (keep current heading mode)');
+  assert.deepEqual(arr.slice(4), [47.4, 8.5, 30]);
+
+  // Explicit values — including 0 — are typed and win over the sentinels.
+  const explicit = buildParamArray(
+    getPreset('reposition'),
+    mergeParams({ params: '{"1":5,"4":0,"5":47.4,"6":8.5,"7":30}' }, null)
+  );
+  assert.equal(explicit[0], 5);
+  assert.equal(explicit[3], 0, 'an explicit 0 yaw is a command to heading 0');
+});
+
+test('GCS parity: blank change-speed fields encode -1 "no change", never a commanded zero (#240)', () => {
+  const arr = buildParamArray(getPreset('change_speed'), mergeParams({ params: '{"1":1}' }, null));
+  assert.deepEqual(arr.slice(0, 3), [1, -1, -1], 'blank speed and throttle are "no change"');
+  const explicit = buildParamArray(getPreset('change_speed'), mergeParams({ params: '{"1":1,"2":0}' }, null));
+  assert.equal(explicit[1], 0, 'an explicit 0 speed is a typed command');
+});
+
+test('GCS parity: blank takeoff yaw encodes NaN — the editor renders no yaw field (#98b class)', () => {
+  const arr = buildParamArray(getPreset('takeoff'), mergeParams({ params: '{"7":25}' }, null));
+  assert.ok(Number.isNaN(arr[3]), 'blank yaw encodes NaN (current heading mode)');
+  assert.equal(arr[6], 25);
+});
+
+test('a raw blank string from the Fan-out path cannot clobber a sentinel with ""', () => {
+  // Fan-out hands action.params to buildParamArray raw, never through
+  // mergeParams — a '' there must read as absent, not as a value.
+  const arr = buildParamArray(getPreset('reposition'), { 4: '', 5: 47.4, 6: 8.5, 7: 30 });
+  assert.ok(Number.isNaN(arr[3]), 'a blank-string yaw still encodes the NaN sentinel');
 });

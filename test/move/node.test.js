@@ -435,7 +435,8 @@ test('mavlink-move stream: malformed payload timing overrides refuse the input',
 });
 
 test('mavlink-move stream: TTL expiry emits an expired message the flow can chain on', async () => {
-  const conn = { vehicle: {}, send() {} };
+  const sends = [];
+  const conn = { vehicle: {}, send(message) { sends.push(message); } };
   const RED = redStub({ conn });
   require('../../nodes/mavlink-move')(RED);
   const Node = RED.nodes.types['mavlink-move'];
@@ -476,6 +477,15 @@ test('mavlink-move stream: TTL expiry emits an expired message the flow can chai
   // Carries the stop packet the vehicle actually got: zero-velocity, not the
   // all-ignore mask PX4 rejects (§14 / #115).
   assert.equal(status.message.fields.type_mask, 3527);
+  // ...and it really went to the wire: TTL expiry is an end of control, the
+  // one place besides explicit stop and close where the brake fires.
+  const brake = sends[sends.length - 1];
+  assert.equal(brake.fields.type_mask, 3527, 'TTL expiry sends the brake');
+  assert.equal(brake.fields.vx, 0);
+  // C11-lite: the record counts setpoints the connection accepted (the
+  // brake is not one; the streaming band may coalesce before the wire).
+  assert.equal(status.sent, sends.length - 1);
+  assert.ok(status.sent >= 1, 'the initial send counts');
 });
 
 test('mavlink-move stream: a whitespace ttl inherits the configured TTL, never "run forever"', async () => {
@@ -676,6 +686,392 @@ test('mavlink-move stream: TTL expiry frees the target for another node (#176)',
   b.emit('close', () => {});
 });
 
+test('mavlink-move stream: replacement hands over with no brake; close still brakes', () => {
+  const sends = [];
+  const conn = { vehicle: {}, send(message) { sends.push(message); } };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    // 0.1 Hz: one send per 10 s, so no timer tick lands inside the test —
+    // every observed send is an initial setpoint or the brake.
+    rateHz: 0.1,
+    ttlMs: 0,
+  });
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  node.emit('input', { payload: { velocity: { north: 2, east: 0, up: 0 } } }, () => {}, () => {});
+
+  // GCS practice (§ "Move setpoint matrix"): old setpoint → new setpoint
+  // directly, the replacement IS the next command.
+  assert.equal(sends.length, 2, 'no brake between old and new');
+  assert.equal(sends[0].fields.vx, 1);
+  assert.equal(sends[1].fields.vx, 2);
+
+  // Close is an end of control and does brake.
+  node.emit('close', () => {});
+  assert.equal(sends.length, 3);
+  assert.equal(sends[2].fields.type_mask, 3527, 'close sends the brake');
+  assert.equal(sends[2].fields.vx, 0);
+});
+
+test('mavlink-move stream: a tick send failure never kills the stream and reports once per streak', async () => {
+  let failing = false;
+  const calls = [];
+  const conn = {
+    vehicle: {},
+    send(message) {
+      calls.push(message);
+      if (failing) throw new Error('identity unresolved');
+    },
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 200,
+    ttlMs: 0,
+  });
+  const emitted = [];
+  node.send = (messages) => { emitted.push(messages); };
+  const statuses = [];
+  node.status = (s) => { statuses.push(s); };
+
+  // Wait until the connection has seen `n` more attempts (throwing sends
+  // included — an attempt proves the timer is still alive).
+  const grow = async (n, why) => {
+    const want = calls.length + n;
+    const deadline = Date.now() + 2000;
+    while (calls.length < want && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.ok(calls.length >= want, why);
+  };
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  failing = true;
+  await grow(2, 'the stream keeps its cadence through a failing link');
+  failing = false;
+  await grow(1, 'the stream still sends after the streak ends');
+  failing = true;
+  await grow(2, 'the stream survives a second streak');
+  failing = false;
+  node.emit('close', () => {});
+
+  const failures = emitted.filter((m) => m[0] === null && m[1].result === 'failed');
+  assert.equal(failures.length, 2, 'one record per streak: fail…, succeed, fail… → two');
+  assert.match(failures[0][1].detail, /send failed/);
+  assert.match(failures[0][1].detail, /identity unresolved/);
+  // Recovery restores the streaming badge, with no extra record.
+  const firstRed = statuses.findIndex((s) => s.fill === 'red');
+  assert.ok(firstRed >= 0, 'streak start flips the badge to error');
+  assert.ok(
+    statuses.slice(firstRed + 1).some((s) => s.fill === 'green' && s.text === 'streaming'),
+    'recovery restores the streaming badge'
+  );
+});
+
+test('mavlink-move stream: a brake-send throw on close still completes close', () => {
+  let failing = false;
+  const conn = {
+    vehicle: {},
+    send() {
+      if (failing) throw new Error('link down');
+    },
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 0.1,
+    ttlMs: 0,
+  });
+  const warns = [];
+  node.warn = (text) => { warns.push(text); };
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  failing = true;
+  let closed = false;
+  node.emit('close', () => { closed = true; });
+
+  assert.ok(closed, 'close completed despite the brake throw');
+  assert.equal(warns.length, 1);
+  assert.match(warns[0], /link down/);
+});
+
+test('mavlink-move stream: {action:"stop"} halts the stream, brakes, and records the sent count', async () => {
+  const sends = [];
+  const conn = { vehicle: {}, send(message) { sends.push(message); } };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 200,
+    ttlMs: 0,
+  });
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  const deadline = Date.now() + 2000;
+  while (sends.length < 3 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.ok(sends.length >= 3, 'stream running before the stop');
+
+  let out;
+  let doneError;
+  node.emit('input', { payload: { action: 'stop' } }, (m) => { out = m; }, (err) => { doneError = err; });
+
+  assert.equal(doneError, undefined);
+  const brake = sends[sends.length - 1];
+  assert.equal(brake.fields.type_mask, 3527, 'stop sends the brake');
+  assert.equal(brake.fields.vx, 0);
+  // One input, one trigger: a stop input succeeding fires the continue port.
+  assert.ok(out[0], 'stop fires output 0');
+  assert.equal(out[1].result, 'succeeded');
+  assert.equal(out[1].detail, 'stopped');
+  assert.equal(out[1].message.fields.type_mask, 3527, 'record carries the brake');
+  // Every send before the brake was an accepted setpoint.
+  assert.equal(out[1].sent, sends.length - 1, 'sent counts setpoints, not the brake');
+
+  const after = sends.length;
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(sends.length, after, 'the stream halted');
+  node.emit('close', () => {});
+  assert.equal(sends.length, after, 'nothing left for close to brake');
+});
+
+test('mavlink-move stream: stop with nothing running succeeds with detail "no stream"', () => {
+  const sends = [];
+  const conn = { vehicle: {}, send(message) { sends.push(message); } };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 0.1,
+    ttlMs: 0,
+  });
+
+  // A stop control must not punish a second press (§ "Move setpoint matrix").
+  let out;
+  let doneError;
+  node.emit('input', { payload: { action: 'stop' } }, (m) => { out = m; }, (err) => { doneError = err; });
+
+  assert.equal(doneError, undefined, 'stop with nothing running is not an error');
+  assert.ok(out[0], 'still fires output 0');
+  assert.equal(out[1].result, 'succeeded');
+  assert.equal(out[1].detail, 'no stream');
+  assert.equal(sends.length, 0, 'nothing running, so nothing sent');
+});
+
+test('mavlink-move send delivery refuses {action:"stop"} — only the stream tier owns streams', () => {
+  const conn = { vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'send',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+  });
+
+  let out;
+  let doneError;
+  node.emit('input', { payload: { action: 'stop' } }, (m) => { out = m; }, (err) => { doneError = err; });
+
+  assert.equal(out[0], null);
+  assert.equal(out[1].result, 'failed');
+  assert.match(doneError.message, /requires stream delivery/);
+});
+
+test('mavlink-move: an unknown action throws naming the valid actions', () => {
+  const conn = { vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 0.1,
+    ttlMs: 0,
+  });
+
+  let out;
+  let doneError;
+  node.emit('input', { payload: { action: 'hover' } }, (m) => { out = m; }, (err) => { doneError = err; });
+
+  assert.equal(out[0], null);
+  assert.equal(out[1].result, 'failed');
+  assert.match(doneError.message, /unknown Move action "hover"/);
+  assert.match(doneError.message, /stop/, 'names the valid actions');
+});
+
+test('mavlink-move stream: {action:"stop"} releases the target for a new stream (#176)', () => {
+  const conn = { id: 'conn', vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const cfg = {
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 0.1,
+    ttlMs: 0,
+  };
+  const a = new Node({ ...cfg });
+  const b = new Node({ ...cfg });
+
+  a.emit('input', { payload: {} }, () => {}, () => {});
+  let refused;
+  b.emit('input', { payload: {} }, (m) => { refused = m; }, () => {});
+  assert.equal(refused[1].result, 'failed', 'target held while a streams');
+
+  let stopped;
+  a.emit('input', { payload: { action: 'stop' } }, (m) => { stopped = m; }, () => {});
+  assert.equal(stopped[1].detail, 'stopped');
+
+  let after;
+  b.emit('input', { payload: {} }, (m) => { after = m; }, () => {});
+  assert.equal(after[1].result, 'succeeded', 'stop freed the target');
+  b.emit('close', () => {});
+  a.emit('close', () => {});
+});
+
+test('mavlink-move advisory dedup: one warn per streak, cleared by a clean input (C8)', () => {
+  const conn = { vehicle: { firmware: 'px4' }, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const make = () => {
+    const node = new Node({
+      delivery: 'send',
+      mode: 'position',
+      north: 1,
+      east: 2,
+      up: 3,
+      connection: 'conn',
+      targetSystem: 1,
+      targetComponent: 1,
+    });
+    const warns = [];
+    node.warn = (text) => { warns.push(text); };
+    return { node, warns };
+  };
+  const offset = { frame: 'LOCAL_OFFSET_NED' };
+  const body = { frame: 'BODY_NED' };
+  const clean = { frame: 'LOCAL_NED' };
+
+  // A refresh-fed stream repeating the same combo must not spam the sidebar —
+  // noise gets ignored, which defeats the advisory's whole purpose.
+  let s = make();
+  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  assert.equal(s.warns.length, 1, 'same advisory twice → exactly one warn');
+  assert.match(s.warns[0], /OFFSET/);
+
+  // Only consecutive repeats dedup: a change is news, and so is the return.
+  s = make();
+  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  s.node.emit('input', { payload: body }, () => {}, () => {});
+  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  assert.equal(s.warns.length, 3, 'advisory A, B, A → three warns');
+  assert.match(s.warns[1], /BODY_NED/);
+
+  // A clean input clears the memory, so the advisory's next appearance warns.
+  s = make();
+  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  s.node.emit('input', { payload: clean }, () => {}, () => {});
+  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  assert.equal(s.warns.length, 2, 'advisory, clean, same advisory → two warns');
+});
+
+test('mavlink-move passes px4Compat from config: missing sends *_INT, false sends spec-current and warns', () => {
+  const sends = [];
+  const conn = { vehicle: { firmware: 'px4' }, send(message) { sends.push(message); } };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const cfg = {
+    delivery: 'send',
+    mode: 'position',
+    frame: 'GLOBAL_RELATIVE_ALT',
+    lat: 47,
+    lon: 8,
+    alt: 10,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+  };
+
+  // A saved config missing the value parses as checked — the safe direction.
+  const legacy = new Node({ ...cfg });
+  legacy.emit('input', { payload: {} }, () => {}, () => {});
+  assert.equal(sends[0].fields.coordinate_frame, 6, 'missing px4Compat keeps the *_INT wire number');
+
+  const optedOut = new Node({ ...cfg, px4Compat: false });
+  const warns = [];
+  optedOut.warn = (text) => { warns.push(text); };
+  optedOut.emit('input', { payload: {} }, () => {}, () => {});
+  assert.equal(sends[1].fields.coordinate_frame, 3, 'opt-out sends the spec-current number');
+  assert.equal(warns.length, 1, 'opt-out under a px4 profile draws the advisory');
+  assert.match(warns[0], /source-read/);
+});
+
 function redStub(nodesById) {
   return {
     nodes: {
@@ -686,6 +1082,7 @@ function redStub(nodesById) {
         node.id = config.id || 'node';
         node.status = () => {};
         node.error = () => {};
+        node.warn = () => {};
         // Real Node-RED gives every node a send() for emits that outlive the
         // input handler — the stream-expiry message is one.
         node.send = () => {};
@@ -699,3 +1096,173 @@ function redStub(nodesById) {
     },
   };
 }
+
+test('mavlink-move stream: expiry brake failure keeps the documented discriminator (Codex, #240)', async () => {
+  // A flow following the node help switches on detail === 'expired'. The one
+  // moment recovery matters most — the brake never reached the wire — is
+  // exactly when that switch must still match; the failure rides its own
+  // brakeError field instead.
+  const conn = {
+    id: 'conn',
+    vehicle: {},
+    // The brake is deliberately shaped like a velocity setpoint (same mask
+    // 3527), so the stub tells them apart by the commanded velocity: the
+    // streamed setpoint carries vx=1, the brake vx=0.
+    send(message) {
+      if (message.fields.vx === 0) throw new Error('link down');
+    },
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 200,
+    ttlMs: 20,
+  });
+
+  const emitted = [];
+  node.send = (messages) => { emitted.push(messages); };
+  node.emit('input', { payload: {} }, () => {}, () => {});
+
+  const deadline = Date.now() + 2000;
+  while (!emitted.length && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.equal(emitted[0][1].detail, 'expired', 'the discriminator survives the brake failure');
+  assert.match(emitted[0][1].brakeError, /link down/);
+  assert.equal(typeof emitted[0][1].sent, 'number');
+  node.emit('close', () => {});
+});
+
+test('mavlink-move stream: a failed handover send leaves the old stream running (Codex, #240)', () => {
+  // The replacement's initial send throwing must not leave the vehicle with
+  // no retrying stream and no brake — the old stream keeps the slot.
+  const sends = [];
+  let failNext = false;
+  const conn = {
+    id: 'conn',
+    vehicle: {},
+    send(message) {
+      if (failNext) { failNext = false; throw new Error('identity unresolved'); }
+      sends.push(message);
+    },
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 0.1,
+    ttlMs: 0,
+  });
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  assert.equal(sends.length, 1, 'old stream started');
+
+  failNext = true;
+  let failed;
+  let doneErr;
+  node.emit('input', { payload: { velocity: { north: 2, east: 0, up: 0 } } }, (m) => { failed = m; }, (err) => { doneErr = err; });
+  assert.match(doneErr.message, /identity unresolved/);
+  assert.equal(failed[1].result, 'failed');
+
+  // The old stream still owns the slot: close brakes it — a dead stream
+  // would have nothing to brake.
+  node.emit('close', () => {});
+  assert.equal(sends.length, 2, 'close braked the surviving stream');
+  assert.equal(sends[1].fields.type_mask, 3527);
+  assert.equal(sends[1].fields.vx, 0);
+});
+
+test('mavlink-move stream: a retarget brakes the old target after the new stream is live (Codex, #240)', () => {
+  // Same-target replacement hands over brakeless; a retarget ends control of
+  // the OLD target, so that vehicle gets the brake — after the new stream's
+  // first send succeeded.
+  const sends = [];
+  const conn = { id: 'conn', vehicle: {}, send(message) { sends.push(message); } };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 0.1,
+    ttlMs: 0,
+  });
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  node.emit('input', { payload: { target: { sysid: 2, compid: 1 } } }, () => {}, () => {});
+
+  assert.equal(sends.length, 3, 'setpoint, handover setpoint, old-target brake');
+  assert.equal(sends[0].fields.target_system, 1);
+  assert.equal(sends[1].fields.target_system, 2, 'the new stream sends before the old is stopped');
+  assert.equal(sends[2].fields.target_system, 1, 'the brake goes to the abandoned target');
+  assert.equal(sends[2].fields.type_mask, 3527);
+  node.emit('close', () => {});
+});
+
+test('mavlink-move stream: a failed retarget frees only the new scope, old stream keeps its own (Codex, #240)', () => {
+  let failNext = false;
+  const conn = {
+    id: 'conn',
+    vehicle: {},
+    send() {
+      if (failNext) { failNext = false; throw new Error('identity unresolved'); }
+    },
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const cfg = {
+    delivery: 'stream',
+    mode: 'velocity',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 0.1,
+    ttlMs: 0,
+  };
+  const a = new Node({ ...cfg });
+  const b = new Node({ ...cfg });
+
+  a.emit('input', { payload: {} }, () => {}, () => {});
+  failNext = true;
+  let doneErr;
+  a.emit('input', { payload: { target: { sysid: 2, compid: 1 } } }, () => {}, (err) => { doneErr = err; });
+  assert.match(doneErr.message, /identity unresolved/);
+
+  // Target 1 is still held by a's surviving stream; target 2 was released on
+  // the way out of the failed retarget.
+  let held;
+  b.emit('input', { payload: {} }, (m) => { held = m; }, () => {});
+  assert.match(held[1].detail, /already running/);
+  let freed;
+  b.emit('input', { payload: { target: { sysid: 2, compid: 1 } } }, (m) => { freed = m; }, () => {});
+  assert.equal(freed[1].result, 'succeeded', 'the failed retarget freed its scope');
+  a.emit('close', () => {});
+  b.emit('close', () => {});
+});

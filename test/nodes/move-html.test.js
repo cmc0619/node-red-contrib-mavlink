@@ -31,6 +31,7 @@ const ROW_IDS = [
   'row-move-aUp',
   'row-move-yaw',
   'row-move-yawRate',
+  'row-move-px4Compat',
   'row-move-rate',
   'row-move-ttl',
 ];
@@ -90,14 +91,33 @@ test('mavlink-move offers the full mode and frame matrix', () => {
     'LOCAL_OFFSET_NED',
     'BODY_OFFSET_NED',
     'BODY_NED',
-    'GLOBAL_RELATIVE_ALT_INT',
-    'GLOBAL_INT',
-    'GLOBAL_TERRAIN_ALT_INT',
+    'GLOBAL_RELATIVE_ALT',
+    'GLOBAL',
+    'GLOBAL_TERRAIN_ALT',
   ]) {
     assert.match(html, new RegExp(`option value="${frame}"`), `frame ${frame} offered`);
   }
+  // The deprecated *_INT spellings are accepted at runtime as aliases, never
+  // advertised: the editor offers only the canonical names (owner-ruled
+  // 2026-08-09).
+  for (const deprecated of ['GLOBAL_INT', 'GLOBAL_RELATIVE_ALT_INT', 'GLOBAL_TERRAIN_ALT_INT']) {
+    assert.doesNotMatch(
+      html,
+      new RegExp(`option value="${deprecated}"`),
+      `deprecated frame ${deprecated} not offered`
+    );
+  }
   // No raw type_mask input — named modes only; raw masks live in mavlink-build.
   assert.doesNotMatch(html, /type_?[mM]ask"|node-input-typeMask/, 'no raw type_mask field');
+});
+
+test('mavlink-move PX4-compat checkbox: default checked, shown only for global frames', () => {
+  // Default on is the byte-identical wire choice (owner-ruled 2026-08-09):
+  // checked emits the *_INT numbers 5/6/11; unchecked the spec-current 0/3/10.
+  assert.match(html, /px4Compat:\s*\{\s*value:\s*true\s*\}/, 'px4Compat defaults to checked');
+  assert.match(html, /type="checkbox" id="node-input-px4Compat"/, 'px4Compat is a checkbox');
+  assert.match(html, /id="row-move-px4Compat"/, 'px4Compat row has ID for frame-driven toggling');
+  assert.match(html, /px4Compat:\s*isGlobalFrame/, 'px4Compat shown only when a global frame is selected');
 });
 
 test('mavlink-move speaks one canonical vocabulary and labels body frames forward/right', () => {
@@ -255,4 +275,28 @@ test('mavlink-move Build dialect select uses shared helper with Vehicle Profile 
 test('mavlink-move has no Firmware row and no silent ardupilotmega default', () => {
   assert.doesNotMatch(html, /node-input-firmware|row-move-firmware|Firmware/, 'Move must not add a Firmware row');
   assert.doesNotMatch(html, /ardupilotmega/, 'Move editor must not invent a default dialect');
+});
+
+test('mavlink-move editor canonicalizes legacy *_INT global frames on open (Codex, #240)', () => {
+  // One explicit compatibility boundary (AGENTS.md "Backward compatibility"):
+  // flows saved before the 2026-08-09 frame ruling store the deprecated *_INT
+  // names. Without the map, the select has no matching option, refreshVisibility
+  // falls back to LOCAL_NED, and saving silently reinterprets a global move as
+  // a local-origin move.
+  assert.match(html, /var FRAME_COMPAT = \{/, 'the compatibility map exists');
+  assert.match(html, /GLOBAL_INT: 'GLOBAL'/, 'GLOBAL_INT canonicalizes');
+  assert.match(html, /GLOBAL_RELATIVE_ALT_INT: 'GLOBAL_RELATIVE_ALT'/, 'GLOBAL_RELATIVE_ALT_INT canonicalizes');
+  assert.match(html, /GLOBAL_TERRAIN_ALT_INT: 'GLOBAL_TERRAIN_ALT'/, 'GLOBAL_TERRAIN_ALT_INT canonicalizes');
+  assert.match(
+    html,
+    /if \(FRAME_COMPAT\[node\.frame\]\) \{\s*\$\('#node-input-frame'\)\.val\(FRAME_COMPAT\[node\.frame\]\);/,
+    'the saved frame is canonicalized into the select before anything reads it'
+  );
+  // The boundary must run before the visibility pass that would otherwise
+  // read the unmatched select as LOCAL_NED.
+  const compatAt = html.indexOf('var FRAME_COMPAT');
+  const visibilityCallAt = html.indexOf('refreshVisibility()');
+  assert.ok(compatAt > -1 && compatAt < visibilityCallAt, 'canonicalization precedes the first visibility pass');
+  // And the legacy names must not be select options — accepted, never offered.
+  assert.doesNotMatch(html, /<option value="GLOBAL_RELATIVE_ALT_INT"/, 'legacy options are not offered');
 });

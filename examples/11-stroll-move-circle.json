@@ -178,7 +178,7 @@
     "type": "function",
     "z": "ex11-tab",
     "name": "Ring points",
-    "func": "// Ring setpoint generator \u2014 no arc primitive; the ring is flow-author maths.\nconst R = 100;\nconst alt = 20;\nconst c_lat = -35.363261;\nconst c_lon = 149.165230;\nlet theta = context.get('theta') || 0;\ntheta += Math.PI / 18;\ncontext.set('theta', theta);\nconst lat = c_lat + (R * Math.sin(theta)) / 111320;\nconst lon = c_lon + (R * Math.cos(theta)) / (111320 * Math.cos(c_lat * Math.PI / 180));\nmsg.payload = {\n    mode: 'position',\n    frame: 'GLOBAL_RELATIVE_ALT_INT',\n    position: { lat, lon, alt }\n};\nreturn msg;",
+    "func": "// Ring setpoint generator \u2014 no arc primitive; the ring is flow-author maths.\nconst R = 100;\nconst alt = 20;\nconst c_lat = -35.363261;\nconst c_lon = 149.165230;\nlet theta = context.get('theta') || 0;\ntheta += Math.PI / 18;\ncontext.set('theta', theta);\nconst lat = c_lat + (R * Math.sin(theta)) / 111320;\nconst lon = c_lon + (R * Math.cos(theta)) / (111320 * Math.cos(c_lat * Math.PI / 180));\nmsg.payload = {\n    mode: 'position',\n    frame: 'GLOBAL_RELATIVE_ALT',\n    position: { lat, lon, alt }\n};\nreturn msg;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -216,6 +216,7 @@
     "yawRate": "",
     "rateHz": 5,
     "ttlMs": 1500,
+    "px4Compat": true,
     "x": 660,
     "y": 220,
     "wires": [
@@ -226,7 +227,7 @@
         "ex11-dbg-move-st"
       ]
     ],
-    "frame": "GLOBAL_RELATIVE_ALT_INT"
+    "frame": "GLOBAL_RELATIVE_ALT"
   },
   {
     "id": "ex11-inject-prep",
