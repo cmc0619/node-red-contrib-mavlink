@@ -77,6 +77,7 @@ without understanding each step.
 | `33-payload-gimbal-legacy.json` | SITL 33 Payload gimbal legacy | AP payload sysid 31 (`14570`) |
 | `34-payload-camera.json` | SITL 34 Payload camera | AP payload sysid 31 (photo ok / video DENIED) |
 | `35-payload-gimbal-manager.json` | SITL 35 Payload gimbal manager | AP payload sysid 31 (send unconfirmed) |
+| `37-move-reposition-carrier.json` | SITL 37 Move reposition carrier | 1× ArduPilot (GUIDED; same goto as 19) |
 
 ## Running the suite
 
