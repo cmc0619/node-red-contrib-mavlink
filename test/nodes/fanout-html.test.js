@@ -183,6 +183,13 @@ test('delivery offers build, send, and send-and-confirm', () => {
   assert.match(html, /<option value="confirm">Send and confirm<\/option>/);
 });
 
+test('help documents the broadcast position gate and the setpoint stream lock (#245)', () => {
+  assert.match(html, /broadcast position setpoint/i, 'the broadcast position gate is documented');
+  assert.match(html, /msg\.confirmed/, 'the confirm escape is named');
+  assert.match(html, /stream lock/i, 'the single-owner stream lock is documented');
+  assert.match(html, /velocity\/acceleration-only/i, 'the velocity exemption is documented');
+});
+
 test('help documents targets patches as wire units and the mavlink-out handoff', () => {
   assert.match(html, /wire units/i, 'raw-surface unit rule is stated');
   assert.match(html, /mavlink-out/, 'Build handoff to mavlink-out is documented');

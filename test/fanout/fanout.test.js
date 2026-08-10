@@ -9,6 +9,7 @@ const {
   selectFanoutMembers,
 } = require('../../lib/fanout');
 const { BAND } = require('../../lib/connection/bands');
+const { streamLocks } = require('../../lib/delivery/lock');
 const { offsetLatLon } = require('../../lib/formation');
 
 test('selection resolves all, explicit list, and filters while excluding stale peers', () => {
@@ -446,6 +447,214 @@ test('the safety gate covers COMMAND_INT and broadcast too (§10)', async () => 
   });
   assert.equal(refused.result, 'refused');
   assert.match(refused.detail, /confirm/i);
+});
+
+test('a broadcast position setpoint requires explicit confirmation (§10, #245)', async () => {
+  // type_mask 3576 uses the position triplet (bits 1+2+4 clear) and ignores
+  // velocity/accel/yaw — every vehicle on the link converges on one point.
+  const positionMask = 3576;
+  const refusedConnection = connectionStub([peer(1), peer(2)]);
+  const refused = await executeFanout({
+    connection: refusedConnection,
+    message: builtSetpoint({ fields: { type_mask: positionMask, x: 10, y: 5, z: -20, vx: 0 } }),
+    mode: 'broadcast',
+    delivery: 'send',
+  });
+  assert.equal(refused.result, 'refused');
+  assert.match(refused.detail, /converges every vehicle/);
+  assert.match(refused.detail, /confirm/i);
+  assert.equal(refusedConnection.sends.length, 0);
+
+  const confirmedConnection = connectionStub([peer(1), peer(2)]);
+  const confirmed = await executeFanout({
+    connection: confirmedConnection,
+    message: builtSetpoint({ fields: { type_mask: positionMask, x: 10, y: 5, z: -20, vx: 0 } }),
+    mode: 'broadcast',
+    delivery: 'send',
+    confirmed: true,
+  });
+  assert.equal(confirmed.success, true);
+  assert.equal(confirmedConnection.sends.length, 1);
+  assert.equal(confirmedConnection.sends[0].message.fields.target_system, 0);
+});
+
+test('the broadcast position gate reads the wire mask: velocity exempt, both carriers, fail closed (#245)', async () => {
+  // builtSetpoint's default mask (3527) ignores all three position bits —
+  // fleet momentum, not convergence, so it broadcasts ungated.
+  const velocityConnection = connectionStub([peer(1), peer(2)]);
+  const velocity = await executeFanout({
+    connection: velocityConnection,
+    message: builtSetpoint(),
+    mode: 'broadcast',
+    delivery: 'send',
+  });
+  assert.equal(velocity.success, true);
+  assert.equal(velocityConnection.sends.length, 1);
+
+  // SET_POSITION_TARGET_GLOBAL_INT is the other position carrier.
+  const globalInt = await executeFanout({
+    connection: connectionStub([peer(1)]),
+    message: builtSetpoint({ name: 'SET_POSITION_TARGET_GLOBAL_INT', fields: { type_mask: 3576 } }),
+    mode: 'broadcast',
+    delivery: 'send',
+  });
+  assert.equal(globalInt.result, 'refused');
+
+  // An unreadable mask cannot prove the position axes are ignored — gated.
+  const unreadable = await executeFanout({
+    connection: connectionStub([peer(1)]),
+    message: builtSetpoint({ fields: { type_mask: undefined } }),
+    mode: 'broadcast',
+    delivery: 'send',
+  });
+  assert.equal(unreadable.result, 'refused');
+
+  // SET_ATTITUDE_TARGET's type_mask bits mean body rates, not position — no
+  // coordinate to converge on, so it stays outside the gate.
+  const attitude = await executeFanout({
+    connection: connectionStub([peer(1)]),
+    message: {
+      name: 'SET_ATTITUDE_TARGET',
+      fields: { target_system: 0, target_component: 0, type_mask: 0, q: [1, 0, 0, 0], thrust: 0.5 },
+    },
+    mode: 'broadcast',
+    delivery: 'send',
+  });
+  assert.equal(attitude.success, true);
+});
+
+test('sequential position setpoints are not confirm-gated — the hazard is broadcast convergence (#245)', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+  const result = await executeFanout({
+    connection,
+    message: builtSetpoint({ fields: { type_mask: 3576, x: 10, y: 5, z: -20, vx: 0 } }),
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  assert.equal(result.success, true);
+  assert.equal(connection.sends.length, 2);
+});
+
+// ── Single-owner setpoint streams (#245) ──────────────────────────────────────
+
+test('a setpoint fan-out refuses a lock-held member and continues with the rest (#245)', async () => {
+  const connection = connectionStub([peer(1), peer(2)], { id: 'conn-A' });
+  // Simulate a Move stream owning vehicle 1 on this connection: the shared
+  // process-wide `streamLocks` registry IS the contract, so acquire on it
+  // exactly as nodes/mavlink-move.js does.
+  const release = streamLocks.acquire('conn-A', { sysid: 1, compid: 1 });
+  try {
+    const result = await executeFanout({
+      connection,
+      message: builtSetpoint(),
+      mode: 'sequential',
+      delivery: 'send',
+      intervalMs: 0,
+    });
+    assert.equal(result.success, false);
+    const bySysid = Object.fromEntries(result.members.map((m) => [m.sysid, m]));
+    assert.equal(bySysid[1].result, 'refused');
+    assert.match(bySysid[1].detail, /setpoint stream to 1\.1 is already running/);
+    assert.equal(bySysid[2].result, 'sent', 'the free member is still commanded (§10 continue doctrine)');
+    assert.deepEqual(connection.sends.map((s) => s.message.fields.target_system), [2]);
+  } finally {
+    release();
+  }
+
+  // Released, the same run succeeds — the refusal was the lock, nothing else.
+  const after = await executeFanout({
+    connection,
+    message: builtSetpoint(),
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  assert.equal(after.success, true);
+});
+
+test('the lock key is (connection, target): another connection or a command is unaffected (#245)', async () => {
+  const release = streamLocks.acquire('conn-A', { sysid: 1, compid: 1 });
+  try {
+    // Same sysid on a different connection is a different vehicle.
+    const crossConn = await executeFanout({
+      connection: connectionStub([peer(1)], { id: 'conn-B' }),
+      message: builtSetpoint(),
+      mode: 'sequential',
+      delivery: 'send',
+    });
+    assert.equal(crossConn.success, true);
+
+    // A command to the locked vehicle is not a stream conflict: the lock's
+    // scope is setpoint streams, and a command has its own ack visibility.
+    const command = await executeFanout({
+      connection: connectionStub([peer(1)], { id: 'conn-A' }),
+      message: builtCommand(),
+      mode: 'sequential',
+      delivery: 'send',
+    });
+    assert.equal(command.success, true);
+  } finally {
+    release();
+  }
+});
+
+test('a broadcast setpoint refuses entirely while any member is lock-held (#245)', async () => {
+  // One packet reaches every vehicle and cannot exclude the streamed-to one.
+  const connection = connectionStub([peer(1), peer(2)], { id: 'conn-A' });
+  const release = streamLocks.acquire('conn-A', { sysid: 2, compid: 1 });
+  try {
+    const result = await executeFanout({
+      connection,
+      message: builtSetpoint(),
+      mode: 'broadcast',
+      delivery: 'send',
+    });
+    assert.equal(result.result, 'refused');
+    assert.match(result.detail, /setpoint stream to 2\.1/);
+    assert.match(result.detail, /broadcast cannot exclude/);
+    assert.equal(connection.sends.length, 0);
+  } finally {
+    release();
+  }
+});
+
+test('one-shot setpoint runs hold nothing: a stream may start right after (#245)', async () => {
+  // The lock marks a persistent stream owner. A fan-out setpoint has no
+  // lifetime to own — a Move stream starting after it supersedes it, exactly
+  // like Move's own handover setpoint — so the run leaves the registry
+  // untouched and a Move-style acquire succeeds immediately.
+  const connection = connectionStub([peer(1)], { id: 'conn-A' });
+  await executeFanout({ connection, message: builtSetpoint(), mode: 'sequential', delivery: 'send' });
+  assert.equal(streamLocks.isHeld('conn-A', { sysid: 1, compid: 1 }), false);
+  const release = streamLocks.acquire('conn-A', { sysid: 1, compid: 1 });
+  assert.notEqual(release, null, 'a Move-style acquire succeeds after the one-shot');
+  release();
+});
+
+test('the lock guards the wire: build tier and dry run pass while it is held (#245)', async () => {
+  const connection = connectionStub([peer(1)], { id: 'conn-A' });
+  const release = streamLocks.acquire('conn-A', { sysid: 1, compid: 1 });
+  try {
+    const built = await executeFanout({
+      connection,
+      message: builtSetpoint(),
+      mode: 'sequential',
+      delivery: 'build',
+    });
+    assert.equal(built.success, true);
+    const preview = await executeFanout({
+      connection,
+      message: builtSetpoint(),
+      mode: 'sequential',
+      delivery: 'send',
+      dryRun: true,
+    });
+    assert.equal(preview.result, 'dry_run');
+    assert.equal(connection.sends.length, 0);
+  } finally {
+    release();
+  }
 });
 
 // ── Per-target overrides (targets) ────────────────────────────────────────────
@@ -1263,17 +1472,19 @@ function builtParamSet(overrides = {}) {
   };
 }
 
-function builtSetpoint() {
+function builtSetpoint(overrides = {}) {
   return {
-    name: 'SET_POSITION_TARGET_LOCAL_NED',
+    name: overrides.name || 'SET_POSITION_TARGET_LOCAL_NED',
     fields: {
       time_boot_ms: 0,
       target_system: 0,
       target_component: 0,
       coordinate_frame: 1,
+      // Velocity-only: all three position bits (1+2+4) ignored.
       type_mask: 3527,
       x: 0, y: 0, z: 0, vx: 1, vy: 0, vz: 0, afx: 0, afy: 0, afz: 0,
       yaw: 0, yaw_rate: 0,
+      ...(overrides.fields || {}),
     },
   };
 }
@@ -1310,6 +1521,7 @@ function peerTableStub(rows) {
 function connectionStub(rows, options = {}) {
   const peerTable = peerTableStub(rows);
   return {
+    id: options.id,
     peerTable,
     sends: [],
     send(message, sendOptions) {
