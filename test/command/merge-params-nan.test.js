@@ -33,10 +33,19 @@ test('unreadable params JSON throws — drifted config must not send preset defa
   assert.throws(() => mergeParams({ params: '{ not valid json' }, null), SyntaxError);
 });
 
-test('absent orbit center defaults to 0 — examples must send NaN explicitly', () => {
+test('absent orbit velocity and altitude encode the spec NaN sentinels; explicit values win', () => {
+  // DO_ORBIT blesses NaN: velocity NaN = vehicle default, altitude NaN =
+  // current vehicle altitude. The old zero-fill commanded zero tangential
+  // velocity and an orbit at ground level — GCS parity sends the sentinels.
   const user = mergeParams({ params: '{"1":100,"2":5,"3":0}' }, null);
   const arr = buildParamArray(getPreset('orbit'), user);
-  assert.deepEqual(arr, [100, 5, 0, 0, 0, 0, 0]);
+  assert.deepEqual(arr.slice(0, 6), [100, 5, 0, 0, 0, 0]);
+  assert.ok(Number.isNaN(arr[6]), 'absent altitude encodes NaN (current altitude)');
+
+  const blankVelocity = buildParamArray(getPreset('orbit'), mergeParams({ params: '{"1":100}' }, null));
+  assert.ok(Number.isNaN(blankVelocity[1]), 'absent velocity encodes NaN (vehicle default)');
+  assert.equal(buildParamArray(getPreset('orbit'), mergeParams({ params: '{"2":0}' }, null))[1], 0,
+    'an explicit 0 velocity is a typed value and wins');
 });
 
 test('undefined payload override does not wipe a configured value into NaN', () => {

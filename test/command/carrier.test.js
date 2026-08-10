@@ -316,3 +316,15 @@ test('every dialect MAV_FRAME entry is classified exactly once (drift pin, §9)'
     }
   }
 });
+
+test('NaN param sentinels survive both carriers to the wire (#240)', () => {
+  // COMMAND_LONG params 1-7 and COMMAND_INT params 1-4 are floats, where NaN
+  // is legal MAVLink; the wire layer refuses NaN only in integer fields.
+  const params = [-1, 0, 0, NaN, 47.4, 8.5, 30];
+  const long = buildCommandLong(192, 1, 1, params, 0);
+  assert.ok(Number.isNaN(long.fields.param4), 'COMMAND_LONG carries the NaN yaw');
+  assert.equal(long.fields.param1, -1);
+  const int = buildCommandInt(192, 1, 1, params, {});
+  assert.ok(Number.isNaN(int.fields.param4), 'COMMAND_INT carries the NaN yaw');
+  assert.equal(int.fields.param1, -1);
+});
