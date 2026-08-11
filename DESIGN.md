@@ -3962,19 +3962,19 @@ belief is well-supported on paper: MAVSDK's `goto_location` pre-switches mode be
 QGC gates guided-goto on a capability bit, and #239 was written expecting "PX4 ignores it
 outside OFFBOARD, advisory shipped" as a legitimate outcome.
 *Fact (SITL, measured 2026-08-11, PX4 sysid 11 on the Compose lab at `main@3cf6525`, via
-example 38 `--only 38`, raw row in #239):* PX4 **accepts** it. `MAV_CMD_DO_REPOSITION` (192)
+example 30 `--only 30`, raw row in #239):* PX4 **accepts** it. `MAV_CMD_DO_REPOSITION` (192)
 sent as `COMMAND_INT` from `mavlink-move` returned `resultCode: 0` with `retries: 0` —
 `frame: 3` (GLOBAL_RELATIVE_ALT), `param1: -1`, `param2: 1` (CHANGE_MODE), `param3: 0`,
 `param4: ~π/2`, `z: 20`. No OFFBOARD stream and no caller-side mode switch: the `CHANGE_MODE`
 flag the command already carries was the whole of it. The wait settled in 6.7 s against a
 55 s ceiling. Both firmwares now answer the same way through the same carrier — ArduPilot via
-example 37, PX4 via 38 — so the carrier, not the stack, is what the Move reposition path
+example 27, PX4 via 30 — so the carrier, not the stack, is what the Move reposition path
 depends on. **Do not ship a "PX4 needs OFFBOARD for reposition" advisory.**
 *Measured only to the wire, not to the airframe:* `param4` was **encoded** in radians (a 90°
 input left as `~π/2`), which settles the units question against the dialect. The vehicle's
 **resulting heading was not captured**, so "yaw 90 ends EAST" stays unmeasured — do not assert
 the behavioural half on the strength of this run.
-*Check:* `node sitl/run-example-suite.js --only 38`.
+*Check:* `node sitl/run-example-suite.js --only 30`.
 
 ---
 
