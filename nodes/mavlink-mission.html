@@ -17,7 +17,7 @@
         // Operation-aware like the shared tier validators: only Upload reads
         // items, so a leftover value must not red a Download or Clear node.
         validate: function (v, _opt) {
-          if (RED.mavlink.liveOr('#node-input-operation', this.operation) !== 'upload') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-operation', this.operation) !== 'upload') return true;
           if (RED.mavlink.isBlank(v)) return true;
           try {
             var arr = JSON.parse(v);

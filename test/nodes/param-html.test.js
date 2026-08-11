@@ -223,7 +223,16 @@ function mountValidator(liveParamId, nodeFor, fields = {}) {
       return { val: () => undefined, length: 0 };
     },
     Number,
-    RED: { mavlink: {}, nodes: { node: nodeFor || (() => null) } },
+    RED: {
+      mavlink: {},
+      nodes: { node: nodeFor || (() => null) },
+      // The seeded live fields model this node's own open dialog, so the
+      // edit stack says so too — liveOr only reads live for the stack's top
+      // owner (#217). Unbound validator calls see the vm global as `this`,
+      // so the context itself carries the owner id.
+      editor: { getEditStack: () => [{ id: '__dialog-owner__' }] },
+    },
+    id: '__dialog-owner__',
   };
   installEditorHelpers(context);
   vm.runInNewContext(
@@ -316,7 +325,8 @@ test('mavlink-param value validator: with no definitions loaded it is the plain 
 function mountKeyedValidator(byKey, editedNode, liveParamId) {
   const context = mountValidator(liveParamId, undefined, { '#node-input-action': 'set' });
   context.seed(byKey);
-  return context.validateForTest.bind(editedNode);
+  // The edited node is the one whose dialog is open (#217 scoping).
+  return context.validateForTest.bind({ id: '__dialog-owner__', ...editedNode });
 }
 
 const PX4_KEY = 'dialect:development|px4';
@@ -451,7 +461,11 @@ function paramDefaults(fields = {}) {
         number: (blankOk) => (v) =>
           (blankOk && (v === '' || v === undefined || v === null)) || Number.isFinite(Number(v)),
       },
+      // Seeded live fields = this node's own open dialog (#217 scoping); the
+      // closed-dialog assertions below re-bind an id-less `this` via .call.
+      editor: { getEditStack: () => [{ id: '__dialog-owner__' }] },
     },
+    id: '__dialog-owner__',
     // One element per selector, so `.val()` answers what the test seeded and
     // an unseeded selector answers '' — the same "field is empty" the dialog
     // sees, distinct from the closed-dialog case below.

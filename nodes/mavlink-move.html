@@ -47,8 +47,8 @@
           // Blank inherits the profile target and is the common case — and
           // Number('') is 0, so the broadcast check below would red it.
           if (RED.mavlink.isBlank(v)) return true;
-          if (RED.mavlink.liveOr('#node-input-carrier', this.carrier, 'setpoint') !== 'reposition') return true;
-          if (RED.mavlink.liveOr('#node-input-delivery', this.delivery) !== 'confirm') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-carrier', this.carrier, 'setpoint') !== 'reposition') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'confirm') return true;
           return Number(v) !== 0 || 'broadcast (0) cannot be confirmed — one ack cannot answer for a fleet; use Send or mavlink-fanout';
         },
       },
@@ -75,14 +75,14 @@
       rateHz: {
         value: 5,
         validate: function (v, _opt) {
-          if (RED.mavlink.liveOr('#node-input-delivery', this.delivery) !== 'stream') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'stream') return true;
           return (Number.isFinite(Number(v)) && Number(v) >= 0.1) || 'must be at least 0.1 Hz';
         },
       },
       ttlMs: {
         value: 1000,
         validate: function (v, _opt) {
-          if (RED.mavlink.liveOr('#node-input-delivery', this.delivery) !== 'stream') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'stream') return true;
           return (Number.isFinite(Number(v)) && Number(v) >= 0) || 'must be a number of milliseconds (0 = no TTL)';
         },
       }

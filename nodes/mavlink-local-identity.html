@@ -21,11 +21,17 @@
      * Role-aware identity-id validator. The companion role derives its SysID
      * and pins its CompID, so blank is valid there. Every other role requires
      * a value.
+     *
+     * The live role read goes through liveOr so it is scoped to this node's
+     * own dialog (#217): a bare $('#node-config-input-role') read would trust
+     * whatever dialog happens to be open, and a foreign read here poisons
+     * `valid` on a node whose blank ids are legal — sticky until reopened,
+     * and the Connection reds with it through Node-RED's config cascade.
      */
     function mavIdentityIdValidator(min) {
       var rangeCheck = RED.mavlink.validateUint8(min);
       return function (v, opt) {
-        var role = $('#node-config-input-role').val() || this.role || 'gcs';
+        var role = RED.mavlink.liveOr(this, '#node-config-input-role', this.role, 'gcs');
         var blank = RED.mavlink.isBlank(v);
         if (role === 'companion') {
           return blank ? true : rangeCheck.call(this, v, opt);

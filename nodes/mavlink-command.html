@@ -158,7 +158,7 @@
           // Blank inherits the profile target and is the common case — and
           // Number('') is 0, so the broadcast check below would red it.
           if (RED.mavlink.isBlank(v)) return true;
-          const tier = RED.mavlink.liveOr('#node-input-delivery', this.delivery, 'confirm');
+          const tier = RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery, 'confirm');
           if (tier !== 'confirm' && tier !== 'complete') return true;
           return Number(v) !== 0 || 'broadcast (0) cannot be confirmed — one ack cannot answer for a fleet; use Send or mavlink-fanout';
         },

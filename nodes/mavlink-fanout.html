@@ -18,7 +18,7 @@
         // (#191). All/filter selection stays on the wire tiers, where a
         // Connection is present anyway.
         validate: function (v, _opt) {
-          if (RED.mavlink.liveOr('#node-input-delivery', this.delivery) !== 'build') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'build') return true;
           return v === 'list' || 'must be an explicit sysid list on Build';
         },
       },
@@ -28,7 +28,7 @@
         // own position; patch is a raw wire-unit field object (blank = none).
         value: [],
         validate: function (v, _opt) {
-          if (RED.mavlink.liveOr('#node-input-selectionMode', this.selectionMode) !== 'list') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-selectionMode', this.selectionMode) !== 'list') return true;
           if (!Array.isArray(v) || v.length === 0) return 'needs at least one member row for list selection';
           // The fields a metre offset would write on any supported carrier —
           // a row carrying both an offset and a raw patch of one of these
@@ -90,7 +90,7 @@
         // hand-set value must still red rather than deploy a node the runtime
         // refuses on every message.
         validate: function (v, _opt) {
-          if (RED.mavlink.liveOr('#node-input-delivery', this.delivery) !== 'build') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'build') return true;
           return v !== 'broadcast' || 'Broadcast needs the "All" selection, which Build cannot use';
         },
       },
