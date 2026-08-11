@@ -168,3 +168,64 @@ test('identity ids: stale saved role with blank ids stays invalid — data, not 
     /required for this role/
   );
 });
+
+// ── The migration guard, and the validators the missed migration disabled ────
+//
+// The first cut of the owner migration missed mavlink-move's two stream
+// validators (Codex, #273): under the new signature their selector string
+// landed in `owner`, `owner.id` was undefined, and liveOr returned '' in
+// every state — so `'' !== 'stream'` skipped the rateHz/ttlMs checks
+// entirely, own dialog and deploy alike. streamValue in the runtime guards
+// payload overrides only and trusts config by doctrine, so a rateHz of 0
+// would have deployed and turned the stream timer into a ~1 ms flood.
+
+test('no liveOr call passes a selector where the owner belongs', () => {
+  // The class guard: the old two-argument shape starts with a string literal.
+  const offenders = [];
+  const files = fs.readdirSync(nodesDir).filter((f) => f.endsWith('.html'))
+    .map((f) => [path.join('nodes', f), fs.readFileSync(path.join(nodesDir, f), 'utf8')]);
+  files.push(['resources/mavlink-editor.js',
+    fs.readFileSync(path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'), 'utf8')]);
+  for (const [name, src] of files) {
+    src.split('\n').forEach((line, i) => {
+      if (/liveOr\(\s*['"]/.test(line)) offenders.push(`${name}:${i + 1}`);
+    });
+  }
+  assert.deepEqual(offenders, [], `liveOr's first argument is the owning node:\n${offenders.join('\n')}`);
+});
+
+test('move stream validators: saved stream tier is checked on deploy', () => {
+  // The state the regression silenced: no dialog anywhere, saved delivery
+  // 'stream' — deploy-time validation must still refuse a flood-shaped rate.
+  const registered = loadNodeHtml('mavlink-move.html');
+  const defaults = registered['mavlink-move'].defaults;
+  const saved = { id: 'm1', delivery: 'stream' };
+  assert.match(String(defaults.rateHz.validate.call(saved, 0, {})), /at least 0\.1 Hz/);
+  assert.match(String(defaults.rateHz.validate.call(saved, 'abc', {})), /at least 0\.1 Hz/);
+  assert.equal(defaults.rateHz.validate.call(saved, 5, {}), true);
+  assert.match(String(defaults.ttlMs.validate.call(saved, -5, {})), /milliseconds/);
+  assert.equal(defaults.ttlMs.validate.call(saved, 0, {}), true, '0 = no TTL is legal');
+});
+
+test('move stream validators: own dialog reads the live tier, foreign does not', () => {
+  // Own dialog, delivery switched to stream and unsaved: live wins, rate 0 reds.
+  const own = loadNodeHtml('mavlink-move.html', {
+    dom: { '#node-input-delivery': 'stream' },
+    editStack: [{ id: 'm1' }],
+  });
+  assert.match(
+    String(own['mavlink-move'].defaults.rateHz.validate.call({ id: 'm1', delivery: 'send' }, 0, {})),
+    /at least 0\.1 Hz/
+  );
+
+  // Foreign dialog showing 'stream': a closed Send-tier node must not have
+  // its rateHz judged against somebody else's tier (#217 scoping).
+  const foreign = loadNodeHtml('mavlink-move.html', {
+    dom: { '#node-input-delivery': 'stream' },
+    editStack: [{ id: 'other' }],
+  });
+  assert.equal(
+    foreign['mavlink-move'].defaults.rateHz.validate.call({ id: 'm1', delivery: 'send' }, 0, {}),
+    true
+  );
+});
