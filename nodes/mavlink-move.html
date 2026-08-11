@@ -35,7 +35,23 @@
       // (5/6/11) PX4 requires; unchecked emits the spec-current 0/3/10
       // (§ "Move setpoint matrix", owner-ruled 2026-08-09).
       px4Compat: { value: true },
-      targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
+      // Broadcast (0) is refused only where an ack is actually awaited: the
+      // reposition carrier on the confirm tier (#260). Setpoint carriers and
+      // Build/Send stay broadcast-legal, so this reds nothing they configure.
+      // The runtime guard stays for profile defaults and payload overrides.
+      targetSystem: {
+        value: '',
+        validate: function (v, opt) {
+          const range = RED.mavlink.validateUint8(0).call(this, v, opt);
+          if (range !== true) return range;
+          // Blank inherits the profile target and is the common case — and
+          // Number('') is 0, so the broadcast check below would red it.
+          if (RED.mavlink.isBlank(v)) return true;
+          if (RED.mavlink.liveOr('#node-input-carrier', this.carrier, 'setpoint') !== 'reposition') return true;
+          if (RED.mavlink.liveOr('#node-input-delivery', this.delivery) !== 'confirm') return true;
+          return Number(v) !== 0 || 'broadcast (0) cannot be confirmed — one ack cannot answer for a fleet; use Send or mavlink-fanout';
+        },
+      },
       targetComponent: { value: '', validate: RED.validators.number(true) },
       north: { value: 0, validate: RED.validators.number(true) },
       east: { value: 0, validate: RED.validators.number(true) },
@@ -327,7 +343,7 @@
   <p>Builds or sends vehicle movement commands. Vertical inputs — altitude, climb, vertical acceleration — are entered up-positive everywhere; the node flips them once to MAVLink NED down-positive values. The type_mask is computed from the mode; you never enter a bitmask.</p>
   <p><b>Carrier</b> picks the wire message. <i>Setpoint</i> (default) sends SET_POSITION_TARGET_* — the streaming/offboard path; setpoints carry no acknowledgement. <i>Reposition</i> sends <code>MAV_CMD_DO_REPOSITION</code> as <code>COMMAND_INT</code> — the one-shot GCS-style guided goto, and the vehicle answers with a COMMAND_ACK. A <code>msg.payload.carrier</code> of <code>"setpoint"</code> or <code>"reposition"</code> overrides the configured carrier, like mode and frame.</p>
   <p>The reposition carrier is position-only on frames <i>Global, altitude above home</i> (3) or <i>Global, absolute altitude</i> (0): setpoint modes (velocity, acceleration, yaw only), local and terrain frames, yaw rate, and Stream delivery all refuse with named errors. Latitude/longitude are entered in degrees; yaw is entered in degrees and converted once to the radians the dialect declares for DO_REPOSITION. Blank optional params send the spec's no-change sentinels, matching what QGC and MAVSDK transmit: blank <b>Ground speed</b> → −1 (vehicle default), blank <b>Loiter radius</b> → 0 (ignored), blank <b>Yaw</b> → NaN (keep the current heading mode; an explicit 0 commands north). <b>Change mode</b> sets MAV_DO_REPOSITION_FLAGS_CHANGE_MODE, telling the vehicle to fly itself into guided mode to execute the goto — it is a mode change and therefore an explicit opt-in (checkbox, or boolean <code>msg.payload.changeMode</code>).</p>
-  <p>On <b>Send &amp; confirm</b> delivery (reposition only) the node waits for the terminal COMMAND_ACK: output 0 fires on <code>ACCEPTED</code> with a <code>succeeded</code> record carrying <code>resultCode</code> 0; every other terminal result — <code>DENIED</code>, <code>COMMAND_INT_ONLY</code>, <code>COMMAND_UNSUPPORTED_MAV_FRAME</code>, … — fails on output 1 with its MAV_RESULT name and code, and a missing ack reports <code>timeout</code>. <code>TEMPORARILY_REJECTED</code> retries with back-off before failing. <b>ACK timeout</b> (blank = 10 s) bounds the wait. Every ack-confirmed record also carries the ack's <code>resultParam2</code> (command-specific detail, often the reason for a denial), and while the vehicle answers <code>IN_PROGRESS</code> the status badge shows the progress it reports.</p>
+  <p>On <b>Send &amp; confirm</b> delivery (reposition only) the node waits for the terminal COMMAND_ACK: output 0 fires on <code>ACCEPTED</code> with a <code>succeeded</code> record carrying <code>resultCode</code> 0; every other terminal result — <code>DENIED</code>, <code>COMMAND_INT_ONLY</code>, <code>COMMAND_UNSUPPORTED_MAV_FRAME</code>, … — fails on output 1 with its MAV_RESULT name and code, and a missing ack reports <code>timeout</code>. <code>TEMPORARILY_REJECTED</code> retries with back-off before failing. <b>ACK timeout</b> (blank = 10 s) bounds the wait. Every ack-confirmed record also carries the ack's <code>resultParam2</code> (command-specific detail, often the reason for a denial), and while the vehicle answers <code>IN_PROGRESS</code> the status badge shows the progress it reports. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use Send or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
   <p><b>Mode</b> picks what drives the vehicle: <i>Position</i>, <i>Velocity</i>, <i>Position + Velocity</i> (feed-forward), <i>Acceleration</i>, or <i>Yaw only</i>. Yaw and yaw rate are entered in degrees (deg, deg/s) and converted once to the radians on the wire. Both are optional on every mode — blank means ignored, a value (including 0) means commanded; Yaw only requires at least one of them.</p>
   <p><b>Frame</b> picks the reference and, on the setpoint carrier, the wire message: local frames (world NED, offset-from-current, body offset, body NED) send <code>SET_POSITION_TARGET_LOCAL_NED</code>; global frames (altitude above home, absolute MSL, terrain) send <code>SET_POSITION_TARGET_GLOBAL_INT</code> with lat/lon entered in degrees. Field labels follow the frame — body frames read forward/right.</p>
   <p><b>PX4 compat</b> (default on, global frames only) transmits each global frame as its deprecated <code>*_INT</code> number (5/6/11) — what PX4 requires and every current stack accepts. Untick to transmit the spec-current numbers (0/3/10): PX4 rejects those on <code>SET_POSITION_TARGET_GLOBAL_INT</code> and discards the setpoint (source-read, not yet measured), so unticking under a PX4 profile raises a warning. The message is still sent as configured.</p>

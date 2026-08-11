@@ -144,7 +144,25 @@
       carrier:           { value: 'int' },
       frame:             { value: '' },
       identity:          { value: '' },
-      targetSystem:       { value: '', validate: RED.mavlink.validateUint8(0) },
+      // A statically configured broadcast (0) on an ack-confirmed tier is a
+      // combination the runtime refuses (#260) — the editor knows the tier, so
+      // it reds at deploy rather than on the first message (AGENTS "conditional
+      // validation when requirements depend on another configured field").
+      // The runtime guard stays for the rungs the editor cannot see: a profile
+      // default and a msg.payload.target override.
+      targetSystem: {
+        value: '',
+        validate: function (v, opt) {
+          const range = RED.mavlink.validateUint8(0).call(this, v, opt);
+          if (range !== true) return range;
+          // Blank inherits the profile target and is the common case — and
+          // Number('') is 0, so the broadcast check below would red it.
+          if (RED.mavlink.isBlank(v)) return true;
+          const tier = RED.mavlink.liveOr('#node-input-delivery', this.delivery, 'confirm');
+          if (tier !== 'confirm' && tier !== 'complete') return true;
+          return Number(v) !== 0 || 'broadcast (0) cannot be confirmed — one ack cannot answer for a fleet; use Send or mavlink-fanout';
+        },
+      },
       targetComponent:      { value: '', validate: RED.validators.number(true) },
       // Blank allowed: the runtime reads '' as "use the default"
       // (mavlink-command.js — `config.timeout === '' ? DEFAULT_TIMEOUT_MS`),
@@ -968,6 +986,10 @@
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
         vehicle state satisfies the command's completion condition (Arm, Takeoff, Land, Set Mode).</li>
   </ul>
+  <p>A broadcast target (sysid 0) is refused on <b>Send &amp; confirm</b> and
+  <b>Send &amp; await completion</b>: one COMMAND_ACK cannot answer for a fleet, and the first
+  vehicle to respond would settle the wait. Broadcast rides <b>Send</b> (fire-and-forget), or
+  <b>mavlink-fanout</b> broadcast mode for per-vehicle acknowledgements.</p>
 
   <h3>Role × tier matrix</h3>
   <p>
