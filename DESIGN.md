@@ -2646,7 +2646,7 @@ brake response. Dropping it would leave only stream cessation (PX4 offboard
 timeout ~500 ms) without a final brake setpoint. Do not “fix” a no-op that is
 not what the code sends.
 *Check:* `lib/move/index.js` (`buildStopMessage`), `test/move/move.test.js`,
-`examples/sitl/20-move-stream-stop.json`, issue #115.
+`examples/sitl/24-move-stream-stop.json`, issue #115.
 
 **ArduPilot cold-arm returns `FAILED` (4), not `TEMPORARILY_REJECTED` (1).**
 *Wrong belief:* racing arm/takeoff on a freshly restarted ArduCopter SITL draws
@@ -2660,7 +2660,7 @@ targets PX4 `DO_SET_MODE` with param2=`196608` (HEARTBEAT-packed POSCTL), which
 stably returns `(1)` on the lab SIH image — the node retries until `maxRetries` is
 exhausted and the status shows `temporarily_rejected` with `retries >= 1`. Correct
 POSCTL encoding remains param2=`3` (example 04 / §14).
-*Check:* `examples/sitl/03-temporarily-rejected.json`, `lib/command/ack.js`.
+*Check:* `examples/sitl/28-temporarily-rejected.json`, `lib/command/ack.js`.
 
 **AP `DO_SET_HOME` GLOBAL_INT needs HOME/EKF origin before ACCEPTED.**
 *Wrong belief:* example 18’s AP GLOBAL_INT failure means ArduPilot rejects the
@@ -2669,7 +2669,7 @@ frame (contradicting the local-vs-global §14 measurement).
 `MAV_RESULT_FAILED` (4) when sent ~5 s after fleet restart, and `ACCEPTED` once
 `HOME_POSITION` / EKF origin exist (~20 s). LOCAL_NED DENIED is unchanged. Harness
 prep `ap-home-ready` waits for peer `home` before deploy.
-*Check:* `sitl/run-example-suite.js` (`waitApHomeReady`), `examples/sitl/18-int-local-vs-global.json`.
+*Check:* `sitl/run-example-suite.js` (`waitApHomeReady`), `examples/sitl/07-int-local-vs-global.json`.
 
 **Copter 4.7.0 SITL has no `WPNAV_SPEED` parameter.**
 *Wrong belief:* example 21’s AP echo timeout is a float32 compare / param_type
@@ -2679,7 +2679,7 @@ decode bug.
 Example 21 uses live `LOIT_SPEED_MS` (REAL32) instead; PX4 `MPC_XY_VEL_MAX` unchanged.
 Example 32 deliberately sets the missing id with confirm so the harness can prove
 `timed-out` / `echo timeout` (the negative twin of 21).
-*Check:* `examples/sitl/21-param-echo-float32.json`, `examples/sitl/32-param-echo-timeout.json`.
+*Check:* `examples/sitl/08-param-echo-float32.json`, `examples/sitl/15-param-echo-timeout.json`.
 
 **Param SITL coverage beyond set/read echo (05 / 13 / 21).**
 *Wrong belief:* the three early param examples already exercise every Param/Fan-out
@@ -2688,8 +2688,8 @@ wire path that needs live firmware.
 confirm, PX4 `request-list` collect, and explicit `msg.payload.paramEncoding` were
 uncovered until examples 28–31. Safe live ids remain `LOIT_SPEED_MS` /
 `ARMING_OPTIONS` (AP) and `COM_RC_IN_MODE` / `MPC_XY_VEL_MAX` (PX4).
-*Check:* `examples/sitl/28-param-read-by-index.json` …
-`examples/sitl/31-param-encoding-override.json`, `sitl/run-example-suite.js` PROFILE.
+*Check:* `examples/sitl/11-param-read-by-index.json` …
+`examples/sitl/14-param-encoding-override.json`, `sitl/run-example-suite.js` PROFILE.
 
 **Payload SITL needs a dedicated AP with `--gimbal`, not the GCS fleet or PX4 SIH.**
 *Wrong belief:* SIH or a stock `ap-1` can exercise `mavlink-payload` gimbal/camera verbs.
@@ -2700,7 +2700,7 @@ binary accepts `--gimbal`; with `MNT1_TYPE=1` + pan/roll/tilt servos, legacy
 `GIMBAL_MANAGER_SET_PITCHYAW` is send-only on this stack (no manager telemetry).
 Dedicated `ap-payload-31` on `14570` (sysid 31) isolates that traffic; PX4 payload
 sysid **32** is reserved until a non-SIH image exists.
-*Check:* `sitl/params/ap-payload-gimbal.parm`, `examples/sitl/33–35-*.json`,
+*Check:* `sitl/params/ap-payload-gimbal.parm`, `examples/sitl/16–18-*.json`,
 `sitl/measure-payload-gimbal.js`.
 
 **SITL signing example uses companion AP sysid 20 and joke passphrase `hunter11`.**
@@ -2719,7 +2719,7 @@ loaded, unsigned probe arms fail on links that are not `MAVLINK_COMM_0`
 signing off the main GCS fleet ports; 14560 remains PX4. The example proves GCS
 `requireSigned` + `msg.trusted` and signed outbound arm. `hunter11` is
 intentionally not a secret.
-*Check:* `examples/sitl/12-signing.json`, `sitl/run-example-suite.js`
+*Check:* `examples/sitl/38-signing.json`, `sitl/run-example-suite.js`
 (`SITL_SIGNING_PASSPHRASE`, `setupCompanionSigning`, `signingCredentialsForFlows`),
 `sitl/AGENTS.md`.
 
@@ -2739,7 +2739,7 @@ ignored the exit code so GUIDED prep never ran. Measured against official
 prebuilt
 `firmware.ardupilot.org/Copter/stable-4.7.0/SITL_x86_64_linux_gnu/arducopter`
 (`ARDUPILOT_REF=Copter-4.7.0` in `sitl/Dockerfile.ardupilot`).
-*Check:* `examples/sitl/01-completion-takeoff.json`, `examples/sitl/02-completion-timeout.json`,
+*Check:* `examples/sitl/20-completion-takeoff.json`, `examples/sitl/21-completion-timeout.json`,
 `sitl/run-example-suite.js`.
 
 **SITL suite must docker-restart the vehicle fleet between examples.**
@@ -2913,7 +2913,7 @@ profiles 08/09/11), `sitl/AGENTS.md`.
 `ARMING_CHECK` (removed/renamed; the live bitmask is `ARMING_OPTIONS`). Integer params must
 use `MAV_PARAM_TYPE_INT32` — a REAL32-typed set writes float bits and echo-confirm times
 out. The suite spaces injects so `request-list` does not flood during the set wait.
-*Check:* `examples/sitl/13-param-defs-live.json`, `lib/param/index.js` (`matchesParamEcho`).
+*Check:* `examples/sitl/04-param-defs-live.json`, `lib/param/index.js` (`matchesParamEcho`).
 
 **PX4 DO_SET_MODE on this SIH wants main_mode in param2, not the HEARTBEAT bitfield.**
 *Wrong belief:* send `custom_mode=196608` (POSCTL packed) because that is what HEARTBEAT
@@ -2925,7 +2925,7 @@ main_mode POSCTL) is `ACCEPTED` and HEARTBEAT then reports `196608`. Completion-
 match compares param2 to peer `flightMode`, so delivery=`complete` cannot succeed across
 that encoding split — example 04 uses delivery=`confirm` for the PX4 leg. Re-measure if the
 Compose digest changes.
-*Check:* `examples/sitl/04-mode-tables.json`, `sitl/docker-compose.yml`.
+*Check:* `examples/sitl/36-mode-tables.json`, `sitl/docker-compose.yml`.
 
 **ArduPilot lab image downloads the official prebuilt SITL binary — it does not compile.**
 *Wrong belief:* `sitl/Dockerfile.ardupilot` must `git clone` + `waf copter` (README once said
@@ -3046,7 +3046,7 @@ instance 0 (`14550/14551`) and instance 1 (`14560`).
 *Fact:* ArduPilot `-I N` defaults occupy `14550 + 10×N`, so `14555` sits inside that band and
 confuses operators. Lab and examples use PX4 GCS **14560→14561**, companions **14540/14542**.
 Operator guide: [`sitl/README.md`](sitl/README.md).
-*Check:* `rg '14555' examples` is empty; `examples/sitl/10-dual-stack-ten.json` bindPort 14560.
+*Check:* `rg '14555' examples` is empty; `examples/sitl/37-dual-stack-ten.json` bindPort 14560.
 
 **Shared editor helpers are one resource file, and the Build-tier picker glue is one shared API.**
 *Wrong belief:* every node's `.html` must inline its own copy of `RED.mavlink.*` helpers (enum
@@ -3465,7 +3465,7 @@ rotates body offsets around +right before heading yaws around down — that is t
 tumble around Y used by SITL 27 (Lucy in the Sky). Planar shapes still keep `down: 0`. Slot 0
 remains on the anchor. Vehicle noses are still not commanded (reposition yaw `NaN`).
 *Check:* `node --test test/formation/formation.test.js test/formation/node.test.js`; SITL
-`examples/sitl/27-lucy-in-the-sky.json` (harness `--only 27`).
+`examples/sitl/35-lucy-in-the-sky.json` (harness `--only 35`).
 
 **Parameter metadata is per firmware *and* per vehicle document, and the shipped documents are
 not the same set as the Vehicle Profile's families.**
@@ -3975,3 +3975,19 @@ input left as `~π/2`), which settles the units question against the dialect. Th
 **resulting heading was not captured**, so "yaw 90 ends EAST" stays unmeasured — do not assert
 the behavioural half on the strength of this run.
 *Check:* `node sitl/run-example-suite.js --only 38`.
+
+---
+
+**SITL suite selective restart + renumbered run order (2026-08-11).**
+*Wrong belief:* every example must `docker restart` all 13 vehicles, and example
+numbers are a fixed identity independent of suite schedule.
+*Fact:* force-disarm still cannot clear AGL, but most examples never take off —
+params, missions, companions, and payload verbs only need a cold fleet once.
+Examples are renumbered **01–38 in run order** by restart class (`none` →
+`ap-1`/`ap-12`/`ap-2` → `px4-1` → `ap-fleet` → `fleet`). `PROFILE.restart`
+selects the container set; `restart: none` skips docker restart after a one-shot
+fleet prime. `SITL_RESTART=fleet` restores the old always-full behaviour for
+bisect. Historical §14 prose that cites old numbers by path has been updated;
+slug names (Lucy, peer-table) remain the durable identity.
+*Check:* `sitl/lib/suite-schedule.js`, `sitl/run-example-suite.js`,
+`examples/sitl/README.md`, `node --test test/sitl/suite-schedule.test.js`.
