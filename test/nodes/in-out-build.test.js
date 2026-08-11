@@ -1204,6 +1204,14 @@ test('mavlink-build: a field the dialect does not name warns once per streak and
   // The typo reappearing after a clean build is a new streak.
   node._input({ payload: { autopilott: 8 } });
   assert.equal(warns.length, 2, 'the advisory returns after a clean build');
+
+  // The dedup key identifies the *set*, not the insertion order. Object.keys
+  // follows insertion order, so two misspellings arriving the other way round
+  // would otherwise read as a new set and warn a second time.
+  node._input({ payload: { autopilott: 8, systtem_status: 4 } });
+  assert.equal(warns.length, 3, 'a genuinely new key set warns');
+  node._input({ payload: { systtem_status: 4, autopilott: 8 } });
+  assert.equal(warns.length, 3, 'the same set in the other order is not a new streak');
 });
 
 test('mavlink-build Send tier: enqueues on the connection and emits on both outputs', () => {

@@ -171,7 +171,10 @@ module.exports = function registerMavlinkBuild(RED) {
       const known = new Set(messageMeta.fields.map((f) => f.name));
       const unknown = Object.keys(rawFields).filter((key) => !known.has(key));
       if (unknown.length > 0) {
-        const warnedKeys = unknown.join(', ');
+        // Sorted, because the dedup key must identify the *set*: Object.keys
+        // follows insertion order, so the same two misspellings arriving in
+        // the other order would read as a new set and warn again.
+        const warnedKeys = unknown.slice().sort().join(', ');
         if (warnedKeys !== lastWarnedKeys) {
           node.warn(`mavlink-build: ${messageName} has no field ${warnedKeys} — ignored`);
         }

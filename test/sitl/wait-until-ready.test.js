@@ -215,3 +215,35 @@ test('real 17/19 branch: the arm ack alone no longer classifies PASS (#267)', ()
   assert.equal(ok.status, 'PASS');
   assert.equal(isSpecializedPass(ok), true, 'goto-accepted PASS stays early-exit eligible');
 });
+
+test('37/38 read mavlink-move\'s status vocabulary, not mavlink-command\'s', () => {
+  // The two node families do not agree on words. An accepted reposition is
+  // published by completeResult as result 'succeeded' (detail 'accepted'); a
+  // lost ack is 'timeout', not 'timed-out'; a terminal MAV_RESULT is 'failed'
+  // carrying its resultCode. Keying these examples on the Command node's
+  // 'accepted'/'timed-out' made 37 unable to pass at all and let 38's silence
+  // through as a measurement — the exact fiction the branch exists to stop.
+  const reposition = (result, detail, resultCode) => ({
+    tag: 'debug:reposition status (resultCode + retries)',
+    result, detail, resultCode, excerpt: '',
+  });
+  const arm = { tag: 'debug:arm status', result: 'accepted', detail: null, resultCode: 0, excerpt: '' };
+  const run = (key, record) =>
+    verdictFrom(PROFILE[key], { debug: record ? [arm, record] : [arm], errors: [] }, '');
+
+  // 37 asserts ArduPilot accepts.
+  assert.equal(run('37-move-reposition-carrier', reposition('succeeded', 'accepted', 0)).status, 'PASS');
+  assert.equal(run('37-move-reposition-carrier', reposition('failed', 'denied', 2)).status, 'FAIL');
+
+  // 38 measures: any answer PX4 gives passes, silence does not.
+  assert.equal(run('38-px4-move-reposition', reposition('succeeded', 'accepted', 0)).status, 'PASS');
+  assert.equal(run('38-px4-move-reposition', reposition('failed', 'denied', 2)).status, 'PASS');
+
+  // A timeout carries no resultCode: nothing was measured, on either example.
+  for (const key of ['37-move-reposition-carrier', '38-px4-move-reposition']) {
+    assert.equal(run(key, reposition('timeout', 'ack timeout', null)).status, 'FAIL');
+    // A send that threw before the wire also spells 'failed', but with no code.
+    assert.equal(run(key, reposition('failed', 'connection closed', null)).status, 'FAIL');
+    assert.equal(run(key, null).status, 'FAIL', 'no record at all');
+  }
+});
