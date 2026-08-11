@@ -267,9 +267,10 @@ const PROFILE = {
     prep: 'px4-home-ready',
     notes:
       "PX4 twin of 37 — #239's last acceptance box. CHANGE_MODE on: the shape 17 measured " +
-      'accepted via mavlink-command, so the carrier is the only variable. The generic verdict ' +
-      'records the ACK result either way — a denial is a measurement, not a harness failure. ' +
-      'If accepted: yaw 90 must end EAST (param4 radians on PX4).',
+      'accepted via mavlink-command, so the carrier is the only variable. The ACK result is ' +
+      'recorded either way — a denial is a measurement, never a harness FAIL — but only an ' +
+      'accept passes: nothing is expected here yet, so a denial is PARTIAL until §14 records ' +
+      'it and this expect string asserts it. If accepted: yaw 90 must end EAST (param4 radians).',
   },
 };
 
@@ -506,12 +507,17 @@ function verdictFrom(profile, summary, log) {
     if (!repositionRecord) {
       return { status: 'PARTIAL', reason: 'Move reposition not settled' };
     }
-    // The two contracts differ and the expect strings carry the difference: 38
-    // measures what PX4 answers and records it either way ("a denial is a
-    // measurement, not a harness failure"), while 37 asserts AP accepts. An
-    // ACK that never arrived is not an answer, so timed-out/unconfirmed is an
-    // incomplete measurement on 38 too — only a real COMMAND_ACK result counts.
+    // The two contracts differ and the expect strings carry the difference.
+    // On 38 only an accept is a PASS. A denial is a legitimate measurement and
+    // never a harness FAIL — but an *expected* denial is what earns a pass (34
+    // requires video DENIED), and nothing on 38 is expected yet: #239 is the
+    // unmeasured question this example exists to answer. Until §14 records what
+    // PX4 actually answers and the expect string asserts it, a non-accept is
+    // PARTIAL — recorded, not green.
     if (/result recorded/i.test(expect)) {
+      if (repositionRecord.result === 'accepted') {
+        return { status: 'PASS', reason: 'PX4 Move reposition accepted' };
+      }
       if (/timed-out|unconfirmed/i.test(repositionRecord.result)) {
         return {
           status: 'PARTIAL',
@@ -519,8 +525,8 @@ function verdictFrom(profile, summary, log) {
         };
       }
       return {
-        status: 'PASS',
-        reason: `PX4 Move reposition ${repositionRecord.result} (recorded)`,
+        status: 'PARTIAL',
+        reason: `PX4 Move reposition ${repositionRecord.result} recorded — accept not measured`,
       };
     }
     return repositionRecord.result === 'accepted'
