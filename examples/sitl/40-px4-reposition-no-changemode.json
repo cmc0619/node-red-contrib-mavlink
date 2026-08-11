@@ -1,0 +1,353 @@
+[
+  {
+    "id": "ex40-tab",
+    "type": "tab",
+    "label": "SITL 40 PX4 reposition no CHANGE_MODE",
+    "disabled": false,
+    "info": "Throwaway probe (delete when §14 records the answer). Fills the empty cell example 30 left: 30 measured PX4 with CHANGE_MODE ON, which is why it accepted. This run is the inverse — CHANGE_MODE OFF, vehicle deliberately out of AUTO_LOITER.",
+    "env": []
+  },
+  {
+    "id": "ex40-comment",
+    "type": "comment",
+    "z": "ex40-tab",
+    "name": "PX4 reposition from POSCTL with CHANGE_MODE clear",
+    "info": "Flow: Arm -> Takeoff (PX4 default alt) -> settle -> Set Mode POSCTL (main_mode 3) -> settle -> Move reposition with changeMode FALSE.\n\nWHY: example 30 retired the 'PX4 needs an OFFBOARD stream' advisory, and that conclusion stands. But 30 sent CHANGE_MODE ON, so it does not tell us what PX4 does with the flag clear. PX4 also lands in AUTO_LOITER by itself after a takeoff completes — which is exactly the mode that satisfies the no-flag path — so the cell cannot be probed without deliberately leaving Hold first. That is what the POSCTL step is for.\n\nSOURCE HYPOTHESIS (PX4 Navigator::run, DO_REPOSITION handling):\n  - accepted if ((uint32_t)cmd.param2 & 1) != 0  (CHANGE_MODE), OR\n  - already in NAVIGATION_STATE_AUTO_LOITER\n  - and in both cases only while ARMING_STATE_ARMED\nWith the flag clear and the vehicle in POSCTL, neither branch holds, so the prediction is that PX4 does NOT apply the setpoint.\n\nOPEN: whether PX4 answers with a non-ACCEPTED MAV_RESULT or says nothing at all. Both are publishable findings, so BOTH PASS this run. The mavlink receiver may ack before the Navigator ever sees the command, in which case an ACCEPTED ack with no motion is itself the finding — note it. Only a send that never reached the wire (result 'failed' with no resultCode) measures nothing and fails the run.\n\nRISK THE RIG SHOULD WATCH: PX4 SITL without RC may refuse POSCTL or trip an RC-loss failsafe. Example 36 already sends this exact command to sysid 11 and it ACKs, but 36 does it on the ground. If the mode status shows the POSCTL change was denied, the probe's precondition never held and the reposition result says nothing about the flag — report that rather than the reposition line.\n\nWHAT THE RIG SHOULD RECORD:\n1. mode status — did POSCTL ACK, and did HEARTBEAT actually leave AUTO_LOITER?\n2. reposition status — result, detail, resultCode (or a 10 s timeout, which is a real answer here)\n3. Whether the vehicle moved toward the target regardless of what the ack said"
+  },
+  {
+    "id": "ex40-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex40-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "PX4 sysid 11",
+    "vehicleFamily": "copter",
+    "firmware": "px4",
+    "dialect": "common",
+    "defaultTargetSystem": 11,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "ex40-connection",
+    "type": "mavlink-connection",
+    "name": "UDP PX4 SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14560,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14561,
+    "vehicle": "ex40-vehicle",
+    "localIdentity": "ex40-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex40-inject",
+    "type": "inject",
+    "z": "ex40-tab",
+    "name": "Arm + takeoff + POSCTL + reposition",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 190,
+    "y": 160,
+    "wires": [
+      [
+        "ex40-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex40-arm",
+    "type": "mavlink-command",
+    "z": "ex40-tab",
+    "name": "Arm (confirm ACK)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex40-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "carrier": "long",
+    "frame": "",
+    "x": 450,
+    "y": 160,
+    "wires": [
+      [
+        "ex40-takeoff"
+      ],
+      [
+        "ex40-arm-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "ex40-takeoff",
+    "type": "mavlink-command",
+    "z": "ex40-tab",
+    "name": "Takeoff (PX4 default alt, confirm ACK)",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex40-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "carrier": "long",
+    "frame": "",
+    "x": 720,
+    "y": 160,
+    "wires": [
+      [
+        "ex40-climb"
+      ],
+      [
+        "ex40-takeoff-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "ex40-climb",
+    "type": "delay",
+    "z": "ex40-tab",
+    "name": "let the climb finish",
+    "pauseType": "delay",
+    "timeout": "10",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 970,
+    "y": 160,
+    "wires": [
+      [
+        "ex40-posctl"
+      ]
+    ]
+  },
+  {
+    "id": "ex40-posctl",
+    "type": "mavlink-command",
+    "z": "ex40-tab",
+    "name": "Set Mode POSCTL (main_mode 3)",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex40-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":1,\"2\":3}",
+    "carrier": "long",
+    "frame": "",
+    "x": 1210,
+    "y": 160,
+    "wires": [
+      [
+        "ex40-settle"
+      ],
+      [
+        "ex40-mode-status"
+      ]
+    ],
+    "targetSystem": "11",
+    "targetComponent": ""
+  },
+  {
+    "id": "ex40-settle",
+    "type": "delay",
+    "z": "ex40-tab",
+    "name": "let POSCTL take hold",
+    "pauseType": "delay",
+    "timeout": "4",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 1460,
+    "y": 160,
+    "wires": [
+      [
+        "ex40-reposition"
+      ]
+    ]
+  },
+  {
+    "id": "ex40-reposition",
+    "type": "mavlink-move",
+    "z": "ex40-tab",
+    "name": "Move goto (reposition, changeMode OFF)",
+    "identity": "",
+    "connection": "ex40-connection",
+    "delivery": "confirm",
+    "carrier": "reposition",
+    "mode": "position",
+    "frame": "GLOBAL_RELATIVE_ALT",
+    "speed": "",
+    "radius": "",
+    "changeMode": false,
+    "ackTimeout": "",
+    "px4Compat": true,
+    "targetSystem": 11,
+    "targetComponent": 1,
+    "north": 0,
+    "east": 0,
+    "up": 0,
+    "vNorth": 0,
+    "vEast": 0,
+    "vUp": 0,
+    "aNorth": 0,
+    "aEast": 0,
+    "aUp": 0,
+    "lat": 47.3991,
+    "lon": 8.5456,
+    "alt": 20,
+    "yaw": "",
+    "yawRate": "",
+    "rateHz": 5,
+    "ttlMs": 3000,
+    "x": 1720,
+    "y": 160,
+    "wires": [
+      [
+        "ex40-success"
+      ],
+      [
+        "ex40-reposition-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex40-arm-status",
+    "type": "debug",
+    "z": "ex40-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 450,
+    "y": 250,
+    "wires": []
+  },
+  {
+    "id": "ex40-takeoff-status",
+    "type": "debug",
+    "z": "ex40-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 250,
+    "wires": []
+  },
+  {
+    "id": "ex40-mode-status",
+    "type": "debug",
+    "z": "ex40-tab",
+    "name": "mode status (POSCTL precondition)",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1210,
+    "y": 250,
+    "wires": []
+  },
+  {
+    "id": "ex40-reposition-status",
+    "type": "debug",
+    "z": "ex40-tab",
+    "name": "reposition status (resultCode + retries)",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1720,
+    "y": 250,
+    "wires": []
+  },
+  {
+    "id": "ex40-success",
+    "type": "debug",
+    "z": "ex40-tab",
+    "name": "Move reposition accepted",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 2000,
+    "y": 160,
+    "wires": []
+  }
+]

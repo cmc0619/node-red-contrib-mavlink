@@ -322,6 +322,38 @@ const PROFILE = {
       'is FAIL (timeout, or a send that never reached the wire). Once §14 records the answer this ' +
       'tightens to assert it, the way 17 requires video DENIED. If accepted: yaw 90 must end EAST.',
   },
+  // ── Throwaway CHANGE_MODE probes (delete with 39/40 once §14 records them) ──
+  //
+  // 27 and 30 did not run the same experiment: 27 was AP pre-switched into
+  // GUIDED with the flag OFF, 30 was PX4 with no mode arrangement and the flag
+  // ON. Each stack was tested only in the configuration expected to work for
+  // it, so "both firmwares answer the same way" rests on two different
+  // experiments. These two fill the opposite cells. Both are open questions, so
+  // both use the `silence is a result` contract — see verdictFrom.
+  '39-ap-reposition-changemode': {
+    restart: 'ap-1',
+    waitMs: 60000,
+    expect: 'AP Move reposition from LOITER, CHANGE_MODE on: silence is a result',
+    prep: 'ap-guided-1',
+    notes:
+      'Inverse of 27. Source hypothesis (ArduCopter handle_command_int_do_reposition): not in ' +
+      'guided AND flag clear returns MAV_RESULT_DENIED, so with the flag set it should ACCEPT and ' +
+      'switch itself into GUIDED. Deliberately asserts no heading — the same handler calls ' +
+      'set_destination(loc, false, 0, false, 0), so Copter ignores param4 for DO_REPOSITION and ' +
+      "27's \"yaw 90 turns east\" cannot hold (ArduPlane does read it, for loiter direction).",
+  },
+  '40-px4-reposition-no-changemode': {
+    restart: 'px4-1',
+    waitMs: 60000,
+    expect: 'PX4 Move reposition from POSCTL, CHANGE_MODE off: silence is a result',
+    prep: 'px4-home-ready',
+    notes:
+      'Inverse of 30. Source hypothesis (PX4 Navigator::run): the setpoint applies only if the ' +
+      'CHANGE_MODE bit is set OR nav_state is already AUTO_LOITER, and only while armed — so with ' +
+      'the flag clear and the vehicle in POSCTL neither branch holds. PX4 settles into AUTO_LOITER ' +
+      'by itself after takeoff, which is why the probe must leave Hold first. The mavlink receiver ' +
+      'may ack before Navigator ever sees it, so an ACCEPTED ack with no motion is itself a finding.',
+  },
 };
 
 function req(method, urlPath, body, headers = {}) {
@@ -627,6 +659,27 @@ function verdictFrom(profile, summary, log) {
     // a timeout, or a send that never reached the wire, measures nothing. Once
     // §14 records what PX4 answers, this tightens to assert that specific
     // result, the way 17 requires video DENIED.
+    // Throwaway 39/40 (delete with the examples). Same measurement contract as
+    // 30, one cell wider: for the CHANGE_MODE probes "does the firmware answer
+    // at all?" is *part of* the open question, so a timeout is a finding — PX4
+    // dropping a flag-clear reposition without a word is exactly the shape the
+    // source predicts. Silence still is not a blank cheque: a send that never
+    // reached the wire spells result 'failed' with no resultCode, and that
+    // measures nothing on any run.
+    if (/silence is a result/i.test(expect)) {
+      if (repositionRecord.result === 'failed' && repositionRecord.resultCode === null) {
+        return {
+          status: 'FAIL',
+          reason: `Move reposition ${repositionRecord.detail || 'never reached the wire'} — nothing measured`,
+        };
+      }
+      const answer = accepted
+        ? 'accepted'
+        : repositionRecord.result === 'timeout'
+          ? 'no ACK — silently dropped'
+          : `${repositionRecord.detail || 'denied'} (${repositionRecord.resultCode})`;
+      return { status: 'PASS', reason: `Move reposition ${answer} (measured)` };
+    }
     if (/result recorded/i.test(expect)) {
       if (!vehicleAnswered) {
         return {

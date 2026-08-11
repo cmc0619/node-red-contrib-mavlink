@@ -277,3 +277,40 @@ test('27/30 read mavlink-move\'s status vocabulary, not mavlink-command\'s', () 
     assert.equal(run(key, null).status, 'FAIL', 'no record at all');
   }
 });
+
+test('39/40 CHANGE_MODE probes: silence is an answer, a dead send is not', () => {
+  // Throwaway pin — delete with examples 39/40. These probe the cells 27 and 30
+  // left empty (27: AP already in GUIDED, flag off; 30: PX4 unarranged, flag
+  // on), and for them "does the firmware answer at all?" is part of the open
+  // question: PX4's Navigator applies a flag-clear reposition only from
+  // AUTO_LOITER, so dropping it in silence is the predicted finding, not a
+  // harness failure. The one thing that still measures nothing is a send that
+  // never reached the wire — 'failed' with no resultCode.
+  const reposition = (result, detail, resultCode) => ({
+    tag: 'debug:reposition status (resultCode + retries)',
+    result, detail, resultCode, excerpt: '',
+  });
+  const arm = { tag: 'debug:arm status', result: 'accepted', detail: null, resultCode: 0, excerpt: '' };
+  const run = (key, record) =>
+    verdictFrom(PROFILE[key], { debug: record ? [arm, record] : [arm], errors: [] }, '');
+
+  for (const key of ['39-ap-reposition-changemode', '40-px4-reposition-no-changemode']) {
+    assert.ok(PROFILE[key], `profile ${key} exists`);
+    assert.equal(run(key, reposition('succeeded', 'accepted', 0)).status, 'PASS');
+    assert.equal(run(key, reposition('failed', 'denied', 2)).status, 'PASS', 'a denial is the measurement');
+
+    // The divergence from 30: a timeout PASSes here and FAILs there.
+    const dropped = run(key, reposition('timeout', 'ack timeout', null));
+    assert.equal(dropped.status, 'PASS', 'silence is the predicted PX4 answer');
+    assert.match(dropped.reason, /silently dropped/);
+    assert.equal(
+      run('30-px4-move-reposition', reposition('timeout', 'ack timeout', null)).status,
+      'FAIL',
+      "30's contract is unchanged — only the probes widen it"
+    );
+
+    // Never a blank cheque: no wire, no measurement, on any contract.
+    assert.equal(run(key, reposition('failed', 'connection closed', null)).status, 'FAIL');
+    assert.equal(run(key, null).status, 'FAIL', 'no record at all');
+  }
+});

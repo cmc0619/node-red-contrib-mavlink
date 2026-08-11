@@ -57,7 +57,13 @@ test('example files are numbered 01–N matching suite run order', () => {
     .filter((f) => /^\d+-.*\.json$/.test(f))
     .sort();
   assert.equal(files[0], '01-px4-param-union.json');
-  assert.equal(files[files.length - 1], '38-signing.json');
+  // 39/40 are throwaway CHANGE_MODE probes, appended past the end of the
+  // ordered suite precisely so adding them renumbers nothing. Delete these
+  // three lines with the examples and 38 is the tail again.
+  const PROBES = ['39-ap-reposition-changemode.json', '40-px4-reposition-no-changemode.json'];
+  const ordered = files.filter((f) => !PROBES.includes(f));
+  assert.deepEqual(files.slice(ordered.length), PROBES, 'probes sort after the ordered suite');
+  assert.equal(ordered[ordered.length - 1], '38-signing.json');
   // Phase boundary: last none/tcp before first ap takeoff
   assert.ok(files.indexOf('19-tcp-connection.json') < files.indexOf('20-completion-takeoff.json'));
   assert.ok(files.indexOf('27-move-reposition-carrier.json') < files.indexOf('28-temporarily-rejected.json'));
