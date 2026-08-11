@@ -1,0 +1,473 @@
+[
+  {
+    "id": "sitl36-tab",
+    "type": "tab",
+    "label": "SITL 26 Peer table in flight",
+    "disabled": false,
+    "info": "Fly ArduPilot sysid 1, then snapshot the Connection peer table (\u00a78). Suite fires Start (GUIDED\u2192arm\u2192takeoff\u2192velocity stream) then Snapshot after a long gap. Hard field asserts live in sitl/measure-peer-table.js; this example is the flow-level regression.",
+    "env": []
+  },
+  {
+    "id": "sitl36-comment",
+    "type": "comment",
+    "z": "sitl36-tab",
+    "name": "Peer table enrichment while airborne",
+    "info": "Chain: GUIDED (confirm) \u2192 Arm (confirm) \u2192 SET_MESSAGE_INTERVAL for GLOBAL_POSITION_INT / GPS_RAW_INT / SYS_STATUS \u2192 Takeoff 10 m (complete) \u2192 Move velocity stream north 1.5 m/s for 8 s.\n\nIntervals matter: completion and the peer table need GLOBAL_POSITION_INT; without an explicit request this SITL often leaves position null and takeoff times out with \"no position data\".\n\nSecond inject: mavlink-state snapshot \u2192 debug \"peer-table snapshot\". Expect armed:true, position.relativeAlt, gps.fixType, battery, home.\n\nConnection: bind 0.0.0.0:14550 \u2192 remote 127.0.0.1:14551, sysid 1.\n\nAuthoritative field checklist: node sitl/measure-peer-table.js (AP + PX4).",
+    "x": 250,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl36-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl36-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl36-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "vehicle": "sitl36-vehicle",
+    "localIdentity": "sitl36-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl36-inject-start",
+    "type": "inject",
+    "z": "sitl36-tab",
+    "name": "Start flight",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 160,
+    "wires": [
+      [
+        "sitl36-guided"
+      ]
+    ]
+  },
+  {
+    "id": "sitl36-guided",
+    "type": "mavlink-command",
+    "z": "sitl36-tab",
+    "name": "Set GUIDED (confirm)",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl36-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":1,\"2\":4}",
+    "carrier": "long",
+    "x": 360,
+    "y": 160,
+    "wires": [
+      [
+        "sitl36-arm"
+      ],
+      [
+        "sitl36-guided-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl36-arm",
+    "type": "mavlink-command",
+    "z": "sitl36-tab",
+    "name": "Arm (confirm)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl36-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "carrier": "long",
+    "x": 580,
+    "y": 160,
+    "wires": [
+      [
+        "sitl36-stream-gpi"
+      ],
+      [
+        "sitl36-arm-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl36-stream-gpi",
+    "type": "mavlink-command",
+    "z": "sitl36-tab",
+    "name": "Stream GPI 10 Hz",
+    "mode": "preset",
+    "preset": "set_message_interval",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl36-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":33,\"2\":100000}",
+    "carrier": "long",
+    "x": 800,
+    "y": 160,
+    "wires": [
+      [
+        "sitl36-stream-gps"
+      ],
+      [
+        "sitl36-stream-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl36-stream-gps",
+    "type": "mavlink-command",
+    "z": "sitl36-tab",
+    "name": "Stream GPS 5 Hz",
+    "mode": "preset",
+    "preset": "set_message_interval",
+    "advancedCommand": "",
+    "delivery": "send",
+    "connection": "sitl36-connection",
+    "timeout": "5000",
+    "maxRetries": "0",
+    "unconfirmedContinue": true,
+    "completionTimeout": "0",
+    "params": "{\"1\":24,\"2\":200000}",
+    "carrier": "long",
+    "x": 1020,
+    "y": 160,
+    "wires": [
+      [
+        "sitl36-stream-sys"
+      ],
+      []
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl36-stream-sys",
+    "type": "mavlink-command",
+    "z": "sitl36-tab",
+    "name": "Stream SYS_STATUS 2 Hz",
+    "mode": "preset",
+    "preset": "set_message_interval",
+    "advancedCommand": "",
+    "delivery": "send",
+    "connection": "sitl36-connection",
+    "timeout": "5000",
+    "maxRetries": "0",
+    "unconfirmedContinue": true,
+    "completionTimeout": "0",
+    "params": "{\"1\":1,\"2\":500000}",
+    "carrier": "long",
+    "x": 1260,
+    "y": 160,
+    "wires": [
+      [
+        "sitl36-takeoff"
+      ],
+      []
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl36-takeoff",
+    "type": "mavlink-command",
+    "z": "sitl36-tab",
+    "name": "Takeoff 10 m (complete)",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "sitl36-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"7\":10}",
+    "carrier": "long",
+    "x": 800,
+    "y": 280,
+    "wires": [
+      [
+        "sitl36-move"
+      ],
+      [
+        "sitl36-takeoff-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl36-move",
+    "type": "mavlink-move",
+    "z": "sitl36-tab",
+    "name": "Velocity N 1.5 m/s",
+    "connection": "sitl36-connection",
+    "delivery": "stream",
+    "mode": "velocity",
+    "frame": "LOCAL_NED",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "north": 0,
+    "east": 0,
+    "up": 0,
+    "vNorth": 1.5,
+    "vEast": 0,
+    "vUp": 0,
+    "lat": "",
+    "lon": "",
+    "alt": "",
+    "yaw": "",
+    "yawRate": "",
+    "rateHz": 10,
+    "ttlMs": 8000,
+    "x": 1060,
+    "y": 280,
+    "wires": [
+      [
+        "sitl36-airborne"
+      ],
+      [
+        "sitl36-move-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl36-inject-snap",
+    "type": "inject",
+    "z": "sitl36-tab",
+    "name": "Snapshot",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 360,
+    "wires": [
+      [
+        "sitl36-state"
+      ]
+    ]
+  },
+  {
+    "id": "sitl36-state",
+    "type": "mavlink-state",
+    "z": "sitl36-tab",
+    "name": "Peer snapshot",
+    "connection": "sitl36-connection",
+    "mode": "snapshot",
+    "events": "",
+    "targetSystem": "1",
+    "targetComponent": "1",
+    "x": 360,
+    "y": 360,
+    "wires": [
+      [
+        "sitl36-snap-debug"
+      ],
+      [
+        "sitl36-state-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl36-guided-status",
+    "type": "debug",
+    "z": "sitl36-tab",
+    "name": "guided status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 360,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl36-arm-status",
+    "type": "debug",
+    "z": "sitl36-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl36-stream-status",
+    "type": "debug",
+    "z": "sitl36-tab",
+    "name": "stream status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 800,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl36-takeoff-status",
+    "type": "debug",
+    "z": "sitl36-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 800,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "sitl36-move-status",
+    "type": "debug",
+    "z": "sitl36-tab",
+    "name": "move status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1060,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "sitl36-airborne",
+    "type": "debug",
+    "z": "sitl36-tab",
+    "name": "airborne+moving",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1280,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "sitl36-state-status",
+    "type": "debug",
+    "z": "sitl36-tab",
+    "name": "state status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 420,
+    "wires": []
+  },
+  {
+    "id": "sitl36-snap-debug",
+    "type": "debug",
+    "z": "sitl36-tab",
+    "name": "peer-table snapshot",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 600,
+    "y": 360,
+    "wires": []
+  }
+]

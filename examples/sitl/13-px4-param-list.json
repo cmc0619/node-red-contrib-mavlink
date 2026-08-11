@@ -1,0 +1,168 @@
+[
+  {
+    "id": "sitl30-tab",
+    "type": "tab",
+    "label": "SITL 13 PX4 param list",
+    "disabled": false,
+    "info": "PX4 request-list + collect \u2014 the AP-only path in SITL 13, mirrored on sysid 11.",
+    "env": []
+  },
+  {
+    "id": "sitl30-comment",
+    "type": "comment",
+    "z": "sitl30-tab",
+    "name": "PX4 PARAM_REQUEST_LIST collect",
+    "info": "Collects the full PX4 parameter table into one array on output 0 (status list-complete).\nAssert function checks length > 0 and known ids COM_RC_IN_MODE / MPC_XY_VEL_MAX.\n\nConnection: PX4 bind 0.0.0.0:14560 \u2192 127.0.0.1:14561 sysid 11.",
+    "x": 250,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl30-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl30-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "PX4 sysid 11",
+    "vehicleFamily": "copter",
+    "firmware": "px4",
+    "dialect": "common",
+    "defaultTargetSystem": 11,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl30-connection",
+    "type": "mavlink-connection",
+    "name": "UDP PX4 SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14560,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14561,
+    "vehicle": "sitl30-vehicle",
+    "localIdentity": "sitl30-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl30-inject",
+    "type": "inject",
+    "z": "sitl30-tab",
+    "name": "Collect PX4 list",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 160,
+    "wires": [
+      [
+        "sitl30-list"
+      ]
+    ]
+  },
+  {
+    "id": "sitl30-list",
+    "type": "mavlink-param",
+    "z": "sitl30-tab",
+    "name": "Collect all params",
+    "connection": "sitl30-connection",
+    "delivery": "collect",
+    "action": "request-list",
+    "firmware": "px4",
+    "targetSystem": 11,
+    "targetComponent": 1,
+    "lookup": "name",
+    "paramId": "",
+    "paramIndex": -1,
+    "value": "",
+    "paramType": "MAV_PARAM_TYPE_REAL32",
+    "timeout": "45000",
+    "x": 400,
+    "y": 160,
+    "wires": [
+      [
+        "sitl30-assert"
+      ],
+      [
+        "sitl30-list-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl30-assert",
+    "type": "function",
+    "z": "sitl30-tab",
+    "name": "Assert known PX4 ids",
+    "func": "const list = Array.isArray(msg.payload) ? msg.payload : [];\nconst ids = new Set(list.map((p) => p && p.paramId).filter(Boolean));\nconst hasRc = ids.has('COM_RC_IN_MODE');\nconst hasVel = ids.has('MPC_XY_VEL_MAX');\nconst ok = list.length > 0 && hasRc && hasVel;\nmsg.payload = {\n  result: ok ? 'succeeded' : 'failed',\n  detail: ok\n    ? ('px4-list count=' + list.length)\n    : ('px4-list incomplete count=' + list.length + ' rc=' + hasRc + ' vel=' + hasVel),\n  count: list.length\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 660,
+    "y": 140,
+    "wires": [
+      [
+        "sitl30-list-assert"
+      ]
+    ]
+  },
+  {
+    "id": "sitl30-list-status",
+    "type": "debug",
+    "z": "sitl30-tab",
+    "name": "list status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 630,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl30-list-assert",
+    "type": "debug",
+    "z": "sitl30-tab",
+    "name": "list assert",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 880,
+    "y": 140,
+    "wires": []
+  }
+]

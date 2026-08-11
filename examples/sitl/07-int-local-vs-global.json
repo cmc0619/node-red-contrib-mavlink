@@ -1,0 +1,448 @@
+[
+  {
+    "id": "sitl18-tab",
+    "type": "tab",
+    "label": "SITL 07 INT local vs global",
+    "disabled": false,
+    "info": "Proves DESIGN.md section 14: COMMAND_INT local-frame x/y scale as metres x 1e4, while global frames scale as degrees x 1e7. ArduPilot accepts DO_SET_HOME with GLOBAL_INT and denies LOCAL_NED; PX4 accepts both and decodes LOCAL_NED as metres.",
+    "env": []
+  },
+  {
+    "id": "sitl18-comment",
+    "type": "comment",
+    "z": "sitl18-tab",
+    "name": "COMMAND_INT frame matrix: GLOBAL_INT vs LOCAL_NED",
+    "info": "Four one-shot DO_SET_HOME probes: ArduPilot GLOBAL_INT, ArduPilot LOCAL_NED, PX4 GLOBAL_INT, PX4 LOCAL_NED.\n\nGlobal cases enter latitude/longitude as decimal degrees and use MAV_FRAME_GLOBAL_INT (5). Local cases enter x/y as metres in the same param slots and use MAV_FRAME_LOCAL_NED (1); the command node scales those to metres x 1e4 on COMMAND_INT.\n\nExpected result per DESIGN.md section 14: GLOBAL_INT ACCEPTED on both stacks; LOCAL_NED DENIED on ArduPilot and ACCEPTED on PX4.\n\nArduPilot Connection: bind 0.0.0.0:14550 -> remote 127.0.0.1:14551, sysid 1.\nPX4 Connection: bind 0.0.0.0:14560 -> remote 127.0.0.1:14561, sysid 11.",
+    "x": 310,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl18-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl18-vehicle-ap",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl18-vehicle-px4",
+    "type": "mavlink-vehicle",
+    "name": "PX4 sysid 11",
+    "vehicleFamily": "copter",
+    "firmware": "px4",
+    "dialect": "common",
+    "defaultTargetSystem": 11,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl18-connection-ap",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "vehicle": "sitl18-vehicle-ap",
+    "localIdentity": "sitl18-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl18-connection-px4",
+    "type": "mavlink-connection",
+    "name": "UDP PX4",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14560,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14561,
+    "vehicle": "sitl18-vehicle-px4",
+    "localIdentity": "sitl18-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl18-inject-ap-global",
+    "type": "inject",
+    "z": "sitl18-tab",
+    "name": "AP GLOBAL_INT home",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 150,
+    "wires": [
+      [
+        "sitl18-ap-global"
+      ]
+    ]
+  },
+  {
+    "id": "sitl18-ap-global",
+    "type": "mavlink-command",
+    "z": "sitl18-tab",
+    "name": "AP DO_SET_HOME GLOBAL_INT",
+    "mode": "preset",
+    "preset": "set_home",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl18-connection-ap",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":0,\"5\":-35.363261,\"6\":149.16523,\"7\":584}",
+    "carrier": "int",
+    "frame": "5",
+    "x": 420,
+    "y": 150,
+    "wires": [
+      [
+        "sitl18-ap-global-done"
+      ],
+      [
+        "sitl18-ap-global-status"
+      ]
+    ],
+    "targetSystem": "1",
+    "targetComponent": "1"
+  },
+  {
+    "id": "sitl18-inject-ap-local",
+    "type": "inject",
+    "z": "sitl18-tab",
+    "name": "AP LOCAL_NED home",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 250,
+    "wires": [
+      [
+        "sitl18-ap-local"
+      ]
+    ]
+  },
+  {
+    "id": "sitl18-ap-local",
+    "type": "mavlink-command",
+    "z": "sitl18-tab",
+    "name": "AP DO_SET_HOME LOCAL_NED",
+    "mode": "preset",
+    "preset": "set_home",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl18-connection-ap",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":0,\"5\":123.4567,\"6\":123.4567,\"7\":0}",
+    "carrier": "int",
+    "frame": "1",
+    "x": 420,
+    "y": 250,
+    "wires": [
+      [
+        "sitl18-ap-local-done"
+      ],
+      [
+        "sitl18-ap-local-status"
+      ]
+    ],
+    "targetSystem": "1",
+    "targetComponent": "1"
+  },
+  {
+    "id": "sitl18-inject-px4-global",
+    "type": "inject",
+    "z": "sitl18-tab",
+    "name": "PX4 GLOBAL_INT home",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 370,
+    "wires": [
+      [
+        "sitl18-px4-global"
+      ]
+    ]
+  },
+  {
+    "id": "sitl18-px4-global",
+    "type": "mavlink-command",
+    "z": "sitl18-tab",
+    "name": "PX4 DO_SET_HOME GLOBAL_INT",
+    "mode": "preset",
+    "preset": "set_home",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl18-connection-px4",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":0,\"5\":47.397742,\"6\":8.545594,\"7\":488}",
+    "carrier": "int",
+    "frame": "5",
+    "x": 420,
+    "y": 370,
+    "wires": [
+      [
+        "sitl18-px4-global-done"
+      ],
+      [
+        "sitl18-px4-global-status"
+      ]
+    ],
+    "targetSystem": "11",
+    "targetComponent": "1"
+  },
+  {
+    "id": "sitl18-inject-px4-local",
+    "type": "inject",
+    "z": "sitl18-tab",
+    "name": "PX4 LOCAL_NED home",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 470,
+    "wires": [
+      [
+        "sitl18-px4-local"
+      ]
+    ]
+  },
+  {
+    "id": "sitl18-px4-local",
+    "type": "mavlink-command",
+    "z": "sitl18-tab",
+    "name": "PX4 DO_SET_HOME LOCAL_NED",
+    "mode": "preset",
+    "preset": "set_home",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl18-connection-px4",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":0,\"5\":123.4567,\"6\":123.4567,\"7\":0}",
+    "carrier": "int",
+    "frame": "1",
+    "x": 420,
+    "y": 470,
+    "wires": [
+      [
+        "sitl18-px4-local-done"
+      ],
+      [
+        "sitl18-px4-local-status"
+      ]
+    ],
+    "targetSystem": "11",
+    "targetComponent": "1"
+  },
+  {
+    "id": "sitl18-ap-global-done",
+    "type": "debug",
+    "z": "sitl18-tab",
+    "name": "ap global accepted",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 700,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "sitl18-ap-global-status",
+    "type": "debug",
+    "z": "sitl18-tab",
+    "name": "ap global status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 700,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "sitl18-ap-local-done",
+    "type": "debug",
+    "z": "sitl18-tab",
+    "name": "ap local continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 700,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl18-ap-local-status",
+    "type": "debug",
+    "z": "sitl18-tab",
+    "name": "ap local status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 700,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "sitl18-px4-global-done",
+    "type": "debug",
+    "z": "sitl18-tab",
+    "name": "px4 global accepted",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 710,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "sitl18-px4-global-status",
+    "type": "debug",
+    "z": "sitl18-tab",
+    "name": "px4 global status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 710,
+    "y": 400,
+    "wires": []
+  },
+  {
+    "id": "sitl18-px4-local-done",
+    "type": "debug",
+    "z": "sitl18-tab",
+    "name": "px4 local accepted",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 710,
+    "y": 450,
+    "wires": []
+  },
+  {
+    "id": "sitl18-px4-local-status",
+    "type": "debug",
+    "z": "sitl18-tab",
+    "name": "px4 local status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 710,
+    "y": 510,
+    "wires": []
+  }
+]

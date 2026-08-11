@@ -144,7 +144,7 @@ const { PROFILE, verdictFrom } = require('../../sitl/run-example-suite');
 test('real generic tail: first-ack PASS is not a specialized PASS (#254 P1)', () => {
   // Example 01 the moment the arm acks, takeoff still climbing: exactly the
   // snapshot that froze the run at 0.1 s.
-  const profile = PROFILE['01-completion-takeoff'];
+  const profile = PROFILE['20-completion-takeoff'];
   assert.ok(profile, 'profile 01 exists');
   const summary = {
     debug: [{ tag: 'arm status', result: 'accepted', excerpt: "result: 'accepted'" }],
@@ -163,7 +163,7 @@ test('real specialized PASS reasons never collide with the generic exclusion', (
   // A specialized branch whose reason started with "results:" would be barred
   // from early exit — harmless — but the reverse drift (generic reason no
   // longer matching) reopens the hole. Pin the one live "results:" producer.
-  const profile = PROFILE['26-formation-basics'];
+  const profile = PROFILE['34-formation-basics'];
   assert.ok(profile, 'profile 26 exists');
   const summary = {
     debug: [
@@ -181,7 +181,7 @@ test('real 17/19 branch: the arm ack alone no longer classifies PASS (#267)', ()
   // The old branch keyed on results.includes('accepted') — flow-wide — plus a
   // log string match on the debug node's *name*, so a denied or unsettled goto
   // classified PASS off the arm. It now reads the goto's own record by tag.
-  const profile = PROFILE['17-int-carrier-goto'];
+  const profile = PROFILE['29-int-carrier-goto'];
   assert.ok(profile, 'profile 17 exists');
   // Did the example test the thing? With no goto record it never exercised its
   // subject, so it failed to test the thing — FAIL, not half credit. Safe
@@ -232,15 +232,15 @@ test('37/38 read mavlink-move\'s status vocabulary, not mavlink-command\'s', () 
     verdictFrom(PROFILE[key], { debug: record ? [arm, record] : [arm], errors: [] }, '');
 
   // 37 asserts ArduPilot accepts.
-  assert.equal(run('37-move-reposition-carrier', reposition('succeeded', 'accepted', 0)).status, 'PASS');
-  assert.equal(run('37-move-reposition-carrier', reposition('failed', 'denied', 2)).status, 'FAIL');
+  assert.equal(run('27-move-reposition-carrier', reposition('succeeded', 'accepted', 0)).status, 'PASS');
+  assert.equal(run('27-move-reposition-carrier', reposition('failed', 'denied', 2)).status, 'FAIL');
 
   // 38 measures: any answer PX4 gives passes, silence does not.
-  assert.equal(run('38-px4-move-reposition', reposition('succeeded', 'accepted', 0)).status, 'PASS');
-  assert.equal(run('38-px4-move-reposition', reposition('failed', 'denied', 2)).status, 'PASS');
+  assert.equal(run('30-px4-move-reposition', reposition('succeeded', 'accepted', 0)).status, 'PASS');
+  assert.equal(run('30-px4-move-reposition', reposition('failed', 'denied', 2)).status, 'PASS');
 
   // A timeout carries no resultCode: nothing was measured, on either example.
-  for (const key of ['37-move-reposition-carrier', '38-px4-move-reposition']) {
+  for (const key of ['27-move-reposition-carrier', '30-px4-move-reposition']) {
     assert.equal(run(key, reposition('timeout', 'ack timeout', null)).status, 'FAIL');
     // A send that threw before the wire also spells 'failed', but with no code.
     assert.equal(run(key, reposition('failed', 'connection closed', null)).status, 'FAIL');

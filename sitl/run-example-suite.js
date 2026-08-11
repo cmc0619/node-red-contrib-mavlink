@@ -4,9 +4,11 @@
  * Deploy each examples/sitl/*.json into the lab Node-RED (host :1880), fire
  * injects, scrape debug/error lines, and write a JSON report.
  *
- * Before each non-SKIP example, docker-restarts the vehicle fleet (not
- * Node-RED) so altitude / EKF / arm state cannot leak across tests — force-
- * disarm alone leaves AGL and makes NAV_TAKEOFF DENIED. See sitl/AGENTS.md.
+ * Before each non-SKIP example, selectively docker-restarts the vehicles that
+ * example needs cold (PROFILE.restart — not Node-RED). Force-disarm alone
+ * leaves AGL and makes NAV_TAKEOFF DENIED. Examples are numbered in run order
+ * (none → ap-* → px4-* → ap-fleet → fleet) so restart:none batches avoid
+ * paying settle between param/companion/payload stories. See sitl/AGENTS.md.
  *
  * After injects, PROFILE.waitMs is a max wait: the harness polls Node-RED
  * logs and early-exits on specialized verdictFrom PASS (optional readyWhen;
@@ -23,6 +25,11 @@ const path = require('path');
 const http = require('http');
 const { spawnSync } = require('child_process');
 const { waitUntilReady } = require('./lib/wait-until-ready');
+const {
+  ALL_VEHICLES,
+  containersForRestart,
+  px4ContainersIn,
+} = require('./lib/suite-schedule');
 
 const ROOT = path.join(__dirname, '..');
 const SITL_DIR = path.join(ROOT, 'examples', 'sitl');
@@ -50,51 +57,64 @@ const OUT =
  * the suite polls logs and early-exits on specialized PASS (or optional
  * `readyWhen`). See sitl/lib/wait-until-ready.js.
  *
- * @type {Record<string, {waitMs: number, expect: string, notes?: string, prep?: string, readyWhen?: Function, injectGapMs?: number, skip?: boolean}>}
+ * `restart` selects which containers docker-restart before the example
+ * (`none` | `ap-1` | `ap-2` | `ap-12` | `ap-fleet` | `px4-1` | `fleet`).
+ * Examples are numbered in run order: none → ap-* → px4-* → ap-fleet → fleet.
+ *
+ * @type {Record<string, {restart?: string, waitMs: number, expect: string, notes?: string, prep?: string, readyWhen?: Function, injectGapMs?: number, skip?: boolean}>}
  */
 const PROFILE = {
-  '01-completion-takeoff': {
+  '20-completion-takeoff': {
+    restart: 'ap-1',
     waitMs: 45000,
     expect: 'takeoff complete / altitude reached',
     prep: 'ap-guided-1',
   },
-  '02-completion-timeout': {
+  '21-completion-timeout': {
+    restart: 'ap-1',
     waitMs: 35000,
     expect: 'completion timeout after accepted takeoff',
     prep: 'ap-guided-1',
   },
-  '03-temporarily-rejected': {
+  '28-temporarily-rejected': {
+    restart: 'px4-1',
     waitMs: 20000,
     expect: 'TEMPORARILY_REJECTED retried until exhausted (PX4 packed mode)',
     prep: 'px4-mode-ready',
     notes:
       'AP cold-arm returns FAILED(4), not (1); example uses PX4 DO_SET_MODE param2=196608 which stably returns TEMPORARILY_REJECTED',
   },
-  '04-mode-tables': {
+  '36-mode-tables': {
+    restart: 'fleet',
     waitMs: 20000,
     expect: 'AP GUIDED + PX4 mode set accepted',
     prep: 'px4-mode-ready',
   },
-  '05-px4-param-union': {
+  '01-px4-param-union': {
+    restart: 'none',
     waitMs: 15000,
     expect: 'param set+read echo confirmed',
   },
-  '06-mission-fence-rally': {
+  '02-mission-fence-rally': {
+    restart: 'none',
     waitMs: 40000,
     expect: 'AP mission/fence/rally ok; PX4 fence fails loud',
   },
-  '07-mission-failloud': {
+  '03-mission-failloud': {
+    restart: 'none',
     waitMs: 45000,
     expect: 'good upload ok; bad upload fails; good plan survives',
   },
-  '08-fanout-sequential-five': {
+  '31-fanout-sequential-five': {
+    restart: 'ap-fleet',
     waitMs: 25000,
     expect: 'dry-run then live sequential arm ×5',
     // delivery=confirm: the first DENIED fails the aggregate, so every one of
     // the five has to be armable before the example runs.
     prep: 'ap-arm-ready-fleet',
   },
-  '09-fanout-member-expires': {
+  '32-fanout-member-expires': {
+    restart: 'ap-fleet',
     waitMs: 20000,
     expect: 'aggregate reports one failed after mid-run kill',
     // The mid-run kill is afterInjectHook, keyed on the file — `kill-ap-3-mid`
@@ -102,13 +122,15 @@ const PROFILE = {
     // fail; an unsettled EKF fails all five and the verdict means nothing.
     prep: 'ap-arm-ready-fleet',
   },
-  '10-dual-stack-ten': {
+  '37-dual-stack-ten': {
+    restart: 'fleet',
     waitMs: 25000,
     expect: 'broadcast arm AP 1–5 and PX4 11–15',
     // No prep: delivery=send, so no ACK is waited on and no verdict turns on
     // whether anyone armed. Arm-ready here would cost ~40 s and change nothing.
   },
-  '11-broadcast-vs-sequential': {
+  '33-broadcast-vs-sequential': {
+    restart: 'ap-fleet',
     waitMs: 30000,
     expect: 'sequential + broadcast arm confirmed',
     prep: 'ap-arm-ready-fleet',
@@ -117,103 +139,123 @@ const PROFILE = {
     // the broadcast half lands on top of it.
     injectGapMs: 12000,
   },
-  '12-signing': {
+  '38-signing': {
+    restart: 'fleet',
     waitMs: 15000,
     expect: 'signed arm accepted; trusted HEARTBEAT on companion 20',
     prep: 'ap-signing-companion-20',
     notes:
       'Lab passphrase hunter11 injected via Admin API credentials; harness SETUP_SIGNING on companion AP sysid 20',
   },
-  '13-param-defs-live': {
+  '04-param-defs-live': {
+    restart: 'none',
     waitMs: 20000,
     expect: 'read / set / list param defs against AP',
     // Let set echo-confirm finish before request-list floods PARAM_VALUE.
     injectGapMs: 8000,
   },
-  '14-command-mission-basics': {
+  '22-command-mission-basics': {
+    restart: 'ap-12',
     waitMs: 40000,
     expect: 'arm sysid1; mission up/down sysid2',
     prep: 'ap-guided-1',
   },
-  '15-companion-ap': {
+  '05-companion-ap': {
+    restart: 'none',
     waitMs: 10000,
     expect: 'NVF sent on companion 20',
   },
-  '16-companion-px4': {
+  '06-companion-px4': {
+    restart: 'none',
     waitMs: 10000,
     expect: 'NVF sent on companion 21',
   },
-  '17-int-carrier-goto': {
+  '29-int-carrier-goto': {
+    restart: 'px4-1',
     waitMs: 55000,
     expect: 'arm+takeoff+INT goto accepted; ~150 m north',
     prep: 'px4-home-ready',
   },
-  '18-int-local-vs-global': {
+  '07-int-local-vs-global': {
+    restart: 'none',
     waitMs: 25000,
     expect: 'GLOBAL_INT accepted both stacks; LOCAL_NED denied AP / accepted PX4',
     prep: 'ap-home-ready',
   },
-  '19-ap-int-carrier-goto': {
+  '23-ap-int-carrier-goto': {
+    restart: 'ap-1',
     waitMs: 55000,
     expect: 'AP arm+takeoff+INT goto accepted',
     prep: 'ap-guided-1',
   },
-  '20-move-stream-stop': {
+  '24-move-stream-stop': {
+    restart: 'ap-1',
     waitMs: 25000,
     expect: 'move stream then zero-velocity stop',
     prep: 'ap-guided-1',
   },
-  '21-param-echo-float32': {
+  '08-param-echo-float32': {
+    restart: 'none',
     waitMs: 35000,
     expect: 'AP + PX4 float32 param set/read echo',
   },
-  '22-in-build-out': {
+  '09-in-build-out': {
+    restart: 'none',
     waitMs: 20000,
     expect: 'mavlink-in → build → out composition',
   },
-  '23-profile-target-inherit': {
+  '25-profile-target-inherit': {
+    restart: 'ap-2',
     waitMs: 20000,
     expect: 'command inherits profile target sysid 2',
     prep: 'ap-arm-ready-2',
   },
-  '24-companion-receive': {
+  '10-companion-receive': {
+    restart: 'none',
     waitMs: 15000,
     expect: 'companion receive path sees vehicle traffic',
   },
-  '25-tcp-connection': {
+  '19-tcp-connection': {
+    restart: 'none',
     waitMs: 5000,
     expect: 'TCP template — skip unless SITL TCP exposed',
     notes: 'default Compose lab is UDP-only; skip without published :5760',
     skip: true,
   },
-  '26-formation-basics': {
+  '34-formation-basics': {
+    restart: 'ap-fleet',
     waitMs: 140000,
     expect: 'formation line then circle succeeded ×5',
     prep: 'ap-arm-ready-fleet',
     notes: 'GUIDED→arm→takeoff→line→circle on AP 1–5; mavlink-formation confirm aggregates',
   },
-  '27-lucy-in-the-sky': {
+  '35-lucy-in-the-sky': {
+    restart: 'ap-fleet',
     waitMs: 260000,
     expect: 'Lucy sphere tumble then peel land',
     prep: 'ap-arm-ready-fleet',
     notes: 'takeoff→line spread→sphere→pitch 0/45/90/135/180→sequential land',
   },
-  '28-param-read-by-index': {
+  '11-param-read-by-index': {
+    restart: 'none',
     waitMs: 45000,
     expect: 'AP list collect then PARAM_REQUEST_READ by param_index',
     notes: 'pick LOIT_SPEED_MS index from collect; assert empty param_id + index ≥ 0',
   },
-  '29-param-fanout-set': {
+  '12-param-fanout-set': {
+    restart: 'none',
     waitMs: 40000,
     expect: 'PARAM_SET fan-out sequential confirm ×5',
     notes: 'build LOIT_SPEED_MS → fanout confirm on AP 1–5; no arm prep',
   },
-  '30-px4-param-list': {
+  '13-px4-param-list': {
+    restart: 'none',
     waitMs: 55000,
     expect: 'PX4 request-list collect with known ids',
     notes: 'mirrors SITL 13 list path on sysid 11; assert COM_RC_IN_MODE + MPC_XY_VEL_MAX',
   },
-  '31-param-encoding-override': {
+  '14-param-encoding-override': {
+    restart: 'none',
     waitMs: 45000,
     expect: 'paramEncoding override matching + crossed timeout',
     // Matching sets finish in ~1 s; crossed AP bytewise waits the 5 s echo timeout.
@@ -221,31 +263,36 @@ const PROFILE = {
     notes:
       'matching overrides (PX4 bytewise / AP c-cast) succeed; crossed AP bytewise must echo-timeout (proves override rung)',
   },
-  '32-param-echo-timeout': {
+  '15-param-echo-timeout': {
+    restart: 'none',
     waitMs: 25000,
     expect: 'known param then unknown WPNAV_SPEED echo timeout',
     injectGapMs: 3000,
     notes:
       'LOIT_SPEED_MS confirm proves AP-1 reachable; then missing WPNAV_SPEED must timed-out / echo timeout',
   },
-  '33-payload-gimbal-legacy': {
+  '16-payload-gimbal-legacy': {
+    restart: 'none',
     waitMs: 35000,
     expect: 'AP-31 legacy gimbal aim mode ROI accepted',
     injectGapMs: 2500,
     notes: 'sysid 31 / 14570 — aim + set-mode + roi-set + roi-clear confirm',
   },
-  '34-payload-camera': {
+  '17-payload-camera': {
+    restart: 'none',
     waitMs: 35000,
     expect: 'AP-31 camera photo accepted video denied',
     injectGapMs: 2500,
     notes: 'CAM1_TYPE=1 stills ACCEPTED; VIDEO_* DENIED on this SITL stack',
   },
-  '35-payload-gimbal-manager': {
+  '18-payload-gimbal-manager': {
+    restart: 'none',
     waitMs: 15000,
     expect: 'AP-31 gimbal manager aim sent unconfirmed',
     notes: 'delivery=send; no COMMAND_ACK / no manager telemetry on Copter-4.7.0 --gimbal',
   },
-  '36-peer-table-inflight': {
+  '26-peer-table-inflight': {
+    restart: 'ap-1',
     waitMs: 20000,
     expect: 'peer-table snapshot armed+position+gps while airborne',
     prep: 'ap-guided-1',
@@ -254,14 +301,16 @@ const PROFILE = {
     notes:
       'Flow-level State snapshot after takeoff+move; hard §8 field asserts in sitl/measure-peer-table.js',
   },
-  '37-move-reposition-carrier': {
+  '27-move-reposition-carrier': {
+    restart: 'ap-1',
     waitMs: 55000,
     expect: 'Move carrier=reposition goto accepted; yaw 90 deg turns east',
     prep: 'ap-guided-1',
     notes:
       'Same goto as 19 through mavlink-move instead of mavlink-command — carrier is the only variable. Measures: ACK reaches output 1 with resultCode 0; param4 yaw is radians (90 deg must end EAST, not some wrapped heading); blank speed/radius encode the -1/0 sentinels. CHANGE_MODE off — without-GUIDED and CHANGE_MODE are separate runs.',
   },
-  '38-px4-move-reposition': {
+  '30-px4-move-reposition': {
+    restart: 'px4-1',
     waitMs: 55000,
     expect: 'PX4 Move reposition: goto settles; result recorded',
     prep: 'px4-home-ready',
@@ -908,7 +957,7 @@ function verdictFrom(profile, summary, log) {
 }
 
 /**
- * Joke lab signing passphrase for example 12. Intentionally not a secret —
+ * Joke lab signing passphrase for example 38 (signing). Intentionally not a secret —
  * Admin API deploy injects it as Connection credentials; harness also pushes
  * SETUP_SIGNING with sha256(passphrase) onto companion AP sysid 20.
  */
@@ -990,21 +1039,7 @@ function signingCredentialsForFlows(flows) {
 }
 
 /** Vehicle containers only — never restart nrc-nodered between examples. */
-const VEHICLE_CONTAINERS = [
-  'nrc-ap-1',
-  'nrc-ap-2',
-  'nrc-ap-3',
-  'nrc-ap-4',
-  'nrc-ap-5',
-  'nrc-px4-11',
-  'nrc-px4-12',
-  'nrc-px4-13',
-  'nrc-px4-14',
-  'nrc-px4-15',
-  'nrc-ap-companion-20',
-  'nrc-px4-companion-21',
-  'nrc-ap-payload-31',
-];
+const VEHICLE_CONTAINERS = ALL_VEHICLES;
 
 const PX4_VEHICLE_CONTAINERS = [
   'nrc-px4-11',
@@ -1204,21 +1239,34 @@ function applyPx4LabHelpers(containers = PX4_VEHICLE_CONTAINERS) {
 }
 
 /**
- * Reset every SITL vehicle between examples. Force-disarm does not clear AGL;
+ * Reset SITL vehicles before an example. Force-disarm does not clear AGL;
  * ArduCopter then DENY's NAV_TAKEOFF when still ~airborne from a prior flight.
+ *
+ * @param {string[]} [containers]  subset to restart; empty → skip (restart: none)
  */
-async function restartVehicleFleet() {
-  console.log('  restarting vehicle fleet…');
+async function restartVehicleFleet(containers = VEHICLE_CONTAINERS) {
+  if (!containers.length) {
+    console.log('  skip vehicle restart (restart: none)');
+    return;
+  }
+  const label =
+    containers.length === VEHICLE_CONTAINERS.length
+      ? 'vehicle fleet'
+      : containers.join(' ');
+  console.log(`  restarting ${label}…`);
   const r = sh(
-    `for c in ${VEHICLE_CONTAINERS.join(' ')}; do docker restart "$c" >/dev/null & done; wait`,
+    `for c in ${containers.join(' ')}; do docker restart "$c" >/dev/null & done; wait`,
     180000
   );
   if (r.code !== 0) {
     console.warn(`  fleet restart exit ${r.code}: ${r.out.slice(0, 200)}`);
   }
   await sleep(FLEET_SETTLE_MS);
-  applyPx4LabHelpers();
-  await sleep(1500);
+  const px4 = px4ContainersIn(containers);
+  if (px4.length) {
+    applyPx4LabHelpers(px4);
+    await sleep(1500);
+  }
 }
 
 async function prep(kind) {
@@ -1246,7 +1294,7 @@ async function prep(kind) {
 }
 
 async function afterInjectHook(fileBase, startedAt) {
-  if (fileBase === '09-fanout-member-expires') {
+  if (fileBase === '32-fanout-member-expires') {
     await sleep(200);
     console.log('  killing nrc-ap-3 mid-run…');
     sh('docker stop nrc-ap-3 >/dev/null');
@@ -1254,13 +1302,38 @@ async function afterInjectHook(fileBase, startedAt) {
 }
 
 async function cleanupAfter(fileBase) {
-  // Next example's fleet restart is the real altitude/arm reset. Only recover
+  // Next example's selective restart is the real altitude/arm reset. Only recover
   // containers the example intentionally stopped so docker restart can proceed.
-  if (fileBase === '09-fanout-member-expires') {
+  if (fileBase === '32-fanout-member-expires') {
     console.log('  ensuring nrc-ap-3 is startable for next fleet restart…');
     sh('docker start nrc-ap-3 >/dev/null 2>&1 || true');
     await sleep(2000);
   }
+}
+
+/** True after any restart this process (including a one-shot prime for restart:none). */
+let suiteRestartPrimed = false;
+
+/**
+ * Selective restart. `restart: none` skips once the suite has been primed;
+ * the first none primes the full fleet so param/companion examples start cold.
+ *
+ * @param {{ restart?: string }} profile
+ */
+async function restartForProfile(profile) {
+  const containers = containersForRestart(profile.restart);
+  if (containers.length === 0) {
+    if (!suiteRestartPrimed) {
+      console.log('  priming vehicle fleet (first restart:none)…');
+      await restartVehicleFleet(VEHICLE_CONTAINERS);
+      suiteRestartPrimed = true;
+      return;
+    }
+    await restartVehicleFleet([]);
+    return;
+  }
+  await restartVehicleFleet(containers);
+  suiteRestartPrimed = true;
 }
 
 async function runOne(file) {
@@ -1285,9 +1358,9 @@ async function runOne(file) {
       errors: [],
     };
   }
-  // Isolation: docker-restart vehicles so AGL/EKF/arm from prior examples cannot
-  // DENY takeoff or poison fan-out members. Node-RED stays up (UDP binds cleared later).
-  await restartVehicleFleet();
+  // Isolation: docker-restart only the vehicles this example needs cold.
+  // Node-RED stays up (UDP binds cleared later).
+  await restartForProfile(profile);
   if (profile.prep) await prep(profile.prep);
 
   const mark = Math.floor(Date.now() / 1000);
