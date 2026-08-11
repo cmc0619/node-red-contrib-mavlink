@@ -82,22 +82,6 @@ test('assignSlots auto-fills in stable sorted-sysid order', () => {
   assert.deepEqual([...map], [[3, 0], [5, 1], [7, 2]]);
 });
 
-test('assignSlots honors explicit pins and fills the unpinned into the lowest free slots', () => {
-  const map = assignSlots([7, 3, 5], { slotMap: { 5: 0 } });
-  assert.equal(map.get(5), 0);
-  assert.equal(map.get(3), 1);
-  assert.equal(map.get(7), 2);
-});
-
-test('assignSlots refuses two vehicles pinned to one slot', () => {
-  assert.throws(() => assignSlots([3, 5], { slotMap: { 3: 1, 5: 1 } }), /more than one vehicle/);
-});
-
-test('assignSlots refuses non-integer and negative slot indices', () => {
-  assert.throws(() => assignSlots([3], { slotMap: { 3: 1.5 } }), /non-negative integer/);
-  assert.throws(() => assignSlots([3], { slotMap: { 3: -1 } }), /non-negative integer/);
-});
-
 test('formationTargets places a line east-west of the anchor by the flat-earth deltas', () => {
   // Hand-computed at lat 47.397742: 10 m east = 10/(R·cos lat)·180/π degrees
   // of longitude = 1.32709215145987e-4 with R = 6378137.

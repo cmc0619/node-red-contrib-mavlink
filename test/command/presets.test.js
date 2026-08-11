@@ -249,6 +249,61 @@ test('location presets refuse blank lat/lon rather than sending 0,0 (#88)', () =
   );
 });
 
+test('a present location must also be in range: |lat| ≤ 90, |lon| ≤ 180 (§9, #263)', () => {
+  // The degE7 int32 ceiling is ±214.7°, so lat 91 scales into a
+  // garbage-but-valid coordinate the vehicle would accept — the C4 hazard
+  // class Move's requireGlobalPosition names, on the preset path.
+  const reposition = getPreset('reposition');
+  assert.match(
+    blankLocationRefusal(reposition, { 5: 91, 6: 8.5, 7: 30 }),
+    /latitude must be within ±90°, got 91/
+  );
+  assert.match(
+    blankLocationRefusal(reposition, { 5: 47.4, 6: 181, 7: 30 }),
+    /longitude must be within ±180°, got 181/
+  );
+  // The poles and the antimeridian are legal places to fly to.
+  assert.equal(blankLocationRefusal(reposition, { 5: -90, 6: 180, 7: 30 }), null);
+
+  // The range clause does not weaken requireAltitude: presence still comes
+  // first, so a blank altitude refuses before any range check runs.
+  assert.match(
+    blankLocationRefusal(reposition, { 5: 47.4, 6: 8.5 }),
+    /altitude.*ground level/
+  );
+
+  // Orbit (no requireAltitude) takes the same range rule.
+  assert.match(
+    blankLocationRefusal(getPreset('orbit'), { 5: 91, 6: 8.5 }),
+    /latitude must be within ±90°, got 91/
+  );
+});
+
+test('range is gated on the coordinate being present, not on the preset requiring one', () => {
+  // Takeoff and Land expose param5/6 without `requireLocation` — blank there
+  // means "here", deliberately (see requireLocationFor). Nesting the range test
+  // inside that presence gate let 200°/200° through on exactly the two presets
+  // the presence rule exempts: degE7 scaled it to x=y=2000000000, a valid int32
+  // the vehicle accepts. §9 (#263) keys the rule on the location being present.
+  for (const id of ['takeoff', 'land']) {
+    const preset = getPreset(id);
+    assert.match(
+      blankLocationRefusal(preset, { 5: 200, 6: 200, 7: 30 }),
+      /latitude must be within ±90°, got 200/,
+      `${id} must refuse an out-of-range latitude`
+    );
+    assert.match(
+      blankLocationRefusal(preset, { 5: 47.4, 6: 200, 7: 30 }),
+      /longitude must be within ±180°, got 200/,
+      `${id} must refuse an out-of-range longitude`
+    );
+
+    // The exemption itself survives: blank still means "here", not null island.
+    assert.equal(blankLocationRefusal(preset, { 7: 30 }), null);
+    assert.equal(blankLocationRefusal(preset, { 5: 47.4, 6: 8.5, 7: 30 }), null);
+  }
+});
+
 test('Set Home only needs coordinates when it is not using the current position (#88)', () => {
   const setHome = getPreset('set_home');
 

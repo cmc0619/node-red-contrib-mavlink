@@ -1668,3 +1668,78 @@ test('mavlink-move reposition confirm: IN_PROGRESS moves the badge and result_pa
   assert.equal(out[1].resultParam2, 4, 'the denial reason reaches the status record');
   node.emit('close', () => {});
 });
+
+// ── Coupling pin: the SITL verdict against REAL Move status records ──────────
+//
+// The 37/38 verdict was written twice against hand-authored summaries whose
+// vocabulary I invented, so the branch and its test agreed with each other and
+// both disagreed with this node: an accepted reposition is 'succeeded', not
+// 'accepted', and a lost ack is 'timeout', not 'timed-out'. Example 37 could
+// not pass and 38 passed on silence, with the suite green throughout — the
+// stub-over-fiction failure the wait-until-ready pins already warn about, one
+// module further out. Fix the seam, not the constants: drive the real node,
+// feed its real record to the real verdictFrom. Only the debug tag is authored
+// here, because that genuinely is flow configuration.
+
+const { PROFILE, verdictFrom } = require('../../sitl/run-example-suite');
+
+/** Wrap a real Move status record the way the SITL harness scrapes it. */
+function asRepositionSummary(record) {
+  return {
+    debug: [
+      { tag: 'debug:arm status', result: 'accepted', detail: null, resultCode: 0, excerpt: '' },
+      { ...record, tag: 'debug:reposition status (resultCode + retries)', excerpt: '' },
+    ],
+    errors: [],
+  };
+}
+
+test('SITL 37/38 verdicts read the record mavlink-move actually emits (accepted)', async () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({ ...repositionCfg, delivery: 'confirm', connection: 'conn' });
+
+  let out;
+  let doneCalled = false;
+  node.emit('input', { payload: {} }, (m) => { out = m; }, () => { doneCalled = true; });
+  conn.subs[0].handler({ sysid: 1, compid: 1, fields: { command: 192, result: 0 } });
+  const deadline = Date.now() + 2000;
+  while (!doneCalled && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  node.emit('close', () => {});
+
+  const summary = asRepositionSummary(out[1]);
+  // Both examples must call a real acceptance a pass. 37 asserting AP accepts
+  // is the case that was dead on arrival.
+  assert.equal(verdictFrom(PROFILE['37-move-reposition-carrier'], summary, '').status, 'PASS');
+  assert.equal(verdictFrom(PROFILE['38-px4-move-reposition'], summary, '').status, 'PASS');
+});
+
+test('SITL 37/38 verdicts read the record mavlink-move actually emits (no ack)', async () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({ ...repositionCfg, delivery: 'confirm', connection: 'conn', ackTimeout: 20 });
+
+  let out;
+  let doneError;
+  node.emit('input', { payload: {} }, (m) => { out = m; }, (err) => { doneError = err; });
+  const deadline = Date.now() + 2000;
+  while (!doneError && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  node.emit('close', () => {});
+
+  const summary = asRepositionSummary(out[1]);
+  // Silence measures nothing, on the asserting example and the measuring one
+  // alike. This is the case that classified PASS on 38.
+  for (const key of ['37-move-reposition-carrier', '38-px4-move-reposition']) {
+    const verdict = verdictFrom(PROFILE[key], summary, '');
+    assert.equal(verdict.status, 'FAIL', `${key} must not pass without an ack`);
+    assert.match(verdict.reason, /no ACK|timeout/i);
+  }
+});

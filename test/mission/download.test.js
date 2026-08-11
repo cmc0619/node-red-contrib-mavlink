@@ -329,3 +329,53 @@ test('no fallback once an INT request was answered — a later stall aborts nami
   assert.equal(outcome.seq, 1);
   assert.equal(stub.sentNames().includes('MISSION_REQUEST'), false, 'silence mid-walk is not a carrier problem');
 });
+
+test('cancelling a mid-flight download sends MISSION_ACK OPERATION_CANCELLED before settling (#261)', async () => {
+  const stub = new StubConnection();
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 3, mission_type: 0 } });
+    }
+    // The vehicle never answers the item request — the download is mid-flight
+    // when the operator cancels.
+  });
+
+  const machine = new MissionDownload(machineOpts(stub));
+  const done = machine.start();
+  machine.cancel();
+  const outcome = await done;
+
+  assert.equal(outcome.result, 'cancelled');
+  assert.equal(outcome.phase, 'cancelled');
+  const acks = stub.sent.filter((s) => s.message.name === 'MISSION_ACK');
+  assert.equal(acks.length, 1, 'the cancel notified the wire');
+  assert.equal(acks[0].message.fields.type, MAV_MISSION_RESULT.OPERATION_CANCELLED);
+  assert.equal(acks[0].message.fields.target_system, TARGET.sysid);
+  assert.equal(acks[0].message.fields.target_component, TARGET.compid);
+  assert.equal(acks[0].message.fields.mission_type, MISSION_TYPE.MISSION);
+  assert.equal(stub.subscriberCount(), 0, 'cancel still tears the subscription down');
+});
+
+test('a cancel whose ack send throws (dead link) still settles cancelled — best-effort (#261)', async () => {
+  const stub = new StubConnection();
+  let dead = false;
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 3, mission_type: 0 } });
+    }
+  });
+
+  const machine = new MissionDownload({
+    ...machineOpts(stub),
+    send: (m) => {
+      if (dead) throw new Error('link is gone');
+      stub.send(m);
+    },
+  });
+  const done = machine.start();
+  dead = true;
+  machine.cancel();
+  const outcome = await done;
+
+  assert.equal(outcome.result, 'cancelled', 'a teardown-path throw never escapes cancel');
+});

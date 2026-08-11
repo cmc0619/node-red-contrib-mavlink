@@ -355,8 +355,9 @@ function rejectedSurface(reason, hasKey) {
   if (reason === 'replay-or-out-of-order') {
     return { log: 'dropping signed traffic — replayed or out-of-order timestamp', badge: 'drop: replayed frame' };
   }
-  // 'too-old' / 'first-contact-too-old', and any future verdict: the tag is
-  // already the message.
+  // 'first-contact-too-old', and any future verdict: the tag is already the
+  // message. The floor is first-contact only — an established stream is
+  // governed by monotonicity alone (§7 signing, #264).
   return { log: `dropping signed traffic — ${reason}`, badge: `drop: ${reason}` };
 }
 

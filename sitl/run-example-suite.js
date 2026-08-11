@@ -261,6 +261,18 @@ const PROFILE = {
     notes:
       'Same goto as 19 through mavlink-move instead of mavlink-command — carrier is the only variable. Measures: ACK reaches output 1 with resultCode 0; param4 yaw is radians (90 deg must end EAST, not some wrapped heading); blank speed/radius encode the -1/0 sentinels. CHANGE_MODE off — without-GUIDED and CHANGE_MODE are separate runs.',
   },
+  '38-px4-move-reposition': {
+    waitMs: 55000,
+    expect: 'PX4 Move reposition: goto settles; result recorded',
+    prep: 'px4-home-ready',
+    notes:
+      "PX4 twin of 37 — #239's last acceptance box. CHANGE_MODE on: the shape 17 measured " +
+      'accepted via mavlink-command, so the carrier is the only variable. What this run expects ' +
+      'is that PX4 answers, not what it answers: accept and denial are both anticipated and both ' +
+      'PASS — a denial is a measurement, never a harness FAIL. No ACK at all measures nothing and ' +
+      'is FAIL (timeout, or a send that never reached the wire). Once §14 records the answer this ' +
+      'tightens to assert it, the way 34 requires video DENIED. If accepted: yaw 90 must end EAST.',
+  },
 };
 
 function req(method, urlPath, body, headers = {}) {
@@ -360,11 +372,19 @@ function summarizeBlocks(blocks) {
     const result = (text.match(/result:\s*'([^']+)'/) || [])[1];
     const command = (text.match(/command:\s*'([^']+)'/) || [])[1];
     const detail = (text.match(/detail:\s*'([^']+)'/) || text.match(/detail:\s*([^\n,]+)/) || [])[1];
+    // resultCode is the proof a COMMAND_ACK actually arrived: a terminal
+    // MAV_RESULT carries its number, while a send that threw before the wire
+    // (failInput) emits result 'failed' with no code at all. Both spell
+    // `result: 'failed'`, and only this tells a measured denial from a
+    // measurement that never happened. Accepted is 0, so never test it for
+    // truthiness.
+    const resultCode = (text.match(/resultCode:\s*(-?\d+|null)/) || [])[1];
     debug.push({
       tag: b.tag,
       result: result || null,
       command: command || null,
       detail: detail || null,
+      resultCode: resultCode === undefined || resultCode === 'null' ? null : Number(resultCode),
       excerpt: text.trim().slice(0, 400),
     });
   }
@@ -467,9 +487,80 @@ function verdictFrom(profile, summary, log) {
     return { status: 'FAIL', reason: 'signed arm / trusted HEARTBEAT not observed' };
   }
   if (/INT goto|150 m/i.test(expect)) {
-    if (results.includes('accepted') && /DO_REPOSITION|INT goto/i.test(log)) {
-      return { status: 'PASS', reason: 'INT goto accepted' };
+    // Key on the goto's OWN record, not any accepted in the flow: the arm ack
+    // satisfied results.includes('accepted') and the old log co-condition
+    // matched the debug node's *name*, so a timed-out or denied goto could
+    // classify PASS off the arm alone (#267). Both 17 and 19 expose a
+    // `goto status` debug wired to the goto command's status output.
+    const gotoRecord = summary.debug.find((d) => /goto status/i.test(d.tag) && d.result);
+    if (gotoRecord) {
+      return gotoRecord.result === 'accepted'
+        ? { status: 'PASS', reason: 'INT goto accepted' }
+        : { status: 'FAIL', reason: `INT goto ${gotoRecord.result}` };
     }
+    // No goto record: the example never exercised its subject, so it failed to
+    // test the thing — FAIL, not a half-credit PARTIAL. Never fall through: the
+    // generic tail would PASS on the arm/takeoff accepteds, the exact fiction
+    // this branch existed to avoid. Safe mid-poll — waitUntilReady early-exits
+    // on specialized PASS only, so this keeps polling and the deadline decides.
+    return { status: 'FAIL', reason: 'INT goto never settled — not measured' };
+  }
+  if (/carrier=reposition|Move reposition/i.test(expect)) {
+    // #267 again, one carrier over: 37/38 send the same goto through
+    // mavlink-move, and their expect strings matched no branch, so the arm and
+    // takeoff accepteds satisfied the generic tail. A Move that never emitted a
+    // status record classified PASS off records that say nothing about the
+    // reposition — the fiction #239's acceptance box cannot afford. Key on the
+    // Move's own `reposition status` debug, as 17/19 key on `goto status`.
+    const repositionRecord = summary.debug.find(
+      (d) => /reposition status/i.test(d.tag) && d.result
+    );
+    if (!repositionRecord) {
+      // Did we test the thing? No — so we failed to test it. Not PARTIAL:
+      // an example that never exercised its subject has failed at its job,
+      // whatever the vehicle would have said. Safe mid-poll — waitUntilReady
+      // early-exits on specialized PASS only, so a FAIL here keeps polling
+      // and the deadline recomputes the final verdict.
+      return { status: 'FAIL', reason: 'Move reposition never settled — not measured' };
+    }
+    // mavlink-move does NOT speak mavlink-command's status vocabulary, and
+    // keying these examples on the Command words was wrong in both directions:
+    // an accepted reposition is published by completeResult as result
+    // 'succeeded' (detail 'accepted'), so 37 could never pass; a lost ack is
+    // 'timeout', not 'timed-out', so 38 fell through to PASS on the very
+    // silence the branch exists to catch. 17/19 read 'accepted' because
+    // mavlink-command emits exactly that — the two families differ.
+    const accepted = repositionRecord.result === 'succeeded';
+    // A terminal MAV_RESULT and a send that threw both spell result 'failed';
+    // only the ACK carries a resultCode. ACCEPTED is 0, so compare to null.
+    const vehicleAnswered = accepted ||
+      (repositionRecord.result === 'failed' && repositionRecord.resultCode !== null);
+    // The two contracts differ and the expect strings carry the difference. 38
+    // is a measurement, so what it expects is that PX4 *answers* — not what the
+    // answer is. An accept and a denial are both anticipated outcomes of the
+    // open question (#239), so neither is a surprise and both pass: a denial is
+    // a measurement, never a harness FAIL. What fails is no answer at all —
+    // a timeout, or a send that never reached the wire, measures nothing. Once
+    // §14 records what PX4 answers, this tightens to assert that specific
+    // result, the way 34 requires video DENIED.
+    if (/result recorded/i.test(expect)) {
+      if (!vehicleAnswered) {
+        return {
+          status: 'FAIL',
+          reason: `PX4 Move reposition ${repositionRecord.result} — no ACK, nothing measured`,
+        };
+      }
+      return {
+        status: 'PASS',
+        reason: `PX4 Move reposition ${accepted ? 'accepted' : repositionRecord.detail || 'denied'} (measured)`,
+      };
+    }
+    return accepted
+      ? { status: 'PASS', reason: 'Move reposition accepted' }
+      : {
+        status: 'FAIL',
+        reason: `Move reposition ${repositionRecord.detail || repositionRecord.result}`,
+      };
   }
   if (/one failed|member expires/i.test(expect)) {
     const aggregateFailed = summary.debug.some((d) =>

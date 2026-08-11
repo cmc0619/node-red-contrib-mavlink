@@ -109,7 +109,10 @@
   target per sysid (lib/formation) and fans a <b>Go To / Reposition</b>
   (<code>MAV_CMD_DO_REPOSITION</code>) out sequentially with each vehicle's own
   lat/lon/alt as per-member params 5/6/7. Slot 0 sits exactly on the anchor;
-  slots are assigned in sorted sysid order.</p>
+  slots are assigned in sorted sysid order. Members hold their commanded
+  position indefinitely — <code>DO_REPOSITION</code> is one-shot, the node
+  maintains nothing after the fan-out settles, and there is no TTL; re-send a
+  new formation, or use Move to displace individual members.</p>
   <h3>Anchor</h3>
   <p><b>Leader vehicle position</b> reads the leader's live position from the
   Connection peer table. A leader with no reported position, or no relative
@@ -145,6 +148,6 @@
   <p>Output 0 fires only when every member succeeded, carrying the fan-out
   aggregate under <code>msg.payload</code>. Output 1 always carries the
   aggregate with per-vehicle detail. Geometry refusals (unknown leader
-  position, missing anchor altitude, bad sysid tokens, duplicate slots) fail
+  position, missing anchor altitude, bad sysid tokens) fail
   the input with the reason.</p>
 </script>

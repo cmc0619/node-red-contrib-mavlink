@@ -1165,6 +1165,55 @@ test('mavlink-build Build tier: msg.payload overrides config fields', () => {
   assert.equal(out0.payload.message.fields.type, 6, 'config default should remain for non-overridden fields');
 });
 
+test('mavlink-build: a field the dialect does not name warns once per streak and still builds (#262)', () => {
+  // encodeMessage walks the dialect's field list, so an unknown key was
+  // silently dropped — a typo built a message missing the field and reported
+  // success. Advisory, not refusal: dialect lag is a real scenario.
+  const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ vehicle: 'v1' });
+  const warns = [];
+  node.warn = (text) => warns.push(text);
+  Constructor.call(node, {
+    vehicle: 'v1',
+    dialect: '__vehicle',
+    messageName: 'HEARTBEAT',
+    tier: 'build',
+    fields: JSON.stringify({ type: 6 }),
+  });
+
+  node._input({ payload: { autopilott: 8 } });
+
+  assert.equal(warns.length, 1, 'the typo is named once');
+  assert.match(warns[0], /HEARTBEAT/);
+  assert.match(warns[0], /autopilott/);
+  const [out0, out1] = node._sends[0];
+  assert.equal(out1.result, 'built', 'advisory, not refusal — the message still builds');
+  assert.deepEqual(out0.payload.message.fields, { type: 6 }, 'the unknown key is dropped from the wire');
+
+  // The same typo again is the same streak — no second warn.
+  node._input({ payload: { autopilott: 8 } });
+  assert.equal(warns.length, 1, 'a repeated identical key set is deduped');
+
+  // A clean build clears the streak and warns nothing.
+  node._input({ payload: { autopilot: 3 } });
+  assert.equal(warns.length, 1, 'a clean build warns nothing');
+
+  // The typo reappearing after a clean build is a new streak.
+  node._input({ payload: { autopilott: 8 } });
+  assert.equal(warns.length, 2, 'the advisory returns after a clean build');
+
+  // The dedup key identifies the *set*, not the insertion order. Object.keys
+  // follows insertion order, so two misspellings arriving the other way round
+  // would otherwise read as a new set and warn a second time.
+  node._input({ payload: { autopilott: 8, systtem_status: 4 } });
+  assert.equal(warns.length, 3, 'a genuinely new key set warns');
+  node._input({ payload: { systtem_status: 4, autopilott: 8 } });
+  assert.equal(warns.length, 3, 'the same set in the other order is not a new streak');
+});
+
 test('mavlink-build Send tier: enqueues on the connection and emits on both outputs', () => {
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());

@@ -313,7 +313,10 @@ module.exports = function registerMavlinkParam(RED) {
         // Scope the PARAM_VALUE subscription to the addressed vehicle so a
         // reply from another system on a shared connection cannot confirm this
         // operation or interleave into a list from a different vehicle.
-        const echoFilter = { message: 'PARAM_VALUE', sysid: request.target.sysid };
+        // trustedOnly: an explicitly untrusted PARAM_VALUE must never confirm
+        // a set or feed a collect (§7 trust ruling #264); plain unsigned
+        // links carry no mark and pass.
+        const echoFilter = { message: 'PARAM_VALUE', sysid: request.target.sysid, trustedOnly: true };
         if (request.target.compid) echoFilter.compid = request.target.compid;
 
         const isConfirmSet = delivery === 'confirm' && request.action === 'set';

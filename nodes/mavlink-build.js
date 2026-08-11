@@ -80,6 +80,11 @@ module.exports = function registerMavlinkBuild(RED) {
     let rateWindowStart = 0;
     let rateWindowCount = 0;
 
+    // Last unknown-key set warned, for per-streak dedup (the Move node's
+    // lastAdvisory pattern): a repeat timer or stream feed re-presenting the
+    // same typo would spam the debug sidebar, and noise gets ignored.
+    let lastWarnedKeys = null;
+
     // Resolve the dialect bundle per the role × tier matrix (§6).
     //   Build + plain dialect name → load from the bundled registry (no vehicle needed).
     //   Build + '__vehicle' → vehicle node's bundle.
@@ -154,6 +159,29 @@ module.exports = function registerMavlinkBuild(RED) {
           ? triggerMsg.payload
           : {};
       const rawFields = { ...configFields, ...overrides };
+
+      // Advisory, not refusal (#262): encodeMessage walks the dialect's field
+      // list, so a key it does not name is silently dropped — which hid typos
+      // (a misspelled field built a message missing it and reported success).
+      // Refusing would be wrong too: dialect lag is a real scenario — a flow
+      // written against a newer dialect than the one deployed should still
+      // build what it can. rawFields carries field values only (band, target
+      // and identityId ride the msg, not the payload), so every unknown key
+      // is worth naming.
+      const known = new Set(messageMeta.fields.map((f) => f.name));
+      const unknown = Object.keys(rawFields).filter((key) => !known.has(key));
+      if (unknown.length > 0) {
+        // Sorted, because the dedup key must identify the *set*: Object.keys
+        // follows insertion order, so the same two misspellings arriving in
+        // the other order would read as a new set and warn again.
+        const warnedKeys = unknown.slice().sort().join(', ');
+        if (warnedKeys !== lastWarnedKeys) {
+          node.warn(`mavlink-build: ${messageName} has no field ${warnedKeys} — ignored`);
+        }
+        lastWarnedKeys = warnedKeys;
+      } else {
+        lastWarnedKeys = null;
+      }
 
       // Encode: apply the field codec to produce wire-ready values.
       let encodedFields;

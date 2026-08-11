@@ -734,6 +734,25 @@ test('broadcast refuses targets — one packet carries one field set (§10)', as
   assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
 });
 
+test('duplicate sysids in targets refuse — last-wins merging would silently drop a patch (§10, #265)', async () => {
+  // The override map merges last-wins, so a duplicated entry shrank the fleet
+  // and dropped the first patch — an operator error reported as success.
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  const result = await executeFanout({
+    connection,
+    message: builtCommand(),
+    targets: [{ sysid: 1, param5: 47.4 }, 2, { sysid: 1, param5: 47.6 }],
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  assert.equal(result.result, 'refused');
+  assert.match(result.detail, /sysid 1 more than once/);
+  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
+});
+
 test('a targets patch may not rewrite `command` — the safety gate runs once, on the base', async () => {
   // The run is classified and gated from the base message before any patch is
   // applied, so a patch rewriting `command` would send an operation that was

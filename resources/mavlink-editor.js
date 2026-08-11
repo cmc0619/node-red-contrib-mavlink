@@ -136,6 +136,7 @@
   RED.mavlink.PAYLOAD_VERBS = {
     camera: [
       { value: 'photo', label: 'Photo' },
+      { value: 'stop-photo', label: 'Stop photo' },
       { value: 'start-video', label: 'Start video' },
       { value: 'stop-video', label: 'Stop video' },
       { value: 'set-mode', label: 'Set mode' },
