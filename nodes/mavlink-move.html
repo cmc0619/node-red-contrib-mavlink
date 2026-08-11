@@ -35,7 +35,20 @@
       // (5/6/11) PX4 requires; unchecked emits the spec-current 0/3/10
       // (§ "Move setpoint matrix", owner-ruled 2026-08-09).
       px4Compat: { value: true },
-      targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
+      // Broadcast (0) is refused only where an ack is actually awaited: the
+      // reposition carrier on the confirm tier (#260). Setpoint carriers and
+      // Build/Send stay broadcast-legal, so this reds nothing they configure.
+      // The runtime guard stays for profile defaults and payload overrides.
+      targetSystem: {
+        value: '',
+        validate: function (v, opt) {
+          const range = RED.mavlink.validateUint8(0).call(this, v, opt);
+          if (range !== true) return range;
+          if (RED.mavlink.liveOr('#node-input-carrier', this.carrier, 'setpoint') !== 'reposition') return true;
+          if (RED.mavlink.liveOr('#node-input-delivery', this.delivery) !== 'confirm') return true;
+          return Number(v) !== 0 || 'broadcast (0) cannot be confirmed — one ack cannot answer for a fleet; use Send or mavlink-fanout';
+        },
+      },
       targetComponent: { value: '', validate: RED.validators.number(true) },
       north: { value: 0, validate: RED.validators.number(true) },
       east: { value: 0, validate: RED.validators.number(true) },

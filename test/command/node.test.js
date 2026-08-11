@@ -394,6 +394,7 @@ test('confirm tier refuses a broadcast target (sysid 0): nothing sent, failed re
   await tick();
 
   assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
+  assert.equal(conn.subs.length, 0, 'no COMMAND_ACK subscription opened');
   assert.equal(out[0], null, 'output 0 must not fire');
   assert.equal(out[1].result, 'failed');
   assert.match(out[1].detail, /broadcast \(sysid 0\)/);
@@ -421,6 +422,7 @@ test('complete tier refuses a broadcast target (sysid 0) the same way (#260)', a
   await tick();
 
   assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
+  assert.equal(conn.subs.length, 0, 'no COMMAND_ACK subscription opened');
   assert.equal(out[0], null, 'output 0 must not fire');
   assert.match(out[1].detail, /broadcast \(sysid 0\)/);
   assert.ok(err instanceof Error);
@@ -449,6 +451,8 @@ test('a payload target override to sysid 0 is refused on confirm too (#260)', as
   await tick();
 
   assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
+  assert.equal(conn.subs.length, 0, 'no COMMAND_ACK subscription opened');
+  assert.equal(out[0], null, 'output 0 must not fire');
   assert.match(out[1].detail, /broadcast \(sysid 0\)/);
   assert.ok(err instanceof Error);
 });
