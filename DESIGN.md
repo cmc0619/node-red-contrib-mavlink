@@ -4020,3 +4020,13 @@ false-PASSed 02 on the PX4 fence gate alone.
 *Check:* `examples/sitl/02-mission-fence-rally.json`, `nodes/mavlink-mission.js`
 (`resolveItems`), `sitl/run-example-suite.js` verdict for expect
 `AP mission/fence/rally ok`.
+
+**Local-frame param5/6 are metres — not subject to ±90/±180 (°)** (2026-08-11).
+*Wrong belief:* #263’s present-location degree range applies to every preset
+coordinate, including `DO_SET_HOME` / COMMAND_INT `MAV_FRAME_LOCAL_NED`.
+*Fact:* local frames scale metres × 1e4 (§14 INT local-vs-global). Refusing
+`123.4567` as “latitude” blocked SITL 07’s LOCAL_NED probes before the wire.
+`blankLocationRefusal` takes the resolved MAV_FRAME and skips the degree gate
+for known local frames; COMMAND_LONG / global frames keep the #263 guard.
+*Check:* `lib/command/presets.js` (`latLonRangeRefusal`), `examples/sitl/07-int-local-vs-global.json`,
+`test/command/presets.test.js`.

@@ -933,6 +933,28 @@ function verdictFrom(profile, summary, log) {
       reason: `peer-table inflight missing: ${JSON.stringify(fields)}`,
     };
   }
+  if (/param defs against AP/i.test(expect)) {
+    // Key on this example's own debug tags — the rolling docker-log window
+    // often still holds example 03's validate failure, which used to force a
+    // false PARTIAL after list-complete succeeded.
+    const setOk = summary.debug.some(
+      (d) => /set status/i.test(d.tag) && d.result === 'succeeded' &&
+        /echo-confirmed/i.test(d.detail || d.excerpt || '')
+    );
+    const listOk = summary.debug.some(
+      (d) => /list status/i.test(d.tag) && d.result === 'succeeded' &&
+        /list-complete/i.test(d.detail || d.excerpt || '')
+    );
+    if (setOk && listOk) {
+      return { status: 'PASS', reason: 'param defs: set echo-confirmed + list-complete' };
+    }
+    if (setOk || listOk) {
+      return {
+        status: 'PARTIAL',
+        reason: `param defs incomplete: set=${setOk} list=${listOk}`,
+      };
+    }
+  }
   if (/WPNAV_SPEED echo timeout|unknown .*echo timeout/i.test(expect)) {
     // Negative path: timed-out is the success — but only after a known-param
     // confirm proves AP-1 is reachable (dead peer would also echo-timeout).

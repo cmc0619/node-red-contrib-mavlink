@@ -249,6 +249,28 @@ test('location presets refuse blank lat/lon rather than sending 0,0 (#88)', () =
   );
 });
 
+test('local MAV_FRAME metres skip the ±90/±180 degree gate (§14 / SITL 07)', () => {
+  // DO_SET_HOME LOCAL_NED puts metres in param5/6 (carrier scales ×1e4). The
+  // #263 degree-range guard must not refuse 123.4567 m as "latitude 123".
+  const setHome = getPreset('set_home');
+  assert.equal(
+    blankLocationRefusal(setHome, { 1: 0, 5: 123.4567, 6: 123.4567, 7: 0 }, 1),
+    null,
+    'LOCAL_NED metres are in range for the local frame'
+  );
+  // Without a local frame (COMMAND_LONG / default global) the same numbers
+  // remain out-of-range degrees — the #263 guard still fires.
+  assert.match(
+    blankLocationRefusal(setHome, { 1: 0, 5: 123.4567, 6: 123.4567, 7: 0 }),
+    /latitude must be within ±90°/
+  );
+  assert.match(
+    blankLocationRefusal(setHome, { 1: 0, 5: 123.4567, 6: 123.4567, 7: 0 }, 5),
+    /latitude must be within ±90°/,
+    'GLOBAL_INT still enforces degree bounds'
+  );
+});
+
 test('a present location must also be in range: |lat| ≤ 90, |lon| ≤ 180 (§9, #263)', () => {
   // The degE7 int32 ceiling is ±214.7°, so lat 91 scales into a
   // garbage-but-valid coordinate the vehicle would accept — the C4 hazard

@@ -186,15 +186,16 @@ module.exports = function registerMavlinkCommand(RED) {
      * Build the 7-element param array for this send, merging config + payload.
      *
      * @param {*} payload
+     * @param {number} [frame]  resolved MAV_FRAME (local ⇒ metres, not degrees)
      * @returns {number[]}
      */
-    function getParams(payload) {
+    function getParams(payload, frame) {
       const userParams = mergeParams(config, payload);
       if (preset) {
         // Refuse before the zero-fill, not after: buildParamArray turns a blank
         // lat/lon into 0,0 — a legal coordinate the vehicle will happily fly to
         // (§9, §10 "blank coordinates must not become 0,0").
-        const refusal = blankLocationRefusal(preset, userParams);
+        const refusal = blankLocationRefusal(preset, userParams, frame);
         if (refusal) throw new Error(`mavlink-command: ${refusal}`);
         return buildParamArray(preset, userParams);
       }
@@ -230,7 +231,6 @@ module.exports = function registerMavlinkCommand(RED) {
         return;
       }
 
-      const paramArray = getParams(msg.payload);
       const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
       const { target, identityId } = resolveDeliveryContext(RED, {
         delivery,
@@ -290,8 +290,10 @@ module.exports = function registerMavlinkCommand(RED) {
       // Frame for the COMMAND_INT carrier (§9 "Coordinate frames"): shared
       // precedence chain — msg.mavFrame beats node config, blank falls to the
       // carrier module's documented default (GLOBAL_RELATIVE_ALT, §14).
-      // Resolved here so every delivery tier — build included — honours it.
+      // Resolved before getParams so the location-range guard can exempt local
+      // frames (metres in param5/6) from the ±90/±180 degree check (#263).
       const frame = resolveFrame(msg.mavFrame, config.frame);
+      const paramArray = getParams(msg.payload, frame);
 
       /**
        * Build the wire message for a carrier at a given confirmation counter.
