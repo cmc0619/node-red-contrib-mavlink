@@ -176,3 +176,35 @@ test('real specialized PASS reasons never collide with the generic exclusion', (
   assert.equal(verdict.status, 'PASS');
   assert.equal(isSpecializedPass(verdict), true, 'conjunctive terminal PASS early-exits');
 });
+
+test('real 17/19 branch: the arm ack alone no longer classifies PASS (#267)', () => {
+  // The old branch keyed on results.includes('accepted') — flow-wide — plus a
+  // log string match on the debug node's *name*, so a denied or unsettled goto
+  // classified PASS off the arm. It now reads the goto's own record by tag.
+  const profile = PROFILE['17-int-carrier-goto'];
+  assert.ok(profile, 'profile 17 exists');
+  const armOnly = { debug: [{ tag: 'arm status', result: 'accepted', excerpt: '' }], errors: [] };
+  assert.equal(verdictFrom(profile, armOnly, '').status, 'PARTIAL', 'arm alone is not the story');
+
+  const gotoDenied = {
+    debug: [
+      { tag: 'arm status', result: 'accepted', excerpt: '' },
+      { tag: 'goto status', result: 'denied', excerpt: '' },
+    ],
+    errors: [],
+  };
+  const denied = verdictFrom(profile, gotoDenied, '');
+  assert.equal(denied.status, 'FAIL', 'a denied goto is a failure, not a fall-through');
+  assert.match(denied.reason, /denied/);
+
+  const gotoOk = {
+    debug: [
+      { tag: 'arm status', result: 'accepted', excerpt: '' },
+      { tag: 'goto status', result: 'accepted', excerpt: '' },
+    ],
+    errors: [],
+  };
+  const ok = verdictFrom(profile, gotoOk, '');
+  assert.equal(ok.status, 'PASS');
+  assert.equal(isSpecializedPass(ok), true, 'goto-accepted PASS stays early-exit eligible');
+});

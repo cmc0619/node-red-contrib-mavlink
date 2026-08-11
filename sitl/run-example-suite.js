@@ -261,6 +261,16 @@ const PROFILE = {
     notes:
       'Same goto as 19 through mavlink-move instead of mavlink-command — carrier is the only variable. Measures: ACK reaches output 1 with resultCode 0; param4 yaw is radians (90 deg must end EAST, not some wrapped heading); blank speed/radius encode the -1/0 sentinels. CHANGE_MODE off — without-GUIDED and CHANGE_MODE are separate runs.',
   },
+  '38-px4-move-reposition': {
+    waitMs: 55000,
+    expect: 'PX4 Move reposition: goto settles; result recorded',
+    prep: 'px4-home-ready',
+    notes:
+      "PX4 twin of 37 — #239's last acceptance box. CHANGE_MODE on: the shape 17 measured " +
+      'accepted via mavlink-command, so the carrier is the only variable. The generic verdict ' +
+      'records the ACK result either way — a denial is a measurement, not a harness failure. ' +
+      'If accepted: yaw 90 must end EAST (param4 radians on PX4).',
+  },
 };
 
 function req(method, urlPath, body, headers = {}) {
@@ -467,9 +477,21 @@ function verdictFrom(profile, summary, log) {
     return { status: 'FAIL', reason: 'signed arm / trusted HEARTBEAT not observed' };
   }
   if (/INT goto|150 m/i.test(expect)) {
-    if (results.includes('accepted') && /DO_REPOSITION|INT goto/i.test(log)) {
-      return { status: 'PASS', reason: 'INT goto accepted' };
+    // Key on the goto's OWN record, not any accepted in the flow: the arm ack
+    // satisfied results.includes('accepted') and the old log co-condition
+    // matched the debug node's *name*, so a timed-out or denied goto could
+    // classify PASS off the arm alone (#267). Both 17 and 19 expose a
+    // `goto status` debug wired to the goto command's status output.
+    const gotoRecord = summary.debug.find((d) => /goto status/i.test(d.tag) && d.result);
+    if (gotoRecord) {
+      return gotoRecord.result === 'accepted'
+        ? { status: 'PASS', reason: 'INT goto accepted' }
+        : { status: 'FAIL', reason: `INT goto ${gotoRecord.result}` };
     }
+    // No goto record: still climbing (mid-poll) or the goto never settled
+    // (deadline). Never fall through — the generic tail would PASS on the
+    // arm/takeoff accepteds, the exact fiction this branch existed to avoid.
+    return { status: 'PARTIAL', reason: 'INT goto not settled' };
   }
   if (/one failed|member expires/i.test(expect)) {
     const aggregateFailed = summary.debug.some((d) =>
