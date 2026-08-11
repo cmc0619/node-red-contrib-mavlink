@@ -699,19 +699,31 @@ an NTP-disciplined clock, so the clock alone keeps timestamps monotonic across r
 persistence is optional; a host with no RTC needs the stored value. If persisting, keep two
 values, write the smaller and read the larger — that is the spec's race guard.
 
-*Inbound.* Discard a signed packet when any of these hold:
+*Inbound.* Discard a signed packet when either of these holds:
 
 1. the computed signature does not match;
-2. the timestamp is not greater than the last accepted timestamp for that stream;
-3. the timestamp is more than 6,000,000 units — one minute — behind local time.
+2. the timestamp is not greater than the last accepted timestamp for that stream.
 
-*First contact.* With no prior record for a stream, accept if the timestamp is not more than one
-minute behind local time. That is the bootstrap case, and without it no new peer is ever
-accepted.
+*First contact.* With no prior record for a stream, accept if the timestamp is not more than
+6,000,000 units — one minute — behind local time. That is the bootstrap case, and without it no
+new peer is ever accepted. The floor applies **at first contact only** (#264, reference parity
+with pymavlink, ruled 2026-08-11): on an established stream monotonicity already defeats replay —
+a captured packet can never exceed the last accepted timestamp — so re-checking the floor there
+guarded nothing and locked out a peer whose clock lags local time (no GPS lock, clock reset)
+even while its stream stayed strictly monotonic.
 
 *On accept.* Advance the stored timestamp when the incoming one is greater. Never advance it
 from a packet that failed verification, including one admitted by *accept invalid signatures* —
 doing so would let a forged packet raise the floor and lock out the real peer.
+
+*Trust gates what a frame may settle* (#264, ruled 2026-08-11). A frame admitted with
+`trusted: false` — the accept-invalid override, the unsigned allowlist — may inform telemetry
+and reach `mavlink-in` (which surfaces `msg.trusted` for the flow to judge), but it must never
+settle a transaction: command ack waits, param echoes and list collection, and mission transfer
+steps subscribe trusted-only. The gate excludes only frames *explicitly* marked untrusted, so
+plain unsigned links — where signing is not configured at all — are unaffected. The peer table
+likewise ignores a source sysid 0: no vehicle sources the broadcast id, and a phantom peer 0
+with compid 1 would walk into fan-out's `all` selection as a broadcast-shaped member (§10).
 
 Replay state is per connection, in memory, keyed by stream. It needs no persistence: after a
 restart the one-minute window discards anything captured earlier, and the monotonic rule resumes
@@ -1136,6 +1148,15 @@ no retransmission of its own, so each tier recovers by repeating its idempotent 
   fan-out's broadcast `PARAM_SET` refusal, §10). Broadcast *component* (compid 0) remains
   deliberate, supported echo-matcher behavior.
 
+- **A param set requires a finite numeric value** (#258, ruled 2026-08-11). The c-cast encode
+  was a bare `Number(value)`: a blank — editor-blessed, since blank defers to the payload —
+  with no payload value transmitted a silent **0** (`Number('')`), `'abc'` and `NaN` went out
+  as wire NaN, and the confirm then lied twice over: `numericEqual(NaN, NaN)` is true, and an
+  undefined value short-circuits the echo match so *any* `PARAM_VALUE` confirms the set. The
+  set boundary now refuses blank and non-finite values by name before anything is built, on
+  every tier — the same voice the bytewise path always had. String numerics still coerce; an
+  explicit 0 is a value, not a blank.
+
 - **Command-shaped confirms refuse a broadcast target (sysid 0); Send and Build stay
   broadcast-legal.** Confirmation needs an expected set (§10): fan-out's broadcast confirm
   waits on the peer-table group, but the single-target ack matcher behind Command's
@@ -1519,7 +1540,11 @@ change") — the zero-fill commanded zero speed and zero throttle; Takeoff blank
 (`DO_ORBIT` blesses both) — the zero-fill orbited at ground level with zero tangential
 velocity. Explicit values, including 0, are typed and win. `DO_REPOSITION` altitude has **no**
 documented blank sentinel, so a blank alt refuses instead (`requireAltitude` — the Move F1
-ground-level rule on the command path, §10). Open, not ruled: Takeoff's blank *altitude* still
+ground-level rule on the command path, §10). Where a preset's location is present it must also
+be **in range** — |lat| ≤ 90, |lon| ≤ 180 (#263 residual, ruled 2026-08-11): the degE7 int32
+ceiling is ±214.7°, so an out-of-range coordinate scales into a garbage-but-valid coordinate the
+vehicle would accept — the same C4 hazard class Move's `requireGlobalPosition` guard names, now
+closed on the preset path it had missed. Open, not ruled: Takeoff's blank *altitude* still
 zero-fills (its completion flow was measured with an altitude set — changing it wants a SITL
 answer for what each stack does with 0/NaN), and `DO_REPOSITION`'s change-mode flag (param 2)
 defaults to 0 where QGC sends 1 to auto-enter Guided — an implicit mode switch is an owner
@@ -1587,6 +1612,13 @@ gate.
 
 Rules across all three:
 
+- **An operator cancel notifies the wire** (#261, ruled 2026-08-11). Cancelling a transfer —
+  node close, redeploy — sends `MISSION_ACK` with `MAV_MISSION_RESULT_OPERATION_CANCELLED` (15)
+  before settling, so the vehicle exits the transfer immediately instead of waiting out its own
+  timeout. Best-effort: the send is try-wrapped, since cancel runs on teardown paths where the
+  link may already be gone. Internal aborts (protocol errors, deadlines) are not cancels — the
+  vehicle side already observed the failure or owns the deadline.
+
 - **A failed upload fails.** It must never degrade into a clear. A vehicle left with a partial
   mission is recoverable; one silently emptied is not.
 - **An empty upload is refused, never sent.** `MISSION_COUNT` 0 is the wire's "erase the plan": an
@@ -1639,10 +1671,19 @@ Rules across all three:
 
 ### Payload topics
 
-Camera: photo, start video, stop video, set mode, trigger by distance.
-Gimbal: aim, set mode, ROI set/clear — and aim has two message paths
-(`DO_MOUNT_CONTROL` vs `GIMBAL_MANAGER_SET_PITCHYAW`) chosen by gimbal generation, so that is a
-per-verb choice inside the topic, not a node-level setting. Servo: set, repeat. Gripper, winch
+Camera: photo, stop photo, start video, stop video, set mode, trigger by distance.
+Stop photo (`IMAGE_STOP_CAPTURE`, 2001) exists because photo exposes `count` and an explicit
+0 starts a continuous capture the node could otherwise never stop (#259); trigger by distance
+carries its own off switch — distance 0 — which the help documents rather than growing a verb.
+The rest of the camera surface (zoom, focus, tracking, storage) is declined pre-1.0: the
+dialect ships the ids and the Command node's advanced tier reaches them, which is the escape
+hatch until a verb earns its keep.
+Gimbal: aim, set mode, ROI set/clear — and aim has three paths
+(`DO_MOUNT_CONTROL` for legacy gimbals, `GIMBAL_MANAGER_SET_PITCHYAW` for fire-and-forget
+manager aiming, and `DO_GIMBAL_MANAGER_PITCHYAW` (1000) when the aim should confirm — the
+command form acks, the message form cannot, #257) chosen per verb inside the topic, not as a
+node-level setting. Manager discovery, status and configure stay unshipped (#257 remains open
+for them). Servo: set, repeat. Gripper, winch
 and parachute: operate.
 
 A topic is a device on the airframe, always. Gripper, winch and parachute are three separate
@@ -1731,7 +1772,10 @@ with, nor invent an addressing field on a message that never declared one. **`co
 refused outright**, not stripped: the run's classification, confirmation and safety gate are
 resolved once from the base message, so a patch rewriting it would send an operation that was
 never gated (a `command: 185` patch under an ARM base put Flight Termination on the wire
-unconfirmed). A per-member command is a different message, not a replication. Broadcast refuses
+unconfirmed). A per-member command is a different message, not a replication. **Duplicate sysids in
+`targets` refuse** (#265, ruled 2026-08-11): the override map merged last-wins, so a duplicated
+entry silently shrank the fleet and dropped the first patch — an operator error reported as
+success. Broadcast refuses
 `targets` (uniform messages only, below). Safety: `DO_FLIGHTTERMINATION` (185) in a replicated command
 still requires `msg.confirmed === true` or the node's Confirm — the gate reads the wire fields.
 The same gate covers a **broadcast position setpoint**: a `SET_POSITION_TARGET_*` packet whose
@@ -3892,4 +3936,18 @@ Lucy **27** ready at ~90 s vs 260 s ceiling; **02** still waits for the takeoff
 completion-timeout signal. Fleet restart, prep, and `injectGapMs` are unchanged.
 *Check:* `sitl/lib/wait-until-ready.js`, `node --test test/sitl/wait-until-ready.test.js`,
 `sitl/run-example-suite.js`, `sitl/AGENTS.md`.
-`sitl/run-example-suite.js`, `sitl/AGENTS.md`.
+
+---
+
+**Bytewise NaN-pattern integers survive the JS float round-trip (2026-08-11).**
+*Wrong belief:* `assertFloatBitsSurvive` blanket-rejects every NaN bit pattern, so bytewise
+INT32 −1 (0xFFFFFFFF, PX4's stock "disabled") is unwritable (#258).
+*Fact:* the guard already is the exact-bit round-trip, and V8 preserves quiet-NaN payloads
+through `readFloatLE`/`writeFloatLE`: −1, −2, `INT32_MAX` and 0x7FC00001 all round-trip
+byte-identical; only true *signaling* NaNs (0x7F800001-class) canonicalize to their quiet
+form — and those genuinely would decode as a different integer, so rejecting them is correct.
+Measured through the real module: `paramValueToWire(-1, INT32)` → wire NaN → decodes back to
+−1 exactly. Beware the two paths that *would* destroy the payload — `structuredClone`
+(0xFFFFFFFF → 0x7FC00000) and JSON round-trips (NaN → null); `lib/connection/clone.js`
+already refuses both by design.
+*Check:* `node -e` round-trip of 0xFFFFFFFF through `lib/codec/param-union.js` encode/decode.
