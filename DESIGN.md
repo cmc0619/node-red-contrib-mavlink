@@ -1136,6 +1136,21 @@ no retransmission of its own, so each tier recovers by repeating its idempotent 
   fan-out's broadcast `PARAM_SET` refusal, §10). Broadcast *component* (compid 0) remains
   deliberate, supported echo-matcher behavior.
 
+- **Command-shaped confirms refuse a broadcast target (sysid 0); Send and Build stay
+  broadcast-legal.** Confirmation needs an expected set (§10): fan-out's broadcast confirm
+  waits on the peer-table group, but the single-target ack matcher behind Command's
+  confirm/complete tiers, Move's reposition confirm, and Payload's command verbs skips source
+  matching at sysid 0, so the first vehicle to answer settles for the whole fleet — partial
+  success reported as total (#260). Those tiers refuse and name the honest paths: the Send
+  tier (a bare broadcast is fire-and-forget by nature) and fan-out broadcast (per-vehicle
+  acks against the expected set). The refusal is deliberately tier-scoped, unlike Param's and
+  Mission's: those refuse every tier because the fleet-wide action itself is the hazard,
+  while broadcast *addressing* is a designed §7 capability and a built or sent broadcast
+  command is legitimate — only the single-ack confirmation is a promise that cannot be kept.
+  Broadcast component (compid 0) with a real sysid stays supported. Aggregating acks inside
+  these nodes was declined by name: fan-out already is the aggregate answer, and a second
+  collector would duplicate it against §2.
+
 **`COMMAND_ACK` can arrive twice.** A takeoff commonly acks `IN_PROGRESS`, then `ACCEPTED`
 seconds later. Treating the first as final reports success early or times out on a command that
 was working. Wait for a terminal result.
