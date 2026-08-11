@@ -65,6 +65,9 @@ function loadResource(values = {}, nodeLookup = {}, opts = {}) {
           return nodeLookup[id] || null;
         },
       },
+      // liveOr consults the edit stack to decide whether the live DOM speaks
+      // for the node under validation (#217). Default: nothing being edited.
+      editor: { getEditStack: () => opts.editStack || [] },
     },
     $,
     toggled,
@@ -1050,23 +1053,45 @@ test('isBlank is one spelling of "nothing was entered"', () => {
   }
 });
 
-test('liveOr reads the open dialog, then the saved config, then the fallback', () => {
-  const open = loadResource({ '#node-input-action': 'set' }).RED;
-  assert.equal(open.mavlink.liveOr('#node-input-action', 'read'), 'set',
-    'the live field wins while the dialog is open');
+test('liveOr: the live field speaks only for the node whose dialog is on top (#217)', () => {
+  const self = { id: 'n1' };
+
+  // Own dialog on top of the edit stack: the live field wins — the operator
+  // may have just changed it and not saved.
+  const own = loadResource({ '#node-input-action': 'set' }, {}, { editStack: [self] }).RED;
+  assert.equal(own.mavlink.liveOr(self, '#node-input-action', 'read'), 'set',
+    'the live field wins while the node\'s own dialog is open');
+
+  // Somebody else's dialog on top: the same DOM value is a lie about this
+  // node. Node-RED's config-save cascade validates every user of the config
+  // node before its tray closes, so this state is real, not theoretical.
+  const foreign = loadResource({ '#node-input-action': 'set' }, {}, { editStack: [{ id: 'other' }] }).RED;
+  assert.equal(foreign.mavlink.liveOr(self, '#node-input-action', 'read'), 'read',
+    'a foreign dialog\'s live value must not leak into this node\'s validation');
+
+  // Stacked trays: own dialog present but no longer on top (a config dialog
+  // opened above it) — the top dialog's DOM is the one jQuery finds first,
+  // so only the top-of-stack owner may read live.
+  const buried = loadResource({ '#node-input-action': 'set' }, {}, { editStack: [self, { id: 'cfg' }] }).RED;
+  assert.equal(buried.mavlink.liveOr(self, '#node-input-action', 'read'), 'read',
+    'a buried dialog does not own the live DOM');
 
   // Dialog closed: the selector matches nothing, which is the state Node-RED
   // runs `validate` in on import and on deploy.
   const closed = loadResource().RED;
-  assert.equal(closed.mavlink.liveOr('#node-input-action', 'read'), 'read',
+  assert.equal(closed.mavlink.liveOr(self, '#node-input-action', 'read'), 'read',
     'the saved value carries it');
-  assert.equal(closed.mavlink.liveOr('#node-input-action', undefined, 'read'), 'read',
+  assert.equal(closed.mavlink.liveOr(self, '#node-input-action', undefined, 'read'), 'read',
     'and the fallback carries it when nothing was ever saved');
-  assert.equal(closed.mavlink.liveOr('#node-input-action', undefined), '');
+  assert.equal(closed.mavlink.liveOr(self, '#node-input-action', undefined), '');
 
   // A field that exists but is empty is not an answer either.
-  const empty = loadResource({ '#node-input-action': '' }).RED;
-  assert.equal(empty.mavlink.liveOr('#node-input-action', 'read'), 'read');
+  const empty = loadResource({ '#node-input-action': '' }, {}, { editStack: [self] }).RED;
+  assert.equal(empty.mavlink.liveOr(self, '#node-input-action', 'read'), 'read');
+
+  // No owner (or an owner without an id) can never read live — fail closed.
+  assert.equal(own.mavlink.liveOr(null, '#node-input-action', 'read'), 'read');
+  assert.equal(own.mavlink.liveOr({}, '#node-input-action', 'read'), 'read');
 });
 
 test('toggleRow tolerates a row the dialog does not have', () => {

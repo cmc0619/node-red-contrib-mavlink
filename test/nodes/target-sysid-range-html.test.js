@@ -112,8 +112,8 @@ test('vehicle defaultTargetSystem still uses the shared uint8 validator', () => 
 // by falling through to an unconfirmed send. An unconditional validator there
 // would red a legal flow.
 const CONDITIONAL_BROADCAST_FILES = [
-  ['mavlink-command.html', "liveOr('#node-input-delivery'"],
-  ['mavlink-move.html', "liveOr('#node-input-carrier'"],
+  ['mavlink-command.html', "liveOr(this, '#node-input-delivery'"],
+  ['mavlink-move.html', "liveOr(this, '#node-input-carrier'"],
 ];
 
 for (const [file, gate] of CONDITIONAL_BROADCAST_FILES) {

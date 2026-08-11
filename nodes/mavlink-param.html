@@ -60,7 +60,7 @@
           // and without this the node stays red over a field that is no longer
           // on screen — the same trap the index validator avoids, and the one
           // hiding a row creates if the check is not hidden with it.
-          if (RED.mavlink.liveOr('#node-input-action', this && this.action, 'read') !== 'set') {
+          if (RED.mavlink.liveOr(this, '#node-input-action', this && this.action, 'read') !== 'set') {
             return true;
           }
           if (RED.mavlink.isBlank(v)) return true;
@@ -123,8 +123,8 @@
    * @returns {boolean}
    */
   function indexAddressed(node) {
-    return RED.mavlink.liveOr('#node-input-action', node && node.action, 'read') === 'read'
-      && RED.mavlink.liveOr('#node-input-lookup', node && node.lookup, 'name') === 'index';
+    return RED.mavlink.liveOr(node, '#node-input-action', node && node.action, 'read') === 'read'
+      && RED.mavlink.liveOr(node, '#node-input-lookup', node && node.lookup, 'name') === 'index';
   }
 
   /**
@@ -135,7 +135,7 @@
    * @returns {string}
    */
   function editedParamId(node) {
-    return RED.mavlink.liveOr('#node-input-paramId', node && node.paramId)
+    return RED.mavlink.liveOr(node, '#node-input-paramId', node && node.paramId)
       .toUpperCase().trim();
   }
 

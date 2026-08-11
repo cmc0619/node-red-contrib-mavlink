@@ -1,0 +1,170 @@
+'use strict';
+
+/**
+ * #217: a validator's live-DOM read must be scoped to the node's own dialog.
+ *
+ * Node-RED's config-save handler validates every user of the saved config node
+ * before its tray closes (red.js v5.0.4, the unconditional cascade after
+ * "Now, validate the config node"), and trays stack — so a *closed* node's
+ * validator runs while another node's dialog owns the DOM. Reproduced by
+ * execution: a Send-tier command with broadcast target 0 — saved-legal — reds
+ * "cannot be confirmed" the moment the shared Connection is Updated from
+ * inside a confirm-tier sibling's dialog, because liveOr read the open
+ * dialog's `#node-input-delivery`. The poisoned `valid` flag is cached and
+ * deploy trusts the cache (red.js revalidates a config node only when `valid`
+ * is undefined), so the red survives until the victim's dialog is reopened.
+ *
+ * These tests drive the REAL validators — the html scripts evaluated whole,
+ * real RED.mavlink helpers underneath — not re-implementations. The
+ * stub-over-fiction lesson (#267): a hand-written copy of the validator can
+ * agree with the test and disagree with the node.
+ */
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+const { installEditorHelpers } = require('../helpers/editor-resource');
+
+const nodesDir = path.join(__dirname, '..', '..', 'nodes');
+
+/**
+ * Evaluate a node HTML's inline scripts against the real editor helpers, a
+ * DOM keyed by selector, and a declared edit stack. Returns the registered
+ * node definitions.
+ *
+ * @param {string} file  node HTML filename
+ * @param {{dom?: Object<string,string>, editStack?: Array<{id: string}>}} [opts]
+ * @returns {Object<string, object>} type → registerType definition
+ */
+function loadNodeHtml(file, opts) {
+  opts = opts || {};
+  const dom = opts.dom || {};
+  const editStack = opts.editStack || [];
+  const html = fs.readFileSync(path.join(nodesDir, file), 'utf8');
+  const scripts = [...html.matchAll(/<script type="text\/javascript">([\s\S]*?)<\/script>/g)]
+    .map((m) => m[1]);
+  assert.ok(scripts.length > 0, `${file}: inline scripts found`);
+
+  const registered = {};
+  function $(selector) {
+    const has = Object.prototype.hasOwnProperty.call(dom, selector);
+    return {
+      length: has ? 1 : 0,
+      val: () => (has ? dom[selector] : undefined),
+    };
+  }
+  const context = {
+    RED: {
+      settings: { httpAdminRoot: '/' },
+      mavlink: {},
+      nodes: {
+        registerType: (type, def) => { registered[type] = def; },
+        getType: () => null,
+        node: () => null,
+      },
+      validators: { number: () => () => true },
+      editor: { getEditStack: () => editStack },
+      events: { on: () => {} },
+    },
+    $,
+  };
+  installEditorHelpers(context);
+  for (const script of scripts) vm.runInNewContext(script, context);
+  return registered;
+}
+
+// ── The reproduced poison: command targetSystem via the config-save cascade ──
+
+test('command targetSystem: a foreign dialog cannot re-tier a closed node (#217)', () => {
+  // Node A (id a1) has its confirm-tier dialog open — its delivery select is
+  // the one in the DOM, and A is on top of the edit stack. The cascade is now
+  // validating closed node B: Send tier, broadcast 0, a saved-legal pair.
+  const registered = loadNodeHtml('mavlink-command.html', {
+    dom: { '#node-input-delivery': 'confirm' },
+    editStack: [{ id: 'a1' }],
+  });
+  const validate = registered['mavlink-command'].defaults.targetSystem.validate;
+  const closedB = { id: 'b2', delivery: 'send', targetSystem: 0 };
+  assert.equal(
+    validate.call(closedB, 0, {}),
+    true,
+    "B's saved Send tier governs — A's live 'confirm' is not B's tier"
+  );
+});
+
+test('command targetSystem: the own-dialog live read survives the fix (#260)', () => {
+  // Same DOM, but the dialog belongs to the node under validation: the
+  // operator switched delivery to confirm and has not saved. The broadcast
+  // refusal must still fire from the live value.
+  const registered = loadNodeHtml('mavlink-command.html', {
+    dom: { '#node-input-delivery': 'confirm' },
+    editStack: [{ id: 'b2' }],
+  });
+  const validate = registered['mavlink-command'].defaults.targetSystem.validate;
+  const own = { id: 'b2', delivery: 'send', targetSystem: 0 };
+  assert.match(
+    String(validate.call(own, 0, {})),
+    /broadcast \(0\) cannot be confirmed/,
+    'the live tier still reds an in-dialog broadcast'
+  );
+});
+
+test('command targetSystem: no dialog anywhere — the saved tier decides', () => {
+  const registered = loadNodeHtml('mavlink-command.html');
+  const validate = registered['mavlink-command'].defaults.targetSystem.validate;
+  assert.equal(validate.call({ id: 'b2', delivery: 'send' }, 0, {}), true);
+  assert.match(
+    String(validate.call({ id: 'b3', delivery: 'confirm' }, 0, {})),
+    /cannot be confirmed/,
+    'a saved confirm tier with broadcast 0 is invalid with no DOM at all'
+  );
+});
+
+// ── The filed instance: companion identity ids ───────────────────────────────
+
+test('identity ids: a foreign role select cannot invalidate a companion (#217)', () => {
+  // The landmine as filed: a companion's blank ids are legal, and a foreign
+  // dialog's role select says 'gcs'. No v5.0.4 editor path validates a
+  // sibling identity while another identity dialog is open — but the read
+  // must not trust whatever dialog happens to be on top, because one foreign
+  // read poisons `valid` and the Connection reds through the config cascade.
+  const registered = loadNodeHtml('mavlink-local-identity.html', {
+    dom: { '#node-config-input-role': 'gcs' },
+    editStack: [{ id: 'other' }],
+  });
+  const defaults = registered['mavlink-local-identity'].defaults;
+  const companion = { id: 'ci', role: 'companion' };
+  assert.equal(defaults.sourceSystemId.validate.call(companion, '', {}), true);
+  assert.equal(defaults.sourceComponentId.validate.call(companion, '', {}), true);
+});
+
+test('identity ids: the own-dialog role switch still validates live', () => {
+  // The reason the live read exists at all: role changed in-dialog, not yet
+  // saved. Blank ids are invalid for the gcs role the operator just picked.
+  const registered = loadNodeHtml('mavlink-local-identity.html', {
+    dom: { '#node-config-input-role': 'gcs' },
+    editStack: [{ id: 'ci' }],
+  });
+  const defaults = registered['mavlink-local-identity'].defaults;
+  const companion = { id: 'ci', role: 'companion' };
+  assert.match(
+    String(defaults.sourceSystemId.validate.call(companion, '', {})),
+    /required for this role/
+  );
+});
+
+test('identity ids: stale saved role with blank ids stays invalid — data, not race', () => {
+  // Sequence (g) from the #217 investigation: role 'gcs' saved alongside
+  // blank ids reproduces the reported symptom with no DOM race at all. That
+  // is bad saved data and must keep redding — the fix scopes the live read,
+  // it does not paper over an inconsistent config.
+  const registered = loadNodeHtml('mavlink-local-identity.html');
+  const defaults = registered['mavlink-local-identity'].defaults;
+  assert.match(
+    String(defaults.sourceSystemId.validate.call({ id: 'ci', role: 'gcs' }, '', {})),
+    /required for this role/
+  );
+});

@@ -1242,21 +1242,41 @@
   /**
    * The in-progress value of a field, falling back to what was saved.
    *
-   * Editor code reads cross-field state in two situations and needs opposite
-   * sources for them: while the dialog is open the live input is the truth
-   * (the operator may have just changed it), and while it is closed — Node-RED
-   * runs `validate` on import and on deploy — jQuery matches nothing and the
-   * saved config is all there is. Four call sites had grown their own version
-   * of this, differing only in which was checked first.
+   * Editor code reads cross-field state in three situations and needs
+   * different sources for them. While the node's own dialog is open, the live
+   * input is the truth — the operator may have just changed it. While no
+   * dialog is open — Node-RED runs `validate` on import and on deploy —
+   * jQuery matches nothing and the saved config is all there is. And while
+   * somebody ELSE'S dialog is open, the live input is a lie about this node:
+   * saving a config node validates every user it has before its tray closes,
+   * and trays stack, so a closed sibling's validator ran against the open
+   * dialog's field. Measured (#217): a Send-tier command with broadcast
+   * target 0 — saved-legal — reds "cannot be confirmed" the moment the shared
+   * Connection is Updated from inside a confirm-tier node's dialog. The
+   * poisoned `valid` flag is cached, deploy trusts the cache, and the red
+   * survives until the victim's own dialog is reopened.
    *
+   * `owner` is what separates the states: the live field is consulted only
+   * when the top of the editor's edit stack IS the owner — its own dialog and
+   * no other. Every other state falls back to the saved value, which is the
+   * safe direction.
+   *
+   * @param {object} owner     the node whose validator or dialog is asking
    * @param {string} selector  jQuery selector for the live field
    * @param {*} saved          the node's saved value
    * @param {*} [fallback='']  when neither answers
    * @returns {string}
    */
-  RED.mavlink.liveOr = function (selector, saved, fallback) {
-    var $el = $(selector);
-    var live = $el && $el.length ? $el.val() : undefined;
+  RED.mavlink.liveOr = function (owner, selector, saved, fallback) {
+    var live;
+    if (owner && owner.id) {
+      var stack = RED.editor.getEditStack();
+      var top = stack.length ? stack[stack.length - 1] : null;
+      if (top && top.id === owner.id) {
+        var $el = $(selector);
+        live = $el && $el.length ? $el.val() : undefined;
+      }
+    }
     if (!RED.mavlink.isBlank(live)) return String(live);
     if (!RED.mavlink.isBlank(saved)) return String(saved);
     return fallback === undefined ? '' : String(fallback);
@@ -1338,7 +1358,7 @@
       value: '',
       type: 'mavlink-connection',
       validate: function (v, _opt) {
-        if (RED.mavlink.liveOr(modeSelector, this && this[modeField]) === 'build') return true;
+        if (RED.mavlink.liveOr(this, modeSelector, this && this[modeField]) === 'build') return true;
         // '_ADD_' is what the platform's "none" option carries until save
         // rewrites it to ''; treat it as blank too, so the field reds while
         // the dialog is still open rather than only after Done.
@@ -1362,10 +1382,10 @@
     var dialectSelector = '#node-input-dialect';
 
     function currentMode(self) {
-      return RED.mavlink.liveOr(modeSelector, self && self[modeField]);
+      return RED.mavlink.liveOr(self, modeSelector, self && self[modeField]);
     }
     function currentDialect(self) {
-      return RED.mavlink.liveOr(dialectSelector, self && self.dialect);
+      return RED.mavlink.liveOr(self, dialectSelector, self && self.dialect);
     }
 
     var defaults = {
