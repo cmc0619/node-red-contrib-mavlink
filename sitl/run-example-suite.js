@@ -307,7 +307,7 @@ const PROFILE = {
     expect: 'Move carrier=reposition goto accepted; yaw 90 deg turns east',
     prep: 'ap-guided-1',
     notes:
-      'Same goto as 19 through mavlink-move instead of mavlink-command — carrier is the only variable. Measures: ACK reaches output 1 with resultCode 0; param4 yaw is radians (90 deg must end EAST, not some wrapped heading); blank speed/radius encode the -1/0 sentinels. CHANGE_MODE off — without-GUIDED and CHANGE_MODE are separate runs.',
+      'Same goto as 23 through mavlink-move instead of mavlink-command — carrier is the only variable. Measures: ACK reaches output 1 with resultCode 0; param4 yaw is radians (90 deg must end EAST, not some wrapped heading); blank speed/radius encode the -1/0 sentinels. CHANGE_MODE off — without-GUIDED and CHANGE_MODE are separate runs.',
   },
   '30-px4-move-reposition': {
     restart: 'px4-1',
@@ -315,12 +315,12 @@ const PROFILE = {
     expect: 'PX4 Move reposition: goto settles; result recorded',
     prep: 'px4-home-ready',
     notes:
-      "PX4 twin of 37 — #239's last acceptance box. CHANGE_MODE on: the shape 17 measured " +
+      "PX4 twin of 27 — #239's last acceptance box. CHANGE_MODE on: the shape 29 measured " +
       'accepted via mavlink-command, so the carrier is the only variable. What this run expects ' +
       'is that PX4 answers, not what it answers: accept and denial are both anticipated and both ' +
       'PASS — a denial is a measurement, never a harness FAIL. No ACK at all measures nothing and ' +
       'is FAIL (timeout, or a send that never reached the wire). Once §14 records the answer this ' +
-      'tightens to assert it, the way 34 requires video DENIED. If accepted: yaw 90 must end EAST.',
+      'tightens to assert it, the way 17 requires video DENIED. If accepted: yaw 90 must end EAST.',
   },
 };
 
@@ -539,7 +539,7 @@ function verdictFrom(profile, summary, log) {
     // Key on the goto's OWN record, not any accepted in the flow: the arm ack
     // satisfied results.includes('accepted') and the old log co-condition
     // matched the debug node's *name*, so a timed-out or denied goto could
-    // classify PASS off the arm alone (#267). Both 17 and 19 expose a
+    // classify PASS off the arm alone (#267). Both 23 and 29 expose a
     // `goto status` debug wired to the goto command's status output.
     const gotoRecord = summary.debug.find((d) => /goto status/i.test(d.tag) && d.result);
     if (gotoRecord) {
@@ -555,12 +555,12 @@ function verdictFrom(profile, summary, log) {
     return { status: 'FAIL', reason: 'INT goto never settled — not measured' };
   }
   if (/carrier=reposition|Move reposition/i.test(expect)) {
-    // #267 again, one carrier over: 37/38 send the same goto through
+    // #267 again, one carrier over: 27/30 send the same goto through
     // mavlink-move, and their expect strings matched no branch, so the arm and
     // takeoff accepteds satisfied the generic tail. A Move that never emitted a
     // status record classified PASS off records that say nothing about the
     // reposition — the fiction #239's acceptance box cannot afford. Key on the
-    // Move's own `reposition status` debug, as 17/19 key on `goto status`.
+    // Move's own `reposition status` debug, as 23/29 key on `goto status`.
     const repositionRecord = summary.debug.find(
       (d) => /reposition status/i.test(d.tag) && d.result
     );
@@ -575,23 +575,23 @@ function verdictFrom(profile, summary, log) {
     // mavlink-move does NOT speak mavlink-command's status vocabulary, and
     // keying these examples on the Command words was wrong in both directions:
     // an accepted reposition is published by completeResult as result
-    // 'succeeded' (detail 'accepted'), so 37 could never pass; a lost ack is
-    // 'timeout', not 'timed-out', so 38 fell through to PASS on the very
-    // silence the branch exists to catch. 17/19 read 'accepted' because
+    // 'succeeded' (detail 'accepted'), so 27 could never pass; a lost ack is
+    // 'timeout', not 'timed-out', so 30 fell through to PASS on the very
+    // silence the branch exists to catch. 23/29 read 'accepted' because
     // mavlink-command emits exactly that — the two families differ.
     const accepted = repositionRecord.result === 'succeeded';
     // A terminal MAV_RESULT and a send that threw both spell result 'failed';
     // only the ACK carries a resultCode. ACCEPTED is 0, so compare to null.
     const vehicleAnswered = accepted ||
       (repositionRecord.result === 'failed' && repositionRecord.resultCode !== null);
-    // The two contracts differ and the expect strings carry the difference. 38
+    // The two contracts differ and the expect strings carry the difference. 30
     // is a measurement, so what it expects is that PX4 *answers* — not what the
     // answer is. An accept and a denial are both anticipated outcomes of the
     // open question (#239), so neither is a surprise and both pass: a denial is
     // a measurement, never a harness FAIL. What fails is no answer at all —
     // a timeout, or a send that never reached the wire, measures nothing. Once
     // §14 records what PX4 answers, this tightens to assert that specific
-    // result, the way 34 requires video DENIED.
+    // result, the way 17 requires video DENIED.
     if (/result recorded/i.test(expect)) {
       if (!vehicleAnswered) {
         return {

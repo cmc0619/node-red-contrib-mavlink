@@ -2,17 +2,16 @@
 
 Index of the **shipped** importable Node-RED flows under `examples/` and
 `examples/sitl/`. Node names, preset ids, delivery tiers, config keys, and firmware
-facts match the package nodes and `DESIGN.md`. Section 3's README outline and section 4's
-rename table are historical notes from when the set was assembled — the JSON files are
-already in-tree.
+facts match the package nodes and `DESIGN.md`. Section 3's README outline is a historical
+note from when the set was assembled — the JSON files and
+[`examples/sitl/README.md`](sitl/README.md) are already in-tree.
 
 Contents:
 
 1. [Node/preset cheat-sheet](#0-cheat-sheet) — the exact strings the flows must use
 2. [Regular examples (10–27)](#1-regular-examples-1027)
-3. [SITL folder (`examples/sitl/`)](#2-sitl-folder-examplessitl) — see also [`sitl/README.md`](sitl/README.md)
+3. [SITL folder (`examples/sitl/`)](#2-sitl-folder-examplessitl) — see also [`examples/sitl/README.md`](sitl/README.md)
 4. [`examples/sitl/README.md` outline](#3-examplessitlreadmemd-outline)
-5. [Renames / moves of 06–09](#4-renames--moves-of-0609)
 
 ---
 
@@ -423,269 +422,347 @@ importable tab per file with shared config nodes inline.
 Flows that only make sense against the live five-ArduPilot + five-PX4 rig (§13): they
 exercise real firmware behaviour — completion timing, mode tables, the PX4 param union,
 mission/fence/rally per stack, fan-out pacing across five vehicles, and signing against a
-verifier. Each flow's tab comment carries the **exact launch command(s)** for the
-instances it needs. Filenames restart at `01` inside the folder.
+verifier. Prefer the Docker lab (`sitl/docker-compose.yml`). Filenames are **numbered in
+harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay selective
+(see [`examples/sitl/README.md`](sitl/README.md)):
 
-### sitl/01 — Completion: IN_PROGRESS → ACCEPTED takeoff  *(moved from 06)*
+| Phase | `restart` | Between examples |
+|-------|-----------|------------------|
+| 01–19 | `none` | no docker restart (after one cold prime) |
+| 20–27 | `ap-1` / `ap-12` / `ap-2` | only those AP containers |
+| 28–30 | `px4-1` | `nrc-px4-11` only |
+| 31–35 | `ap-fleet` | AP 1–5 |
+| 36–38 | `fleet` | all 13 vehicles |
 
-- **File:** `examples/sitl/01-completion-takeoff.json` · **Tab:** `SITL 01 Completion takeoff`
-- **Story:** Arm then take off with `delivery: "complete"` and watch the node correctly
-  wait through the `IN_PROGRESS` ack for the terminal `ACCEPTED` once the copter is
-  actually at altitude — the pain point that a naïve implementation reports early.
-- **Nodes:** config triplet (ArduPilot sysid 1), `command` arm(confirm)→takeoff(complete),
-  `inject`, `debug`.
-- **Config/launch:** bind `14550`→`14551`; `completionTimeout ≥ 30000`.
-  `sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550`.
+### 01–19 — `restart: none` (params / missions / companions / payload)
 
-### sitl/02 — Completion timeout: accepts but never climbs
+### sitl/01 — PX4 parameter int/float union
 
-- **File:** `examples/sitl/02-completion-timeout.json` · **Tab:** `SITL 02 Completion timeout`
-- **Story:** Deliberately provoke the timeout branch — take off **without** first entering
-  GUIDED (or with a low `completionTimeout`) so the vehicle accepts the command yet never
-  reaches altitude; the wait ends, output 0 stays silent, and the status names the timeout.
-- **Nodes:** config triplet, `command` takeoff (`complete`, `completionTimeout: 8000`),
-  `inject`, `debug`.
-- **Config/launch:** same single ArduCopter instance; comment tells the operator to skip
-  the mode/arm prep so the climb never happens.
-
-### sitl/03 — TEMPORARILY_REJECTED → back off and retry
-
-- **File:** `examples/sitl/03-temporarily-rejected.json` · **Tab:** `SITL 03 Temporarily rejected`
-- **Story:** Fire arm/takeoff the instant SITL boots, before GPS lock, to draw a
-  `TEMPORARILY_REJECTED (1)`; the node backs off and retries and eventually succeeds —
-  the readiness answer coming from the vehicle, not a client-side precondition table (§9).
-- **Nodes:** config triplet, `command` arm→takeoff (`confirm`, `maxRetries: 5`), `inject`
-  (fire immediately / `once`), `debug` (show the retry count in the status record).
-- **Config/launch:** ArduCopter fresh boot; comment: inject `once` at deploy to race GPS.
-
-### sitl/04 — Mode tables per stack (ArduPilot vs PX4)
-
-- **File:** `examples/sitl/04-mode-tables.json` · **Tab:** `SITL 04 Mode tables`
-- **Story:** Set flight modes on both stacks from the profile mode table and prove the
-  `DO_SET_MODE` custom_mode differs — ArduCopter's small integer (`GUIDED=4`) versus PX4's
-  encoded main/sub-mode bitfield — so a value that works on one is meaningless on the
-  other. The headline "firmware-gated behaviour cannot be faked" demo.
-- **Nodes:** 1 identity, 2 vehicles (ardupilot + px4), 2 connections, per-stack `command`
-  `set_mode` (`complete`), `state` feed to read active mode, `inject`, `debug`.
-- **Config/launch:** both single instances (sysid 1 + sysid 11) on their own ports;
-  comment carries the ArduPilot and PX4 mode numbers and warns against cross-use.
-
-### sitl/05 — PX4 parameter int/float union
-
-- **File:** `examples/sitl/05-px4-param-union.json` · **Tab:** `SITL 05 PX4 param union`
+- **File:** `examples/sitl/01-px4-param-union.json` · **Tab:** `SITL 01 PX4 param union`
 - **Story:** Set an integer PX4 parameter (e.g. `COM_RC_IN_MODE`) and read it back to show
   the value survives the int/float **union** reinterpretation rather than a numeric cast —
   the corruption §11 warns about, only observable against real PX4.
 - **Nodes:** config triplet (PX4 sysid 11), `param` set(`confirm`)→read, `inject`, `debug`.
-- **Config/launch:** PX4 SITL, `paramType: "MAV_PARAM_TYPE_INT32"`; comment: verify the
-  echo integer matches, not a float-cast neighbour.
+- **Config/launch:** PX4 SITL, `paramType: "MAV_PARAM_TYPE_INT32"`; bind `14560`→`14561`.
 
-### sitl/06 — Mission / fence / rally per firmware
+### sitl/02 — Mission / fence / rally per firmware
 
-- **File:** `examples/sitl/06-mission-fence-rally.json` · **Tab:** `SITL 06 Mission/fence/rally`
+- **File:** `examples/sitl/02-mission-fence-rally.json` · **Tab:** `SITL 02 Mission/fence/rally`
 - **Story:** Upload mission + fence + rally to ArduPilot (all three supported), then send
   the same fence/rally to PX4 and watch the node refuse fail-loud because PX4 doesn't carry
   them over this protocol — the firmware-gated type list in action.
 - **Nodes:** 1 identity, 2 vehicles, 2 connections, `mission` ×5 (ArduPilot: mission/fence/
   rally upload; PX4: fence upload → expected failure), `inject`, `debug`.
-- **Config/launch:** ArduCopter sysid 1 + PX4 sysid 11; comment shows both launches and
-  that the PX4 fence attempt should surface `px4 does not support fence`.
+- **Config/launch:** ArduCopter sysid 1 + PX4 sysid 11.
 
-### sitl/07 — Malformed mission upload fails, never clears
+### sitl/03 — Malformed mission upload fails, never clears
 
-- **File:** `examples/sitl/07-mission-failloud.json` · **Tab:** `SITL 07 Mission fail-loud`
-- **Story:** First upload a good mission, then upload a malformed one (a fence command id
-  smuggled into a mission plan, or a NaN coordinate) and confirm the transfer **fails** and
-  leaves the previously-good mission intact — it must never degrade into a clear (§9).
-- **Nodes:** config triplet, `mission` upload(good)→download(verify)→upload(bad)→
-  download(verify unchanged), `inject`, `debug`.
-- **Config/launch:** single ArduCopter; comment: the bad item is rejected by the per-type
-  validator before or during transfer; the download after proves the good plan survived.
+- **File:** `examples/sitl/03-mission-failloud.json` · **Tab:** `SITL 03 Mission fail-loud`
+- **Story:** First upload a good mission, then upload a malformed one and confirm the
+  transfer **fails** and leaves the previously-good mission intact — it must never degrade
+  into a clear (§9).
+- **Nodes:** config triplet, `mission` upload(good)→download→upload(bad)→download, `inject`,
+  `debug`.
+- **Config/launch:** single ArduCopter sysid 1.
 
-### sitl/08 — Five-vehicle fan-out pacing  *(moved from 07)*
+### sitl/04 — Live param defs labels
 
-- **File:** `examples/sitl/08-fanout-sequential-five.json` · **Tab:** `SITL 08 Fan-out ×5 pacing`
-- **Story:** Sequential arm across ArduPilot sysids 1–5 on one connection with 200 ms
-  pacing, dry-run first; exercises the peer table, queue pacing, and fan-out aggregation
-  across the full five-instance rig.
-- **Nodes:** config triplet, `command` (Build, preset Arm) per path feeding 2× `fanout`
-  (dry-run + live, `list` 1–5, `sequential` `intervalMs: 200`), `inject`, `debug`.
-- **Config/launch:** the five-ArduCopter loop (see README); bind `14550`→`14551`.
-
-### sitl/09 — Fan-out member expires mid-fan-out
-
-- **File:** `examples/sitl/09-fanout-member-expires.json` · **Tab:** `SITL 09 Fan-out member expires`
-- **Story:** Start a sequential fan-out across five, then kill one SITL instance partway;
-  the run continues, and the aggregate reports the dropped member as failed rather than
-  aborting or silently re-resolving the group (§10).
-- **Nodes:** config triplet, `command` (Build, preset Arm) feeding `fanout` (`sequential`,
-  `confirm`, `intervalMs: 500` to give a human time to kill one), `state` feed (watch the
-  `expired` event), `inject`, `debug`.
-- **Config/launch:** five ArduCopters; comment: `kill` one instance's PID after the run
-  starts; expect one `failed` entry in the aggregate, four succeeded.
-
-### sitl/10 — Dual-stack ten vehicles, one panel
-
-- **File:** `examples/sitl/10-dual-stack-ten.json` · **Tab:** `SITL 10 Dual-stack ×10`
-- **Story:** Both connections live at once — five ArduPilot (1–5) + five PX4 (11–15) — with
-  a State feed showing all ten peers and a per-stack broadcast arm (two broadcasts, one per
-  connection, because a broadcast is single-stack). The whole-rig integration demo.
-- **Nodes:** 1 identity, 2 vehicles, 2 connections, `command` (Build, preset Arm) per stack
-  feeding 2× `fanout` (`broadcast` per stack), `state` feed, `inject`, `debug`.
-- **Config/launch:** prefer `sitl/docker-compose.yml` (`--profile sitl`); AP bind
-  `14550`→`14551`, PX4 bind `14560`→`14561`.
-
-### SITL 15 — Companion ArduPilot (sysid 20)
-
-- **File:** `examples/sitl/15-companion-ap.json` · **Tab:** `SITL 15 Companion AP`
-- **Story:** Node-RED companion identity sharing sysid 20 / compid 191 on the lab companion ports.
-- **Key config:** bind `14540`→`14541`; vehicle firmware ardupilot; Docker service `ap-companion-20`.
-
-### SITL 16 — Companion PX4 (sysid 21)
-
-- **File:** `examples/sitl/16-companion-px4.json` · **Tab:** `SITL 16 Companion PX4`
-- **Story:** Companion identity sharing sysid 21 on PX4 companion ports.
-- **Key config:** bind `14542`→`14543`; vehicle firmware px4; Docker service `px4-companion-21`.
-
-
-### sitl/11 — Broadcast vs sequential arm, confirmed by state
-
-- **File:** `examples/sitl/11-broadcast-vs-sequential.json` · **Tab:** `SITL 11 Broadcast vs sequential`
-- **Story:** Arm the five-ArduPilot group two ways and compare: sequential fan-out (paced,
-  per-vehicle acks) versus a single `target_system=0` broadcast confirmed by polling the
-  peer-table armed state rather than counting the ack storm (§10).
-- **Nodes:** config triplet, `command` (Build, preset Arm) per path feeding 2× `fanout`
-  (sequential confirm; broadcast + `confirm` waiting on the resolved set), `state`
-  snapshot, `inject`, `debug`.
-- **Config/launch:** five ArduCopters; comment on the inbound ack-burst congestion note.
-
-### sitl/12 — Signing: sign-outbound + require-signed (dry-run notes)
-
-- **File:** `examples/sitl/12-signing.json` · **Tab:** `SITL 12 Signing`
-- **Story:** A signing bring-up flow: one connection with **sign outbound** + **require
-  signed inbound** enabled and a passphrase credential, plus a listen-only companion
-  connection that is **require-signed with sign-off**. Mostly a configured template with a
-  heavily-commented dry-run procedure, since making SITL actually verify signatures is
-  version- and setup-dependent.
-- **Nodes:** identity (+ signing credential ref), `vehicle`, 2× `connection` (signing
-  switches set), `in` (watch `trusted` flag), `state` feed (untrusted indication),
-  `command` arm (to send a signed frame), `debug`.
-- **Config/launch:** comment walks the operator through setting a matching key on the SITL
-  side and enabling signing, and states plainly which parts are dry-run notes vs live;
-  first-contact / one-minute-window / monotonic-timestamp behaviour called out (§7).
-
-### sitl/13 — Live param defs labels  *(moved from 08)*
-
-- **File:** `examples/sitl/13-param-defs-live.json` · **Tab:** `SITL 13 Param defs (live)`
-- **Story:** Read and set parameters on a live ArduCopter with the ArduPilot `apm.pdef.json`
+- **File:** `examples/sitl/04-param-defs-live.json` · **Tab:** `SITL 04 Param defs (live)`
+- **Story:** Read and set parameters on a live ArduCopter with ArduPilot `apm.pdef.json`
   definitions bound to the profile, so values render with units, ranges, and enum labels —
-  and request-list collects the full set. The bench-fetched defs meet live firmware here.
-- **Nodes:** config triplet (Vehicle `paramDefsUrl` = ArduCopter pdef or family-derived),
-  `param` read/set(`confirm`)/request-list(`collect`), `inject`, `debug`.
-- **Config/launch:** single ArduCopter; comment: defs fetch needs internet once at the
-  bench; read/set behaviour needs the live vehicle.
+  and request-list collects the full set.
+- **Nodes:** config triplet (Vehicle `paramDefsUrl`), `param` read/set(`confirm`)/
+  request-list(`collect`), `inject`, `debug`.
+- **Config/launch:** single ArduCopter; defs fetch needs internet once at the bench.
 
-### sitl/14 — Command + mission basics on two instances  *(moved from 09)*
+### sitl/05 — Companion ArduPilot (sysid 20)
 
-- **File:** `examples/sitl/14-command-mission-basics.json` · **Tab:** `SITL 14 Command & mission basics`
-- **Story:** The original 09 demo, now folded into the rig folder: preset + advanced
-  commands on sysid 1 and a mission upload/download on sysid 2, two ArduPilot instances on
-  one connection, showing target-by-sysid routing on a shared link.
-- **Nodes:** config triplet, `command` arm + advanced `set_message_interval`, `mission`
-  upload/download to sysid 2, `inject`, `debug`.
-- **Config/launch:** two ArduCopter instances (sysid 1, 2) both `--out=udp:127.0.0.1:14550`.
+- **File:** `examples/sitl/05-companion-ap.json` · **Tab:** `SITL 05 Companion AP`
+- **Story:** Node-RED companion identity sharing sysid 20 / compid 191 on the lab companion
+  ports.
+- **Key config:** bind `14540`→`14541`; Docker service `ap-companion-20`.
 
-### sitl/28 — Param read by index
+### sitl/06 — Companion PX4 (sysid 21)
 
-- **File:** `examples/sitl/28-param-read-by-index.json` · **Tab:** `SITL 28 Param read by index`
+- **File:** `examples/sitl/06-companion-px4.json` · **Tab:** `SITL 06 Companion PX4`
+- **Story:** Companion identity sharing sysid 21 on PX4 companion ports.
+- **Key config:** bind `14542`→`14543`; Docker service `px4-companion-21`.
+
+### sitl/07 — COMMAND_INT local vs global scale
+
+- **File:** `examples/sitl/07-int-local-vs-global.json` · **Tab:** `SITL 07 INT local vs global`
+- **Story:** Prove §14: `COMMAND_INT` local-frame x/y scale as metres × 1e4, global as
+  degrees × 1e7. ArduPilot accepts `DO_SET_HOME` with `GLOBAL_INT` and denies `LOCAL_NED`;
+  PX4 accepts both and decodes `LOCAL_NED` as metres.
+- **Nodes:** dual connections, 4× `command` `DO_SET_HOME` probes, `inject`, `debug`.
+- **Config/launch:** AP sysid 1 + PX4 sysid 11.
+
+### sitl/08 — Param float32 echo (both stacks)
+
+- **File:** `examples/sitl/08-param-echo-float32.json` · **Tab:** `SITL 08 Param float32 echo`
+- **Story:** Focused REAL32 set → echo-confirm → read on AP (`LOIT_SPEED_MS`) and PX4
+  (`MPC_XY_VEL_MAX`).
+- **Nodes:** dual connections, `param` set/read per stack, `inject`, `debug`.
+
+### sitl/09 — In → Build → Out
+
+- **File:** `examples/sitl/09-in-build-out.json` · **Tab:** `SITL 09 In → Build → Out`
+- **Story:** Live In → Build → Out handoff against the lab (decode, re-encode, forward).
+- **Nodes:** config triplet, `in`, `build`, `out`, `inject`, `debug`.
+
+### sitl/10 — Companion receive
+
+- **File:** `examples/sitl/10-companion-receive.json` · **Tab:** `SITL 10 Companion receive`
+- **Story:** Companion role on AP sysid 20: receive HEARTBEAT/STATUSTEXT; optional
+  NAMED_VALUE_FLOAT send.
+- **Key config:** bind `14540`→`14541`; identity `companion` sysid 20 / compid 191.
+
+### sitl/11 — Param read by index
+
+- **File:** `examples/sitl/11-param-read-by-index.json` · **Tab:** `SITL 11 Param read by index`
 - **Story:** Collect the AP param table, pick `LOIT_SPEED_MS` by index, then send
   `PARAM_REQUEST_READ` with `param_index ≥ 0` and empty `param_id`.
-- **Nodes:** config triplet, `param` collect → function → `param` read(send) → assert, `debug`.
+- **Nodes:** config triplet, `param` collect → function → `param` read(send) → assert.
 
-### sitl/29 — Param fan-out set
+### sitl/12 — Param fan-out set
 
-- **File:** `examples/sitl/29-param-fanout-set.json` · **Tab:** `SITL 29 Param fan-out set`
+- **File:** `examples/sitl/12-param-fanout-set.json` · **Tab:** `SITL 12 Param fan-out set`
 - **Story:** Build-tier `PARAM_SET` of `LOIT_SPEED_MS=10` then sequential fan-out
   echo-confirm across AP sysids 1–5 (§10 sequential-only for sets).
 - **Nodes:** config triplet, `param` (Build) → `fanout` (confirm), `inject`, `debug`.
 
-### sitl/30 — PX4 param list collect
+### sitl/13 — PX4 param list collect
 
-- **File:** `examples/sitl/30-px4-param-list.json` · **Tab:** `SITL 30 PX4 param list`
-- **Story:** PX4 `request-list` + collect (the AP-only path in sitl/13), asserting known
-  ids `COM_RC_IN_MODE` and `MPC_XY_VEL_MAX`.
+- **File:** `examples/sitl/13-px4-param-list.json` · **Tab:** `SITL 13 PX4 param list`
+- **Story:** PX4 `request-list` + collect, asserting known ids `COM_RC_IN_MODE` and
+  `MPC_XY_VEL_MAX`.
 - **Nodes:** config triplet (PX4 sysid 11), `param` collect → assert, `inject`, `debug`.
 
-### sitl/31 — Param encoding override
+### sitl/14 — Param encoding override
 
-- **File:** `examples/sitl/31-param-encoding-override.json` · **Tab:** `SITL 31 Param encoding override`
-- **Story:** Explicit `msg.payload.paramEncoding` on both stacks — PX4 `bytewise` INT32
-  and ArduPilot `c-cast` INT32 echo-confirm — plus a crossed AP `bytewise` set that must
-  echo-timeout so success depends on the override rung, not firmware fallback (§11).
+- **File:** `examples/sitl/14-param-encoding-override.json` · **Tab:** `SITL 14 Param encoding override`
+- **Story:** Explicit `msg.payload.paramEncoding` on both stacks — PX4 `bytewise` INT32 and
+  ArduPilot `c-cast` INT32 echo-confirm — plus a crossed AP `bytewise` set that must
+  echo-timeout (§11).
 - **Nodes:** dual connections, 3× `param` set(confirm) with JSON inject payloads, `debug`.
 
-### sitl/32 — Param echo timeout (unknown id)
+### sitl/15 — Param echo timeout (unknown id)
 
-- **File:** `examples/sitl/32-param-echo-timeout.json` · **Tab:** `SITL 32 Param echo timeout`
+- **File:** `examples/sitl/15-param-echo-timeout.json` · **Tab:** `SITL 15 Param echo timeout`
 - **Story:** Confirm live `LOIT_SPEED_MS` first (AP-1 reachable), then set missing
   `WPNAV_SPEED` on Copter 4.7.0; confirm must finish as `timed-out` / `echo timeout`.
 - **Nodes:** config triplet, 2× `param` set(confirm), `inject`, `debug`.
 
-### sitl/33 — Payload gimbal legacy (AP-31)
+### sitl/16 — Payload gimbal legacy (AP-31)
 
-- **File:** `examples/sitl/33-payload-gimbal-legacy.json` · **Tab:** `SITL 33 Payload gimbal legacy`
-- **Story:** Legacy mount aim / set-mode / ROI set+clear against dedicated payload
-  vehicle sysid 31 (`--gimbal` + servo mount) on bind `14570`.
+- **File:** `examples/sitl/16-payload-gimbal-legacy.json` · **Tab:** `SITL 16 Payload gimbal legacy`
+- **Story:** Legacy mount aim / set-mode / ROI set+clear against dedicated payload vehicle
+  sysid 31 (`--gimbal` + servo mount) on bind `14570`.
 - **Nodes:** config triplet (sysid 31), 4× `payload` gimbal(confirm), `inject`, `debug`.
 
-### sitl/34 — Payload camera (AP-31)
+### sitl/17 — Payload camera (AP-31)
 
-- **File:** `examples/sitl/34-payload-camera.json` · **Tab:** `SITL 34 Payload camera`
+- **File:** `examples/sitl/17-payload-camera.json` · **Tab:** `SITL 17 Payload camera`
 - **Story:** `IMAGE_START_CAPTURE` ACCEPTED with `CAM1_TYPE=1`; `VIDEO_*` DENIED —
   documents the measured servo-camera limit on Copter-4.7.0 SITL.
 - **Nodes:** config triplet (sysid 31), 3× `payload` camera(confirm), `inject`, `debug`.
 
-### sitl/35 — Payload gimbal manager (AP-31)
+### sitl/18 — Payload gimbal manager (AP-31)
 
-- **File:** `examples/sitl/35-payload-gimbal-manager.json` · **Tab:** `SITL 35 Payload gimbal manager`
-- **Story:** `GIMBAL_MANAGER_SET_PITCHYAW` via delivery=send (no ack by design); proves
-  the wire path on AP-31 even though this stack emits no manager telemetry.
+- **File:** `examples/sitl/18-payload-gimbal-manager.json` · **Tab:** `SITL 18 Payload gimbal manager`
+- **Story:** `GIMBAL_MANAGER_SET_PITCHYAW` via delivery=send (no ack by design); proves the
+  wire path on AP-31 even though this stack emits no manager telemetry.
 - **Nodes:** config triplet (sysid 31), `payload` gimbal aim manager(send), `inject`, `debug`.
+
+### sitl/19 — TCP connection (template; SKIP in default lab)
+
+- **File:** `examples/sitl/19-tcp-connection.json` · **Tab:** `SITL 19 TCP connection`
+- **Story:** Structural TCP client example (`127.0.0.1:5760`). Default Compose lab is
+  UDP-only, so the harness **SKIPs** this unless TCP is explicitly exposed.
+- **Nodes:** config triplet (`mode: "tcp"`), `in` (HEARTBEAT), optional `build` NVF, `debug`.
+
+### 20–27 — ArduPilot flight (`ap-1` / `ap-12` / `ap-2`)
+
+### sitl/20 — Completion: IN_PROGRESS → ACCEPTED takeoff
+
+- **File:** `examples/sitl/20-completion-takeoff.json` · **Tab:** `SITL 20 Completion takeoff`
+- **Story:** GUIDED → arm → takeoff with `delivery: "complete"`; wait through
+  `IN_PROGRESS` for terminal `ACCEPTED` once at altitude.
+- **Nodes:** config triplet (AP sysid 1), `command` chain, `inject`, `debug`.
+- **Config/launch:** bind `14550`→`14551`; `completionTimeout ≥ 30000`. `restart: ap-1`.
+
+### sitl/21 — Completion timeout
+
+- **File:** `examples/sitl/21-completion-timeout.json` · **Tab:** `SITL 21 Completion timeout`
+- **Story:** 80 m takeoff with a short `completionTimeout` so the ACK arrives but altitude
+  is never reached; status names the timeout, output 0 stays silent.
+- **Nodes:** config triplet, `command` GUIDED→arm→takeoff(`complete`), `inject`, `debug`.
+- **Config/launch:** `restart: ap-1`.
+
+### sitl/22 — Command + mission basics on two instances
+
+- **File:** `examples/sitl/22-command-mission-basics.json` · **Tab:** `SITL 22 Command & mission basics`
+- **Story:** Preset + advanced commands on sysid 1 and a mission upload/download on sysid 2,
+  two ArduPilot instances on one connection — target-by-sysid routing on a shared link.
+- **Nodes:** config triplet, `command`, `mission` upload/download to sysid 2, `inject`,
+  `debug`.
+- **Config/launch:** AP sysids 1+2; `restart: ap-12`.
+
+### sitl/23 — AP INT carrier goto
+
+- **File:** `examples/sitl/23-ap-int-carrier-goto.json` · **Tab:** `SITL 23 AP INT carrier goto`
+- **Story:** Live `COMMAND_INT` / `DO_REPOSITION` goto on ArduCopter sysid 1 (decimal
+  degrees → degE7 on the wire).
+- **Nodes:** config triplet, `command` arm/takeoff/reposition, `inject`, `debug`.
+- **Config/launch:** `restart: ap-1`.
+
+### sitl/24 — Move stream + stop
+
+- **File:** `examples/sitl/24-move-stream-stop.json` · **Tab:** `SITL 24 Move stream + stop`
+- **Story:** Move velocity stream then stop — freshness/TTL and the zero-velocity halt
+  contract (§14 / #115).
+- **Nodes:** config triplet, `command` prep, `move` (`stream`), stop inject, `debug`.
+- **Config/launch:** `restart: ap-1`.
+
+### sitl/25 — Profile target inherit
+
+- **File:** `examples/sitl/25-profile-target-inherit.json` · **Tab:** `SITL 25 Profile target inherit`
+- **Story:** Vehicle profile `targetSystem` is 2; the command leaves target blank so the
+  wire address inherits from the profile default.
+- **Nodes:** config triplet (profile sysid 2), `command` arm, `inject`, `debug`.
+- **Config/launch:** AP sysid 2; `restart: ap-2`.
+
+### sitl/26 — Peer table in flight
+
+- **File:** `examples/sitl/26-peer-table-inflight.json` · **Tab:** `SITL 26 Peer table in flight`
+- **Story:** Fly AP sysid 1, then snapshot the Connection peer table (§8) — armed, position,
+  GPS, battery, home. Hard field asserts live in `sitl/measure-peer-table.js`.
+- **Nodes:** config triplet, `command` chain, `move` velocity stream, `state` snapshot,
+  `inject`, `debug`.
+- **Config/launch:** `restart: ap-1`.
+
+### sitl/27 — Move reposition carrier (AP)
+
+- **File:** `examples/sitl/27-move-reposition-carrier.json` · **Tab:** `SITL 27 Move reposition carrier`
+- **Story:** Move's `carrier: reposition` against ArduCopter sysid 1 — same goto SITL 23
+  flies through Command, routed through `mavlink-move` instead (#239).
+- **Nodes:** config triplet, `command` prep, `move` (`carrier: reposition`), `inject`,
+  `debug`.
+- **Config/launch:** `restart: ap-1`.
+
+### 28–30 — PX4 flight (`px4-1`)
+
+### sitl/28 — TEMPORARILY_REJECTED → backoff and retry
+
+- **File:** `examples/sitl/28-temporarily-rejected.json` · **Tab:** `SITL 28 Temporarily rejected`
+- **Story:** PX4 `DO_SET_MODE` with the wrong HEARTBEAT-packed custom_mode draws stable
+  `TEMPORARILY_REJECTED (1)`; AckWaiter backs off until `maxRetries` exhausts (§14).
+- **Nodes:** config triplet (PX4 sysid 11), `command` set_mode(`confirm`), `inject`,
+  `debug`.
+- **Config/launch:** bind `14560`→`14561`; `restart: px4-1`.
+
+### sitl/29 — INT carrier goto (PX4)
+
+- **File:** `examples/sitl/29-int-carrier-goto.json` · **Tab:** `SITL 29 INT carrier goto`
+- **Story:** Arm → takeoff (LONG) → `DO_REPOSITION` on the INT carrier against PX4 sysid 11;
+  decimal degrees become degE7 on the wire.
+- **Nodes:** config triplet (PX4), `command` arm/takeoff/reposition, `inject`, `debug`.
+- **Config/launch:** `restart: px4-1`.
+
+### sitl/30 — PX4 Move reposition
+
+- **File:** `examples/sitl/30-px4-move-reposition.json` · **Tab:** `SITL 30 PX4 Move reposition`
+- **Story:** PX4 twin of SITL 27 — `DO_REPOSITION` via `mavlink-move` with CHANGE_MODE on
+  (the shape SITL 29 measured accepted through Command). Records ACK either way; yaw 90 →
+  EAST (§14 / #239).
+- **Nodes:** config triplet (PX4), `command` arm/takeoff, `move` reposition, `inject`,
+  `debug`.
+- **Config/launch:** `restart: px4-1`.
+
+### 31–35 — AP fleet (`ap-fleet`)
+
+### sitl/31 — Five-vehicle fan-out pacing
+
+- **File:** `examples/sitl/31-fanout-sequential-five.json` · **Tab:** `SITL 31 Fan-out ×5 pacing`
+- **Story:** Sequential arm across ArduPilot sysids 1–5 with 200 ms pacing, dry-run first.
+- **Nodes:** config triplet, `command` (Build, Arm) → 2× `fanout`, `inject`, `debug`.
+- **Config/launch:** five ArduCopters; `restart: ap-fleet`.
+
+### sitl/32 — Fan-out member expires mid-fan-out
+
+- **File:** `examples/sitl/32-fanout-member-expires.json` · **Tab:** `SITL 32 Fan-out member expires`
+- **Story:** Sequential fan-out across five, then kill one SITL instance partway; aggregate
+  reports the dropped member as failed (§10).
+- **Nodes:** config triplet, `command` → `fanout` (`sequential` `confirm`), `state` feed,
+  `inject`, `debug`.
+- **Config/launch:** five ArduCopters; `restart: ap-fleet`.
+
+### sitl/33 — Broadcast vs sequential arm
+
+- **File:** `examples/sitl/33-broadcast-vs-sequential.json` · **Tab:** `SITL 33 Broadcast vs sequential`
+- **Story:** Arm the five-ArduPilot group two ways: sequential (paced acks) versus
+  `target_system=0` broadcast confirmed via peer-table armed state (§10).
+- **Nodes:** config triplet, 2× `fanout` paths, `state` snapshot, `inject`, `debug`.
+- **Config/launch:** `restart: ap-fleet`.
+
+### sitl/34 — Formation basics
+
+- **File:** `examples/sitl/34-formation-basics.json` · **Tab:** `SITL 34 Formation basics`
+- **Story:** Fan-out formation offsets / basic multi-vehicle formation exercise on the AP
+  five.
+- **Nodes:** config triplet, `move`/`fanout`, `inject`, `debug`.
+- **Config/launch:** `restart: ap-fleet`.
+
+### sitl/35 — Lucy in the Sky
+
+- **File:** `examples/sitl/35-lucy-in-the-sky.json` · **Tab:** `SITL 35 Lucy in the Sky`
+- **Story:** Full formation choreography demo on the AP fleet (see §14 Lucy notes).
+- **Nodes:** config triplet, formation chain, `inject`, `debug`.
+- **Config/launch:** `restart: ap-fleet`.
+
+### 36–38 — Full fleet (`fleet`)
+
+### sitl/36 — Mode tables per stack
+
+- **File:** `examples/sitl/36-mode-tables.json` · **Tab:** `SITL 36 Mode tables`
+- **Story:** Set flight modes on both stacks from the profile mode table — ArduCopter
+  `GUIDED=4` versus PX4's encoded main/sub-mode bitfield. Never cross-use mode numbers.
+- **Nodes:** 1 identity, 2 vehicles, 2 connections, per-stack `command` `set_mode`, `state`
+  feed, `inject`, `debug`.
+- **Config/launch:** sysid 1 + sysid 11; `restart: fleet`.
+
+### sitl/37 — Dual-stack ten vehicles
+
+- **File:** `examples/sitl/37-dual-stack-ten.json` · **Tab:** `SITL 37 Dual-stack ×10`
+- **Story:** Both connections live — five ArduPilot (1–5) + five PX4 (11–15) — State feed
+  of all ten peers and per-stack broadcast arm.
+- **Nodes:** 1 identity, 2 vehicles, 2 connections, 2× `fanout` (`broadcast`), `state` feed,
+  `inject`, `debug`.
+- **Config/launch:** Docker lab; `restart: fleet`.
+
+### sitl/38 — Signing
+
+- **File:** `examples/sitl/38-signing.json` · **Tab:** `SITL 38 Signing`
+- **Story:** Sign-outbound + require-signed inbound with a passphrase credential, plus a
+  listen-only companion that is require-signed with sign-off. Bring-up / dry-run notes for
+  SITL signature verification (§7).
+- **Nodes:** identity (+ signing credential), 2× `connection`, `in`, `state`, `command`,
+  `debug`.
+- **Config/launch:** matching key on the SITL side; `restart: fleet`.
 
 ---
 
 ## 3. `examples/sitl/README.md` outline
 
-Short README to drop into the folder. Suggested sections:
+The folder README is shipped — keep it aligned with the table in §2 and
+[`examples/sitl/README.md`](sitl/README.md). Suggested sections:
 
-1. **What this folder is** — one paragraph: flows that require the live SITL rig because
-   they test firmware behaviour that cannot be faked with fixtures (completion timing, mode
-   tables, the PX4 param union, mission/fence/rally per stack, fan-out pacing, signing).
-   Top-level `examples/` demos work against any link; these need real firmware.
-2. **The rig (§13)** — five ArduPilot at sysids 1–5, five PX4 at sysids 11–15, on
-   **separate connections**, one Vehicle Profile per stack. Note the deliberate 1–5 / 11–15
-   gap: a mistyped sysid lands nowhere, not on the wrong stack.
-3. **Start the ArduPilot five** — the copy-paste loop:
-   ```bash
-   for i in 0 1 2 3 4; do \
-     sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \
-       --out=udp:127.0.0.1:14550 & \
-   done
-   ```
-   Bind the ArduPilot Connection to `127.0.0.1:14550` (receives `--out`), remote
-   `127.0.0.1:14551` (command destination).
-4. **Start the PX4 five** — best-effort with a caveat that PX4 multi-instance networking is
-   version-specific: e.g. `./Tools/simulation/sitl_multiple_run.sh 5` (or per-instance
-   `make px4_sitl` with `PX4_INSTANCE`), then set `MAV_SYS_ID` = 11–15 per instance. Note
-   PX4 emits its GCS MAVLink on a different port set than ArduPilot; point the PX4
-   Connection at the port your build uses (commonly `14550` broadcast or `14570`/`14580`)
-   and **verify against your PX4 version** — do not assume ArduPilot's ports.
-5. **One vs five** — most flows use one instance; fan-out/dual-stack flows use five per stack.
-   Each flow's tab comment names exactly which instances it needs.
-6. **Signing** — extra setup: a matching key on the SITL side; sitl/12 documents the
-   dry-run procedure. Off by default everywhere else.
-7. **What is *not* provisioned** — SITL itself is the operator's local rig; nothing here
-   launches it for you, and the fixture test suite (`node --test`) covers everything that
-   doesn't need firmware. Cross-connection fan-out is out of scope (§10).
-8. **Safety** — SITL only; several flows arm, fly, flip, terminate, or force-disarm. Never
-   point these at a real vehicle without understanding each step.
+1. **What this folder is** — flows that require the live SITL rig (completion timing, mode
+   tables, PX4 param union, mission/fence/rally, fan-out pacing, signing).
+2. **The rig (§13)** — five ArduPilot at sysids 1–5, five PX4 at 11–15, separate
+   connections; companions 20/21; payload 31.
+3. **Docker lab** — `cd sitl && docker compose --profile sitl up -d --build`.
+4. **Suite order / selective restart** — numbered 01–38 by `PROFILE.restart` phase.
+5. **Signing** — sitl/38 documents the dry-run procedure. Off by default elsewhere.
+6. **Safety** — SITL only; never point these at a real vehicle without understanding each
+   step.

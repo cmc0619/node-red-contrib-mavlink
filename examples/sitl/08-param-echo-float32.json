@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl21-tab",
     "name": "Float32 param echo on ArduPilot and PX4",
-    "info": "ArduPilot path sets LOIT_SPEED_MS=10 as MAV_PARAM_TYPE_REAL32, echo-confirms, then reads it back (Copter 4.7.0 SITL has no WPNAV_SPEED).\n\nPX4 path sets MPC_XY_VEL_MAX=12 as MAV_PARAM_TYPE_REAL32, echo-confirms, then reads it back.\n\nConnections mirror SITL 04: AP bind 0.0.0.0:14550 -> 127.0.0.1:14551 sysid 1; PX4 bind 0.0.0.0:14560 -> 127.0.0.1:14561 sysid 11.",
+    "info": "ArduPilot path sets LOIT_SPEED_MS=10 as MAV_PARAM_TYPE_REAL32, echo-confirms, then reads it back (Copter 4.7.0 SITL has no WPNAV_SPEED).\n\nPX4 path sets MPC_XY_VEL_MAX=12 as MAV_PARAM_TYPE_REAL32, echo-confirms, then reads it back.\n\nConnections: AP bind 0.0.0.0:14550 -> 127.0.0.1:14551 sysid 1; PX4 bind 0.0.0.0:14560 -> 127.0.0.1:14561 sysid 11.",
     "x": 270,
     "y": 40,
     "wires": []

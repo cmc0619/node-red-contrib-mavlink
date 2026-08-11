@@ -177,7 +177,7 @@ test('real specialized PASS reasons never collide with the generic exclusion', (
   assert.equal(isSpecializedPass(verdict), true, 'conjunctive terminal PASS early-exits');
 });
 
-test('real 17/19 branch: the arm ack alone no longer classifies PASS (#267)', () => {
+test('real 23/29 branch: the arm ack alone no longer classifies PASS (#267)', () => {
   // The old branch keyed on results.includes('accepted') — flow-wide — plus a
   // log string match on the debug node's *name*, so a denied or unsettled goto
   // classified PASS off the arm. It now reads the goto's own record by tag.
@@ -216,7 +216,7 @@ test('real 17/19 branch: the arm ack alone no longer classifies PASS (#267)', ()
   assert.equal(isSpecializedPass(ok), true, 'goto-accepted PASS stays early-exit eligible');
 });
 
-test('37/38 read mavlink-move\'s status vocabulary, not mavlink-command\'s', () => {
+test('27/30 read mavlink-move\'s status vocabulary, not mavlink-command\'s', () => {
   // The two node families do not agree on words. An accepted reposition is
   // published by completeResult as result 'succeeded' (detail 'accepted'); a
   // lost ack is 'timeout', not 'timed-out'; a terminal MAV_RESULT is 'failed'

@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl03-tab",
     "name": "TEMPORARILY_REJECTED retry (PX4 packed mode)",
-    "info": "ArduPilot cold-arm returns MAV_RESULT_FAILED (4) with STATUSTEXT, not TEMPORARILY_REJECTED (1) \u2014 so an AP arm race cannot exercise AckWaiter retries (DESIGN.md \u00a714).\n\nThis example uses the measured PX4 path from \u00a714: DO_SET_MODE with param2=196608 (POSCTL packed as HEARTBEAT reports it) is TEMPORARILY_REJECTED on every attempt. delivery=confirm + maxRetries=3 backs off and retries; the status output should show result temporarily_rejected with retries >= 1 (exhausted).\n\nCorrect POSCTL encoding is param2=3 (example 04). This flow intentionally sends the wrong packing so (1) is stable and the retry loop is observable.\n\nConnection: bind 0.0.0.0:14560 \u2192 remote 127.0.0.1:14561, sysid 11.",
+    "info": "ArduPilot cold-arm returns MAV_RESULT_FAILED (4) with STATUSTEXT, not TEMPORARILY_REJECTED (1) \u2014 so an AP arm race cannot exercise AckWaiter retries (DESIGN.md \u00a714).\n\nThis example uses the measured PX4 path from \u00a714: DO_SET_MODE with param2=196608 (POSCTL packed as HEARTBEAT reports it) is TEMPORARILY_REJECTED on every attempt. delivery=confirm + maxRetries=3 backs off and retries; the status output should show result temporarily_rejected with retries >= 1 (exhausted).\n\nCorrect POSCTL encoding is param2=3 (example 36). This flow intentionally sends the wrong packing so (1) is stable and the retry loop is observable.\n\nConnection: bind 0.0.0.0:14560 \u2192 remote 127.0.0.1:14561, sysid 11.",
     "x": 300,
     "y": 40,
     "wires": []

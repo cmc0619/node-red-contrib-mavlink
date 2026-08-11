@@ -43,8 +43,8 @@ but works in restricted VMs).
 | PX4 payload | 32 | reserved | SIH has no useful gimbal/camera |
 
 Existing GCS examples expect AP on `14550/14551` and PX4 on `14560/14561`. Companion
-lab flows are `examples/sitl/15-companion-ap.json` and `16-companion-px4.json`.
-Payload flows are `examples/sitl/33–35` against `ap-payload-31` (`--gimbal` +
+lab flows are `examples/sitl/05-companion-ap.json` and `06-companion-px4.json`.
+Payload flows are `examples/sitl/16–18` against `ap-payload-31` (`--gimbal` +
 `params/ap-payload-gimbal.parm`).
 
 ### Why examples still list two ports
@@ -78,10 +78,10 @@ Node-RED on the host. Flight logs mount under `sitl/logs/<service>/`.
 
 | Import | Needs |
 |--------|--------|
-| Any AP example / most `examples/sitl/01–14` | AP fleet (or single) on `14550/14551` |
-| `examples/sitl/10-dual-stack-ten.json` | Full GCS fleets 1–5 and 11–15 |
-| `examples/sitl/15-companion-ap.json` | Companion AP sysid 20 on `14540/14541` |
-| `examples/sitl/16-companion-px4.json` | Companion PX4 sysid 21 on `14542/14543` |
+| Most `examples/sitl/01–27` AP paths | AP fleet (or single) on `14550/14551` |
+| `examples/sitl/37-dual-stack-ten.json` | Full GCS fleets 1–5 and 11–15 |
+| `examples/sitl/05-companion-ap.json` | Companion AP sysid 20 on `14540/14541` |
+| `examples/sitl/06-companion-px4.json` | Companion PX4 sysid 21 on `14542/14543` |
 
 GCS flows use a **GCS** Local Identity. Companion flows use **companion** role, sharing the
 vehicle sysid with component **191**.
