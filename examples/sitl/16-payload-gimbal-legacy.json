@@ -1,0 +1,419 @@
+[
+  {
+    "id": "sitl33-tab",
+    "type": "tab",
+    "label": "SITL 16 Payload gimbal legacy",
+    "disabled": false,
+    "info": "Legacy gimbal aim / set-mode / ROI on Copter-4.7.0 sysid 31 (--gimbal + servo mount). Bind 0.0.0.0:14570 \u2192 127.0.0.1:14571.",
+    "env": []
+  },
+  {
+    "id": "sitl33-comment",
+    "type": "comment",
+    "z": "sitl33-tab",
+    "name": "Legacy gimbal lab (sysid 31 / 14570)",
+    "info": "Dedicated Copter-4.7.0 SITL sysid 31 with --gimbal + servo mount (MNT1_TYPE=1) and CAM1_TYPE=1.\nConnection: bind 0.0.0.0:14570 \u2192 remote 127.0.0.1:14571.\n\nMeasured firmware behaviour (confirm delivery, COMMAND_LONG):\n- gimbal aim (DO_MOUNT_CONTROL) pitch=-20 yaw=10 \u2192 COMMAND_ACK result 0\n- gimbal set-mode mode=2 (MAVLINK_TARGETING) \u2192 COMMAND_ACK result 0\n- gimbal roi-set lat=-35.363262 lon=149.165237 alt=584 \u2192 COMMAND_ACK result 0\n- gimbal roi-clear \u2192 COMMAND_ACK result 0\n\nHarness fires all four injects; verdict debug names: aim status, mode status, roi set status, roi clear status.",
+    "x": 280,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl33-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl33-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 31",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 31,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl33-connection",
+    "type": "mavlink-connection",
+    "name": "UDP payload AP-31",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14570,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14571,
+    "vehicle": "sitl33-vehicle",
+    "localIdentity": "sitl33-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl33-inject-aim",
+    "type": "inject",
+    "z": "sitl33-tab",
+    "name": "Gimbal aim legacy confirm",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 190,
+    "y": 140,
+    "wires": [
+      [
+        "sitl33-aim"
+      ]
+    ]
+  },
+  {
+    "id": "sitl33-aim",
+    "type": "mavlink-payload",
+    "z": "sitl33-tab",
+    "name": "Aim legacy pitch=-20 yaw=10",
+    "connection": "sitl33-connection",
+    "delivery": "confirm",
+    "carrier": "long",
+    "timeout": 10000,
+    "maxRetries": 3,
+    "topic": "gimbal",
+    "verb": "aim",
+    "path": "legacy",
+    "targetSystem": 31,
+    "targetComponent": 1,
+    "values": {
+      "pitch": -20,
+      "roll": 0,
+      "yaw": 10
+    },
+    "x": 480,
+    "y": 140,
+    "wires": [
+      [
+        "sitl33-aim-continue"
+      ],
+      [
+        "sitl33-aim-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl33-inject-mode",
+    "type": "inject",
+    "z": "sitl33-tab",
+    "name": "Gimbal set-mode confirm",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 190,
+    "y": 240,
+    "wires": [
+      [
+        "sitl33-mode"
+      ]
+    ]
+  },
+  {
+    "id": "sitl33-mode",
+    "type": "mavlink-payload",
+    "z": "sitl33-tab",
+    "name": "Set-mode MAVLINK_TARGETING",
+    "connection": "sitl33-connection",
+    "delivery": "confirm",
+    "carrier": "long",
+    "timeout": 10000,
+    "maxRetries": 3,
+    "topic": "gimbal",
+    "verb": "set-mode",
+    "path": "legacy",
+    "targetSystem": 31,
+    "targetComponent": 1,
+    "values": {
+      "mode": 2,
+      "modeValue": 2,
+      "stabilizeRoll": 0,
+      "stabilizePitch": 0,
+      "stabilizeYaw": 0
+    },
+    "x": 490,
+    "y": 240,
+    "wires": [
+      [
+        "sitl33-mode-continue"
+      ],
+      [
+        "sitl33-mode-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl33-inject-roi-set",
+    "type": "inject",
+    "z": "sitl33-tab",
+    "name": "Gimbal ROI set confirm",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 180,
+    "y": 340,
+    "wires": [
+      [
+        "sitl33-roi-set"
+      ]
+    ]
+  },
+  {
+    "id": "sitl33-roi-set",
+    "type": "mavlink-payload",
+    "z": "sitl33-tab",
+    "name": "ROI set home lat/lon/alt",
+    "connection": "sitl33-connection",
+    "delivery": "confirm",
+    "carrier": "long",
+    "timeout": 10000,
+    "maxRetries": 3,
+    "topic": "gimbal",
+    "verb": "roi-set",
+    "path": "legacy",
+    "targetSystem": 31,
+    "targetComponent": 1,
+    "values": {
+      "lat": -35.363262,
+      "lon": 149.165237,
+      "alt": 584
+    },
+    "x": 480,
+    "y": 340,
+    "wires": [
+      [
+        "sitl33-roi-set-continue"
+      ],
+      [
+        "sitl33-roi-set-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl33-inject-roi-clear",
+    "type": "inject",
+    "z": "sitl33-tab",
+    "name": "Gimbal ROI clear confirm",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 190,
+    "y": 440,
+    "wires": [
+      [
+        "sitl33-roi-clear"
+      ]
+    ]
+  },
+  {
+    "id": "sitl33-roi-clear",
+    "type": "mavlink-payload",
+    "z": "sitl33-tab",
+    "name": "ROI clear",
+    "connection": "sitl33-connection",
+    "delivery": "confirm",
+    "carrier": "long",
+    "timeout": 10000,
+    "maxRetries": 3,
+    "topic": "gimbal",
+    "verb": "roi-clear",
+    "path": "legacy",
+    "targetSystem": 31,
+    "targetComponent": 1,
+    "values": {},
+    "x": 430,
+    "y": 440,
+    "wires": [
+      [
+        "sitl33-roi-clear-continue"
+      ],
+      [
+        "sitl33-roi-clear-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl33-aim-continue",
+    "type": "debug",
+    "z": "sitl33-tab",
+    "name": "aim continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 710,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "sitl33-aim-status",
+    "type": "debug",
+    "z": "sitl33-tab",
+    "name": "aim status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 700,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "sitl33-mode-continue",
+    "type": "debug",
+    "z": "sitl33-tab",
+    "name": "mode continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl33-mode-status",
+    "type": "debug",
+    "z": "sitl33-tab",
+    "name": "mode status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 710,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "sitl33-roi-set-continue",
+    "type": "debug",
+    "z": "sitl33-tab",
+    "name": "roi set continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "sitl33-roi-set-status",
+    "type": "debug",
+    "z": "sitl33-tab",
+    "name": "roi set status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 710,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "sitl33-roi-clear-continue",
+    "type": "debug",
+    "z": "sitl33-tab",
+    "name": "roi clear continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 730,
+    "y": 420,
+    "wires": []
+  },
+  {
+    "id": "sitl33-roi-clear-status",
+    "type": "debug",
+    "z": "sitl33-tab",
+    "name": "roi clear status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 460,
+    "wires": []
+  }
+]

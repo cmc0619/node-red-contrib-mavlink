@@ -1,0 +1,150 @@
+[
+  {
+    "id": "sitl23-tab",
+    "type": "tab",
+    "label": "SITL 25 Profile target inherit",
+    "disabled": false,
+    "info": "Vehicle profile targetSystem is 2. The command node leaves targetSystem and targetComponent blank, proving the wire-tier address inherits from the profile default.",
+    "env": []
+  },
+  {
+    "id": "sitl23-comment",
+    "type": "comment",
+    "z": "sitl23-tab",
+    "name": "Blank command target inherits profile sysid 2",
+    "info": "The Vehicle Profile default target is sysid 2, compid 1. The Arm command intentionally saves targetSystem and targetComponent as empty strings, the same inherited-address shape used throughout the examples.\n\nRun an ArduPilot SITL configured as sysid 2 on the default AP port pair, then fire the inject. The status output should show the resolved target as sysid 2 / compid 1.",
+    "x": 280,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl23-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl23-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 2",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 2,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl23-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot sysid 2",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "vehicle": "sitl23-vehicle",
+    "localIdentity": "sitl23-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl23-inject-arm",
+    "type": "inject",
+    "z": "sitl23-tab",
+    "name": "Arm inherited sysid 2",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 160,
+    "wires": [
+      [
+        "sitl23-arm"
+      ]
+    ]
+  },
+  {
+    "id": "sitl23-arm",
+    "type": "mavlink-command",
+    "z": "sitl23-tab",
+    "name": "Arm (blank target fields)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl23-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "carrier": "long",
+    "frame": "",
+    "x": 430,
+    "y": 160,
+    "wires": [
+      [
+        "sitl23-arm-done"
+      ],
+      [
+        "sitl23-arm-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl23-arm-done",
+    "type": "debug",
+    "z": "sitl23-tab",
+    "name": "arm accepted",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 670,
+    "y": 130,
+    "wires": []
+  },
+  {
+    "id": "sitl23-arm-status",
+    "type": "debug",
+    "z": "sitl23-tab",
+    "name": "arm status target 2",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 700,
+    "y": 190,
+    "wires": []
+  }
+]

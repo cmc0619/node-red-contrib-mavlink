@@ -1,0 +1,222 @@
+[
+  {
+    "id": "sitl12-tab",
+    "type": "tab",
+    "label": "SITL 38 Signing",
+    "disabled": false,
+    "info": "MAVLink2 signing against the standalone companion ArduCopter (sysid 20). Harness injects passphrase hunter11 and SETUP_SIGNING before deploy \u2014 see tab comment.",
+    "env": []
+  },
+  {
+    "id": "sitl12-comment",
+    "type": "comment",
+    "z": "sitl12-tab",
+    "name": "MAVLink 2 signing (companion AP sysid 20)",
+    "info": "Connection: sign outbound + require signed inbound. Passphrase credential is hunter11 (joke lab secret \u2014 not for production).\n\nLab harness (sitl/run-example-suite.js):\n1. docker-restarts the fleet; proves companion AP-20 arm-ready; then SETUP_SIGNING with sha256(hunter11).\n2. Deploys this flow with Admin API credentials: { signingPassphrase: \"hunter11\" }.\n3. Injects arm; expects COMMAND_ACK accepted and mavlink-in msg.trusted === true on HEARTBEAT.\n\nPorts: bind 0.0.0.0:14540 \u2192 remote 127.0.0.1:14541 (companion AP, not the GCS fleet on 14550).\n\nArm-ready must precede SETUP_SIGNING \u2014 after the key is loaded, unsigned commands are rejected on non-COMM_0 links (SITL udpclient is not guaranteed to be COMM_0).\n\nSigning is off by default in all other examples.",
+    "x": 300,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl12-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl12-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Companion ArduCopter sysid 20",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 20,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl12-connection-signed",
+    "type": "mavlink-connection",
+    "name": "UDP signed (companion 20)",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14540,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14541,
+    "vehicle": "sitl12-vehicle",
+    "localIdentity": "sitl12-identity",
+    "additionalIdentities": [],
+    "signOutbound": true,
+    "requireSigned": true,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl12-in-hearbeat",
+    "type": "mavlink-in",
+    "z": "sitl12-tab",
+    "name": "HEARTBEAT (signed link)",
+    "connection": "sitl12-connection-signed",
+    "messages": [
+      "HEARTBEAT"
+    ],
+    "sysid": "",
+    "compid": "",
+    "changedOnly": false,
+    "rateLimit": 0,
+    "x": 600,
+    "y": 140,
+    "wires": [
+      [
+        "sitl12-in-debug"
+      ]
+    ]
+  },
+  {
+    "id": "sitl12-state",
+    "type": "mavlink-state",
+    "z": "sitl12-tab",
+    "name": "Peer feed",
+    "connection": "sitl12-connection-signed",
+    "mode": "feed",
+    "events": "peer-new,profile-mismatch",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 600,
+    "y": 320,
+    "wires": [
+      [
+        "sitl12-state-debug"
+      ]
+    ]
+  },
+  {
+    "id": "sitl12-inject-arm",
+    "type": "inject",
+    "z": "sitl12-tab",
+    "name": "Arm (signed send)",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 160,
+    "wires": [
+      [
+        "sitl12-arm"
+      ]
+    ]
+  },
+  {
+    "id": "sitl12-arm",
+    "type": "mavlink-command",
+    "z": "sitl12-tab",
+    "name": "Arm (confirm)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl12-connection-signed",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "x": 350,
+    "y": 160,
+    "wires": [
+      [
+        "sitl12-arm-done"
+      ],
+      [
+        "sitl12-arm-status"
+      ]
+    ],
+    "carrier": "long",
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl12-arm-done",
+    "type": "debug",
+    "z": "sitl12-tab",
+    "name": "arm continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "sitl12-arm-status",
+    "type": "debug",
+    "z": "sitl12-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 560,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "sitl12-in-debug",
+    "type": "debug",
+    "z": "sitl12-tab",
+    "name": "trusted flag",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "trusted",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 820,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "sitl12-state-debug",
+    "type": "debug",
+    "z": "sitl12-tab",
+    "name": "state events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 820,
+    "y": 320,
+    "wires": []
+  }
+]

@@ -1,0 +1,254 @@
+[
+  {
+    "id": "sitl24-tab",
+    "type": "tab",
+    "label": "SITL 10 Companion receive",
+    "disabled": false,
+    "info": "Node-RED as an onboard companion for ArduPilot sysid 20 on the companion UDP pair. Receives HEARTBEAT and STATUSTEXT from the vehicle and can send one NAMED_VALUE_FLOAT.",
+    "env": []
+  },
+  {
+    "id": "sitl24-comment",
+    "type": "comment",
+    "z": "sitl24-tab",
+    "name": "Companion receive from AP sysid 20",
+    "info": "Companion role: MAV_TYPE_ONBOARD_CONTROLLER. Shares the vehicle sysid 20 and uses compid 191. Connection binds 0.0.0.0:14540 and sends to 127.0.0.1:14541.\n\nThe receive proof is HEARTBEAT and STATUSTEXT filtered to sysid 20 / compid 1. The optional inject sends one NAMED_VALUE_FLOAT as the companion.",
+    "x": 250,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl24-identity",
+    "type": "mavlink-local-identity",
+    "name": "Companion identity",
+    "role": "companion",
+    "sourceSystemId": 20,
+    "sourceComponentId": 191,
+    "heartbeatType": "MAV_TYPE_ONBOARD_CONTROLLER",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl24-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter companion sysid 20",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 20,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl24-connection",
+    "type": "mavlink-connection",
+    "name": "UDP companion 20",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14540,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14541,
+    "vehicle": "sitl24-vehicle",
+    "localIdentity": "sitl24-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl24-inject-nvf",
+    "type": "inject",
+    "z": "sitl24-tab",
+    "name": "Send companion NVF",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 160,
+    "wires": [
+      [
+        "sitl24-build-nvf"
+      ]
+    ]
+  },
+  {
+    "id": "sitl24-build-nvf",
+    "type": "mavlink-build",
+    "z": "sitl24-tab",
+    "name": "Companion NVF (send)",
+    "vehicle": "sitl24-vehicle",
+    "connection": "sitl24-connection",
+    "messageName": "NAMED_VALUE_FLOAT",
+    "fields": "{\"time_boot_ms\":0,\"name\":\"companion\",\"value\":24}",
+    "tier": "send",
+    "band": "2",
+    "repeatMs": 1000,
+    "x": 390,
+    "y": 160,
+    "wires": [
+      [
+        "sitl24-debug-nvf"
+      ],
+      [
+        "sitl24-debug-nvf-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl24-in-hb",
+    "type": "mavlink-in",
+    "z": "sitl24-tab",
+    "name": "Vehicle HEARTBEAT",
+    "connection": "sitl24-connection",
+    "messages": [
+      "HEARTBEAT"
+    ],
+    "sysid": "20",
+    "compid": "1",
+    "changedOnly": false,
+    "rateLimit": 1,
+    "x": 390,
+    "y": 280,
+    "wires": [
+      [
+        "sitl24-debug-hb"
+      ]
+    ]
+  },
+  {
+    "id": "sitl24-in-statustext",
+    "type": "mavlink-in",
+    "z": "sitl24-tab",
+    "name": "Vehicle STATUSTEXT",
+    "connection": "sitl24-connection",
+    "messages": [
+      "STATUSTEXT"
+    ],
+    "sysid": "20",
+    "compid": "1",
+    "changedOnly": false,
+    "rateLimit": 0,
+    "x": 390,
+    "y": 360,
+    "wires": [
+      [
+        "sitl24-debug-statustext"
+      ]
+    ]
+  },
+  {
+    "id": "sitl24-state",
+    "type": "mavlink-state",
+    "z": "sitl24-tab",
+    "name": "Peer events",
+    "connection": "sitl24-connection",
+    "mode": "feed",
+    "events": "peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,multi-endpoint,profile-mismatch,statustext",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 390,
+    "y": 440,
+    "wires": [
+      [
+        "sitl24-debug-state"
+      ]
+    ]
+  },
+  {
+    "id": "sitl24-debug-nvf-status",
+    "type": "debug",
+    "z": "sitl24-tab",
+    "name": "nvf status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 390,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl24-debug-nvf",
+    "type": "debug",
+    "z": "sitl24-tab",
+    "name": "nvf sent",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 610,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "sitl24-debug-hb",
+    "type": "debug",
+    "z": "sitl24-tab",
+    "name": "vehicle heartbeat",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 640,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "sitl24-debug-statustext",
+    "type": "debug",
+    "z": "sitl24-tab",
+    "name": "vehicle statustext",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 650,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "sitl24-debug-state",
+    "type": "debug",
+    "z": "sitl24-tab",
+    "name": "state events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 620,
+    "y": 440,
+    "wires": []
+  }
+]

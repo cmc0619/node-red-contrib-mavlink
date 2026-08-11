@@ -1,0 +1,922 @@
+[
+  {
+    "id": "sitl27-tab",
+    "type": "tab",
+    "label": "SITL 35 Lucy in the Sky",
+    "disabled": false,
+    "info": "Lucy in the Sky: five ArduPilot copters take off, spread on a line, form a sphere, tumble the sphere around body +Y (pitch 0\u219245\u219290\u2192135\u2192180), then peel off one-by-one and land.",
+    "env": []
+  },
+  {
+    "id": "sitl27-comment",
+    "type": "comment",
+    "z": "sitl27-tab",
+    "name": "Lucy in the Sky \u2014 sphere tumble then peel",
+    "info": "Choreography on AP sysids 1\u20135:\n1. GUIDED \u2192 arm \u2192 takeoff 40 m\n2. Spread: line spacing 18 m (fixed Canberra-home anchor, alt 40)\n3. Form sphere radius 12 m\n4. Rotate as a group around Y: pitchDeg 0 \u2192 45 \u2192 90 \u2192 135 \u2192 180 (same sphere node family, pitch on each step)\n5. Peel: sequential NAV_LAND with 2 s pacing\n\nSphere is 3-D \u2014 followers sit above and below the anchor; keep the anchor high enough (40 m with radius 12 clears ~28 m AGL).\n\nHarness: ap-arm-ready-fleet. Long wait \u2014 settle delays between geometry steps.",
+    "x": 360,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl27-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl27-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduPilot fleet",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl27-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot 5\u00d7SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "vehicle": "sitl27-vehicle",
+    "localIdentity": "sitl27-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl27-inject",
+    "type": "inject",
+    "z": "sitl27-tab",
+    "name": "Lucy in the Sky",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-guided-build"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-guided-build",
+    "type": "mavlink-command",
+    "z": "sitl27-tab",
+    "name": "GUIDED \u00d75 (build)",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "carrier": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"1\":1,\"2\":4}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 180,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-guided"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "sitl27-guided",
+    "type": "mavlink-fanout",
+    "z": "sitl27-tab",
+    "name": "GUIDED \u00d75",
+    "connection": "sitl27-connection",
+    "selectionMode": "list",
+    "members": [
+      {
+        "sysid": 1
+      },
+      {
+        "sysid": 2
+      },
+      {
+        "sysid": 3
+      },
+      {
+        "sysid": 4
+      },
+      {
+        "sysid": 5
+      }
+    ],
+    "vehicleType": "",
+    "firmwareFilter": "",
+    "armedFilter": "",
+    "executionMode": "sequential",
+    "intervalMs": 200,
+    "dryRun": false,
+    "delivery": "confirm",
+    "timeoutMs": "10000",
+    "maxRetries": "3",
+    "x": 320,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-arm-build"
+      ],
+      [
+        "sitl27-st-guided"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-arm-build",
+    "type": "mavlink-command",
+    "z": "sitl27-tab",
+    "name": "Arm \u00d75 (build)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "carrier": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 380,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-arm"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "sitl27-arm",
+    "type": "mavlink-fanout",
+    "z": "sitl27-tab",
+    "name": "Arm \u00d75",
+    "connection": "sitl27-connection",
+    "selectionMode": "list",
+    "members": [
+      {
+        "sysid": 1
+      },
+      {
+        "sysid": 2
+      },
+      {
+        "sysid": 3
+      },
+      {
+        "sysid": 4
+      },
+      {
+        "sysid": 5
+      }
+    ],
+    "vehicleType": "",
+    "firmwareFilter": "",
+    "armedFilter": "",
+    "executionMode": "sequential",
+    "intervalMs": 200,
+    "dryRun": false,
+    "delivery": "confirm",
+    "timeoutMs": "10000",
+    "maxRetries": "3",
+    "x": 520,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-takeoff-build"
+      ],
+      [
+        "sitl27-st-arm"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-takeoff-build",
+    "type": "mavlink-command",
+    "z": "sitl27-tab",
+    "name": "Takeoff 40 m \u00d75 (build)",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "carrier": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"7\":40}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 600,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-takeoff"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "sitl27-takeoff",
+    "type": "mavlink-fanout",
+    "z": "sitl27-tab",
+    "name": "Takeoff 40 m \u00d75",
+    "connection": "sitl27-connection",
+    "selectionMode": "list",
+    "members": [
+      {
+        "sysid": 1
+      },
+      {
+        "sysid": 2
+      },
+      {
+        "sysid": 3
+      },
+      {
+        "sysid": 4
+      },
+      {
+        "sysid": 5
+      }
+    ],
+    "vehicleType": "",
+    "firmwareFilter": "",
+    "armedFilter": "",
+    "executionMode": "sequential",
+    "intervalMs": 200,
+    "dryRun": false,
+    "delivery": "confirm",
+    "timeoutMs": "10000",
+    "maxRetries": "3",
+    "x": 740,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-climb"
+      ],
+      [
+        "sitl27-st-takeoff"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-climb",
+    "type": "delay",
+    "z": "sitl27-tab",
+    "name": "climb settle",
+    "pauseType": "delay",
+    "timeout": "14",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 960,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-spread"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-spread",
+    "type": "mavlink-formation",
+    "z": "sitl27-tab",
+    "name": "Spread line 18 m",
+    "connection": "sitl27-connection",
+    "shape": "line",
+    "spacing": 18,
+    "sysids": "1,2,3,4,5",
+    "anchorMode": "fixed",
+    "leader": "",
+    "lat": -35.363262,
+    "lon": 149.165237,
+    "alt": 40,
+    "headingDeg": 0,
+    "pitchDeg": 0,
+    "carrier": "int",
+    "delivery": "confirm",
+    "intervalMs": 200,
+    "timeoutMs": 10000,
+    "x": 1180,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-d-spread"
+      ],
+      [
+        "sitl27-st-spread"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-d-spread",
+    "type": "delay",
+    "z": "sitl27-tab",
+    "name": "spread settle",
+    "pauseType": "delay",
+    "timeout": "12",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 1400,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-sphere0"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-sphere0",
+    "type": "mavlink-formation",
+    "z": "sitl27-tab",
+    "name": "Sphere pitch 0",
+    "connection": "sitl27-connection",
+    "shape": "sphere",
+    "spacing": 12,
+    "sysids": "1,2,3,4,5",
+    "anchorMode": "fixed",
+    "leader": "",
+    "lat": -35.363262,
+    "lon": 149.165237,
+    "alt": 40,
+    "headingDeg": 0,
+    "pitchDeg": 0,
+    "carrier": "int",
+    "delivery": "confirm",
+    "intervalMs": 200,
+    "timeoutMs": 10000,
+    "x": 1620,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-d-s0"
+      ],
+      [
+        "sitl27-st-s0"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-d-s0",
+    "type": "delay",
+    "z": "sitl27-tab",
+    "name": "sphere settle",
+    "pauseType": "delay",
+    "timeout": "12",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 1840,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-sphere45"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-sphere45",
+    "type": "mavlink-formation",
+    "z": "sitl27-tab",
+    "name": "Sphere pitch 45",
+    "connection": "sitl27-connection",
+    "shape": "sphere",
+    "spacing": 12,
+    "sysids": "1,2,3,4,5",
+    "anchorMode": "fixed",
+    "leader": "",
+    "lat": -35.363262,
+    "lon": 149.165237,
+    "alt": 40,
+    "headingDeg": 0,
+    "pitchDeg": 45,
+    "carrier": "int",
+    "delivery": "confirm",
+    "intervalMs": 200,
+    "timeoutMs": 10000,
+    "x": 2060,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-d-s45"
+      ],
+      [
+        "sitl27-st-s45"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-d-s45",
+    "type": "delay",
+    "z": "sitl27-tab",
+    "name": "pitch settle",
+    "pauseType": "delay",
+    "timeout": "10",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 2280,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-sphere90"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-sphere90",
+    "type": "mavlink-formation",
+    "z": "sitl27-tab",
+    "name": "Sphere pitch 90",
+    "connection": "sitl27-connection",
+    "shape": "sphere",
+    "spacing": 12,
+    "sysids": "1,2,3,4,5",
+    "anchorMode": "fixed",
+    "leader": "",
+    "lat": -35.363262,
+    "lon": 149.165237,
+    "alt": 40,
+    "headingDeg": 0,
+    "pitchDeg": 90,
+    "carrier": "int",
+    "delivery": "confirm",
+    "intervalMs": 200,
+    "timeoutMs": 10000,
+    "x": 2500,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-d-s90"
+      ],
+      [
+        "sitl27-st-s90"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-d-s90",
+    "type": "delay",
+    "z": "sitl27-tab",
+    "name": "pitch settle",
+    "pauseType": "delay",
+    "timeout": "10",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 2720,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-sphere135"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-sphere135",
+    "type": "mavlink-formation",
+    "z": "sitl27-tab",
+    "name": "Sphere pitch 135",
+    "connection": "sitl27-connection",
+    "shape": "sphere",
+    "spacing": 12,
+    "sysids": "1,2,3,4,5",
+    "anchorMode": "fixed",
+    "leader": "",
+    "lat": -35.363262,
+    "lon": 149.165237,
+    "alt": 40,
+    "headingDeg": 0,
+    "pitchDeg": 135,
+    "carrier": "int",
+    "delivery": "confirm",
+    "intervalMs": 200,
+    "timeoutMs": 10000,
+    "x": 2940,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-d-s135"
+      ],
+      [
+        "sitl27-st-s135"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-d-s135",
+    "type": "delay",
+    "z": "sitl27-tab",
+    "name": "pitch settle",
+    "pauseType": "delay",
+    "timeout": "10",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 3160,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-sphere180"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-sphere180",
+    "type": "mavlink-formation",
+    "z": "sitl27-tab",
+    "name": "Sphere pitch 180",
+    "connection": "sitl27-connection",
+    "shape": "sphere",
+    "spacing": 12,
+    "sysids": "1,2,3,4,5",
+    "anchorMode": "fixed",
+    "leader": "",
+    "lat": -35.363262,
+    "lon": 149.165237,
+    "alt": 40,
+    "headingDeg": 0,
+    "pitchDeg": 180,
+    "carrier": "int",
+    "delivery": "confirm",
+    "intervalMs": 200,
+    "timeoutMs": 10000,
+    "x": 3380,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-d-s180"
+      ],
+      [
+        "sitl27-st-s180"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-d-s180",
+    "type": "delay",
+    "z": "sitl27-tab",
+    "name": "before peel",
+    "pauseType": "delay",
+    "timeout": "8",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 3600,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-land-build"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-land-build",
+    "type": "mavlink-command",
+    "z": "sitl27-tab",
+    "name": "Peel land \u00d75 (build)",
+    "mode": "preset",
+    "preset": "land",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "carrier": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 3680,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-land"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "sitl27-land",
+    "type": "mavlink-fanout",
+    "z": "sitl27-tab",
+    "name": "Peel land \u00d75",
+    "connection": "sitl27-connection",
+    "selectionMode": "list",
+    "members": [
+      {
+        "sysid": 1
+      },
+      {
+        "sysid": 2
+      },
+      {
+        "sysid": 3
+      },
+      {
+        "sysid": 4
+      },
+      {
+        "sysid": 5
+      }
+    ],
+    "vehicleType": "",
+    "firmwareFilter": "",
+    "armedFilter": "",
+    "executionMode": "sequential",
+    "intervalMs": 2000,
+    "dryRun": false,
+    "delivery": "confirm",
+    "timeoutMs": "10000",
+    "maxRetries": "3",
+    "x": 3820,
+    "y": 200,
+    "wires": [
+      [
+        "sitl27-done"
+      ],
+      [
+        "sitl27-st-land"
+      ]
+    ]
+  },
+  {
+    "id": "sitl27-done",
+    "type": "debug",
+    "z": "sitl27-tab",
+    "name": "Lucy done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 4040,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "sitl27-st-guided",
+    "type": "debug",
+    "z": "sitl27-tab",
+    "name": "guided status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 320,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "sitl27-st-arm",
+    "type": "debug",
+    "z": "sitl27-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 540,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "sitl27-st-takeoff",
+    "type": "debug",
+    "z": "sitl27-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 760,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "sitl27-st-spread",
+    "type": "debug",
+    "z": "sitl27-tab",
+    "name": "spread status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 980,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "sitl27-st-s0",
+    "type": "debug",
+    "z": "sitl27-tab",
+    "name": "s0 status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1200,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "sitl27-st-s45",
+    "type": "debug",
+    "z": "sitl27-tab",
+    "name": "s45 status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1420,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "sitl27-st-s90",
+    "type": "debug",
+    "z": "sitl27-tab",
+    "name": "s90 status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1640,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "sitl27-st-s135",
+    "type": "debug",
+    "z": "sitl27-tab",
+    "name": "s135 status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1860,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "sitl27-st-s180",
+    "type": "debug",
+    "z": "sitl27-tab",
+    "name": "s180 status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 2080,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "sitl27-st-land",
+    "type": "debug",
+    "z": "sitl27-tab",
+    "name": "land status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 2300,
+    "y": 320,
+    "wires": []
+  }
+]

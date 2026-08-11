@@ -1,0 +1,152 @@
+[
+  {
+    "id": "sitl35-tab",
+    "type": "tab",
+    "label": "SITL 18 Payload gimbal manager",
+    "disabled": false,
+    "info": "Gimbal manager aim (GIMBAL_MANAGER_SET_PITCHYAW) on Copter-4.7.0 sysid 31. Delivery send only \u2014 no ACK; status detail sent (unconfirmed).",
+    "env": []
+  },
+  {
+    "id": "sitl35-comment",
+    "type": "comment",
+    "z": "sitl35-tab",
+    "name": "Gimbal manager lab (sysid 31 / 14570)",
+    "info": "Dedicated Copter-4.7.0 SITL sysid 31 with --gimbal + servo mount.\nConnection: bind 0.0.0.0:14570 \u2192 remote 127.0.0.1:14571.\n\nMeasured firmware behaviour:\n- gimbal aim path=manager (GIMBAL_MANAGER_SET_PITCHYAW) has no MAVLink acknowledgement \u2014 delivery must be send (not confirm).\n- Status output reports result succeeded with detail \"sent (unconfirmed)\".\n\nHarness fires the inject; verdict debug name: manager status.",
+    "x": 280,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl35-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl35-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 31",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 31,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl35-connection",
+    "type": "mavlink-connection",
+    "name": "UDP payload AP-31",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14570,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14571,
+    "vehicle": "sitl35-vehicle",
+    "localIdentity": "sitl35-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl35-inject-mgr",
+    "type": "inject",
+    "z": "sitl35-tab",
+    "name": "Gimbal aim manager send",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 180,
+    "y": 160,
+    "wires": [
+      [
+        "sitl35-mgr"
+      ]
+    ]
+  },
+  {
+    "id": "sitl35-mgr",
+    "type": "mavlink-payload",
+    "z": "sitl35-tab",
+    "name": "Aim manager pitch=-20 yaw=10",
+    "connection": "sitl35-connection",
+    "delivery": "send",
+    "carrier": "long",
+    "timeout": 10000,
+    "maxRetries": 3,
+    "topic": "gimbal",
+    "verb": "aim",
+    "path": "manager",
+    "targetSystem": 31,
+    "targetComponent": 1,
+    "values": {
+      "flags": 0,
+      "gimbalDeviceId": 0,
+      "pitch": -20,
+      "yaw": 10
+    },
+    "x": 470,
+    "y": 160,
+    "wires": [
+      [
+        "sitl35-mgr-continue"
+      ],
+      [
+        "sitl35-mgr-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl35-mgr-continue",
+    "type": "debug",
+    "z": "sitl35-tab",
+    "name": "manager continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "sitl35-mgr-status",
+    "type": "debug",
+    "z": "sitl35-tab",
+    "name": "manager status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 710,
+    "y": 180,
+    "wires": []
+  }
+]

@@ -1714,8 +1714,8 @@ test('SITL 37/38 verdicts read the record mavlink-move actually emits (accepted)
   const summary = asRepositionSummary(out[1]);
   // Both examples must call a real acceptance a pass. 37 asserting AP accepts
   // is the case that was dead on arrival.
-  assert.equal(verdictFrom(PROFILE['37-move-reposition-carrier'], summary, '').status, 'PASS');
-  assert.equal(verdictFrom(PROFILE['38-px4-move-reposition'], summary, '').status, 'PASS');
+  assert.equal(verdictFrom(PROFILE['27-move-reposition-carrier'], summary, '').status, 'PASS');
+  assert.equal(verdictFrom(PROFILE['30-px4-move-reposition'], summary, '').status, 'PASS');
 });
 
 test('SITL 37/38 verdicts read the record mavlink-move actually emits (no ack)', async () => {
@@ -1737,7 +1737,7 @@ test('SITL 37/38 verdicts read the record mavlink-move actually emits (no ack)',
   const summary = asRepositionSummary(out[1]);
   // Silence measures nothing, on the asserting example and the measuring one
   // alike. This is the case that classified PASS on 38.
-  for (const key of ['37-move-reposition-carrier', '38-px4-move-reposition']) {
+  for (const key of ['27-move-reposition-carrier', '30-px4-move-reposition']) {
     const verdict = verdictFrom(PROFILE[key], summary, '');
     assert.equal(verdict.status, 'FAIL', `${key} must not pass without an ack`);
     assert.match(verdict.reason, /no ACK|timeout/i);

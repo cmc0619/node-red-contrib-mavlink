@@ -1,0 +1,329 @@
+[
+  {
+    "id": "sitl34-tab",
+    "type": "tab",
+    "label": "SITL 17 Payload camera",
+    "disabled": false,
+    "info": "Camera photo / start-video / stop-video on Copter-4.7.0 sysid 31 (CAM1_TYPE=1). Bind 0.0.0.0:14570 \u2192 127.0.0.1:14571. Photo ACCEPTED; video DENIED.",
+    "env": []
+  },
+  {
+    "id": "sitl34-comment",
+    "type": "comment",
+    "z": "sitl34-tab",
+    "name": "Camera lab (sysid 31 / 14570)",
+    "info": "Dedicated Copter-4.7.0 SITL sysid 31 with --gimbal + servo mount and CAM1_TYPE=1.\nConnection: bind 0.0.0.0:14570 \u2192 remote 127.0.0.1:14571.\n\nMeasured firmware behaviour (confirm delivery, COMMAND_LONG):\n- camera photo (IMAGE_START_CAPTURE) \u2192 COMMAND_ACK result 0 (ACCEPTED) \u2014 expect succeeded\n- camera start-video (VIDEO_START_CAPTURE) \u2192 COMMAND_ACK result 4 (DENIED) \u2014 expect denied/failed\n- camera stop-video (VIDEO_STOP_CAPTURE) \u2192 COMMAND_ACK result 4 (DENIED) \u2014 expect denied/failed\n\nVideo DENIED is honest firmware behaviour on this SITL camera, not a harness failure.\nHarness fires all three injects; verdict debug names: photo status, video start status, video stop status.",
+    "x": 260,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl34-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl34-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 31",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 31,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "sitl34-connection",
+    "type": "mavlink-connection",
+    "name": "UDP payload AP-31",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14570,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14571,
+    "vehicle": "sitl34-vehicle",
+    "localIdentity": "sitl34-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl34-inject-photo",
+    "type": "inject",
+    "z": "sitl34-tab",
+    "name": "Camera photo confirm",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 180,
+    "y": 140,
+    "wires": [
+      [
+        "sitl34-photo"
+      ]
+    ]
+  },
+  {
+    "id": "sitl34-photo",
+    "type": "mavlink-payload",
+    "z": "sitl34-tab",
+    "name": "Photo IMAGE_START_CAPTURE",
+    "connection": "sitl34-connection",
+    "delivery": "confirm",
+    "carrier": "long",
+    "timeout": 10000,
+    "maxRetries": 3,
+    "topic": "camera",
+    "verb": "photo",
+    "path": "legacy",
+    "targetSystem": 31,
+    "targetComponent": 1,
+    "values": {
+      "cameraId": 0,
+      "interval": 0,
+      "count": 1,
+      "sequence": 0
+    },
+    "x": 470,
+    "y": 140,
+    "wires": [
+      [
+        "sitl34-photo-continue"
+      ],
+      [
+        "sitl34-photo-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl34-inject-vstart",
+    "type": "inject",
+    "z": "sitl34-tab",
+    "name": "Camera start-video confirm",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 190,
+    "y": 240,
+    "wires": [
+      [
+        "sitl34-vstart"
+      ]
+    ]
+  },
+  {
+    "id": "sitl34-vstart",
+    "type": "mavlink-payload",
+    "z": "sitl34-tab",
+    "name": "Start video (expect DENIED)",
+    "connection": "sitl34-connection",
+    "delivery": "confirm",
+    "carrier": "long",
+    "timeout": 10000,
+    "maxRetries": 3,
+    "topic": "camera",
+    "verb": "start-video",
+    "path": "legacy",
+    "targetSystem": 31,
+    "targetComponent": 1,
+    "values": {
+      "streamId": 0,
+      "statusFrequency": 0
+    },
+    "x": 480,
+    "y": 240,
+    "wires": [
+      [
+        "sitl34-vstart-continue"
+      ],
+      [
+        "sitl34-vstart-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl34-inject-vstop",
+    "type": "inject",
+    "z": "sitl34-tab",
+    "name": "Camera stop-video confirm",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 190,
+    "y": 340,
+    "wires": [
+      [
+        "sitl34-vstop"
+      ]
+    ]
+  },
+  {
+    "id": "sitl34-vstop",
+    "type": "mavlink-payload",
+    "z": "sitl34-tab",
+    "name": "Stop video (expect DENIED)",
+    "connection": "sitl34-connection",
+    "delivery": "confirm",
+    "carrier": "long",
+    "timeout": 10000,
+    "maxRetries": 3,
+    "topic": "camera",
+    "verb": "stop-video",
+    "path": "legacy",
+    "targetSystem": 31,
+    "targetComponent": 1,
+    "values": {
+      "streamId": 0
+    },
+    "x": 470,
+    "y": 340,
+    "wires": [
+      [
+        "sitl34-vstop-continue"
+      ],
+      [
+        "sitl34-vstop-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl34-photo-continue",
+    "type": "debug",
+    "z": "sitl34-tab",
+    "name": "photo continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 710,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "sitl34-photo-status",
+    "type": "debug",
+    "z": "sitl34-tab",
+    "name": "photo status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 700,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "sitl34-vstart-continue",
+    "type": "debug",
+    "z": "sitl34-tab",
+    "name": "video start continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 730,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl34-vstart-status",
+    "type": "debug",
+    "z": "sitl34-tab",
+    "name": "video start status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "sitl34-vstop-continue",
+    "type": "debug",
+    "z": "sitl34-tab",
+    "name": "video stop continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 730,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "sitl34-vstop-status",
+    "type": "debug",
+    "z": "sitl34-tab",
+    "name": "video stop status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 720,
+    "y": 360,
+    "wires": []
+  }
+]
