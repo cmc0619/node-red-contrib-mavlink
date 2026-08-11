@@ -1527,6 +1527,28 @@ test('mavlink-move reposition confirm: a missing ack reports timeout', async () 
   node.emit('close', () => {});
 });
 
+test('mavlink-move reposition confirm refuses a broadcast target (sysid 0): nothing sent, failed record, done(err) (#260)', () => {
+  // The ack matcher accepts any source at sysid 0 — the first vehicle to
+  // answer would settle the goto for the whole fleet. Thrown before any send
+  // or subscription, through the same failInput path as the carrier refusals.
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({ ...repositionCfg, targetSystem: 0, delivery: 'confirm', connection: 'conn' });
+
+  let out;
+  let doneError;
+  node.emit('input', { payload: {} }, (m) => { out = m; }, (err) => { doneError = err; });
+
+  assert.equal(conn.sends.length, 0, 'nothing reached the wire');
+  assert.equal(conn.subs.length, 0, 'no COMMAND_ACK subscription opened');
+  assert.equal(out[0], null, 'output 0 must not fire');
+  assert.equal(out[1].result, 'failed');
+  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
+  assert.ok(doneError instanceof Error);
+});
+
 test('mavlink-move reposition confirm: close cancels the wait quietly', async () => {
   const conn = repositionConn();
   const RED = redStub({ conn });

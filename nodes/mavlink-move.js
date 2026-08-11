@@ -220,6 +220,17 @@ module.exports = function registerMavlinkMove(RED) {
               throw new Error('mavlink-move requires a Connection for send/confirm delivery');
             }
             if (delivery === 'confirm') {
+              // Broadcast + confirm: the ack matcher accepts any source at
+              // sysid 0, so the first vehicle to answer would settle for the
+              // fleet (#260, §9). Send stays broadcast-legal; the expected-set
+              // aggregator is fan-out broadcast (§10).
+              if (target.sysid === 0) {
+                throw new Error(
+                  'Move reposition confirm cannot target broadcast (sysid 0) — the first ' +
+                  'vehicle to ack would answer for the whole fleet; use Send or ' +
+                  'mavlink-fanout broadcast (per-vehicle acks)'
+                );
+              }
               // Async: the ack arrives later. done() is owned by the confirm
               // flow; a throw anywhere in it fails this input like any other.
               confirmReposition(message, target, identityId, connectionNode, send, done)

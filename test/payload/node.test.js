@@ -145,6 +145,39 @@ test('mavlink-payload confirm tier with carrier int sends COMMAND_INT without a 
   node.emit('close', () => {});
 });
 
+test('mavlink-payload confirm refuses a broadcast target (sysid 0): nothing sent, failed record, done(err) (#260)', async () => {
+  // First responder would settle for the fleet — and the carrier-swap could
+  // then re-broadcast the command off one stray wrong-carrier ack.
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    carrier: 'long',
+    delivery: 'confirm',
+    topic: 'servo',
+    verb: 'set',
+    connection: 'conn',
+    targetSystem: 0,
+    targetComponent: 1,
+    timeout: 2000,
+  });
+
+  let out;
+  let doneError;
+  node.emit('input', { payload: { values: { servo: 8, pwm: 1600 } } }, (m) => { out = m; }, (e) => { doneError = e; });
+  await tick();
+
+  assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
+  assert.equal(conn.subs.length, 0, 'no COMMAND_ACK subscription opened');
+  assert.equal(out[0], null, 'output 0 must not fire');
+  assert.equal(out[1].result, 'failed');
+  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
+  assert.ok(doneError instanceof Error);
+
+  node.emit('close', () => {});
+});
+
 test('mavlink-payload confirm tier halts the chain on a DENIED ack', async () => {
   const conn = connStub();
   const RED = redStub({ conn });

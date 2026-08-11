@@ -370,6 +370,89 @@ test('resolveTarget: config 0 is broadcast and survives (new semantics)', async 
   assert.equal(sent[0].payload.fields.target_component, 0, 'config 0 compid = broadcast, must not be treated as inherit');
 });
 
+test('confirm tier refuses a broadcast target (sysid 0): nothing sent, failed record, done(err) (#260)', async () => {
+  // The ack matcher accepts any source at sysid 0, so the first vehicle to
+  // answer would settle for the whole fleet. The send-tier test above pins
+  // that broadcast stays legal where fire-and-forget is the honest contract.
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSystem: '0',
+    targetComponent: '1',
+  });
+
+  let out;
+  let err;
+  node.emit('input', { payload: null }, (m) => { out = m; }, (e) => { err = e; });
+  await tick();
+
+  assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
+  assert.equal(out[0], null, 'output 0 must not fire');
+  assert.equal(out[1].result, 'failed');
+  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
+  assert.ok(err instanceof Error, 'done() is called with an error');
+});
+
+test('complete tier refuses a broadcast target (sysid 0) the same way (#260)', async () => {
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'complete',
+    connection: 'conn',
+    targetSystem: '0',
+    targetComponent: '1',
+  });
+
+  let out;
+  let err;
+  node.emit('input', { payload: null }, (m) => { out = m; }, (e) => { err = e; });
+  await tick();
+
+  assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
+  assert.equal(out[0], null, 'output 0 must not fire');
+  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
+  assert.ok(err instanceof Error);
+});
+
+test('a payload target override to sysid 0 is refused on confirm too (#260)', async () => {
+  // The broadcast can arrive from any rung — config, profile default, or a
+  // msg.payload override. The guard sits after resolution, so it sees them all.
+  const conn = connStub({ targetSystem: 7, targetComponent: 1 });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    carrier: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSystem: '',
+    targetComponent: '',
+  });
+
+  let out;
+  let err;
+  node.emit('input', { payload: { target: { sysid: 0 } } }, (m) => { out = m; }, (e) => { err = e; });
+  await tick();
+
+  assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
+  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
+  assert.ok(err instanceof Error);
+});
+
 test('resolveTarget: build tier inherits from config.vehicle profile stub', async () => {
   const vehicleStub = {
     defaultTargetSystem: 77,
