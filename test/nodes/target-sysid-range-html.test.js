@@ -132,6 +132,63 @@ for (const [file, gate] of CONDITIONAL_BROADCAST_FILES) {
   });
 }
 
+// The pins above read source text, which cannot catch a validator that is
+// present but wrong. It happened: the first cut of these conditionals rejected
+// a *blank* targetSystem on the confirm tier, because Number('') is 0 and the
+// broadcast check ran before any blank test — reddening the commonest config
+// (blank = inherit the profile target) while every source pin stayed green.
+// So evaluate the real descriptor and call it (CodeRabbit).
+const vm = require('node:vm');
+
+/**
+ * Evaluate a node HTML's `targetSystem` descriptor and return its validator,
+ * bound to a given saved-config object.
+ *
+ * @param {string} file  node HTML filename
+ * @param {object} saved  the node config `this` the validator reads
+ * @returns {(v: *) => true|string}
+ */
+function targetSystemValidator(file, saved) {
+  const html = fs.readFileSync(path.join(nodesDir, file), 'utf8');
+  const context = {
+    RED: { mavlink: {}, validators: { number: () => () => true } },
+    // No dialog is open in a test, so every live read misses and liveOr falls
+    // back to the saved value — the node-first half of the helper.
+    $: () => ({ length: 0, val: () => undefined }),
+  };
+  installEditorHelpers(context);
+  const descriptor = vm.runInNewContext(`({ ${descriptorBlock(html, 'targetSystem').replace(/^\{/, '').replace(/\}$/, '')} })`, context);
+  return (v) => descriptor.validate.call(saved, v, {});
+}
+
+for (const [file, tierField, tierValue] of [
+  ['mavlink-command.html', 'delivery', 'confirm'],
+  ['mavlink-move.html', 'delivery', 'confirm'],
+]) {
+  test(`${file}: a blank targetSystem still inherits on the ${tierValue} tier (#260 regression)`, () => {
+    // Move needs the reposition carrier for its rule to engage at all.
+    const saved = { [tierField]: tierValue, carrier: 'reposition' };
+    const validate = targetSystemValidator(file, saved);
+
+    assert.equal(validate(''), true, "blank means inherit the profile target — Number('') is 0, but blank is not broadcast");
+    assert.equal(validate(undefined), true, 'an unset field inherits too');
+    assert.equal(validate(1), true, 'a real sysid is fine');
+    assert.match(String(validate(0)), /cannot be confirmed/, 'an explicit 0 is still refused');
+    assert.match(String(validate('0')), /cannot be confirmed/, 'the string form the editor stores is refused too');
+  });
+}
+
+test('mavlink-command.html: an explicit 0 stays valid on the Send tier (#260)', () => {
+  const validate = targetSystemValidator('mavlink-command.html', { delivery: 'send' });
+  assert.equal(validate(0), true, 'broadcast addressing is a designed capability where no ack is awaited');
+  assert.equal(validate(''), true);
+});
+
+test('mavlink-move.html: an explicit 0 stays valid on the setpoint carrier (#260)', () => {
+  const validate = targetSystemValidator('mavlink-move.html', { delivery: 'confirm', carrier: 'setpoint' });
+  assert.equal(validate(0), true, 'only the reposition carrier awaits an ack');
+});
+
 test('mavlink-payload.html: targetSystem stays unconditional — its editor cannot know the ack mode (#260)', () => {
   const html = fs.readFileSync(path.join(nodesDir, 'mavlink-payload.html'), 'utf8');
   assert.doesNotMatch(
