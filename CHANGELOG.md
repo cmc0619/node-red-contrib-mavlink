@@ -65,9 +65,11 @@ changes alter observable behaviour — see **Changed** before upgrading.
 
 - `mavlink-param`: a blank c-cast value sent a silent `0`, and an `undefined`
   confirmed itself before the echo was compared. Both refuse now.
-- `mavlink-command`: preset coordinates are range-checked wherever a location
-  is *present*, including Takeoff and Land — an out-of-range latitude reached
-  the wire as a valid-looking `COMMAND_INT`.
+- `mavlink-command`: preset coordinates are range-checked wherever a *global*
+  location is present, including Takeoff and Land — an out-of-range latitude
+  reached the wire as a valid-looking `COMMAND_INT`. Local frames are exempt:
+  `param5`/`param6` there are metres, not degrees, so `±90`/`±180` does not
+  apply to them.
 - `mavlink-connection`: a peer with sysid 0 is no longer tracked; it walked
   into fan-out's `all` selection as a broadcast-shaped member.
 - `mavlink-fanout`: duplicate targets in one selection are refused instead of
