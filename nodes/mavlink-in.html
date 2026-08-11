@@ -222,8 +222,16 @@
     <dd>Source system id.</dd>
     <dt>compid <span class="property-type">number</span></dt>
     <dd>Source component id.</dd>
-    <dt>trusted <span class="property-type">boolean</span></dt>
-    <dd>Whether the frame passed signing verification on the connection.</dd>
+    <dt>trusted <span class="property-type">boolean | undefined</span></dt>
+    <dd><code>true</code> when the frame passed signing verification.
+      <code>false</code> marks a frame admitted <i>despite</i> being untrusted —
+      an unsigned sender on the allowlist while signing is required, or any
+      frame accepted under <b>Accept invalid signatures</b>. On a plain unsigned
+      link the property is <b>absent</b>, because signing was never in play and
+      the frame is neither vouched for nor suspect. Gate on
+      <code>msg.trusted === false</code> to drop the explicitly untrusted;
+      testing for <code>!== true</code> also rejects every frame on an unsigned
+      link.</dd>
   </dl>
   <h3>Details</h3>
   <p><b>Messages</b>, <b>Sysid</b>, and <b>Compid</b> filters are all optional;

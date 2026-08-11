@@ -279,6 +279,31 @@ test('a present location must also be in range: |lat| ≤ 90, |lon| ≤ 180 (§9
   );
 });
 
+test('range is gated on the coordinate being present, not on the preset requiring one', () => {
+  // Takeoff and Land expose param5/6 without `requireLocation` — blank there
+  // means "here", deliberately (see requireLocationFor). Nesting the range test
+  // inside that presence gate let 200°/200° through on exactly the two presets
+  // the presence rule exempts: degE7 scaled it to x=y=2000000000, a valid int32
+  // the vehicle accepts. §9 (#263) keys the rule on the location being present.
+  for (const id of ['takeoff', 'land']) {
+    const preset = getPreset(id);
+    assert.match(
+      blankLocationRefusal(preset, { 5: 200, 6: 200, 7: 30 }),
+      /latitude must be within ±90°, got 200/,
+      `${id} must refuse an out-of-range latitude`
+    );
+    assert.match(
+      blankLocationRefusal(preset, { 5: 47.4, 6: 200, 7: 30 }),
+      /longitude must be within ±180°, got 200/,
+      `${id} must refuse an out-of-range longitude`
+    );
+
+    // The exemption itself survives: blank still means "here", not null island.
+    assert.equal(blankLocationRefusal(preset, { 7: 30 }), null);
+    assert.equal(blankLocationRefusal(preset, { 5: 47.4, 6: 8.5, 7: 30 }), null);
+  }
+});
+
 test('Set Home only needs coordinates when it is not using the current position (#88)', () => {
   const setHome = getPreset('set_home');
 

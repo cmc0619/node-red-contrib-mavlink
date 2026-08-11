@@ -205,3 +205,20 @@ test('the carrier is only a real choice where the command carries a location', (
     assert.equal(carrierMattersFor(bundle, topic, verb, path), false, `${topic}/${verb}/${path}`);
   }
 });
+
+test('both gimbal-manager paths agree that flags is a bitmask, not a choice', () => {
+  // Command param rows carry no `bitmask` key — only metadata/commands-list.js
+  // derives one — so the acked manager path rendered a single-choice dropdown
+  // for GIMBAL_MANAGER_FLAGS while the message-form twin rendered a
+  // multi-select for the identical field. ROLL_LOCK|PITCH_LOCK|YAW_LOCK (28)
+  // was unselectable on the acked path, and a <select> offers no raw-number
+  // escape. The recipe pairs the two on purpose; the metadata must match.
+  const bundle = loadBundled('common');
+  const cmd = fieldMetaFromBundle(bundle, 'gimbal', 'aim', 'manager-cmd');
+  const msg = fieldMetaFromBundle(bundle, 'gimbal', 'aim', 'manager');
+
+  assert.equal(cmd.flags.enum, 'GIMBAL_MANAGER_FLAGS');
+  assert.equal(msg.flags.enum, 'GIMBAL_MANAGER_FLAGS');
+  assert.equal(cmd.flags.bitmask, true, 'acked path must offer a set, not one flag');
+  assert.equal(msg.flags.bitmask, true);
+});
