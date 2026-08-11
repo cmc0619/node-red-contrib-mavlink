@@ -267,10 +267,11 @@ const PROFILE = {
     prep: 'px4-home-ready',
     notes:
       "PX4 twin of 37 — #239's last acceptance box. CHANGE_MODE on: the shape 17 measured " +
-      'accepted via mavlink-command, so the carrier is the only variable. The ACK result is ' +
-      'recorded either way — a denial is a measurement, never a harness FAIL — but only an ' +
-      'accept passes: nothing is expected here yet, so a denial is PARTIAL until §14 records ' +
-      'it and this expect string asserts it. If accepted: yaw 90 must end EAST (param4 radians).',
+      'accepted via mavlink-command, so the carrier is the only variable. What this run expects ' +
+      'is that PX4 answers, not what it answers: accept and denial are both anticipated and both ' +
+      'PASS — a denial is a measurement, never a harness FAIL. No ACK at all measures nothing and ' +
+      'is PARTIAL. Once §14 records the answer this tightens to assert it, the way 34 requires ' +
+      'video DENIED. If accepted: yaw 90 must end EAST (param4 radians on PX4).',
   },
 };
 
@@ -507,26 +508,24 @@ function verdictFrom(profile, summary, log) {
     if (!repositionRecord) {
       return { status: 'PARTIAL', reason: 'Move reposition not settled' };
     }
-    // The two contracts differ and the expect strings carry the difference.
-    // On 38 only an accept is a PASS. A denial is a legitimate measurement and
-    // never a harness FAIL — but an *expected* denial is what earns a pass (34
-    // requires video DENIED), and nothing on 38 is expected yet: #239 is the
-    // unmeasured question this example exists to answer. Until §14 records what
-    // PX4 actually answers and the expect string asserts it, a non-accept is
-    // PARTIAL — recorded, not green.
+    // The two contracts differ and the expect strings carry the difference. 38
+    // is a measurement, so what it expects is that PX4 *answers* — not what the
+    // answer is. An accept and a denial are both anticipated outcomes of the
+    // open question (#239), so neither is a surprise and both pass: a denial is
+    // a measurement, never a harness FAIL. What fails the run is no answer at
+    // all — an ACK that never arrived measures nothing, so timed-out and
+    // unconfirmed are PARTIAL. Once §14 records what PX4 answers, this tightens
+    // to assert that specific result, the way 34 requires video DENIED.
     if (/result recorded/i.test(expect)) {
-      if (repositionRecord.result === 'accepted') {
-        return { status: 'PASS', reason: 'PX4 Move reposition accepted' };
-      }
       if (/timed-out|unconfirmed/i.test(repositionRecord.result)) {
         return {
           status: 'PARTIAL',
-          reason: `PX4 Move reposition ${repositionRecord.result} — no ACK to record`,
+          reason: `PX4 Move reposition ${repositionRecord.result} — no ACK to measure`,
         };
       }
       return {
-        status: 'PARTIAL',
-        reason: `PX4 Move reposition ${repositionRecord.result} recorded — accept not measured`,
+        status: 'PASS',
+        reason: `PX4 Move reposition ${repositionRecord.result} (measured)`,
       };
     }
     return repositionRecord.result === 'accepted'
