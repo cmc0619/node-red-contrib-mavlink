@@ -183,8 +183,15 @@ test('real 17/19 branch: the arm ack alone no longer classifies PASS (#267)', ()
   // classified PASS off the arm. It now reads the goto's own record by tag.
   const profile = PROFILE['17-int-carrier-goto'];
   assert.ok(profile, 'profile 17 exists');
+  // Did the example test the thing? With no goto record it never exercised its
+  // subject, so it failed to test the thing — FAIL, not half credit. Safe
+  // mid-poll: waitUntilReady early-exits on specialized PASS only, so a FAIL
+  // keeps polling and the deadline recomputes.
   const armOnly = { debug: [{ tag: 'arm status', result: 'accepted', excerpt: '' }], errors: [] };
-  assert.equal(verdictFrom(profile, armOnly, '').status, 'PARTIAL', 'arm alone is not the story');
+  const unsettled = verdictFrom(profile, armOnly, '');
+  assert.equal(unsettled.status, 'FAIL', 'arm alone is not the story');
+  assert.match(unsettled.reason, /never settled|not measured/);
+  assert.equal(isSpecializedPass(unsettled), false, 'a FAIL must not early-exit the wait');
 
   const gotoDenied = {
     debug: [

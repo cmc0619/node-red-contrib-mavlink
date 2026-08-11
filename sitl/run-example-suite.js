@@ -490,10 +490,12 @@ function verdictFrom(profile, summary, log) {
         ? { status: 'PASS', reason: 'INT goto accepted' }
         : { status: 'FAIL', reason: `INT goto ${gotoRecord.result}` };
     }
-    // No goto record: still climbing (mid-poll) or the goto never settled
-    // (deadline). Never fall through — the generic tail would PASS on the
-    // arm/takeoff accepteds, the exact fiction this branch existed to avoid.
-    return { status: 'PARTIAL', reason: 'INT goto not settled' };
+    // No goto record: the example never exercised its subject, so it failed to
+    // test the thing — FAIL, not a half-credit PARTIAL. Never fall through: the
+    // generic tail would PASS on the arm/takeoff accepteds, the exact fiction
+    // this branch existed to avoid. Safe mid-poll — waitUntilReady early-exits
+    // on specialized PASS only, so this keeps polling and the deadline decides.
+    return { status: 'FAIL', reason: 'INT goto never settled — not measured' };
   }
   if (/carrier=reposition|Move reposition/i.test(expect)) {
     // #267 again, one carrier over: 37/38 send the same goto through
@@ -506,7 +508,12 @@ function verdictFrom(profile, summary, log) {
       (d) => /reposition status/i.test(d.tag) && d.result
     );
     if (!repositionRecord) {
-      return { status: 'PARTIAL', reason: 'Move reposition not settled' };
+      // Did we test the thing? No — so we failed to test it. Not PARTIAL:
+      // an example that never exercised its subject has failed at its job,
+      // whatever the vehicle would have said. Safe mid-poll — waitUntilReady
+      // early-exits on specialized PASS only, so a FAIL here keeps polling
+      // and the deadline recomputes the final verdict.
+      return { status: 'FAIL', reason: 'Move reposition never settled — not measured' };
     }
     // The two contracts differ and the expect strings carry the difference. 38
     // is a measurement, so what it expects is that PX4 *answers* — not what the
@@ -519,8 +526,8 @@ function verdictFrom(profile, summary, log) {
     if (/result recorded/i.test(expect)) {
       if (/timed-out|unconfirmed/i.test(repositionRecord.result)) {
         return {
-          status: 'PARTIAL',
-          reason: `PX4 Move reposition ${repositionRecord.result} — no ACK to measure`,
+          status: 'FAIL',
+          reason: `PX4 Move reposition ${repositionRecord.result} — no ACK, nothing measured`,
         };
       }
       return {
