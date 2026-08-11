@@ -1331,7 +1331,14 @@ async function main() {
   console.log('Summary', counts);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
+
+// For tests only: the wait gate's generic-PASS exclusion keys on the reason
+// string verdictFrom's fallback tail emits (#256). That contract spans two
+// files, so the pin has to drive the real function, not a stub of its output.
+module.exports = { PROFILE, verdictFrom };

@@ -128,3 +128,51 @@ test('timeout returns final verdict without ready', async () => {
   assert.ok(result.waitedMs >= 1000);
   assert.ok(calls >= 2);
 });
+
+// ── Coupling pins: the gate against the REAL verdictFrom ─────────────────────
+//
+// isSpecializedPass excludes generic PASSes by their reason string, which
+// verdictFrom's fallback tail composes in another file. Every test above
+// stubs that string, so rewording the tail would silently reopen #254's
+// first-ack early exit (measured: example 01 froze at 0.1 s) with the suite
+// still green. These pins drive the real functions end to end (#252 lesson:
+// stubs go green over fictions the real path cannot produce).
+
+const { isSpecializedPass } = require('../../sitl/lib/wait-until-ready');
+const { PROFILE, verdictFrom } = require('../../sitl/run-example-suite');
+
+test('real generic tail: first-ack PASS is not a specialized PASS (#254 P1)', () => {
+  // Example 01 the moment the arm acks, takeoff still climbing: exactly the
+  // snapshot that froze the run at 0.1 s.
+  const profile = PROFILE['01-completion-takeoff'];
+  assert.ok(profile, 'profile 01 exists');
+  const summary = {
+    debug: [{ tag: 'arm status', result: 'accepted', excerpt: "result: 'accepted'" }],
+    errors: [],
+  };
+  const verdict = verdictFrom(profile, summary, '');
+  assert.equal(verdict.status, 'PASS', 'generic tail still PASSes on one good result');
+  assert.equal(
+    isSpecializedPass(verdict),
+    false,
+    'the gate must recognize the real generic reason — if this fails, the tail reason and the gate regex have drifted apart'
+  );
+});
+
+test('real specialized PASS reasons never collide with the generic exclusion', () => {
+  // A specialized branch whose reason started with "results:" would be barred
+  // from early exit — harmless — but the reverse drift (generic reason no
+  // longer matching) reopens the hole. Pin the one live "results:" producer.
+  const profile = PROFILE['26-formation-basics'];
+  assert.ok(profile, 'profile 26 exists');
+  const summary = {
+    debug: [
+      { tag: 'line status', result: 'succeeded', excerpt: '' },
+      { tag: 'circle status', result: 'succeeded', excerpt: '' },
+    ],
+    errors: [],
+  };
+  const verdict = verdictFrom(profile, summary, '');
+  assert.equal(verdict.status, 'PASS');
+  assert.equal(isSpecializedPass(verdict), true, 'conjunctive terminal PASS early-exits');
+});
