@@ -138,7 +138,8 @@
       [
         "sitl21-ap-set-status"
       ]
-    ]
+    ],
+    "timeout": "15000"
   },
   {
     "id": "sitl21-ap-read",
@@ -215,7 +216,8 @@
       [
         "sitl21-px4-set-status"
       ]
-    ]
+    ],
+    "timeout": "15000"
   },
   {
     "id": "sitl21-px4-read",

@@ -216,6 +216,36 @@ test('real 23/29 branch: the arm ack alone no longer classifies PASS (#267)', ()
   assert.equal(isSpecializedPass(ok), true, 'goto-accepted PASS stays early-exit eligible');
 });
 
+test('02 requires AP mission/fence/rally success plus PX4 fence gate (no empty false PASS)', () => {
+  const profile = PROFILE['02-mission-fence-rally'];
+  assert.ok(profile, 'profile 02 exists');
+  const row = (tag, result, excerpt = '') => ({ tag, result, excerpt, detail: null, resultCode: null });
+  const px4Gate = row(
+    'debug:px4 fence status',
+    'failed',
+    "phase: 'gated'\nreason: 'px4 does not support fence over the mission protocol'"
+  );
+  const emptyAp = [
+    row('debug:mission status', 'failed', "phase: 'empty'"),
+    row('debug:fence status', 'failed', "phase: 'empty'"),
+    row('debug:rally status', 'failed', "phase: 'empty'"),
+    px4Gate,
+  ];
+  const emptyVerdict = verdictFrom(profile, { debug: emptyAp, errors: [] }, '');
+  assert.equal(emptyVerdict.status, 'FAIL', 'AP empty uploads must not PASS on the PX4 gate alone');
+  assert.match(emptyVerdict.reason, /AP uploads incomplete/);
+
+  const ok = [
+    row('debug:mission status', 'succeeded'),
+    row('debug:fence status', 'succeeded'),
+    row('debug:rally status', 'succeeded'),
+    px4Gate,
+  ];
+  const pass = verdictFrom(profile, { debug: ok, errors: [] }, "does not support fence");
+  assert.equal(pass.status, 'PASS');
+  assert.equal(isSpecializedPass(pass), true);
+});
+
 test('27/30 read mavlink-move\'s status vocabulary, not mavlink-command\'s', () => {
   // The two node families do not agree on words. An accepted reposition is
   // published by completeResult as result 'succeeded' (detail 'accepted'); a

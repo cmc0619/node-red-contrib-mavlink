@@ -504,6 +504,41 @@ function verdictFrom(profile, summary, log) {
       return { status: 'PASS', reason: 'good mission survived expected validation failure' };
     }
   }
+  // SITL 02: AP mission + fence + rally must succeed; PX4 fence must fail gated.
+  // The old "fails loud" branch PASSed on *any* failure — including AP empty
+  // uploads — once the expected PX4 gate fired (false PASS on phase:empty).
+  if (/AP mission\/fence\/rally ok|PX4 fence fails loud/i.test(expect)) {
+    const lastByTag = new Map();
+    for (const d of summary.debug) {
+      if (d.tag && d.result) lastByTag.set(d.tag, d);
+    }
+    const apMission = lastByTag.get('debug:mission status');
+    const apFence = lastByTag.get('debug:fence status');
+    const apRally = lastByTag.get('debug:rally status');
+    const px4Fence = lastByTag.get('debug:px4 fence status');
+    const apOk = [apMission, apFence, apRally].every((d) => d && d.result === 'succeeded');
+    const px4Gated =
+      !!px4Fence &&
+      px4Fence.result === 'failed' &&
+      (/does not support fence/i.test(px4Fence.excerpt || '') ||
+        /phase:\s*'gated'/i.test(px4Fence.excerpt || '') ||
+        /does not support fence/i.test(log));
+    if (apOk && px4Gated) {
+      return { status: 'PASS', reason: 'AP mission/fence/rally ok; PX4 fence fails loud' };
+    }
+    if (!apOk) {
+      const parts = [
+        `mission=${apMission?.result || 'missing'}`,
+        `fence=${apFence?.result || 'missing'}`,
+        `rally=${apRally?.result || 'missing'}`,
+      ];
+      return { status: 'FAIL', reason: `AP uploads incomplete (${parts.join(', ')})` };
+    }
+    return {
+      status: 'FAIL',
+      reason: `PX4 fence gate missing (px4=${px4Fence?.result || 'missing'})`,
+    };
+  }
   if (/fails loud|expect fail/i.test(expect)) {
     const hasFail = results.some((r) => /fail|error|refused/i.test(r)) || /does not support|fail/i.test(log);
     const hasOk = results.some((r) => /success|accepted|succeeded/i.test(r));
@@ -1013,7 +1048,10 @@ function runApControlScript(body, timeoutMs = 20000, opts = {}) {
   });
   const out = `${r.stdout || ''}${r.stderr || ''}`;
   if (r.status !== 0) {
-    throw new Error(`AP control script failed (exit ${r.status}): ${out.slice(0, 300)}`);
+    // Prefer the trailing 800 chars — Node deprecation banners often eat the
+    // front of stdout/stderr and used to hide the real throw message.
+    const tail = out.length > 800 ? out.slice(-800) : out;
+    throw new Error(`AP control script failed (exit ${r.status}): ${tail}`);
   }
   return { code: r.status, out };
 }
@@ -1116,6 +1154,12 @@ async function waitApArmReady(sysids, budgetMs = 120000) {
  * Wait until AP has published HOME_POSITION (EKF origin). Needed before
  * DO_SET_HOME GLOBAL_INT — cold SITL returns MAV_RESULT_FAILED until then.
  *
+ * Under selective restart (`restart: none`) this helper often attaches after
+ * the vehicle's one-shot HOME_POSITION publication has already passed, so a
+ * passive peer-table wait never sees it. Actively request home (same shape as
+ * sitl/measure-peer-table.js): MAV_CMD_GET_HOME_POSITION (410) plus
+ * REQUEST_MESSAGE HOME_POSITION (242).
+ *
  * @param {number} [sysid]
  */
 async function waitApHomeReady(sysid = 1) {
@@ -1123,14 +1167,35 @@ async function waitApHomeReady(sysid = 1) {
   runApControlScript(
     `
       const deadline = Date.now() + 90000;
+      const t = { sysid: ${sysid}, compid: 1 };
       const compOf = () => conn.peerTable.getComponent(${sysid}, 1);
+      const requestHome = () => {
+        conn.send(buildCommandLong(410, ${sysid}, 1, [0, 0, 0, 0, 0, 0, 0], 0), {
+          band: BAND.CONTROL, target: t,
+        });
+        conn.send(buildCommandLong(512, ${sysid}, 1, [242, 0, 0, 0, 0, 0, 0], 0), {
+          band: BAND.CONTROL, target: t,
+        });
+      };
+      while (!compOf()?.primaryEndpoint && Date.now() < deadline) await sleep(500);
+      if (!compOf()?.primaryEndpoint) {
+        throw new Error('AP-${sysid} peer not learned before HOME_POSITION wait');
+      }
+      let nextRequest = 0;
       while (Date.now() < deadline) {
         const c = compOf();
-        if (c?.home && c.home.lat != null) break;
+        if (c && c.home && c.home.lat != null) break;
+        if (Date.now() >= nextRequest) {
+          requestHome();
+          nextRequest = Date.now() + 2000;
+        }
         await sleep(500);
       }
-      if (!compOf()?.home || compOf().home.lat == null) {
-        throw new Error('AP-${sysid} HOME_POSITION not seen after fleet restart');
+      const home = compOf()?.home;
+      if (!home || home.lat == null) {
+        throw new Error(
+          'AP-${sysid} HOME_POSITION not seen after GET_HOME_POSITION / REQUEST_MESSAGE(242)'
+        );
       }
     `,
     100000

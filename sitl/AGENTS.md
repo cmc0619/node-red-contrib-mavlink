@@ -100,6 +100,16 @@ Force-disarm alone does **not** reset AGL; without the fleet restart, a prior
 takeoff leaves sysid 1 airborne and the next `NAV_TAKEOFF` returns
 `MAV_RESULT_DENIED` (resultCode 4).
 
+**Admin-API deploy traps (examples must serialize what the editor would fill):**
+
+- `mavlink-param` confirm/collect: always ship `"timeout": "…"`. Omitted →
+  `Number(undefined)` → immediate `setTimeout` → fake echo/list timeout.
+- `mavlink-mission` upload injects: `msg.payload` must be `{"items":[…]}`, not a
+  bare array (`resolveItems` only reads `.items`).
+- `ap-home-ready` **requests** `HOME_POSITION` (GET_HOME + REQUEST_MESSAGE 242);
+  a passive wait misses home after `restart: none` when the vehicle already
+  published once.
+
 ### Targeted Move measurements (#175 / #179)
 
 ```bash

@@ -212,7 +212,8 @@
       [
         "ex08-list-status"
       ]
-    ]
+    ],
+    "timeout": "30000"
   },
   {
     "id": "ex08-read-done",

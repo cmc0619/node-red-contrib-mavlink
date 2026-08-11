@@ -2663,30 +2663,33 @@ POSCTL encoding remains param2=`3` (example 04 / §14).
 *Check:* `examples/sitl/28-temporarily-rejected.json`, `lib/command/ack.js`.
 
 **AP `DO_SET_HOME` GLOBAL_INT needs HOME/EKF origin before ACCEPTED.**
-*Wrong belief:* example 18’s AP GLOBAL_INT failure means ArduPilot rejects the
+*Wrong belief:* example 07’s AP GLOBAL_INT failure means ArduPilot rejects the
 frame (contradicting the local-vs-global §14 measurement).
 *Fact:* the same COMMAND_INT (`frame=5`, lab home lat/lon/alt) returns
 `MAV_RESULT_FAILED` (4) when sent ~5 s after fleet restart, and `ACCEPTED` once
 `HOME_POSITION` / EKF origin exist (~20 s). LOCAL_NED DENIED is unchanged. Harness
-prep `ap-home-ready` waits for peer `home` before deploy.
+prep `ap-home-ready` waits for peer `home` before deploy — and under selective
+restart it must **request** home (`MAV_CMD_GET_HOME_POSITION` / `REQUEST_MESSAGE`
+242), not only listen: a late Connection after `restart: none` never sees the
+vehicle’s earlier one-shot `HOME_POSITION` publication.
 *Check:* `sitl/run-example-suite.js` (`waitApHomeReady`), `examples/sitl/07-int-local-vs-global.json`.
 
 **Copter 4.7.0 SITL has no `WPNAV_SPEED` parameter.**
-*Wrong belief:* example 21’s AP echo timeout is a float32 compare / param_type
+*Wrong belief:* example 08’s AP echo timeout is a float32 compare / param_type
 decode bug.
 *Fact:* `PARAM_REQUEST_LIST` on lab AP-1 returns 1369 params with no `WPNAV_SPEED`
 (and no `WPNAV*` in `copter.parm`). Unknown names produce no `PARAM_VALUE` echo.
-Example 21 uses live `LOIT_SPEED_MS` (REAL32) instead; PX4 `MPC_XY_VEL_MAX` unchanged.
-Example 32 deliberately sets the missing id with confirm so the harness can prove
-`timed-out` / `echo timeout` (the negative twin of 21).
+Example 08 uses live `LOIT_SPEED_MS` (REAL32) instead; PX4 `MPC_XY_VEL_MAX` unchanged.
+Example 15 deliberately sets the missing id with confirm so the harness can prove
+`timed-out` / `echo timeout` (the negative twin of 08).
 *Check:* `examples/sitl/08-param-echo-float32.json`, `examples/sitl/15-param-echo-timeout.json`.
 
-**Param SITL coverage beyond set/read echo (05 / 13 / 21).**
+**Param SITL coverage beyond set/read echo (01 / 04 / 08).**
 *Wrong belief:* the three early param examples already exercise every Param/Fan-out
 wire path that needs live firmware.
 *Fact:* index-addressed `PARAM_REQUEST_READ`, Build→Fan-out sequential `PARAM_SET`
 confirm, PX4 `request-list` collect, and explicit `msg.payload.paramEncoding` were
-uncovered until examples 28–31. Safe live ids remain `LOIT_SPEED_MS` /
+uncovered until examples 11–14. Safe live ids remain `LOIT_SPEED_MS` /
 `ARMING_OPTIONS` (AP) and `COM_RC_IN_MODE` / `MPC_XY_VEL_MAX` (PX4).
 *Check:* `examples/sitl/11-param-read-by-index.json` …
 `examples/sitl/14-param-encoding-override.json`, `sitl/run-example-suite.js` PROFILE.
@@ -3991,3 +3994,29 @@ bisect. Historical §14 prose that cites old numbers by path has been updated;
 slug names (Lucy, peer-table) remain the durable identity.
 *Check:* `sitl/lib/suite-schedule.js`, `sitl/run-example-suite.js`,
 `examples/sitl/README.md`, `node --test test/sitl/suite-schedule.test.js`.
+
+**Admin-API SITL deploy does not materialize editor defaults (2026-08-11).**
+*Wrong belief:* omitting `timeout` on a `mavlink-param` confirm/collect node is
+fine because the editor default is 10 s; selective-restart congestion caused
+examples 04/08 to PARTIAL.
+*Fact:* the suite posts raw flow JSON via the Admin API, so omitted properties
+stay absent. Runtime does `config.timeout === '' ? DEFAULT : Number(config.timeout)`;
+`Number(undefined)` is `NaN` and `setTimeout(..., NaN)` fires on the next tick —
+list collect / echo-confirm settle as immediate timeouts. Nodes that serialize
+`"timeout": "15000"` (etc.) pass in the same `restart: none` batch. Ship the
+editor default in every confirm/collect example node; `test/sitl/example-json-contracts.test.js`
+guards it.
+*Check:* `examples/sitl/04-param-defs-live.json`, `examples/sitl/08-param-echo-float32.json`,
+`nodes/mavlink-param.js`.
+
+**Mission upload items live under `msg.payload.items`, not a bare array (2026-08-11).**
+*Wrong belief:* example 02’s AP `phase: empty` failures were Admin-inject `props`
+loss or vehicle state under `restart: none`.
+*Fact:* `mavlink-mission` resolves `Array.isArray(payload.items) ? payload.items
+: JSON.parse(config.items)`. A bare JSON array on `msg.payload` yields `[]` and
+is refused before any MAVLink packet leaves. Example 03’s `{"items":[…]}` shape
+works on the same unrestarted AP. The old harness “fails loud” verdict also
+false-PASSed 02 on the PX4 fence gate alone.
+*Check:* `examples/sitl/02-mission-fence-rally.json`, `nodes/mavlink-mission.js`
+(`resolveItems`), `sitl/run-example-suite.js` verdict for expect
+`AP mission/fence/rally ok`.

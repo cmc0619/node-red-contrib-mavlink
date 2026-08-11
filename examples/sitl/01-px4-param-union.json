@@ -107,7 +107,8 @@
       [
         "sitl05-set-status"
       ]
-    ]
+    ],
+    "timeout": "15000"
   },
   {
     "id": "sitl05-read",
