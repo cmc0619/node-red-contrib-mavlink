@@ -493,6 +493,40 @@ function verdictFrom(profile, summary, log) {
     // arm/takeoff accepteds, the exact fiction this branch existed to avoid.
     return { status: 'PARTIAL', reason: 'INT goto not settled' };
   }
+  if (/carrier=reposition|Move reposition/i.test(expect)) {
+    // #267 again, one carrier over: 37/38 send the same goto through
+    // mavlink-move, and their expect strings matched no branch, so the arm and
+    // takeoff accepteds satisfied the generic tail. A Move that never emitted a
+    // status record classified PASS off records that say nothing about the
+    // reposition — the fiction #239's acceptance box cannot afford. Key on the
+    // Move's own `reposition status` debug, as 17/19 key on `goto status`.
+    const repositionRecord = summary.debug.find(
+      (d) => /reposition status/i.test(d.tag) && d.result
+    );
+    if (!repositionRecord) {
+      return { status: 'PARTIAL', reason: 'Move reposition not settled' };
+    }
+    // The two contracts differ and the expect strings carry the difference: 38
+    // measures what PX4 answers and records it either way ("a denial is a
+    // measurement, not a harness failure"), while 37 asserts AP accepts. An
+    // ACK that never arrived is not an answer, so timed-out/unconfirmed is an
+    // incomplete measurement on 38 too — only a real COMMAND_ACK result counts.
+    if (/result recorded/i.test(expect)) {
+      if (/timed-out|unconfirmed/i.test(repositionRecord.result)) {
+        return {
+          status: 'PARTIAL',
+          reason: `PX4 Move reposition ${repositionRecord.result} — no ACK to record`,
+        };
+      }
+      return {
+        status: 'PASS',
+        reason: `PX4 Move reposition ${repositionRecord.result} (recorded)`,
+      };
+    }
+    return repositionRecord.result === 'accepted'
+      ? { status: 'PASS', reason: 'Move reposition accepted' }
+      : { status: 'FAIL', reason: `Move reposition ${repositionRecord.result}` };
+  }
   if (/one failed|member expires/i.test(expect)) {
     const aggregateFailed = summary.debug.some((d) =>
       d.result === 'failed' && /mavlink-fanout|aggregate|fanout/i.test(d.excerpt)
