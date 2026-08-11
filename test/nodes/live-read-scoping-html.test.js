@@ -179,19 +179,22 @@ test('identity ids: stale saved role with blank ids stays invalid — data, not 
 // payload overrides only and trusts config by doctrine, so a rateHz of 0
 // would have deployed and turned the stream timer into a ~1 ms flood.
 
-test('no liveOr call passes a selector where the owner belongs', () => {
-  // The class guard: the old two-argument shape starts with a string literal.
-  const offenders = [];
-  const files = fs.readdirSync(nodesDir).filter((f) => f.endsWith('.html'))
-    .map((f) => [path.join('nodes', f), fs.readFileSync(path.join(nodesDir, f), 'utf8')]);
-  files.push(['resources/mavlink-editor.js',
-    fs.readFileSync(path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'), 'utf8')]);
-  for (const [name, src] of files) {
-    src.split('\n').forEach((line, i) => {
-      if (/liveOr\(\s*['"]/.test(line)) offenders.push(`${name}:${i + 1}`);
-    });
-  }
-  assert.deepEqual(offenders, [], `liveOr's first argument is the owning node:\n${offenders.join('\n')}`);
+test('liveOr refuses a selector in the owner slot — misuse fails loud, not silent', () => {
+  // The enforcement lives in the helper, not in a source grep: red.js wraps
+  // validator calls in try/catch, logs the error, and reds the node naming
+  // the property, so a wrong-shaped call cannot survive its first validation
+  // in the real editor — including call sites in files no grep list names.
+  // These behavioral tests then catch it at suite time, because an
+  // unmigrated validator throws instead of silently passing everything.
+  const { installEditorHelpers: install } = require('../helpers/editor-resource');
+  const ctx = install({
+    RED: { mavlink: {}, editor: { getEditStack: () => [] }, nodes: { node: () => null } },
+    $: () => ({ length: 0, val: () => undefined }),
+  });
+  assert.throws(
+    () => ctx.RED.mavlink.liveOr('#node-input-delivery', 'stream'),
+    /first argument is the owning node/
+  );
 });
 
 test('move stream validators: saved stream tier is checked on deploy', () => {

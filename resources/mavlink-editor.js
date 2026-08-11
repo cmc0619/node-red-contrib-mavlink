@@ -1268,6 +1268,18 @@
    * @returns {string}
    */
   RED.mavlink.liveOr = function (owner, selector, saved, fallback) {
+    // A selector in the owner slot is the old two-argument shape, and under
+    // this signature it is not a stale-but-working call: the live read is
+    // silently skipped and `saved` is absent, so the caller's gate compares
+    // against '' forever — the Move stream validators shipped disabled that
+    // way. Throwing instead is contained and loud: red.js wraps validator
+    // calls, logs the error, and reds the node naming the property, so a
+    // wrong-shaped call site cannot survive its first validation.
+    if (typeof owner === 'string') {
+      throw new Error(
+        "liveOr: the first argument is the owning node, not a selector — liveOr(this, '#node-input-…', saved, fallback)"
+      );
+    }
     var live;
     if (owner && owner.id) {
       var stack = RED.editor.getEditStack();
