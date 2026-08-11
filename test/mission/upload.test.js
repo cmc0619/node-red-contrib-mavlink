@@ -220,3 +220,29 @@ test('global-frame item x/y are scaled to degE7 in the INT carrier (§9 coordina
   // z (altitude) stays a float.
   assert.equal(msg.fields.z, 25);
 });
+
+test('cancelling a mid-flight upload sends MISSION_ACK OPERATION_CANCELLED before settling (#261)', async () => {
+  const stub = new StubConnection();
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_COUNT') {
+      deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } });
+    }
+    // The vehicle never requests further items — the upload is mid-flight
+    // when the operator cancels.
+  });
+
+  const machine = new MissionUpload(uploadOpts(stub, makeItems(3)));
+  const done = machine.start();
+  machine.cancel();
+  const outcome = await done;
+
+  assert.equal(outcome.result, 'cancelled');
+  assert.equal(outcome.phase, 'cancelled');
+  const acks = stub.sent.filter((s) => s.message.name === 'MISSION_ACK');
+  assert.equal(acks.length, 1, 'the cancel notified the wire');
+  assert.equal(acks[0].message.fields.type, MAV_MISSION_RESULT.OPERATION_CANCELLED);
+  assert.equal(acks[0].message.fields.target_system, TARGET.sysid);
+  assert.equal(acks[0].message.fields.target_component, TARGET.compid);
+  assert.equal(acks[0].message.fields.mission_type, MISSION_TYPE.MISSION);
+  assert.equal(stub.subscriberCount(), 0, 'cancel still tears the subscription down');
+});

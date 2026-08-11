@@ -75,6 +75,16 @@ test('editor catalog includes every lib/payload verb value', () => {
   }
 });
 
+test('gimbal path picker offers all three aim paths, including the acked command form (#257)', () => {
+  assert.match(payloadHtml, /<option value="legacy">DO_MOUNT_CONTROL<\/option>/);
+  assert.match(payloadHtml, /<option value="manager">GIMBAL_MANAGER_SET_PITCHYAW<\/option>/);
+  assert.match(
+    payloadHtml,
+    /<option value="manager-cmd">DO_GIMBAL_MANAGER_PITCHYAW \(acked\)<\/option>/,
+    'the command form acks where the message form cannot'
+  );
+});
+
 test('payload controls take their shape from the field metadata (§6)', () => {
   // A two-state enum is a checkbox, a bitmask is a multi-select, any other
   // enum is a pulldown, everything else is a number. None of it is a list of

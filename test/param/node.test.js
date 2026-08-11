@@ -82,6 +82,43 @@ test('a set with no paramType fails loud rather than guessing REAL32', () => {
   );
 });
 
+test('mavlink-param refuses a set whose value is blank end to end: nothing sent, named refusal, done(err) (§9, #258)', () => {
+  // Blank config value + no payload value used to transmit a silent 0
+  // (Number('') === 0) and report success. The refusal happens before
+  // anything is built, so the wire never sees it (same shape as the
+  // broadcast-refusal test above).
+  const conn = connStubFull();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'confirm',
+    action: 'set',
+    paramType: 'MAV_PARAM_TYPE_REAL32',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 1,
+    value: '',
+  });
+
+  let out;
+  let err;
+  node.emit(
+    'input',
+    { payload: { paramId: 'FOO' } },
+    (m) => { out = m; },
+    (e) => { err = e; }
+  );
+
+  assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
+  assert.equal(conn.subs.length, 0, 'no PARAM_VALUE subscription opened');
+  assert.equal(out[0], null, 'output 0 must not fire');
+  assert.equal(out[1].result, 'failed');
+  assert.match(out[1].detail, /requires a value, got blank/);
+  assert.ok(err instanceof Error, 'done() is called with an error');
+  assert.match(err.message, /requires a value, got blank/);
+});
+
 test('mavlink-param refuses a configured broadcast target (sysid 0): nothing sent, no subscription, failed record, done(err)', () => {
   const conn = connStubFull();
   const RED = redStub({ conn });

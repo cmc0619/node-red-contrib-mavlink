@@ -40,6 +40,37 @@ test('camera photo defaults camera id and sequence to 0 and count to 1', () => {
   assert.equal(built.message.fields.param4, 0);
 });
 
+test('camera stop-photo builds IMAGE_STOP_CAPTURE with command-ack confirmation (#259)', () => {
+  // Photo exposes `count` and an explicit 0 starts a continuous capture the
+  // node could otherwise never stop — this verb is the off switch.
+  const built = buildPayloadMessage({
+    carrier: 'long',
+    topic: 'camera',
+    verb: 'stop-photo',
+    target: { sysid: 2, compid: 100 },
+    values: { cameraId: 4 },
+  });
+
+  assert.equal(built.confirmation, 'command_ack');
+  assert.equal(built.message.name, 'COMMAND_LONG');
+  assert.equal(built.message.fields.command, 2001);
+  assert.equal(built.message.fields.param1, 4);
+  // Params 2-7 are reserved in the dialect — the recipe exposes camera id only.
+  for (const slot of ['param2', 'param3', 'param4', 'param5', 'param6', 'param7']) {
+    assert.equal(built.message.fields[slot], 0, `${slot} stays reserved-zero`);
+  }
+
+  // Camera id defaults to 0 (all cameras).
+  const blank = buildPayloadMessage({
+    carrier: 'long',
+    topic: 'camera',
+    verb: 'stop-photo',
+    target: { sysid: 1, compid: 1 },
+    values: {},
+  });
+  assert.equal(blank.message.fields.param1, 0);
+});
+
 test('gimbal manager aim uses the message path and declares no confirmation', () => {
   const built = buildPayloadMessage({
     carrier: 'long',
@@ -98,6 +129,71 @@ test('gimbal manager angle aim NaN-s the rate pair when the fields are omitted e
   const f = built.message.fields;
   assert.ok(Number.isNaN(f.pitch_rate), 'omitted pitch rate must default to NaN');
   assert.ok(Number.isNaN(f.yaw_rate), 'omitted yaw rate must default to NaN');
+});
+
+test('gimbal manager-cmd aim builds DO_GIMBAL_MANAGER_PITCHYAW with command-ack confirmation (#257)', () => {
+  // The command form acks where the message form cannot — same inputs as the
+  // manager message path, confirmation instead of fire-and-forget.
+  const long = buildPayloadMessage({
+    carrier: 'long',
+    topic: 'gimbal',
+    verb: 'aim',
+    path: 'manager-cmd',
+    target: { sysid: 2, compid: 154 },
+    values: { pitch: -15, yaw: 90, pitchRate: 2, yawRate: 3, flags: 16, gimbalDeviceId: 1 },
+  });
+
+  assert.equal(long.confirmation, 'command_ack');
+  assert.equal(long.message.name, 'COMMAND_LONG');
+  assert.equal(long.message.fields.command, 1000);
+  assert.equal(long.message.fields.param1, -15);
+  assert.equal(long.message.fields.param2, 90);
+  assert.equal(long.message.fields.param3, 2);
+  assert.equal(long.message.fields.param4, 3);
+  assert.equal(long.message.fields.param5, 16);
+  assert.equal(long.message.fields.param7, 1);
+
+  // Carrier-agnostic: the INT carrier builds the same command, and param5
+  // (manager flags) is a raw number there — never scaled as a coordinate.
+  const int = buildPayloadMessage({
+    carrier: 'int',
+    topic: 'gimbal',
+    verb: 'aim',
+    path: 'manager-cmd',
+    target: { sysid: 2, compid: 154 },
+    values: { pitch: -15, yaw: 90, pitchRate: 2, yawRate: 3, flags: 16, gimbalDeviceId: 1 },
+  });
+  assert.equal(int.confirmation, 'command_ack');
+  assert.equal(int.message.name, 'COMMAND_INT');
+  assert.equal(int.message.fields.command, 1000);
+  assert.equal(int.message.fields.x, 16, 'flags carry what the operator entered under INT');
+  assert.equal(int.message.fields.z, 1);
+});
+
+test('gimbal manager-cmd aim keeps the message path\'s NaN-rate convention (issue #87 parity)', () => {
+  // The two manager paths take the same inputs: an angle aim with the rates
+  // left blank (or omitted) must command NaN rates ("axis not rate
+  // controlled"), never a literal zero rate.
+  for (const values of [
+    { pitch: -45, yaw: 90, pitchRate: '', yawRate: '' },
+    { pitch: -45, yaw: 90 },
+  ]) {
+    const built = buildPayloadMessage({
+      carrier: 'long',
+      topic: 'gimbal',
+      verb: 'aim',
+      path: 'manager-cmd',
+      target: { sysid: 2, compid: 154 },
+      values,
+    });
+    const f = built.message.fields;
+    assert.equal(f.param1, -45);
+    assert.equal(f.param2, 90);
+    assert.ok(Number.isNaN(f.param3), 'blank pitch rate must be NaN, not 0');
+    assert.ok(Number.isNaN(f.param4), 'blank yaw rate must be NaN, not 0');
+    assert.equal(f.param5, 0, 'flags default to 0');
+    assert.equal(f.param7, 0, 'gimbal device id defaults to 0 (primary)');
+  }
 });
 
 test('servo repeat and gripper verbs map to their MAV_CMD command values', () => {

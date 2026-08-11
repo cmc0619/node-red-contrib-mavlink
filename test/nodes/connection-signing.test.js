@@ -23,7 +23,7 @@ const {
   makeRejectedHandler,
   applyStatus,
 } = require('../../nodes/mavlink-connection');
-const { SigningState, timestampFromMs, ONE_MINUTE_UNITS, STATE } = require('../../lib/connection');
+const { SigningState, timestampFromMs, STATE } = require('../../lib/connection');
 const { BADGE_MAX } = require('../../lib/delivery');
 
 test('a passphrase alone (both checkboxes off) still derives a key', () => {
@@ -156,15 +156,9 @@ function liveRejectReasons() {
   reasons.push(new SigningState({}).acceptInbound(signed(0), now).reason); // first contact, stale
 
   const fresh = timestampFromMs(now);
-  let state = new SigningState({});
+  const state = new SigningState({});
   state.acceptInbound(signed(fresh), now);
   reasons.push(state.acceptInbound(signed(fresh), now).reason); // not greater than last
-
-  state = new SigningState({});
-  const floorEdge = timestampFromMs(now) - ONE_MINUTE_UNITS;
-  state.acceptInbound(signed(floorEdge), now);
-  const later = now + 10 * 60 * 1000;
-  reasons.push(state.acceptInbound(signed(floorEdge + 1), later).reason); // monotonic but stale
 
   return reasons;
 }
@@ -177,7 +171,6 @@ test('every live reject reason surfaces with a badge inside the §6 cap', () => 
       'first-contact-too-old',
       'invalid-signature',
       'replay-or-out-of-order',
-      'too-old',
       'unsigned-rejected-require-signed',
     ],
     'the harness exercised the whole reject vocabulary of signing.js'

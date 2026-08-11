@@ -61,6 +61,18 @@ test('filter narrows by message, sysid, and compid', () => {
   assert.deepEqual(hits.sort(), ['by-compid', 'by-message']);
 });
 
+test('trustedOnly excludes only the explicit untrusted mark (§7 trust ruling #264)', () => {
+  const reg = new SubscriptionRegistry();
+  const received = [];
+  reg.subscribe({ trustedOnly: true }, (msg) => received.push(msg.trusted));
+
+  reg.dispatch(decoded({ trusted: false })); // explicitly marked — excluded
+  reg.dispatch(decoded({ trusted: true })); // verified — delivered
+  reg.dispatch(decoded({})); // no mark (plain unsigned link) — delivered
+
+  assert.deepEqual(received, [true, undefined]);
+});
+
 test('unsubscribe stops further delivery', () => {
   const reg = new SubscriptionRegistry();
   let count = 0;

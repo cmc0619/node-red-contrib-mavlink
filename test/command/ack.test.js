@@ -23,9 +23,11 @@ const { AckWaiter, MAV_RESULT } = require('../../lib/command');
 function stubConn() {
   const handlers = [];
   return {
+    filters: [],
     subscribe(filter, handler) {
       const entry = { filter, handler };
       handlers.push(entry);
+      this.filters.push(filter);
       return () => {
         const i = handlers.indexOf(entry);
         if (i >= 0) handlers.splice(i, 1);
@@ -46,6 +48,20 @@ function makeWaiter(conn, opts) {
     ...opts,
   });
 }
+
+test('the ack subscription is trusted-only — an untrusted frame cannot settle a transaction (§7, #264)', async () => {
+  // The trust gate itself lives in the connection's subscription registry;
+  // what AckWaiter owns is asking for it, so the filter it subscribes with is
+  // the thing to pin.
+  const conn = stubConn();
+  const waiter = makeWaiter(conn, { commandId: 400, targetSystem: 2, targetComponent: 1 });
+  const p = waiter.start();
+
+  assert.deepEqual(conn.filters, [{ message: 'COMMAND_ACK', trustedOnly: true }]);
+
+  conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 2, 1);
+  await p;
+});
 
 test('ack from a different sysid does not settle the transaction; the addressed one does', async () => {
   const conn = stubConn();

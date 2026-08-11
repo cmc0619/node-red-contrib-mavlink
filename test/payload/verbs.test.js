@@ -13,7 +13,7 @@ const {
 
 /** Verbs accepted by buildPayloadMessage per topic (gimbal aim uses legacy path). */
 const KNOWN_VERBS = {
-  camera: ['photo', 'start-video', 'stop-video', 'set-mode', 'trigger-distance'],
+  camera: ['photo', 'stop-photo', 'start-video', 'stop-video', 'set-mode', 'trigger-distance'],
   gimbal: ['aim', 'set-mode', 'roi-set', 'roi-clear'],
   servo: ['set', 'repeat'],
   gripper: ['operate'],

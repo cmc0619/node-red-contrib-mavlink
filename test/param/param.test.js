@@ -31,6 +31,47 @@ test('PARAM_SET for PX4 integer params writes the int bits into the float slot',
   assert.equal(message.fields.param_value, paramValueToWire(42, 'MAV_PARAM_TYPE_INT32'));
 });
 
+test('a set refuses a blank or non-finite value by name — nothing is built (§9, #258)', () => {
+  // The c-cast encode was a bare Number(value): a blank transmitted a silent 0
+  // (Number('') === 0), and 'abc'/NaN went out as wire NaN which then
+  // self-confirmed (numericEqual(NaN, NaN); an undefined value short-circuits
+  // the echo match). The set boundary now refuses before anything is built.
+  const set = (value) => buildParamMessage({
+    action: 'set',
+    target: { sysid: 1, compid: 1 },
+    paramId: 'RC1_MIN',
+    value,
+    paramType: 'MAV_PARAM_TYPE_REAL32',
+    firmware: 'ardupilot',
+  });
+
+  assert.throws(() => set(''), /param set requires a value, got blank/);
+  assert.throws(() => set('   '), /param set requires a value, got blank/);
+  assert.throws(() => set(undefined), /param set requires a value, got blank/);
+  assert.throws(() => set(null), /param set requires a value, got blank/);
+  assert.throws(() => set('abc'), /finite numeric value, got "abc"/);
+  assert.throws(() => set(NaN), /finite numeric value, got NaN/);
+
+  // A string numeric is a value — the editor's number box serializes one.
+  assert.equal(set('1100').fields.param_value, 1100);
+  // An explicit 0 is a value, not a blank.
+  assert.equal(set(0).fields.param_value, 0);
+});
+
+test('read and request-list still build without any value (#258 touches set only)', () => {
+  const read = buildParamMessage({
+    action: 'read',
+    target: { sysid: 1, compid: 1 },
+    paramId: 'RC1_MIN',
+  });
+  const list = buildParamMessage({
+    action: 'request-list',
+    target: { sysid: 1, compid: 1 },
+  });
+  assert.equal(read.name, 'PARAM_REQUEST_READ');
+  assert.equal(list.name, 'PARAM_REQUEST_LIST');
+});
+
 test('Param set confirms only by matching PARAM_VALUE echo, decoded through the PX4 union', () => {
   const request = {
     paramId: 'MIS_TAKEOFF_ALT',

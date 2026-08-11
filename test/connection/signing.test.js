@@ -50,15 +50,20 @@ test('an out-of-order (non-increasing) timestamp is rejected', () => {
   assert.equal(v.reason, 'replay-or-out-of-order');
 });
 
-test('a valid but stale timestamp (past the one-minute floor) is rejected', () => {
+test('a lagging but monotonic established stream stays accepted — the floor is first-contact only (#264)', () => {
+  // First contact within the floor, then local time runs 20 minutes ahead
+  // while the peer's clock (no GPS lock, clock reset) falls more than a minute
+  // behind it. Monotonicity alone governs the established stream: a captured
+  // packet can never exceed the last accepted timestamp, so the floor would
+  // have guarded nothing and locked the real peer out (§7 signing, #264).
   const s = new SigningState({ now: () => NOW_MS });
-  s.acceptInbound(frame({ timestamp: NOW_UNITS - 10 * ONE_MINUTE_UNITS }));
-  // establish a floor 10 minutes back, then advance local time far ahead
-  const later = () => NOW_MS + 20 * 60 * 1000;
-  const s2 = new SigningState({ now: later });
-  s2.acceptInbound(frame({ timestamp: timestampFromMs(later()) })); // fresh first contact
-  const v = s2.acceptInbound(frame({ timestamp: timestampFromMs(later()) + 1 - ONE_MINUTE_UNITS * 2 }));
-  assert.equal(v.accept, false);
+  s.acceptInbound(frame({ timestamp: NOW_UNITS }));
+  const later = NOW_MS + 20 * 60 * 1000;
+  const v = s.acceptInbound(frame({ timestamp: NOW_UNITS + 1 }), later);
+  assert.equal(v.accept, true);
+  assert.equal(v.trusted, true);
+  assert.equal(v.reason, 'accepted');
+  assert.equal(s.lastInboundTimestamp(1, 1, 0), NOW_UNITS + 1);
 });
 
 test('the store never advances from a packet admitted by accept-invalid', () => {
@@ -91,11 +96,14 @@ test('require-signed drops unsigned frames but keeps the RADIO_STATUS allowlist'
   assert.equal(allowed.trusted, false); // allowlisted, never trusted
 });
 
-test('unsigned frames are accepted (untrusted) when require-signed is off', () => {
+test('unsigned frames carry no trust mark when require-signed is off (§7 trust ruling #264)', () => {
+  // `false` is the explicit untrusted mark that bars a frame from settling
+  // transactions; a plain unsigned link has no signing regime to judge
+  // against, so the verdict stays unmarked and trusted-only gates pass it.
   const s = new SigningState({ now: () => NOW_MS });
   const v = s.acceptInbound(frame({ signaturePresent: false }));
   assert.equal(v.accept, true);
-  assert.equal(v.trusted, false);
+  assert.equal(v.trusted, undefined);
 });
 
 test('outbound timestamps are strictly increasing per stream', () => {
