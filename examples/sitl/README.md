@@ -19,69 +19,72 @@ union, mission/fence/rally, fan-out pacing, signing). Prefer the **Docker lab** 
 cd sitl && docker compose --profile sitl up -d --build
 ```
 
-### Manual launch (without Docker)
-
-ArduPilot five (telemetry to GCS bind `14550`):
-
-```bash
-for i in 0 1 2 3 4; do \
-  sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \
-    --out=udp:127.0.0.1:14550 & \
-done
-```
-
-PX4 five: set `MAV_SYS_ID` 11–15 and point GCS MAVLink at `127.0.0.1:14560` (version-specific;
-the Docker entrypoint does this for you).
-
 ## Safety
 
 SITL only — several flows arm, fly, or force-disarm. Never point them at a real vehicle
 without understanding each step.
 
+## Suite order and selective restart
+
+Examples are **numbered in harness run order**, batched by how much vehicle state they
+need reset (`PROFILE.restart` in `sitl/run-example-suite.js`):
+
+| Phase | `restart` | What happens between examples |
+|-------|-----------|-------------------------------|
+| 01–19 | `none` | no docker restart (after one cold prime) |
+| 20–27 | `ap-1` / `ap-12` / `ap-2` | only those AP containers |
+| 28–30 | `px4-1` | `nrc-px4-11` only |
+| 31–35 | `ap-fleet` | AP 1–5 |
+| 36–38 | `fleet` | all 13 vehicles |
+
+Force a full fleet every time with `SITL_RESTART=fleet`.
+
 ## Flow index
 
-| File | Tab | Needs |
-|------|-----|-------|
-| `01-completion-takeoff.json` | SITL 01 Completion takeoff | 1× ArduPilot |
-| `02-completion-timeout.json` | SITL 02 Completion timeout | 1× ArduPilot |
-| `03-temporarily-rejected.json` | SITL 03 Temporarily rejected | 1× PX4 (packed mode → retry) |
-| `04-mode-tables.json` | SITL 04 Mode tables | 1× ArduPilot + 1× PX4 |
-| `05-px4-param-union.json` | SITL 05 PX4 param union | 1× PX4 |
-| `06-mission-fence-rally.json` | SITL 06 Mission/fence/rally | 1× ArduPilot + 1× PX4 |
-| `07-mission-failloud.json` | SITL 07 Mission fail-loud | 1× ArduPilot |
-| `08-fanout-sequential-five.json` | SITL 08 Fan-out ×5 pacing | 5× ArduPilot |
-| `09-fanout-member-expires.json` | SITL 09 Fan-out member expires | 5× ArduPilot |
-| `10-dual-stack-ten.json` | SITL 10 Dual-stack ×10 | 5× ArduPilot + 5× PX4 |
-| `11-broadcast-vs-sequential.json` | SITL 11 Broadcast vs sequential | 5× ArduPilot |
-| `12-signing.json` | SITL 12 Signing | companion AP sysid 20 (`hunter11` via harness) |
-| `13-param-defs-live.json` | SITL 13 Param defs (live) | 1× ArduPilot |
-| `14-command-mission-basics.json` | SITL 14 Command & mission basics | 2× ArduPilot |
-| `15-companion-ap.json` | SITL 15 Companion AP | companion AP sysid 20 |
-| `16-companion-px4.json` | SITL 16 Companion PX4 | companion PX4 sysid 21 |
-| `17-int-carrier-goto.json` | SITL 17 INT carrier goto | 1× PX4 |
-| `18-int-local-vs-global.json` | SITL 18 INT local vs global | 1× ArduPilot + 1× PX4 |
-| `19-ap-int-carrier-goto.json` | SITL 19 AP INT carrier goto | 1× ArduPilot |
-| `20-move-stream-stop.json` | SITL 20 Move stream + stop | 1× ArduPilot |
-| `21-param-echo-float32.json` | SITL 21 Param float32 echo | 1× ArduPilot + 1× PX4 |
-| `22-in-build-out.json` | SITL 22 In → Build → Out | 1× ArduPilot |
-| `23-profile-target-inherit.json` | SITL 23 Profile target inherit | 1× ArduPilot (sysid 2) |
-| `24-companion-receive.json` | SITL 24 Companion receive | companion AP sysid 20 |
-| `25-tcp-connection.json` | SITL 25 TCP connection (template) | TCP SITL on `:5760` (not in default Compose) |
-| `26-formation-basics.json` | SITL 26 Formation basics | 5× ArduPilot (line then circle) |
-| `27-lucy-in-the-sky.json` | SITL 27 Lucy in the Sky | 5× ArduPilot (sphere tumble + peel land) |
-| `28-param-read-by-index.json` | SITL 28 Param read by index | 1× ArduPilot (list → index read) |
-| `29-param-fanout-set.json` | SITL 29 Param fan-out set | 5× ArduPilot (PARAM_SET confirm) |
-| `30-px4-param-list.json` | SITL 30 PX4 param list | 1× PX4 (request-list collect) |
-| `31-param-encoding-override.json` | SITL 31 Param encoding override | 1× ArduPilot + 1× PX4 |
-| `32-param-echo-timeout.json` | SITL 32 Param echo timeout | 1× ArduPilot (unknown id) |
-| `33-payload-gimbal-legacy.json` | SITL 33 Payload gimbal legacy | AP payload sysid 31 (`14570`) |
-| `34-payload-camera.json` | SITL 34 Payload camera | AP payload sysid 31 (photo ok / video DENIED) |
-| `35-payload-gimbal-manager.json` | SITL 35 Payload gimbal manager | AP payload sysid 31 (send unconfirmed) |
-| `37-move-reposition-carrier.json` | SITL 37 Move reposition carrier | 1× ArduPilot (GUIDED; same goto as 19) |
+| File | Tab | restart |
+|------|-----|---------|
+| `01-px4-param-union.json` | SITL 01 PX4 param union | none |
+| `02-mission-fence-rally.json` | SITL 02 Mission/fence/rally | none |
+| `03-mission-failloud.json` | SITL 03 Mission fail-loud | none |
+| `04-param-defs-live.json` | SITL 04 Param defs (live) | none |
+| `05-companion-ap.json` | SITL 05 Companion AP | none |
+| `06-companion-px4.json` | SITL 06 Companion PX4 | none |
+| `07-int-local-vs-global.json` | SITL 07 INT local vs global | none |
+| `08-param-echo-float32.json` | SITL 08 Param float32 echo | none |
+| `09-in-build-out.json` | SITL 09 In → Build → Out | none |
+| `10-companion-receive.json` | SITL 10 Companion receive | none |
+| `11-param-read-by-index.json` | SITL 11 Param read by index | none |
+| `12-param-fanout-set.json` | SITL 12 Param fan-out set | none |
+| `13-px4-param-list.json` | SITL 13 PX4 param list | none |
+| `14-param-encoding-override.json` | SITL 14 Param encoding override | none |
+| `15-param-echo-timeout.json` | SITL 15 Param echo timeout | none |
+| `16-payload-gimbal-legacy.json` | SITL 16 Payload gimbal legacy | none |
+| `17-payload-camera.json` | SITL 17 Payload camera | none |
+| `18-payload-gimbal-manager.json` | SITL 18 Payload gimbal manager | none |
+| `19-tcp-connection.json` | SITL 19 TCP connection (template) | none (SKIP) |
+| `20-completion-takeoff.json` | SITL 20 Completion takeoff | ap-1 |
+| `21-completion-timeout.json` | SITL 21 Completion timeout | ap-1 |
+| `22-command-mission-basics.json` | SITL 22 Command & mission basics | ap-12 |
+| `23-ap-int-carrier-goto.json` | SITL 23 AP INT carrier goto | ap-1 |
+| `24-move-stream-stop.json` | SITL 24 Move stream + stop | ap-1 |
+| `25-profile-target-inherit.json` | SITL 25 Profile target inherit | ap-2 |
+| `26-peer-table-inflight.json` | SITL 26 Peer table in flight | ap-1 |
+| `27-move-reposition-carrier.json` | SITL 27 Move reposition carrier | ap-1 |
+| `28-temporarily-rejected.json` | SITL 28 Temporarily rejected | px4-1 |
+| `29-int-carrier-goto.json` | SITL 29 INT carrier goto | px4-1 |
+| `30-px4-move-reposition.json` | SITL 30 PX4 Move reposition | px4-1 |
+| `31-fanout-sequential-five.json` | SITL 31 Fan-out ×5 pacing | ap-fleet |
+| `32-fanout-member-expires.json` | SITL 32 Fan-out member expires | ap-fleet |
+| `33-broadcast-vs-sequential.json` | SITL 33 Broadcast vs sequential | ap-fleet |
+| `34-formation-basics.json` | SITL 34 Formation basics | ap-fleet |
+| `35-lucy-in-the-sky.json` | SITL 35 Lucy in the Sky | ap-fleet |
+| `36-mode-tables.json` | SITL 36 Mode tables | fleet |
+| `37-dual-stack-ten.json` | SITL 37 Dual-stack ×10 | fleet |
+| `38-signing.json` | SITL 38 Signing | fleet |
 
 ## Running the suite
 
-Use the Docker lab + harness (`sitl/AGENTS.md`). Default lab skips **25** (UDP-only).
+Use the Docker lab + harness (`sitl/AGENTS.md`). Default lab skips **19** (UDP-only).
 
 **Results:** GitHub Issues labeled `sitl-results` — not PRs that rewrite `testing.md`.
 Close the prior open results issue when posting a new run.

@@ -87,8 +87,14 @@ generic `results: …` PASS does not early-exit — first ack is not “done”;
 `SITL_READY_POLL_MS`, default 500) → write JSON under `/tmp/` (default). Example
 **12** (signing) targets companion AP sysid 20: harness sends `SETUP_SIGNING` with
 `sha256(hunter11)` and injects `{ signingPassphrase: "hunter11" }` on Admin API
-deploy (`hunter11` is a joke lab passphrase, not a secret). Example **25** (TCP)
+deploy (`hunter11` is a joke lab passphrase, not a secret). Example **19** (TCP)
 is **SKIP** unless Compose exposes SITL TCP.
+
+
+Before each example the harness selectively `docker restart`s containers named by
+`PROFILE.restart` (`none` / `ap-1` / `ap-12` / `ap-2` / `ap-fleet` / `px4-1` /
+`fleet`). Examples are numbered in that run order so `restart: none` batches
+skip settle. Override with `SITL_RESTART=fleet`. See `examples/sitl/README.md`.
 
 Force-disarm alone does **not** reset AGL; without the fleet restart, a prior
 takeoff leaves sysid 1 airborne and the next `NAV_TAKEOFF` returns
@@ -116,7 +122,7 @@ node sitl/measure-peer-table.js
 Asserts every DESIGN.md §8 field (identity, armed/mode, endpoints, position,
 GPS, battery, home, section freshness, snapshot projection; AUTOPILOT_VERSION /
 STATUSTEXT best-effort) on AP GUIDED + PX4 OFFBOARD after takeoff and a short
-velocity tour. Suite example **36** is the thinner flow-level State snapshot
+velocity tour. Suite example **26** is the thinner flow-level State snapshot
 regression (`run-example-suite.js --only 36`).
 
 ### Post results (no PR)
@@ -149,7 +155,7 @@ local or paste a collapsed `<details>` block — do not land it in git.
 - Example **18**: needs `ap-home-ready` (HOME_POSITION) or AP GLOBAL_INT home FAILs.
 - Example **21**: AP param is `LOIT_SPEED_MS` (no `WPNAV_SPEED` on Copter 4.7.0).
 - Example **23**: inherit PASS is resolved `target.sysid === 2` (prep `ap-arm-ready-2`).
-- Examples **26/27**: formation + takeoff need `ap-arm-ready-fleet`; **27** wait is long
+- Examples **34/35**: formation + takeoff need `ap-arm-ready-fleet`; **27** wait is long
   (sphere pitch steps + peel land). Verdict keys on named debug tags (`line status`,
   `s0 status`…`land status`), not a generic succeeded count.
 - Example **28**: list collect then index-read — verdict needs `list status` + `index assert`
@@ -184,13 +190,13 @@ Connection does that — and a single send to `remotePort` reaches nobody.
 
 ## Takeoff / GUIDED / fan-out arm
 
-AP `NAV_TAKEOFF` needs GUIDED **and** a vehicle on the ground. Examples **01/02**
+AP `NAV_TAKEOFF` needs GUIDED **and** a vehicle on the ground. Examples **20/21**
 set GUIDED **before** arm (cold SITL often DENYs armed STABILIZE→GUIDED).
 Harness prep `ap-guided-1` polls until HEARTBEAT shows GUIDED **and** a
 probe arm succeeds (EKF position — often ~30–40 s after docker restart), then
 force-disarms for the example’s own arm step.
 
-Examples **08/09/11** arm sysids 1–5 with `delivery=confirm`, where the first
+Examples **31/32/33** arm sysids 1–5 with `delivery=confirm`, where the first
 `DENIED` fails the aggregate, so they use prep `ap-arm-ready-fleet`: probe-arm
 each in turn until it succeeds, then force-disarm. Do **not** reach for a bigger
 `SITL_FLEET_SETTLE_MS` instead — peers come back within seconds while arm stays
