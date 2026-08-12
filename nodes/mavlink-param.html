@@ -769,7 +769,7 @@
   <div class="form-row" id="row-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
   <div class="form-row" id="row-firmware"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value=""></option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
   <div class="form-row" id="row-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
-  <div class="form-row" id="row-identity"><label for="node-input-identity">Send-as</label><select id="node-input-identity"></select></div>
+  <div class="form-row" id="row-identity"><label for="node-input-identity">Identity</label><select id="node-input-identity"></select></div>
   <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action"><option value="read">Read one</option><option value="set">Set one</option><option value="request-list">Request list</option></select></div>
   <div class="form-row" id="row-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
   <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
@@ -830,7 +830,7 @@
 
 <script type="text/html" data-help-name="mavlink-param">
   <p>Reads one parameter, sets one parameter, or requests a full list. Set confirmation is by matching the PARAM_VALUE echo, not COMMAND_ACK.</p>
-  <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — pick a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Send-as</b> identity stamps the source address.</p>
+  <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — pick a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Identity</b> stamps the source address.</p>
   <p><b>Confirm and collect.</b> On a set, <i>Send and echo-confirm</i> waits for
   the vehicle's <code>PARAM_VALUE</code> echo and re-sends the
   <code>PARAM_SET</code> on silence — three attempts in all, each waiting the

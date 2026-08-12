@@ -489,3 +489,13 @@ test('command param enum pulldowns carry no blank option', () => {
   );
   assert.match(renderer, /isBitmask\) \{\s*sel\.attr\('multiple'/, 'bitmask branch keeps its multi-select');
 });
+
+test('the identity row is labelled Identity, not a second Send as', () => {
+  // One dialog, one meaning per label: "Send as" names the wire message
+  // (§6), so the identity selector cannot wear it too (#278).
+  assert.match(
+    html,
+    /<label for="node-input-identity"[^>]*>Identity<\/label>/,
+    'identity row must be labelled Identity'
+  );
+});
