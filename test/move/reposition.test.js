@@ -12,7 +12,7 @@ const goodPosition = { lat: 47.1234567, lon: 8.5, alt: 25 };
 function input(overrides = {}) {
   return {
     mode: 'position',
-    frame: 'GLOBAL_RELATIVE_ALT',
+    frame: 3,
     target,
     position: goodPosition,
     ...overrides,
@@ -34,15 +34,11 @@ test('reposition builds COMMAND_INT / DO_REPOSITION with degE7 coordinates and f
   assert.equal(message.fields.z, 25);
 });
 
-test('reposition frame mapping: GLOBAL → 0, GLOBAL_RELATIVE_ALT → 3, aliases resolve to the canon', () => {
-  assert.equal(buildRepositionMessage(input({ frame: 'GLOBAL' })).fields.frame, 0);
-  assert.equal(buildRepositionMessage(input({ frame: 'GLOBAL_RELATIVE_ALT' })).fields.frame, 3);
-  // The deprecated *_INT spellings and numbers are MAVLink's protocol surface
-  // and resolve to the spec-current numbers COMMAND_INT wants.
-  assert.equal(buildRepositionMessage(input({ frame: 'GLOBAL_INT' })).fields.frame, 0);
-  assert.equal(buildRepositionMessage(input({ frame: 'GLOBAL_RELATIVE_ALT_INT' })).fields.frame, 3);
-  assert.equal(buildRepositionMessage(input({ frame: 5 })).fields.frame, 0);
-  assert.equal(buildRepositionMessage(input({ frame: 6 })).fields.frame, 3);
+test('reposition frame mapping: the derived numbers 0 and 3 ride COMMAND_INT unchanged', () => {
+  // COMMAND_INT wants the spec-current numbers, which is exactly what
+  // frameForAltRef derives — no *_INT twin question on this carrier.
+  assert.equal(buildRepositionMessage(input({ frame: 0 })).fields.frame, 0);
+  assert.equal(buildRepositionMessage(input({ frame: 3 })).fields.frame, 3);
 });
 
 test('reposition refusal matrix: setpoint modes refuse with named errors', () => {
@@ -59,18 +55,28 @@ test('reposition refusal matrix: setpoint modes refuse with named errors', () =>
   assert.throws(() => buildRepositionMessage(input({ mode: 'force' })), /unknown Move mode/);
 });
 
-test('reposition refusal matrix: local and terrain frames refuse naming the frame', () => {
-  for (const frame of ['LOCAL_NED', 'LOCAL_OFFSET_NED', 'BODY_NED', 'BODY_OFFSET_NED', 'GLOBAL_TERRAIN_ALT']) {
+test('reposition refusal matrix: local frames refuse naming the frame; retired frames refuse upstream', () => {
+  for (const [frame, name] of [[1, 'LOCAL_NED'], [8, 'BODY_NED'], [9, 'BODY_OFFSET_NED']]) {
     assert.throws(
       () => buildRepositionMessage(input({ frame })),
-      new RegExp(`GLOBAL and GLOBAL_RELATIVE_ALT — ${frame}`),
+      new RegExp(`GLOBAL and GLOBAL_RELATIVE_ALT — ${name}`),
+      `frame ${name} must refuse`
+    );
+  }
+  // Terrain (10) and LOCAL_OFFSET_NED (7) left the vocabulary with the Action
+  // surface: they still refuse on the goto path, now with the simplified
+  // numeric-only frame error.
+  for (const frame of [7, 10]) {
+    assert.throws(
+      () => buildRepositionMessage(input({ frame })),
+      /not a SET_POSITION_TARGET frame/,
       `frame ${frame} must refuse`
     );
   }
   // A blank frame resolves the Move default LOCAL_NED and refuses the same way
   // — fail closed, never a silent global guess.
   assert.throws(() => buildRepositionMessage(input({ frame: undefined })), /LOCAL_NED/);
-  assert.throws(() => buildRepositionMessage(input({ frame: 'WARP' })), /unknown Move frame/);
+  assert.throws(() => buildRepositionMessage(input({ frame: 'WARP' })), /not a SET_POSITION_TARGET frame/);
 });
 
 test('reposition refusal matrix: yaw rate has no DO_REPOSITION field', () => {

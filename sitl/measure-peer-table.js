@@ -16,7 +16,7 @@ const ROOT = path.resolve(__dirname, '..');
 const { Connection, BAND } = require(path.join(ROOT, 'lib/connection'));
 const { loadBundled } = require(path.join(ROOT, 'lib/metadata'));
 const { buildCommandLong } = require(path.join(ROOT, 'lib/command/carrier'));
-const { buildMoveMessage, createMoveStream } = require(path.join(ROOT, 'lib/move'));
+const { buildMoveMessage, createMoveStream, MAV_FRAME } = require(path.join(ROOT, 'lib/move'));
 
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-peer-table-'));
 const OUT = path.join(WORK, 'peer-table-results.json');
@@ -211,7 +211,7 @@ async function px4OffboardClimb(conn, sysid, results, tag) {
   const target = { sysid, compid: 1 };
   const climb = buildMoveMessage({
     mode: 'position',
-    frame: 'LOCAL_NED',
+    frame: MAV_FRAME.LOCAL_NED,
     target,
     position: { north: 0, east: 0, up: 12 },
   });
@@ -253,7 +253,7 @@ async function flyAround(conn, sysid) {
   for (const velocity of legs) {
     const message = buildMoveMessage({
       mode: 'velocity',
-      frame: 'LOCAL_NED',
+      frame: MAV_FRAME.LOCAL_NED,
       target,
       velocity,
     });
