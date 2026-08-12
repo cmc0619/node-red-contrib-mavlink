@@ -383,51 +383,6 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
   assert.equal(padded.fields.x, 4);
 });
 
-test('advisoryFor fires only on measured-unsupported combos (§14)', () => {
-  const { advisoryFor } = require('../../lib/move');
-  // Confirmed: PX4 1.18 produced no motion at all for BODY_OFFSET_NED (9) —
-  // the only OFFSET frame still reachable since the Action surface.
-  assert.match(advisoryFor({ mode: 'position', frame: 9, firmware: 'px4' }), /BODY_OFFSET_NED/);
-  // New from measurement: PX4 does not read BODY_NED (8) as a body offset.
-  assert.match(advisoryFor({ mode: 'position', frame: 8, firmware: 'px4' }), /BODY_NED/);
-  assert.match(advisoryFor({ mode: 'position-velocity', frame: 8, firmware: 'px4' }), /BODY_NED/);
-  // …but only when position is actually commanded (Codex, #277): BODY_NED
-  // velocity is PX4's intended body path — the very frame the steer body
-  // reference derives — and warning on it would be advisory noise.
-  assert.equal(advisoryFor({ mode: 'velocity', frame: 8, firmware: 'px4' }), null);
-  // Confirmed 2026-08-08: ArduPilot GUIDED held heading under an absolute-yaw
-  // yaw-only stream (type_mask 2559, 0.2° in 5 s).
-  assert.match(advisoryFor({ mode: 'yaw-only', frame: 1, firmware: 'ardupilot' }), /yaw-only/);
-  // ...but only that mask was measured. A yaw *rate* rides mask 1535 (or 511
-  // with both), and the same run clocked AP slewing ~60 °/s on a commanded
-  // rate — so the advisory must not claim "no yaw change" there (§14 / #179).
-  assert.equal(
-    advisoryFor({ mode: 'yaw-only', frame: 1, firmware: 'ardupilot', yawRate: 20 }),
-    null
-  );
-  assert.equal(
-    advisoryFor({ mode: 'yaw-only', frame: 1, firmware: 'ardupilot', yawRate: 0 }),
-    null
-  );
-  // Supported combos and unknown firmware stay silent.
-  assert.equal(advisoryFor({ mode: 'yaw-only', frame: 1, firmware: 'px4' }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 1, firmware: 'px4' }), null);
-  assert.equal(advisoryFor({ mode: 'acceleration', frame: 1, firmware: 'px4' }), null);
-  assert.equal(advisoryFor({ mode: 'acceleration', frame: 1, firmware: 'custom' }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 1 }), null);
-});
-
-test('measurement-refuted advisories are silent — a warning on working behaviour is noise (§14)', () => {
-  const { advisoryFor } = require('../../lib/move');
-  // ArduPilot Copter-4.7.0 *moved* ~43 m on an acceleration-only setpoint, so
-  // "ArduPilot ignores acceleration-only" was wrong.
-  assert.equal(advisoryFor({ mode: 'acceleration', frame: 1, firmware: 'ardupilot' }), null);
-  // ArduPilot treated BODY_NED (8) and BODY_OFFSET_NED (9) identically
-  // (body-axis offset), so "ArduPilot expects BODY_OFFSET_NED" was wrong.
-  assert.equal(advisoryFor({ mode: 'position', frame: 8, firmware: 'ardupilot' }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 9, firmware: 'ardupilot' }), null);
-});
-
 test('blank local coordinates: refused in absolute frames, inert in the measured OFFSET frame (§14)', () => {
   const target = { sysid: 2, compid: 1 };
   // Absolute local frames — a blank zero-filled here commands the EKF origin.

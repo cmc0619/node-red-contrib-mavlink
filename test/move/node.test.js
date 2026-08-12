@@ -1011,60 +1011,6 @@ test('mavlink-move stream: {action:"stop"} releases the target for a new stream 
   a.emit('close', () => {});
 });
 
-test('mavlink-move advisory dedup: one warn per streak, cleared by a clean input (C8)', () => {
-  const make = () => {
-    // Firmware rides the connection's Vehicle Profile, so the stub's profile
-    // is mutable per input — a real flow's connection can rebind too.
-    const conn = { vehicle: { firmware: 'px4' }, send() {} };
-    const RED = redStub({ conn });
-    require('../../nodes/mavlink-move')(RED);
-    const Node = RED.nodes.types['mavlink-move'];
-    const node = new Node({
-      delivery: 'send',
-      action: 'steer',
-      connection: 'conn',
-      targetSystem: 1,
-      targetComponent: 1,
-    });
-    const warns = [];
-    node.warn = (text) => { warns.push(text); };
-    return { node, conn, warns };
-  };
-  // A: PX4 body reference derives BODY_NED (8) with position commanded —
-  // position discarded (§14). Velocity-only body no longer warns (Codex,
-  // #277: it is PX4's intended body path), so the streak needs a position.
-  const bodyOnPx4 = { reference: 'body', position: { north: 5, east: 0, up: 0 } };
-  // B: ArduPilot absolute-yaw yaw-only — held heading in measurement (§14).
-  const yawOnAp = { yaw: 90 };
-  // Clean: world velocity works everywhere.
-  const clean = { velocity: { north: 1, east: 0, up: 0 } };
-
-  // A refresh-fed stream repeating the same combo must not spam the sidebar —
-  // noise gets ignored, which defeats the advisory's whole purpose.
-  let s = make();
-  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
-  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
-  assert.equal(s.warns.length, 1, 'same advisory twice → exactly one warn');
-  assert.match(s.warns[0], /BODY_NED/);
-
-  // Only consecutive repeats dedup: a change is news, and so is the return.
-  s = make();
-  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
-  s.conn.vehicle.firmware = 'ardupilot';
-  s.node.emit('input', { payload: yawOnAp }, () => {}, () => {});
-  s.conn.vehicle.firmware = 'px4';
-  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
-  assert.equal(s.warns.length, 3, 'advisory A, B, A → three warns');
-  assert.match(s.warns[1], /yaw-only/);
-
-  // A clean input clears the memory, so the advisory's next appearance warns.
-  s = make();
-  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
-  s.node.emit('input', { payload: clean }, () => {}, () => {});
-  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
-  assert.equal(s.warns.length, 2, 'advisory, clean, same advisory → two warns');
-});
-
 function redStub(nodesById) {
   return {
     nodes: {

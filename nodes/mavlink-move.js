@@ -4,7 +4,6 @@ const {
   buildMoveMessage,
   createMoveStream,
   streamLocks,
-  advisoryFor,
   buildRepositionMessage,
   positionFrom,
   velocityFrom,
@@ -39,7 +38,6 @@ module.exports = function registerMavlinkMove(RED) {
     // Last advisory warned, for per-streak dedup (C8): a refresh-fed stream
     // repeating the same combo would spam the debug sidebar, and noise gets
     // ignored. Redeploy resets naturally — new node instance.
-    let lastAdvisory = null;
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
     // Resolve the Vehicle Profile once, like the Connection (guideline:
@@ -315,23 +313,6 @@ module.exports = function registerMavlinkMove(RED) {
         // (§14: setpoints carry no ack, so this warning is all the feedback
         // the operator will get). Firmware resolves the same way the body
         // frame does (CodeRabbit, #277): the connection's bound Vehicle
-        // Profile first, the node's own Vehicle Profile on Build — a Build
-        // node that knows its firmware well enough to derive a body frame
-        // knows it well enough to warn. Build without a profile stays silent:
-        // every advisory is firmware-keyed.
-        const advisory = advisoryFor({
-          mode: moveInput.mode,
-          frame: moveInput.frame,
-          // The ArduPilot yaw-only advisory was measured on absolute yaw only,
-          // so it needs to see whether a yaw rate is riding along (§14 / #179).
-          yawRate: moveInput.yawRate,
-          firmware: firmwareFor(vehicleAtDeploy, connectionNode),
-        });
-        // One warn per advisory streak (C8): a stream feed repeating the same
-        // combo warns once; a clean input clears the memory so the advisory's
-        // next appearance warns again.
-        if (advisory && advisory !== lastAdvisory) node.warn(advisory);
-        lastAdvisory = advisory;
 
         if (delivery === 'build') {
           completeBuild(node, send, message);
