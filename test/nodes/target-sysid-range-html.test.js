@@ -113,7 +113,10 @@ test('vehicle defaultTargetSystem still uses the shared uint8 validator', () => 
 // would red a legal flow.
 const CONDITIONAL_BROADCAST_FILES = [
   ['mavlink-command.html', "liveOr(this, '#node-input-delivery'"],
-  ['mavlink-move.html', "liveOr(this, '#node-input-carrier'"],
+  // Move gates on delivery too since the Action surface (§6 redesign):
+  // Send & confirm is only offered on the Go to action, so the tier field
+  // alone carries the rule — the carrier field it used to read is gone.
+  ['mavlink-move.html', "liveOr(this, '#node-input-delivery'"],
 ];
 
 for (const [file, gate] of CONDITIONAL_BROADCAST_FILES) {
@@ -166,8 +169,10 @@ for (const [file, tierField, tierValue] of [
   ['mavlink-move.html', 'delivery', 'confirm'],
 ]) {
   test(`${file}: a blank targetSystem still inherits on the ${tierValue} tier (#260 regression)`, () => {
-    // Move needs the reposition carrier for its rule to engage at all.
-    const saved = { [tierField]: tierValue, carrier: 'reposition' };
+    // Confirm implies the acked path on both nodes now — Move's editor only
+    // offers the tier on the Go to action, so the saved action rides along
+    // for realism but the validator keys on delivery alone.
+    const saved = { [tierField]: tierValue, action: 'goto' };
     const validate = targetSystemValidator(file, saved);
 
     assert.equal(validate(''), true, "blank means inherit the profile target — Number('') is 0, but blank is not broadcast");
@@ -184,9 +189,15 @@ test('mavlink-command.html: an explicit 0 stays valid on the Send tier (#260)', 
   assert.equal(validate(''), true);
 });
 
-test('mavlink-move.html: an explicit 0 stays valid on the setpoint carrier (#260)', () => {
-  const validate = targetSystemValidator('mavlink-move.html', { delivery: 'confirm', carrier: 'setpoint' });
-  assert.equal(validate(0), true, 'only the reposition carrier awaits an ack');
+test('mavlink-move.html: an explicit 0 stays valid on the unacked tiers (#260)', () => {
+  // The old form of this test saved {delivery:'confirm', carrier:'setpoint'}
+  // — a combo the Action surface makes unrepresentable (confirm is only
+  // offered on Go to). What survives is the real rule: broadcast is legal
+  // wherever no ack is awaited.
+  for (const delivery of ['send', 'stream', 'build']) {
+    const validate = targetSystemValidator('mavlink-move.html', { delivery, action: 'steer' });
+    assert.equal(validate(0), true, `broadcast is legal on ${delivery} — nothing awaits an ack`);
+  }
 });
 
 test('mavlink-payload.html: targetSystem stays unconditional — its editor cannot know the ack mode (#260)', () => {
