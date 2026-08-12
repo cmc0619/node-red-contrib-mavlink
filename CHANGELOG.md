@@ -62,6 +62,19 @@ config-node shapes and message contracts may still change without a major bump.
   1/8/9). The builders now validate a numeric frame against the derivable set
   and nothing else.
 
+### Fixed
+
+- **`mavlink-move`: the Body-on-Build gate never fired.** Steer's *body*
+  reference derives its frame from the vehicle's firmware, so Body on the
+  Build tier with a concrete dialect has no firmware to derive from — a node
+  that deploys clean and then refuses every message. The editor validator
+  added to red that combination was declared `function (v)`, and Node-RED
+  only treats a returned string as an invalid *reason* when the validator
+  takes two arguments; with one, the reason string is coerced with `!!`,
+  comes out truthy, and the field passes. The gate has been reading as
+  working and stopping nothing since it landed. Declared `(v, _opt)`, and the
+  arity is now pinned by the test that covers it.
+
 ## [0.2.0] - 2026-08-11
 
 Three weeks of transaction work: every node that waits for a vehicle now
