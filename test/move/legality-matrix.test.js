@@ -81,8 +81,17 @@ function configFor(action, delivery, variant) {
     config.vUp = 0;
   }
   if (delivery === 'build') {
-    config.dialect = 'common';
-    if (variant === 'body') config.vehicle = 'veh';
+    // Body on Build is only offered through the Vehicle Profile dialect
+    // escape — the editor reds any other dialect (Codex, #277), because a
+    // concrete dialect gives Build no firmware source and the node would
+    // deploy clean and refuse every input. The matrix drives the offered
+    // shape, not the hidden-field shortcut it originally used.
+    if (variant === 'body') {
+      config.dialect = '__vehicle';
+      config.vehicle = 'veh';
+    } else {
+      config.dialect = 'common';
+    }
   } else {
     config.connection = 'conn';
   }

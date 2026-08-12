@@ -16,8 +16,23 @@
       altRef: { value: 'home' },
       // Steer's axes: world = LOCAL_NED everywhere; body adapts to the bound
       // firmware (AP BODY_OFFSET_NED vs PX4 BODY_NED, §14) and fails closed
-      // without one.
-      reference: { value: 'world' },
+      // without one. On the wire tiers the Connection's Vehicle Profile
+      // supplies the firmware; on Build only the Vehicle Profile dialect
+      // escape does — so Body on Build with a concrete dialect is a node
+      // that deploys clean and refuses every input (Codex, #277), and the
+      // editor must not offer that shape. Deploy-time validation reads the
+      // saved values; the live read is own-dialog scoped (#217).
+      reference: {
+        value: 'world',
+        validate: function (v) {
+          var ref = RED.mavlink.liveOr(this, '#node-input-reference', v, 'world');
+          if (ref !== 'body') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'steer') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery, 'build') !== 'build') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-dialect', this.dialect, '') === '__vehicle') return true;
+          return 'Body on Build needs a firmware to adapt to — set Dialect to "from Vehicle Profile…", or use World';
+        },
+      },
       // Go to command-path params. Blank encodes the spec's no-change sentinel
       // at runtime (speed −1 = vehicle default, radius 0 = ignored, yaw NaN =
       // current heading mode — the command-preset blankParams convention).

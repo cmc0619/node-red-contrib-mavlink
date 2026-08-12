@@ -99,7 +99,9 @@ test('mavlink-move Action surface: goto default, both actions offered, retired f
   assert.match(html, /option value="goto"/, 'goto action offered');
   assert.match(html, /option value="steer"/, 'steer action offered');
   assert.match(html, /altRef:\s*\{\s*value:\s*'home'\s*\}/, 'altRef defaults to home (the GCS default)');
-  assert.match(html, /reference:\s*\{\s*value:\s*'world'\s*\}/, 'reference defaults to world (works everywhere)');
+  // Defaults-based, not a source regex: reference grew a validator (Codex
+  // #277 Body-on-Build gate) so its literal is no longer one line.
+  assert.equal(loadNodeDefaults('mavlink-move').reference.value, 'world', 'reference defaults to world (works everywhere)');
 
   // The old carrier/mode/frame triple and the PX4-compat checkbox are
   // retired, not hidden (YAGNI, pre-1.0: delete and re-pick). The wire
@@ -190,6 +192,25 @@ test('mavlink-move goto requires the global position at deploy, steer requires n
   assert.match(String(defaults.lat.validate.call(gotoNode, 91, {})), /\[-90, 90\]/);
   assert.match(String(defaults.lon.validate.call(gotoNode, 181, {})), /\[-180, 180\]/);
   assert.match(String(defaults.alt.validate.call(gotoNode, 'abc', {})), /number of metres/);
+});
+
+test('mavlink-move Body on Build requires the Vehicle Profile dialect (Codex #277)', () => {
+  // Build with a concrete dialect has no firmware source, so a Body node
+  // would deploy clean and refuse every input — the editor must red it. The
+  // Vehicle Profile dialect escape supplies the firmware and passes; every
+  // wire tier gets firmware from the Connection and never reds.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const validate = defaults.reference.validate;
+  assert.match(
+    String(validate.call({ action: 'steer', delivery: 'build', dialect: 'common' }, 'body', {})),
+    /Body on Build needs a firmware/
+  );
+  assert.equal(validate.call({ action: 'steer', delivery: 'build', dialect: '__vehicle' }, 'body', {}), true);
+  assert.equal(validate.call({ action: 'steer', delivery: 'send', dialect: '' }, 'body', {}), true);
+  assert.equal(validate.call({ action: 'steer', delivery: 'stream', dialect: '' }, 'body', {}), true);
+  assert.equal(validate.call({ action: 'steer', delivery: 'build', dialect: 'common' }, 'world', {}), true);
+  assert.equal(validate.call({ action: 'goto', delivery: 'build', dialect: 'common' }, 'body', {}), true,
+    'a hidden reference on a goto node never reds');
 });
 
 test('mavlink-move steer fields default blank with the blank-allowed validator', () => {

@@ -351,6 +351,15 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, with loud re
   assert.throws(() => deriveSteerMode(g({ accel: filled, velocity: filled })), /cannot mix acceleration/);
   // Nothing filled is nothing to command — never an all-ignore packet (§14 / #115).
   assert.throws(() => deriveSteerMode(g()), /nothing to command/);
+
+  // Only the LOCAL triplet names the position group (Codex, #277): a node
+  // switched from Go to keeps its hidden lat/lon/alt serialized, and
+  // positionFrom carries both families. Stale globals must not turn a
+  // velocity-only steer into position-velocity — nor rescue an empty one.
+  const staleGlobals = { north: '', east: '', up: '', lat: 47.1, lon: 8.5, alt: 25 };
+  assert.equal(deriveSteerMode(g({ position: staleGlobals, velocity: filled })), 'velocity');
+  assert.equal(deriveSteerMode(g({ position: staleGlobals, accel: filled })), 'acceleration');
+  assert.throws(() => deriveSteerMode(g({ position: staleGlobals })), /nothing to command/);
 });
 
 test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw', () => {
