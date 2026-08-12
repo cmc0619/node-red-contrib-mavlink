@@ -348,9 +348,13 @@ test('mavlink-move blank payload altRef/reference inherit the configured value; 
     targetComponent: 1,
   });
   for (const blank of [undefined, null, '']) {
+    // Reset between emits (CodeRabbit, #277): a stale `sent` would let a
+    // dropped output pass on the previous iteration's message.
+    sent = undefined;
     steer.emit('input', { payload: { reference: blank } }, (m) => { sent = m; }, () => {});
     assert.equal(sent[0].payload.fields.coordinate_frame, 9, `blank reference ${JSON.stringify(blank)} inherits body (ArduPilot)`);
   }
+  sent = undefined;
   steer.emit('input', { payload: { reference: 'world' } }, (m) => { sent = m; }, () => {});
   assert.equal(sent[0].payload.fields.coordinate_frame, 1, 'an explicit payload reference wins');
 });
@@ -1402,6 +1406,16 @@ test('mavlink-move goto + Stream streams global position setpoints on the *_INT 
     assert.equal(out[0], null, `payload.${key} must not fire the continue port`);
     assert.equal(out[1].result, 'failed');
     assert.match(doneError.message, new RegExp(`payload\\.${key} belongs to the Go to command path`));
+  }
+  // yawRate is a steer field on every goto tier — DO_REPOSITION carries a
+  // heading only — and the stream must refuse it rather than drop it in
+  // silence (CodeRabbit, #277).
+  {
+    let out;
+    let doneError;
+    node.emit('input', { payload: { yawRate: 10 } }, (m) => { out = m; }, (err) => { doneError = err; });
+    assert.equal(out[0], null);
+    assert.match(doneError.message, /yawRate is a Steer field/);
   }
 
   const before = conn.sends.length;

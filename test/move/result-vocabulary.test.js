@@ -75,8 +75,11 @@ function conn() {
   };
 }
 
+// Blank, not 0: a zero is a commanded value under the derived mask, and a
+// placeholder 0 here would turn the velocity stream fixtures into
+// position-velocity commanding the local origin (CodeRabbit, #277).
 const setpointCfg = {
-  action: 'steer', north: 0, east: 0, up: 0, targetSystem: 5, targetComponent: 1,
+  action: 'steer', north: '', east: '', up: '', targetSystem: 5, targetComponent: 1,
 };
 const repositionCfg = {
   action: 'goto', altRef: 'home',

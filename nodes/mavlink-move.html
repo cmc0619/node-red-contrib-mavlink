@@ -165,6 +165,16 @@
         $adv.toggle();
         $(this).text(($adv.is(':visible') ? '▾' : '▸') + ' Advanced');
       });
+      // A configured Advanced value must be visible on open (CodeRabbit,
+      // #277): an invalid ackTimeout — or a commanded acceleration, which is
+      // the whole mode — hiding behind a collapsed section leaves the
+      // operator staring at a red node with no visible cause.
+      if (!RED.mavlink.isBlank(node.ackTimeout) || !RED.mavlink.isBlank(node.radius)
+        || !RED.mavlink.isBlank(node.aNorth) || !RED.mavlink.isBlank(node.aEast)
+        || !RED.mavlink.isBlank(node.aUp) || node.changeMode) {
+        $('#move-advanced').show();
+        $('#move-advanced-toggle').text('▾ Advanced');
+      }
 
       // Delivery tiers follow the action (§9: tiers are computed, not fixed):
       // goto's command path confirms via COMMAND_ACK; steer setpoints carry

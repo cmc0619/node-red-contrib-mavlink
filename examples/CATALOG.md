@@ -47,7 +47,8 @@ Build/Send/Send & confirm, `SET_POSITION_TARGET_GLOBAL_INT` on Stream; `altRef`:
 command path) or `steer` (setpoints; `reference`: `world` = Local NED everywhere, `body`
 derives the frame from the bound firmware and fails closed without one). There is no
 mode pulldown: the type_mask derives from which field groups are non-blank — filling
-fields IS the mode, so placeholder zeros must be blank (`""`), never `0`. `rateHz`
+fields IS the mode. Fields in an **unused** group must be blank (`""`); `0` inside an
+active group is a commanded zero (hover, pure-north) and stays. `rateHz`
 (setpoints/s), `ttlMs` govern the stream. Up is up-positive and yaw is degrees in the UI;
 the node flips to NED and converts to radians at encode. **No arc primitive** — a
 curved path is either many setpoints from a Function node, `DO_ORBIT`, or a mission ring.

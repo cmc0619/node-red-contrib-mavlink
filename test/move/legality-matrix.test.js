@@ -119,8 +119,12 @@ function drive(config, { firmware } = {}) {
       (err) => resolve({ out, err, node, conn })
     );
     // The confirm tier completes on its COMMAND_ACK: feed ACCEPTED so the
-    // offered combo can finish the way a real vehicle finishes it.
-    if (config.delivery === 'confirm' && conn.subs.length) {
+    // offered combo can finish the way a real vehicle finishes it. Assert
+    // the subscription instead of guarding on it (CodeRabbit, #277): a
+    // confirm tier that stopped subscribing would otherwise hang the test
+    // instead of failing with a name.
+    if (config.delivery === 'confirm') {
+      assert.ok(conn.subs.length, 'the confirm tier subscribes before the handler returns');
       conn.subs[0].handler({ sysid: 1, compid: 1, fields: { command: 192, result: 0 } });
     }
   });
@@ -189,6 +193,21 @@ const REFUSED = [
     name: 'body reference without firmware',
     config: configFor('steer', 'send', 'body'),
     error: /Vehicle Profile with firmware ardupilot or px4/,
+  },
+  // Every steer field is optional at deploy — the widest gap between the
+  // editor surface and the runtime — so the all-blank refusal lands at
+  // input time, and the matrix must own it (CodeRabbit, #277).
+  {
+    name: 'steer with no motion fields',
+    config: {
+      action: 'steer',
+      delivery: 'send',
+      reference: 'world',
+      connection: 'conn',
+      targetSystem: 1,
+      targetComponent: 1,
+    },
+    error: /nothing to command/,
   },
 ];
 

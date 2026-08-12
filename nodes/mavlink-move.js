@@ -43,6 +43,10 @@ module.exports = function registerMavlinkMove(RED) {
     let lastAdvisory = null;
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
+    // Resolve the Vehicle Profile once, like the Connection (guideline:
+    // config-node references resolve at deploy, not per input). Build-tier
+    // body derivation and advisories read firmware through it.
+    const vehicleAtDeploy = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
     applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
 
     // Stop the active stream and free its single-owner scope (#176). Every
@@ -270,6 +274,13 @@ module.exports = function registerMavlinkMove(RED) {
               );
             }
           }
+          // yawRate is a steer field on every goto tier (CodeRabbit, #277):
+          // DO_REPOSITION carries a heading only (the builder refuses it on
+          // the command path), and the goto stream's position setpoint never
+          // forwards it — so without this it would drop in silence.
+          if (payload.yawRate !== undefined) {
+            throw new Error('msg.payload.yawRate is a Steer field — Go to carries a heading (yaw) only');
+          }
           moveInput = {
             mode: 'position',
             frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),
@@ -291,7 +302,7 @@ module.exports = function registerMavlinkMove(RED) {
             mode: deriveSteerMode({ position, velocity, accel, yaw, yawRate }),
             frame: frameForReference(
               firstDefined(payload.reference, config.reference),
-              firmwareFor(RED, config, connectionNode)
+              firmwareFor(vehicleAtDeploy, connectionNode)
             ),
             target,
             position,
@@ -306,15 +317,19 @@ module.exports = function registerMavlinkMove(RED) {
 
         // Known-unsupported firmware combos still send, but never silently
         // (§14: setpoints carry no ack, so this warning is all the feedback
-        // the operator will get). Firmware comes from the connection's bound
-        // Vehicle Profile; Build tier — which has no connection — never warns.
+        // the operator will get). Firmware resolves the same way the body
+        // frame does (CodeRabbit, #277): the connection's bound Vehicle
+        // Profile first, the node's own Vehicle Profile on Build — a Build
+        // node that knows its firmware well enough to derive a body frame
+        // knows it well enough to warn. Build without a profile stays silent:
+        // every advisory is firmware-keyed.
         const advisory = advisoryFor({
           mode: moveInput.mode,
           frame: moveInput.frame,
           // The ArduPilot yaw-only advisory was measured on absolute yaw only,
           // so it needs to see whether a yaw rate is riding along (§14 / #179).
           yawRate: moveInput.yawRate,
-          firmware: connectionNode?.vehicle?.firmware,
+          firmware: firmwareFor(vehicleAtDeploy, connectionNode),
         });
         // One warn per advisory streak (C8): a stream feed repeating the same
         // combo warns once; a clean input clears the memory so the advisory's
@@ -531,21 +546,18 @@ function statusRecord(result, detail, extra = {}) {
 }
 
 /**
- * Firmware for the body-reference derivation: the connection's bound Vehicle
- * Profile on the wire tiers, the node's own Vehicle Profile on Build (which
- * has no connection). Returns undefined when neither names one — the body
- * derivation fails closed on that, world never asks.
+ * Firmware for the body-reference derivation and the advisories: the
+ * connection's bound Vehicle Profile on the wire tiers, the node's own
+ * Vehicle Profile (resolved once at deploy) on Build. Returns undefined when
+ * neither names one — the body derivation fails closed on that, world never
+ * asks, and advisories stay silent.
  *
- * @param {object} RED
- * @param {object} config
+ * @param {object|null} vehicleNode  the node's own Vehicle Profile, from deploy
  * @param {object|null} connectionNode
  * @returns {string|undefined}
  */
-function firmwareFor(RED, config, connectionNode) {
-  const fromConnection = connectionNode?.vehicle?.firmware;
-  if (fromConnection) return fromConnection;
-  const vehicleNode = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
-  return vehicleNode?.firmware;
+function firmwareFor(vehicleNode, connectionNode) {
+  return connectionNode?.vehicle?.firmware ?? vehicleNode?.firmware;
 }
 
 /**
