@@ -8,6 +8,26 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Changed
 
+- **`mavlink-move` surface redesign — breaking.** The carrier/mode/frame
+  triple is gone; the node speaks intents. **Action** is `goto` (one-shot
+  guided goto: Build/Send/Send & confirm ride `MAV_CMD_DO_REPOSITION`,
+  Stream rides `SET_POSITION_TARGET_GLOBAL_INT`) or `steer` (setpoints; the
+  type_mask derives from which field groups are filled — there is no mode
+  pulldown). The only frame choices left are the ones that are choices: an
+  altitude reference (above home / MSL) on goto, and world/body axes on
+  steer, with the body frame derived from the vehicle profile's firmware
+  (ArduPilot `BODY_OFFSET_NED`, PX4 `BODY_NED`) and refusing when firmware
+  is unknown. `px4Compat` is deleted — global setpoint frames always
+  transmit the `*_INT` twins. Terrain frames are off the surface until
+  measured. The retired `msg.payload` keys (`carrier`, `mode`, `frame`,
+  `px4Compat`) refuse loudly.
+- **`mavlink-command` sheds motion presets.** `yaw` and `rotate`
+  (`CONDITION_YAW`) are deleted from the curated list — the raw command
+  path keeps the capability, and PX4 never implemented the command. `Go To
+  / Reposition` leaves the preset dropdown (Move owns the goto); its
+  metadata row remains for `mavlink-formation`. The carrier selector is
+  labelled **Send as** — the options are the literal wire messages.
+
 - **`mavlink-move` result vocabulary — breaking.** `succeeded` is gone: it
   meant both "put on the wire" (setpoints) and "the vehicle agreed"
   (reposition), and the double meaning let a silent run read as a success.
