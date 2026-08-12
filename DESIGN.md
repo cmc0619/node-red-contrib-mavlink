@@ -1058,7 +1058,7 @@ instead — sustained setpoints with TTL and stop, no confirmation possible. Its
 confirm** and refuses Stream.
 
 **A stream announces its own expiry — on output 1.** When the TTL elapses the node sends the
-zero-velocity stop packet and emits a status record with `detail: 'expired'`, carrying the stop
+zero-velocity stop packet and emits a status record with `result: 'expired'`, carrying the stop
 packet the vehicle actually got. Without it a timed move is unobservable: the vehicle halts, the
 flow hears nothing, and the node's status still reads "streaming", so the obvious use of a TTL —
 *move for N ms, then do the next thing* — cannot be built. Branch on it with a `switch`, the
@@ -1409,7 +1409,7 @@ consecutive-failure streak on the status output, never deciding on its own to qu
 operator chose to stream, and the firmware's own setpoint watchdog is the failsafe on a
 truly dead link. `expired` and `stopped` records carry `sent` — setpoints the connection accepted, not wire
 deliveries: the streaming band deliberately coalesces under backpressure, last value wins. A brake send
-that throws at expiry rides the record's own `brakeError` field — `detail` stays the
+that throws at expiry rides the record's own `brakeError` field — `result` stays the
 documented `expired` discriminator, matching exactly when downstream recovery matters most —
 and the single-owner scope (#176) is freed in `finally` so no throw can strand the target
 locked. The handover itself is failure-ordered: the old stream keeps the slot until the
@@ -1458,15 +1458,24 @@ naming the valid set.
 
 Move has a second carrier for one-shot goto (#239): `carrier: reposition` sends
 `MAV_CMD_DO_REPOSITION` (192) as `COMMAND_INT` — the guided goto every reference implementation
-converges on, and the only reposition ArduPilot accepts (INT-only; a `COMMAND_LONG` attempt acks
-`COMMAND_INT_ONLY`). Same node, same mode and frame vocabulary, same §10 coordinate guards — with
-the one thing no setpoint offers: a `COMMAND_ACK`. The editor field defaults to `setpoint`;
-`msg.payload.carrier` overrides per input like mode and frame, and a saved config without the
-field parses as setpoint — the safe direction.
+converges on, and the canonical form for a location-bearing command (degE7 x/y, no float
+truncation). *Correction (source-read 2026-08-12):* this section previously justified the INT
+choice as "the only reposition ArduPilot accepts; a `COMMAND_LONG` attempt acks
+`COMMAND_INT_ONLY`" — that is wrong. ArduPilot converts a LONG-form `DO_REPOSITION` to INT
+internally (`command_long_stores_location` → `convert_COMMAND_LONG_to_COMMAND_INT`) and PX4
+accepts both forms; INT stays our choice on precision grounds alone. Same node, same mode and
+frame vocabulary, same §10 coordinate guards — with the one thing no setpoint offers: a
+`COMMAND_ACK`. The editor field defaults to `setpoint`; `msg.payload.carrier` overrides per
+input like mode and frame, and a saved config without the field parses as setpoint — the safe
+direction.
 
 The carrier is position-only on frames `GLOBAL` (0) and `GLOBAL_RELATIVE_ALT` (3), sent in
-`COMMAND_INT`'s own frame field as the spec-current numbers — no `*_INT` twin exists on this path,
-so the PX4-compat checkbox does not apply. Everything else fails closed with named errors: setpoint
+`COMMAND_INT`'s own frame field as the spec-current numbers. The `*_INT` twins of these frames
+do exist (`GLOBAL_INT` 5, `GLOBAL_RELATIVE_ALT_INT` 6 — MAVSDK transmits 5 here), correcting
+this section's earlier "no twin exists" premise; the conclusion stands on measurement instead:
+PX4 buckets every global and unrecognised frame into the same ÷1e7 branch and frame 5 is
+measured accepted on both stacks (§14 COMMAND_INT scaling entry), so the PX4-compat checkbox
+does not apply. Everything else fails closed with named errors: setpoint
 modes (velocity, position-velocity, acceleration, yaw-only), local frames (ArduPilot denied LOCAL
 in the SITL 18 matrix), terrain (unmeasured), yaw rate (DO_REPOSITION carries a heading only), and
 Stream delivery (`COMMAND_INT` has no streaming semantics). Lat/lon enter in degrees and scale to
@@ -1479,18 +1488,34 @@ mode — an explicit 0 commands north). **The dialect declares param4 in radians
 operator's degrees convert exactly once at encode, `NaN` surviving the scale.
 `MAV_DO_REPOSITION_FLAGS_CHANGE_MODE` (param2 = 1) flies the vehicle into guided to execute the
 goto: a mode change, therefore a strict boolean opt-in (editor checkbox or
-`msg.payload.changeMode === true`; truthy tokens refuse), default off.
+`msg.payload.changeMode === true`; truthy tokens refuse), default off. The flag is **the gate**,
+measured on both stacks (§14, 2026-08-12): a reposition is ACCEPTED iff the flag is set or the
+vehicle is already in the stack's guided-capable mode — GUIDED on ArduPilot, AUTO_LOITER/Hold on
+PX4 — and otherwise answers `MAV_RESULT_DENIED` (2), the same refusal code on both. With the
+flag set, the stacks are indistinguishable to the caller. `param4` yaw actuation stays
+unmeasured, and source reading (2026-08-12) says not to expect it on Copter: ArduCopter's
+handler ignores param4 outright (`set_destination(..., use_yaw=false)`; ArduPlane reads it as
+loiter direction), so "yaw 90 turns east" is not a Copter behaviour and no SITL verdict asserts
+a heading.
 
 Delivery tiers follow the carrier (§9: tiers are computed, not fixed): Build and Send map
 naturally; **Send and confirm** replaces Stream, riding the Command node's AckWaiter unchanged —
 retry on `TEMPORARILY_REJECTED`, re-arm on `IN_PROGRESS`, ack attribution by source and GCS
-address. `ACCEPTED` fires Continue with `resultCode` 0; every other terminal — `COMMAND_INT_ONLY`
-(8) and `COMMAND_UNSUPPORTED_MAV_FRAME` (9) included — fails on the status output with its
-`MAV_RESULT` name and code, never silence, and no carrier swap is attempted (an INT-only command's
-wrong-carrier ack is a contradiction to fail loudly, not resolve). A missing ack reports `timeout`
-— no completion condition exists for a goto in this node. No advisories ship on this carrier: the
-ack is the feedback channel, and every candidate (ArduPilot outside GUIDED, PX4 outside OFFBOARD,
-`CONDITION_YAW` interplay, param4 actuation) awaits SITL measurement (§14).
+address — and publishing its outcome **verbatim**, one vocabulary across Move and Command
+(#276): `accepted` fires Continue with `resultCode` 0; every other terminal fails on the status
+output with the MAV_RESULT name lowercased *as* the result — `denied`, `command_int_only` (8),
+`command_unsupported_mav_frame` (9), … — never silence, and no carrier swap is attempted (an
+INT-only command's wrong-carrier ack is a contradiction to fail loudly, not resolve). A missing
+ack reports `unconfirmed` (§9: a missing ack is not a failure) — no completion condition exists
+for a goto in this node. `succeeded` is banned from mavlink-move entirely: it once meant both
+"on the wire" (setpoints) and "the vehicle agreed" (reposition), and that double meaning is how
+SITL 27/30 measured silence as success. The silent paths speak their own words — `built`,
+`sent`, `streaming`, `stopped`, `expired` — each one meaning, pinned by
+`test/move/result-vocabulary.test.js`. No advisories ship on this carrier: the ack is the
+feedback channel, and the loudest former candidates are measured moot — outside the eligible
+mode with the flag clear, both stacks answer `DENIED` (2) themselves (§14, 2026-08-12), better
+feedback than any advisory; `CONDITION_YAW` interplay and param4 actuation still await
+measurement.
 
 ### Command presets
 
@@ -3770,7 +3795,8 @@ when it elapses. The stopping is the behaviour; there is nothing further to repo
 still read "streaming", so *move for N ms, then do the next thing* — the obvious reason to set a
 TTL at all — was unbuildable, and the node's own display lied about live state. Both reference
 implementations (`-ai`, `-kimi`) emit a stream-lifecycle message; ours was alone in staying
-quiet. TTL expiry now emits a status record with `detail: 'expired'`. Stops the flow *caused*
+quiet. TTL expiry now emits a status record announcing it (today's discriminator, post-#276:
+`result: 'expired'`). Stops the flow *caused*
 stay silent (replacement, redeploy): the general rule is **announce what the flow could not
 otherwise observe, and nothing else**, which is the same reasoning that keeps advisories from
 becoming noise.
@@ -3977,6 +4003,12 @@ depends on. **Do not ship a "PX4 needs OFFBOARD for reposition" advisory.**
 input left as `~π/2`), which settles the units question against the dialect. The vehicle's
 **resulting heading was not captured**, so "yaw 90 ends EAST" stays unmeasured — do not assert
 the behavioural half on the strength of this run.
+*Superseded in part (2026-08-12):* this run was confounded. The 8 s post-takeoff wait let PX4
+settle into AUTO_LOITER — the very state that satisfies the flag-clear path — so its ACCEPTED
+cannot isolate `CHANGE_MODE`, and the sentence "both firmwares now answer the same way through
+the same carrier" rested on two different experiments (27: AP pre-switched to GUIDED, flag off;
+30: flag on from AUTO_LOITER). The no-OFFBOARD-stream conclusion **stands**; the same-way claim
+is replaced by the measured gate in the CHANGE_MODE entry below.
 *Check:* `node sitl/run-example-suite.js --only 30`.
 
 ---
@@ -4030,3 +4062,38 @@ coordinate, including `DO_SET_HOME` / COMMAND_INT `MAV_FRAME_LOCAL_NED`.
 for known local frames; COMMAND_LONG / global frames keep the #263 guard.
 *Check:* `lib/command/presets.js` (`latLonRangeRefusal`), `examples/sitl/07-int-local-vs-global.json`,
 `test/command/presets.test.js`.
+
+**`CHANGE_MODE` is the gate for `DO_REPOSITION` — on both stacks (2026-08-12).**
+*Wrong belief:* examples 27 and 30 established that both firmwares answer a Move reposition the
+same way, with the flag as belt-and-braces the way QGC and MAVSDK treat it. The two runs were in
+fact different experiments — 27 was ArduPilot pre-switched into GUIDED with the flag OFF, 30 was
+PX4 with the flag ON from AUTO_LOITER — so neither stack ever had the flag isolated, and four
+green cells did not measure the variable they were named after.
+*Fact (SITL, measured 2026-08-12 via throwaway probes 39–42 — one-field twins of 27/30 in which
+only `changeMode` differed, so a change in outcome could only be the flag):* a reposition is
+**ACCEPTED iff `CHANGE_MODE` is set OR the vehicle is already in the stack's guided-capable
+mode** — GUIDED on ArduPilot (Copter 4.7.0), AUTO_LOITER/Hold on PX4 (1.18) — and otherwise
+answers **`MAV_RESULT_DENIED` (2), the same refusal code on both stacks**. Cells: AP flag-on
+from LOITER → ACCEPTED (and the ack itself proves the self-switch into GUIDED — the handler
+returns FAILED when that switch fails); AP flag-off from LOITER → DENIED (2); PX4 flag-on
+mid-AUTO_TAKEOFF → ACCEPTED; PX4 flag-off mid-AUTO_TAKEOFF → DENIED (2). Matches both handlers
+as source-read (ArduCopter `handle_command_int_do_reposition`, PX4 `Navigator::run`), and
+MAVSDK's per-autopilot pre-switch (Hold on PX4, guided on ArduPilot) is the same table
+implemented client-side. One cell remains source-read, not measured: PX4 flag-clear from
+AUTO_LOITER (accepted per source; example 30 cannot serve — its flag was set).
+*Check:* the probes were throwaway and are deleted; re-measure by re-creating one-field twins
+of examples 27/30 (LOITER pre-switch on AP; mid-climb timing with `MIS_TAKEOFF_ALT` raised on
+PX4).
+
+**PX4 refuses a stick-driven mode airborne without RC (2026-08-12).**
+*Wrong belief:* probe 40 could leave Hold by commanding POSCTL (`DO_SET_MODE`, main_mode 3)
+mid-flight — the same command example 36 measured ACKed on sysid 11.
+*Fact:* airborne on the Compose lab (no RC input), PX4 answered `TEMPORARILY_REJECTED` (1) —
+3 retries over 3.0 s, never accepted. POSCTL is stick-driven and PX4 will not enter it with
+nothing to steer by; example 36's ACK was on the ground, pre-arm, and ground-vs-airborne is the
+variable. The probe was recut to reach its cell by timing instead — mid-climb the nav_state is
+AUTO_TAKEOFF, already outside Hold, with `MIS_TAKEOFF_ALT` raised to 40 m to widen the window
+from ~2 s to ~25 s (an explicit NAV_TAKEOFF altitude would not do: PX4 reads param7 as AMSL and
+the lab's Zurich home sits near 488 m).
+*Check:* example 36 for the ground half; the airborne refusal is recorded in commit 7be10a7 and
+the probe-40 rig row (2026-08-12).
