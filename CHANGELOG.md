@@ -8,6 +8,12 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Changed
 
+- **The identity row is labelled `Identity`.** It used to read *Send as* (or
+  *Send-as* on Mission and Param), which now names the wire-message selector on
+  Command, Payload and Formation — two rows, one label, in the same dialog.
+  Label only: the `identity` config key and everything it addresses are
+  unchanged.
+
 - **`mavlink-move` surface redesign — breaking.** The carrier/mode/frame
   triple is gone; the node speaks intents. **Action** is `goto` (one-shot
   guided goto: Build/Send/Send & confirm ride `MAV_CMD_DO_REPOSITION`,

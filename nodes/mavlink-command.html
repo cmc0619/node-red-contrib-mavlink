@@ -821,7 +821,7 @@
   </div>
 
   <div class="form-row" id="row-cmd-identity">
-    <label for="node-input-identity" style="width:120px">Send as</label>
+    <label for="node-input-identity" style="width:120px">Identity</label>
     <select id="node-input-identity" style="width:240px"></select>
   </div>
 
@@ -906,7 +906,7 @@
       precedence over every other resolution step including companion derivation.
     </dd>
     <dt class="optional">payload.identityId <span class="property-type">string</span></dt>
-    <dd>Runtime override for the send-as Local Identity node id.</dd>
+    <dd>Runtime override for the Identity row's Local Identity node id.</dd>
     <dt class="optional">confirmed <span class="property-type">boolean</span></dt>
     <dd>Must be <code>true</code> for Safety presets (e.g. Flight Termination).</dd>
     <dt class="optional">mavFrame <span class="property-type">number</span></dt>
@@ -1003,8 +1003,8 @@
     <li><b>Build tier</b>: Dialect row shown; Vehicle Profile row shown only when Dialect is
         <em>from Vehicle Profile…</em>. Connection, identity, timeout, and retry rows hidden.
         Target sysid/compid inherit from the Vehicle Profile only in that mode.</li>
-    <li><b>Wire tiers</b> (Send / confirm / complete): Connection shown (required); identity
-        (send-as) shown. Target rows follow the identity role:</li>
+    <li><b>Wire tiers</b> (Send / confirm / complete): Connection shown (required); the
+        Identity row shown. Target rows follow the identity role:</li>
     <li><b>gcs / custom identity</b>: target sysid and compid shown; blank inherits the
         connection's vehicle profile default.</li>
     <li><b>companion identity</b>: target sysid and compid hidden — target is derived from

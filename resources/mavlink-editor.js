@@ -1182,7 +1182,7 @@
   };
 
   /**
-   * Fill a send-as identity select with the identities bound to the selected
+   * Fill an Identity select with the identities bound to the selected
    * connection. When the saved id is not eligible (or empty), the first
    * eligible identity is preselected — and thereby written into config on
    * Done (§6 matrix: prefill is explicit, runtime never infers).
@@ -1206,7 +1206,7 @@
   };
 
   /**
-   * Reload the send-as identity select from the live Connection picker.
+   * Reload the Identity select from the live Connection picker.
    * Thin defaulting wrapper over `fillIdentitySelect` — Fan-out passes
    * `rolesAllowed: ['gcs','custom']`; everyone else keeps the full set.
    *
@@ -1475,7 +1475,7 @@
   };
 
   /**
-   * §6 companion Send-as identity hides target addressing rows on wire tiers.
+   * §6 companion Identity hides target addressing rows on wire tiers.
    * Build always shows them (must stamp targets). Payload passes
    * `hideCompidWhenCompanion: false` — compid addresses a payload device.
    *
