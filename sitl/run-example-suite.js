@@ -322,71 +322,6 @@ const PROFILE = {
       'is FAIL (timeout, or a send that never reached the wire). Once §14 records the answer this ' +
       'tightens to assert it, the way 17 requires video DENIED. If accepted: yaw 90 must end EAST.',
   },
-  // ── Throwaway CHANGE_MODE probes (delete with 39/40 once §14 records them) ──
-  //
-  // 27 and 30 did not run the same experiment: 27 was AP pre-switched into
-  // GUIDED with the flag OFF, 30 was PX4 with no mode arrangement and the flag
-  // ON. Each stack was tested only in the configuration expected to work for
-  // it, so "both firmwares answer the same way" rests on two different
-  // experiments. These two fill the opposite cells. Both are open questions, so
-  // both use the `silence is a result` contract — see verdictFrom.
-  '39-ap-reposition-changemode': {
-    restart: 'ap-1',
-    waitMs: 60000,
-    expect: 'AP Move reposition from LOITER, CHANGE_MODE on: silence is a result',
-    prep: 'ap-guided-1',
-    notes:
-      'Inverse of 27. Source hypothesis (ArduCopter handle_command_int_do_reposition): not in ' +
-      'guided AND flag clear returns MAV_RESULT_DENIED, so with the flag set it should ACCEPT and ' +
-      'switch itself into GUIDED. Deliberately asserts no heading — the same handler calls ' +
-      'set_destination(loc, false, 0, false, 0), so Copter ignores param4 for DO_REPOSITION and ' +
-      "27's \"yaw 90 turns east\" cannot hold (ArduPlane does read it, for loiter direction).",
-  },
-  '40-px4-reposition-no-changemode': {
-    restart: 'px4-1',
-    waitMs: 60000,
-    expect: 'PX4 Move reposition from POSCTL, CHANGE_MODE off: silence is a result',
-    prep: 'px4-home-ready',
-    notes:
-      'Inverse of 30. Source hypothesis (PX4 Navigator::run): the setpoint applies only if the ' +
-      'CHANGE_MODE bit is set OR nav_state is already AUTO_LOITER, and only while armed. PX4 ' +
-      'settles into AUTO_LOITER by itself once a takeoff completes — the very state that satisfies ' +
-      'the no-flag path — so the cell is only reachable before the climb finishes. Attempt 1 tried ' +
-      'to leave Hold via POSCTL and PX4 answered TEMPORARILY_REJECTED (resultCode 1, 3 retries, ' +
-      '3.0 s): it refuses a stick-driven mode airborne with no RC, so the reposition never ran and ' +
-      'the run correctly scored not-measured. This cut needs no mode change — mid-climb the ' +
-      'nav_state is AUTO_TAKEOFF, already not AUTO_LOITER. MIS_TAKEOFF_ALT is raised to 40 m to ' +
-      'widen that window from ~2 s to ~25 s; an explicit NAV_TAKEOFF altitude would not do, since ' +
-      "PX4 reads param7 as AMSL and the lab's Zurich home is near 488 m.",
-  },
-  // The other two cells. 39 and 40 each measured one corner, but neither
-  // isolates CHANGE_MODE on its own stack: 39 could be the flag working or AP
-  // not gating on mode at all, and 30 — the only PX4 flag-set run — waited 8 s
-  // after a 2 s takeoff, so PX4 was already in AUTO_LOITER and its ACCEPTED is
-  // explained equally well by the mode. 41/42 are one-field twins of 39/40, so
-  // a difference in outcome can only be the flag.
-  '41-ap-reposition-no-changemode': {
-    restart: 'ap-1',
-    waitMs: 60000,
-    expect: 'AP Move reposition from LOITER, CHANGE_MODE off: silence is a result',
-    prep: 'ap-guided-1',
-    notes:
-      'One-field twin of 39 (flag off). Source hypothesis: not in_guided_mode() and flag clear ' +
-      'returns MAV_RESULT_DENIED, so the prediction is denied (2) — the same answer PX4 gave in 40 ' +
-      'from its own non-eligible mode. An ACCEPT is the more interesting result: it would mean AP ' +
-      "does not gate on mode at all and 39's pass says nothing about the flag.",
-  },
-  '42-px4-reposition-changemode': {
-    restart: 'px4-1',
-    waitMs: 60000,
-    expect: 'PX4 Move reposition mid-AUTO_TAKEOFF, CHANGE_MODE on: silence is a result',
-    prep: 'px4-home-ready',
-    notes:
-      'One-field twin of 40 (flag on), and the run that decontaminates 30. Flips only the flag ' +
-      'against the state 40 measured as DENIED, so an accept isolates CHANGE_MODE as sufficient on ' +
-      'PX4; a denial would mean PX4 needs the eligible mode regardless and 30 passed purely on ' +
-      'AUTO_LOITER. Same MIS_TAKEOFF_ALT precondition as 40 — read the param status first.',
-  },
 };
 
 function req(method, urlPath, body, headers = {}) {
@@ -706,33 +641,6 @@ function verdictFrom(profile, summary, log) {
     // a timeout, or a send that never reached the wire, measures nothing. Once
     // §14 records what PX4 answers, this tightens to assert that specific
     // result, the way 17 requires video DENIED.
-    // Throwaway 39/40 (delete with the examples). Same measurement contract as
-    // 30, one cell wider: for the CHANGE_MODE probes "does the firmware answer
-    // at all?" is *part of* the open question, so a timeout is a finding — PX4
-    // dropping a flag-clear reposition without a word is exactly the shape the
-    // source predicts. Silence still is not a blank cheque: a send that never
-    // reached the wire spells result 'failed' with no resultCode, and that
-    // measures nothing on any run.
-    if (/silence is a result/i.test(expect)) {
-      // Wide is not unbounded (Codex, #276): the contract admits only
-      // confirm outcomes — accepted, a terminal refusal carrying its
-      // resultCode, or the explicit 'unconfirmed' of a lost ack. Anything
-      // else with no code — a dead send's 'failed', or the 'sent' a probe
-      // misconfigured to Send delivery would emit — waited for nothing and
-      // measures nothing, and must not early-exit the poll as a PASS.
-      if (!accepted && repositionRecord.result !== 'unconfirmed' && repositionRecord.resultCode === null) {
-        const why = repositionRecord.result === 'failed'
-          ? repositionRecord.detail || 'never reached the wire'
-          : `${repositionRecord.result} — not a confirm outcome`;
-        return { status: 'FAIL', reason: `Move reposition ${why} — nothing measured` };
-      }
-      const answer = accepted
-        ? 'accepted'
-        : repositionRecord.result === 'unconfirmed'
-          ? 'no ACK — silently dropped'
-          : `${repositionRecord.result} (${repositionRecord.resultCode})`;
-      return { status: 'PASS', reason: `Move reposition ${answer} (measured)` };
-    }
     if (/result recorded/i.test(expect)) {
       if (!vehicleAnswered) {
         return {
