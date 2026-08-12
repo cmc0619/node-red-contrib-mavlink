@@ -13,6 +13,14 @@
    * is enforced here or nowhere. Velocity and acceleration are deliberately
    * exempt: a blank rate encodes a zero rate, which is inert, not a place.
    *
+   * Siblings are read through `ownDialogField`, NOT `liveOr` (Codex, #284).
+   * `liveOr` treats a blank live value as "no answer" and falls back to the
+   * saved one — right for a field that inherits, wrong here, where an empty
+   * box is the operator's answer. With `liveOr` a saved full triplet could
+   * never be cleared: each cleared axis still read its siblings as filled, so
+   * all three stayed red and there was no way to switch a position Steer to a
+   * velocity one. Reproduced by execution before the fix, pinned below.
+   *
    * @param {string} name  which axis this validator guards
    * @returns {function(*, object): (boolean|string)} arity 2, so a returned
    *   reason counts as invalid rather than coercing truthy (§14)
@@ -24,7 +32,8 @@
       if (!RED.mavlink.isBlank(v)) return RED.validators.number(true).call(this, v, opt);
       for (var i = 0; i < AXES.length; i++) {
         if (AXES[i] === name) continue;
-        var sibling = RED.mavlink.liveOr(this, '#node-input-' + AXES[i], this[AXES[i]], '');
+        var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + AXES[i]);
+        var sibling = $sibling ? $sibling.val() : this[AXES[i]];
         if (!RED.mavlink.isBlank(sibling)) {
           return 'is required once another position axis is filled — a blank axis commands the origin, not "no change"';
         }

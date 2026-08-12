@@ -269,6 +269,50 @@ test('mavlink-move: a Steer position triplet is all-or-nothing (the runtime no l
   assert.deepEqual(verdicts('5', '', '', 'goto'), [true, true, true], 'goto ignores the triplet entirely');
 });
 
+test('mavlink-move: a saved position triplet can be cleared to switch steering modes (Codex, #284)', () => {
+  // The bug this pins: reading siblings through liveOr made a full triplet
+  // impossible to clear. liveOr answers "blank live value means no answer,
+  // use the saved one" — correct where a field inherits, wrong here, where an
+  // empty box IS the answer. Each cleared axis saw its siblings as still
+  // filled, all three stayed red, and the operator could not move a Steer node
+  // off position onto velocity. Sibling reads go through ownDialogField now.
+  const AXES = ['north', 'east', 'up'];
+  const dialog = (n, e, u) => ({
+    '#node-input-action': { val: 'steer' },
+    '#node-input-north': { val: n },
+    '#node-input-east': { val: e },
+    '#node-input-up': { val: u },
+  });
+  const open = (dom, saved) => {
+    const defaults = loadNodeDefaults('mavlink-move', {}, { dom, editStack: [{ id: 'm1' }] });
+    return AXES.map((axis) => defaults[axis].validate.call(saved, dom['#node-input-' + axis].val, {}) === true);
+  };
+  const savedFull = { id: 'm1', action: 'steer', north: '5', east: '2', up: '3' };
+
+  assert.deepEqual(open(dialog('', '', ''), savedFull), [true, true, true],
+    'clearing every axis of a saved triplet must validate — this is the regression');
+  assert.deepEqual(open(dialog('5', '', ''), savedFull), [true, false, false],
+    'clearing only some of them is still the half-typed form');
+  assert.deepEqual(open(dialog('5', '2', '3'), savedFull), [true, true, true], 'untouched full triplet passes');
+
+  // With no dialog of ours open — deploy, import, or somebody else's tray on
+  // top (#217) — the saved config is the only truth, and Node-RED passes this
+  // node's own saved value as `v`. A foreign dialog's empty boxes must not
+  // red a node whose own triplet is complete.
+  const foreign = loadNodeDefaults('mavlink-move', {}, { dom: dialog('', '', ''), editStack: [{ id: 'other' }] });
+  assert.deepEqual(
+    AXES.map((axis) => foreign[axis].validate.call(savedFull, savedFull[axis], {}) === true),
+    [true, true, true],
+    "a foreign dialog cannot red a closed node's complete triplet"
+  );
+  const savedHalf = { id: 'm1', action: 'steer', north: '5', east: '', up: '' };
+  assert.deepEqual(
+    AXES.map((axis) => foreign[axis].validate.call(savedHalf, savedHalf[axis], {}) === true),
+    [true, false, false],
+    'a genuinely half-saved triplet still reds on its own merits'
+  );
+});
+
 test('mavlink-move targetSystem broadcast refusal keys on the confirm tier', () => {
   // Broadcast (0) is refused only where an ack is actually awaited (#260) —
   // and confirm is a goto-only tier now, so the delivery IS the gate; there
