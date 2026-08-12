@@ -448,6 +448,57 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
   assert.equal(padded.fields.x, 4);
 });
 
+test('a present-but-unreadable yaw refuses instead of riding the wire as a commanded NaN', () => {
+  // The mask, not NaN, is a setpoint's "don't care" channel: blank clears the
+  // field by *setting* the ignore bit. Junk that coerces to NaN did the
+  // opposite — it counted as present, cleared bit 1024, and put NaN in the
+  // field, so the vehicle was told to hold a heading it cannot read. The
+  // command path already refused the same input ("expected a finite number");
+  // every other numeric field here already went through numberOr.
+  // `[]` is deliberately absent from this list: it stringifies empty, so the
+  // shared isBlank reads it as blank exactly like `''` — mask-ignored, which is
+  // the safe direction and not this guard's business to relitigate.
+  for (const bad of ['abc', NaN, {}]) {
+    assert.throws(
+      () => buildMoveMessage({
+        mode: 'position',
+        target: { sysid: 2, compid: 1 },
+        position: { north: 1, east: 2, up: 3 },
+        yaw: bad,
+      }),
+      /expected a finite number/,
+      `yaw ${JSON.stringify(bad)} must refuse`
+    );
+    assert.throws(
+      () => buildMoveMessage({
+        mode: 'velocity',
+        target: { sysid: 2, compid: 1 },
+        velocity: { north: 1, east: 0, up: 0 },
+        yawRate: bad,
+      }),
+      /expected a finite number/,
+      `yawRate ${JSON.stringify(bad)} must refuse`
+    );
+  }
+
+  // Unchanged either side of the guard: blank is still mask-ignored, and a
+  // real value — 0 included — is still commanded.
+  const ignored = buildMoveMessage({
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { north: 1, east: 2, up: 3 },
+  });
+  assert.equal(ignored.fields.type_mask & 1024, 1024, 'blank yaw stays ignored');
+  const north = buildMoveMessage({
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { north: 1, east: 2, up: 3 },
+    yaw: 0,
+  });
+  assert.equal(north.fields.type_mask & 1024, 0, 'an explicit 0 yaw is commanded');
+  assert.equal(north.fields.yaw, 0);
+});
+
 test('advisoryFor fires only on measured-unsupported combos (§14)', () => {
   const { advisoryFor } = require('../../lib/move');
   // Confirmed: PX4 1.18 produced no motion at all for BODY_OFFSET_NED (9) —

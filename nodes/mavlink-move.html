@@ -24,7 +24,7 @@
       // saved values; the live read is own-dialog scoped (#217).
       reference: {
         value: 'world',
-        validate: function (v) {
+        validate: function (v, _opt) {
           var ref = RED.mavlink.liveOr(this, '#node-input-reference', v, 'world');
           if (ref !== 'body') return true;
           if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'steer') return true;

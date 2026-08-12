@@ -47,6 +47,7 @@ const {
   buildCommandLong,
   buildCommandInt,
   CARRIER,
+  resolveCarrier,
   carrierWantedBy,
   intCoordKinds,
   resolveFrame,
@@ -91,21 +92,6 @@ function resolveCommandId(config) {
   const preset = getPreset(config.preset);
   return preset ? preset.commandId : null;
 }
-
-/**
- * Resolve the configured carrier choice, or null when it is missing/invalid
- * (§9). The editor supplies the default; runtime does not repair malformed or
- * hand-edited flow data.
- *
- * @param {object} config  node config from editor
- * @returns {'long'|'int'|null}
- */
-function resolveCarrier(config) {
-  if (config.sendAs === CARRIER.INT) return CARRIER.INT;
-  if (config.sendAs === CARRIER.LONG) return CARRIER.LONG;
-  return null;
-}
-
 
 module.exports = function registerMavlinkCommand(RED) {
   function MavlinkCommandNode(config) {
