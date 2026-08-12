@@ -85,12 +85,12 @@
       aEast: { value: '', validate: RED.validators.number(true) },
       aUp: { value: '', validate: RED.validators.number(true) },
       // Go to's global position is required — saved or live. This is the only
-      // check on the *configured* path: requireGlobalPosition was deleted with
-      // the input-trust ruling (AGENTS.md, 2026-08-12), so §10's "blank
-      // coordinates must not become 0,0 at ground level" is enforced here or
-      // nowhere. A coordinate arriving on msg.payload.position is not checked
-      // at all — blank encodes 0 and out-of-range scales and rides the wire,
-      // deliberately (§14). The blank-action fallback is 'steer', mirroring
+      // check on the *configured* path: the runtime trusts what it is handed
+      // (AGENTS.md, input trust), so §10's "blank coordinates must not become
+      // 0,0 at ground level" is enforced here or nowhere. A coordinate
+      // arriving on msg.payload.position is not checked at all — blank encodes
+      // 0 and out-of-range scales and rides the wire, deliberately (§14). The
+      // blank-action fallback is 'steer', mirroring
       // resolveMoveAction: a saved config without `action` parses as steer.
       lat: {
         value: '',

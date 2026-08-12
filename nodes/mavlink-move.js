@@ -258,23 +258,11 @@ module.exports = function registerMavlinkMove(RED) {
         let moveInput;
         if (action === 'goto') {
           // goto + Stream: the same intent, streamed — position setpoints on
-          // the global frame the altitude reference names. The command-path
-          // params have no meaning on a setpoint and refuse loud rather than
-          // silently not happening.
-          for (const key of ['speed', 'radius', 'changeMode']) {
-            if (payload[key] !== undefined) {
-              throw new Error(
-                `msg.payload.${key} belongs to the Go to command path (Build/Send/Send & confirm) — a streamed setpoint cannot carry it`
-              );
-            }
-          }
-          // yawRate is a steer field on every goto tier (CodeRabbit, #277):
-          // DO_REPOSITION carries a heading only (the builder refuses it on
-          // the command path), and the goto stream's position setpoint never
-          // forwards it — so without this it would drop in silence.
-          if (payload.yawRate !== undefined) {
-            throw new Error('msg.payload.yawRate is a Steer field — Go to carries a heading (yaw) only');
-          }
+          // the global frame the altitude reference names. `speed`, `radius`,
+          // `changeMode` and `yawRate` belong to the command path; a setpoint
+          // has no field to carry them, so they are not read here. Ignoring a
+          // key the wire has no room for is what the driver does with msg
+          // (AGENTS.md, input trust) — it does not refuse over one.
           moveInput = {
             mode: 'position',
             frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),

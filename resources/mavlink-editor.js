@@ -1240,6 +1240,59 @@
   };
 
   /**
+   * The live jQuery field for `selector`, but only while `owner`'s OWN dialog
+   * is the top of the edit stack — null in every other state.
+   *
+   * This is the gate {@link RED.mavlink.liveOr} is built on, shared with every
+   * other question that needs the same scoping. The reasoning it enforces is
+   * written out there: a closed node validated by the config-save cascade
+   * would otherwise read the open dialog's field and cache a poisoned `valid`
+   * flag (#217).
+   *
+   * @param {object} owner     the node whose validator or dialog is asking
+   * @param {string} selector  jQuery selector for the live field
+   * @returns {object|null} the jQuery element, or null when it is not ours
+   */
+  RED.mavlink.ownDialogField = function (owner, selector) {
+    if (!owner || !owner.id) return null;
+    var stack = RED.editor.getEditStack();
+    var top = stack.length ? stack[stack.length - 1] : null;
+    if (!top || top.id !== owner.id) return null;
+    var $el = $(selector);
+    return $el && $el.length ? $el : null;
+  };
+
+  /**
+   * True when `owner`'s open dialog shows `selector` sitting on the
+   * out-of-dialect sentinel that {@link RED.mavlink.ensureSavedEnumOption}
+   * appends — a saved value the current catalog does not contain.
+   *
+   * The sentinel exists so a value the catalog lacks survives open-and-save
+   * instead of silently deselecting (#198). For a *param* value that is the
+   * whole point and the state is legal. For a field the runtime must resolve
+   * metadata from, it is not: the node deploys and every trigger fails. Those
+   * fields validate against this.
+   *
+   * Only the open dialog can answer. The catalog is fetched asynchronously and
+   * a `defaults` validator is synchronous, so a node whose dialog was never
+   * opened cannot be checked here — the reachable case is the operator
+   * switching dialect or Connection with the dialog in front of them, which is
+   * exactly when the red triangle is useful.
+   *
+   * @param {object} owner     the node being validated
+   * @param {string} selector  jQuery selector for the live select
+   * @param {*} value          the value under validation
+   * @returns {boolean}
+   */
+  RED.mavlink.isMissingFromDialect = function (owner, selector, value) {
+    var $el = RED.mavlink.ownDialogField(owner, selector);
+    if (!$el) return false;
+    var $opt = $el.find('option:selected');
+    if (!$opt || !$opt.length) return false;
+    return $opt.text() === RED.mavlink.missingEnumOptionLabel(value);
+  };
+
+  /**
    * The in-progress value of a field, falling back to what was saved.
    *
    * Editor code reads cross-field state in three situations and needs
@@ -1280,15 +1333,8 @@
         "liveOr: the first argument is the owning node, not a selector — liveOr(this, '#node-input-…', saved, fallback)"
       );
     }
-    var live;
-    if (owner && owner.id) {
-      var stack = RED.editor.getEditStack();
-      var top = stack.length ? stack[stack.length - 1] : null;
-      if (top && top.id === owner.id) {
-        var $el = $(selector);
-        live = $el && $el.length ? $el.val() : undefined;
-      }
-    }
+    var $own = RED.mavlink.ownDialogField(owner, selector);
+    var live = $own ? $own.val() : undefined;
     if (!RED.mavlink.isBlank(live)) return String(live);
     if (!RED.mavlink.isBlank(saved)) return String(saved);
     return fallback === undefined ? '' : String(fallback);

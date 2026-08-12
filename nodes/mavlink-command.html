@@ -140,10 +140,10 @@
       mode:              { value: 'preset' },
       preset:            { value: 'arm' },
       // Advanced mode's command *is* the message — blank builds MAV_CMD(null)
-      // and sends it. The runtime's deploy badge for this went with the §6
-      // status ruling (2026-08-12), so the editor is now the only thing
-      // standing between a half-filled dialog and the wire. Preset mode never
-      // reads the field, hence the conditional. Two args so the reason renders.
+      // and sends it. Config validity is the editor's verdict (§6), so this is
+      // the only thing standing between a half-filled dialog and the wire.
+      // Preset mode never reads the field, hence the conditional. Two args so
+      // the reason renders.
       advancedCommand:   {
         value: '',
         validate: function (v, _opt) {

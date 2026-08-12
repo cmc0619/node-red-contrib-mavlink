@@ -279,13 +279,46 @@ test('Build validates the fields JSON in the editor, so the runtime need not', (
 });
 
 test('mavlink-build: a blank message name reds in the editor (§6 status ruling, 2026-08-12)', () => {
-  // This used to be a deploy-time red badge in the runtime. That badge is gone
-  // — config validity is the editor's verdict — so the validator is the only
-  // thing left between a cleared field and a node whose every input fails with
+  // Config validity is the editor's verdict (§6), so this validator is the
+  // only thing between a cleared field and a node whose every input fails with
   // "dialect or message unresolved".
   const { messageName } = loadNodeDefaults('mavlink-build');
   assert.match(String(messageName.validate.call({}, '', {})), /is required/);
   assert.match(String(messageName.validate.call({}, '   ', {})), /is required/, 'whitespace is blank');
   assert.equal(messageName.validate.call({}, 'HEARTBEAT', {}), true);
   assert.equal(messageName.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+});
+
+test('mavlink-build: a message the dialect lost reds too, not just a blank one', () => {
+  // The reachable path is normal editing, not hand-edited JSON: switch an
+  // existing node's dialect or Connection and fillEnumSelect keeps the old name
+  // selectable as the `#NAME (not in dialect)` sentinel so it survives
+  // open-and-save (#198). Surviving is right; deploying is not — messageMeta
+  // resolves null and every trigger fails at mavlink-build.js:147-149.
+  const sentinel = { dom: { '#node-input-messageName': { val: 'PLANE_ONLY_MSG',
+    selectedText: '#PLANE_ONLY_MSG (not in dialect)' } }, editStack: [{ id: 'b1' }] };
+  const { messageName } = loadNodeDefaults('mavlink-build', {}, sentinel);
+  assert.match(
+    String(messageName.validate.call({ id: 'b1' }, 'PLANE_ONLY_MSG', {})),
+    /not in this dialect/
+  );
+
+  // A real option in the same open dialog carries its own label, not the
+  // sentinel's — the check keys off the label, so it must not red everything.
+  const present = { dom: { '#node-input-messageName': { val: 'HEARTBEAT',
+    selectedText: 'HEARTBEAT' } }, editStack: [{ id: 'b1' }] };
+  assert.equal(
+    loadNodeDefaults('mavlink-build', {}, present).messageName.validate.call({ id: 'b1' }, 'HEARTBEAT', {}),
+    true
+  );
+
+  // Somebody else's dialog is on top: the config-save cascade validates closed
+  // nodes, and their select is not the one in the DOM (#217). Reading it would
+  // red a node that is fine and cache the verdict.
+  const foreign = { dom: { '#node-input-messageName': { val: 'PLANE_ONLY_MSG',
+    selectedText: '#PLANE_ONLY_MSG (not in dialect)' } }, editStack: [{ id: 'other' }] };
+  assert.equal(
+    loadNodeDefaults('mavlink-build', {}, foreign).messageName.validate.call({ id: 'b1' }, 'HEARTBEAT', {}),
+    true
+  );
 });

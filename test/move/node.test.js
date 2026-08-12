@@ -1273,7 +1273,7 @@ test('mavlink-move reposition Send tier rides the Control band, not Streaming', 
   assert.equal(sent[1].detail, null);
 });
 
-test('mavlink-move goto + Stream streams global position setpoints on the *_INT twin; command-path params refuse and leave it running', async () => {
+test('mavlink-move goto + Stream streams global position setpoints on the *_INT twin; command-path params are ignored and the stream keeps running', async () => {
   const conn = repositionConn();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-move')(RED);
@@ -1300,26 +1300,17 @@ test('mavlink-move goto + Stream streams global position setpoints on the *_INT 
   }
   assert.ok(conn.sends.length >= 2, 'stream running before the bad input');
 
-  // speed/radius/changeMode belong to the command path — a streamed setpoint
-  // cannot carry them, and the refusal must leave the running stream running.
-  for (const payload of [{ speed: 5 }, { radius: 80 }, { changeMode: true }]) {
+  // speed/radius/changeMode/yawRate belong to the command path. A setpoint has
+  // no field to carry them, so the stream ignores them and keeps streaming —
+  // msg is trusted and a key the wire has no room for is not a refusal
+  // (AGENTS.md, input trust).
+  for (const payload of [{ speed: 5 }, { radius: 80 }, { changeMode: true }, { yawRate: 10 }]) {
     const key = Object.keys(payload)[0];
     let out;
     let doneError;
     node.emit('input', { payload }, (m) => { out = m; }, (err) => { doneError = err; });
-    assert.equal(out[0], null, `payload.${key} must not fire the continue port`);
-    assert.equal(out[1].result, 'failed');
-    assert.match(doneError.message, new RegExp(`payload\\.${key} belongs to the Go to command path`));
-  }
-  // yawRate is a steer field on every goto tier — DO_REPOSITION carries a
-  // heading only — and the stream must refuse it rather than drop it in
-  // silence (CodeRabbit, #277).
-  {
-    let out;
-    let doneError;
-    node.emit('input', { payload: { yawRate: 10 } }, (m) => { out = m; }, (err) => { doneError = err; });
-    assert.equal(out[0], null);
-    assert.match(doneError.message, /yawRate is a Steer field/);
+    assert.equal(doneError, undefined, `payload.${key} must not raise`);
+    assert.equal(out[1].result, 'streaming', `payload.${key} restreams like any other retrigger`);
   }
 
   const before = conn.sends.length;

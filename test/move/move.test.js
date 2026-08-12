@@ -220,14 +220,16 @@ test('global setpoint frames always transmit the *_INT twin — the wire number 
 });
 
 test('a blank global coordinate encodes 0 — deliberate, ruled, and pinned here (§14)', () => {
-  // NOT a bug and not an oversight. requireGlobalPosition refused this until
-  // 2026-08-12; the input-trust ruling deleted it because both of its inputs —
-  // editor-validated config and trusted msg.payload — are checked elsewhere or
-  // not at all by design. Null island is the accepted cost, recorded in §14.
+  // NOT a bug and not an oversight. Both inputs to this builder are handled
+  // elsewhere: config coordinates are editor-validated, and msg.payload is
+  // trusted and checked nowhere by design. Null island is the accepted cost,
+  // recorded in §14. Do not add a guard here — this test is what makes doing
+  // so fail loudly instead of passing quietly.
   //
-  // This test exists so that restoring the guard fails loudly instead of
-  // passing quietly: the next reader gets a pointer to the ruling rather than
-  // a green suite and a plausible-looking "fix".
+  // Only the blank is pinned. An out-of-range coordinate takes the same
+  // multiply as a legal one (degreesToDegE7 is numberOr + Math.round), so
+  // asserting on 200° would restate the extremes test below without covering
+  // a single extra branch.
   const blank = buildMoveMessage({
     mode: 'position',
     frame: 3,
@@ -236,23 +238,12 @@ test('a blank global coordinate encodes 0 — deliberate, ruled, and pinned here
   });
   assert.equal(blank.fields.lat_int, 0, 'blank lat encodes 0, it does not throw');
   assert.equal(blank.fields.alt, 10, 'and the fields around it are untouched');
-
-  // Out of range rides the wire too: 200° scales into a real place well inside
-  // the degE7 int32 ceiling. The editor is where that is caught.
-  const oor = buildMoveMessage({
-    mode: 'position',
-    frame: 3,
-    target: { sysid: 2, compid: 1 },
-    position: { lat: 200, lon: 8, alt: 10 },
-  });
-  assert.equal(oor.fields.lat_int, 2000000000);
 });
 
 test('degE7 encoding is exact at the coordinate extremes', () => {
-  // The range refusal that used to live here went with requireGlobalPosition
-  // (input-trust ruling, AGENTS.md 2026-08-12): an out-of-range coordinate now
-  // scales and rides the wire, and the editor is where it is caught. What
-  // still matters at this layer is that the legal extremes encode exactly —
+  // This layer does not range-check: an out-of-range coordinate scales and
+  // rides the wire, and the editor is where it is caught (AGENTS.md, input
+  // trust). What matters here is that the legal extremes encode exactly —
   // degE7 is an int32 and ±180° is 1.8e9, well inside it.
   const base = { mode: 'position', frame: 3, target: { sysid: 2, compid: 1 } };
   const poles = buildMoveMessage({ ...base, position: { lat: 90, lon: -180, alt: 10 } });
