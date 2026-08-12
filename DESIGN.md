@@ -1474,12 +1474,11 @@ replacement's first send succeeds, so a transient link failure leaves the vehicl
 retrying stream, and a retarget brakes the old target only after the new stream is live —
 that target's control ended.
 
-A position with a blank coordinate refuses in every **absolute local** frame: a local blank
-zero-filled into north/east/up commands the EKF origin. The measured OFFSET frames
-(`LOCAL_OFFSET_NED`, `BODY_OFFSET_NED`) are the exception — a zero there is "no change" on every
-axis, so blanks pass as zero offsets (§14). `BODY_NED` keeps the guard: ArduPilot reads it as a
-body offset but PX4 does not, so a zero is not provably inert. Velocity and acceleration blanks
-always stay 0 — a zero rate is inert, not a place. Yaw and yaw rate follow the same presence
+A position with a blank coordinate encodes 0 on **every** frame, local and global alike. On an
+absolute local frame that 0 is the EKF origin — a real place, and rarely where the vehicle is —
+which is the hazard the runtime used to refuse. It does not any more: the driver coerces what it
+is handed and the *editor* is the only layer that checks (see the ruling below). Velocity and
+acceleration blanks always stay 0 — a zero rate is inert, not a place. Yaw and yaw rate follow the same presence
 rule as everywhere else: blank is mask-ignored, and a blank arriving on `msg.payload` is
 normalised to unset rather than commanding a yaw of zero.
 
@@ -1496,8 +1495,19 @@ all-blank reposition builds `x 0, y 0, z 0`. §10's "blank coordinates must not 
 ground level" therefore no longer describes the Move runtime — it describes the Move *editor*,
 and the command path, where `blankLocationRefusal` still enforces it for `MAV_CMD` params.
 
-The local guard above survives this ruling only because removing it was not what was asked; it
-rests on the same trust argument and is the obvious next candidate.
+**The *local* coordinate guard went the same way** (ruled 2026-08-12, #284), on the same
+argument — it had no untrusted input either. It is worth recording what the check found before
+the cut, because it was not a formality: the editor did **not** already cover this. `north`,
+`east` and `up` carried `RED.validators.number(true)` — blank allowed — justified by "filling
+fields IS the mode". That is true per *group* and false *within* one. Fill north, tab past east
+and up, deploy, and the two blanks encode 0. Reachable by ordinary form-filling.
+
+So the guard moved rather than vanished: `positionAxisValidator` in `mavlink-move.html` makes
+the triplet all-or-nothing. All three blank stays legal (a Steer with no position group), an
+explicit `0` counts as filled, whitespace counts as blank, and the rule is gated off on Go to,
+which does not show the triplet. **The general rule this sets: before deleting a runtime guard,
+execute the editor's validators against the inputs the guard refused. "The editor validates" is
+a claim to verify, not an assumption to lean on.**
 
 **Blank means undefined, null, or a string holding nothing but whitespace** (`isBlank`). The
 whitespace arm is load-bearing: `Number(' ')` is a *finite* `0`, so a blank test of `=== ''`
@@ -2239,10 +2249,17 @@ absolute-vs-offset and world-vs-body axes are both separable.
    exact PX4 semantics are **inconclusive**; what is conclusive is that it is *not* an offset,
    so a zero there is not provably inert.
 
-*Decision:* the blank-coordinate guard keys on a measured `OFFSET_FRAMES` set — **7 and 9 only**.
-Blanks pass as zero offsets in those and refuse everywhere else, `BODY_NED` included: a frame
-that means "offset" on one stack and "absolute-like" on the other cannot carry a
-blanks-are-safe exemption. Do not infer a third frame's behaviour from two siblings' names.
+*Decision (retired 2026-08-12, #284):* this drove a blank-coordinate guard keyed on a measured
+`OFFSET_FRAMES` set — **7 and 9 only** — that passed blanks as zero offsets there and refused
+everywhere else, `BODY_NED` included. The guard and the set are deleted with the rest of the
+coordinate refusals; the editor's all-or-nothing triplet rule replaced it, and it does not vary
+by frame because the operator does not pick one.
+
+**The measurements above are not retired and this is why they are kept**: they are the reason a
+blank on frame 1 or 8 is a *real place* rather than a harmless zero, which is what makes the
+editor rule worth having. And the method still stands: a frame that means "offset" on one stack
+and "absolute-like" on the other cannot carry a blanks-are-safe exemption. Do not infer a third
+frame's behaviour from two siblings' names.
 
 *The same run settled the Move firmware advisories*, which had been asserted from documentation
 and never measured. Two of five were wrong:
@@ -2302,10 +2319,10 @@ required for the actuation questions (acceptance in the parser is not action by 
 the acceleration refutation turned on precisely that gap) and for pinning behaviour to the
 versions users fly. Hypothesis from source, authority from measurement — in that order.
 
-*Check:* `lib/move/index.js` (`OFFSET_FRAMES`), `node --test test/move/move.test.js` — "blank
-local coordinates: refused in absolute frames, inert in measured OFFSET frames". The advisory
-half of this check is gone with the advisories themselves (#285); the frame facts above stand on
-their own.
+*Check:* `node --test test/move/move.test.js` — "a blank local coordinate encodes 0, on every
+frame". Both code pointers this line used to carry are gone: `advisoryFor` with the advisories
+(#285) and `OFFSET_FRAMES` with the coordinate guards (#284). The frame facts above stand on
+their own, and the editor's `positionAxisValidator` is what acts on them now.
 
 ---
 
