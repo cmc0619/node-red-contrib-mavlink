@@ -1434,16 +1434,30 @@ replacement's first send succeeds, so a transient link failure leaves the vehicl
 retrying stream, and a retarget brakes the old target only after the new stream is live —
 that target's control ended.
 
-A position with a blank coordinate refuses in every **absolute** frame (§10 "blank coordinates
-must not become 0,0"): global lat/lon must not become null island, a blank global alt must not
-become ground level (0 m above home in frame 6, 0 m AGL in frame 11 — or below ground at
-0 m MSL in frame 5), and a local blank zero-filled into north/east/up commands the EKF origin. The measured OFFSET frames (`LOCAL_OFFSET_NED`,
-`BODY_OFFSET_NED`) are the exception — a zero there is "no change" on every axis, so blanks pass
-as zero offsets (§14). `BODY_NED` keeps the guard: ArduPilot reads it as a body offset but PX4
-does not, so a zero is not provably inert. Velocity and acceleration blanks always stay 0 — a
-zero rate is inert, not a place. Yaw and yaw rate follow the same presence rule as everywhere
-else: blank is mask-ignored, and a blank arriving on `msg.payload` is normalised to unset rather
-than commanding a yaw of zero.
+A position with a blank coordinate refuses in every **absolute local** frame: a local blank
+zero-filled into north/east/up commands the EKF origin. The measured OFFSET frames
+(`LOCAL_OFFSET_NED`, `BODY_OFFSET_NED`) are the exception — a zero there is "no change" on every
+axis, so blanks pass as zero offsets (§14). `BODY_NED` keeps the guard: ArduPilot reads it as a
+body offset but PX4 does not, so a zero is not provably inert. Velocity and acceleration blanks
+always stay 0 — a zero rate is inert, not a place. Yaw and yaw rate follow the same presence
+rule as everywhere else: blank is mask-ignored, and a blank arriving on `msg.payload` is
+normalised to unset rather than commanding a yaw of zero.
+
+**The *global* coordinate guard is gone** (ruled 2026-08-12, #284). `requireGlobalPosition`
+refused a blank or out-of-range lat/lon/alt on both Move carriers; it is deleted. Its two
+inputs were `config` — editor-validated, `mavlink-move.html` requires all three on goto with
+the same ±90/±180 bounds — and `msg.payload.position`, which the input-trust categories
+(`AGENTS.md`) rule trusted. Neither is an untrusted path, so the guard was a guardrail by the
+project's own rule, and the editor is now the only place a global coordinate is checked.
+
+What that admits, measured on the branch rather than reasoned: a blank global lat encodes
+`lat_int 0`; `lat: 200` encodes `lat_int 2000000000`, which fits int32 and is a real place; an
+all-blank reposition builds `x 0, y 0, z 0`. §10's "blank coordinates must not become 0,0 at
+ground level" therefore no longer describes the Move runtime — it describes the Move *editor*,
+and the command path, where `blankLocationRefusal` still enforces it for `MAV_CMD` params.
+
+The local guard above survives this ruling only because removing it was not what was asked; it
+rests on the same trust argument and is the obvious next candidate.
 
 **Blank means undefined, null, or a string holding nothing but whitespace** (`isBlank`). The
 whitespace arm is load-bearing: `Number(' ')` is a *finite* `0`, so a blank test of `=== ''`
@@ -1498,8 +1512,10 @@ command (degE7 x/y, no float truncation). *Correction (source-read 2026-08-12):*
 choice as "the only reposition ArduPilot accepts; a `COMMAND_LONG` attempt acks
 `COMMAND_INT_ONLY`" — that is wrong. ArduPilot converts a LONG-form `DO_REPOSITION` to INT
 internally (`command_long_stores_location` → `convert_COMMAND_LONG_to_COMMAND_INT`) and PX4
-accepts both forms; INT stays our choice on precision grounds alone. Same node, same §10
-coordinate guards — with the one thing no setpoint offers: a `COMMAND_ACK`. The editor field
+accepts both forms; INT stays our choice on precision grounds alone. Same node, same coordinate
+handling as the setpoint carrier — which since #284 means no runtime global guard on either,
+the editor holding the line for both — with the one thing no setpoint offers: a `COMMAND_ACK`.
+The editor field
 defaults to `action: goto` (the most common intent, the acked path); a blank action parses as
 steer, and `msg.payload.altRef` overrides per input the way mode and frame once did.
 
@@ -2326,6 +2342,23 @@ silent-fallback to `common`. Five component dialects (`uAvionix`, `icarous`, `lo
 *Fact:* 279 of 420 unlabelled params in `common.xml` carry `Empty`, `Empty.` or `Reserved` as
 body text. Treat them as reserved and no numbered field survives anywhere.
 *Check:* the four-case rule in §6.
+
+**Move's global coordinate guard is deleted — the editor is the only check (2026-08-12, #284).**
+*Wrong belief:* `requireGlobalPosition` is a safety guard, so it survives the input-trust
+ruling on the strength of what it prevents — a vehicle flown to 0,0 at ground level.
+*Fact:* the ruling is about *where* input is checked, not how bad the outcome is. The guard's
+two inputs are `config` (editor-validated: `mavlink-move.html` requires lat/lon/alt on goto with
+±90/±180 bounds) and `msg.payload.position` (trusted). No untrusted path reached it, so it was a
+guardrail by the project's own categories and is gone from both carriers. Measured on the branch
+after removal: blank lat → `lat_int 0`; `lat: 200` → `lat_int 2000000000` (fits int32, a real
+place); an all-blank reposition → `x 0, y 0, z 0`. Those are now reachable through
+`msg.payload.position`, and that is the accepted cost — a flow handing Move a blank coordinate
+is the flow author's bug, and the configured path still reds at deploy. The command path is
+unaffected: `blankLocationRefusal` still enforces §10 for `MAV_CMD` params. Two static analysers
+disagreed about the same deletion — Codacy scored −8 complexity, DeepSource dropped Reliability
+A→B — which is why the call is recorded here rather than delegated to either.
+*Check:* `rg -n "requireGlobalPosition" lib/` returns nothing; `rg -n "lat:" nodes/mavlink-move.html`
+shows the surviving editor validator.
 
 **One-arg editor validators treat an error string as valid.**
 *Wrong belief:* `validate: function (v) { return 'out of range'; }` reds the field — a string is
