@@ -147,10 +147,13 @@ test('an unknown carrier token is refused too (no silent LONG fallback)', async 
     delivery: 'send',
     intervalMs: 0,
   });
-  const err = await emitInput(node, { payload: {} }, () => {}).then(() => null, (e) => e);
+  let sent;
+  const err = await emitInput(node, { payload: {} }, (m) => { sent = m; }).then(() => null, (e) => e);
 
   assert.ok(err, 'an unrecognised carrier token fails the input');
   assert.equal(connection.sends.length, 0, 'nothing was sent');
+  assert.equal(sent[0], null, 'no continue output on refusal');
+  assert.equal(sent[1].result, 'failed');
 });
 
 test('leader with no reported position is refused, not defaulted', async () => {
