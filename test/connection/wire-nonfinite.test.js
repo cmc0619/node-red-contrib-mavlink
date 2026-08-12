@@ -55,7 +55,7 @@ test('a NaN float field still serializes — NaN floats are legal MAVLink', () =
 test('finite integer fields serialize round-trip unchanged', () => {
   const message = buildMoveMessage({
     mode: 'position',
-    frame: 3,
+    frame: 'GLOBAL_RELATIVE_ALT_INT',
     target: { sysid: 7, compid: 1 },
     position: { lat: 47.397742, lon: 8.545594, alt: 25 },
   });

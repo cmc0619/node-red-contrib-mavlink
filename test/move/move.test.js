@@ -29,7 +29,7 @@ test('position Move flips operator up-positive altitude to NED down-positive exa
 test('global position Move encodes degrees to degE7 and keeps altitude up-positive', () => {
   const message = buildMoveMessage({
     mode: 'position',
-    frame: 3,
+    frame: 'GLOBAL_RELATIVE_ALT_INT',
     target: { sysid: 3, compid: 1 },
     position: { lat: 47.397742, lon: 8.545594, alt: 25 },
     timeBootMs: 42,
@@ -44,7 +44,7 @@ test('global position Move encodes degrees to degE7 and keeps altitude up-positi
 test('global position Move encodes whole-number degrees as degE7, not as raw wire values', () => {
   const message = buildMoveMessage({
     mode: 'position',
-    frame: 3,
+    frame: 'GLOBAL_RELATIVE_ALT_INT',
     target: { sysid: 3, compid: 1 },
     // Integer degrees must still scale by 1e7 — treating 47 as an already
     // encoded degE7 value would place the point at 47e-7 degrees.
@@ -118,20 +118,30 @@ test('yaw-only Move ignores every translation vector and requires yaw or yaw rat
   );
 });
 
-test('numeric frames select the carrier message and coordinate_frame value', () => {
+test('frame names select the carrier message and coordinate_frame value', () => {
   const body = buildMoveMessage({
     mode: 'position',
-    frame: 9,
+    frame: 'BODY_OFFSET_NED',
     target: { sysid: 2, compid: 1 },
     position: { north: 10, east: 0, up: 0 },
   });
   assert.equal(body.name, 'SET_POSITION_TARGET_LOCAL_NED');
   assert.equal(body.fields.coordinate_frame, 9);
 
+  const terrain = buildMoveMessage({
+    mode: 'position',
+    frame: 'GLOBAL_TERRAIN_ALT_INT',
+    target: { sysid: 2, compid: 1 },
+    position: { lat: 47, lon: 8, alt: 30 },
+  });
+  assert.equal(terrain.name, 'SET_POSITION_TARGET_GLOBAL_INT');
+  assert.equal(terrain.fields.coordinate_frame, 11);
+  assert.equal(terrain.fields.lat_int, 470000000);
+
   // Velocity in a global frame rides GLOBAL_INT with position ignored.
   const globalVel = buildMoveMessage({
     mode: 'velocity',
-    frame: 3,
+    frame: 'GLOBAL_RELATIVE_ALT_INT',
     target: { sysid: 2, compid: 1 },
     velocity: { north: 1, east: 0, up: 0 },
   });
@@ -139,26 +149,31 @@ test('numeric frames select the carrier message and coordinate_frame value', () 
   assert.equal(globalVel.fields.type_mask & 7, 7);
 
   assert.throws(
+    () => buildMoveMessage({ mode: 'position', frame: 'BODY_FRD', target: { sysid: 2, compid: 1 } }),
+    /unknown Move frame/
+  );
+  assert.throws(
     () => buildMoveMessage({ mode: 'position', frame: 2, target: { sysid: 2, compid: 1 } }),
     /not a SET_POSITION_TARGET frame/
   );
 });
 
-test('`frame` is numeric-only: a derived number resolves, blank defaults to LOCAL_NED', () => {
+test('`frame` is the only frame spelling: member name or raw number', () => {
   const global = {
     mode: 'position',
     target: { sysid: 2, compid: 1 },
     position: { lat: 47, lon: 8, alt: 10 },
   };
 
-  // The derivation hands the builder a number; a numeric string still resolves.
-  for (const frame of [3, '3']) {
+  // Both real spellings of `frame` keep working: member name and raw number.
+  for (const frame of ['GLOBAL_RELATIVE_ALT_INT', 6, '6']) {
     const message = buildMoveMessage({ ...global, frame });
-    assert.equal(message.fields.coordinate_frame, 6, `frame ${JSON.stringify(frame)} resolves (wire twin 6)`);
+    assert.equal(message.fields.coordinate_frame, 6, `frame ${JSON.stringify(frame)} resolves`);
   }
 
-  // Blank defaults, and whitespace is blank (#174): a builder-level safety,
-  // still exercised — "nothing supplied" is the frame that works everywhere.
+  // Blank defaults, and whitespace is blank (#174): the node's payload→config
+  // resolution now trims, so a whitespace frame reaching the library never
+  // skipped a configured value — it is the same "nothing supplied" as ''.
   for (const blank of [undefined, null, '', ' ']) {
     const message = buildMoveMessage({
       mode: 'position',
@@ -170,25 +185,28 @@ test('`frame` is numeric-only: a derived number resolves, blank defaults to LOCA
   }
 });
 
-test('string frame names throw — the retired operator vocabulary is deleted, not aliased', () => {
-  // The Action surface derives numbers; the parsing layer for member names and
-  // the deprecated *_INT aliases (names and numbers 5/6/11) is deleted.
-  const { resolveModeAndFrame } = require('../../lib/move/frames');
-  for (const frame of ['LOCAL_NED', 'GLOBAL_RELATIVE_ALT', 'GLOBAL_RELATIVE_ALT_INT', 'GLOBAL_INT', 'BODY_FRD']) {
-    assert.throws(
-      () => resolveModeAndFrame({ mode: 'position', frame }),
-      /not a SET_POSITION_TARGET frame/,
-      `string frame ${JSON.stringify(frame)} must throw`
-    );
-  }
-  // The deprecated wire numbers and the retired terrain/offset frames are not
-  // in the vocabulary either — same simplified error.
-  for (const frame of [5, 6, 7, 10, 11]) {
-    assert.throws(
-      () => resolveModeAndFrame({ mode: 'position', frame }),
-      /not a SET_POSITION_TARGET frame/,
-      `frame ${frame} must throw`
-    );
+test('global frame vocabulary: every alias spelling builds the same message (owner-ruled 2026-08-09)', () => {
+  const base = {
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { lat: 47, lon: 8, alt: 10 },
+  };
+  // One canon per frame; the deprecated *_INT names and numbers are MAVLink's
+  // protocol surface and resolve as aliases — accepted, never advertised.
+  const spellings = {
+    GLOBAL: ['GLOBAL', 'GLOBAL_INT', 0, '0', 5, '5'],
+    GLOBAL_RELATIVE_ALT: ['GLOBAL_RELATIVE_ALT', 'GLOBAL_RELATIVE_ALT_INT', 3, '3', 6, '6'],
+    GLOBAL_TERRAIN_ALT: ['GLOBAL_TERRAIN_ALT', 'GLOBAL_TERRAIN_ALT_INT', 10, '10', 11, '11'],
+  };
+  for (const [canon, frames] of Object.entries(spellings)) {
+    const reference = buildMoveMessage({ ...base, frame: canon });
+    for (const frame of frames) {
+      assert.deepEqual(
+        buildMoveMessage({ ...base, frame }),
+        reference,
+        `frame ${JSON.stringify(frame)} builds the same message as ${canon}`
+      );
+    }
   }
 });
 
@@ -201,26 +219,38 @@ test('global setpoint frames always transmit the *_INT twin — the wire number 
     target: { sysid: 2, compid: 1 },
     position: { lat: 47, lon: 8, alt: 10 },
   };
-  const wire = new Map([[0, 5], [3, 6]]);
-  for (const [frame, twin] of wire) {
+  const wire = { GLOBAL: 5, GLOBAL_RELATIVE_ALT: 6, GLOBAL_TERRAIN_ALT: 11 };
+  for (const [frame, twin] of Object.entries(wire)) {
     assert.equal(
       buildMoveMessage({ ...base, frame }).fields.coordinate_frame,
       twin,
-      `frame ${frame} transmits the *_INT twin`
+      `${frame} transmits the *_INT twin`
     );
   }
   // Local frames carry their own number; the twin swap is a global-frame rule.
   const local = buildMoveMessage({
     mode: 'position',
-    frame: 1,
+    frame: 'LOCAL_NED',
     target: { sysid: 2, compid: 1 },
     position: { north: 1, east: 2, up: 3 },
   });
   assert.equal(local.fields.coordinate_frame, 1);
 });
 
+test('unknown Move frame error names the canonical set, not the accepted aliases', () => {
+  try {
+    buildMoveMessage({ mode: 'position', frame: 'GLOBAL_FRD', target: { sysid: 2, compid: 1 } });
+    assert.fail('unknown frame must throw');
+  } catch (err) {
+    assert.match(err.message, /unknown Move frame "GLOBAL_FRD"/);
+    assert.match(err.message, /GLOBAL_RELATIVE_ALT/);
+    assert.match(err.message, /GLOBAL_TERRAIN_ALT/);
+    assert.doesNotMatch(err.message, /_INT/, 'aliases are accepted, not advertised');
+  }
+});
+
 test('global lat/lon out of range refuses — the degE7 int32 ceiling is ±214.7° (C4)', () => {
-  const base = { mode: 'position', frame: 3, target: { sysid: 2, compid: 1 } };
+  const base = { mode: 'position', frame: 'GLOBAL_RELATIVE_ALT', target: { sysid: 2, compid: 1 } };
   // An out-of-range longitude still fits degE7's int32 and scales into a
   // garbage coordinate the vehicle would accept — same hazard class as the
   // blank guards.
@@ -375,16 +405,16 @@ test('global position with blank lat, lon or alt refuses — never 0,0 at ground
     () =>
       buildMoveMessage({
         mode: 'position',
-        frame: 3,
+        frame: 'GLOBAL_RELATIVE_ALT_INT',
         target: { sysid: 2, compid: 1 },
         position: { lat: '', lon: 8, alt: 10 },
       }),
     /blank coordinates must not become 0,0/
   );
   // A blank alt zero-filled is the same hazard on the vertical axis: 0 m above
-  // home (frame 3, wire twin 6) is the ground, 0 m MSL (frame 0, wire twin 5)
-  // may be below it. An explicit 0 stays a value; blank refuses.
-  for (const frame of [3, 0]) {
+  // home (frame 6) or 0 m AGL (frame 11) is the ground, 0 m MSL (frame 5) may
+  // be below it. An explicit 0 stays a value; blank refuses.
+  for (const frame of ['GLOBAL_RELATIVE_ALT_INT', 'GLOBAL_INT', 'GLOBAL_TERRAIN_ALT_INT']) {
     assert.throws(
       () =>
         buildMoveMessage({
@@ -394,12 +424,12 @@ test('global position with blank lat, lon or alt refuses — never 0,0 at ground
           position: { lat: 47, lon: 8 },
         }),
       /blank coordinates must not become 0,0/,
-      `frame ${frame} must refuse a blank alt`
+      `${frame} must refuse a blank alt`
     );
   }
   const explicitZero = buildMoveMessage({
     mode: 'position',
-    frame: 3,
+    frame: 'GLOBAL_RELATIVE_ALT_INT',
     target: { sysid: 2, compid: 1 },
     position: { lat: 47, lon: 8, alt: 0 },
   });
@@ -421,7 +451,7 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
   assert.throws(
     () => buildMoveMessage({
       mode: 'position',
-      frame: 3,
+      frame: 'GLOBAL_RELATIVE_ALT_INT',
       target: { sysid: 2, compid: 1 },
       position: { lat: 47, lon: 8, alt: '  ' },
     }),
@@ -450,72 +480,78 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
 
 test('advisoryFor fires only on measured-unsupported combos (§14)', () => {
   const { advisoryFor } = require('../../lib/move');
-  // Confirmed: PX4 1.18 produced no motion at all for BODY_OFFSET_NED (9) —
-  // the only OFFSET frame still reachable since the Action surface.
-  assert.match(advisoryFor({ mode: 'position', frame: 9, firmware: 'px4' }), /BODY_OFFSET_NED/);
-  // New from measurement: PX4 does not read BODY_NED (8) as a body offset.
-  assert.match(advisoryFor({ mode: 'position', frame: 8, firmware: 'px4' }), /BODY_NED/);
-  assert.match(advisoryFor({ mode: 'position-velocity', frame: 8, firmware: 'px4' }), /BODY_NED/);
+  // Confirmed: PX4 1.18 produced no motion at all for either OFFSET frame.
+  for (const frame of ['LOCAL_OFFSET_NED', 'BODY_OFFSET_NED']) {
+    assert.match(advisoryFor({ mode: 'position', frame, firmware: 'px4' }), /OFFSET/);
+  }
+  // New from measurement: PX4 does not read BODY_NED as a body offset.
+  assert.match(advisoryFor({ mode: 'position', frame: 'BODY_NED', firmware: 'px4' }), /BODY_NED/);
+  assert.match(advisoryFor({ mode: 'position-velocity', frame: 'BODY_NED', firmware: 'px4' }), /BODY_NED/);
   // …but only when position is actually commanded (Codex, #277): BODY_NED
   // velocity is PX4's intended body path — the very frame the steer body
   // reference derives — and warning on it would be advisory noise.
-  assert.equal(advisoryFor({ mode: 'velocity', frame: 8, firmware: 'px4' }), null);
+  assert.equal(advisoryFor({ mode: 'velocity', frame: 'BODY_NED', firmware: 'px4' }), null);
   // Confirmed 2026-08-08: ArduPilot GUIDED held heading under an absolute-yaw
   // yaw-only stream (type_mask 2559, 0.2° in 5 s).
-  assert.match(advisoryFor({ mode: 'yaw-only', frame: 1, firmware: 'ardupilot' }), /yaw-only/);
+  assert.match(advisoryFor({ mode: 'yaw-only', frame: 'LOCAL_NED', firmware: 'ardupilot' }), /yaw-only/);
   // ...but only that mask was measured. A yaw *rate* rides mask 1535 (or 511
   // with both), and the same run clocked AP slewing ~60 °/s on a commanded
   // rate — so the advisory must not claim "no yaw change" there (§14 / #179).
   assert.equal(
-    advisoryFor({ mode: 'yaw-only', frame: 1, firmware: 'ardupilot', yawRate: 20 }),
+    advisoryFor({ mode: 'yaw-only', frame: 'LOCAL_NED', firmware: 'ardupilot', yawRate: 20 }),
     null
   );
   assert.equal(
-    advisoryFor({ mode: 'yaw-only', frame: 1, firmware: 'ardupilot', yawRate: 0 }),
+    advisoryFor({ mode: 'yaw-only', frame: 'LOCAL_NED', firmware: 'ardupilot', yawRate: 0 }),
     null
   );
   // Supported combos and unknown firmware stay silent.
-  assert.equal(advisoryFor({ mode: 'yaw-only', frame: 1, firmware: 'px4' }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 1, firmware: 'px4' }), null);
-  assert.equal(advisoryFor({ mode: 'acceleration', frame: 1, firmware: 'px4' }), null);
-  assert.equal(advisoryFor({ mode: 'acceleration', frame: 1, firmware: 'custom' }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 1 }), null);
+  assert.equal(advisoryFor({ mode: 'yaw-only', frame: 'LOCAL_NED', firmware: 'px4' }), null);
+  assert.equal(advisoryFor({ mode: 'position', frame: 'LOCAL_NED', firmware: 'px4' }), null);
+  assert.equal(advisoryFor({ mode: 'acceleration', frame: 'LOCAL_NED', firmware: 'px4' }), null);
+  assert.equal(advisoryFor({ mode: 'acceleration', frame: 'LOCAL_NED', firmware: 'custom' }), null);
+  assert.equal(advisoryFor({ mode: 'position', frame: 'LOCAL_NED' }), null);
 });
 
 test('measurement-refuted advisories are silent — a warning on working behaviour is noise (§14)', () => {
   const { advisoryFor } = require('../../lib/move');
   // ArduPilot Copter-4.7.0 *moved* ~43 m on an acceleration-only setpoint, so
   // "ArduPilot ignores acceleration-only" was wrong.
-  assert.equal(advisoryFor({ mode: 'acceleration', frame: 1, firmware: 'ardupilot' }), null);
-  // ArduPilot treated BODY_NED (8) and BODY_OFFSET_NED (9) identically
-  // (body-axis offset), so "ArduPilot expects BODY_OFFSET_NED" was wrong.
-  assert.equal(advisoryFor({ mode: 'position', frame: 8, firmware: 'ardupilot' }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 9, firmware: 'ardupilot' }), null);
+  assert.equal(advisoryFor({ mode: 'acceleration', frame: 'LOCAL_NED', firmware: 'ardupilot' }), null);
+  // ArduPilot treated BODY_NED and BODY_OFFSET_NED identically (body-axis
+  // offset), so "ArduPilot expects BODY_OFFSET_NED" was wrong.
+  assert.equal(advisoryFor({ mode: 'position', frame: 'BODY_NED', firmware: 'ardupilot' }), null);
+  assert.equal(advisoryFor({ mode: 'position', frame: 'BODY_OFFSET_NED', firmware: 'ardupilot' }), null);
+  // PX4 accepted a terrain-altitude target and moved without complaint, so
+  // "PX4 does not support terrain-altitude targets" was not supportable.
+  assert.equal(advisoryFor({ mode: 'position', frame: 'GLOBAL_TERRAIN_ALT_INT', firmware: 'px4' }), null);
 });
 
-test('blank local coordinates: refused in absolute frames, inert in the measured OFFSET frame (§14)', () => {
+test('blank local coordinates: refused in absolute frames, inert in measured OFFSET frames (§14)', () => {
   const target = { sysid: 2, compid: 1 };
   // Absolute local frames — a blank zero-filled here commands the EKF origin.
-  // BODY_NED (8) is included deliberately: ArduPilot reads it as a body offset
-  // but PX4 moved absolute-like, so it cannot claim the exemption.
-  for (const frame of [1, 8]) {
+  // BODY_NED is included deliberately: ArduPilot reads it as a body offset but
+  // PX4 moved absolute-like, so it cannot claim the exemption.
+  for (const frame of ['LOCAL_NED', 'BODY_NED']) {
     assert.throws(
       () => buildMoveMessage({ mode: 'position', frame, target, position: { north: '', east: 2, up: 3 } }),
       /blank coordinates must not become the origin/,
-      `frame ${frame} must refuse a blank coordinate`
+      `${frame} must refuse a blank coordinate`
     );
   }
-  // Measured OFFSET frame BODY_OFFSET_NED (9) — zero means "no change" on
-  // every axis, so a blank is inert and passes as 0.
-  const message = buildMoveMessage({
-    mode: 'position',
-    frame: 9,
-    target,
-    position: { north: 10, east: '', up: '' },
-  });
-  assert.equal(message.fields.x, 10, 'BODY_OFFSET_NED keeps the commanded axis');
-  assert.equal(message.fields.y, 0, 'BODY_OFFSET_NED blank east is a zero offset');
-  assert.equal(message.fields.z, -0, 'BODY_OFFSET_NED blank up is a zero offset');
+  // Measured OFFSET frames — zero means "no change" on every axis, so a blank
+  // is inert and passes as 0.
+  for (const frame of ['LOCAL_OFFSET_NED', 'BODY_OFFSET_NED']) {
+    const message = buildMoveMessage({
+      mode: 'position',
+      frame,
+      target,
+      position: { north: 10, east: '', up: '' },
+    });
+    assert.equal(message.fields.x, 10, `${frame} keeps the commanded axis`);
+    assert.equal(message.fields.y, 0, `${frame} blank east is a zero offset`);
+    assert.equal(message.fields.z, -0, `${frame} blank up is a zero offset`);
+  }
 });
 
 test('buildStopMessage copies target ids and does not invent system 1', () => {
