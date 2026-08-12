@@ -219,32 +219,13 @@ test('global setpoint frames always transmit the *_INT twin — the wire number 
   assert.equal(local.fields.coordinate_frame, 1);
 });
 
-test('global lat/lon out of range refuses — the degE7 int32 ceiling is ±214.7° (C4)', () => {
+test('degE7 encoding is exact at the coordinate extremes', () => {
+  // The range refusal that used to live here went with requireGlobalPosition
+  // (input-trust ruling, AGENTS.md 2026-08-12): an out-of-range coordinate now
+  // scales and rides the wire, and the editor is where it is caught. What
+  // still matters at this layer is that the legal extremes encode exactly —
+  // degE7 is an int32 and ±180° is 1.8e9, well inside it.
   const base = { mode: 'position', frame: 3, target: { sysid: 2, compid: 1 } };
-  // An out-of-range longitude still fits degE7's int32 and scales into a
-  // garbage coordinate the vehicle would accept — same hazard class as the
-  // blank guards.
-  for (const position of [
-    { lat: 90.0001, lon: 8, alt: 10 },
-    { lat: -90.0001, lon: 8, alt: 10 },
-  ]) {
-    assert.throws(
-      () => buildMoveMessage({ ...base, position }),
-      /lat must be within \[-90, 90\]/,
-      `lat ${position.lat} must refuse`
-    );
-  }
-  for (const position of [
-    { lat: 47, lon: 180.0001, alt: 10 },
-    { lat: 47, lon: -180.0001, alt: 10 },
-  ]) {
-    assert.throws(
-      () => buildMoveMessage({ ...base, position }),
-      /lon must be within \[-180, 180\]/,
-      `lon ${position.lon} must refuse`
-    );
-  }
-  // Exact boundaries are valid coordinates.
   const poles = buildMoveMessage({ ...base, position: { lat: 90, lon: -180, alt: 10 } });
   assert.equal(poles.fields.lat_int, 900000000);
   assert.equal(poles.fields.lon_int, -1800000000);
@@ -370,42 +351,6 @@ test('local position with a blank coordinate refuses — never the origin (§10)
   assert.equal(velocityBlanks.fields.vy, 0);
 });
 
-test('global position with blank lat, lon or alt refuses — never 0,0 at ground level (§10)', () => {
-  assert.throws(
-    () =>
-      buildMoveMessage({
-        mode: 'position',
-        frame: 3,
-        target: { sysid: 2, compid: 1 },
-        position: { lat: '', lon: 8, alt: 10 },
-      }),
-    /blank coordinates must not become 0,0/
-  );
-  // A blank alt zero-filled is the same hazard on the vertical axis: 0 m above
-  // home (frame 3, wire twin 6) is the ground, 0 m MSL (frame 0, wire twin 5)
-  // may be below it. An explicit 0 stays a value; blank refuses.
-  for (const frame of [3, 0]) {
-    assert.throws(
-      () =>
-        buildMoveMessage({
-          mode: 'position',
-          frame,
-          target: { sysid: 2, compid: 1 },
-          position: { lat: 47, lon: 8 },
-        }),
-      /blank coordinates must not become 0,0/,
-      `frame ${frame} must refuse a blank alt`
-    );
-  }
-  const explicitZero = buildMoveMessage({
-    mode: 'position',
-    frame: 3,
-    target: { sysid: 2, compid: 1 },
-    position: { lat: 47, lon: 8, alt: 0 },
-  });
-  assert.equal(explicitZero.fields.alt, 0);
-});
-
 test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)', () => {
   // The blank guards are only as good as the blank test: ' ' is not '', so
   // without trimming it reaches numberOr, and Number(' ') === 0 passes the
@@ -418,16 +363,6 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
     }),
     /blank coordinates must not become the origin/
   );
-  assert.throws(
-    () => buildMoveMessage({
-      mode: 'position',
-      frame: 3,
-      target: { sysid: 2, compid: 1 },
-      position: { lat: 47, lon: 8, alt: '  ' },
-    }),
-    /blank coordinates must not become 0,0/
-  );
-
   // Yaw follows the presence rule: whitespace is absent, so the ignore bit
   // stays set rather than commanding a yaw of 0 (north) nobody asked for.
   const yawBlank = buildMoveMessage({

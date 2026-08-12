@@ -84,10 +84,11 @@
       aNorth: { value: '', validate: RED.validators.number(true) },
       aEast: { value: '', validate: RED.validators.number(true) },
       aUp: { value: '', validate: RED.validators.number(true) },
-      // Go to's global position is required — saved or live — matching the
-      // runtime's requireGlobalPosition (§10: blank coordinates must not
-      // become 0,0 at ground level), so a blank reds at deploy rather than
-      // refusing every input. The blank-action fallback is 'steer', mirroring
+      // Go to's global position is required — saved or live. This is now the
+      // only check: the runtime's requireGlobalPosition was deleted with the
+      // input-trust ruling (AGENTS.md, 2026-08-12), so §10's "blank
+      // coordinates must not become 0,0 at ground level" is enforced here or
+      // nowhere. The blank-action fallback is 'steer', mirroring
       // resolveMoveAction: a saved config without `action` parses as steer.
       lat: {
         value: '',

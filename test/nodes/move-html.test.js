@@ -165,8 +165,8 @@ test('mavlink-move delivery options are rebuilt per action — confirm is goto-o
 
 test('mavlink-move goto requires the global position at deploy, steer requires nothing', () => {
   // Behavioral, not grep: the validators mirror the runtime's
-  // requireGlobalPosition (§10 "blank coordinates must not become 0,0 at
-  // ground level") — required on goto, saved or live, and silent on steer,
+  // §10 rule ("blank coordinates must not become 0,0 at ground level") — the
+  // editor now owns it outright, required on goto, saved or live, silent on steer,
   // where the runtime derives the mode from what is filled and refuses an
   // all-blank steer at input time.
   const defaults = loadNodeDefaults('mavlink-move');
@@ -188,7 +188,7 @@ test('mavlink-move goto requires the global position at deploy, steer requires n
   assert.equal(defaults.lon.validate.call(gotoNode, -122.3, {}), true);
   assert.equal(defaults.alt.validate.call(gotoNode, 30, {}), true);
   // The degE7 int32 ceiling makes range a guard, not pedantry — same rule as
-  // the runtime's requireGlobalPosition.
+  // §10 — the editor is the only place this is enforced.
   assert.match(String(defaults.lat.validate.call(gotoNode, 91, {})), /\[-90, 90\]/);
   assert.match(String(defaults.lon.validate.call(gotoNode, 181, {})), /\[-180, 180\]/);
   assert.match(String(defaults.alt.validate.call(gotoNode, 'abc', {})), /number of metres/);
