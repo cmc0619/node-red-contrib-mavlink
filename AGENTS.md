@@ -116,6 +116,58 @@ The node-specific application of this rule is the Configuration Trust ruleset fu
 that section is this principle worked out per configuration-property category, not a separate
 policy.
 
+## We are building two things: a driver and a protector (owner ruling, 2026-08-12)
+
+Read this before writing a line of runtime code. Nearly every guardrail this project has had to
+delete came from missing it.
+
+**Thing one is a driver.** `lib/**` and `nodes/*.js` together are a MAVLink driver — call it a
+framework, an SDK, a wrapper, whatever. It exposes the protocol's full expressive power. The
+benchmark is pymavlink: **if you can fly a drone into the ground at 500 mph with pymavlink, you
+can — and *should* be able to* — do it with this code.** A driver that second-guesses its caller
+is a worse driver.
+
+**Thing one never refuses input. It coerces and sends.** Not "refuses only dangerous things",
+not "refuses only impossible things" — never. There is no value, combination, or omission that
+makes runtime code throw on the way to the wire. A field with no slot in the message being built
+is ignored, not rejected. An unrecognised token is passed along, not named in an error. Whatever
+comes out the other side is what the vehicle gets to judge.
+
+If bad data reaches thing one, **that is a bug, and the job is to hunt it down and stomp on it
+at its source** — in the editor, in the flow, in our own wiring. It is never a reason to add a
+check at the point where the bad data surfaced. Adding the check hides the bug and costs code.
+
+**Thing two is a protector.** `nodes/*.html` — the editor dialog — is the *only* place that
+protects the user from a dumb decision. It validates operator input at configure time: field
+requirements, ranges, cross-field rules, options that cannot legally combine. When something
+must be stopped, it is stopped here, before deploy, where the operator can see and fix it. The
+Configuration Trust ruleset below is this sentence worked out property by property.
+
+That is the whole architecture. Editor validates; driver obeys.
+
+### What this does not mean
+
+- **Decoding is not refusing.** The codec parsing bytes off the wire is the *receive* direction,
+  not the send path. A malformed frame failing to parse is a parse failure, and it stays. This
+  ruling governs data flowing out: config → node runtime → `lib/**` → wire.
+- **Operational failure is not refusing.** A dropped connection, a timeout, an ack that never
+  comes, a vehicle answering `DENIED` — real conditions, reported where they occur.
+- **Type conversion is not refusing.** Turning a saved string into a number is plumbing.
+
+### Advisories are dead
+
+The warn-but-still-send layer — `advisoryFor` and anything like it, emitting "PX4 ignored
+BODY_OFFSET_NED in measurement (§14); sent as configured" — is **removed**. A driver does not
+editorialise about what the vehicle will do with a legal message. The §14 measurements behind
+those strings stay in `DESIGN.md`, where they are documentation rather than runtime weight.
+
+### Enforcement
+
+Going forward, plus **remove on sight**: any guardrail you encounter in `lib/**` or `nodes/*.js`
+while working on something else is deleted in that change, along with its tests, error strings,
+helpers and comments. A full audit of the existing surface comes at the end; until then, seeing
+one and leaving it is not an option.
+
 ## Implementation workflow: use sub-agents (repo-owner directive)
 
 The repo owner wants implementation parallelized with sub-agents, with agent capability matched
@@ -406,7 +458,9 @@ obtain it.
 
 ### Three kinds of input, three treatments (owner ruling, 2026-08-12)
 
-Naming the category is most of the decision. There are three, and only one of them is checked
+This is the driver/protector split above, applied to where a value came from. The governing
+sentence is still "editor validates; driver obeys" — this table only says which door each value
+came through. Naming the category is most of the decision, and only one of the three is checked
 in the runtime:
 
 | Input | Trusted? | Checked where |

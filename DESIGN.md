@@ -30,6 +30,27 @@ carries explicit freshness and stop behavior.
 
 ## 2. Code principles
 
+**Two things are being built: a driver and a protector** (owner ruling, 2026-08-12). This is the
+principle the rest of this section serves, and the one most often lost.
+
+*Thing one is a driver.* `lib/**` plus `nodes/*.js` form a MAVLink driver — framework, SDK,
+wrapper, pick a word — exposing the protocol's full expressive power. The benchmark is
+pymavlink: **anything you can do to a vehicle with pymavlink, including flying it into the
+ground at 500 mph, you can and should be able to do with this code.** It never refuses an input.
+Not dangerous ones, not nonsensical ones, not incomplete ones — it coerces and sends, and the
+vehicle judges the result. A field with no slot in the message being built is ignored, never
+rejected. Bad data arriving here is a bug to hunt to its source, not a reason for a check at the
+point it surfaced.
+
+*Thing two is a protector.* `nodes/*.html` — the editor dialog — is the only place a user is
+protected from a dumb decision. It validates at configure time, before deploy, where the
+operator can see and fix it: requirements, ranges, cross-field rules, illegal combinations.
+
+Editor validates; driver obeys. Three things this does not touch: decoding bytes off the wire
+(the receive direction — a malformed frame still fails to parse, §5), operational failure
+(dropped links, timeouts, `DENIED` acks), and type conversion. `AGENTS.md` carries the full
+ruleset, including the removal-on-sight rule for guardrails found in passing.
+
 **Shared logic lives in `lib/`, not in nodes.** Any behaviour that applies in more than one
 place is a module with a single owner. Nodes stay thin: read config, call a library function,
 shape the output. The field codec (§5) and the metadata service (§4) are the two largest
