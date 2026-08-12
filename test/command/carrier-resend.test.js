@@ -102,7 +102,7 @@ function deploy(ackResults, config = {}, extraNodes = {}) {
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
-    carrier: config.carrier || 'long',
+    sendAs: config.sendAs || 'long',
     mode: 'preset',
     preset: 'reposition',
     delivery: 'confirm',
@@ -197,7 +197,7 @@ test('contradictory LONG_ONLY on the first LONG send fails loud without swapping
 });
 
 test('INT-first: configured carrier int sends COMMAND_INT with degrees scaled to degE7', async () => {
-  const { node, conn, warnings } = deploy([MAV_RESULT.ACCEPTED], { carrier: 'int' });
+  const { node, conn, warnings } = deploy([MAV_RESULT.ACCEPTED], { sendAs: 'int' });
 
   const sent = await runInput(node, { payload: { 5: -35, 6: 149, 7: 100 } });
 
@@ -217,7 +217,7 @@ test('INT-first: configured carrier int sends COMMAND_INT with degrees scaled to
 test('INT-first LONG_ONLY: swaps back to COMMAND_LONG with unscaled degrees', async () => {
   const { node, conn, warnings } = deploy(
     [MAV_RESULT.COMMAND_LONG_ONLY, MAV_RESULT.ACCEPTED],
-    { carrier: 'int' }
+    { sendAs: 'int' }
   );
 
   const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
@@ -241,7 +241,7 @@ test('INT-first LONG_ONLY: swaps back to COMMAND_LONG with unscaled degrees', as
 test('INT-first contradictory INT_ONLY fails loud without swapping', async () => {
   const { node, conn, warnings } = deploy(
     [MAV_RESULT.COMMAND_INT_ONLY],
-    { carrier: 'int' }
+    { sendAs: 'int' }
   );
 
   const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
@@ -254,7 +254,7 @@ test('INT-first contradictory INT_ONLY fails loud without swapping', async () =>
 });
 
 test('missing carrier config: node reds out and inputs fail loud through Catch', async () => {
-  const { node, conn } = deploy([MAV_RESULT.ACCEPTED], { carrier: '' });
+  const { node, conn } = deploy([MAV_RESULT.ACCEPTED], { sendAs: '' });
 
   let sent;
   let doneErr;
@@ -301,7 +301,7 @@ test('INT + non-location command: XML kinds keep param5 raw on the wire', async 
   const { node, conn } = deploy(
     [MAV_RESULT.ACCEPTED],
     {
-      carrier: 'int',
+      sendAs: 'int',
       mode: 'advanced',
       advancedCommand: '1000', // DO_GIMBAL_MANAGER_PITCHYAW — param5 is flags
     },
@@ -320,7 +320,7 @@ test('INT + NaN lat/lon refuses loud — nothing reaches the wire', async () => 
   const { node, conn } = deploy(
     [MAV_RESULT.ACCEPTED],
     {
-      carrier: 'int',
+      sendAs: 'int',
       mode: 'advanced',
       advancedCommand: '192', // DO_REPOSITION
     },

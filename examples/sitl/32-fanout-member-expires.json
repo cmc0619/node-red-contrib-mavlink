@@ -112,7 +112,7 @@
     "delivery": "build",
     "connection": "",
     "dialect": "common",
-    "carrier": "long",
+    "sendAs": "long",
     "timeout": "10000",
     "maxRetries": "0",
     "unconfirmedContinue": false,

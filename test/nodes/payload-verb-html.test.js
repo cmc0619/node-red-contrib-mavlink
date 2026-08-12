@@ -290,14 +290,14 @@ test('mavlink-payload CompID reloads when catalog source changes', () => {
   );
 });
 
-test('payload carrier defaults to the first valid option with no blank prompt', () => {
-  assert.match(payloadHtml, /id="node-input-carrier"/, 'carrier select must bind to the carrier property');
+test('payload sendAs defaults to the first valid option with no blank prompt', () => {
+  assert.match(payloadHtml, /id="node-input-sendAs"/, 'send-as select must bind to the sendAs property');
   assert.match(
     payloadHtml,
-    /carrier:\s*\{ value: 'int' \}/,
+    /sendAs:\s*\{ value: 'int' \}/,
     'new payload nodes default to COMMAND_INT'
   );
-  assert.doesNotMatch(payloadHtml, /select carrier/, 'carrier select has no meaningless blank prompt');
+  assert.doesNotMatch(payloadHtml, /select carrier/i, 'send-as select has no meaningless blank prompt');
   assert.match(payloadHtml, /<option value="int">/, 'COMMAND_INT option offered');
   assert.match(payloadHtml, /<option value="long">/, 'COMMAND_LONG option offered');
 });
@@ -310,12 +310,12 @@ test('payload frame row binds to the frame property and follows the INT carrier 
     'frame is declared in defaults (blank = builder default GLOBAL_RELATIVE_ALT) so the selection persists'
   );
   assert.match(payloadHtml, /row-payload-frame/, 'frame row id must exist');
-  assert.match(payloadHtml, /\$\('#node-input-carrier'\)\.on\('change'/, 'carrier change re-evaluates the frame row');
-  // §6 hidden is not honored, both halves: carrier is pinned to what is sent
-  // when its row hides, and frame clears rather than saving a stale value the
-  // operator can no longer see. One helper, so the two cannot drift.
+  assert.match(payloadHtml, /\$\('#node-input-sendAs'\)\.on\('change'/, 'send-as change re-evaluates the frame row');
+  // §6 hidden is not honored, both halves: the carrier choice is pinned to
+  // what is sent when its row hides, and frame clears rather than saving a
+  // stale value the operator can no longer see. One helper, so the two cannot drift.
   assert.match(payloadHtml, /data\.carrierMatters/);
-  assert.match(payloadHtml, /if \(!matters\) \$\('#node-input-carrier'\)\.val\('int'\);/);
+  assert.match(payloadHtml, /if \(!matters\) \$\('#node-input-sendAs'\)\.val\('int'\);/);
   assert.match(payloadHtml, /if \(!shown\) \$\('#node-input-frame'\)\.val\(''\);/);
   assert.equal(
     (payloadHtml.match(/#row-payload-frame'\)\.toggle/g) || []).length,

@@ -98,7 +98,7 @@
     "unconfirmedContinue": false,
     "completionTimeout": "30000",
     "params": "{\"1\":1,\"2\":4}",
-    "carrier": "long",
+    "sendAs": "long",
     "x": 360,
     "y": 160,
     "wires": [
@@ -127,7 +127,7 @@
     "unconfirmedContinue": false,
     "completionTimeout": "30000",
     "params": "{}",
-    "carrier": "long",
+    "sendAs": "long",
     "x": 580,
     "y": 160,
     "wires": [
@@ -156,7 +156,7 @@
     "unconfirmedContinue": false,
     "completionTimeout": "30000",
     "params": "{\"1\":33,\"2\":100000}",
-    "carrier": "long",
+    "sendAs": "long",
     "x": 800,
     "y": 160,
     "wires": [
@@ -185,7 +185,7 @@
     "unconfirmedContinue": true,
     "completionTimeout": "0",
     "params": "{\"1\":24,\"2\":200000}",
-    "carrier": "long",
+    "sendAs": "long",
     "x": 1020,
     "y": 160,
     "wires": [
@@ -212,7 +212,7 @@
     "unconfirmedContinue": true,
     "completionTimeout": "0",
     "params": "{\"1\":1,\"2\":500000}",
-    "carrier": "long",
+    "sendAs": "long",
     "x": 1260,
     "y": 160,
     "wires": [
@@ -239,7 +239,7 @@
     "unconfirmedContinue": false,
     "completionTimeout": "120000",
     "params": "{\"7\":10}",
-    "carrier": "long",
+    "sendAs": "long",
     "x": 800,
     "y": 280,
     "wires": [

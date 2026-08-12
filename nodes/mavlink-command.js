@@ -101,8 +101,8 @@ function resolveCommandId(config) {
  * @returns {'long'|'int'|null}
  */
 function resolveCarrier(config) {
-  if (config.carrier === CARRIER.INT) return CARRIER.INT;
-  if (config.carrier === CARRIER.LONG) return CARRIER.LONG;
+  if (config.sendAs === CARRIER.INT) return CARRIER.INT;
+  if (config.sendAs === CARRIER.LONG) return CARRIER.LONG;
   return null;
 }
 

@@ -107,7 +107,7 @@
         "ex23-debug-arm-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -136,7 +136,7 @@
         "ex23-debug-guided-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },

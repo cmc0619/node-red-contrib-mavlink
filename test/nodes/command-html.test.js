@@ -422,14 +422,14 @@ test('command help documents status fields at message root, not under payload', 
   );
 });
 
-test('carrier defaults to the first valid option with no blank prompt', () => {
-  assert.match(html, /id="node-input-carrier"/, 'carrier select must bind to the carrier property');
+test('sendAs defaults to the first valid option with no blank prompt', () => {
+  assert.match(html, /id="node-input-sendAs"/, 'send-as select must bind to the sendAs property');
   assert.match(
     html,
-    /carrier:\s*\{ value: 'int' \}/,
+    /sendAs:\s*\{ value: 'int' \}/,
     'new command nodes default to COMMAND_INT'
   );
-  assert.doesNotMatch(html, /select carrier/, 'carrier select has no meaningless blank prompt');
+  assert.doesNotMatch(html, /select carrier/i, 'send-as select has no meaningless blank prompt');
   assert.match(
     html,
     /<option value="int">/,
@@ -447,8 +447,8 @@ test('frame row binds to the frame property and follows the INT carrier', () => 
   assert.match(html, /row-cmd-frame/, 'frame row id must exist');
   assert.match(
     html,
-    /\$\('#node-input-carrier'\)\.on\('change', refreshFrameRow\);/,
-    'carrier change re-evaluates the frame row'
+    /\$\('#node-input-sendAs'\)\.on\('change', refreshFrameRow\);/,
+    'send-as change re-evaluates the frame row'
   );
 });
 

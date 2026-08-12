@@ -81,7 +81,7 @@
         "ex17-dbg-photo-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "values": {
       "cameraId": 0,
       "count": 1,
@@ -113,7 +113,7 @@
         "ex17-dbg-vstart-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "values": {
       "streamId": 0,
       "statusFrequency": 0
@@ -143,7 +143,7 @@
         "ex17-dbg-vstop-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "values": {
       "streamId": 0
     }
@@ -172,7 +172,7 @@
         "ex17-dbg-legacy-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "values": {
       "pitch": -45,
       "roll": 0,
@@ -203,7 +203,7 @@
         "ex17-dbg-mgr-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "values": {
       "pitch": -45,
       "roll": 0,
@@ -235,7 +235,7 @@
         "ex17-dbg-roi-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "values": {
       "lat": 47.3977,
       "lon": 8.5456,
@@ -266,7 +266,7 @@
         "ex17-dbg-roic-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "values": {}
   },
   {

@@ -33,7 +33,7 @@ Requires Node.js 20+ and Node-RED 4.0+.
 | `mavlink-out` | Send raw or pre-built messages |
 | `mavlink-build` | Build any dialect message with delivery tiers |
 | `mavlink-command` | `MAV_CMD` presets and advanced commands |
-| `mavlink-move` | `SET_POSITION_TARGET_*` streaming |
+| `mavlink-move` | Go to (acked guided goto, `MAV_CMD_DO_REPOSITION`; streamed global setpoints on Stream) and steer (setpoints, mask derived from filled fields) |
 | `mavlink-param` | Read, set, or list parameters |
 | `mavlink-payload` | Camera, gimbal, servo, release |
 | `mavlink-state` | Peer table reads and transitions |
