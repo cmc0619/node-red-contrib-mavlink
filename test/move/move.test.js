@@ -477,6 +477,11 @@ test('advisoryFor fires only on measured-unsupported combos (§14)', () => {
   }
   // New from measurement: PX4 does not read BODY_NED as a body offset.
   assert.match(advisoryFor({ mode: 'position', frame: 'BODY_NED', firmware: 'px4' }), /BODY_NED/);
+  assert.match(advisoryFor({ mode: 'position-velocity', frame: 'BODY_NED', firmware: 'px4' }), /BODY_NED/);
+  // …but only when position is actually commanded (Codex, #277): BODY_NED
+  // velocity is PX4's intended body path — the very frame the steer body
+  // reference derives — and warning on it would be advisory noise.
+  assert.equal(advisoryFor({ mode: 'velocity', frame: 'BODY_NED', firmware: 'px4' }), null);
   // Confirmed 2026-08-08: ArduPilot GUIDED held heading under an absolute-yaw
   // yaw-only stream (type_mask 2559, 0.2° in 5 s).
   assert.match(advisoryFor({ mode: 'yaw-only', frame: 'LOCAL_NED', firmware: 'ardupilot' }), /yaw-only/);
