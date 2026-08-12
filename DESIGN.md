@@ -1504,20 +1504,27 @@ whitespace arm is load-bearing: `Number(' ')` is a *finite* `0`, so a blank test
 leaves every guard above open to a string that merely looks empty (§14). A padded number
 (`' 4 '`) is still `4` — only strings with no content are blank.
 
-**Known-unsupported combos send anyway, but never silently** (`advisoryFor`): a setpoint has no
-acknowledgement, so a `node.warn` is all the feedback the operator gets. The list is what
-measurement supports, nothing more (§14): **PX4 + either OFFSET frame** (no motion at all),
-**PX4 + `BODY_NED`** (body frames carry velocity only; PX4 discards the position), and
-**ArduPilot + `yaw-only` with no yaw rate** (GUIDED held heading under an absolute-yaw stream,
-`type_mask` 2559 — SITL 2026-08-08 / #179; a rate rides a different mask and was not measured).
-Build-tier nodes have no connection firmware and never warn. Three earlier advisories were
-*removed* when measurement refuted them — ArduPilot acceleration-only, ArduPilot `BODY_NED`, and
-PX4 terrain-altitude — because a warning that fires on working behaviour is noise, and noise gets
-ignored. A claimed "~2 Hz OFFBOARD floor" on PX4 was also **not** promoted: with
+**Known-unsupported combos send, and the runtime says nothing about them.** A driver does not
+editorialise about what a vehicle will do with a legal message (`AGENTS.md`, driver/protector),
+so `lib/**` carries no advisory machinery: these build, send, and report exactly like any other
+setpoint. What measurement established about them stands as *documentation*, and this is where it
+lives — **PX4 + either OFFSET frame** (accepted, no motion at all), **PX4 + `BODY_NED`** (body
+frames carry velocity only; the position is discarded), and **ArduPilot + `yaw-only` with no yaw
+rate** (GUIDED held heading under an absolute-yaw stream, `type_mask` 2559 — SITL 2026-08-08 /
+#179; a rate rides a different mask and was not measured).
+
+Three further combinations are known to **work**, having been asserted from documentation and
+then refuted by measurement: ArduPilot acceleration-only, ArduPilot `BODY_NED`, and PX4
+terrain-altitude. A claimed "~2 Hz OFFBOARD floor" on PX4 is likewise unsupported — with
 `COM_OF_LOSS_T=1.0` the SIH held OFFBOARD at 1 Hz and left only on full setpoint silence (#179).
-Firmware comes from the connection's bound Vehicle Profile; `custom` opts out of
-firmware-specific advisories. Warn-not-block is deliberate: firmware support moves, and the
-advisory table is a snapshot, not a gate.
+Anything that ever tells an operator about these reads from here, and must not re-assert the
+refuted three.
+
+Whether the operator is told any of it in the **editor** — the half of the split where warning a
+human is legitimate work — is open: **issue #285**, removed in `ffb8314`. Node-RED validators are
+binary, so it would be a conditional hint row, not a validator, and it can only see firmware
+where the editor can: wire tiers via the Connection's Vehicle Profile, Build only through the
+`__vehicle` escape.
 
 There is **one vocabulary**: Move config and `msg.payload` overrides speak these mode and frame
 names (Fan-out no longer builds Move inputs at all — it replicates built messages, §10). The pre-frame names (`local-position` /
@@ -2295,9 +2302,10 @@ required for the actuation questions (acceptance in the parser is not action by 
 the acceleration refutation turned on precisely that gap) and for pinning behaviour to the
 versions users fly. Hypothesis from source, authority from measurement — in that order.
 
-*Check:* `lib/move/index.js` (`OFFSET_FRAMES`, `advisoryFor`), `node --test test/move/move.test.js`
-— "blank local coordinates: refused in absolute frames, inert in measured OFFSET frames" and
-"measurement-refuted advisories are silent".
+*Check:* `lib/move/index.js` (`OFFSET_FRAMES`), `node --test test/move/move.test.js` — "blank
+local coordinates: refused in absolute frames, inert in measured OFFSET frames". The advisory
+half of this check is gone with the advisories themselves (#285); the frame facts above stand on
+their own.
 
 ---
 
@@ -3842,8 +3850,8 @@ on one stack.
    after ~3 s, exactly as a one-shot velocity brakes. Recorded as hypothesis, not advisory — it
    was not part of the 2026-08-08 run. Sustained yaw slew needs **Stream**, same as velocity.
 
-*Check:* `node sitl/measure-move-179.js`; `lib/move/index.js` `advisoryFor`; `node --test
-test/move/move.test.js`.
+*Check:* `node sitl/measure-move-179.js`; `node --test test/move/move.test.js`. (The facts above
+were what the advisory table was built from; the table itself is gone — #285.)
 
 ---
 
