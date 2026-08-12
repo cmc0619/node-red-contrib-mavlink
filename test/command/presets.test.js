@@ -22,7 +22,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getPreset, buildParamArray, blankLocationRefusal, mergeParams, PRESETS, COMPLETION } = require('../../lib/command');
+const { getPreset, buildParamArray, blankLocationRefusal, mergeParams, PRESETS, COMPLETION, presetGroups } = require('../../lib/command');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -71,27 +71,32 @@ test('Arm: exposed param 2 defaults to 0 when user omits it', () => {
   assertParamAt('arm', emptyUser(), 2, 0);
 });
 
-// ── Yaw / Rotate ───────────────────────────────────────────────────────────
+// ── Motion-preset ownership (§6 redesign, 2026-08-12) ──────────────────────
+//
+// Move owns motion intents; Command curates everything else. Yaw and Rotate
+// (CONDITION_YAW) are deleted — the raw MAV_CMD path keeps the capability —
+// and Go To / Reposition leaves the operator surface while its row stays as
+// the shared DO_REPOSITION metadata mavlink-formation builds from.
 
-test('Yaw and Rotate share commandId 115', () => {
-  assert.equal(getPreset('yaw').commandId, 115);
-  assert.equal(getPreset('rotate').commandId, 115);
+test('yaw and rotate are gone from the curated list — Move owns motion', () => {
+  assert.equal(getPreset('yaw'), undefined);
+  assert.equal(getPreset('rotate'), undefined);
+  const offered = presetGroups().flatMap((g) => g.presets.map((p) => p.id));
+  assert.ok(!offered.includes('yaw'));
+  assert.ok(!offered.includes('rotate'));
 });
 
-test('Yaw pins param 4 (Relative) to 0 (absolute)', () => {
-  assertParamAt('yaw', emptyUser(), 4, 0);
-});
-
-test('Rotate pins param 4 (Relative) to 1 (relative)', () => {
-  assertParamAt('rotate', emptyUser(), 4, 1);
-});
-
-test('Yaw: user cannot override pinned param 4', () => {
-  assertParamAt('yaw', { 4: 99 }, 4, 0);
-});
-
-test('Rotate: user cannot override pinned param 4', () => {
-  assertParamAt('rotate', { 4: 99 }, 4, 1);
+test('reposition is library metadata, not operator surface', () => {
+  // Formation builds from the row (blankParams sentinels, commandId), so it
+  // must exist — and the Command editor must not offer it, or the goto is
+  // duplicated across two nodes again.
+  const row = getPreset('reposition');
+  assert.equal(row.commandId, 192);
+  assert.equal(row.listed, false);
+  assert.equal(row.blankParams[1], -1, 'speed sentinel rides with the row');
+  assert.ok(Number.isNaN(row.blankParams[4]), 'yaw sentinel rides with the row');
+  const offered = presetGroups().flatMap((g) => g.presets.map((p) => p.id));
+  assert.ok(!offered.includes('reposition'), 'the dropdown no longer offers the goto');
 });
 
 // ── Mission pause / resume ─────────────────────────────────────────────────

@@ -5,12 +5,16 @@ const {
   createMoveStream,
   streamLocks,
   advisoryFor,
-  resolveMoveCarrier,
   buildRepositionMessage,
   positionFrom,
   velocityFrom,
   accelFrom,
   valueFrom,
+  resolveMoveAction,
+  frameForAltRef,
+  frameForReference,
+  deriveSteerMode,
+  refuseRetiredOverrides,
 } = require('../lib/move');
 const { AckWaiter } = require('../lib/command');
 const { DEFAULT_MAX_RESENDS } = require('../lib/command/ack');
@@ -186,30 +190,31 @@ module.exports = function registerMavlinkMove(RED) {
           connectionNode: connAtDeploy,
         });
 
-        // Carrier: setpoint (SET_POSITION_TARGET_*) or reposition
-        // (COMMAND_INT / DO_REPOSITION, #239). Payload override inherits like
-        // mode/frame; blank resolves setpoint — the safe direction for a flow
-        // saved before the field existed.
-        const carrier = resolveMoveCarrier(firstDefined(payload.carrier, config.carrier));
+        // Action × Delivery derives the wire (§6 redesign): the operator
+        // states an intent; carrier, message name, frame number, and mask are
+        // code. The retired carrier/mode/frame overrides refuse loud — a
+        // payload written for the old surface must not be silently
+        // reinterpreted into the wrong wire message.
+        refuseRetiredOverrides(payload);
+        const action = resolveMoveAction(config.action);
 
-        if (carrier === 'reposition') {
-          if (delivery === 'stream') {
-            // A streamed reposition is a setpoint's job — COMMAND_INT has no
-            // streaming semantics. Thrown before any stream bookkeeping, so a
-            // payload-carrier override never disturbs a running stream.
-            throw new Error('Move reposition cannot stream — DO_REPOSITION is a one-shot command; use the setpoint carrier for streams');
-          }
+        if (action === 'goto' && delivery !== 'stream') {
+          // One-shot guided goto: DO_REPOSITION as COMMAND_INT, the acked
+          // path. The altitude reference is the one frame choice that exists.
           const message = buildRepositionMessage({
-            mode: firstDefined(payload.mode, config.mode),
-            frame: firstDefined(payload.frame, config.frame),
+            mode: 'position',
+            frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),
             target,
             position: payload.position || positionFrom(config),
             speed: valueFrom(payload, config, 'speed'),
             radius: valueFrom(payload, config, 'radius'),
             yaw: valueFrom(payload, config, 'yaw'),
-            yawRate: valueFrom(payload, config, 'yawRate'),
+            yawRate: payload.yawRate,
             // CHANGE_MODE flies the vehicle into guided — an explicit boolean
             // opt-in (editor checkbox, payload override), never a truthy token.
+            // Measured (§14 2026-08-12): the flag is the gate on both stacks;
+            // without it, outside GUIDED (AP) / Hold (PX4), the answer is
+            // DENIED (2).
             changeMode: firstDefined(payload.changeMode, config.changeMode),
           });
           // No advisories on this carrier: the ack is the feedback channel,
@@ -248,29 +253,55 @@ module.exports = function registerMavlinkMove(RED) {
 
         if (delivery === 'confirm') {
           // Setpoints carry no acknowledgement of any kind (§9) — there is
-          // nothing for confirm to wait on.
-          throw new Error('Move setpoints carry no acknowledgement — Send & confirm requires the reposition carrier');
+          // nothing for confirm to wait on. Only goto's command path confirms.
+          throw new Error('Move setpoints carry no acknowledgement — Send & confirm exists on the Go to action only');
         }
 
-        const moveInput = {
-          // Blank means inherit (§6): a payload mode/frame of undefined, null,
-          // or '' falls back to the node's configured value, never to a
-          // hardcoded default that discards the configuration.
-          mode: firstDefined(payload.mode, config.mode),
-          frame: firstDefined(payload.frame, config.frame),
-          target,
-          position: payload.position || positionFrom(config),
-          velocity: payload.velocity || velocityFrom(config),
-          accel: payload.accel || accelFrom(config),
-          yaw: valueFrom(payload, config, 'yaw'),
-          yawRate: valueFrom(payload, config, 'yawRate'),
-          timeBootMs: payload.timeBootMs,
-          // Deployment property, deliberately no payload override: the global
-          // wire numbering is the operator's standing compatibility choice
-          // (§ "Move setpoint matrix"), not a per-message knob. A missing
-          // value resolves true at encode — the safe direction.
-          px4Compat: config.px4Compat,
-        };
+        let moveInput;
+        if (action === 'goto') {
+          // goto + Stream: the same intent, streamed — position setpoints on
+          // the global frame the altitude reference names. The command-path
+          // params have no meaning on a setpoint and refuse loud rather than
+          // silently not happening.
+          for (const key of ['speed', 'radius', 'changeMode']) {
+            if (payload[key] !== undefined) {
+              throw new Error(
+                `msg.payload.${key} belongs to the Go to command path (Build/Send/Send & confirm) — a streamed setpoint cannot carry it`
+              );
+            }
+          }
+          moveInput = {
+            mode: 'position',
+            frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),
+            target,
+            position: payload.position || positionFrom(config),
+            yaw: valueFrom(payload, config, 'yaw'),
+            timeBootMs: payload.timeBootMs,
+          };
+        } else {
+          // steer: the reference picks the axes (body is firmware-derived and
+          // fails closed on an unknown stack, §14); the mode derives from
+          // which groups carry values — filling fields IS the mode.
+          const position = payload.position || positionFrom(config);
+          const velocity = payload.velocity || velocityFrom(config);
+          const accel = payload.accel || accelFrom(config);
+          const yaw = valueFrom(payload, config, 'yaw');
+          const yawRate = valueFrom(payload, config, 'yawRate');
+          moveInput = {
+            mode: deriveSteerMode({ position, velocity, accel, yaw, yawRate }),
+            frame: frameForReference(
+              firstDefined(payload.reference, config.reference),
+              firmwareFor(RED, config, connectionNode)
+            ),
+            target,
+            position,
+            velocity,
+            accel,
+            yaw,
+            yawRate,
+            timeBootMs: payload.timeBootMs,
+          };
+        }
         const message = buildMoveMessage(moveInput);
 
         // Known-unsupported firmware combos still send, but never silently
@@ -283,7 +314,6 @@ module.exports = function registerMavlinkMove(RED) {
           // The ArduPilot yaw-only advisory was measured on absolute yaw only,
           // so it needs to see whether a yaw rate is riding along (§14 / #179).
           yawRate: moveInput.yawRate,
-          px4Compat: moveInput.px4Compat,
           firmware: connectionNode?.vehicle?.firmware,
         });
         // One warn per advisory streak (C8): a stream feed repeating the same
@@ -498,6 +528,24 @@ function completeExpiry(node, message, sent, brakeError) {
 
 function statusRecord(result, detail, extra = {}) {
   return makeStatusRecord({ node: 'mavlink-move', result, detail, ...extra });
+}
+
+/**
+ * Firmware for the body-reference derivation: the connection's bound Vehicle
+ * Profile on the wire tiers, the node's own Vehicle Profile on Build (which
+ * has no connection). Returns undefined when neither names one — the body
+ * derivation fails closed on that, world never asks.
+ *
+ * @param {object} RED
+ * @param {object} config
+ * @param {object|null} connectionNode
+ * @returns {string|undefined}
+ */
+function firmwareFor(RED, config, connectionNode) {
+  const fromConnection = connectionNode?.vehicle?.firmware;
+  if (fromConnection) return fromConnection;
+  const vehicleNode = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
+  return vehicleNode?.firmware;
 }
 
 /**
