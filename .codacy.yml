@@ -1,0 +1,22 @@
+---
+# Codacy skips the test tree (owner ruling, 2026-08-12).
+#
+# The trigger was `detect-non-literal-fs-filename` raised as *critical
+# Security* against a test that reads `nodes/*.html` to check them. Those
+# rules exist for code that handles untrusted input; a test reading the
+# repo's own source files by construction handles none. The finding was
+# unfixable on its own terms, too — a sweep that takes a literal filename
+# stops covering the files added after it was written, which is the only
+# reason to have one.
+#
+# Scope note: Codacy's config excludes *paths*, not categories, so this
+# takes the test tree out of Codacy's analysis entirely rather than out of
+# its Security category alone. Duplication is the other metric affected,
+# and losing it there is no loss — near-identical arrange/act/assert blocks
+# are how a test file is supposed to read.
+#
+# Runtime and editor code is untouched by this: `lib/**`, `nodes/**` and
+# `integration/**` are still fully analysed, and they are where a real
+# security finding would matter.
+exclude_paths:
+  - 'test/**'

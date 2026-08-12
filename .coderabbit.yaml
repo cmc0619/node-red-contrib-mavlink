@@ -8,14 +8,6 @@
 # which scans documents by pattern. Patterns listed here are added to the
 # defaults rather than replacing them, so AGENTS.md and CLAUDE.md keep being
 # picked up without being named.
-# CodeRabbit is the most expensive reviewer on this repo, so it never engages
-# on its own (owner standing order, 2026-08-12). No review on open, none on
-# draft→ready. It runs when someone asks for it by name — `@coderabbitai
-# review` — and only then.
-reviews:
-  auto_review:
-    enabled: false
-
 knowledge_base:
   code_guidelines:
     enabled: true
