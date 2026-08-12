@@ -35,14 +35,11 @@ module.exports = function registerMavlinkMove(RED) {
     // Reposition-carrier confirm transaction — at most one in flight per node,
     // like the Command node's waiter (§9).
     let activeWaiter = null;
-    // Last advisory warned, for per-streak dedup (C8): a refresh-fed stream
-    // repeating the same combo would spam the debug sidebar, and noise gets
-    // ignored. Redeploy resets naturally — new node instance.
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
     // Resolve the Vehicle Profile once, like the Connection (guideline:
     // config-node references resolve at deploy, not per input). Build-tier
-    // body derivation and advisories read firmware through it.
+    // body derivation reads firmware through it.
     const vehicleAtDeploy = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
     applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
 
@@ -215,8 +212,6 @@ module.exports = function registerMavlinkMove(RED) {
             // DENIED (2).
             changeMode: firstDefined(payload.changeMode, config.changeMode),
           });
-          // No advisories on this carrier: the ack is the feedback channel,
-          // and every advisory candidate still needs SITL measurement (§14).
           if (delivery === 'build') {
             completeBuild(node, send, message);
           } else {
@@ -296,11 +291,6 @@ module.exports = function registerMavlinkMove(RED) {
           };
         }
         const message = buildMoveMessage(moveInput);
-
-        // Known-unsupported firmware combos still send, but never silently
-        // (§14: setpoints carry no ack, so this warning is all the feedback
-        // the operator will get). Firmware resolves the same way the body
-        // frame does (CodeRabbit, #277): the connection's bound Vehicle
 
         if (delivery === 'build') {
           completeBuild(node, send, message);
@@ -511,11 +501,10 @@ function statusRecord(result, detail, extra = {}) {
 }
 
 /**
- * Firmware for the body-reference derivation and the advisories: the
- * connection's bound Vehicle Profile on the wire tiers, the node's own
- * Vehicle Profile (resolved once at deploy) on Build. Returns undefined when
- * neither names one — the body derivation fails closed on that, world never
- * asks, and advisories stay silent.
+ * Firmware for the body-reference derivation: the connection's bound Vehicle
+ * Profile on the wire tiers, the node's own Vehicle Profile (resolved once at
+ * deploy) on Build. Returns undefined when neither names one — the body
+ * derivation fails closed on that, and world never asks.
  *
  * @param {object|null} vehicleNode  the node's own Vehicle Profile, from deploy
  * @param {object|null} connectionNode
