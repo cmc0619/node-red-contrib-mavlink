@@ -219,17 +219,54 @@ test('mavlink-move Body on Build requires the Vehicle Profile dialect (Codex #27
     'a hidden reference on a goto node never reds');
 });
 
-test('mavlink-move steer fields default blank with the blank-allowed validator', () => {
+test('mavlink-move steer fields default blank and an all-blank steer stays clean', () => {
   // Filling fields IS the mode: a default of 0 would put every fresh steer
   // node in a position+velocity+accel mix the runtime refuses. Blank is the
-  // only default that means "not commanded".
-  for (const field of ['north', 'east', 'up', 'vNorth', 'vEast', 'vUp', 'aNorth', 'aEast', 'aUp', 'yaw', 'yawRate']) {
-    assert.match(
-      html,
-      new RegExp(`${field}:\\s*\\{\\s*value:\\s*'',\\s*validate:\\s*RED\\.validators\\.number\\(true\\)`),
-      `${field} defaults blank with the blank-allowed numeric validator`
+  // only default that means "not commanded" — and a node with nothing filled
+  // must not red, or every freshly dropped Move node arrives broken.
+  //
+  // Executed, not grepped: the position axes carry a different validator now,
+  // and a regex over the source cannot tell whether blank still passes.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const fields = ['north', 'east', 'up', 'vNorth', 'vEast', 'vUp', 'aNorth', 'aEast', 'aUp', 'yaw', 'yawRate'];
+  const allBlank = { id: 'm1', action: 'steer' };
+  for (const field of fields) {
+    assert.equal(defaults[field].value, '', `${field} defaults blank`);
+    assert.equal(
+      defaults[field].validate.call(allBlank, '', {}),
+      true,
+      `${field} accepts blank when nothing else is filled`
     );
   }
+});
+
+test('mavlink-move: a Steer position triplet is all-or-nothing (the runtime no longer checks)', () => {
+  // Filling any axis makes this a position setpoint and the blanks encode 0 —
+  // the EKF origin on an absolute frame. The runtime coerces without looking
+  // (AGENTS.md, input trust), so this validator is the only layer that sees a
+  // half-typed triplet. Velocity and acceleration are exempt by design: a
+  // blank rate is a zero rate, which is inert.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const AXES = ['north', 'east', 'up'];
+  const verdicts = (north, east, up, action = 'steer') => {
+    const cfg = { id: 'm1', action, north, east, up };
+    return AXES.map((axis, i) => defaults[axis].validate.call(cfg, [north, east, up][i], {}) === true);
+  };
+
+  assert.deepEqual(verdicts('', '', ''), [true, true, true], 'all blank is a steer with no position group');
+  assert.deepEqual(verdicts('5', '2', '3'), [true, true, true], 'a full triplet passes');
+  assert.deepEqual(verdicts('5', '', ''), [true, false, false], 'one axis filled reds the other two');
+  assert.deepEqual(verdicts('5', '2', ''), [true, true, false], 'two filled reds the last');
+  // An explicit 0 is a value, not a blank — it commits the triplet.
+  assert.deepEqual(verdicts('0', '', ''), [true, false, false], 'explicit 0 counts as filled');
+  // Whitespace is blank (#174), so it reds rather than passing as Number(' ') = 0.
+  assert.deepEqual(verdicts('5', ' ', '3'), [true, false, true], 'a whitespace axis is blank');
+  assert.match(String(defaults.east.validate.call({ id: 'm1', action: 'steer', north: '5' }, '', {})),
+    /commands the origin/, 'the reason names the hazard');
+
+  // Go to does not show the triplet, so a stale value there must never red a
+  // node that will not read it — the same gating every Steer-only field uses.
+  assert.deepEqual(verdicts('5', '', '', 'goto'), [true, true, true], 'goto ignores the triplet entirely');
 });
 
 test('mavlink-move targetSystem broadcast refusal keys on the confirm tier', () => {

@@ -350,39 +350,46 @@ test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw
   }
 });
 
-test('local position with a blank coordinate refuses — never the origin (§10)', () => {
-  // A blank north zero-filled into a LOCAL_NED position setpoint commands the
-  // world origin. Explicit 0 is a value; blank refuses. Velocity blanks stay
-  // 0 — a zero rate is inert, not a place.
-  assert.throws(
-    () =>
-      buildMoveMessage({
-        mode: 'position',
-        target: { sysid: 2, compid: 1 },
-        position: { north: '', east: 2, up: 3 },
-      }),
-    /blank coordinates must not become the origin/
-  );
+test('a blank local coordinate encodes 0, on every frame — deliberate, ruled (§14)', () => {
+  // The local twin of the global rule, and the same reasoning: config
+  // coordinates are editor-validated and msg.payload is trusted and checked
+  // nowhere, so the builder coerces. On an absolute frame that 0 is the EKF
+  // origin — a real place, and the accepted cost. Do not add a guard here.
+  //
+  // Frames used to differ: absolute ones refused and BODY_OFFSET_NED (9) let
+  // blanks through as "no change". They behave alike now, which is why one
+  // test covers all three.
+  const target = { sysid: 2, compid: 1 };
+  for (const frame of [1, 8, 9]) {
+    const message = buildMoveMessage({
+      mode: 'position', frame, target, position: { north: '', east: 2, up: 3 },
+    });
+    assert.equal(message.fields.x, 0, `frame ${frame}: blank north encodes 0`);
+    assert.equal(message.fields.y, 2, `frame ${frame}: the axes around it are untouched`);
+  }
+
+  // Velocity and acceleration blanks were never the question — a zero rate is
+  // inert, not a place — and they still encode 0.
   const velocityBlanks = buildMoveMessage({
     mode: 'velocity',
-    target: { sysid: 2, compid: 1 },
+    target,
     velocity: { north: 1 },
   });
   assert.equal(velocityBlanks.fields.vy, 0);
 });
 
 test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)', () => {
-  // The blank guards are only as good as the blank test: ' ' is not '', so
-  // without trimming it reaches numberOr, and Number(' ') === 0 passes the
-  // finite check. Every one of these zero-fills somewhere dangerous.
-  assert.throws(
-    () => buildMoveMessage({
-      mode: 'position',
-      target: { sysid: 2, compid: 1 },
-      position: { north: ' ', east: 2, up: 3 },
-    }),
-    /blank coordinates must not become the origin/
-  );
+  // Still load-bearing, now for the presence rules rather than the deleted
+  // coordinate guards: ' ' is not '', so without trimming it reaches Number()
+  // and comes back a finite 0. Where that decides an *ignore bit* it changes
+  // the command; where it decides a coordinate it just encodes 0.
+  const whitespaceAxis = buildMoveMessage({
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { north: ' ', east: 2, up: 3 },
+  });
+  assert.equal(whitespaceAxis.fields.x, 0, 'a whitespace axis encodes 0, same as blank');
+
   // Yaw follows the presence rule: whitespace is absent, so the ignore bit
   // stays set rather than commanding a yaw of 0 (north) nobody asked for.
   const yawBlank = buildMoveMessage({
@@ -401,31 +408,6 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
     position: { north: ' 4 ', east: 2, up: 3 },
   });
   assert.equal(padded.fields.x, 4);
-});
-
-test('blank local coordinates: refused in absolute frames, inert in the measured OFFSET frame (§14)', () => {
-  const target = { sysid: 2, compid: 1 };
-  // Absolute local frames — a blank zero-filled here commands the EKF origin.
-  // BODY_NED (8) is included deliberately: ArduPilot reads it as a body offset
-  // but PX4 moved absolute-like, so it cannot claim the exemption.
-  for (const frame of [1, 8]) {
-    assert.throws(
-      () => buildMoveMessage({ mode: 'position', frame, target, position: { north: '', east: 2, up: 3 } }),
-      /blank coordinates must not become the origin/,
-      `frame ${frame} must refuse a blank coordinate`
-    );
-  }
-  // Measured OFFSET frame BODY_OFFSET_NED (9) — zero means "no change" on
-  // every axis, so a blank is inert and passes as 0.
-  const message = buildMoveMessage({
-    mode: 'position',
-    frame: 9,
-    target,
-    position: { north: 10, east: '', up: '' },
-  });
-  assert.equal(message.fields.x, 10, 'BODY_OFFSET_NED keeps the commanded axis');
-  assert.equal(message.fields.y, 0, 'BODY_OFFSET_NED blank east is a zero offset');
-  assert.equal(message.fields.z, -0, 'BODY_OFFSET_NED blank up is a zero offset');
 });
 
 test('buildStopMessage copies target ids and does not invent system 1', () => {
