@@ -11,7 +11,6 @@ const {
   buildCommandLong,
   buildCommandInt,
   CARRIER,
-  resolveCarrier,
   intCoordKinds,
 } = require('../lib/command');
 
@@ -69,14 +68,6 @@ module.exports = function registerMavlinkFormation(RED) {
         if (!connectionNode) {
           throw new Error('mavlink-formation requires a Connection');
         }
-        // Refuse a missing/invalid carrier rather than defaulting (§9): the two
-        // carriers are different wire messages, and a bare `=== CARRIER.INT`
-        // read the absence as "operator chose LONG" — the one node of the three
-        // that guessed. Command reds out at deploy, Payload's builder throws.
-        const carrier = resolveCarrier(config);
-        if (carrier === null) {
-          throw new Error('mavlink-formation: invalid config — set the wire message (Send as)');
-        }
         const payload = msg.payload ?? {};
         const sysids = parseSysidList(
           payload.sysids !== undefined ? payload.sysids : config.sysids
@@ -100,7 +91,7 @@ module.exports = function registerMavlinkFormation(RED) {
         // performed here because Fan-out patches are the raw surface (§10).
         const preset = getPreset(REPOSITION_PRESET);
         const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
-        const isInt = carrier === CARRIER.INT;
+        const isInt = config.sendAs === CARRIER.INT;
         const bundle = isInt ? dialectFromConnection(RED, connectionNode) : null;
         const message = isInt
           ? buildCommandInt(Number(preset.commandId), 0, 0, params, {

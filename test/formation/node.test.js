@@ -95,67 +95,6 @@ test('leader anchor reads position, relative altitude and heading from the peer 
   assert.ok(Math.abs(bySysid[2].param6 - 8.5) < 1e-9, 'slot 1 stays on the leader longitude at heading 90');
 });
 
-test('a config with no carrier is refused, not defaulted to COMMAND_LONG', async () => {
-  // Formation read `sendAs` as a bare `=== CARRIER.INT`, so a missing choice
-  // became LONG — the one node of the three that guessed. Command reds out at
-  // deploy and Payload's builder throws; the shared resolveCarrier (§9) makes
-  // all three refuse. A hand-edited flow is the only way to reach this: the
-  // editor always saves a choice.
-  const connection = connectionStub([peer(1), peer(2)]);
-  const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-formation')(RED);
-  const node = new (RED.nodes.types['mavlink-formation'])({
-    connection: 'conn',
-    shape: 'line',
-    spacing: 10,
-    sysids: '1,2',
-    anchorMode: 'fixed',
-    lat: ANCHOR.lat,
-    lon: ANCHOR.lon,
-    alt: ANCHOR.alt,
-    headingDeg: 0,
-    pitchDeg: 0,
-    delivery: 'send',
-    intervalMs: 0,
-  });
-  let sent;
-  const err = await emitInput(node, { payload: {} }, (m) => { sent = m; }).then(() => null, (e) => e);
-
-  assert.ok(err, 'a missing carrier fails the input');
-  assert.match(err.message, /Send as/, 'the refusal names the field the operator must set');
-  assert.equal(connection.sends.length, 0, 'nothing reached the wire on the guessed carrier');
-  assert.equal(sent[0], null, 'no continue output on refusal');
-  assert.equal(sent[1].result, 'failed');
-});
-
-test('an unknown carrier token is refused too (no silent LONG fallback)', async () => {
-  const connection = connectionStub([peer(1)]);
-  const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-formation')(RED);
-  const node = new (RED.nodes.types['mavlink-formation'])({
-    connection: 'conn',
-    shape: 'line',
-    spacing: 10,
-    sysids: '1',
-    anchorMode: 'fixed',
-    lat: ANCHOR.lat,
-    lon: ANCHOR.lon,
-    alt: ANCHOR.alt,
-    headingDeg: 0,
-    pitchDeg: 0,
-    sendAs: 'COMMAND_INT',
-    delivery: 'send',
-    intervalMs: 0,
-  });
-  let sent;
-  const err = await emitInput(node, { payload: {} }, (m) => { sent = m; }).then(() => null, (e) => e);
-
-  assert.ok(err, 'an unrecognised carrier token fails the input');
-  assert.equal(connection.sends.length, 0, 'nothing was sent');
-  assert.equal(sent[0], null, 'no continue output on refusal');
-  assert.equal(sent[1].result, 'failed');
-});
-
 test('leader with no reported position is refused, not defaulted', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(7)]); // leader has position: null
   const RED = redStub({ conn: connection });
