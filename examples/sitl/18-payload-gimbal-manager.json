@@ -90,7 +90,7 @@
     "name": "Aim manager pitch=-20 yaw=10",
     "connection": "sitl35-connection",
     "delivery": "send",
-    "carrier": "long",
+    "sendAs": "long",
     "timeout": 10000,
     "maxRetries": 3,
     "topic": "gimbal",

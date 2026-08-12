@@ -24,7 +24,7 @@ test('line formation fans DO_REPOSITION out with each member\'s own lat/lon/alt 
     alt: ANCHOR.alt,
     headingDeg: 0,
     pitchDeg: 0,
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     intervalMs: 0,
   });
@@ -77,7 +77,7 @@ test('leader anchor reads position, relative altitude and heading from the peer 
     anchorMode: 'leader',
     leader: 7,
     pitchDeg: 0,
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     intervalMs: 0,
   });
@@ -107,7 +107,7 @@ test('leader with no reported position is refused, not defaulted', async () => {
     anchorMode: 'leader',
     leader: 7,
     pitchDeg: 0,
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     intervalMs: 0,
   });
@@ -136,7 +136,7 @@ test('leader without a finite relative altitude is refused (altitude must not de
     anchorMode: 'leader',
     leader: 7,
     pitchDeg: 0,
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     intervalMs: 0,
   });
@@ -160,7 +160,7 @@ test('unknown leader heading defaults the pattern to north (0), documented safe 
     anchorMode: 'leader',
     leader: 7,
     pitchDeg: 0,
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     intervalMs: 0,
   });
@@ -186,7 +186,7 @@ test('geometry refusal propagates: fixed anchor with a blank altitude fails the 
     lon: 8.5,
     alt: '',
     pitchDeg: 0,
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     intervalMs: 0,
   });
@@ -213,7 +213,7 @@ test('bad config sysid tokens fail loudly as node errors', async () => {
     lon: 8.5,
     alt: 30,
     pitchDeg: 0,
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     intervalMs: 0,
   });
@@ -240,7 +240,7 @@ test('msg.payload.anchor and headingDeg override the configured leader anchor', 
     anchorMode: 'leader',
     leader: 7,
     pitchDeg: 0,
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     intervalMs: 0,
   });
@@ -273,7 +273,7 @@ test('non-numeric msg.payload.headingDeg is refused with the raw value named', a
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
     pitchDeg: 0,
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     intervalMs: 0,
   });
@@ -303,7 +303,7 @@ test('default carrier int builds COMMAND_INT with per-member degE7 coords (§9)'
     alt: ANCHOR.alt,
     headingDeg: 0,
     pitchDeg: 0,
-    carrier: 'int',
+    sendAs: 'int',
     delivery: 'send',
     intervalMs: 0,
   });
@@ -346,7 +346,7 @@ test('close aborts an in-flight formation run and waits for it to unwind', async
     alt: ANCHOR.alt,
     headingDeg: 0,
     pitchDeg: 0,
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     intervalMs: 60000,
   });
@@ -389,7 +389,7 @@ test('msg.payload.sysids overrides the configured member list', async () => {
     lon: 8.5,
     alt: 30,
     pitchDeg: 0,
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     intervalMs: 0,
   });
@@ -420,7 +420,7 @@ test('sphere with pitchDeg override fans distinct altitudes via DO_REPOSITION', 
     alt: ANCHOR.alt,
     headingDeg: 0,
     pitchDeg: 0,
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     intervalMs: 0,
   });

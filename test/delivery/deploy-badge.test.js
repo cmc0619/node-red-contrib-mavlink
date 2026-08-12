@@ -27,8 +27,8 @@ const assert = require('node:assert/strict');
 /** Every sender with a Build tier, and the config that selects a wire tier. */
 const SENDERS = [
   { type: 'mavlink-command', module: 'mavlink-command',
-    wire: { mode: 'preset', preset: 'arm', carrier: 'long', delivery: 'confirm' },
-    build: { mode: 'preset', preset: 'arm', carrier: 'long', delivery: 'build' } },
+    wire: { mode: 'preset', preset: 'arm', sendAs: 'long', delivery: 'confirm' },
+    build: { mode: 'preset', preset: 'arm', sendAs: 'long', delivery: 'build' } },
   { type: 'mavlink-mission', module: 'mavlink-mission',
     wire: { operation: 'download', delivery: 'confirm' },
     build: { operation: 'download', delivery: 'build' } },

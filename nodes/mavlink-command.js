@@ -101,8 +101,8 @@ function resolveCommandId(config) {
  * @returns {'long'|'int'|null}
  */
 function resolveCarrier(config) {
-  if (config.carrier === CARRIER.INT) return CARRIER.INT;
-  if (config.carrier === CARRIER.LONG) return CARRIER.LONG;
+  if (config.sendAs === CARRIER.INT) return CARRIER.INT;
+  if (config.sendAs === CARRIER.LONG) return CARRIER.LONG;
   return null;
 }
 
@@ -130,7 +130,7 @@ module.exports = function registerMavlinkCommand(RED) {
       // Fails loudly through Catch instead of vanishing into a node that
       // never listened (house rule, nodes/mavlink-build.js:105).
       node.on('input', (_msg, _send, done) => {
-        done(new Error('mavlink-command: invalid config — set a command and carrier'));
+        done(new Error('mavlink-command: invalid config — set a command and wire message (Send as)'));
       });
       node.on('close', (done) => done());
       return;

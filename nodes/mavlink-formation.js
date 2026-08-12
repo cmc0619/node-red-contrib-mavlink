@@ -91,7 +91,7 @@ module.exports = function registerMavlinkFormation(RED) {
         // performed here because Fan-out patches are the raw surface (§10).
         const preset = getPreset(REPOSITION_PRESET);
         const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
-        const isInt = config.carrier === CARRIER.INT;
+        const isInt = config.sendAs === CARRIER.INT;
         const bundle = isInt ? dialectFromConnection(RED, connectionNode) : null;
         const message = isInt
           ? buildCommandInt(Number(preset.commandId), 0, 0, params, {
