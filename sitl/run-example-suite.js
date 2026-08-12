@@ -714,11 +714,17 @@ function verdictFrom(profile, summary, log) {
     // reached the wire spells result 'failed' with no resultCode, and that
     // measures nothing on any run.
     if (/silence is a result/i.test(expect)) {
-      if (repositionRecord.result === 'failed' && repositionRecord.resultCode === null) {
-        return {
-          status: 'FAIL',
-          reason: `Move reposition ${repositionRecord.detail || 'never reached the wire'} — nothing measured`,
-        };
+      // Wide is not unbounded (Codex, #276): the contract admits only
+      // confirm outcomes — accepted, a terminal refusal carrying its
+      // resultCode, or the explicit 'unconfirmed' of a lost ack. Anything
+      // else with no code — a dead send's 'failed', or the 'sent' a probe
+      // misconfigured to Send delivery would emit — waited for nothing and
+      // measures nothing, and must not early-exit the poll as a PASS.
+      if (!accepted && repositionRecord.result !== 'unconfirmed' && repositionRecord.resultCode === null) {
+        const why = repositionRecord.result === 'failed'
+          ? repositionRecord.detail || 'never reached the wire'
+          : `${repositionRecord.result} — not a confirm outcome`;
+        return { status: 'FAIL', reason: `Move reposition ${why} — nothing measured` };
       }
       const answer = accepted
         ? 'accepted'

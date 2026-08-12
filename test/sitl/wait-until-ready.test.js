@@ -327,5 +327,12 @@ test('39/40 CHANGE_MODE probes: silence is an answer, a dead send is not', () =>
     assert.equal(run(key, null).status, 'FAIL', 'no record at all');
     // The banned word fails even on the widest contract.
     assert.equal(run(key, reposition('succeeded', 'accepted', 0)).status, 'FAIL');
+    // Wide is not unbounded (Codex, #276): a probe misconfigured to Send
+    // delivery emits 'sent' with no resultCode — it waited for nothing, and
+    // publishing it as measured would early-exit the poll on a run that
+    // never asked the vehicle anything.
+    const misconfigured = run(key, reposition('sent', null, null));
+    assert.equal(misconfigured.status, 'FAIL');
+    assert.match(misconfigured.reason, /not a confirm outcome/);
   }
 });
