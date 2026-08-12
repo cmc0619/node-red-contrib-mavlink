@@ -84,7 +84,16 @@
     var buildDefaults = Object.assign(
       {
         name:        { value: '' },
-        messageName: { value: 'HEARTBEAT' },
+        // A blank name resolves no message metadata, so every input fails
+        // with "dialect or message unresolved". The deploy badge that used to
+        // say so went with the §6 status ruling (2026-08-12); the editor reds
+        // it now. Two args so the reason renders.
+        messageName: {
+          value: 'HEARTBEAT',
+          validate: function (v, _opt) {
+            return !RED.mavlink.isBlank(v) || 'is required — pick a message from the dialect';
+          },
+        },
         fields:      {
           value: '{}',
           // Two args so a returned reason counts as invalid rather than being

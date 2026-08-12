@@ -12,7 +12,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { assertChangeHandlerContains } = require('./html-assert');
+const { assertChangeHandlerContains, loadNodeDefaults } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-command.html'),
@@ -489,4 +489,23 @@ test('command param enum pulldowns carry no blank option', () => {
     'no empty-valued option'
   );
   assert.match(renderer, /isBitmask\) \{\s*sel\.attr\('multiple'/, 'bitmask branch keeps its multi-select');
+});
+
+test('mavlink-command: Advanced mode requires a command (§6 status ruling, 2026-08-12)', () => {
+  // Advanced mode's command is the whole message; blank resolves to null and
+  // would build MAV_CMD(null). The runtime's deploy badge for that is gone, so
+  // the editor owns it — and only in Advanced, since preset mode never reads
+  // the field.
+  const { advancedCommand } = loadNodeDefaults('mavlink-command');
+  assert.match(
+    String(advancedCommand.validate.call({ mode: 'advanced' }, '', {})),
+    /required in Advanced mode/
+  );
+  assert.equal(advancedCommand.validate.call({ mode: 'advanced' }, '31', {}), true);
+  assert.equal(
+    advancedCommand.validate.call({ mode: 'preset' }, '', {}),
+    true,
+    'preset mode never reads it, so a blank must not red'
+  );
+  assert.equal(advancedCommand.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
 });

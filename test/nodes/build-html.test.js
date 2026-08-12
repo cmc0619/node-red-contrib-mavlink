@@ -277,3 +277,15 @@ test('Build validates the fields JSON in the editor, so the runtime need not', (
   assert.match(String(fields.validate.call({}, '[1,2]')), /JSON object/);
   assert.match(String(fields.validate.call({}, '42')), /JSON object/);
 });
+
+test('mavlink-build: a blank message name reds in the editor (§6 status ruling, 2026-08-12)', () => {
+  // This used to be a deploy-time red badge in the runtime. That badge is gone
+  // — config validity is the editor's verdict — so the validator is the only
+  // thing left between a cleared field and a node whose every input fails with
+  // "dialect or message unresolved".
+  const { messageName } = loadNodeDefaults('mavlink-build');
+  assert.match(String(messageName.validate.call({}, '', {})), /is required/);
+  assert.match(String(messageName.validate.call({}, '   ', {})), /is required/, 'whitespace is blank');
+  assert.equal(messageName.validate.call({}, 'HEARTBEAT', {}), true);
+  assert.equal(messageName.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+});
