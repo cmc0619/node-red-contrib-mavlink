@@ -285,7 +285,7 @@ test('mavlink-move: a saved position triplet can be cleared to switch steering m
   });
   const open = (dom, saved) => {
     const defaults = loadNodeDefaults('mavlink-move', {}, { dom, editStack: [{ id: 'm1' }] });
-    return AXES.map((axis) => defaults[axis].validate.call(saved, dom['#node-input-' + axis].val, {}) === true);
+    return AXES.map((axis) => defaults[axis].validate.call(saved, dom[`#node-input-${axis}`].val, {}) === true);
   };
   const savedFull = { id: 'm1', action: 'steer', north: '5', east: '2', up: '3' };
 
