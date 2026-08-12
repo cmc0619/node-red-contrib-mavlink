@@ -25,7 +25,7 @@ test('mavlink-move node builds a position message and emits status on output 1',
 
   assert.equal(sent[0].payload.name, 'SET_POSITION_TARGET_LOCAL_NED');
   assert.equal(sent[0].payload.fields.z, -3);
-  assert.equal(sent[1].result, 'succeeded');
+  assert.equal(sent[1].result, 'built');
 });
 
 test('mavlink-move inherits Vehicle Profile target when Build dialect uses Vehicle Profile escape', () => {
@@ -429,7 +429,7 @@ test('mavlink-move stream: malformed payload timing overrides refuse the input',
     let doneError;
     node.emit('input', { payload }, (m) => { sent = m; }, (err) => { doneError = err; });
     assert.equal(doneError, undefined, `${JSON.stringify(payload)} must be accepted`);
-    assert.equal(sent[1].result, 'succeeded');
+    assert.equal(sent[1].result, 'streaming');
   }
   node.emit('close', () => {});
 });
@@ -472,8 +472,8 @@ test('mavlink-move stream: TTL expiry emits an expired message the flow can chai
   // start already fired it. A second message here would run the downstream
   // chain twice — once at t=0 and once at expiry.
   assert.equal(out, null, 'expiry must not re-fire the continue port');
-  assert.equal(status.result, 'succeeded');
-  assert.equal(status.detail, 'expired');
+  assert.equal(status.result, 'expired');
+  assert.equal(status.detail, null);
   // Carries the stop packet the vehicle actually got: zero-velocity, not the
   // all-ignore mask PX4 rejects (§14 / #115).
   assert.equal(status.message.fields.type_mask, 3527);
@@ -520,7 +520,7 @@ test('mavlink-move stream: a whitespace ttl inherits the configured TTL, never "
   node.emit('close', () => {});
 
   assert.equal(emitted.length, 1, 'whitespace ttl still expires');
-  assert.equal(emitted[0][1].detail, 'expired');
+  assert.equal(emitted[0][1].result, 'expired');
 });
 
 test('mavlink-move stream: a replaced or closed stream expires silently', async () => {
@@ -634,18 +634,18 @@ test('mavlink-move stream: one owner per (connection, target) — a second node 
   // The owner replacing its own stream is single-flight, not a conflict.
   let replaced;
   a.emit('input', { payload: {} }, (m) => { replaced = m; }, () => {});
-  assert.equal(replaced[1].result, 'succeeded', 'same node re-acquires its own scope');
+  assert.equal(replaced[1].result, 'streaming', 'same node re-acquires its own scope');
 
   // A different target on the same connection is a different vehicle: free.
   let other;
   b.emit('input', { payload: { target: { sysid: 2, compid: 1 } } }, (m) => { other = m; }, () => {});
-  assert.equal(other[1].result, 'succeeded', 'other targets stay free');
+  assert.equal(other[1].result, 'streaming', 'other targets stay free');
 
   // Close releases the scope for the next owner.
   a.emit('close', () => {});
   let after;
   b.emit('input', { payload: {} }, (m) => { after = m; }, () => {});
-  assert.equal(after[1].result, 'succeeded', 'close freed the target');
+  assert.equal(after[1].result, 'streaming', 'close freed the target');
   b.emit('close', () => {});
 });
 
@@ -677,11 +677,11 @@ test('mavlink-move stream: TTL expiry frees the target for another node (#176)',
   while (!emitted.length && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
-  assert.equal(emitted[0][1].detail, 'expired', 'stream expired');
+  assert.equal(emitted[0][1].result, 'expired', 'stream expired');
 
   let sent;
   b.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
-  assert.equal(sent[1].result, 'succeeded', 'expiry freed the target');
+  assert.equal(sent[1].result, 'streaming', 'expiry freed the target');
   a.emit('close', () => {});
   b.emit('close', () => {});
 });
@@ -859,8 +859,8 @@ test('mavlink-move stream: {action:"stop"} halts the stream, brakes, and records
   assert.equal(brake.fields.vx, 0);
   // One input, one trigger: a stop input succeeding fires the continue port.
   assert.ok(out[0], 'stop fires output 0');
-  assert.equal(out[1].result, 'succeeded');
-  assert.equal(out[1].detail, 'stopped');
+  assert.equal(out[1].result, 'stopped');
+  assert.equal(out[1].detail, null);
   assert.equal(out[1].message.fields.type_mask, 3527, 'record carries the brake');
   // Every send before the brake was an accepted setpoint.
   assert.equal(out[1].sent, sends.length - 1, 'sent counts setpoints, not the brake');
@@ -872,7 +872,7 @@ test('mavlink-move stream: {action:"stop"} halts the stream, brakes, and records
   assert.equal(sends.length, after, 'nothing left for close to brake');
 });
 
-test('mavlink-move stream: stop with nothing running succeeds with detail "no stream"', () => {
+test('mavlink-move stream: stop with nothing running reports stopped with detail "no stream"', () => {
   const sends = [];
   const conn = { vehicle: {}, send(message) { sends.push(message); } };
   const RED = redStub({ conn });
@@ -898,7 +898,7 @@ test('mavlink-move stream: stop with nothing running succeeds with detail "no st
 
   assert.equal(doneError, undefined, 'stop with nothing running is not an error');
   assert.ok(out[0], 'still fires output 0');
-  assert.equal(out[1].result, 'succeeded');
+  assert.equal(out[1].result, 'stopped');
   assert.equal(out[1].detail, 'no stream');
   assert.equal(sends.length, 0, 'nothing running, so nothing sent');
 });
@@ -983,11 +983,11 @@ test('mavlink-move stream: {action:"stop"} releases the target for a new stream 
 
   let stopped;
   a.emit('input', { payload: { action: 'stop' } }, (m) => { stopped = m; }, () => {});
-  assert.equal(stopped[1].detail, 'stopped');
+  assert.equal(stopped[1].result, 'stopped');
 
   let after;
   b.emit('input', { payload: {} }, (m) => { after = m; }, () => {});
-  assert.equal(after[1].result, 'succeeded', 'stop freed the target');
+  assert.equal(after[1].result, 'streaming', 'stop freed the target');
   b.emit('close', () => {});
   a.emit('close', () => {});
 });
@@ -1098,7 +1098,7 @@ function redStub(nodesById) {
 }
 
 test('mavlink-move stream: expiry brake failure keeps the documented discriminator (Codex, #240)', async () => {
-  // A flow following the node help switches on detail === 'expired'. The one
+  // A flow following the node help switches on result === 'expired'. The one
   // moment recovery matters most — the brake never reached the wire — is
   // exactly when that switch must still match; the failure rides its own
   // brakeError field instead.
@@ -1136,7 +1136,7 @@ test('mavlink-move stream: expiry brake failure keeps the documented discriminat
   while (!emitted.length && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
-  assert.equal(emitted[0][1].detail, 'expired', 'the discriminator survives the brake failure');
+  assert.equal(emitted[0][1].result, 'expired', 'the discriminator survives the brake failure');
   assert.match(emitted[0][1].brakeError, /link down/);
   assert.equal(typeof emitted[0][1].sent, 'number');
   node.emit('close', () => {});
@@ -1262,7 +1262,7 @@ test('mavlink-move stream: a failed retarget frees only the new scope, old strea
   assert.match(held[1].detail, /already running/);
   let freed;
   b.emit('input', { payload: { target: { sysid: 2, compid: 1 } } }, (m) => { freed = m; }, () => {});
-  assert.equal(freed[1].result, 'succeeded', 'the failed retarget freed its scope');
+  assert.equal(freed[1].result, 'streaming', 'the failed retarget freed its scope');
   a.emit('close', () => {});
   b.emit('close', () => {});
 });
@@ -1313,8 +1313,8 @@ test('mavlink-move reposition Build tier emits the COMMAND_INT without sending',
   assert.equal(sent[0].payload.fields.z, 25);
   assert.equal(sent[0].payload.fields.param1, -1, 'blank speed sentinel');
   assert.ok(Number.isNaN(sent[0].payload.fields.param4), 'blank yaw sentinel');
-  assert.equal(sent[1].result, 'succeeded');
-  assert.equal(sent[1].detail, 'built');
+  assert.equal(sent[1].result, 'built');
+  assert.equal(sent[1].detail, null);
 });
 
 test('mavlink-move reposition Send tier rides the Control band, not Streaming', () => {
@@ -1331,8 +1331,8 @@ test('mavlink-move reposition Send tier rides the Control band, not Streaming', 
   assert.equal(conn.sends[0].message.name, 'COMMAND_INT');
   // BAND.CONTROL is 2; setpoints ride STREAMING (3).
   assert.equal(conn.sends[0].opts.band, 2, 'commands ride the Control band');
-  assert.equal(sent[1].result, 'succeeded');
-  assert.equal(sent[1].detail, 'sent');
+  assert.equal(sent[1].result, 'sent');
+  assert.equal(sent[1].detail, null);
 });
 
 test('mavlink-move payload.carrier overrides config like mode/frame; unknown carrier refuses', () => {
@@ -1458,18 +1458,21 @@ test('mavlink-move reposition confirm: ACCEPTED fires continue with resultCode 0
 
   assert.equal(doneError, undefined);
   assert.ok(out[0], 'ACCEPTED fires the continue port');
-  assert.equal(out[0].payload.result, 'succeeded');
+  assert.equal(out[0].payload.result, 'accepted');
   assert.equal(out[0].payload.resultCode, 0);
-  assert.equal(out[1].result, 'succeeded');
-  assert.equal(out[1].detail, 'accepted');
+  assert.equal(out[1].result, 'accepted');
+  assert.equal(out[1].detail, null);
+  assert.equal(out[1].confirmedBy, 'ack');
   assert.equal(out[1].resultCode, 0);
   assert.equal(out[1].message.fields.command, 192);
   node.emit('close', () => {});
 });
 
-test('mavlink-move reposition confirm: COMMAND_INT_ONLY and UNSUPPORTED_MAV_FRAME surface as failures', async () => {
-  // The two wrong-carrier/wrong-frame answers the issue names must fail with
-  // their MAV_RESULT name and code — never silence, never a silent resend.
+test('mavlink-move reposition confirm: COMMAND_INT_ONLY and UNSUPPORTED_MAV_FRAME surface as verbatim MAV_RESULT names', async () => {
+  // The two wrong-carrier/wrong-frame answers the issue names must surface
+  // with their MAV_RESULT name as the result, and their code — never silence,
+  // never a silent resend. Same words the AckWaiter (and mavlink-command)
+  // publish: one vocabulary, no translation layer.
   const cases = [
     { result: 8, name: 'command_int_only' },
     { result: 9, name: 'command_unsupported_mav_frame' },
@@ -1492,15 +1495,16 @@ test('mavlink-move reposition confirm: COMMAND_INT_ONLY and UNSUPPORTED_MAV_FRAM
     }
 
     assert.equal(out[0], null, `${name} must not fire continue`);
-    assert.equal(out[1].result, 'failed');
+    assert.equal(out[1].result, name, `${name} is the result, verbatim`);
     assert.equal(out[1].resultCode, result, `${name} carries its MAV_RESULT code`);
-    assert.match(out[1].detail, new RegExp(name));
+    assert.equal(out[1].detail, null, 'the name lives in result, not detail');
+    assert.equal(out[1].confirmedBy, 'ack');
     assert.match(doneError.message, new RegExp(name));
     node.emit('close', () => {});
   }
 });
 
-test('mavlink-move reposition confirm: a missing ack reports timeout', async () => {
+test('mavlink-move reposition confirm: a missing ack reports unconfirmed', async () => {
   const conn = repositionConn();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-move')(RED);
@@ -1516,8 +1520,9 @@ test('mavlink-move reposition confirm: a missing ack reports timeout', async () 
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 
-  assert.equal(out[0], null, 'timeout must not fire continue');
-  assert.equal(out[1].result, 'timeout');
+  assert.equal(out[0], null, 'a lost ack must not fire continue');
+  assert.equal(out[1].result, 'unconfirmed');
+  assert.equal(out[1].confirmedBy, 'none');
   assert.equal(out[1].resultCode, null);
   // A re-sent goto is the same goto, so this carrier opts into the timeout
   // re-send the library leaves off by default (#249): initial send plus 3.
@@ -1618,9 +1623,9 @@ test('mavlink-move reposition confirm: a second goto supersedes the first wait q
   // The replacement runs to its ack normally.
   assert.ok(second.done, 'the replacement input completes after its ACK');
   assert.equal(second.err, undefined);
-  assert.equal(second.out[0].payload.result, 'succeeded');
-  assert.equal(second.out[1].result, 'succeeded');
-  assert.equal(second.out[1].detail, 'accepted');
+  assert.equal(second.out[0].payload.result, 'accepted');
+  assert.equal(second.out[1].result, 'accepted');
+  assert.equal(second.out[1].detail, null);
   node.emit('close', () => {});
 });
 
@@ -1663,7 +1668,7 @@ test('mavlink-move reposition confirm: IN_PROGRESS moves the badge and result_pa
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 
-  assert.equal(out[1].result, 'failed');
+  assert.equal(out[1].result, 'denied');
   assert.equal(out[1].resultCode, 2);
   assert.equal(out[1].resultParam2, 4, 'the denial reason reaches the status record');
   node.emit('close', () => {});
@@ -1671,15 +1676,16 @@ test('mavlink-move reposition confirm: IN_PROGRESS moves the badge and result_pa
 
 // ── Coupling pin: the SITL verdict against REAL Move status records ──────────
 //
-// The 37/38 verdict was written twice against hand-authored summaries whose
-// vocabulary I invented, so the branch and its test agreed with each other and
-// both disagreed with this node: an accepted reposition is 'succeeded', not
-// 'accepted', and a lost ack is 'timeout', not 'timed-out'. Example 37 could
-// not pass and 38 passed on silence, with the suite green throughout — the
-// stub-over-fiction failure the wait-until-ready pins already warn about, one
-// module further out. Fix the seam, not the constants: drive the real node,
-// feed its real record to the real verdictFrom. Only the debug tag is authored
-// here, because that genuinely is flow configuration.
+// Move's and Command's result vocabularies are now unified: the reposition
+// confirm tier passes the AckWaiter outcome.result through verbatim, exactly
+// like mavlink-command — 'accepted' for MAV_RESULT_ACCEPTED, the MAV_RESULT
+// name for every terminal refusal ('denied', 'command_int_only', …), and
+// 'unconfirmed' for a lost ack. 'succeeded' is banned from this node: it once
+// meant both "on the wire" and "the vehicle agreed", which is how silence
+// could classify as success. These pins drive the real node and feed its real
+// record to the real verdictFrom, so any drift back toward 'succeeded' — in
+// either the node or the harness — fails here first. Only the debug tag is
+// authored, because that genuinely is flow configuration.
 
 const { PROFILE, verdictFrom } = require('../../sitl/run-example-suite');
 
@@ -1711,6 +1717,7 @@ test('SITL 37/38 verdicts read the record mavlink-move actually emits (accepted)
   }
   node.emit('close', () => {});
 
+  assert.equal(out[1].result, 'accepted', "the record says 'accepted', never 'succeeded'");
   const summary = asRepositionSummary(out[1]);
   // Both examples must call a real acceptance a pass. 37 asserting AP accepts
   // is the case that was dead on arrival.
@@ -1734,12 +1741,13 @@ test('SITL 37/38 verdicts read the record mavlink-move actually emits (no ack)',
   }
   node.emit('close', () => {});
 
+  assert.equal(out[1].result, 'unconfirmed', 'silence is unconfirmed, the shared word');
   const summary = asRepositionSummary(out[1]);
   // Silence measures nothing, on the asserting example and the measuring one
   // alike. This is the case that classified PASS on 38.
   for (const key of ['27-move-reposition-carrier', '30-px4-move-reposition']) {
     const verdict = verdictFrom(PROFILE[key], summary, '');
     assert.equal(verdict.status, 'FAIL', `${key} must not pass without an ack`);
-    assert.match(verdict.reason, /no ACK|timeout/i);
+    assert.match(verdict.reason, /no ACK|unconfirmed|timeout/i);
   }
 });
