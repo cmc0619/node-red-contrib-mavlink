@@ -27,6 +27,7 @@ const {
   createMoveStream,
   buildStopMessage,
 } = require(path.join(ROOT, 'lib/move'));
+const { MAV_FRAME } = require(path.join(ROOT, 'lib/move/frames'));
 
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-move-179-'));
 const OUT = path.join(WORK, 'move-179-results.json');
@@ -287,12 +288,10 @@ async function probeHaltReplace(conn, sysid, results, frame) {
   const tReplace = Date.now();
   // Same path as mavlink-move replace: stop() then new stream (halt on wire).
   stream.stop();
-  const msgB = mk(
-    frame === 'LOCAL_NED'
-      ? { north: 0, east: 2, up: 0 }
-      : { north: 0, east: 2, up: 0 }
-  );
-  // For GLOBAL_RELATIVE_ALT_INT velocity still uses GLOBAL_INT carrier fields
+  // Both frames take the same velocity vector: the global frames carry it in
+  // the GLOBAL_INT fields, and the arms were identical even when this read
+  // the frame name.
+  const msgB = mk({ north: 0, east: 2, up: 0 });
   stream = createMoveStream({
     connection: conn,
     message: msgB,
@@ -341,7 +340,7 @@ async function probeYawOnly(conn, sysid, results) {
   const target = { sysid, compid: 1 };
   const message = buildMoveMessage({
     mode: 'yaw-only',
-    frame: 'LOCAL_NED',
+    frame: MAV_FRAME.LOCAL_NED,
     target,
     yaw: targetYawDeg,
   });
@@ -379,7 +378,7 @@ async function probeGuidTimeout(conn, sysid, results) {
   // One-shot Send (not stream): single velocity setpoint.
   sendMove(conn, sysid, {
     mode: 'velocity',
-    frame: 'LOCAL_NED',
+    frame: MAV_FRAME.LOCAL_NED,
     velocity: { north: 2, east: 0, up: 0 },
   });
   const t0 = Date.now();
@@ -414,7 +413,7 @@ async function probeYawAndRate(conn, sysid, results, tag) {
   // A) velocity north + absolute yaw east (90°)
   const msgA = buildMoveMessage({
     mode: 'velocity',
-    frame: 'LOCAL_NED',
+    frame: MAV_FRAME.LOCAL_NED,
     target,
     velocity: { north: 1.5, east: 0, up: 0 },
     yaw: 90,
@@ -443,7 +442,7 @@ async function probeYawAndRate(conn, sysid, results, tag) {
   await sleep(500);
   const msgB = buildMoveMessage({
     mode: 'velocity',
-    frame: 'LOCAL_NED',
+    frame: MAV_FRAME.LOCAL_NED,
     target,
     velocity: { north: 0, east: 0, up: 0 },
     yaw: 180,
@@ -519,7 +518,7 @@ async function probePx4OffboardRate(conn, sysid, results) {
     const target = { sysid, compid: 1 };
     const message = buildMoveMessage({
       mode: 'velocity',
-      frame: 'LOCAL_NED',
+      frame: MAV_FRAME.LOCAL_NED,
       target,
       velocity: { north: 0.5, east: 0, up: 0 },
     });
@@ -576,7 +575,7 @@ async function probePx4OffboardRate(conn, sysid, results) {
     const target = { sysid, compid: 1 };
     const message = buildMoveMessage({
       mode: 'velocity',
-      frame: 'LOCAL_NED',
+      frame: MAV_FRAME.LOCAL_NED,
       target,
       velocity: { north: 0, east: 0, up: 0 },
     });
@@ -641,9 +640,9 @@ async function main() {
   await sleep(3000);
   try {
     await apGuidedArmTakeoff(ap, 1, results);
-    await probeHaltReplace(ap, 1, results, 'LOCAL_NED');
+    await probeHaltReplace(ap, 1, results, MAV_FRAME.LOCAL_NED);
     await sleep(1000);
-    await probeHaltReplace(ap, 1, results, 'GLOBAL_RELATIVE_ALT_INT');
+    await probeHaltReplace(ap, 1, results, MAV_FRAME.GLOBAL_RELATIVE_ALT);
     await sleep(1000);
     await probeYawOnly(ap, 1, results);
     await sleep(1000);
@@ -684,7 +683,7 @@ async function main() {
     requestTelemetry(px4, 11);
     const climb = buildMoveMessage({
       mode: 'position',
-      frame: 'LOCAL_NED',
+      frame: MAV_FRAME.LOCAL_NED,
       target,
       position: { north: 0, east: 0, up: 10 },
     });
