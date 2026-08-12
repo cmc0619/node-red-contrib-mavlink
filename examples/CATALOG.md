@@ -25,24 +25,32 @@ reference these by name rather than re-explaining them each time.
 | Node | Values |
 |---|---|
 | `mavlink-command` | `build` \| `send` \| `confirm` \| `complete` |
-| `mavlink-move` | `build` \| `send` \| `stream` |
+| `mavlink-move` | `build` \| `send` \| `confirm` (Go to only) \| `stream` |
 | `mavlink-param` | `build` \| `send` \| `confirm` (set echo) \| `collect` (list) |
 | `mavlink-payload` | `build` \| `send` \| `confirm` |
 | `mavlink-build` | `build` \| `send` (config key is `tier`) |
 | `mavlink-fanout` | `build` \| `send` \| `confirm` |
 
 **Command presets** (`mode: "preset"`, `preset: <id>`): `arm`, `disarm`, `set_mode`,
-`takeoff`, `land`, `rtl`, `set_home`, `reposition`, `change_speed`, `yaw`, `rotate`,
-`orbit`, `mission_start`, `pause`, `resume`, `request_message`, `set_message_interval`,
-`stop_message_interval`, `reboot_autopilot`, `flight_termination`. Advanced mode is
-`mode: "advanced"`, `advancedCommand: "<MAV_CMD numeric>"`. `params` is a JSON string
-keyed by param index (`"{\"7\":20}"` = param7 = 20).
+`takeoff`, `land`, `rtl`, `set_home`, `change_speed`, `orbit`, `mission_start`, `pause`,
+`resume`, `request_message`, `set_message_interval`, `stop_message_interval`,
+`reboot_autopilot`, `flight_termination`. `reposition` still resolves at runtime but is
+off the dropdown (`listed: false`) — Move owns the goto; only the §14 INT-carrier anchors
+(SITL 23/29) still pin it. The old `yaw`/`rotate` presets are **gone**: `CONDITION_YAW`
+rides advanced mode now (`advancedCommand: "115"`, param4 = 0 absolute / 1 relative).
+Advanced mode is `mode: "advanced"`, `advancedCommand: "<MAV_CMD numeric>"`. `params` is
+a JSON string keyed by param index (`"{\"7\":20}"` = param7 = 20).
 
-**Move** `mode`: `position`, `velocity`, `position-velocity`, `acceleration`,
-`yaw-only`; `frame` picks local (N/E/Up metres) vs global (`lat`/`lon` deg, `alt` m)
-and the body/offset/altitude-datum variants. `rateHz` (setpoints/s), `ttlMs` govern the
-stream. Up is up-positive and yaw is degrees in the UI; the node flips to NED and
-converts to radians at encode. **No arc primitive** — a
+**Move** `action`: `goto` (one-shot guided goto — `DO_REPOSITION` as COMMAND_INT on
+Build/Send/Send & confirm, `SET_POSITION_TARGET_GLOBAL_INT` on Stream; `altRef`: `home` \|
+`msl` is the only frame choice, plus `speed`/`radius`/`changeMode`/`ackTimeout` on the
+command path) or `steer` (setpoints; `reference`: `world` = Local NED everywhere, `body`
+derives the frame from the bound firmware and fails closed without one). There is no
+mode pulldown: the type_mask derives from which field groups are non-blank — filling
+fields IS the mode. Fields in an **unused** group must be blank (`""`); `0` inside an
+active group is a commanded zero (hover, pure-north) and stays. `rateHz`
+(setpoints/s), `ttlMs` govern the stream. Up is up-positive and yaw is degrees in the UI;
+the node flips to NED and converts to radians at encode. **No arc primitive** — a
 curved path is either many setpoints from a Function node, `DO_ORBIT`, or a mission ring.
 
 **Payload** `topic`/`verb`: camera → `photo`, `start-video`, `stop-video`, `set-mode`,
@@ -119,8 +127,9 @@ importable tab per file with shared config nodes inline.
   3. `takeoff` — `params {"7":20}` (complete on relative alt 20 m).
   4. `orbit` (DO_ORBIT) — `params {"1":100,"2":5,"3":0,"5":"NaN","6":"NaN","7":"NaN"}`
      (radius 100 m ⇒ ~200 m circle, 5 m/s, center = current position via NaN); `confirm`.
-  5. `rotate` (CONDITION_YAW relative) — `params {"1":360,"2":30,"3":1}` (360° CW at
-     30°/s); `confirm`.
+  5. spin — advanced `CONDITION_YAW` (`advancedCommand: "115"`) —
+     `params {"1":360,"2":30,"3":1,"4":1}` (360° CW at 30°/s, param4=1 relative);
+     `confirm`. No yaw preset exists — Move owns motion intents.
   6. `set_mode` FLIP — `params {"1":1,"2":14}`; `confirm`. Comment: ArduCopter-only; must
      be airborne + armed; auto-returns to GUIDED after one flip.
   7. `land` (complete on landed state).
@@ -140,11 +149,12 @@ importable tab per file with shared config nodes inline.
   go stops the vehicle. It exists to contrast honest streaming against `DO_ORBIT` and to
   show Move's freshness/stop behaviour.
 - **Nodes:** config triplet, `command` (arm/set_mode/takeoff/land), `inject`, one
-  `function` (ring generator — the only computed part), `move` (`mode: "position"`,
-  `frame: "GLOBAL_RELATIVE_ALT"`, `delivery: "stream"`, `rateHz: 5`, `ttlMs: 1500`), `debug`.
+  `function` (ring generator — the only computed part), `move` (`action: "goto"`,
+  `altRef: "home"`, `delivery: "stream"`, `rateHz: 5`, `ttlMs: 1500`), `debug`.
 - **Key config:** Function computes `lat = c_lat + (R·sinθ)/111320`,
   `lon = c_lon + (R·cosθ)/(111320·cos c_lat)` per §"Coordinate frames"; emits
-  `{payload:{mode:"position",frame:"GLOBAL_RELATIVE_ALT",position:{lat,lon,alt}}}`. Move TTL means the stream
+  `{payload:{position:{lat,lon,alt}}}` — the action and altitude reference live in the
+  Move node's config, not the payload. Move TTL means the stream
   self-stops if injects stop arriving. Comment states plainly: no arc primitive exists;
   the ring is the flow author's maths.
 - **Inject buttons:** **`Arm+GUIDED+Takeoff`**, **`◯ Fly circle`** (repeat inject at 5 Hz
@@ -314,19 +324,19 @@ importable tab per file with shared config nodes inline.
 - **Inject buttons:** **`Upload mission`**, **`Download mission`**, **`Upload fence`**,
   **`Upload rally`**, **`⚠ Clear mission (confirm)`**.
 
-### 22 — Go-to tour (Reposition, with NaN yaw hold)
+### 22 — Go-to tour (Move goto, blank-yaw heading hold)
 
 - **File:** `examples/22-goto-tour.json`
 - **Tab label:** `22 Go-to tour`
-- **Story:** Send a GUIDED copter hopping between three points with `DO_REPOSITION`, each
-  hop holding the current heading by passing `NaN` as yaw — a live demonstration of the §5
-  rule that `NaN` is a real sentinel in exactly the fields whose metadata declares it.
-- **Nodes:** config triplet, `command` arm→set_mode GUIDED (complete), 3× `command`
-  `reposition`, `inject`, `debug`.
-- **Key config:** each reposition `params` sets param4 (yaw) = `NaN` (hold), param5/6/7 =
-  lat/lon/alt, param1 = ground speed. Comment: the editor must be able to emit `NaN` here;
-  `JSON.stringify` cannot carry it, so the flow uses the node's NaN control, not a raw
-  payload literal.
+- **Story:** Send a GUIDED copter hopping between three points with the Move node's Go to
+  action (`DO_REPOSITION` on the COMMAND_INT carrier under the hood), each hop holding the
+  current heading by leaving Yaw blank — a live demonstration of the §5 rule that blank
+  fields encode the spec sentinels (`NaN` yaw = hold) rather than zero-filling.
+- **Nodes:** config triplet, `command` arm→set_mode GUIDED (complete), 3× `move`
+  (`action: "goto"`, `delivery: "confirm"`), `inject`, `debug`.
+- **Key config:** each Move goto sets `lat`/`lon`/`alt` (`altRef: "home"`), `speed: 5`,
+  blank `yaw` (hold current heading) and blank `radius` (0 = ignored);
+  `delivery: "confirm"` waits on the `COMMAND_ACK`.
 - **Inject buttons:** **`Arm + GUIDED`**, **`Go point A`**, **`Go point B`**,
   **`Go point C`**.
 
@@ -338,9 +348,9 @@ importable tab per file with shared config nodes inline.
   N/E/Up velocity through a Move node with a short TTL, so releasing a button lets the
   stream lapse and the vehicle stops — the freshness-and-stop contract that keeps a
   streamed control from running away.
-- **Nodes:** config triplet, `command` arm→GUIDED, `move` (`mode: "velocity"`, `frame: "LOCAL_NED"`,
-  `delivery: "stream"`, `rateHz: 10`, `ttlMs: 500`), `inject` (velocity presets),
-  `debug`.
+- **Nodes:** config triplet, `command` arm→GUIDED, `move` (`action: "steer"`,
+  `reference: "world"`, `delivery: "stream"`, `rateHz: 10`, `ttlMs: 500`), `inject`
+  (velocity presets), `debug`.
 - **Key config:** e.g. Forward `{velocity:{north:2,east:0,up:0}}`; Up
   `{velocity:{north:0,east:0,up:1}}`; a `Stop` inject sends `payload:false` (suppress) so
   the TTL times the setpoints out. Comment: Up is up-positive in the UI, flipped to NED at
@@ -356,7 +366,7 @@ importable tab per file with shared config nodes inline.
   velocity setpoint across a sysid list, first sequentially (paced) then as a single
   broadcast, showing when simultaneity beats pacing. Move carries no ack, so the fan-out
   reports per-vehicle send outcomes, not confirmations.
-- **Nodes:** config triplet, `move` (Build, velocity north 1 m/s) feeding 3× `fanout`
+- **Nodes:** config triplet, `move` (Build, `action: "steer"` world, velocity north 1 m/s) feeding 3× `fanout`
   (dry-run; `executionMode: "sequential"` `intervalMs: 150`; `broadcast`), `inject`, `debug`.
 - **Key config:** selection `list` with member rows for sysids 1–5 (broadcast uses `all`); the Move
   node builds the setpoint, the fan-outs replicate it; broadcast pins `target_system=0`,
@@ -369,15 +379,15 @@ importable tab per file with shared config nodes inline.
 - **File:** `examples/25-speed-yaw-choreo.json`
 - **Tab label:** `25 Speed & yaw choreography`
 - **Story:** A small aerobatic-ish routine for GUIDED: change ground speed, yaw to an
-  absolute heading, then rotate relative — the three Autonomy presets built on
-  `DO_CHANGE_SPEED` and `CONDITION_YAW`, with the Yaw/Rotate pair showing one command with
-  the relative flag pinned two ways.
+  absolute heading, then rotate relative — the `change_speed` preset plus the raw
+  `CONDITION_YAW` command twice, showing one `MAV_CMD` with the relative flag set two
+  ways (the old yaw/rotate presets are gone — Move owns motion intents).
 - **Nodes:** config triplet, `command` arm→GUIDED→takeoff (complete), `command`
-  `change_speed`, `command` `yaw`, `command` `rotate`, `inject`, `debug`.
+  `change_speed`, 2× `command` advanced `115` (Face / Rotate), `inject`, `debug`.
 - **Key config:** change_speed `params {"1":1,"2":8,"3":-1}` (airspeed type enum, 8 m/s,
-  no throttle change); yaw `params {"1":90,"2":20,"3":1}` (to 90° CW); rotate `params
-  {"1":45,"2":20,"3":1}` (relative +45°). Comment: Yaw pins param4=0, Rotate pins
-  param4=1 — same `MAV_CMD`.
+  no throttle change); Face 90° — advanced `115`, `params {"1":90,"2":20,"3":1,"4":0}`
+  (param4=0 absolute); Rotate +45° — advanced `115`, `params {"1":45,"2":20,"3":1,"4":1}`
+  (param4=1 relative). Same `MAV_CMD`, one param apart.
 - **Inject buttons:** **`Prep (arm/GUIDED/takeoff)`**, **`Speed 8 m/s`**, **`Face 90°`**,
   **`Rotate +45°`**.
 
@@ -644,9 +654,10 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 ### sitl/27 — Move reposition carrier (AP)
 
 - **File:** `examples/sitl/27-move-reposition-carrier.json` · **Tab:** `SITL 27 Move reposition carrier`
-- **Story:** Move's `carrier: reposition` against ArduCopter sysid 1 — same goto SITL 23
-  flies through Command, routed through `mavlink-move` instead (#239).
-- **Nodes:** config triplet, `command` prep, `move` (`carrier: reposition`), `inject`,
+- **Story:** Move's acked goto (`action: "goto"`, `delivery: "confirm"` —
+  `DO_REPOSITION`/COMMAND_INT derived, not configured) against ArduCopter sysid 1 — same
+  goto SITL 23 flies through Command, routed through `mavlink-move` instead (#239).
+- **Nodes:** config triplet, `command` prep, `move` (`action: "goto"`, confirm), `inject`,
   `debug`.
 - **Config/launch:** `restart: ap-1`.
 
@@ -672,10 +683,10 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 ### sitl/30 — PX4 Move reposition
 
 - **File:** `examples/sitl/30-px4-move-reposition.json` · **Tab:** `SITL 30 PX4 Move reposition`
-- **Story:** PX4 twin of SITL 27 — `DO_REPOSITION` via `mavlink-move` with CHANGE_MODE on
-  (the shape SITL 29 measured accepted through Command). Records ACK either way; yaw 90 →
-  EAST (§14 / #239).
-- **Nodes:** config triplet (PX4), `command` arm/takeoff, `move` reposition, `inject`,
+- **Story:** PX4 twin of SITL 27 — `DO_REPOSITION` via `mavlink-move` (`action: "goto"`,
+  `delivery: "confirm"`) with CHANGE_MODE on (the shape SITL 29 measured accepted through
+  Command). Records ACK either way; yaw 90 → EAST (§14 / #239).
+- **Nodes:** config triplet (PX4), `command` arm/takeoff, `move` goto (confirm), `inject`,
   `debug`.
 - **Config/launch:** `restart: px4-1`.
 

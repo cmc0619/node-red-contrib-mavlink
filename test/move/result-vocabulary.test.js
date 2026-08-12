@@ -75,11 +75,14 @@ function conn() {
   };
 }
 
+// Blank, not 0: a zero is a commanded value under the derived mask, and a
+// placeholder 0 here would turn the velocity stream fixtures into
+// position-velocity commanding the local origin (CodeRabbit, #277).
 const setpointCfg = {
-  mode: 'position', north: 0, east: 0, up: 0, targetSystem: 5, targetComponent: 1,
+  action: 'steer', north: '', east: '', up: '', targetSystem: 5, targetComponent: 1,
 };
 const repositionCfg = {
-  carrier: 'reposition', mode: 'position', frame: 'GLOBAL_RELATIVE_ALT',
+  action: 'goto', altRef: 'home',
   lat: 47.1, lon: 8.5, alt: 25, targetSystem: 1, targetComponent: 1,
 };
 
@@ -128,7 +131,7 @@ test('reposition send tier emits result "sent" — same word as the setpoint sen
 test('stream lifecycle: "streaming", "stopped", "stopped"/"no stream", "expired"', async () => {
   const c = conn();
   const node = makeNode(
-    { ...setpointCfg, mode: 'velocity', vNorth: 1, vEast: 0, vUp: 0, delivery: 'stream', connection: 'conn', rateHz: 50, ttlMs: 0 },
+    { ...setpointCfg, vNorth: 1, vEast: 0, vUp: 0, delivery: 'stream', connection: 'conn', rateHz: 50, ttlMs: 0 },
     { conn: c }
   );
   const started = await drive(node, { velocity: { north: 1, east: 0, up: 0 } });
@@ -149,7 +152,7 @@ test('stream lifecycle: "streaming", "stopped", "stopped"/"no stream", "expired"
   // Expiry: restart with a TTL and let it lapse. The report rides node.send
   // (status port only) — captured by the stub's recorder.
   const expiring = makeNode(
-    { ...setpointCfg, mode: 'velocity', vNorth: 1, vEast: 0, vUp: 0, delivery: 'stream', connection: 'conn', rateHz: 50, ttlMs: 30 },
+    { ...setpointCfg, vNorth: 1, vEast: 0, vUp: 0, delivery: 'stream', connection: 'conn', rateHz: 50, ttlMs: 30 },
     { conn: c }
   );
   const seen = [];

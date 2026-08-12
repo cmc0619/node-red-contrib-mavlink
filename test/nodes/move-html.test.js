@@ -1,14 +1,18 @@
 'use strict';
 
 /**
- * mavlink-move editor: mode/delivery-driven field visibility (DESIGN.md §6).
+ * mavlink-move editor: Action × Delivery drive the form (DESIGN.md §6
+ * redesign, 2026-08-12). The operator states an intent — goto or steer — and
+ * no dropdown may offer an option the current selection makes illegal:
+ * delivery options are rebuilt per action, goto shows only the global
+ * position, and steer never shows the command-path params.
  */
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { assertChangeHandlerContains } = require('./html-assert');
+const { assertChangeHandlerContains, loadNodeDefaults } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-move.html'),
@@ -16,9 +20,8 @@ const html = fs.readFileSync(
 );
 
 const ROW_IDS = [
-  'row-move-carrier',
-  'row-move-mode',
-  'row-move-frame',
+  'row-move-altRef',
+  'row-move-reference',
   'row-move-speed',
   'row-move-radius',
   'row-move-changeMode',
@@ -37,22 +40,26 @@ const ROW_IDS = [
   'row-move-aUp',
   'row-move-yaw',
   'row-move-yawRate',
-  'row-move-px4Compat',
   'row-move-rate',
   'row-move-ttl',
 ];
 
-test('mavlink-move editor reshapes fields by mode, frame, and delivery (§6)', () => {
-  assert.match(html, /function refreshVisibility/, 'mode/frame/delivery drive row visibility');
+test('mavlink-move editor reshapes fields by action and delivery (§6)', () => {
+  assert.match(html, /function refreshVisibility/, 'action/delivery drive row visibility');
   assert.match(
     html,
-    /\$\('#node-input-mode'\)\.on\('change', refreshVisibility\)/,
-    'mode change refreshes visibility'
+    /\$\('#node-input-action'\)\.on\('change', refreshVisibility\)/,
+    'action change refreshes visibility'
   );
   assert.match(
     html,
-    /\$\('#node-input-frame'\)\.on\('change', refreshVisibility\)/,
-    'frame change refreshes visibility'
+    /\$\('#node-input-altRef'\)\.on\('change', refreshVisibility\)/,
+    'altitude-reference change refreshes visibility'
+  );
+  assert.match(
+    html,
+    /\$\('#node-input-reference'\)\.on\('change', refreshVisibility\)/,
+    'reference change refreshes visibility'
   );
   assertChangeHandlerContains(
     html,
@@ -66,32 +73,54 @@ test('mavlink-move editor reshapes fields by mode, frame, and delivery (§6)', (
     assert.match(html, new RegExp(`id="${id}"`), `${id} row must exist`);
   }
 
-  assert.match(html, /usesPosition && !isGlobalFrame/, 'local position fields gated on mode + frame');
-  assert.match(html, /usesPosition && isGlobalFrame/, 'global position fields gated on mode + frame');
-  assert.match(html, /vNorth: usesVelocity/, 'velocity fields gated on mode');
-  assert.match(html, /aNorth: usesAccel/, 'accel fields gated on mode');
+  // The gates themselves: goto owns the global position + altitude reference;
+  // steer owns the reference and the optional field groups; the command-path
+  // params exist only on goto's Build/Send/Send & confirm.
+  assert.match(html, /altRef:\s*isGoto/, 'altitude reference shown on goto only');
+  assert.match(html, /lat:\s*isGoto/, 'global position gated on goto');
+  assert.match(html, /reference:\s*!isGoto/, 'reference shown on steer only');
+  assert.match(html, /north:\s*!isGoto/, 'steer position fields gated on steer');
+  assert.match(html, /vNorth:\s*!isGoto/, 'velocity fields gated on steer');
+  assert.match(html, /aNorth:\s*!isGoto/, 'accel fields gated on steer');
+  assert.match(html, /yawRate:\s*!isGoto/, 'yaw rate is a setpoint field — steer only');
+  assert.match(html, /var isCommandPath = isGoto && !isStream/, 'the command path is goto off Stream');
+  assert.match(html, /speed:\s*isCommandPath/, 'ground speed hides on Stream (the runtime refuses it there)');
+  assert.match(html, /radius:\s*isCommandPath/, 'loiter radius hides on Stream');
+  assert.match(html, /changeMode:\s*isCommandPath/, 'change mode hides on Stream');
+  assert.match(html, /ackTimeout:\s*isGoto && delivery === 'confirm'/, 'ACK timeout on goto confirm only');
   assert.match(html, /delivery === 'stream'/, 'stream rate and TTL gated on delivery');
 });
 
-test('mavlink-move declares the frame default and the acceleration validators', () => {
-  // A wrong or missing default frame changes the carrier message for every
-  // Move node that never touched the field.
-  assert.match(html, /frame:\s*\{\s*value:\s*'LOCAL_NED'\s*\}/, 'frame defaults to LOCAL_NED');
-  for (const field of ['aNorth', 'aEast', 'aUp']) {
-    assert.match(
+test('mavlink-move Action surface: goto default, both actions offered, retired fields gone', () => {
+  // A wrong or missing default changes the wire message for every Move node
+  // that never touched the field; goto is the acked direction the redesign
+  // leads with.
+  assert.match(html, /action:\s*\{\s*value:\s*'goto'\s*\}/, 'action defaults to goto');
+  assert.match(html, /option value="goto"/, 'goto action offered');
+  assert.match(html, /option value="steer"/, 'steer action offered');
+  assert.match(html, /altRef:\s*\{\s*value:\s*'home'\s*\}/, 'altRef defaults to home (the GCS default)');
+  // Defaults-based, not a source regex: reference grew a validator (Codex
+  // #277 Body-on-Build gate) so its literal is no longer one line.
+  assert.equal(loadNodeDefaults('mavlink-move').reference.value, 'world', 'reference defaults to world (works everywhere)');
+
+  // The old carrier/mode/frame triple and the PX4-compat checkbox are
+  // retired, not hidden (YAGNI, pre-1.0: delete and re-pick). The wire
+  // number is code now, so no field of any spelling may survive.
+  for (const gone of ['carrier', 'mode', 'frame', 'px4Compat']) {
+    assert.doesNotMatch(
       html,
-      new RegExp(`${field}:\\s*\\{\\s*value:\\s*0,\\s*validate:\\s*RED\\.validators\\.number\\(true\\)`),
-      `${field} declares the blank-allowed numeric validator`
+      new RegExp(`node-input-${gone}"`),
+      `retired field ${gone} must have no input`
+    );
+    assert.doesNotMatch(
+      html,
+      new RegExp(`row-move-${gone}"`),
+      `retired field ${gone} must have no row`
     );
   }
-});
-
-test('mavlink-move offers the full mode and frame matrix', () => {
-  for (const mode of ['position', 'velocity', 'position-velocity', 'acceleration', 'yaw-only']) {
-    assert.match(html, new RegExp(`option value="${mode}"`), `mode ${mode} offered`);
-  }
-  // Force is gone, not hidden: no firmware actuated the force bit (§14).
-  assert.doesNotMatch(html, /option value="force"/, 'force is not offered');
+  assert.doesNotMatch(html, /FRAME_COMPAT/, 'the *_INT canonicalization map died with the frame field');
+  // The frame is derived, never picked: no MAV_FRAME select options of any
+  // spelling (the help may still *name* frames when explaining the derivation).
   for (const frame of [
     'LOCAL_NED',
     'LOCAL_OFFSET_NED',
@@ -100,37 +129,193 @@ test('mavlink-move offers the full mode and frame matrix', () => {
     'GLOBAL_RELATIVE_ALT',
     'GLOBAL',
     'GLOBAL_TERRAIN_ALT',
+    'GLOBAL_RELATIVE_ALT_INT',
   ]) {
-    assert.match(html, new RegExp(`option value="${frame}"`), `frame ${frame} offered`);
-  }
-  // The deprecated *_INT spellings are accepted at runtime as aliases, never
-  // advertised: the editor offers only the canonical names (owner-ruled
-  // 2026-08-09).
-  for (const deprecated of ['GLOBAL_INT', 'GLOBAL_RELATIVE_ALT_INT', 'GLOBAL_TERRAIN_ALT_INT']) {
     assert.doesNotMatch(
       html,
-      new RegExp(`option value="${deprecated}"`),
-      `deprecated frame ${deprecated} not offered`
+      new RegExp(`option value="${frame}"`),
+      `no frame option ${frame}`
     );
   }
-  // No raw type_mask input — named modes only; raw masks live in mavlink-build.
+  // No raw type_mask input — the mask derives from filled fields; raw masks
+  // live in mavlink-build.
   assert.doesNotMatch(html, /type_?[mM]ask"|node-input-typeMask/, 'no raw type_mask field');
 });
 
-test('mavlink-move PX4-compat checkbox: default checked, shown only for global frames', () => {
-  // Default on is the byte-identical wire choice (owner-ruled 2026-08-09):
-  // checked emits the *_INT numbers 5/6/11; unchecked the spec-current 0/3/10.
-  assert.match(html, /px4Compat:\s*\{\s*value:\s*true\s*\}/, 'px4Compat defaults to checked');
-  assert.match(html, /type="checkbox" id="node-input-px4Compat"/, 'px4Compat is a checkbox');
-  assert.match(html, /id="row-move-px4Compat"/, 'px4Compat row has ID for frame-driven toggling');
-  assert.match(html, /px4Compat:\s*isGlobalFrame/, 'px4Compat shown only when a global frame is selected');
+test('mavlink-move delivery options are rebuilt per action — confirm is goto-only (§9)', () => {
+  assert.match(html, /function refreshDeliveryOptions/, 'the delivery select is rebuilt, not just toggled');
+  const map = /var DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
+  assert.ok(map, 'DELIVERY_OPTIONS map must be extractable');
+  const steer = /steer:\s*\[[\s\S]*?\n {8}\]/.exec(map[0]);
+  assert.ok(steer, 'steer option list must be extractable');
+  assert.doesNotMatch(steer[0], /confirm/, 'steer setpoints carry no ack — confirm is never offered');
+  const goto = /goto:\s*\[[\s\S]*?\n {8}\]/.exec(map[0]);
+  assert.ok(goto, 'goto option list must be extractable');
+  for (const tier of ['build', 'send', 'confirm', 'stream']) {
+    assert.match(goto[0], new RegExp(`'${tier}'`), `goto offers ${tier}`);
+  }
+  for (const tier of ['build', 'send', 'stream']) {
+    assert.match(steer[0], new RegExp(`'${tier}'`), `steer offers ${tier}`);
+  }
+  // The saved (or in-progress) value survives when still legal; an illegal
+  // one falls back to Send — still a wire tier, like the old coercion.
+  assert.match(html, /\[live, node\.delivery\]\.filter/, 'live then saved value preserved when legal');
+  assert.match(html, /\$delivery\.val\(keep \|\| 'send'\)/, 'illegal saved delivery falls back to Send');
 });
 
-test('mavlink-move speaks one canonical vocabulary and labels body frames forward/right', () => {
+test('mavlink-move goto requires the global position at deploy, steer requires nothing', () => {
+  // Behavioral, not grep: the validators mirror the runtime's
+  // requireGlobalPosition (§10 "blank coordinates must not become 0,0 at
+  // ground level") — required on goto, saved or live, and silent on steer,
+  // where the runtime derives the mode from what is filled and refuses an
+  // all-blank steer at input time.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const gotoNode = { action: 'goto' };
+  const steerNode = { action: 'steer' };
+
+  for (const field of ['lat', 'lon', 'alt']) {
+    assert.match(
+      String(defaults[field].validate.call(gotoNode, '', {})),
+      /required for Go to/,
+      `${field} blank reds on goto`
+    );
+    assert.equal(defaults[field].validate.call(steerNode, '', {}), true, `${field} blank passes on steer`);
+    // A saved config without `action` parses as steer (resolveMoveAction), so
+    // the validator's blank-action fallback must be steer too.
+    assert.equal(defaults[field].validate.call({}, '', {}), true, `${field} blank passes on a pre-action save`);
+  }
+  assert.equal(defaults.lat.validate.call(gotoNode, 47.5, {}), true);
+  assert.equal(defaults.lon.validate.call(gotoNode, -122.3, {}), true);
+  assert.equal(defaults.alt.validate.call(gotoNode, 30, {}), true);
+  // The degE7 int32 ceiling makes range a guard, not pedantry — same rule as
+  // the runtime's requireGlobalPosition.
+  assert.match(String(defaults.lat.validate.call(gotoNode, 91, {})), /\[-90, 90\]/);
+  assert.match(String(defaults.lon.validate.call(gotoNode, 181, {})), /\[-180, 180\]/);
+  assert.match(String(defaults.alt.validate.call(gotoNode, 'abc', {})), /number of metres/);
+});
+
+test('mavlink-move Body on Build requires the Vehicle Profile dialect (Codex #277)', () => {
+  // Build with a concrete dialect has no firmware source, so a Body node
+  // would deploy clean and refuse every input — the editor must red it. The
+  // Vehicle Profile dialect escape supplies the firmware and passes; every
+  // wire tier gets firmware from the Connection and never reds.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const validate = defaults.reference.validate;
+  assert.match(
+    String(validate.call({ action: 'steer', delivery: 'build', dialect: 'common' }, 'body', {})),
+    /Body on Build needs a firmware/
+  );
+  assert.equal(validate.call({ action: 'steer', delivery: 'build', dialect: '__vehicle' }, 'body', {}), true);
+  assert.equal(validate.call({ action: 'steer', delivery: 'send', dialect: '' }, 'body', {}), true);
+  assert.equal(validate.call({ action: 'steer', delivery: 'stream', dialect: '' }, 'body', {}), true);
+  assert.equal(validate.call({ action: 'steer', delivery: 'build', dialect: 'common' }, 'world', {}), true);
+  assert.equal(validate.call({ action: 'goto', delivery: 'build', dialect: 'common' }, 'body', {}), true,
+    'a hidden reference on a goto node never reds');
+});
+
+test('mavlink-move steer fields default blank with the blank-allowed validator', () => {
+  // Filling fields IS the mode: a default of 0 would put every fresh steer
+  // node in a position+velocity+accel mix the runtime refuses. Blank is the
+  // only default that means "not commanded".
+  for (const field of ['north', 'east', 'up', 'vNorth', 'vEast', 'vUp', 'aNorth', 'aEast', 'aUp', 'yaw', 'yawRate']) {
+    assert.match(
+      html,
+      new RegExp(`${field}:\\s*\\{\\s*value:\\s*'',\\s*validate:\\s*RED\\.validators\\.number\\(true\\)`),
+      `${field} defaults blank with the blank-allowed numeric validator`
+    );
+  }
+});
+
+test('mavlink-move targetSystem broadcast refusal keys on the confirm tier', () => {
+  // Broadcast (0) is refused only where an ack is actually awaited (#260) —
+  // and confirm is a goto-only tier now, so the delivery IS the gate; there
+  // is no carrier field left to consult.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const validate = defaults.targetSystem.validate;
+  assert.match(
+    String(validate.call({ delivery: 'confirm' }, 0, {})),
+    /cannot be confirmed/,
+    'an explicit 0 reds on confirm'
+  );
+  assert.match(String(validate.call({ delivery: 'confirm' }, '0', {})), /cannot be confirmed/);
+  assert.equal(validate.call({ delivery: 'confirm' }, '', {}), true, 'blank inherits the profile target');
+  assert.equal(validate.call({ delivery: 'confirm' }, 1, {}), true);
+  assert.equal(validate.call({ delivery: 'send' }, 0, {}), true, 'Send stays broadcast-legal');
+  assert.equal(validate.call({ delivery: 'stream' }, 0, {}), true, 'Stream stays broadcast-legal');
+  assert.doesNotMatch(
+    /targetSystem:\s*\{[\s\S]*?\n {6}\},/.exec(html)[0],
+    /carrier/,
+    'the retired carrier gate is gone from the validator'
+  );
+});
+
+test('mavlink-move Advanced section: toggle link, hidden div, the right rows inside', () => {
+  assert.match(html, /id="move-advanced-toggle"/, 'the Advanced toggle link exists');
+  assert.match(html, /id="move-advanced" style="display:none"/, 'the Advanced div starts hidden');
+  assert.match(html, /\$adv\.toggle\(\)/, 'plain jQuery show/hide, no widget');
+  const advancedAt = html.indexOf('id="move-advanced"');
+  const templateEnd = html.indexOf('</script>', advancedAt);
+  for (const id of [
+    'row-move-changeMode',
+    'row-move-ackTimeout',
+    'row-move-radius',
+    'row-move-aNorth',
+    'row-move-aEast',
+    'row-move-aUp',
+    'row-move-targetComponent',
+  ]) {
+    const at = html.indexOf(`id="${id}"`);
+    assert.ok(
+      at > advancedAt && at < templateEnd,
+      `${id} must live inside the Advanced div`
+    );
+  }
+});
+
+test('mavlink-move Change mode tip states the measured §14 gate', () => {
+  // The flag is the gate on both stacks (measured 2026-08-12): without it,
+  // outside GUIDED (AP) / Hold (PX4), the answer is DENIED (2). The tip must
+  // say so — an operator who unticks it needs to know what refuses.
+  const tip = /id="node-input-changeMode"[\s\S]*?<\/span>/.exec(html);
+  assert.ok(tip, 'changeMode row must carry a form-tips span');
+  assert.match(tip[0], /must already be in GUIDED \(ArduPilot\) \/ Hold \(PX4\)/, 'off-state names the required modes');
+  assert.match(tip[0], /answers DENIED/, 'off-state names the refusal');
+  assert.match(tip[0], /flies itself into guided mode \(§14\)/, 'on-state names the mode change and the measurement');
+  assert.match(html, /changeMode:\s*\{\s*value:\s*false\s*\}/, 'changeMode defaults off');
+  assert.match(html, /type="checkbox" id="node-input-changeMode"/, 'changeMode is a checkbox');
+});
+
+test('mavlink-move goto params: blank-sentinel fields and the positive ACK timeout', () => {
+  for (const field of ['speed', 'radius']) {
+    assert.match(
+      html,
+      new RegExp(`${field}:\\s*\\{\\s*value:\\s*'',\\s*validate:\\s*RED\\.validators\\.number\\(true\\)`),
+      `${field} defaults blank with the blank-allowed numeric validator`
+    );
+  }
+  // ackTimeout is blank-allowed too, but 0 and negatives are not a shorter
+  // wait — they fire the ack timer before the vehicle can answer — so its
+  // validator requires a positive number rather than any number.
+  const ackValidator = /ackTimeout:\s*\{[\s\S]*?\n {6}\},/.exec(html);
+  assert.ok(ackValidator, 'ackTimeout validate function must be extractable');
+  assert.match(ackValidator[0], /value:\s*''/, 'ackTimeout defaults blank (inherit the 10 s default)');
+  assert.match(ackValidator[0], /isBlank\(v\)\)\s*return true/, 'blank stays valid');
+  assert.match(ackValidator[0], /Number\(v\) > 0/, 'zero and negatives are rejected');
+  assert.doesNotMatch(ackValidator[0], /RED\.validators\.number\(true\)/, 'the any-number validator is gone');
+  // Blank speed/radius/yaw encode the spec sentinels at runtime; the
+  // placeholders say so instead of implying zero.
+  assert.match(html, /id="node-input-speed"[^>]*placeholder="\(vehicle default\)"/, 'speed placeholder names the sentinel');
+  assert.match(html, /id="node-input-radius"[^>]*placeholder="\(ignored\)"/, 'radius placeholder names the sentinel');
+});
+
+test('mavlink-move speaks one canonical vocabulary and labels the body reference forward/right', () => {
   // Pre-1.0, no aliases (AGENTS.md "no migrations, no compatibility shims"):
-  // the pre-frame mode names must not appear anywhere in the editor.
+  // neither the pre-frame mode names nor the retired carrier vocabulary may
+  // appear anywhere in the editor.
   assert.doesNotMatch(html, /local-position|local-velocity|global-position/, 'no legacy mode names');
-  assert.match(html, /isBodyFrame \? 'Metres forward' : 'Metres north'/, 'body frames relabel north to forward');
+  assert.doesNotMatch(html, /setpoint \(stream|reposition \(guided/i, 'no carrier option labels');
+  assert.match(html, /isBody \? 'Metres forward' : 'Metres north'/, 'body reference relabels north to forward');
+  assert.match(html, /altRef === 'msl' \? 'Metres alt \(MSL\)' : 'Metres alt \(above home\)'/, 'alt label follows the altitude reference');
 });
 
 test('mavlink-move has one labeled row per parameter, not dual local/global rows', () => {
@@ -283,120 +468,60 @@ test('mavlink-move has no Firmware row and no silent ardupilotmega default', () 
   assert.doesNotMatch(html, /ardupilotmega/, 'Move editor must not invent a default dialect');
 });
 
-test('mavlink-move editor canonicalizes legacy *_INT global frames on open (Codex, #240)', () => {
-  // One explicit compatibility boundary (AGENTS.md "Backward compatibility"):
-  // flows saved before the 2026-08-09 frame ruling store the deprecated *_INT
-  // names. Without the map, the select has no matching option, refreshVisibility
-  // falls back to LOCAL_NED, and saving silently reinterprets a global move as
-  // a local-origin move.
-  assert.match(html, /var FRAME_COMPAT = \{/, 'the compatibility map exists');
-  assert.match(html, /GLOBAL_INT: 'GLOBAL'/, 'GLOBAL_INT canonicalizes');
-  assert.match(html, /GLOBAL_RELATIVE_ALT_INT: 'GLOBAL_RELATIVE_ALT'/, 'GLOBAL_RELATIVE_ALT_INT canonicalizes');
-  assert.match(html, /GLOBAL_TERRAIN_ALT_INT: 'GLOBAL_TERRAIN_ALT'/, 'GLOBAL_TERRAIN_ALT_INT canonicalizes');
-  assert.match(
-    html,
-    /if \(FRAME_COMPAT\[node\.frame\]\) \{\s*\$\('#node-input-frame'\)\.val\(FRAME_COMPAT\[node\.frame\]\);/,
-    'the saved frame is canonicalized into the select before anything reads it'
-  );
-  // The boundary must run before the visibility pass that would otherwise
-  // read the unmatched select as LOCAL_NED.
-  const compatAt = html.indexOf('var FRAME_COMPAT');
-  const visibilityCallAt = html.indexOf('refreshVisibility()');
-  assert.ok(compatAt > -1 && compatAt < visibilityCallAt, 'canonicalization precedes the first visibility pass');
-  // And the legacy names must not be select options — accepted, never offered.
-  assert.doesNotMatch(html, /<option value="GLOBAL_RELATIVE_ALT_INT"/, 'legacy options are not offered');
-});
+// ── Help text: the load-bearing statements, in the new vocabulary ────────────
 
-// ── Reposition carrier (#239) ───────────────────────────────────────────────
-
-test('mavlink-move carrier field: setpoint default, both carriers offered, change refreshes', () => {
-  // A wrong or missing default flips every existing Move node onto the
-  // command path; setpoint is the pre-#239 behavior and must stay the default.
-  assert.match(html, /carrier:\s*\{\s*value:\s*'setpoint'\s*\}/, 'carrier defaults to setpoint');
-  assert.match(html, /option value="setpoint"/, 'setpoint carrier offered');
-  assert.match(html, /option value="reposition"/, 'reposition carrier offered');
-  assert.match(
-    html,
-    /\$\('#node-input-carrier'\)\.on\('change', refreshVisibility\)/,
-    'carrier change refreshes visibility'
-  );
-});
-
-test('mavlink-move delivery tiers follow the carrier (§9: tiers are computed, not fixed)', () => {
-  assert.match(html, /option value="confirm">Send &amp; confirm/, 'Send & confirm offered');
-  // Stream is setpoint-only (COMMAND_INT has no streaming semantics); confirm
-  // is reposition-only (setpoints carry no ack). An invalid saved selection
-  // falls back to Send rather than deploying a per-input refusal.
-  assert.match(
-    html,
-    /option\[value="stream"\]'\)\.toggle\(!isReposition\)/,
-    'stream option hidden on reposition'
-  );
-  assert.match(
-    html,
-    /option\[value="confirm"\]'\)\.toggle\(isReposition\)/,
-    'confirm option shown only on reposition'
-  );
-  assert.match(
-    html,
-    /isReposition && liveDelivery === 'stream'\) \|\| \(!isReposition && liveDelivery === 'confirm'/,
-    'invalid carrier/delivery combos coerce'
-  );
-});
-
-test('mavlink-move reposition reshapes the form: position-only, global frames only', () => {
-  // Reposition implies position semantics: the mode select is coerced and its
-  // row hidden, so a stale setpoint mode never deploys into a refusal.
-  assert.match(html, /if \(isReposition\) \{\s*\$\('#node-input-mode'\)\.val\('position'\)/, 'mode coerced to position');
-  assert.match(html, /mode:\s*!isReposition/, 'mode row hidden on reposition');
-  // DO_REPOSITION rides frames 0/3 only: the Local optgroup and terrain
-  // option are withdrawn and a non-global saved frame coerces to relative-alt.
-  assert.match(html, /optgroup\[label="Local"\]'\)\.toggle\(!isReposition\)/, 'local frames withdrawn on reposition');
-  assert.match(html, /option\[value="GLOBAL_TERRAIN_ALT"\]'\)\.toggle\(!isReposition\)/, 'terrain frame withdrawn on reposition');
-  assert.match(html, /\.val\('GLOBAL_RELATIVE_ALT'\)/, 'non-global saved frame coerces to GLOBAL_RELATIVE_ALT');
-  // COMMAND_INT wants the spec-current 0/3 — no *_INT twin, so no PX4-compat
-  // checkbox; yaw rate has no DO_REPOSITION field.
-  assert.match(html, /px4Compat:\s*isGlobalFrame && !isReposition/, 'px4Compat hidden on reposition');
-  assert.match(html, /yawRate:\s*!isReposition/, 'yaw rate hidden on reposition');
-});
-
-test('mavlink-move reposition params: blank-sentinel fields and the CHANGE_MODE opt-in', () => {
-  for (const field of ['speed', 'radius']) {
-    assert.match(
-      html,
-      new RegExp(`${field}:\\s*\\{\\s*value:\\s*'',\\s*validate:\\s*RED\\.validators\\.number\\(true\\)`),
-      `${field} defaults blank with the blank-allowed numeric validator`
-    );
-  }
-  // ackTimeout is blank-allowed too, but 0 and negatives are not a shorter
-  // wait — they fire the ack timer before the vehicle can answer — so its
-  // validator requires a positive number rather than any number.
-  const ackValidator = /ackTimeout:\s*\{[\s\S]*?\n {6}\},/.exec(html);
-  assert.ok(ackValidator, 'ackTimeout validate function must be extractable');
-  assert.match(ackValidator[0], /value:\s*''/, 'ackTimeout defaults blank (inherit the 10 s default)');
-  assert.match(ackValidator[0], /isBlank\(v\)\)\s*return true/, 'blank stays valid');
-  assert.match(ackValidator[0], /Number\(v\) > 0/, 'zero and negatives are rejected');
-  assert.doesNotMatch(ackValidator[0], /RED\.validators\.number\(true\)/, 'the any-number validator is gone');
-  // Blank speed/radius/yaw encode the spec sentinels at runtime; the
-  // placeholders say so instead of implying zero.
-  assert.match(html, /id="node-input-speed"[^>]*placeholder="\(vehicle default\)"/, 'speed placeholder names the sentinel');
-  assert.match(html, /id="node-input-radius"[^>]*placeholder="\(ignored\)"/, 'radius placeholder names the sentinel');
-  // CHANGE_MODE is a mode change: an explicit opt-in checkbox, default off,
-  // documented as such in the help.
-  assert.match(html, /changeMode:\s*\{\s*value:\s*false\s*\}/, 'changeMode defaults off');
-  assert.match(html, /type="checkbox" id="node-input-changeMode"/, 'changeMode is a checkbox');
-  assert.match(html, /speed:\s*isReposition/, 'speed shown only on reposition');
-  assert.match(html, /radius:\s*isReposition/, 'radius shown only on reposition');
-  assert.match(html, /changeMode:\s*isReposition/, 'changeMode shown only on reposition');
-  assert.match(html, /ackTimeout:\s*delivery === 'confirm'/, 'ACK timeout shown only on confirm');
-});
-
-test('mavlink-move help documents the reposition carrier and the mode-change flag', () => {
+test('mavlink-move help documents the goto command path and the mode-change gate', () => {
   assert.match(html, /DO_REPOSITION/, 'help names the command');
   assert.match(html, /COMMAND_INT/, 'help names the wire message');
   assert.match(html, /MAV_DO_REPOSITION_FLAGS_CHANGE_MODE/, 'help names the flag');
   assert.match(html, /mode change/, 'the flag is documented as a mode change');
+  // The measured §14 gate, in one sentence flows can act on.
+  assert.match(
+    html,
+    /accepted iff the flag is set or the vehicle is already in GUIDED \(ArduPilot\) \/ Hold \(PX4\)/,
+    'help states the CHANGE_MODE gate as measured'
+  );
+  assert.match(html, /denied \(2\)/, 'help names the refusal code');
   // The failure words are documented as flows will see them: the MAV_RESULT
   // name lowercased IS the record's result field, verbatim from the ack path.
   assert.match(html, /command_int_only/, 'help names the failure surfacing as the result word');
+  assert.match(html, /<code>unconfirmed<\/code>/, 'a missing ack reports unconfirmed, not failure');
+});
+
+test('mavlink-move help keeps the result vocabulary and the expired discriminator', () => {
+  for (const word of ['sent', 'streaming', 'stopped', 'accepted', 'denied']) {
+    assert.match(html, new RegExp(`<code>${word}</code>`), `result word ${word} documented`);
+  }
+  assert.match(html, /result === "expired"/, 'expiry is branched on result — result IS the discriminator');
+  assert.match(html, /result: "stopped"/, 'stop completes with result stopped');
+  assert.match(html, /brakeError/, 'a failed expiry brake rides its own field');
+  assert.match(html, /setpoint watchdog is the failsafe on a dead link/, 'the TTL/deadman paragraph survives');
+});
+
+test('mavlink-move help keeps the sentinel, unit, and body-frame statements', () => {
+  assert.match(html, /−1 \(vehicle default\)/, 'blank speed sentinel −1');
+  assert.match(html, /0 \(ignored/, 'blank radius sentinel 0');
+  assert.match(html, /NaN \(keep the current heading mode/, 'blank yaw sentinel NaN');
+  assert.match(html, /up-positive/, 'verticals are entered up-positive');
+  assert.match(html, /degrees[\s\S]{0,80}radians/, 'yaw converts degrees to radians once');
+  assert.match(html, /BODY_OFFSET_NED \(9\)/, 'ArduPilot body frame named');
+  assert.match(html, /BODY_NED \(8\)/, 'PX4 body frame named');
+  assert.match(html, /velocity only/, 'PX4 body frames carry velocity only');
+});
+
+test('mavlink-move help documents the action-shaped overrides and refuses the retired set', () => {
+  for (const key of ['altRef', 'reference', 'position', 'velocity', 'accel', 'yawRate', 'rateHz', 'ttlMs', 'timeBootMs', 'changeMode']) {
+    assert.match(
+      html,
+      new RegExp(`<code>${key}`),
+      `payload override ${key} documented`
+    );
+  }
+  assert.match(html, /action: "stop"/, 'the stop action is documented');
+  assert.match(html, /msg\.payload === false<\/code> suppresses/, 'the suppress sentinel is documented');
+  assert.match(
+    html,
+    /retired <code>carrier<\/code>, <code>mode<\/code>, <code>frame<\/code>, and <code>px4Compat<\/code> overrides refuse loud/,
+    'the retired override set is named and refuses loud'
+  );
 });

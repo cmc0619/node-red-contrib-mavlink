@@ -210,34 +210,27 @@ test('global frame vocabulary: every alias spelling builds the same message (own
   }
 });
 
-test('px4Compat picks the global wire number: default *_INT (5/6/11), opted out spec-current (0/3/10)', () => {
+test('global setpoint frames always transmit the *_INT twin — the wire number is code, not a choice (§6 redesign)', () => {
+  // px4Compat is deleted, not defaulted: PX4 main exact-matches 5/6/11 and
+  // discards anything else, and every current stack accepts the twins — no
+  // operator benefits from the spec-current number on this carrier.
   const base = {
     mode: 'position',
     target: { sysid: 2, compid: 1 },
     position: { lat: 47, lon: 8, alt: 10 },
   };
-  const wire = { GLOBAL: [5, 0], GLOBAL_RELATIVE_ALT: [6, 3], GLOBAL_TERRAIN_ALT: [11, 10] };
-  for (const [frame, [compat, spec]] of Object.entries(wire)) {
-    // Missing, blank, and explicit true all resolve on — the safe direction —
-    // so the default wire stays byte-identical to what was measured.
-    for (const px4Compat of [undefined, '', true]) {
-      assert.equal(
-        buildMoveMessage({ ...base, frame, px4Compat }).fields.coordinate_frame,
-        compat,
-        `${frame} with px4Compat ${JSON.stringify(px4Compat)} transmits the *_INT twin`
-      );
-    }
+  const wire = { GLOBAL: 5, GLOBAL_RELATIVE_ALT: 6, GLOBAL_TERRAIN_ALT: 11 };
+  for (const [frame, twin] of Object.entries(wire)) {
     assert.equal(
-      buildMoveMessage({ ...base, frame, px4Compat: false }).fields.coordinate_frame,
-      spec,
-      `${frame} opted out transmits the spec-current number`
+      buildMoveMessage({ ...base, frame }).fields.coordinate_frame,
+      twin,
+      `${frame} transmits the *_INT twin`
     );
   }
-  // Local frames carry their own number; px4Compat is a global-frame choice.
+  // Local frames carry their own number; the twin swap is a global-frame rule.
   const local = buildMoveMessage({
     mode: 'position',
     frame: 'LOCAL_NED',
-    px4Compat: false,
     target: { sysid: 2, compid: 1 },
     position: { north: 1, east: 2, up: 3 },
   });
@@ -290,22 +283,83 @@ test('global lat/lon out of range refuses — the degE7 int32 ceiling is ±214.7
   assert.equal(antipode.fields.lon_int, 1800000000);
 });
 
-test('PX4-compat opt-out advisory fires only on the exact (global, px4Compat false, px4) triple', () => {
-  const { advisoryFor } = require('../../lib/move');
-  for (const frame of ['GLOBAL', 'GLOBAL_RELATIVE_ALT', 'GLOBAL_TERRAIN_ALT']) {
-    const text = advisoryFor({ mode: 'position', frame, firmware: 'px4', px4Compat: false });
-    assert.match(text, /spec-current global frames \(0\/3\/10\)/);
-    // Source-read tier, not measurement: the text must say so rather than
-    // borrow §14's authority.
-    assert.match(text, /source-read/);
-    assert.doesNotMatch(text, /\(§14\)/);
+// ── Action derivation (§6 redesign): the operator states an intent, the
+// wire follows — these functions ARE the new surface's contract ─────────────
+
+test('resolveMoveAction: blank parses steer (the old setpoint default), unknown throws naming the set', () => {
+  const { resolveMoveAction } = require('../../lib/move');
+  for (const blank of [undefined, null, '', ' ']) {
+    assert.equal(resolveMoveAction(blank), 'steer', `${JSON.stringify(blank)} parses steer`);
   }
-  // Any leg of the triple missing stays silent.
-  assert.equal(advisoryFor({ mode: 'position', frame: 'GLOBAL_RELATIVE_ALT', firmware: 'px4' }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 'GLOBAL_RELATIVE_ALT', firmware: 'px4', px4Compat: true }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 'GLOBAL_RELATIVE_ALT', firmware: 'ardupilot', px4Compat: false }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 'GLOBAL_RELATIVE_ALT', px4Compat: false }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 'LOCAL_NED', firmware: 'px4', px4Compat: false }), null);
+  assert.equal(resolveMoveAction('goto'), 'goto');
+  assert.equal(resolveMoveAction('steer'), 'steer');
+  assert.throws(() => resolveMoveAction('teleport'), /unknown Move action "teleport" — expected goto or steer/);
+});
+
+test('frameForAltRef: home → 3, msl → 0, blank → home; terrain is unreachable from the surface (§14)', () => {
+  const { frameForAltRef } = require('../../lib/move');
+  assert.equal(frameForAltRef('home'), 3);
+  assert.equal(frameForAltRef('msl'), 0);
+  for (const blank of [undefined, null, '']) {
+    assert.equal(frameForAltRef(blank), 3, `blank ${JSON.stringify(blank)} defaults to home, the GCS default`);
+  }
+  // Terrain is deliberately absent — unmeasured on both stacks, dropped from
+  // the surface until it isn't. It refuses loud, never a silent global guess.
+  assert.throws(() => frameForAltRef('terrain'), /unknown Move altitude reference "terrain"/);
+  assert.throws(() => frameForAltRef('agl'), /expected home \(above home\) or msl \(absolute\)/);
+});
+
+test('frameForReference: world is LOCAL_NED and never needs firmware; body derives per stack and fails closed (§14)', () => {
+  const { frameForReference } = require('../../lib/move');
+  // World works everywhere — firmware is not consulted at all.
+  assert.equal(frameForReference('world', undefined), 1);
+  assert.equal(frameForReference('world', 'ardupilot'), 1);
+  for (const blank of [undefined, null, '']) {
+    assert.equal(frameForReference(blank, undefined), 1, `blank ${JSON.stringify(blank)} defaults to world`);
+  }
+  // Measured (§14 2026-08-05): the stacks read *different* body frames.
+  assert.equal(frameForReference('body', 'ardupilot'), 9, 'ArduPilot reads BODY_OFFSET_NED');
+  assert.equal(frameForReference('body', 'px4'), 8, 'PX4 reads BODY_NED');
+  // Unknown stack fails closed — the wrong frame number is silently dropped
+  // by the vehicle, exactly the wrong the derivation exists to prevent.
+  assert.throws(() => frameForReference('body', undefined), /Vehicle Profile with firmware ardupilot or px4/);
+  assert.throws(() => frameForReference('body', 'custom'), /Vehicle Profile with firmware ardupilot or px4/);
+  assert.throws(() => frameForReference('sideways', undefined), /unknown Move reference "sideways"/);
+});
+
+test('deriveSteerMode: filling fields IS the mode — the CSV rule, with loud refusals at the edges', () => {
+  const { deriveSteerMode } = require('../../lib/move');
+  const blank = { north: '', east: '', up: '' };
+  const filled = { north: 1, east: 0, up: 0 };
+  const g = (over = {}) => ({ position: blank, velocity: blank, accel: blank, yaw: '', yawRate: '', ...over });
+
+  assert.equal(deriveSteerMode(g({ position: filled })), 'position');
+  assert.equal(deriveSteerMode(g({ velocity: filled })), 'velocity');
+  assert.equal(deriveSteerMode(g({ position: filled, velocity: filled })), 'position-velocity');
+  assert.equal(deriveSteerMode(g({ accel: filled })), 'acceleration');
+  // Explicit 0 is a value, so a zero vector still names its group.
+  assert.equal(deriveSteerMode(g({ velocity: { north: 0, east: '', up: '' } })), 'velocity');
+  // Yaw/yaw-rate alone are the measured-hazard yaw-only mode, still offered.
+  assert.equal(deriveSteerMode(g({ yaw: 90 })), 'yaw-only');
+  assert.equal(deriveSteerMode(g({ yawRate: 10 })), 'yaw-only');
+  // Yaw rides any mode by presence — it does not change the derived group.
+  assert.equal(deriveSteerMode(g({ velocity: filled, yaw: 90 })), 'velocity');
+
+  // Acceleration composes with nothing in the wire vocabulary: mixing refuses
+  // loud rather than silently dropping a group.
+  assert.throws(() => deriveSteerMode(g({ accel: filled, position: filled })), /cannot mix acceleration/);
+  assert.throws(() => deriveSteerMode(g({ accel: filled, velocity: filled })), /cannot mix acceleration/);
+  // Nothing filled is nothing to command — never an all-ignore packet (§14 / #115).
+  assert.throws(() => deriveSteerMode(g()), /nothing to command/);
+
+  // Only the LOCAL triplet names the position group (Codex, #277): a node
+  // switched from Go to keeps its hidden lat/lon/alt serialized, and
+  // positionFrom carries both families. Stale globals must not turn a
+  // velocity-only steer into position-velocity — nor rescue an empty one.
+  const staleGlobals = { north: '', east: '', up: '', lat: 47.1, lon: 8.5, alt: 25 };
+  assert.equal(deriveSteerMode(g({ position: staleGlobals, velocity: filled })), 'velocity');
+  assert.equal(deriveSteerMode(g({ position: staleGlobals, accel: filled })), 'acceleration');
+  assert.throws(() => deriveSteerMode(g({ position: staleGlobals })), /nothing to command/);
 });
 
 test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw', () => {
@@ -432,6 +486,11 @@ test('advisoryFor fires only on measured-unsupported combos (§14)', () => {
   }
   // New from measurement: PX4 does not read BODY_NED as a body offset.
   assert.match(advisoryFor({ mode: 'position', frame: 'BODY_NED', firmware: 'px4' }), /BODY_NED/);
+  assert.match(advisoryFor({ mode: 'position-velocity', frame: 'BODY_NED', firmware: 'px4' }), /BODY_NED/);
+  // …but only when position is actually commanded (Codex, #277): BODY_NED
+  // velocity is PX4's intended body path — the very frame the steer body
+  // reference derives — and warning on it would be advisory noise.
+  assert.equal(advisoryFor({ mode: 'velocity', frame: 'BODY_NED', firmware: 'px4' }), null);
   // Confirmed 2026-08-08: ArduPilot GUIDED held heading under an absolute-yaw
   // yaw-only stream (type_mask 2559, 0.2° in 5 s).
   assert.match(advisoryFor({ mode: 'yaw-only', frame: 'LOCAL_NED', firmware: 'ardupilot' }), /yaw-only/);

@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildRepositionMessage, resolveMoveCarrier } = require('../../lib/move');
+const { buildRepositionMessage } = require('../../lib/move');
 
 const target = { sysid: 5, compid: 1 };
 const goodPosition = { lat: 47.1234567, lon: 8.5, alt: 25 };
@@ -147,13 +147,4 @@ test('reposition CHANGE_MODE is a strict boolean opt-in', () => {
       `changeMode ${JSON.stringify(bad)} must refuse`
     );
   }
-});
-
-test('resolveMoveCarrier: blank inherits setpoint, unknown names the valid set', () => {
-  for (const blank of [undefined, null, '', ' ']) {
-    assert.equal(resolveMoveCarrier(blank), 'setpoint', `${JSON.stringify(blank)} resolves setpoint`);
-  }
-  assert.equal(resolveMoveCarrier('setpoint'), 'setpoint');
-  assert.equal(resolveMoveCarrier('reposition'), 'reposition');
-  assert.throws(() => resolveMoveCarrier('teleport'), /unknown Move carrier "teleport" — expected one of setpoint, reposition/);
 });

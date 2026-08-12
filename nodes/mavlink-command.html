@@ -836,7 +836,11 @@
   </div>
 
   <div class="form-row" id="row-cmd-carrier">
-    <label for="node-input-carrier" style="width:120px">Carrier</label>
+    <!-- Label says what the options are: the literal wire messages. "Carrier"
+         was a metaphor the ecosystem doesn't share (-ai says "Send as"), and
+         the word collided with Move's former protocol selector. Config key
+         stays `carrier` until the examples sweep renames it in one shot. -->
+    <label for="node-input-carrier" style="width:120px">Send as</label>
     <select id="node-input-carrier" style="width:280px">
       <option value="int">COMMAND_INT (positional; degE7 on the wire)</option>
       <option value="long">COMMAND_LONG (float params)</option>
@@ -911,9 +915,9 @@
         precedence over the configured Frame.</dd>
   </dl>
 
-  <h3>Carrier</h3>
+  <h3>Send as</h3>
   <p>
-    <b>Carrier</b> defaults to COMMAND_INT; choose COMMAND_LONG only when needed.
+    <b>Send as</b> defaults to COMMAND_INT; choose COMMAND_LONG only when needed.
     Positional parameters (latitude / longitude) are always entered in
     <b>decimal degrees</b>; the choice only changes how they travel:
   </p>

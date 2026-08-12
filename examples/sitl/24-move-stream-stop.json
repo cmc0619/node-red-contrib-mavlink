@@ -198,12 +198,13 @@
     "name": "Velocity stream",
     "connection": "sitl20-connection",
     "delivery": "stream",
-    "mode": "velocity",
+    "action": "steer",
+    "reference": "world",
     "targetSystem": 1,
     "targetComponent": 1,
-    "north": 0,
-    "east": 0,
-    "up": 0,
+    "north": "",
+    "east": "",
+    "up": "",
     "vNorth": 0,
     "vEast": 0,
     "vUp": 0,
@@ -223,8 +224,7 @@
       [
         "sitl20-move-status"
       ]
-    ],
-    "frame": "LOCAL_NED"
+    ]
   },
   {
     "id": "sitl20-arm-status",
