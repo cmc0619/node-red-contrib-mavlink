@@ -201,6 +201,12 @@ test('mavlink-move Body on Build requires the Vehicle Profile dialect (Codex #27
   // wire tier gets firmware from the Connection and never reds.
   const defaults = loadNodeDefaults('mavlink-move');
   const validate = defaults.reference.validate;
+  // Arity first: DESIGN §14 measured that Node-RED coerces a one-arg
+  // validator's return with `!!`, so a reason string is truthy and the field
+  // passes. This gate shipped that way — correct in isolation, dead in the
+  // editor — and the assertions below cannot see it, because calling the
+  // validator directly returns the string either way.
+  assert.equal(validate.length, 2, 'a reason-returning validator must declare (v, opt) or it always passes');
   assert.match(
     String(validate.call({ action: 'steer', delivery: 'build', dialect: 'common' }, 'body', {})),
     /Body on Build needs a firmware/
