@@ -349,10 +349,15 @@ const PROFILE = {
     prep: 'px4-home-ready',
     notes:
       'Inverse of 30. Source hypothesis (PX4 Navigator::run): the setpoint applies only if the ' +
-      'CHANGE_MODE bit is set OR nav_state is already AUTO_LOITER, and only while armed — so with ' +
-      'the flag clear and the vehicle in POSCTL neither branch holds. PX4 settles into AUTO_LOITER ' +
-      'by itself after takeoff, which is why the probe must leave Hold first. The mavlink receiver ' +
-      'may ack before Navigator ever sees it, so an ACCEPTED ack with no motion is itself a finding.',
+      'CHANGE_MODE bit is set OR nav_state is already AUTO_LOITER, and only while armed. PX4 ' +
+      'settles into AUTO_LOITER by itself once a takeoff completes — the very state that satisfies ' +
+      'the no-flag path — so the cell is only reachable before the climb finishes. Attempt 1 tried ' +
+      'to leave Hold via POSCTL and PX4 answered TEMPORARILY_REJECTED (resultCode 1, 3 retries, ' +
+      '3.0 s): it refuses a stick-driven mode airborne with no RC, so the reposition never ran and ' +
+      'the run correctly scored not-measured. This cut needs no mode change — mid-climb the ' +
+      'nav_state is AUTO_TAKEOFF, already not AUTO_LOITER. MIS_TAKEOFF_ALT is raised to 40 m to ' +
+      'widen that window from ~2 s to ~25 s; an explicit NAV_TAKEOFF altitude would not do, since ' +
+      "PX4 reads param7 as AMSL and the lab's Zurich home is near 488 m.",
   },
 };
 
