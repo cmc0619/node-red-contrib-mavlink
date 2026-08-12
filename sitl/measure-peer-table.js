@@ -16,8 +16,7 @@ const ROOT = path.resolve(__dirname, '..');
 const { Connection, BAND } = require(path.join(ROOT, 'lib/connection'));
 const { loadBundled } = require(path.join(ROOT, 'lib/metadata'));
 const { buildCommandLong } = require(path.join(ROOT, 'lib/command/carrier'));
-const { buildMoveMessage, createMoveStream } = require(path.join(ROOT, 'lib/move'));
-const { MAV_FRAME } = require(path.join(ROOT, 'lib/move/frames'));
+const { buildMoveMessage, createMoveStream, MAV_FRAME } = require(path.join(ROOT, 'lib/move'));
 
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-peer-table-'));
 const OUT = path.join(WORK, 'peer-table-results.json');

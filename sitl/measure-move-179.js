@@ -26,8 +26,8 @@ const {
   buildMoveMessage,
   createMoveStream,
   buildStopMessage,
+  MAV_FRAME,
 } = require(path.join(ROOT, 'lib/move'));
-const { MAV_FRAME } = require(path.join(ROOT, 'lib/move/frames'));
 
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-move-179-'));
 const OUT = path.join(WORK, 'move-179-results.json');
