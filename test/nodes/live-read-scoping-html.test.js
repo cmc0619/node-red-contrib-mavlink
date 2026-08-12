@@ -175,8 +175,8 @@ test('identity ids: stale saved role with blank ids stays invalid — data, not 
 // validators (Codex, #273): under the new signature their selector string
 // landed in `owner`, `owner.id` was undefined, and liveOr returned '' in
 // every state — so `'' !== 'stream'` skipped the rateHz/ttlMs checks
-// entirely, own dialog and deploy alike. streamValue in the runtime guards
-// payload overrides only and trusts config by doctrine, so a rateHz of 0
+// entirely, own dialog and deploy alike. These validators are the only check
+// on stream timing — the runtime takes rateHz as given — so a rateHz of 0
 // would have deployed and turned the stream timer into a ~1 ms flood.
 
 test('liveOr refuses a selector in the owner slot — misuse fails loud, not silent', () => {

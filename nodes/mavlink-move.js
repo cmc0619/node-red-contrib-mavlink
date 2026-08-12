@@ -305,8 +305,10 @@ module.exports = function registerMavlinkMove(RED) {
             // never stop it as a side effect of a failed replacement.
             // Payload overrides config (§6 runtime override of last resort);
             // the editor default guarantees config when the payload is silent.
-            const rateHz = streamValue(payload.rateHz, config.rateHz, 'rateHz', 0.1, 'Hz');
-            const ttlMs = streamValue(payload.ttlMs, config.ttlMs, 'ttlMs', 0, 'milliseconds');
+            // Blank inherits the editor-validated config; anything else is
+            // taken as given and coerced (AGENTS.md, input trust).
+            const rateHz = Number(isBlank(payload.rateHz) ? config.rateHz : payload.rateHz);
+            const ttlMs = Number(isBlank(payload.ttlMs) ? config.ttlMs : payload.ttlMs);
             // One stream per (connection, target) (#176): a second node
             // streaming to the same vehicle would alternate contradictory
             // setpoints — the vehicle oscillates while both nodes report
@@ -514,38 +516,3 @@ function firmwareFor(vehicleNode, connectionNode) {
   return connectionNode?.vehicle?.firmware ?? vehicleNode?.firmware;
 }
 
-/**
- * Stream timing: config is editor-validated and trusted; a payload override is
- * runtime-boundary data and must refuse rather than misbehave silently — a NaN
- * ttl never satisfies the stream's `ttl > 0` expiry check (the stream runs
- * forever), and setInterval coerces a NaN or out-of-range interval to ~1 ms.
- * Minimum 0 keeps ttl 0 = "stream until replaced or closed". The rate minimum
- * is 0.1 Hz: a rate must be positive to be a rate at all, and a near-zero rate
- * is the same hazard in disguise — its 1000/rate interval overflows
- * setInterval's 32-bit ceiling, which Node clamps to 1 ms, turning "almost
- * never" into a 1000 Hz flood. One setpoint per 10 s is already far below any
- * firmware's setpoint watchdog, so nothing real is excluded.
- *
- * @param {*} payloadValue  value from msg.payload, blank = inherit config
- * @param {*} configValue   value from the editor-validated config
- * @param {string} name     payload property name, for the error
- * @param {number} minimum  smallest valid value
- * @param {string} unit     unit name, for the error
- * @returns {number}
- */
-function streamValue(payloadValue, configValue, name, minimum, unit) {
-  if (isBlank(payloadValue)) {
-    return Number(configValue);
-  }
-  // Only numbers and numeric strings: bare Number() coercion turns `true`
-  // into a 1 ms flood and `false`/`[]` into 0.
-  const n = typeof payloadValue === 'number' || typeof payloadValue === 'string'
-    ? Number(payloadValue)
-    : NaN;
-  if (!Number.isFinite(n) || n < minimum) {
-    throw new Error(
-      `payload.${name} must be a finite number of ${unit} >= ${minimum}, got ${JSON.stringify(payloadValue)}`
-    );
-  }
-  return n;
-}

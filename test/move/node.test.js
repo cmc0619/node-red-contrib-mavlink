@@ -393,7 +393,7 @@ test('mavlink-move stream: payload rateHz overrides config (§6 payload override
   assert.ok(sends.length >= 3, `payload interval override must re-send (got ${sends.length} sends)`);
 });
 
-test('mavlink-move stream: malformed payload timing overrides refuse the input', () => {
+test('mavlink-move stream: payload timing overrides are taken as given, not vetted', () => {
   const conn = {
     vehicle: {},
     send() {},
@@ -414,31 +414,30 @@ test('mavlink-move stream: malformed payload timing overrides refuse the input',
     ttlMs: 1000,
   });
 
-  // A NaN ttl would never satisfy the stream's `ttl > 0` expiry check (the
-  // stream runs forever); a zero or near-zero rate makes the derived
-  // 1000/rate interval degenerate into a setInterval clamp flood. Both must
-  // fail the input instead.
-  const bad = [
-    { payload: { ttlMs: 'forever' }, why: 'non-numeric ttl', rule: /milliseconds/ },
-    { payload: { rateHz: 'fast' }, why: 'non-numeric rate', rule: /Hz/ },
-    { payload: { rateHz: -5 }, why: 'negative rate', rule: /Hz/ },
-    { payload: { rateHz: 0 }, why: 'zero rate', rule: /Hz/ },
-    { payload: { rateHz: 0.05 }, why: 'below-minimum rate', rule: /Hz/ },
-    { payload: { ttlMs: -1 }, why: 'negative ttl', rule: /milliseconds/ },
-    // Bare Number() coercion would make these numeric: true → a 1 Hz stream
-    // nobody asked for, false/[] → 0. Only numbers and numeric strings are
-    // values.
-    { payload: { rateHz: true }, why: 'boolean rate', rule: /Hz/ },
-    { payload: { ttlMs: false }, why: 'boolean ttl', rule: /milliseconds/ },
-    { payload: { rateHz: [5] }, why: 'array rate', rule: /Hz/ },
-  ];
-  for (const { payload, why, rule } of bad) {
+  // msg is trusted (AGENTS.md, input trust): a timing override is coerced and
+  // used, never vetted. Every one of these used to fail the input.
+  //
+  // The one that is genuinely lossy is a rate that coerces to NaN, 0 or
+  // negative: `1000 / rate` is then NaN, Infinity or negative, and setInterval
+  // substitutes 1 ms rather than refusing — so "never" becomes ~1000 Hz.
+  // Measured 2026-08-12, and ruled an acceptable cost: a rate like that
+  // reaching the node is a bug in the flow to hunt at its source, and the
+  // editor is what stops an operator typing one. Note that the 0.1 Hz floor
+  // this used to enforce was justified by a claim measurement does not support
+  // — 0.1 Hz is a 10 s delay, nowhere near setInterval's 32-bit ceiling, which
+  // needs roughly 4.7e-7 Hz.
+  //
+  // Sync on purpose: no timer tick can land between these emits and the close.
+  for (const payload of [
+    { ttlMs: 'forever' }, { rateHz: 'fast' }, { rateHz: -5 }, { rateHz: 0 },
+    { rateHz: 0.05 }, { ttlMs: -1 }, { rateHz: true }, { ttlMs: false },
+    { rateHz: [5] },
+  ]) {
     let sent;
     let doneError;
     node.emit('input', { payload }, (m) => { sent = m; }, (err) => { doneError = err; });
-    assert.equal(sent[0], null, `${why} must not start a stream`);
-    assert.equal(sent[1].result, 'failed', `${why} fails the input`);
-    assert.match(doneError.message, rule, `${why} names the timing rule`);
+    assert.equal(doneError, undefined, `${JSON.stringify(payload)} must not raise`);
+    assert.equal(sent[1].result, 'streaming', `${JSON.stringify(payload)} streams`);
   }
 
   // Blank still inherits config, and an explicit payload ttl of 0 is a value
@@ -571,53 +570,6 @@ test('mavlink-move stream: a replaced or closed stream expires silently', async 
   await new Promise((resolve) => setTimeout(resolve, 20));
 
   assert.equal(emitted.length, 0, 'replacement and close emit nothing');
-});
-
-test('mavlink-move stream: rejected timing override leaves the active stream running', async () => {
-  const sends = [];
-  const conn = {
-    vehicle: {},
-    send(message) { sends.push(message); },
-  };
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-move')(RED);
-  const Node = RED.nodes.types['mavlink-move'];
-  const node = new Node({
-    delivery: 'stream',
-    action: 'steer',
-    vNorth: 1,
-    vEast: 0,
-    vUp: 0,
-    connection: 'conn',
-    targetSystem: 1,
-    targetComponent: 1,
-    rateHz: 200,
-    ttlMs: 0,
-  });
-
-  node.emit('input', { payload: {} }, () => {}, () => {});
-  let deadline = Date.now() + 2000;
-  while (sends.length < 2 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  assert.ok(sends.length >= 2, 'stream must be running before the bad input');
-
-  // The rejected replacement must not stop the running stream: validation
-  // happens before stream.stop(), same as a buildMoveMessage refusal.
-  let doneError;
-  node.emit('input', { payload: { ttlMs: 'forever' } }, () => {}, (err) => { doneError = err; });
-  assert.match(doneError.message, /milliseconds/);
-
-  const before = sends.length;
-  deadline = Date.now() + 2000;
-  while (sends.length < before + 2 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  node.emit('close', () => {});
-  assert.ok(
-    sends.length >= before + 2,
-    `stream must keep sending after a rejected override (got ${sends.length - before} further sends)`
-  );
 });
 
 test('mavlink-move stream: one owner per (connection, target) — a second node is refused, the owner may replace itself (#176)', () => {

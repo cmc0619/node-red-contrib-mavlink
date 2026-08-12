@@ -120,8 +120,15 @@
       },
       yaw: { value: '', validate: RED.validators.number(true) },
       yawRate: { value: '', validate: RED.validators.number(true) },
-      // 0.1 Hz floor: the runtime divides 1000/rateHz to arm the timer, so a
-      // zero or near-zero rate degenerates into a setInterval clamp flood.
+      // The runtime divides 1000/rateHz to arm the timer, and setInterval
+      // substitutes 1 ms for a delay it cannot represent instead of refusing —
+      // so a rate of 0, a negative, or anything that coerces to NaN inverts
+      // into a ~1000 Hz flood (measured, §14). This is the only check on that:
+      // the runtime takes msg.payload.rateHz as given. The floor is 0.1 Hz
+      // rather than "any positive number" because one setpoint per 10 s is
+      // already far below every firmware's setpoint watchdog, so nothing real
+      // is excluded — a UI choice, not a wire limit; the wire does not care
+      // until roughly 4.7e-7 Hz, where 1000/rate finally overflows int32.
       // Both fields exist only on Stream delivery — a cleared value must not
       // red a Build or Send node that never reads it (same liveOr gating as
       // mission's items). Two args so the reasons render (§14).
