@@ -371,9 +371,12 @@ For a typed input:
 
 - The configured value property and its companion type property MUST be declared correctly.
 - The editor MUST validate static configured values.
-- Runtime code MUST validate a value resolved from `msg`, flow context, global context,
-  environment variables, or another dynamic source when that value is required for the
-  operation.
+- Runtime code MUST handle a typed input that does not *resolve at all* — the configured
+  property is absent from `msg`, context, or the environment — when the operation requires it.
+  That is a missing lookup, not a distrusted value: report it and stop, rather than continuing
+  with `undefined`.
+- Runtime code MUST NOT then validate the resolved value's type, range, or shape. Once the
+  lookup succeeds the value is trusted like any other `msg` content (see "`msg` is trusted").
 - Runtime code MUST NOT revalidate a literal value already validated by the editor.
 
 Example distinction:
@@ -401,25 +404,41 @@ if (config.targetType === "num") {
 Validate the dynamic result, not the already-validated editor field that describes where to
 obtain it.
 
-### Message input is a runtime boundary
+### `msg` is trusted (owner ruling, 2026-08-12)
 
-Properties received through `msg` are dynamic runtime input and may require validation.
+**`msg` is trusted input. The untrusted surface is what the operator types, and it is
+validated in the editor.** A `msg` arrives from the upstream nodes of a flow the same user
+wired together — it is their own program's intermediate state, not hostile input crossing a
+security boundary. Guarding it is the same guardrail as guarding `config`, one hop further
+along, and the net-code budget applies just as hard.
 
-Runtime validation is appropriate for:
+So a value that reaches the runtime by way of `msg` gets used, not vetted:
 
-- required message properties;
-- dynamically selected property paths;
-- payload types;
-- numeric ranges;
-- MAVLink command arguments;
-- buffers and binary data;
-- externally supplied identifiers; and
-- values resolved from context or environment variables.
+```js
+// Forbidden — msg is trusted, and a bad value here is the flow author's bug to see
+if (!Number.isFinite(Number(msg.payload.yaw))) {
+    throw new Error('yaw must be a number');
+}
+```
 
-Validate only the message properties the operation actually requires.
+Let it through and let the core runtime fail loudly if it is wrong. That is the same rule the
+YAGNI section states for configuration, and it is the reason a `msg`-shaped guard cannot be
+justified by "the value could be anything" — so could every value in every program.
 
-Do not create a generic message-normalization framework merely because arbitrary malformed
-messages are theoretically possible.
+Two things this does **not** license, because neither is validation of trusted input:
+
+- **Decoding external bytes.** Wire frames, serial data, file contents, API responses and
+  device data arrive from outside the flow and are parsed, not trusted — the codec's job, and
+  it fails loudly on malformed input by design.
+- **Operational failure.** A connection that drops, a timeout, an ack that never comes, a
+  vehicle that answers `DENIED` — these are real conditions to handle where they occur, and
+  none of them is an input check.
+
+*Superseded:* this section previously read "Message input is a runtime boundary" and listed
+`msg` properties, payload types, numeric ranges and MAVLink command arguments as appropriate
+targets for runtime validation. That is the belief this ruling displaces. It cost a guard in
+`lib/move/index.js` refusing a non-numeric `msg.payload.yaw` (#283, reverted) — written in
+good faith against the old wording, which is why the wording is gone rather than annotated.
 
 ### Configuration-node references
 
@@ -485,8 +504,7 @@ require special handling.
 
 Runtime code SHOULD validate data or operations the editor cannot guarantee, including:
 
-- `msg` properties;
-- dynamic typed-input results;
+- a typed input that does not resolve at all (the lookup, not the value — see above);
 - network responses;
 - file contents;
 - serial data;
