@@ -292,6 +292,7 @@ test('mavlink-payload CompID reloads when catalog source changes', () => {
 
 test('payload sendAs defaults to the first valid option with no blank prompt', () => {
   assert.match(payloadHtml, /id="node-input-sendAs"/, 'send-as select must bind to the sendAs property');
+  assert.doesNotMatch(payloadHtml, /id="node-input-carrier"/, 'retired carrier control must not be rendered');
   assert.match(
     payloadHtml,
     /sendAs:\s*\{ value: 'int' \}/,

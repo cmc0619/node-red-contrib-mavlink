@@ -65,6 +65,34 @@ test('the retired carrier config key is not read: a flow saving only carrier fai
   assert.match(doneErr.message, /requires carrier 'int' or 'long'/);
 });
 
+test('the retired payload.carrier override is not read: the config choice wins', () => {
+  // Same rename at the message level: the per-message override moved to
+  // `payload.sendAs`. A payload still carrying the old `carrier` key must
+  // not flip the wire message — the configured choice stands.
+  const RED = redStub({});
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    sendAs: 'long',
+    delivery: 'build',
+    dialect: 'common',
+    topic: 'servo',
+    verb: 'set',
+    targetSystem: 7,
+    targetComponent: 1,
+  });
+  let sent;
+
+  node.emit(
+    'input',
+    { payload: { carrier: 'int', values: { servo: 8, pwm: 1600 } } },
+    (messages) => { sent = messages; },
+    () => {}
+  );
+
+  assert.equal(sent[0].payload.name, 'COMMAND_LONG', 'old override key must not select COMMAND_INT');
+});
+
 test('mavlink-payload reuses its deploy-resolved Connection during input delivery', () => {
   const conn = connStub();
   conn.vehicle = { targetSystem: 7, targetComponent: 1 };

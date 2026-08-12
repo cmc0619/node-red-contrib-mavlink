@@ -130,7 +130,7 @@ module.exports = function registerMavlinkCommand(RED) {
       // Fails loudly through Catch instead of vanishing into a node that
       // never listened (house rule, nodes/mavlink-build.js:105).
       node.on('input', (_msg, _send, done) => {
-        done(new Error('mavlink-command: invalid config — set a command and carrier'));
+        done(new Error('mavlink-command: invalid config — set a command and wire message (Send as)'));
       });
       node.on('close', (done) => done());
       return;

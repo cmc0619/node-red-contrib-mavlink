@@ -424,6 +424,7 @@ test('command help documents status fields at message root, not under payload', 
 
 test('sendAs defaults to the first valid option with no blank prompt', () => {
   assert.match(html, /id="node-input-sendAs"/, 'send-as select must bind to the sendAs property');
+  assert.doesNotMatch(html, /id="node-input-carrier"/, 'retired carrier control must not be rendered');
   assert.match(
     html,
     /sendAs:\s*\{ value: 'int' \}/,
