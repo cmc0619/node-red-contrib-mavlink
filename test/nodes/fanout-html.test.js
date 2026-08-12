@@ -93,7 +93,7 @@ test('identity defaults to empty string and refreshIdentitySelect uses gcs+custo
   assert.match(
     html,
     /<select id="node-input-identity"/,
-    'Send-as identity field is a plain <select>'
+    'Identity field is a plain <select>'
   );
   assert.doesNotMatch(html, /function refreshIdentitySelect/, 'no local identity-refresh copy');
 });
