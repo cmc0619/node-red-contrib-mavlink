@@ -4,7 +4,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
-## [0.3.0] - 2026-08-12
+## [0.3.0] "Move it" - 2026-08-12
+
+The release Move stopped speaking MAVLink's vocabulary and started taking
+intents — and the one where Command handed motion over to it.
 
 ### Changed
 
