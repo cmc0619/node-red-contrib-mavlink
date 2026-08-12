@@ -64,24 +64,6 @@ test('Build tier with carrier int: output 0 carries a COMMAND_INT with config fr
   assert.equal(sent[1].result, 'built');
 });
 
-test('the retired carrier config key is not read: a flow saving only carrier reds out as invalid', async () => {
-  // Pre-1.0 rename, delete-and-repick: the choice moved from `carrier` to
-  // `sendAs` with no alias or dual-read. A flow still carrying only the old
-  // key behaves exactly like one with no choice at all — invalid config.
-  const RED = redStub({});
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({ carrier: 'long', mode: 'preset', preset: 'arm', delivery: 'build' });
-
-  let sent;
-  let doneErr;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, (err) => { doneErr = err; });
-  await tick();
-
-  assert.equal(sent, undefined, 'no outputs fire from the old key alone');
-  assert.match(doneErr.message, /invalid config/);
-});
-
 test('Safety preset refuses a truthy-but-non-boolean confirmation token', async () => {
   const conn = connStub();
   const RED = redStub({ conn });

@@ -48,7 +48,6 @@ const {
   buildCommandInt,
   CARRIER,
   carrierWantedBy,
-  resolveSendAs,
   intCoordKinds,
   resolveFrame,
   DEFAULT_TIMEOUT_MS,
@@ -93,6 +92,21 @@ function resolveCommandId(config) {
   return preset ? preset.commandId : null;
 }
 
+/**
+ * Resolve the configured carrier choice, or null when it is missing/invalid
+ * (§9). The editor supplies the default; runtime does not repair malformed or
+ * hand-edited flow data.
+ *
+ * @param {object} config  node config from editor
+ * @returns {'long'|'int'|null}
+ */
+function resolveCarrier(config) {
+  if (config.sendAs === CARRIER.INT) return CARRIER.INT;
+  if (config.sendAs === CARRIER.LONG) return CARRIER.LONG;
+  return null;
+}
+
+
 module.exports = function registerMavlinkCommand(RED) {
   function MavlinkCommandNode(config) {
     RED.nodes.createNode(this, config);
@@ -110,7 +124,7 @@ module.exports = function registerMavlinkCommand(RED) {
     const commandId = resolveCommandId(config);
     // The editor supplies the normal default. Missing or invalid saved config
     // still reds out exactly like a missing command.
-    const configuredCarrier = resolveSendAs(config);
+    const configuredCarrier = resolveCarrier(config);
     if (commandId === null || configuredCarrier === null) {
       applyActionStatus(node, 'invalid', 'invalid config');
       // Fails loudly through Catch instead of vanishing into a node that

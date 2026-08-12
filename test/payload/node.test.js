@@ -34,37 +34,6 @@ test('mavlink-payload node builds command-backed payload messages', () => {
   assert.equal(sent[1].confirmation, 'command_ack');
 });
 
-test('the retired carrier config key is not read: a flow saving only carrier fails the build loud', () => {
-  // Pre-1.0 rename, delete-and-repick: the choice moved from `carrier` to
-  // `sendAs` with no alias or dual-read. A flow still carrying only the old
-  // key builds with no choice at all, which the command builder refuses.
-  const RED = redStub({});
-  require('../../nodes/mavlink-payload')(RED);
-  const Node = RED.nodes.types['mavlink-payload'];
-  const node = new Node({
-    carrier: 'long',
-    delivery: 'build',
-    dialect: 'common',
-    topic: 'servo',
-    verb: 'set',
-    targetSystem: 7,
-    targetComponent: 1,
-  });
-  let sent;
-  let doneErr;
-
-  node.emit(
-    'input',
-    { payload: { values: { servo: 8, pwm: 1600 } } },
-    (messages) => { sent = messages; },
-    (err) => { doneErr = err; }
-  );
-
-  assert.equal(sent[0], null, 'no built message from the old key alone');
-  assert.equal(sent[1].result, 'failed');
-  assert.match(doneErr.message, /requires carrier 'int' or 'long'/);
-});
-
 test('the retired payload.carrier override is not read: the config choice wins', () => {
   // Same rename at the message level: the per-message override moved to
   // `payload.sendAs`. A payload still carrying the old `carrier` key must

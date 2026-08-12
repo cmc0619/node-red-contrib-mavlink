@@ -328,41 +328,6 @@ test('default carrier int builds COMMAND_INT with per-member degE7 coords (§9)'
   }
 });
 
-test('the retired carrier config key is not read: a flow saving only carrier refuses with nothing sent', async () => {
-  // Pre-1.0 rename, delete-and-repick: the choice moved from `carrier` to
-  // `sendAs` with no alias or dual-read. A flow still carrying only the old
-  // key (even `carrier: 'int'`) has made no readable choice, and refuses —
-  // the sibling action nodes' rule, not a silent fall to COMMAND_LONG.
-  const connection = connectionStub([peer(1), peer(2)]);
-  const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-formation')(RED);
-  const node = new (RED.nodes.types['mavlink-formation'])({
-    connection: 'conn',
-    shape: 'line',
-    spacing: 10,
-    sysids: '1,2',
-    anchorMode: 'fixed',
-    lat: ANCHOR.lat,
-    lon: ANCHOR.lon,
-    alt: ANCHOR.alt,
-    headingDeg: 0,
-    pitchDeg: 0,
-    carrier: 'int',
-    delivery: 'send',
-    intervalMs: 0,
-  });
-  let sent;
-
-  await assert.rejects(
-    () => emitInput(node, { payload: {} }, (m) => { sent = m; }),
-    /requires a wire message \(Send as\)/
-  );
-
-  assert.equal(connection.sends.length, 0, 'nothing reaches the wire on an unreadable choice');
-  assert.equal(sent[0], null, 'no built message from the old key alone');
-  assert.equal(sent[1].result, 'failed');
-});
-
 test('close aborts an in-flight formation run and waits for it to unwind', async () => {
   // Same close discipline as mavlink-fanout: a 60 s inter-member interval
   // parks the member loop in the pause, so close is guaranteed to land

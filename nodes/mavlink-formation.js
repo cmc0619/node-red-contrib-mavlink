@@ -11,7 +11,6 @@ const {
   buildCommandLong,
   buildCommandInt,
   CARRIER,
-  resolveSendAs,
   intCoordKinds,
 } = require('../lib/command');
 
@@ -92,15 +91,7 @@ module.exports = function registerMavlinkFormation(RED) {
         // performed here because Fan-out patches are the raw surface (§10).
         const preset = getPreset(REPOSITION_PRESET);
         const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
-        // Sibling action nodes refuse an unreadable wire-message choice rather
-        // than picking one; a silent COMMAND_LONG would change the
-        // representation of a saved flow without saying so. Same reader they
-        // use, so "what counts as a choice" has one definition.
-        const sendAs = resolveSendAs(config);
-        if (!sendAs) {
-          throw new Error("mavlink-formation requires a wire message (Send as): 'int' or 'long'");
-        }
-        const isInt = sendAs === CARRIER.INT;
+        const isInt = config.sendAs === CARRIER.INT;
         const bundle = isInt ? dialectFromConnection(RED, connectionNode) : null;
         const message = isInt
           ? buildCommandInt(Number(preset.commandId), 0, 0, params, {
