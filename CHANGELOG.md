@@ -4,7 +4,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
-## [0.3.0] - 2026-08-12
+## [0.3.0] "Move it" - 2026-08-12
+
+The release Move stopped speaking MAVLink's vocabulary and started taking
+intents — and the one where Command handed motion over to it.
 
 ### Changed
 
@@ -61,6 +64,19 @@ config-node shapes and message contracts may still change without a major bump.
   the Action surface, which derives only numeric frames (goto: 0/3, steer:
   1/8/9). The builders now validate a numeric frame against the derivable set
   and nothing else.
+
+### Fixed
+
+- **`mavlink-move`: the Body-on-Build gate never fired.** Steer's *body*
+  reference derives its frame from the vehicle's firmware, so Body on the
+  Build tier with a concrete dialect has no firmware to derive from — a node
+  that deploys clean and then refuses every message. The editor validator
+  added to red that combination was declared `function (v)`, and Node-RED
+  only treats a returned string as an invalid *reason* when the validator
+  takes two arguments; with one, the reason string is coerced with `!!`,
+  comes out truthy, and the field passes. The gate has been reading as
+  working and stopping nothing since it landed. Declared `(v, _opt)`, and the
+  arity is now pinned by the test that covers it.
 
 ## [0.2.0] - 2026-08-11
 
