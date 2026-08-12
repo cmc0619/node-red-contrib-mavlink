@@ -219,6 +219,35 @@ test('global setpoint frames always transmit the *_INT twin — the wire number 
   assert.equal(local.fields.coordinate_frame, 1);
 });
 
+test('a blank global coordinate encodes 0 — deliberate, ruled, and pinned here (§14)', () => {
+  // NOT a bug and not an oversight. requireGlobalPosition refused this until
+  // 2026-08-12; the input-trust ruling deleted it because both of its inputs —
+  // editor-validated config and trusted msg.payload — are checked elsewhere or
+  // not at all by design. Null island is the accepted cost, recorded in §14.
+  //
+  // This test exists so that restoring the guard fails loudly instead of
+  // passing quietly: the next reader gets a pointer to the ruling rather than
+  // a green suite and a plausible-looking "fix".
+  const blank = buildMoveMessage({
+    mode: 'position',
+    frame: 3,
+    target: { sysid: 2, compid: 1 },
+    position: { lat: '', lon: 8, alt: 10 },
+  });
+  assert.equal(blank.fields.lat_int, 0, 'blank lat encodes 0, it does not throw');
+  assert.equal(blank.fields.alt, 10, 'and the fields around it are untouched');
+
+  // Out of range rides the wire too: 200° scales into a real place well inside
+  // the degE7 int32 ceiling. The editor is where that is caught.
+  const oor = buildMoveMessage({
+    mode: 'position',
+    frame: 3,
+    target: { sysid: 2, compid: 1 },
+    position: { lat: 200, lon: 8, alt: 10 },
+  });
+  assert.equal(oor.fields.lat_int, 2000000000);
+});
+
 test('degE7 encoding is exact at the coordinate extremes', () => {
   // The range refusal that used to live here went with requireGlobalPosition
   // (input-trust ruling, AGENTS.md 2026-08-12): an out-of-range coordinate now
