@@ -127,6 +127,85 @@
     flight_termination: [{ index: 1, label: 'Terminate (1=yes)' }],
   };
 
+  // Which presets cannot be sent with a blank coordinate — a mirror of
+  // `requireLocation` / `requireAltitude` in lib/command/presets.js. It lives
+  // here because a Node-RED validator is synchronous and the preset catalog is
+  // fetched asynchronously: a node whose dialog was never opened still has to
+  // be checked at deploy, so the rule cannot wait on a fetch.
+  //
+  // Two copies of one rule is a real cost. It is paid down by an executed test
+  // (test/nodes/command-html.test.js) that reads the library's PRESETS and
+  // asserts this map matches it exactly, so the pair cannot drift in silence.
+  // `reposition` is listed: false — Move owns the goto — so it is unreachable
+  // from the dropdown; it is kept here only to keep that equality total.
+  const PRESET_LOCATION = {
+    set_home:   { require: { unless: { param: 1, equals: 1 } } },
+    reposition: { require: true, altitude: true },
+    orbit:      { require: true },
+  };
+
+  /** A param value that is actually a value: not blank, and finite. */
+  function presentParam(value) {
+    return !RED.mavlink.isBlank(value) && Number.isFinite(Number(value));
+  }
+
+  /**
+   * Whether this invocation needs lat/lon, reading the same shape the library
+   * declares on the preset row.
+   * Set Home's "use current position" flag makes the vehicle ignore the
+   * coordinates; a blank flag is 0, which is still "no".
+   */
+  function locationRequired(rule, values) {
+    if (rule === true) return true;
+    if (!rule || !rule.unless) return false;
+    return Number(values[rule.unless.param] || 0) !== rule.unless.equals;
+  }
+
+  /**
+   * Param values to validate: the live rendered fields while this node's own
+   * dialog is on top, otherwise the saved blob. `oneditsave` writes
+   * `#node-input-params` only on Done, so mid-edit the hidden field still holds
+   * the pre-edit JSON and validating it would judge the wrong values.
+   *
+   * Returns null when the saved blob is unreadable — the caller reds rather
+   * than falling open.
+   */
+  function paramValues(owner, savedJson) {
+    const values = {};
+    if (RED.mavlink.ownDialogField(owner, '#node-input-params')) {
+      $('.param-input').each(function () {
+        const $input = $(this);
+        const raw = String($input.val() === undefined || $input.val() === null ? '' : $input.val()).trim();
+        if (raw !== '') values[Number($input.attr('data-idx'))] = Number(raw);
+      });
+      return values;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(savedJson || '{}');
+    } catch {
+      return null;
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    for (const key of Object.keys(parsed)) {
+      if (!RED.mavlink.isBlank(parsed[key])) values[Number(key)] = Number(parsed[key]);
+    }
+    return values;
+  }
+
+  /**
+   * True when param5/6 carry metres rather than degrees, so the ±90/±180 gate
+   * must not fire. Only COMMAND_INT carries a frame at all; the LONG carrier
+   * and every unknown frame stay on the degree path, which is the safe
+   * direction — a missing frame must not buy a bypass (§9, #263).
+   */
+  function localFrameSelected(owner) {
+    if (RED.mavlink.liveOr(owner, '#node-input-sendAs', owner.sendAs, 'int') !== 'int') return false;
+    const frame = Number(RED.mavlink.liveOr(owner, '#node-input-frame', owner.frame, ''));
+    return frame === 1 || frame === 7 || frame === 8 || frame === 9 ||
+      frame === 20 || frame === 21;
+  }
+
   // Presets with completion conditions — determines if "await completion" is shown.
   const HAS_COMPLETION = new Set(['arm', 'disarm', 'takeoff', 'land', 'rtl', 'set_mode']);
   // Safety presets that require msg.confirmed.
@@ -182,7 +261,41 @@
       maxRetries:        { value: '3', validate: RED.validators.number(true) },
       unconfirmedContinue: { value: false },
       completionTimeout: { value: '60000', validate: RED.validators.number(true) },
-      params:            { value: '{}' },
+      // The preset params blob. Nothing checked it before, and the runtime
+      // refused blank/out-of-range coordinates on its behalf; that refusal is
+      // gone (AGENTS.md, input trust), so this is now the only thing between a
+      // half-filled Set Home and a vehicle told its home is 0,0 — null island,
+      // Gulf of Guinea, at sea level. Range is checked wherever a degree
+      // coordinate is *present*, independently of whether the preset requires
+      // one: takeoff and land expose lat/lon without requiring them, and 200°
+      // there is still garbage that scales into a real place (§9, #263).
+      // Two args so the reasons render (§14).
+      params: {
+        value: '{}',
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-mode', this.mode, 'preset') !== 'preset') return true;
+          const values = paramValues(this, v);
+          if (values === null) return 'is not valid JSON';
+          if (!localFrameSelected(this)) {
+            if (presentParam(values[5]) && Math.abs(Number(values[5])) > 90) {
+              return 'latitude must be within ±90°';
+            }
+            if (presentParam(values[6]) && Math.abs(Number(values[6])) > 180) {
+              return 'longitude must be within ±180°';
+            }
+          }
+          const preset = RED.mavlink.liveOr(this, '#node-input-preset', this.preset, 'arm');
+          const rule = PRESET_LOCATION[preset];
+          if (!rule || !locationRequired(rule.require, values)) return true;
+          if (!presentParam(values[5]) || !presentParam(values[6])) {
+            return 'needs a latitude and longitude — a blank coordinate is sent as 0,0';
+          }
+          if (rule.altitude && !presentParam(values[7])) {
+            return 'needs an altitude — a blank altitude is sent as ground level';
+          }
+          return true;
+        },
+      },
     },
     RED.mavlink.buildTierDialectDefaults()
   );

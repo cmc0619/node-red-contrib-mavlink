@@ -22,7 +22,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getPreset, buildParamArray, blankLocationRefusal, mergeParams, PRESETS, COMPLETION, presetGroups } = require('../../lib/command');
+const { getPreset, buildParamArray, mergeParams, PRESETS, COMPLETION, presetGroups } = require('../../lib/command');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -226,148 +226,15 @@ test('buildParamArray always returns a 7-element array', () => {
   }
 });
 
-test('location presets refuse blank lat/lon rather than sending 0,0 (#88)', () => {
-  // buildParamArray fills absent params with 0, so a blank latitude became a
-  // legal coordinate in the Gulf of Guinea and the vehicle flew to it. The
-  // guard reads the operator's input, before that zero-fill.
-  const reposition = getPreset('reposition');
-  assert.match(
-    blankLocationRefusal(reposition, { 1: 5, 5: '', 6: 8.5 }),
-    /requires latitude, longitude and altitude/
-  );
-  // Reposition also refuses a blank altitude (requireAltitude): DO_REPOSITION
-  // documents no blank-alt sentinel, and a zero-fill is ground level — the
-  // Move F1 rule on the command path (§10).
-  assert.match(
-    blankLocationRefusal(reposition, { 5: 47.4, 6: 8.5 }),
-    /altitude.*ground level/
-  );
-  assert.equal(blankLocationRefusal(reposition, { 5: 47.4, 6: 8.5, 7: 30 }), null);
-
-  // An explicit 0 is a real coordinate, deliberately typed, and passes.
-  assert.equal(blankLocationRefusal(reposition, { 5: 0, 6: 0, 7: 0 }), null);
-
-  // Orbit carries the same rule.
-  assert.match(
-    blankLocationRefusal(getPreset('orbit'), { 5: 47.4 }),
-    /requires latitude and longitude/
-  );
-});
-
-test('local MAV_FRAME metres skip the ±90/±180 degree gate (§14 / SITL 07)', () => {
-  // DO_SET_HOME LOCAL_NED puts metres in param5/6 (carrier scales ×1e4). The
-  // #263 degree-range guard must not refuse 123.4567 m as "latitude 123".
-  const setHome = getPreset('set_home');
-  assert.equal(
-    blankLocationRefusal(setHome, { 1: 0, 5: 123.4567, 6: 123.4567, 7: 0 }, 1),
-    null,
-    'LOCAL_NED metres are in range for the local frame'
-  );
-  // Without a local frame (COMMAND_LONG / default global) the same numbers
-  // remain out-of-range degrees — the #263 guard still fires.
-  assert.match(
-    blankLocationRefusal(setHome, { 1: 0, 5: 123.4567, 6: 123.4567, 7: 0 }),
-    /latitude must be within ±90°/
-  );
-  assert.match(
-    blankLocationRefusal(setHome, { 1: 0, 5: 123.4567, 6: 123.4567, 7: 0 }, 5),
-    /latitude must be within ±90°/,
-    'GLOBAL_INT still enforces degree bounds'
-  );
-});
-
-test('a present location must also be in range: |lat| ≤ 90, |lon| ≤ 180 (§9, #263)', () => {
-  // The degE7 int32 ceiling is ±214.7°, so lat 91 scales into a
-  // garbage-but-valid coordinate the vehicle would accept — the C4 hazard
-  // class §10 names for a global coordinate, on the preset path.
-  const reposition = getPreset('reposition');
-  assert.match(
-    blankLocationRefusal(reposition, { 5: 91, 6: 8.5, 7: 30 }),
-    /latitude must be within ±90°, got 91/
-  );
-  assert.match(
-    blankLocationRefusal(reposition, { 5: 47.4, 6: 181, 7: 30 }),
-    /longitude must be within ±180°, got 181/
-  );
-  // The poles and the antimeridian are legal places to fly to.
-  assert.equal(blankLocationRefusal(reposition, { 5: -90, 6: 180, 7: 30 }), null);
-
-  // The range clause does not weaken requireAltitude: presence still comes
-  // first, so a blank altitude refuses before any range check runs.
-  assert.match(
-    blankLocationRefusal(reposition, { 5: 47.4, 6: 8.5 }),
-    /altitude.*ground level/
-  );
-
-  // Orbit (no requireAltitude) takes the same range rule.
-  assert.match(
-    blankLocationRefusal(getPreset('orbit'), { 5: 91, 6: 8.5 }),
-    /latitude must be within ±90°, got 91/
-  );
-});
-
-test('range is gated on the coordinate being present, not on the preset requiring one', () => {
-  // Takeoff and Land expose param5/6 without `requireLocation` — blank there
-  // means "here", deliberately (see requireLocationFor). Nesting the range test
-  // inside that presence gate let 200°/200° through on exactly the two presets
-  // the presence rule exempts: degE7 scaled it to x=y=2000000000, a valid int32
-  // the vehicle accepts. §9 (#263) keys the rule on the location being present.
-  for (const id of ['takeoff', 'land']) {
-    const preset = getPreset(id);
-    assert.match(
-      blankLocationRefusal(preset, { 5: 200, 6: 200, 7: 30 }),
-      /latitude must be within ±90°, got 200/,
-      `${id} must refuse an out-of-range latitude`
-    );
-    assert.match(
-      blankLocationRefusal(preset, { 5: 47.4, 6: 200, 7: 30 }),
-      /longitude must be within ±180°, got 200/,
-      `${id} must refuse an out-of-range longitude`
-    );
-
-    // The exemption itself survives: blank still means "here", not null island.
-    assert.equal(blankLocationRefusal(preset, { 7: 30 }), null);
-    assert.equal(blankLocationRefusal(preset, { 5: 47.4, 6: 8.5, 7: 30 }), null);
-  }
-});
-
-test('Set Home only needs coordinates when it is not using the current position (#88)', () => {
-  const setHome = getPreset('set_home');
-
-  // param1 = 1 is "use current position": the vehicle ignores lat/lon entirely,
-  // so demanding them would refuse a perfectly ordinary Set Home.
-  assert.equal(blankLocationRefusal(setHome, { 1: 1 }), null);
-
-  // param1 = 0 means the coordinates are the home position, so they must exist.
-  assert.match(blankLocationRefusal(setHome, { 1: 0 }), /requires latitude and longitude/);
-  // A blank flag is 0 — "no" — and still demands coordinates.
-  assert.match(blankLocationRefusal(setHome, {}), /requires latitude and longitude/);
-  assert.equal(blankLocationRefusal(setHome, { 1: 0, 5: 47.4, 6: 8.5 }), null);
-});
-
-test('presets without a location are untouched by the guard (#88)', () => {
-  // Takeoff and Land are hasLocation *and* isDestination in the dialect, yet
-  // blank coordinates there are the normal "here" case — which is why the rule
-  // lives on the preset rather than being read from those XML flags.
-  for (const id of ['takeoff', 'land', 'arm', 'disarm']) {
-    const preset = getPreset(id);
-    if (!preset) continue;
-    assert.equal(blankLocationRefusal(preset, {}), null, `${id} must not require coordinates`);
-  }
-});
-
 test('a blank msg.payload override stays blank instead of coercing to 0 (Greptile #141)', () => {
-  // mergeParams used to Number() everything, so msg.payload = { 5: '' } arrived
-  // as a legal coordinate 0 and the guard downstream saw a present value. A
-  // flow computing coordinates and yielding '' for a missing one is the exact
-  // upstream-math case this protects.
+  // mergeParams must not Number() a blank: msg.payload = { 5: '' } would
+  // arrive as a legal coordinate 0. A flow computing coordinates and yielding
+  // '' for a missing one is the exact upstream-math case this covers. The
+  // distinction still matters after the coordinate guards went to the editor —
+  // buildParamArray reads "absent" and "0" differently, and blank means absent.
   for (const blank of ['', '   ', '\t']) {
     const merged = mergeParams({}, { 5: blank, 6: 8.5 });
     assert.equal(merged[5], undefined, `${JSON.stringify(blank)} must not become a coordinate`);
-    assert.match(
-      blankLocationRefusal(getPreset('reposition'), merged),
-      /requires latitude, longitude and altitude/
-    );
   }
 
   // A real override still lands, and an explicit 0 still counts as typed.

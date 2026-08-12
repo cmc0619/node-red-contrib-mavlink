@@ -509,3 +509,88 @@ test('mavlink-command: Advanced mode requires a command (§6 status ruling, 2026
   );
   assert.equal(advancedCommand.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
 });
+
+test('mavlink-command: preset coordinates are checked here, and nowhere else', () => {
+  // The runtime's blankLocationRefusal is gone (AGENTS.md, input trust), and
+  // before this validator the params blob had no check at all — so this is the
+  // whole of what stops a Set Home telling the vehicle its home is 0,0, or an
+  // Orbit centred on null island.
+  const { params } = loadNodeDefaults('mavlink-command');
+  const cfg = (over) => Object.assign({ id: 'c1', mode: 'preset' }, over);
+  const verdict = (over, blob) => params.validate.call(cfg(over), JSON.stringify(blob), {});
+
+  assert.equal(params.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+
+  // Presence, on the two presets that require a location.
+  for (const preset of ['set_home', 'orbit']) {
+    assert.match(String(verdict({ preset }, {})), /needs a latitude and longitude/, `${preset} blank`);
+    assert.match(String(verdict({ preset }, { 5: 47.4 })), /needs a latitude and longitude/, `${preset} half`);
+    assert.equal(verdict({ preset }, { 5: 47.4, 6: 8.5 }), true, `${preset} complete`);
+  }
+  // Set Home's param1 = 1 is "use current position" — the vehicle ignores the
+  // coordinates, so blank is correct rather than dangerous.
+  assert.equal(verdict({ preset: 'set_home' }, { 1: 1 }), true);
+  assert.match(String(verdict({ preset: 'set_home' }, { 1: 0 })), /needs a latitude and longitude/,
+    'a blank flag is 0, which is still "no"');
+
+  // Range is keyed on the coordinate being *present*, not on the preset
+  // requiring one: takeoff and land expose lat/lon where blank means "here",
+  // and 200° there is still garbage that scales into a real place (#263).
+  for (const preset of ['takeoff', 'land']) {
+    assert.equal(verdict({ preset }, {}), true, `${preset} blank means "here"`);
+    assert.match(String(verdict({ preset }, { 5: 200, 6: 8 })), /within ±90°/, `${preset} lat`);
+    assert.match(String(verdict({ preset }, { 5: 47, 6: 181 })), /within ±180°/, `${preset} lon`);
+  }
+
+  // Local frames carry metres, so the degree bounds must not fire — but only
+  // COMMAND_INT has a frame at all, and an unknown one stays on the degree
+  // path so a missing frame cannot buy a bypass.
+  const far = { 5: 123.4, 6: 456.7 };
+  assert.equal(verdict({ preset: 'set_home', sendAs: 'int', frame: '1' }, far), true, 'LOCAL_NED metres');
+  assert.match(String(verdict({ preset: 'set_home', sendAs: 'int', frame: '0' }, far)), /within ±90°/,
+    'GLOBAL is degrees');
+  assert.match(String(verdict({ preset: 'set_home', sendAs: 'long', frame: '1' }, far)), /within ±90°/,
+    'the LONG carrier has no frame — degrees apply whatever the stale field says');
+
+  // Gates: Advanced never reads the preset rules, and an unreadable blob reds
+  // rather than falling open.
+  assert.equal(verdict({ mode: 'advanced', preset: 'orbit' }, {}), true);
+  assert.equal(verdict({ preset: 'arm' }, {}), true, 'presets without coordinates are untouched');
+  assert.match(String(params.validate.call(cfg({ preset: 'arm' }), '{oops', {})), /valid JSON/);
+});
+
+test('mavlink-command: the editor\'s location rules match the library\'s, exactly', () => {
+  // PRESET_LOCATION is a second copy of lib/command/presets.js's
+  // requireLocation/requireAltitude, and it exists because a Node-RED
+  // validator is synchronous while the preset catalog is fetched. Two copies
+  // of one rule only stay honest if something compares them, so: executed, in
+  // both directions, so neither a new location preset nor a deleted one can
+  // land on one side alone.
+  const { PRESETS } = require('../../lib/command');
+  const map = /const PRESET_LOCATION = \{[\s\S]*?\n {2}\};/.exec(html);
+  assert.ok(map, 'PRESET_LOCATION must be extractable');
+
+  const fromLibrary = PRESETS
+    .filter((p) => p.requireLocation)
+    .map((p) => p.id)
+    .sort();
+  const fromEditor = [...map[0].matchAll(/^\s{4}(\w+):/gm)].map((m) => m[1]).sort();
+  assert.deepEqual(fromEditor, fromLibrary, 'the same presets require a location on both sides');
+
+  for (const preset of PRESETS.filter((p) => p.requireLocation)) {
+    const entry = new RegExp(`${preset.id}:\\s*\\{([^}]*\\}?[^}]*)\\}`).exec(map[0]);
+    assert.ok(entry, `${preset.id} entry must be extractable`);
+    assert.equal(
+      /altitude:\s*true/.test(entry[1]),
+      Boolean(preset.requireAltitude),
+      `${preset.id}: requireAltitude must agree`
+    );
+    // `true` vs the conditional `{ unless: … }` form must agree too — the
+    // difference is Set Home's "use current position" escape.
+    assert.equal(
+      /require:\s*true/.test(entry[1]),
+      preset.requireLocation === true,
+      `${preset.id}: the conditional-vs-always form must agree`
+    );
+  }
+});
