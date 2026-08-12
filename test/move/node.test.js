@@ -1026,8 +1026,10 @@ test('mavlink-move advisory dedup: one warn per streak, cleared by a clean input
     node.warn = (text) => { warns.push(text); };
     return { node, conn, warns };
   };
-  // A: PX4 body reference derives BODY_NED (8) — position discarded (§14).
-  const bodyOnPx4 = { reference: 'body', velocity: { north: 1, east: 0, up: 0 } };
+  // A: PX4 body reference derives BODY_NED (8) with position commanded —
+  // position discarded (§14). Velocity-only body no longer warns (Codex,
+  // #277: it is PX4's intended body path), so the streak needs a position.
+  const bodyOnPx4 = { reference: 'body', position: { north: 5, east: 0, up: 0 } };
   // B: ArduPilot absolute-yaw yaw-only — held heading in measurement (§14).
   const yawOnAp = { yaw: 90 };
   // Clean: world velocity works everywhere.
