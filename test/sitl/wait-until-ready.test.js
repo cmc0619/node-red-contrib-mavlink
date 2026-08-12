@@ -294,7 +294,13 @@ test('39/40 CHANGE_MODE probes: silence is an answer, a dead send is not', () =>
   const run = (key, record) =>
     verdictFrom(PROFILE[key], { debug: record ? [arm, record] : [arm], errors: [] }, '');
 
-  for (const key of ['39-ap-reposition-changemode', '40-px4-reposition-no-changemode']) {
+  const PROBES = [
+    '39-ap-reposition-changemode',
+    '40-px4-reposition-no-changemode',
+    '41-ap-reposition-no-changemode',
+    '42-px4-reposition-changemode',
+  ];
+  for (const key of PROBES) {
     assert.ok(PROFILE[key], `profile ${key} exists`);
     assert.equal(run(key, reposition('succeeded', 'accepted', 0)).status, 'PASS');
     assert.equal(run(key, reposition('failed', 'denied', 2)).status, 'PASS', 'a denial is the measurement');

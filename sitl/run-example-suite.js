@@ -359,6 +359,34 @@ const PROFILE = {
       'widen that window from ~2 s to ~25 s; an explicit NAV_TAKEOFF altitude would not do, since ' +
       "PX4 reads param7 as AMSL and the lab's Zurich home is near 488 m.",
   },
+  // The other two cells. 39 and 40 each measured one corner, but neither
+  // isolates CHANGE_MODE on its own stack: 39 could be the flag working or AP
+  // not gating on mode at all, and 30 — the only PX4 flag-set run — waited 8 s
+  // after a 2 s takeoff, so PX4 was already in AUTO_LOITER and its ACCEPTED is
+  // explained equally well by the mode. 41/42 are one-field twins of 39/40, so
+  // a difference in outcome can only be the flag.
+  '41-ap-reposition-no-changemode': {
+    restart: 'ap-1',
+    waitMs: 60000,
+    expect: 'AP Move reposition from LOITER, CHANGE_MODE off: silence is a result',
+    prep: 'ap-guided-1',
+    notes:
+      'One-field twin of 39 (flag off). Source hypothesis: not in_guided_mode() and flag clear ' +
+      'returns MAV_RESULT_DENIED, so the prediction is denied (2) — the same answer PX4 gave in 40 ' +
+      'from its own non-eligible mode. An ACCEPT is the more interesting result: it would mean AP ' +
+      "does not gate on mode at all and 39's pass says nothing about the flag.",
+  },
+  '42-px4-reposition-changemode': {
+    restart: 'px4-1',
+    waitMs: 60000,
+    expect: 'PX4 Move reposition mid-AUTO_TAKEOFF, CHANGE_MODE on: silence is a result',
+    prep: 'px4-home-ready',
+    notes:
+      'One-field twin of 40 (flag on), and the run that decontaminates 30. Flips only the flag ' +
+      'against the state 40 measured as DENIED, so an accept isolates CHANGE_MODE as sufficient on ' +
+      'PX4; a denial would mean PX4 needs the eligible mode regardless and 30 passed purely on ' +
+      'AUTO_LOITER. Same MIS_TAKEOFF_ALT precondition as 40 — read the param status first.',
+  },
 };
 
 function req(method, urlPath, body, headers = {}) {

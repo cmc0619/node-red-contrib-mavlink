@@ -1,0 +1,353 @@
+[
+  {
+    "id": "ex41-tab",
+    "type": "tab",
+    "label": "SITL 41 AP reposition no CHANGE_MODE",
+    "disabled": false,
+    "info": "Throwaway probe. The fourth AP cell: not in GUIDED, CHANGE_MODE clear. Identical to 39 in every respect but the flag.",
+    "env": []
+  },
+  {
+    "id": "ex41-comment",
+    "type": "comment",
+    "z": "ex41-tab",
+    "name": "AP reposition from LOITER with CHANGE_MODE clear",
+    "info": "Flow: identical to 39 — Arm -> Takeoff 10 m (GUIDED, which AP needs for NAV_TAKEOFF) -> settle -> Set Mode LOITER (custom_mode 5) -> settle -> Move reposition. The ONLY difference is changeMode FALSE.\n\nWHY: 39 measured AP accepting from LOITER with the flag set, and 27 measured AP accepting from GUIDED with it clear. Neither isolates the flag. 39 could be the flag doing the work, or AP simply not gating on mode at all. This run separates them: because it is a one-field twin of 39, any difference in outcome can only be the flag.\n\nSOURCE HYPOTHESIS (ArduCopter handle_command_int_do_reposition):\n  if (!copter.flightmode->in_guided_mode() && !change_modes) { return MAV_RESULT_DENIED; }\nSo the prediction is DENIED (resultCode 2) — the same answer PX4 gave in 40 from its own non-eligible mode.\n\nAn ACCEPT here would be the more interesting outcome: it would mean AP does not gate on mode, and 39 says nothing about the flag.\n\nWHAT THE RIG SHOULD RECORD:\n1. mode status — did the LOITER change ACK? If not, the precondition never held and the reposition line means nothing\n2. reposition status — result, detail, resultCode\n3. param2 on the wire must read 0, which is the proof the flag really was clear"
+  },
+  {
+    "id": "ex41-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "ex41-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": ""
+  },
+  {
+    "id": "ex41-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "vehicle": "ex41-vehicle",
+    "localIdentity": "ex41-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "ex41-inject",
+    "type": "inject",
+    "z": "ex41-tab",
+    "name": "Arm + takeoff + LOITER + reposition",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 180,
+    "y": 160,
+    "wires": [
+      [
+        "ex41-arm"
+      ]
+    ]
+  },
+  {
+    "id": "ex41-arm",
+    "type": "mavlink-command",
+    "z": "ex41-tab",
+    "name": "Arm (confirm ACK)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex41-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "carrier": "long",
+    "frame": "",
+    "x": 440,
+    "y": 160,
+    "wires": [
+      [
+        "ex41-takeoff"
+      ],
+      [
+        "ex41-arm-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "ex41-takeoff",
+    "type": "mavlink-command",
+    "z": "ex41-tab",
+    "name": "Takeoff 10 m (confirm ACK)",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex41-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"7\":10}",
+    "carrier": "long",
+    "frame": "",
+    "x": 690,
+    "y": 160,
+    "wires": [
+      [
+        "ex41-climb"
+      ],
+      [
+        "ex41-takeoff-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "ex41-climb",
+    "type": "delay",
+    "z": "ex41-tab",
+    "name": "let the climb finish",
+    "pauseType": "delay",
+    "timeout": "8",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 920,
+    "y": 160,
+    "wires": [
+      [
+        "ex41-loiter"
+      ]
+    ]
+  },
+  {
+    "id": "ex41-loiter",
+    "type": "mavlink-command",
+    "z": "ex41-tab",
+    "name": "Set Mode LOITER (custom_mode 5)",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "ex41-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":1,\"2\":5}",
+    "carrier": "long",
+    "frame": "",
+    "x": 1160,
+    "y": 160,
+    "wires": [
+      [
+        "ex41-settle"
+      ],
+      [
+        "ex41-mode-status"
+      ]
+    ],
+    "targetSystem": "1",
+    "targetComponent": ""
+  },
+  {
+    "id": "ex41-settle",
+    "type": "delay",
+    "z": "ex41-tab",
+    "name": "let LOITER take hold",
+    "pauseType": "delay",
+    "timeout": "4",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 1420,
+    "y": 160,
+    "wires": [
+      [
+        "ex41-reposition"
+      ]
+    ]
+  },
+  {
+    "id": "ex41-reposition",
+    "type": "mavlink-move",
+    "z": "ex41-tab",
+    "name": "Move goto (reposition, changeMode OFF)",
+    "identity": "",
+    "connection": "ex41-connection",
+    "delivery": "confirm",
+    "carrier": "reposition",
+    "mode": "position",
+    "frame": "GLOBAL_RELATIVE_ALT",
+    "speed": "",
+    "radius": "",
+    "changeMode": false,
+    "ackTimeout": "",
+    "px4Compat": true,
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "north": 0,
+    "east": 0,
+    "up": 0,
+    "vNorth": 0,
+    "vEast": 0,
+    "vUp": 0,
+    "aNorth": 0,
+    "aEast": 0,
+    "aUp": 0,
+    "lat": -35.3591,
+    "lon": 149.16,
+    "alt": 20,
+    "yaw": "",
+    "yawRate": "",
+    "rateHz": 5,
+    "ttlMs": 3000,
+    "x": 1680,
+    "y": 160,
+    "wires": [
+      [
+        "ex41-success"
+      ],
+      [
+        "ex41-reposition-status"
+      ]
+    ]
+  },
+  {
+    "id": "ex41-arm-status",
+    "type": "debug",
+    "z": "ex41-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 440,
+    "y": 250,
+    "wires": []
+  },
+  {
+    "id": "ex41-takeoff-status",
+    "type": "debug",
+    "z": "ex41-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 690,
+    "y": 250,
+    "wires": []
+  },
+  {
+    "id": "ex41-mode-status",
+    "type": "debug",
+    "z": "ex41-tab",
+    "name": "mode status (LOITER precondition)",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1160,
+    "y": 250,
+    "wires": []
+  },
+  {
+    "id": "ex41-reposition-status",
+    "type": "debug",
+    "z": "ex41-tab",
+    "name": "reposition status (resultCode + retries)",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1680,
+    "y": 250,
+    "wires": []
+  },
+  {
+    "id": "ex41-success",
+    "type": "debug",
+    "z": "ex41-tab",
+    "name": "Move reposition accepted",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1960,
+    "y": 160,
+    "wires": []
+  }
+]
