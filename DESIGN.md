@@ -575,17 +575,36 @@ kinds of node. Do not mix them.
 | transaction open | blue dot, text ending in an ellipsis (`sending ARM…`) |
 | completed | green dot naming what completed (`ARM accepted`) |
 | dry run or preview | yellow dot with a count |
-| failed | red ring |
-| misconfigured at deploy | red ring, `invalid config` |
+| refused from outside | red ring |
 
-The last row is the one exception: an action node shows a *state* before any message has arrived,
-because a node that cannot possibly work should say so without being triggered first.
+**Red means someone outside this node said no** (ruled 2026-08-12). That is the whole meaning,
+and every red path must be able to name the party:
 
-That badge has a second half. Node-RED clears a node's status only when the node is *removed*, and
-the editor holds the last status event it received, so a node fixed and redeployed keeps showing
-the stale red badge until something publishes a new one (§14). A constructor that can bail with
-`invalid config` must therefore call `node.status({})` on the path where the config resolved —
-clearing, not badging, so the rule above stays true in both directions.
+| Who said no | Examples |
+|---|---|
+| The vehicle, out loud | `denied` and every other `MAV_RESULT` refusal |
+| The vehicle, by saying nothing | `unconfirmed` — the ack window closed in silence. Silence is an answer |
+| The link | connection dropped, no transport |
+| Another node | a setpoint stream to that target is already running on this connection |
+
+Red is **never** "your settings are wrong" and never "your `msg` was odd".
+
+*Settings* are the editor's to judge, and Node-RED already shows that verdict for free: a node
+whose `defaults` validators fail wears a **red triangle** on the node body, design-time, with no
+code from us. Restating it underneath in our own words duplicates the platform and squats on the
+status line. **There is no `invalid` status** — the vocabulary is `sending` / `ok` / `preview` /
+`error`, and an action node publishes nothing at all until a message arrives. Forced deploys past
+editor errors and incomplete imports are unsupported paths (`AGENTS.md`), so no code covers them.
+
+*`msg` content* produces no badge either, because the runtime does not judge it (§2, driver and
+protector): a field the message has no slot for is ignored. If the value is genuinely nonsense it
+rides the wire and the vehicle answers — which arrives back as a red ring for the right reason,
+attributed to the party that actually objected.
+
+**A scheduled ending is not a refusal.** `stopped` and `expired` both mean the node did exactly
+what it was configured to do — a stream halted on command, or a TTL that ran its length. Neither
+is silence from the vehicle, and neither is red. Only `unconfirmed` — asked, and no answer came —
+is the cold shoulder. Two things get called "timeout"; only one of them is one.
 
 Shape carries meaning independently of colour — **ring is not-running or not-ok, dot is active or
 settled-good** — so the badge is still readable to anyone who cannot separate red from green.
