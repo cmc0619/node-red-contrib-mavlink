@@ -1478,7 +1478,8 @@ one-shot guided goto (this section's `DO_REPOSITION` on Build/Send/Send & confir
 the wire could have prevented from being wrong is derived, not chosen: carrier, message name,
 frame number, and type_mask are code. The old `carrier`/`mode`/`frame`/`px4Compat` config keys
 are deleted (no migration — owner ruling: no flows exist), and the retired `msg.payload`
-spellings refuse loud rather than being silently reinterpreted. The operator's remaining frame
+spellings are not read: recognising them in order to throw was itself migration machinery, and
+the ruling admits none (owner, 2026-08-12). They are ignored like any key Move does not speak. The operator's remaining frame
 choices are real ones: goto's altitude reference (`home`→3, `msl`→0; terrain off the surface
 until measured) and steer's world/body reference — body derives per firmware (ArduPilot
 `BODY_OFFSET_NED`, PX4 `BODY_NED`, both measured §14) and **fails closed** without one,
