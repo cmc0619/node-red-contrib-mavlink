@@ -1411,7 +1411,8 @@ operator-facing vocabulary — the Action surface derives frames instead of acce
 the alias layer had no remaining producer, and the earlier "MAVLink's protocol surface, not our
 vocabulary" defense of the aliases no longer applies to an input nothing external feeds:
 `msg.payload` overrides go through the Action schema, not raw frames. Pre-1.0, no aliases:
-deleted, and the retired spellings refuse loud.
+deleted, and the retired spellings are not read — ignored like any key Move does not speak
+(#282; see the §6 redesign paragraph below, which is the authority on this).
 
 **Stream lifecycle follows GCS practice** (owner-ruled 2026-08-09): replacing a running
 stream hands over old→new directly with **no brake between** — MAVSDK and QGC never brake
