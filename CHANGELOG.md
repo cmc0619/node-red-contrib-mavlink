@@ -26,7 +26,8 @@ config-node shapes and message contracts may still change without a major bump.
   is unknown. `px4Compat` is deleted — global setpoint frames always
   transmit the `*_INT` twins. Terrain frames are off the surface until
   measured. The retired `msg.payload` keys (`carrier`, `mode`, `frame`,
-  `px4Compat`) refuse loudly.
+  `px4Compat`) are not read — like any key Move does not speak, they are
+  ignored, and the action-shaped overrides are what the node acts on.
 - **`mavlink-command` sheds motion presets.** `yaw` and `rotate`
   (`CONDITION_YAW`) are deleted from the curated list — the raw command
   path keeps the capability, and PX4 never implemented the command. `Go To

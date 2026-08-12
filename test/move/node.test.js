@@ -1327,48 +1327,6 @@ test('mavlink-move reposition Send tier rides the Control band, not Streaming', 
   assert.equal(sent[1].detail, null);
 });
 
-test('mavlink-move retired overrides refuse loud: payload carrier/mode/frame/px4Compat throw, nothing reaches the wire', () => {
-  const conn = repositionConn();
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-move')(RED);
-  const Node = RED.nodes.types['mavlink-move'];
-  const node = new Node({
-    delivery: 'send',
-    action: 'steer',
-    vNorth: 1,
-    vEast: 0,
-    vUp: 0,
-    connection: 'conn',
-    targetSystem: 1,
-    targetComponent: 1,
-  });
-
-  // A payload written for the old surface must not be silently reinterpreted
-  // into the wrong wire message — every retired key refuses, naming the new
-  // vocabulary, before anything is built or sent.
-  const retired = [
-    { carrier: 'reposition' },
-    { mode: 'velocity' },
-    { frame: 'LOCAL_NED' },
-    { px4Compat: false },
-  ];
-  for (const payload of retired) {
-    const key = Object.keys(payload)[0];
-    let out;
-    let doneError;
-    node.emit('input', { payload }, (m) => { out = m; }, (err) => { doneError = err; });
-    assert.equal(out[0], null, `payload.${key} must not fire the continue port`);
-    assert.equal(out[1].result, 'failed', `payload.${key} fails the input`);
-    assert.match(doneError.message, new RegExp(`msg\\.payload\\.${key} is retired`), `payload.${key} refuses by name`);
-    assert.match(doneError.message, /action-shaped overrides/, 'the error teaches the new vocabulary');
-  }
-  assert.equal(conn.sends.length, 0, 'nothing reached the wire');
-
-  // The new vocabulary on the same node still works.
-  node.emit('input', { payload: {} }, () => {}, () => {});
-  assert.equal(conn.sends[0].message.name, 'SET_POSITION_TARGET_LOCAL_NED');
-});
-
 test('mavlink-move goto + Stream streams global position setpoints on the *_INT twin; command-path params refuse and leave it running', async () => {
   const conn = repositionConn();
   const RED = redStub({ conn });

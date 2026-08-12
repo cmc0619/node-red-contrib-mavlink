@@ -519,9 +519,4 @@ test('mavlink-move help documents the action-shaped overrides and refuses the re
   }
   assert.match(html, /action: "stop"/, 'the stop action is documented');
   assert.match(html, /msg\.payload === false<\/code> suppresses/, 'the suppress sentinel is documented');
-  assert.match(
-    html,
-    /retired <code>carrier<\/code>, <code>mode<\/code>, <code>frame<\/code>, and <code>px4Compat<\/code> overrides refuse loud/,
-    'the retired override set is named and refuses loud'
-  );
 });

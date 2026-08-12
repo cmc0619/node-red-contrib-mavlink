@@ -14,7 +14,6 @@ const {
   frameForAltRef,
   frameForReference,
   deriveSteerMode,
-  refuseRetiredOverrides,
 } = require('../lib/move');
 const { AckWaiter } = require('../lib/command');
 const { DEFAULT_MAX_RESENDS } = require('../lib/command/ack');
@@ -196,10 +195,7 @@ module.exports = function registerMavlinkMove(RED) {
 
         // Action × Delivery derives the wire (§6 redesign): the operator
         // states an intent; carrier, message name, frame number, and mask are
-        // code. The retired carrier/mode/frame overrides refuse loud — a
-        // payload written for the old surface must not be silently
-        // reinterpreted into the wrong wire message.
-        refuseRetiredOverrides(payload);
+        // code.
         const action = resolveMoveAction(config.action);
 
         if (action === 'goto' && delivery !== 'stream') {
