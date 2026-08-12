@@ -147,7 +147,7 @@
         "sitl12-arm-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },

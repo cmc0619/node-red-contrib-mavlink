@@ -27,6 +27,13 @@ config-node shapes and message contracts may still change without a major bump.
   / Reposition` leaves the preset dropdown (Move owns the goto); its
   metadata row remains for `mavlink-formation`. The carrier selector is
   labelled **Send as** — the options are the literal wire messages.
+- **The `carrier` config key is renamed `sendAs` — breaking.** On
+  `mavlink-command`, `mavlink-payload`, and `mavlink-formation` (and
+  `msg.payload.sendAs` for Payload's per-message override). The options are
+  the literal wire messages (`COMMAND_INT`/`COMMAND_LONG`), matching the
+  **Send as** label. No alias, no dual-read: a flow still carrying only
+  `carrier` behaves as if no choice was saved — re-pick and redeploy. Batched
+  into the release that already breaks Move's keys.
 
 - **`mavlink-move` result vocabulary — breaking.** `succeeded` is gone: it
   meant both "put on the wire" (setpoints) and "the vehicle agreed"

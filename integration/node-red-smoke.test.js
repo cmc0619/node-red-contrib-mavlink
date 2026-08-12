@@ -86,7 +86,7 @@ function representativeFlow() {
       // to mean anything (#223).
       mode: 'preset',
       preset: 'arm',
-      carrier: 'long',
+      sendAs: 'long',
       wires: [[], []]
     },
     {

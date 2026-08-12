@@ -107,7 +107,7 @@
         "ex27-debug-disarm-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -166,7 +166,7 @@
         "ex27-debug-ft-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },

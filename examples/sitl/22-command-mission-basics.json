@@ -108,7 +108,7 @@
         "ex09-arm-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "1",
     "targetComponent": "1"
   },
@@ -162,7 +162,7 @@
         "ex09-msgint-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "1",
     "targetComponent": "1"
   },

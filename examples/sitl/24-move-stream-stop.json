@@ -98,7 +98,7 @@
     "unconfirmedContinue": false,
     "completionTimeout": "60000",
     "params": "{}",
-    "carrier": "long",
+    "sendAs": "long",
     "x": 330,
     "y": 160,
     "wires": [
@@ -127,7 +127,7 @@
     "unconfirmedContinue": false,
     "completionTimeout": "60000",
     "params": "{\"1\":1,\"2\":4}",
-    "carrier": "long",
+    "sendAs": "long",
     "x": 540,
     "y": 160,
     "wires": [

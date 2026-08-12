@@ -82,7 +82,7 @@
         "ex11-dbg-arm"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -111,7 +111,7 @@
         "ex11-dbg-guided"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -140,7 +140,7 @@
         "ex11-dbg-takeoff-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -169,7 +169,7 @@
         "ex11-dbg-land-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },

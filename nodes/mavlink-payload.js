@@ -102,7 +102,7 @@ module.exports = function registerMavlinkPayload(RED) {
           });
         }
 
-        const carrierChosen = payload.carrier || config.carrier;
+        const carrierChosen = payload.sendAs || config.sendAs;
         const built = buildFor(carrierChosen);
 
         if (delivery === 'build') {

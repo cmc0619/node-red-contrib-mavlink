@@ -108,7 +108,7 @@
         "ex06-guided-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -137,7 +137,7 @@
         "ex06-arm-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -166,7 +166,7 @@
         "ex06-takeoff-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
