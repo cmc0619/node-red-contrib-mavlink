@@ -58,9 +58,9 @@ const { DEFAULT_MAX_RESENDS } = require('../lib/command/ack');
 const { loadMetadata } = require('../lib/metadata/load');
 const {
   resolveDeliveryContext,
+  applyConnectionStatus,
   dialectFromVehicleId,
   dialectFromConnection,
-  applyConnectionStatus,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -120,21 +120,11 @@ module.exports = function registerMavlinkCommand(RED) {
     // completion handle, and must not start (or keep) a live wait.
     let _generation = 0;
 
-    /** Validate configuration at deploy time. */
+    // The editor guarantees both (§6, ruled 2026-08-12): a node missing its
+    // command or its wire message wears Node-RED's red triangle, and there is
+    // no deploy-time badge or refusing input handler restating it here.
     const commandId = resolveCommandId(config);
-    // The editor supplies the normal default. Missing or invalid saved config
-    // still reds out exactly like a missing command.
     const configuredCarrier = resolveCarrier(config);
-    if (commandId === null || configuredCarrier === null) {
-      applyActionStatus(node, 'invalid', 'invalid config');
-      // Fails loudly through Catch instead of vanishing into a node that
-      // never listened (house rule, nodes/mavlink-build.js:105).
-      node.on('input', (_msg, _send, done) => {
-        done(new Error('mavlink-command: invalid config — set a command and wire message (Send as)'));
-      });
-      node.on('close', (done) => done());
-      return;
-    }
 
     const preset =
       config.mode !== 'advanced' ? getPreset(config.preset) : null;

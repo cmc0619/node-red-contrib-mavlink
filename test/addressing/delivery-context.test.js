@@ -102,7 +102,7 @@ test('applyConnectionStatus badges a wire tier whose Connection did not resolve'
   applyConnectionStatus(node, true, null);
   assert.equal(statuses[0].fill, 'red');
   assert.equal(statuses[0].shape, 'ring');
-  assert.equal(statuses[0].text, 'invalid config');
+  assert.equal(statuses[0].text, 'no connection');
 });
 
 test('applyConnectionStatus clears when the config resolves — both halves', () => {

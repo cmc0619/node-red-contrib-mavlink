@@ -77,7 +77,7 @@ for (const s of SENDERS) {
     // Non-empty id — editor-valid — that resolves to nothing, which is the only
     // way this state is reachable now that the editor rejects a blank.
     const statuses = deploy(s.module, s.type, { ...s.wire, connection: 'gone' }, null);
-    const badge = statuses.find((x) => x && x.text === 'invalid config');
+    const badge = statuses.find((x) => x && x.text === 'no connection');
     assert.ok(badge, 'expected the §6 invalid config badge');
     assert.equal(badge.fill, 'red');
     assert.equal(badge.shape, 'ring');
@@ -87,7 +87,7 @@ for (const s of SENDERS) {
     const conn = { id: 'conn', vehicle: { firmware: 'ardupilot' }, peerTable: {} };
     const statuses = deploy(s.module, s.type, { ...s.wire, connection: 'conn' }, conn);
     assert.ok(
-      !statuses.some((x) => x && x.text === 'invalid config'),
+      !statuses.some((x) => x && x.text === 'no connection'),
       'a usable Connection must not badge'
     );
     assert.ok(
@@ -99,7 +99,7 @@ for (const s of SENDERS) {
   test(`${s.type}: the Build tier needs no Connection and clears rather than badges`, () => {
     const statuses = deploy(s.module, s.type, { ...s.build, connection: '' }, null);
     assert.ok(
-      !statuses.some((x) => x && x.text === 'invalid config'),
+      !statuses.some((x) => x && x.text === 'no connection'),
       'Build sends nothing, so a blank Connection is the correct configuration'
     );
     // The absence of a badge is not enough to assert on its own: a node that

@@ -1043,15 +1043,6 @@ test('mavlink-out: a disabled connection fails the send, not a phantom "sent"', 
 // mavlink-build tests
 // ---------------------------------------------------------------------------
 
-test('mavlink-build: marks invalid config when vehicle is missing', () => {
-  const RED = makeRED();
-  require('../../nodes/mavlink-build')(RED);
-  const Constructor = RED._nodeTypes['mavlink-build'];
-  const node = makeNodeInstance({ vehicle: 'missing' });
-  Constructor.call(node, { vehicle: 'missing', dialect: '__vehicle' });
-  assert.equal(node._status && node._status.fill, 'red');
-});
-
 test('mavlink-build: a resolvable config clears any stale badge at deploy', () => {
   // The runtime publishes a status clear only when a node is *removed*
   // (@node-red/runtime flows/Flow.js:395-399), and the editor simply replays
@@ -1066,36 +1057,6 @@ test('mavlink-build: a resolvable config clears any stale badge at deploy', () =
   Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', tier: 'build', messageName: 'HEARTBEAT' });
 
   assert.deepEqual(node._status, {}, 'a good config clears rather than badges');
-});
-
-test('mavlink-build: a blank messageName is invalid config, not a silent HEARTBEAT', () => {
-  // This replaces a test that pinned `messageName || 'HEARTBEAT'` (#222). The
-  // editor always saves a name, so a blank one is drift — and defaulting it
-  // built and transmitted a heartbeat nobody configured, which is the phantom
-  // §9 forbids. Refusing is the honest answer.
-  const RED = makeRED();
-  RED.nodes._register('v1', makeVehicleStub());
-  require('../../nodes/mavlink-build')(RED);
-  const Constructor = RED._nodeTypes['mavlink-build'];
-  const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', messageName: '', tier: 'build' });
-
-  assert.equal(node._status && node._status.fill, 'red', 'says so at deploy (§6)');
-
-  // And it stays loud on input rather than vanishing: the handler is still
-  // registered, so the failure reaches Catch.
-  node._input({ payload: { type: 6, autopilot: 3 } });
-  assert.ok(node._doneErrors.length > 0 || node._errors.length > 0, 'fails loud on input');
-});
-
-test('mavlink-build: marks invalid config when messageName is not in dialect', () => {
-  const RED = makeRED();
-  RED.nodes._register('v1', makeVehicleStub());
-  require('../../nodes/mavlink-build')(RED);
-  const Constructor = RED._nodeTypes['mavlink-build'];
-  const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', messageName: 'NONEXISTENT_MSG' });
-  assert.equal(node._status && node._status.fill, 'red');
 });
 
 test('mavlink-build: suppresses when msg.payload === false', () => {

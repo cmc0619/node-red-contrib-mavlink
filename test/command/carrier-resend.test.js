@@ -16,8 +16,6 @@ const assert = require('node:assert/strict');
 
 const { MAV_RESULT } = require('../../lib/command');
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 25));
-
 function runInput(node, msg, done = () => {}) {
   return new Promise((resolve) => {
     node.emit('input', msg, resolve, done);
@@ -251,21 +249,6 @@ test('INT-first contradictory INT_ONLY fails loud without swapping', async () =>
   assert.equal(sent[0], null);
   assert.equal(sent[1].result, 'command_int_only');
   assert.match(sent[1].detail, /already sent/);
-});
-
-test('missing carrier config: node reds out and inputs fail loud through Catch', async () => {
-  const { node, conn } = deploy([MAV_RESULT.ACCEPTED], { sendAs: '' });
-
-  let sent;
-  let doneErr;
-  node.emit('input', { payload: { 5: 47.1 } }, (m) => { sent = m; }, (err) => { doneErr = err; });
-  await tick();
-
-  assert.equal(conn.sent.length, 0, 'nothing sent without a carrier choice');
-  assert.equal(sent, undefined, 'no outputs fire from an invalid config');
-  // The message must not vanish silently (house rule, nodes/mavlink-build.js:105).
-  assert.ok(doneErr, 'done(err) fires so Catch hears about it');
-  assert.match(doneErr.message, /invalid config/);
 });
 
 test('msg.mavFrame selects a non-global frame so INT x/y scale by 1e4, not 1e7', async () => {
