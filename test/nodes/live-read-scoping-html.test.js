@@ -232,3 +232,40 @@ test('move stream validators: own dialog reads the live tier, foreign does not',
     true
   );
 });
+
+test('move goto position validators: saved action decides, own dialog reads live, foreign does not', () => {
+  // The §6 redesign keys the lat/lon/alt requirement on the Action field the
+  // way the stream validators key on delivery — same liveOr scoping rules.
+  // No dialog anywhere: the saved action governs. A saved config without
+  // `action` parses as steer (resolveMoveAction), so blank stays legal.
+  const registered = loadNodeHtml('mavlink-move.html');
+  const defaults = registered['mavlink-move'].defaults;
+  assert.match(
+    String(defaults.lat.validate.call({ id: 'm1', action: 'goto' }, '', {})),
+    /required for Go to/,
+    'a saved goto with a blank lat reds on deploy'
+  );
+  assert.equal(defaults.lat.validate.call({ id: 'm1', action: 'steer' }, '', {}), true);
+  assert.equal(defaults.lat.validate.call({ id: 'm1' }, '', {}), true, 'pre-action saves parse as steer');
+
+  // Own dialog, action switched to goto and unsaved: live wins, blank reds.
+  const own = loadNodeHtml('mavlink-move.html', {
+    dom: { '#node-input-action': 'goto' },
+    editStack: [{ id: 'm1' }],
+  });
+  assert.match(
+    String(own['mavlink-move'].defaults.lat.validate.call({ id: 'm1', action: 'steer' }, '', {})),
+    /required for Go to/
+  );
+
+  // Foreign dialog showing 'goto': a closed steer node's blank lat must not
+  // be judged against somebody else's action (#217 scoping).
+  const foreign = loadNodeHtml('mavlink-move.html', {
+    dom: { '#node-input-action': 'goto' },
+    editStack: [{ id: 'other' }],
+  });
+  assert.equal(
+    foreign['mavlink-move'].defaults.lat.validate.call({ id: 'm1', action: 'steer' }, '', {}),
+    true
+  );
+});
