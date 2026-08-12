@@ -1052,10 +1052,11 @@ Build's output goes to `mavlink-out`.
 Which config references and address fields a tier shows — and where blank targets inherit from —
 is governed by the role × tier matrix (§6).
 
-Move's setpoint carrier has no acknowledgement of any kind, so its third tier is **Stream**
-instead — sustained setpoints with TTL and stop, no confirmation possible. Its reposition carrier
-(§ "Move reposition carrier") is the inverse: a one-shot ACKed command, so it offers **Send and
-confirm** and refuses Stream.
+Move's steer action (setpoints) has no acknowledgement of any kind, so its third tier is
+**Stream** instead — sustained setpoints with TTL and stop, no confirmation possible. Its goto
+action's command path (§ "Move Action surface") is the inverse: a one-shot ACKed command, so it
+offers **Send and confirm**; goto + Stream sends position setpoints instead — same intent,
+streamed.
 
 **A stream announces its own expiry — on output 1.** When the TTL elapses the node sends the
 zero-velocity stop packet and emits a status record with `result: 'expired'`, carrying the stop
@@ -1085,7 +1086,7 @@ Not every message can be acknowledged, and the node must offer the right one:
 | Mission | `MISSION_ACK`, via the mission protocol |
 | Param | none — confirm by matching the `PARAM_VALUE` the vehicle broadcasts back |
 | Payload | per verb — command-backed verbs ack; `GIMBAL_MANAGER_SET_PITCHYAW` is a message with none |
-| Move | per carrier — setpoints carry no acknowledgement, ever; the reposition carrier is a real `COMMAND_ACK` |
+| Move | per action — steer setpoints carry no acknowledgement, ever; goto's command path is a real `COMMAND_ACK` |
 
 Param is echo-confirm, not ack. Different mechanism, different failure mode, and it must not be
 presented as the same checkbox.
@@ -1352,8 +1353,12 @@ Three rules, each of which encodes a wrong message if missed:
 Move covers the full `SET_POSITION_TARGET_*` capability space with **named modes and frames —
 never a raw `type_mask`** (a set bit means *ignore*, most of the 65,536 values are invalid, and
 firmware drops bad ones silently; the raw-mask escape hatch is mavlink-build, the same place raw
-anything lives). Mode picks which vectors the mask *uses*; frame picks the reference and the
-carrier message (`lib/move/index.js` `MODES` / `MAV_FRAME`):
+anything lives). *Superseded in part by the Action surface (§ "Move Action surface", ruled
+2026-08-12):* the mode is no longer an operator pulldown — it **derives from which field groups
+are non-blank** (`deriveSteerMode`: filling fields IS the mode; a `0` is a commanded value, a
+blank is an ignored one), and the operator's frame choice collapsed to steer's world/body
+reference (body firmware-derived, fails closed) and goto's altitude reference. The matrix below
+remains the wire truth the derivation targets (`lib/move/index.js` `MODES` / `MAV_FRAME`):
 
 | Mode | Uses | Notes |
 |---|---|---|
@@ -1388,13 +1393,11 @@ measuring). ArduPilot maps both numbering sets to the same alt frames; MAVSDK tr
 `*_INT` values. Canonical names are the modern spellings; the deprecated `*_INT` names and
 both numeric sets are accepted on input as aliases — MAVLink's protocol surface, not our
 vocabulary, so the pre-1.0 no-aliases rule (which governs our own renames) does not apply.
-The wire number is a per-node **PX4-compat checkbox, default on**: checked emits 5/6/11
-(accepted by every current stack), unchecked emits the spec-current 0/3/10 — an informed
-opt-out, warn-not-block: unchecking under a `px4` profile draws an advisory naming the
-rejection. Deliberately operator-held, not firmware-keyed: Build has no connection to ask and
-`custom` declines firmware-specific behavior, but a checkbox is decidable everywhere. A saved
-config missing the value parses as checked — the safe direction. Unchecked-on-ArduPilot is
-source-read only; a SITL pin is wanted before the opt-out is leaned on (§14). When PX4
+*Superseded (ruled 2026-08-12, #277):* the PX4-compat checkbox is **deleted** — the wire number
+is code, not a choice. Global setpoint frames always transmit the `*_INT` twins (5/6/11), which
+every current stack accepts; the checkbox's off-position existed only to emit numbers PX4
+rejects, and no operator benefits from that. The paragraph below records the superseded ruling
+(2026-08-09) for the reasoning trail. When PX4
 accepts 0/3/10 the default flips, and eventually the checkbox retires.
 
 **Stream lifecycle follows GCS practice** (owner-ruled 2026-08-09): replacing a running
@@ -1454,22 +1457,38 @@ names (Fan-out no longer builds Move inputs at all — it replicates built messa
 aliased — pre-1.0, unpublished, no migrations (AGENTS.md); an unknown mode or frame throws
 naming the valid set.
 
-### Move reposition carrier
+### Move Action surface
 
-Move has a second carrier for one-shot goto (#239): `carrier: reposition` sends
-`MAV_CMD_DO_REPOSITION` (192) as `COMMAND_INT` — the guided goto every reference implementation
-converges on, and the canonical form for a location-bearing command (degE7 x/y, no float
-truncation). *Correction (source-read 2026-08-12):* this section previously justified the INT
+**The §6 redesign (ruled 2026-08-12, #277).** Move speaks two intents — **`action: goto`**, the
+one-shot guided goto (this section's `DO_REPOSITION` on Build/Send/Send & confirm;
+`SET_POSITION_TARGET_GLOBAL_INT` on Stream), and **`action: steer`**, setpoints — and everything
+the wire could have prevented from being wrong is derived, not chosen: carrier, message name,
+frame number, and type_mask are code. The old `carrier`/`mode`/`frame`/`px4Compat` config keys
+are deleted (no migration — owner ruling: no flows exist), and the retired `msg.payload`
+spellings refuse loud rather than being silently reinterpreted. The operator's remaining frame
+choices are real ones: goto's altitude reference (`home`→3, `msl`→0; terrain off the surface
+until measured) and steer's world/body reference — body derives per firmware (ArduPilot
+`BODY_OFFSET_NED`, PX4 `BODY_NED`, both measured §14) and **fails closed** without one,
+including in the editor (Body + Build requires the Vehicle-Profile dialect). The enforcement is
+`test/move/legality-matrix.test.js`: every offered Action × Delivery × Reference combination
+drives the real node to completion, and every unoffered one refuses with nothing on the wire —
+"no dropdown offers an option the current selection makes illegal", as CI. Command's curated
+presets shed motion in the same ruling (`yaw`/`rotate` deleted; `reposition` demoted to
+`listed: false` library metadata that mavlink-formation builds from), and its wire-form label is
+**Send as**.
+
+The goto command path sends `MAV_CMD_DO_REPOSITION` (192) as `COMMAND_INT` — the guided goto
+every reference implementation converges on, and the canonical form for a location-bearing
+command (degE7 x/y, no float truncation). *Correction (source-read 2026-08-12):* this section previously justified the INT
 choice as "the only reposition ArduPilot accepts; a `COMMAND_LONG` attempt acks
 `COMMAND_INT_ONLY`" — that is wrong. ArduPilot converts a LONG-form `DO_REPOSITION` to INT
 internally (`command_long_stores_location` → `convert_COMMAND_LONG_to_COMMAND_INT`) and PX4
-accepts both forms; INT stays our choice on precision grounds alone. Same node, same mode and
-frame vocabulary, same §10 coordinate guards — with the one thing no setpoint offers: a
-`COMMAND_ACK`. The editor field defaults to `setpoint`; `msg.payload.carrier` overrides per
-input like mode and frame, and a saved config without the field parses as setpoint — the safe
-direction.
+accepts both forms; INT stays our choice on precision grounds alone. Same node, same §10
+coordinate guards — with the one thing no setpoint offers: a `COMMAND_ACK`. The editor field
+defaults to `action: goto` (the most common intent, the acked path); a blank action parses as
+steer, and `msg.payload.altRef` overrides per input the way mode and frame once did.
 
-The carrier is position-only on frames `GLOBAL` (0) and `GLOBAL_RELATIVE_ALT` (3), sent in
+The goto command path is position-only on frames `GLOBAL` (0) and `GLOBAL_RELATIVE_ALT` (3), sent in
 `COMMAND_INT`'s own frame field as the spec-current numbers. The `*_INT` twins of these frames
 do exist (`GLOBAL_INT` 5, `GLOBAL_RELATIVE_ALT_INT` 6 — MAVSDK transmits 5 here), correcting
 this section's earlier "no twin exists" premise; the conclusion stands on measurement instead:
@@ -1521,7 +1540,12 @@ measurement.
 
 A preset is not a separate command. It is **(command, pinned params, exposed params, friendly
 name)** over the same metadata everything else uses. Arm and Disarm are one `MAV_CMD` with
-param 1 pinned to opposite values; Yaw and Rotate are one command with the relative flag pinned.
+param 1 pinned to opposite values; Pause and Resume are one command with the continue flag
+pinned. (Yaw and Rotate were that pattern too — one `CONDITION_YAW` with the relative flag
+pinned each way — until the Action-surface ruling deleted them: Move owns motion intents, the
+raw MAV_CMD path keeps the capability, and PX4 never implemented the command anyway.
+`reposition` likewise left the operator dropdown but keeps its row as `listed: false` library
+metadata, because mavlink-formation builds from its sentinel table.)
 That is why the preset list is short and hand-curated while remaining maintenance-free — a
 dialect update changes the fields, never the preset definitions.
 
