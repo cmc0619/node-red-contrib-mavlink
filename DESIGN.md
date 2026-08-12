@@ -1492,8 +1492,8 @@ project's own rule, and the editor is now the only place a global coordinate is 
 What that admits, measured on the branch rather than reasoned: a blank global lat encodes
 `lat_int 0`; `lat: 200` encodes `lat_int 2000000000`, which fits int32 and is a real place; an
 all-blank reposition builds `x 0, y 0, z 0`. §10's "blank coordinates must not become 0,0 at
-ground level" therefore no longer describes the Move runtime — it describes the Move *editor*,
-and the command path, where `blankLocationRefusal` still enforces it for `MAV_CMD` params.
+ground level" therefore no longer describes any runtime at all — it describes the *editors*, on
+Move and on Command alike (see the command-path ruling below).
 
 **The *local* coordinate guard went the same way** (ruled 2026-08-12, #284), on the same
 argument — it had no untrusted input either. It is worth recording what the check found before
@@ -2418,8 +2418,8 @@ guardrail by the project's own categories and is gone from both carriers. Measur
 after removal: blank lat → `lat_int 0`; `lat: 200` → `lat_int 2000000000` (fits int32, a real
 place); an all-blank reposition → `x 0, y 0, z 0`. Those are now reachable through
 `msg.payload.position`, and that is the accepted cost — a flow handing Move a blank coordinate
-is the flow author's bug, and the configured path still reds at deploy. The command path is
-unaffected: `blankLocationRefusal` still enforces §10 for `MAV_CMD` params. Two static analysers
+is the flow author's bug, and the configured path still reds at deploy. The command path went
+the same way a day later (#286) and for the same reason. Two static analysers
 disagreed about the same deletion — Codacy scored −8 complexity, DeepSource dropped Reliability
 A→B — which is why the call is recorded here rather than delegated to either.
 *Check:* `rg -n "requireGlobalPosition" lib/` returns nothing; `rg -n "lat:" nodes/mavlink-move.html`
@@ -2956,8 +2956,9 @@ the escape hatch, and its whole contract is that you have read the command's
 definition. No preset exists there to carry the intent, and the `hasLocation`
 objection above applies just as much, so any guard would have to invent a rule
 the protocol does not supply. Do not re-raise this as a gap.
-*Check:* `lib/command/presets.js` (`blankLocationRefusal`, `requireLocationFor`),
-`lib/command/merge-params.js` (`isBlank`), `lib/payload/index.js` (`hasValue`,
+*Check:* `nodes/mavlink-command.html` (the `params` validator, which is where the preset
+coordinate rule lives since #286), `lib/command/merge-params.js` (`isBlank`),
+`lib/payload/index.js` (`hasValue`,
 `slotValue`), `lib/fanout/index.js` (`validateWrap`), `node --test
 test/command/presets.test.js test/fanout/fanout.test.js
 test/payload/verbs.test.js` — every guard sabotage-verified.
@@ -4195,10 +4196,14 @@ false-PASSed 02 on the PX4 fence gate alone.
 coordinate, including `DO_SET_HOME` / COMMAND_INT `MAV_FRAME_LOCAL_NED`.
 *Fact:* local frames scale metres × 1e4 (§14 INT local-vs-global). Refusing
 `123.4567` as “latitude” blocked SITL 07’s LOCAL_NED probes before the wire.
-`blankLocationRefusal` takes the resolved MAV_FRAME and skips the degree gate
-for known local frames; COMMAND_LONG / global frames keep the #263 guard.
-*Check:* `lib/command/presets.js` (`latLonRangeRefusal`), `examples/sitl/07-int-local-vs-global.json`,
-`test/command/presets.test.js`.
+The check reads the selected MAV_FRAME and skips the degree gate for known
+local frames; COMMAND_LONG and global frames keep the #263 guard, and an
+*unknown* frame stays on the degree path so a missing one cannot buy a bypass.
+Since #286 that check lives in `nodes/mavlink-command.html`'s `params`
+validator rather than the runtime, but the rule is unchanged.
+*Check:* `nodes/mavlink-command.html` (`localFrameSelected`),
+`examples/sitl/07-int-local-vs-global.json`, `node --test
+test/nodes/command-html.test.js`.
 
 **`CHANGE_MODE` is the gate for `DO_REPOSITION` — on both stacks (2026-08-12).**
 *Wrong belief:* examples 27 and 30 established that both firmwares answer a Move reposition the
