@@ -139,7 +139,7 @@
         "sitl04-ap-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "1",
     "targetComponent": "1"
   },
@@ -193,7 +193,7 @@
         "sitl04-px4-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "11",
     "targetComponent": "1"
   },

@@ -9,7 +9,7 @@
         name: { value: '' },
         identity: { value: '' },
         delivery: { value: 'build' },
-        carrier: { value: 'int' },
+        sendAs: { value: 'int' },
         frame: { value: '' },
         timeout: { value: 10000, validate: RED.validators.number(true) },
         maxRetries: { value: 3, validate: RED.validators.number(true) },
@@ -176,7 +176,7 @@
       // put anything on the wire, so the frame row clears itself on the way
       // out rather than saving whatever was left in it.
       function applyFrameRow(carrierShown) {
-        var shown = carrierShown && $('#node-input-carrier').val() === 'int';
+        var shown = carrierShown && $('#node-input-sendAs').val() === 'int';
         if (!shown) $('#node-input-frame').val('');
         $('#row-payload-frame').toggle(shown);
       }
@@ -189,8 +189,8 @@
         var sel = selection();
         var matters = !RED.mavlink.payloadVerbIgnoresCarrier(sel.topic, sel.verb, sel.path)
           && !!(data && data.carrierMatters);
-        if (!matters) $('#node-input-carrier').val('int');
-        $('#row-payload-carrier').toggle(matters);
+        if (!matters) $('#node-input-sendAs').val('int');
+        $('#row-payload-sendAs').toggle(matters);
         applyFrameRow(matters);
       }
 
@@ -287,8 +287,8 @@
       $('#node-input-verb').on('change', reselect);
       $('#node-input-path').on('change', reselect);
 
-      $('#node-input-carrier').on('change', function () {
-        applyFrameRow($('#row-payload-carrier').is(':visible'));
+      $('#node-input-sendAs').on('change', function () {
+        applyFrameRow($('#row-payload-sendAs').is(':visible'));
       });
       $('#node-input-delivery').on('change', function () {
         refreshVisibility();
@@ -351,7 +351,7 @@
   <div class="form-row" id="row-payload-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
   <div class="form-row" id="row-payload-identity"><label for="node-input-identity">Identity</label><select id="node-input-identity" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option></select></div>
-  <div class="form-row" id="row-payload-carrier"><label for="node-input-carrier">Carrier</label><select id="node-input-carrier" style="width:70%"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
+  <div class="form-row" id="row-payload-sendAs"><label for="node-input-sendAs">Send as</label><select id="node-input-sendAs" style="width:70%"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
   <div class="form-row" id="row-payload-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="">Global, relative alt (default)</option><option value="0">Global, absolute alt (AMSL)</option><option value="3">Global, relative alt</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
   <div class="form-row" id="row-payload-timeout"><label for="node-input-timeout">ACK timeout</label><input type="number" id="node-input-timeout" style="width:80px"> ms</div>
   <div class="form-row" id="row-payload-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
@@ -367,7 +367,7 @@
   <p>Controls camera, gimbal, servo, gripper, winch and parachute payload verbs. Command-backed verbs report command acknowledgement as their confirmation mode.</p>
   <p>A <b>Topic</b> is a device on the airframe; a <b>Verb</b> is what to do with it. Topic and verb reshape the form (§6): only the parameters for the selected verb are shown, and their labels, units, enum choices and any real ceiling come from the Vehicle's dialect rather than this page. A blank number sends that parameter's recipe default; the dialect's advisory minimums are not enforced, because upstream sometimes contradicts them in its own description text. Gripper, winch and parachute have a single verb each, so their Verb row is hidden.</p>
   <p>Camera photo exposes a count, and an explicit count of 0 starts a continuous capture — <b>Stop photo</b> (<code>IMAGE_STOP_CAPTURE</code>) is its off switch. Trigger by distance carries its own off switch instead: a distance of 0 stops triggering, so stopping is the same verb, not a separate one.</p>
-  <p>The <b>Carrier</b> field appears only when the choice is observable — a command the dialect marks as carrying a location, i.e. gimbal ROI-set. Elsewhere <code>COMMAND_INT</code> and <code>COMMAND_LONG</code> pass params 1–4 identically, so the node sends <code>COMMAND_INT</code>. Positional values — e.g. ROI latitude / longitude — are always entered in decimal degrees regardless of carrier. <code>msg.payload.carrier</code> and <code>msg.payload.mavFrame</code> override per message. Message-kind verbs (gimbal manager aiming) never ride a MAV_CMD.</p>
+  <p>The <b>Send as</b> field appears only when the choice is observable — a command the dialect marks as carrying a location, i.e. gimbal ROI-set. Elsewhere <code>COMMAND_INT</code> and <code>COMMAND_LONG</code> pass params 1–4 identically, so the node sends <code>COMMAND_INT</code>. Positional values — e.g. ROI latitude / longitude — are always entered in decimal degrees regardless of the Send as choice. <code>msg.payload.sendAs</code> and <code>msg.payload.mavFrame</code> override per message. Message-kind verbs (gimbal manager aiming) never ride a MAV_CMD.</p>
   <p>On <b>Build</b> delivery the Dialect picker supplies editor catalogs. Choose <i>from Vehicle Profile…</i> to use a profile dialect and target defaults; a concrete dialect has no profile target rung. On <b>Send</b> or <b>Send &amp; confirm</b> delivery a Connection is required. The Identity drives target addressing: a companion identity derives the target sysid from its airframe; the target compid remains visible and config-resolved because it addresses a payload device (camera or gimbal), not the autopilot.</p>
   <p>On the <b>Send &amp; confirm</b> tier a command-backed verb waits for its <code>COMMAND_ACK</code>: output 0 (continue) fires only on <code>ACCEPTED</code>, and a <code>DENIED</code>, <code>TEMPORARILY_REJECTED</code>, or timeout halts the chain and reports on output 1. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use <b>Send</b> or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
   <p>Gimbal manager aiming uses GIMBAL_MANAGER_SET_PITCHYAW and has no MAVLink acknowledgement, so it is always sent unconfirmed. When the aim should confirm, pick the <code>DO_GIMBAL_MANAGER_PITCHYAW</code> path — it takes the same inputs, and the command form acks where the message form cannot.</p>

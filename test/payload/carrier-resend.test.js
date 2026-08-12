@@ -78,11 +78,11 @@ function deploy(ackResults, config = {}) {
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    // servo set: a command verb whose Carrier row the editor hides, so `int`
+    // servo set: a command verb whose Send-as row the editor hides, so `int`
     // here is the pin, not an operator choice.
     topic: 'servo',
     verb: 'set',
-    carrier: 'int',
+    sendAs: 'int',
     delivery: 'confirm',
     dialect: 'common',
     connection: 'conn',
@@ -121,7 +121,7 @@ test('LONG_ONLY on a pinned-INT verb resends as COMMAND_LONG and continues', asy
 });
 
 test('INT_ONLY on a LONG-carrier verb resends as COMMAND_INT', async () => {
-  // The other direction. gimbal roi-set is the one verb whose Carrier control
+  // The other direction. gimbal roi-set is the one verb whose Send-as control
   // the editor still shows, so `long` here is an operator choice rather than
   // the pin — and it is the verb where the carrier is observable at all.
   const { node, conn, warnings } = deploy(
@@ -129,7 +129,7 @@ test('INT_ONLY on a LONG-carrier verb resends as COMMAND_INT', async () => {
     {
       topic: 'gimbal',
       verb: 'roi-set',
-      carrier: 'long',
+      sendAs: 'long',
       values: { lat: 47.397742, lon: 8.545594, alt: 30 },
     }
   );

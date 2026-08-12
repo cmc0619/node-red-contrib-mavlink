@@ -9,7 +9,7 @@ test('mavlink-payload node builds command-backed payload messages', () => {
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'build',
     dialect: 'common',
     topic: 'servo',
@@ -34,6 +34,34 @@ test('mavlink-payload node builds command-backed payload messages', () => {
   assert.equal(sent[1].confirmation, 'command_ack');
 });
 
+test('the retired payload.carrier override is not read: the config choice wins', () => {
+  // Same rename at the message level: the per-message override moved to
+  // `payload.sendAs`. A payload still carrying the old `carrier` key must
+  // not flip the wire message — the configured choice stands.
+  const RED = redStub({});
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    sendAs: 'long',
+    delivery: 'build',
+    dialect: 'common',
+    topic: 'servo',
+    verb: 'set',
+    targetSystem: 7,
+    targetComponent: 1,
+  });
+  let sent;
+
+  node.emit(
+    'input',
+    { payload: { carrier: 'int', values: { servo: 8, pwm: 1600 } } },
+    (messages) => { sent = messages; },
+    () => {}
+  );
+
+  assert.equal(sent[0].payload.name, 'COMMAND_LONG', 'old override key must not select COMMAND_INT');
+});
+
 test('mavlink-payload reuses its deploy-resolved Connection during input delivery', () => {
   const conn = connStub();
   conn.vehicle = { targetSystem: 7, targetComponent: 1 };
@@ -47,7 +75,7 @@ test('mavlink-payload reuses its deploy-resolved Connection during input deliver
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     topic: 'servo',
     verb: 'set',
@@ -77,7 +105,7 @@ test('mavlink-payload confirm tier waits for COMMAND_ACK and continues only on A
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'confirm',
     topic: 'servo',
     verb: 'set',
@@ -113,7 +141,7 @@ test('mavlink-payload confirm tier with carrier int sends COMMAND_INT without a 
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'int',
+    sendAs: 'int',
     delivery: 'confirm',
     topic: 'gimbal',
     verb: 'roi-set',
@@ -153,7 +181,7 @@ test('mavlink-payload confirm refuses a broadcast target (sysid 0): nothing sent
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'confirm',
     topic: 'servo',
     verb: 'set',
@@ -184,7 +212,7 @@ test('mavlink-payload confirm tier halts the chain on a DENIED ack', async () =>
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'confirm',
     topic: 'servo',
     verb: 'set',
@@ -216,7 +244,7 @@ test('a denied Payload verb carries the ack\'s result_param2 (§9, Codex)', asyn
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'confirm',
     topic: 'servo',
     verb: 'set',
@@ -246,7 +274,7 @@ test('blank Payload timeout keeps the 10000 ms ACK window', async (t) => {
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'confirm',
     topic: 'servo',
     verb: 'set',
@@ -277,7 +305,7 @@ test('blank Payload maxRetries keeps three temporary-rejection retries', async (
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'confirm',
     topic: 'servo',
     verb: 'set',
@@ -318,7 +346,7 @@ test('mavlink-payload inherits Vehicle Profile target when config is empty', () 
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'build',
     dialect: '__vehicle',
     topic: 'servo',
@@ -346,7 +374,7 @@ test('mavlink-payload explicit config value wins over Vehicle Profile', () => {
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'build',
     dialect: 'common',
     topic: 'servo',
@@ -374,7 +402,7 @@ test('mavlink-payload gimbal manager setpoint stays unconfirmed even on the conf
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'confirm',
     topic: 'gimbal',
     verb: 'aim',
@@ -410,7 +438,7 @@ test('mavlink-payload companion identity derives sysid; compid stays config-reso
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     topic: 'servo',
     verb: 'set',
@@ -445,7 +473,7 @@ test('mavlink-payload companion + explicit compid config → {companion sysid, c
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     topic: 'servo',
     verb: 'set',
@@ -477,7 +505,7 @@ test('mavlink-payload payload.target beats companion derivation', () => {
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'send',
     topic: 'servo',
     verb: 'set',
@@ -504,7 +532,7 @@ test('mavlink-payload build tier inherits from config.vehicle stub', () => {
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'build',
     dialect: '__vehicle',
     topic: 'servo',
@@ -532,7 +560,7 @@ test('mavlink-payload build tier concrete dialect does not inherit Vehicle Profi
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'build',
     dialect: 'common',
     topic: 'servo',
@@ -561,7 +589,7 @@ test('mavlink-payload build tier ignores connection vehicle when vehicle field i
   require('../../nodes/mavlink-payload')(RED);
   const Node = RED.nodes.types['mavlink-payload'];
   const node = new Node({
-    carrier: 'long',
+    sendAs: 'long',
     delivery: 'build',
     dialect: '__vehicle',
     topic: 'servo',

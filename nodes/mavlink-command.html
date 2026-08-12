@@ -141,7 +141,7 @@
       preset:            { value: 'arm' },
       advancedCommand:   { value: '' },
       delivery:          { value: 'confirm' },
-      carrier:           { value: 'int' },
+      sendAs:            { value: 'int' },
       frame:             { value: '' },
       identity:          { value: '' },
       // A statically configured broadcast (0) on an ack-confirmed tier is a
@@ -423,10 +423,10 @@
       // Frame only exists on the COMMAND_INT wire message, so its row follows
       // the carrier choice.
       function refreshFrameRow() {
-        const isInt = $('#node-input-carrier').val() === 'int';
+        const isInt = $('#node-input-sendAs').val() === 'int';
         $('#row-cmd-frame')[isInt ? 'show' : 'hide']();
       }
-      $('#node-input-carrier').on('change', refreshFrameRow);
+      $('#node-input-sendAs').on('change', refreshFrameRow);
       refreshFrameRow();
 
       // ── Param fields ───────────────────────────────────────────────────────
@@ -835,13 +835,12 @@
     </select>
   </div>
 
-  <div class="form-row" id="row-cmd-carrier">
+  <div class="form-row" id="row-cmd-sendAs">
     <!-- Label says what the options are: the literal wire messages. "Carrier"
          was a metaphor the ecosystem doesn't share (-ai says "Send as"), and
-         the word collided with Move's former protocol selector. Config key
-         stays `carrier` until the examples sweep renames it in one shot. -->
-    <label for="node-input-carrier" style="width:120px">Send as</label>
-    <select id="node-input-carrier" style="width:280px">
+         the word collided with Move's former protocol selector. -->
+    <label for="node-input-sendAs" style="width:120px">Send as</label>
+    <select id="node-input-sendAs" style="width:280px">
       <option value="int">COMMAND_INT (positional; degE7 on the wire)</option>
       <option value="long">COMMAND_LONG (float params)</option>
     </select>

@@ -107,7 +107,7 @@
         "ex25-debug-arm-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -136,7 +136,7 @@
         "ex25-debug-guided-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -165,7 +165,7 @@
         "ex25-debug-takeoff-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -219,7 +219,7 @@
         "ex25-debug-speed-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -273,7 +273,7 @@
         "ex25-debug-yaw-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -327,7 +327,7 @@
         "ex25-debug-rotate-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },

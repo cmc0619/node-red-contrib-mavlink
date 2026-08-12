@@ -82,7 +82,7 @@
         "ex15-dbg-req-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -111,7 +111,7 @@
         "ex15-dbg-set-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -140,7 +140,7 @@
         "ex15-dbg-stop-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },

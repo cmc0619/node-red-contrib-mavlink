@@ -108,7 +108,7 @@
         "sitl03-status"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "11",
     "targetComponent": "1"
   },

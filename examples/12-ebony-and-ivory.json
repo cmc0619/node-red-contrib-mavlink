@@ -112,7 +112,7 @@
         "ex12-dbg-ap-arm"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -141,7 +141,7 @@
         "ex12-dbg-ap-guided"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -170,7 +170,7 @@
         "ex12-dbg-ap-takeoff-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -199,7 +199,7 @@
         "ex12-dbg-px4-arm"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "11",
     "targetComponent": ""
   },
@@ -228,7 +228,7 @@
         "ex12-dbg-px4-takeoff-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "11",
     "targetComponent": ""
   },
@@ -257,7 +257,7 @@
         "ex12-dbg-ap-rtl-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "",
     "targetComponent": ""
   },
@@ -286,7 +286,7 @@
         "ex12-dbg-px4-rtl-st"
       ]
     ],
-    "carrier": "long",
+    "sendAs": "long",
     "targetSystem": "11",
     "targetComponent": ""
   },

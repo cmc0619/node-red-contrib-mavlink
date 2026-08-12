@@ -98,7 +98,7 @@
     "unconfirmedContinue": false,
     "completionTimeout": "30000",
     "params": "{}",
-    "carrier": "long",
+    "sendAs": "long",
     "frame": "",
     "x": 430,
     "y": 160,
