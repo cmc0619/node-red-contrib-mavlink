@@ -404,15 +404,21 @@ if (config.targetType === "num") {
 Validate the dynamic result, not the already-validated editor field that describes where to
 obtain it.
 
-### `msg` is trusted (owner ruling, 2026-08-12)
+### Three kinds of input, three treatments (owner ruling, 2026-08-12)
 
-**`msg` is trusted input. The untrusted surface is what the operator types, and it is
-validated in the editor.** A `msg` arrives from the upstream nodes of a flow the same user
-wired together — it is their own program's intermediate state, not hostile input crossing a
-security boundary. Guarding it is the same guardrail as guarding `config`, one hop further
-along, and the net-code budget applies just as hard.
+Naming the category is most of the decision. There are three, and only one of them is checked
+in the runtime:
 
-So a value that reaches the runtime by way of `msg` gets used, not vetted:
+| Input | Trusted? | Checked where |
+|---|---|---|
+| **Operator UI entry** — what a person types into a node's dialog | **No** | **The editor.** `defaults`, `required`, `validate`, `oneditsave`. Never re-checked at runtime. |
+| **`msg`** — what arrives from upstream nodes | **Yes** | **Nowhere.** Use it. |
+| **External input** — bytes and answers from outside the flow | **No** | **The boundary that receives it**, once: codec, transport, parser, API client. |
+
+**`msg` is trusted** because it is the flow author's own intermediate state — the output of
+nodes the same user wired together, not hostile input crossing a security boundary. Guarding
+it is the same guardrail as guarding `config`, one hop further along, and the net-code budget
+applies just as hard:
 
 ```js
 // Forbidden — msg is trusted, and a bad value here is the flow author's bug to see
@@ -422,17 +428,20 @@ if (!Number.isFinite(Number(msg.payload.yaw))) {
 ```
 
 Let it through and let the core runtime fail loudly if it is wrong. That is the same rule the
-YAGNI section states for configuration, and it is the reason a `msg`-shaped guard cannot be
-justified by "the value could be anything" — so could every value in every program.
+YAGNI section states for configuration, and it is why a `msg`-shaped guard cannot be justified
+by "the value could be anything" — so could every value in every program.
 
-Two things this does **not** license, because neither is validation of trusted input:
+**External input is not trusted**, and this is the distinction that makes the ruling workable
+rather than reckless. MAVLink frames off the wire, serial bytes, file contents, HTTP and API
+responses, device data: none of it was produced by the user's flow, none of it is covered by
+"trust the flow author", and all of it is parsed rather than assumed. That work belongs at the
+boundary that receives it — the codec fails loudly on a malformed frame by design — and it
+happens **once**, there, not re-checked by every node downstream. The moment external data has
+been decoded and put on a `msg`, it is `msg`: trusted from then on.
 
-- **Decoding external bytes.** Wire frames, serial data, file contents, API responses and
-  device data arrive from outside the flow and are parsed, not trusted — the codec's job, and
-  it fails loudly on malformed input by design.
-- **Operational failure.** A connection that drops, a timeout, an ack that never comes, a
-  vehicle that answers `DENIED` — these are real conditions to handle where they occur, and
-  none of them is an input check.
+Operational failure is a fourth thing and not an input check at all. A connection that drops,
+a timeout, an ack that never comes, a vehicle that answers `DENIED` — real conditions, handled
+where they occur.
 
 *Superseded:* this section previously read "Message input is a runtime boundary" and listed
 `msg` properties, payload types, numeric ranges and MAVLink command arguments as appropriate
