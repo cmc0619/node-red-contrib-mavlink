@@ -396,5 +396,7 @@ test('mavlink-move help documents the reposition carrier and the mode-change fla
   assert.match(html, /COMMAND_INT/, 'help names the wire message');
   assert.match(html, /MAV_DO_REPOSITION_FLAGS_CHANGE_MODE/, 'help names the flag');
   assert.match(html, /mode change/, 'the flag is documented as a mode change');
-  assert.match(html, /COMMAND_INT_ONLY/, 'help names the failure surfacing');
+  // The failure words are documented as flows will see them: the MAV_RESULT
+  // name lowercased IS the record's result field, verbatim from the ack path.
+  assert.match(html, /command_int_only/, 'help names the failure surfacing as the result word');
 });

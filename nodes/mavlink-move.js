@@ -117,25 +117,26 @@ module.exports = function registerMavlinkMove(RED) {
         elapsed: outcome.elapsed,
       };
       if (outcome.result === 'accepted') {
-        completeResult(node, send, 'succeeded', 'accepted', shared);
+        completeResult(node, send, 'accepted', null, { ...shared, confirmedBy: 'ack' });
         done();
         return;
       }
       if (outcome.result === 'timeout') {
-        // No completion condition exists for a goto in this node, so a lost
-        // ack stays what it is: an unanswered wait, reported as timeout.
-        applyActionStatus(node, 'error', 'reposition timeout');
-        send([null, statusRecord('timeout', outcome.detail, shared)]);
+        // §9: a missing ack is not a failure — and not a verdict either. No
+        // completion condition exists for a goto in this node, so a lost ack
+        // reports exactly what the Command node reports: unconfirmed, with
+        // nothing having confirmed it. Same word, same meaning, same machinery.
+        applyActionStatus(node, 'error', 'reposition unconfirmed');
+        send([null, statusRecord('unconfirmed', outcome.detail, { ...shared, confirmedBy: 'none' })]);
         done(new Error('Move reposition timed out waiting for COMMAND_ACK'));
         return;
       }
-      // Terminal failure — the record's detail names the MAV_RESULT
-      // ('denied', 'command_int_only', 'command_unsupported_mav_frame', …).
+      // Terminal ack — the MAV_RESULT name IS the result ('denied',
+      // 'command_int_only', 'command_unsupported_mav_frame', …), passed
+      // through verbatim like mavlink-command's, because it is the same
+      // AckWaiter outcome. One vocabulary, no translation layer to drift.
       applyActionStatus(node, 'error', `reposition ${outcome.result}`);
-      send([
-        null,
-        statusRecord('failed', outcome.detail ? `${outcome.result}: ${outcome.detail}` : outcome.result, shared),
-      ]);
+      send([null, statusRecord(outcome.result, outcome.detail, { ...shared, confirmedBy: 'ack' })]);
       done(new Error(`Move reposition ${outcome.result}`));
     }
 
@@ -167,12 +168,12 @@ module.exports = function registerMavlinkMove(RED) {
             // send that throws routes to failInput below: that input
             // genuinely failed (the lock is still freed by stopStream).
             const stopMessage = stopStream();
-            completeResult(node, send, 'succeeded', 'stopped', { message: stopMessage, sent });
+            completeResult(node, send, 'stopped', null, { message: stopMessage, sent });
           } else {
-            // A stop with nothing running succeeds with a distinguishing
+            // A stop with nothing running completes with a distinguishing
             // detail — a stop control must not punish a second press
             // (§ "Move setpoint matrix").
-            completeResult(node, send, 'succeeded', 'no stream', {});
+            completeResult(node, send, 'stopped', 'no stream', {});
           }
           done();
           return;
@@ -239,7 +240,7 @@ module.exports = function registerMavlinkMove(RED) {
             }
             // Send tier: commands ride the Control band, not Streaming.
             connectionNode.send(message, { band: BAND.CONTROL, target, identityId });
-            completeResult(node, send, 'succeeded', 'sent', { message });
+            completeResult(node, send, 'sent', null, { message });
           }
           done();
           return;
@@ -399,13 +400,13 @@ module.exports = function registerMavlinkMove(RED) {
             stream = next;
             streamKey = key;
             releaseStream = release;
-            completeResult(node, send, 'succeeded', 'streaming', { message });
+            completeResult(node, send, 'streaming', null, { message });
           } else {
             // Send tier. No stopStream here: `delivery` is fixed per node, so
             // a send-delivery node can never own a stream — the guard would
             // protect an unreachable state (AGENTS "Proof-of-possibility").
             connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
-            completeResult(node, send, 'succeeded', 'sent', { message });
+            completeResult(node, send, 'sent', null, { message });
           }
         }
         done();
@@ -438,24 +439,32 @@ module.exports = function registerMavlinkMove(RED) {
 
 function completeBuild(node, send, message) {
   applyActionStatus(node, 'ok', 'built move');
-  send([{ payload: message }, statusRecord('succeeded', 'built', { message })]);
+  send([{ payload: message }, statusRecord('built', null, { message })]);
 }
 
 /**
  * A completed input: badge, output 0 trigger, status record — one shape for
- * the sent/streaming/stopped outcomes. One input, one trigger (§9): a stop
- * that succeeded fires output 0 like any other completed input; its
- * 'no stream' detail distinguishes the second press.
+ * every good outcome. One input, one trigger (§9): a stop that completed
+ * fires output 0 like any other completed input; its 'no stream' detail
+ * distinguishes the second press.
+ *
+ * The result IS the outcome, one meaning per word, shared with
+ * mavlink-command wherever the meaning is shared: 'sent' (on the wire,
+ * nobody answers), 'streaming' (setpoints flowing at rate), 'stopped'
+ * (stream ended by the flow), 'accepted' (the vehicle agreed — reposition
+ * confirm only). 'succeeded' is banned from this node: it once meant both
+ * "on the wire" and "the vehicle agreed", and a word with two meanings is
+ * how 27/30 measured silence as success.
  *
  * @param {object} node
  * @param {Function} send
- * @param {string} result  'succeeded'
- * @param {string} detail  'sent' | 'streaming' | 'stopped' | 'no stream' | 'accepted'
+ * @param {string} result  'sent' | 'streaming' | 'stopped' | 'accepted'
+ * @param {?string} detail  qualifier within the result ('no stream'), or null
  * @param {object} fields  payload/record fields (message, `sent` on stops,
- *   resultCode/retries/elapsed on reposition confirms)
+ *   resultCode/retries/elapsed/confirmedBy on reposition confirms)
  */
 function completeResult(node, send, result, detail, fields) {
-  applyActionStatus(node, 'ok', detail);
+  applyActionStatus(node, 'ok', detail || result);
   send([{ payload: { result, ...fields } }, statusRecord(result, detail, fields)]);
 }
 
@@ -469,7 +478,7 @@ function completeResult(node, send, result, detail, fields) {
  * here would run the whole downstream chain a second time — the setpoint's own
  * "then do X" would fire at t=0 as well as at expiry. Expiry is a lifecycle
  * update, and lifecycle updates ride output 1, the same way Mission and Param
- * progress does. Branch on it with a switch for `detail === 'expired'`.
+ * progress does. Branch on it with a switch for `result === 'expired'`.
  *
  * @param {object} node
  * @param {object|null} message  the zero-velocity brake that was sent, or null when its send threw
@@ -478,13 +487,13 @@ function completeResult(node, send, result, detail, fields) {
  */
 function completeExpiry(node, message, sent, brakeError) {
   applyActionStatus(node, 'ok', 'stream expired');
-  // `detail` is the documented discriminator (`detail === 'expired'`) and
+  // `result` is the documented discriminator (`result === 'expired'`) and
   // must survive a brake failure — the one moment downstream recovery matters
   // most is exactly when the switch must still match (Codex, #240). The
   // failure rides its own field instead.
   const extra = { message, sent };
   if (brakeError) extra.brakeError = brakeError.message;
-  node.send([null, statusRecord('succeeded', 'expired', extra)]);
+  node.send([null, statusRecord('expired', null, extra)]);
 }
 
 function statusRecord(result, detail, extra = {}) {

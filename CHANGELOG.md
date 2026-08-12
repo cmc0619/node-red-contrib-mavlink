@@ -4,6 +4,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [Unreleased]
+
+### Changed
+
+- **`mavlink-move` result vocabulary — breaking.** `succeeded` is gone: it
+  meant both "put on the wire" (setpoints) and "the vehicle agreed"
+  (reposition), and the double meaning let a silent run read as a success.
+  Every result is now its own word, shared with `mavlink-command` where the
+  meaning is shared: silent paths report `built`, `sent`, `streaming`,
+  `stopped`, or `expired`; the reposition confirm path reports the ack outcome
+  verbatim — `accepted`, the MAV_RESULT name for a refusal (`denied`,
+  `command_int_only`, …), or `unconfirmed` for a lost ack (previously
+  `timeout`). Stream expiry and stop now discriminate on `result` (`expired` /
+  `stopped`), not `detail`. `failed` still means the input never took effect.
+
 ## [0.2.0] - 2026-08-11
 
 Three weeks of transaction work: every node that waits for a vehicle now

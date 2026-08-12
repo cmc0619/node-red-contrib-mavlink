@@ -246,13 +246,16 @@ test('02 requires AP mission/fence/rally success plus PX4 fence gate (no empty f
   assert.equal(isSpecializedPass(pass), true);
 });
 
-test('27/30 read mavlink-move\'s status vocabulary, not mavlink-command\'s', () => {
-  // The two node families do not agree on words. An accepted reposition is
-  // published by completeResult as result 'succeeded' (detail 'accepted'); a
-  // lost ack is 'timeout', not 'timed-out'; a terminal MAV_RESULT is 'failed'
-  // carrying its resultCode. Keying these examples on the Command node's
-  // 'accepted'/'timed-out' made 37 unable to pass at all and let 38's silence
-  // through as a measurement — the exact fiction the branch exists to stop.
+test('27/30 read the unified vocabulary — and \'succeeded\' stays banned', () => {
+  // The two node families used to disagree on words: Move published
+  // 'succeeded'/'timeout' where Command published 'accepted'/'unconfirmed',
+  // and keying 27/30 on the wrong family's words made 27 unable to pass and
+  // let 30's silence through as a measurement (#267, one carrier over). The
+  // vocabulary is now one: Move's reposition path publishes the AckWaiter
+  // outcome verbatim, exactly as mavlink-command does. These pins hold the
+  // harness to the unified words — and hold 'succeeded' out of the branch,
+  // so a producer regression to the old word reads as never-settled (FAIL),
+  // not as a pass.
   const reposition = (result, detail, resultCode) => ({
     tag: 'debug:reposition status (resultCode + retries)',
     result, detail, resultCode, excerpt: '',
@@ -261,20 +264,24 @@ test('27/30 read mavlink-move\'s status vocabulary, not mavlink-command\'s', () 
   const run = (key, record) =>
     verdictFrom(PROFILE[key], { debug: record ? [arm, record] : [arm], errors: [] }, '');
 
-  // 37 asserts ArduPilot accepts.
-  assert.equal(run('27-move-reposition-carrier', reposition('succeeded', 'accepted', 0)).status, 'PASS');
-  assert.equal(run('27-move-reposition-carrier', reposition('failed', 'denied', 2)).status, 'FAIL');
+  // 27 asserts ArduPilot accepts.
+  assert.equal(run('27-move-reposition-carrier', reposition('accepted', null, 0)).status, 'PASS');
+  assert.equal(run('27-move-reposition-carrier', reposition('denied', null, 2)).status, 'FAIL');
 
-  // 38 measures: any answer PX4 gives passes, silence does not.
-  assert.equal(run('30-px4-move-reposition', reposition('succeeded', 'accepted', 0)).status, 'PASS');
-  assert.equal(run('30-px4-move-reposition', reposition('failed', 'denied', 2)).status, 'PASS');
+  // 30 measures: any answer PX4 gives passes, silence does not.
+  assert.equal(run('30-px4-move-reposition', reposition('accepted', null, 0)).status, 'PASS');
+  assert.equal(run('30-px4-move-reposition', reposition('denied', null, 2)).status, 'PASS');
 
-  // A timeout carries no resultCode: nothing was measured, on either example.
+  // A lost ack is 'unconfirmed' (§9) and carries no resultCode: nothing was
+  // measured, on either example.
   for (const key of ['27-move-reposition-carrier', '30-px4-move-reposition']) {
-    assert.equal(run(key, reposition('timeout', 'ack timeout', null)).status, 'FAIL');
-    // A send that threw before the wire also spells 'failed', but with no code.
+    assert.equal(run(key, reposition('unconfirmed', 'ack timeout', null)).status, 'FAIL');
+    // A send that threw before the wire spells 'failed', with no code.
     assert.equal(run(key, reposition('failed', 'connection closed', null)).status, 'FAIL');
     assert.equal(run(key, null).status, 'FAIL', 'no record at all');
+    // The banned word: a regression to 'succeeded' must read as not-measured,
+    // never as acceptance.
+    assert.equal(run(key, reposition('succeeded', 'accepted', 0)).status, 'FAIL');
   }
 });
 
@@ -302,15 +309,15 @@ test('39/40 CHANGE_MODE probes: silence is an answer, a dead send is not', () =>
   ];
   for (const key of PROBES) {
     assert.ok(PROFILE[key], `profile ${key} exists`);
-    assert.equal(run(key, reposition('succeeded', 'accepted', 0)).status, 'PASS');
-    assert.equal(run(key, reposition('failed', 'denied', 2)).status, 'PASS', 'a denial is the measurement');
+    assert.equal(run(key, reposition('accepted', null, 0)).status, 'PASS');
+    assert.equal(run(key, reposition('denied', null, 2)).status, 'PASS', 'a denial is the measurement');
 
-    // The divergence from 30: a timeout PASSes here and FAILs there.
-    const dropped = run(key, reposition('timeout', 'ack timeout', null));
+    // The divergence from 30: a lost ack PASSes here and FAILs there.
+    const dropped = run(key, reposition('unconfirmed', 'ack timeout', null));
     assert.equal(dropped.status, 'PASS', 'silence is the predicted PX4 answer');
     assert.match(dropped.reason, /silently dropped/);
     assert.equal(
-      run('30-px4-move-reposition', reposition('timeout', 'ack timeout', null)).status,
+      run('30-px4-move-reposition', reposition('unconfirmed', 'ack timeout', null)).status,
       'FAIL',
       "30's contract is unchanged — only the probes widen it"
     );
@@ -318,5 +325,7 @@ test('39/40 CHANGE_MODE probes: silence is an answer, a dead send is not', () =>
     // Never a blank cheque: no wire, no measurement, on any contract.
     assert.equal(run(key, reposition('failed', 'connection closed', null)).status, 'FAIL');
     assert.equal(run(key, null).status, 'FAIL', 'no record at all');
+    // The banned word fails even on the widest contract.
+    assert.equal(run(key, reposition('succeeded', 'accepted', 0)).status, 'FAIL');
   }
 });

@@ -672,18 +672,32 @@ function verdictFrom(profile, summary, log) {
       // and the deadline recomputes the final verdict.
       return { status: 'FAIL', reason: 'Move reposition never settled — not measured' };
     }
-    // mavlink-move does NOT speak mavlink-command's status vocabulary, and
-    // keying these examples on the Command words was wrong in both directions:
-    // an accepted reposition is published by completeResult as result
-    // 'succeeded' (detail 'accepted'), so 27 could never pass; a lost ack is
-    // 'timeout', not 'timed-out', so 30 fell through to PASS on the very
-    // silence the branch exists to catch. 23/29 read 'accepted' because
-    // mavlink-command emits exactly that — the two families differ.
-    const accepted = repositionRecord.result === 'succeeded';
-    // A terminal MAV_RESULT and a send that threw both spell result 'failed';
-    // only the ACK carries a resultCode. ACCEPTED is 0, so compare to null.
-    const vehicleAnswered = accepted ||
-      (repositionRecord.result === 'failed' && repositionRecord.resultCode !== null);
+    if (repositionRecord.result === 'succeeded') {
+      // The banned legacy word. The old producer published an ACCEPTED ack as
+      // 'succeeded' (detail 'accepted', resultCode 0), so a regression would
+      // arrive here carrying a resultCode that looks like an answer. It is
+      // not read as one: the word is dead, and a record speaking it means the
+      // producer drifted — fail the run rather than measure through it.
+      return {
+        status: 'FAIL',
+        reason: "Move reposition record speaks the banned word 'succeeded' — producer regression, nothing measured",
+      };
+    }
+    // One vocabulary: Move's reposition path rides the same AckWaiter as
+    // mavlink-command and now publishes its words verbatim — 'accepted', the
+    // MAV_RESULT name for a terminal refusal ('denied', 'command_int_only',
+    // …), 'unconfirmed' for a lost ack — so this branch reads the same words
+    // 23/29 read. 'succeeded' is banned from mavlink-move: it once meant both
+    // "on the wire" (setpoints) and "the vehicle agreed" (reposition), which
+    // is how 27 could never pass while 30 passed on silence (#267, one
+    // carrier over). The translation table this comment used to be is gone
+    // because the thing it translated is gone.
+    const accepted = repositionRecord.result === 'accepted';
+    // Only a COMMAND_ACK carries a resultCode — accepted (0) and every
+    // terminal MAV_RESULT ('denied' 2, 'command_int_only' 8, …). An
+    // 'unconfirmed' wait and a send that died before the wire both carry
+    // null: nothing answered.
+    const vehicleAnswered = repositionRecord.resultCode !== null;
     // The two contracts differ and the expect strings carry the difference. 30
     // is a measurement, so what it expects is that PX4 *answers* — not what the
     // answer is. An accept and a denial are both anticipated outcomes of the
@@ -708,9 +722,9 @@ function verdictFrom(profile, summary, log) {
       }
       const answer = accepted
         ? 'accepted'
-        : repositionRecord.result === 'timeout'
+        : repositionRecord.result === 'unconfirmed'
           ? 'no ACK — silently dropped'
-          : `${repositionRecord.detail || 'denied'} (${repositionRecord.resultCode})`;
+          : `${repositionRecord.result} (${repositionRecord.resultCode})`;
       return { status: 'PASS', reason: `Move reposition ${answer} (measured)` };
     }
     if (/result recorded/i.test(expect)) {
@@ -722,7 +736,7 @@ function verdictFrom(profile, summary, log) {
       }
       return {
         status: 'PASS',
-        reason: `PX4 Move reposition ${accepted ? 'accepted' : repositionRecord.detail || 'denied'} (measured)`,
+        reason: `PX4 Move reposition ${accepted ? 'accepted' : repositionRecord.result} (measured)`,
       };
     }
     return accepted
@@ -770,13 +784,14 @@ function verdictFrom(profile, summary, log) {
     }
   }
   if (/move stream|stop sent|zero.?velocity/i.test(expect)) {
-    const streaming = summary.debug.some(
-      (d) => d.result === 'succeeded' && /streaming/i.test(d.detail || d.excerpt || '')
-    );
-    const zeroOrResent = summary.debug.filter(
-      (d) => d.result === 'succeeded' && /streaming|sent/i.test(d.detail || d.excerpt || '')
-    ).length;
-    if (streaming && zeroOrResent >= 2) {
+    // Move's silent-path results are their own words now: 'streaming' on
+    // stream start, 'stopped' on the explicit stop (the zero-velocity brake
+    // rides the stop). The old detail/excerpt sniffing matched the stop via
+    // the `sent` COUNT field in its excerpt — a lucky collision, replaced by
+    // reading the result the node actually publishes.
+    const streaming = summary.debug.some((d) => d.result === 'streaming');
+    const stopped = summary.debug.some((d) => d.result === 'stopped');
+    if (streaming && stopped) {
       return { status: 'PASS', reason: 'move stream then zero-velocity/stop observed' };
     }
   }
