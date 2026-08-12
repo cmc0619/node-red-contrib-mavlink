@@ -467,7 +467,7 @@ same rule the identity node already applies to role changes.
 
 | | `gcs` / `custom` | `companion` |
 |---|---|---|
-| Send-as (identity) | dropdown of identities bound to the selected connection; first eligible preselected and written into config | same dropdown (with one bound identity it is simply shown selected — "hardcoded") |
+| Identity | dropdown of identities bound to the selected connection; first eligible preselected and written into config | same dropdown (with one bound identity it is simply shown selected — "hardcoded") |
 | Target sysid | shown; blank inherits the profile default | hidden — derived from the airframe (identity's own sysid) |
 | Target compid | shown; blank inherits the profile default | hidden, pinned to 1 (the autopilot) — except Payload, whose compid addresses a payload device and stays visible |
 
@@ -478,7 +478,7 @@ same rule the identity node already applies to role changes.
 | Connection | hidden — nothing is sent; output 0 feeds `mavlink-out` or a Build-node trigger, which brings its own connection | shown, required |
 | Dialect | shown — bundled dialect list plus a `from Vehicle Profile…` escape; required (empty is editor-invalid — no silent `ardupilotmega`) | hidden — the connection's profile dialect governs catalogs |
 | Vehicle Profile | shown **only** when Dialect is `from Vehicle Profile…`; empty stays invalid until a profile is chosen (no auto-pick) | hidden — the profile arrives via the connection |
-| Send-as (identity) | hidden — source ids are stamped at the wire by whichever node eventually sends | per role table |
+| Identity | hidden — source ids are stamped at the wire by whichever node eventually sends | per role table |
 | Target sysid/compid | shown — a builder must stamp targets | per role table |
 | Firmware (Param, Mission) | shown and required when Build is **not** using Vehicle Profile; hidden (inherited from the profile) when it is | no dropdown — inherited from the connection's profile |
 | Timeout / retries / band | hidden | shown |
@@ -491,7 +491,7 @@ so on Build they take **Vehicle Profile** *or* **(Dialect and Firmware)**.
 independently; a configured 0 is broadcast and survives; blank means inherit):
 
 1. `msg.payload.target`
-2. companion send-as identity → derived `{airframe sysid, 1}` (node config target ignored —
+2. companion identity → derived `{airframe sysid, 1}` (node config target ignored —
    hidden is not honored; Payload's compid still resolves from its visible field)
 3. node config target
 4. profile default — the connection's bound profile on wire tiers; on Build, only when Dialect
@@ -522,7 +522,7 @@ or mixed enums; keep multi-select and caveat emptor outside that binary exceptio
   `from Vehicle Profile…` pattern as the senders; no connection or identity on Build. On wire
   tiers the connection's profile governs the catalogs, because that dialect is what the wire
   will encode.
-- **Fan-out** — gcs-paradigm by nature. Its send-as dropdown offers only gcs-enabled identities
+- **Fan-out** — gcs-paradigm by nature. Its Identity dropdown offers only gcs-enabled identities
   (`gcs` or `custom`, first one preselected); selection modes replace the single-target rows.
   Build tier with `all`/`filter` selection still shows the connection — the live peer table is
   the only place those selections can resolve. Build + explicit `list` needs no connection; when
@@ -2009,7 +2009,7 @@ before each one.
 | Item | Status | Notes |
 |---|---|---|
 | **Custom dialect upload in the Vehicle editor** | deferred | Superseded by the dialect library (Seed + catalog dates). No path/upload UI and no path resolution behind it. Private-dialect library ingestion is future work. |
-| **Command node `COMMAND_INT`** | **done** | Carrier defaults to `COMMAND_INT` in the Command, Payload, and Formation editors (config key `sendAs` since #278; Fan-out never held the key — its "Send as" row is the identity selector); the only other choice is `COMMAND_LONG`, with no blank prompt or conditional editor validator. Runtime still refuses missing/invalid saved carrier data rather than repairing it. Every tier — build included — honours the configured carrier. Positional params are always degrees; the INT carrier scales ×1e7 per the dialect XML's own classification (`intCoordKinds`: `hasLocation` + not-degE7 → scale; natively-degE7 params carry raw; non-location param5/6 like gimbal flags never scale; unknown command → historical scaling). NaN in param5/6 refuses the INT build loud — the spec routes NaN-meaning commands to COMMAND_LONG, and coercion would aim at null island. On `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns and rebuilds once from the canonical degree params in the other form; second wrong-carrier fails loud (no auto-swap in Fan-out/Payload — homogeneous fleets per node, the named result tells the operator which way to flip). Fan-out command/payload actions and Payload command-backed verbs use the same `lib/command` builders; message-kind payload verbs ignore the carrier. |
+| **Command node `COMMAND_INT`** | **done** | Carrier defaults to `COMMAND_INT` in the Command, Payload, and Formation editors (config key `sendAs` since #278; Fan-out never held the key — that row selects the identity, and is labelled **Identity**); the only other choice is `COMMAND_LONG`, with no blank prompt or conditional editor validator. Runtime reads the saved choice and does not repair it; there is no migration machinery for the retired `carrier` key, and no helper or test exists to classify a config the editor cannot produce (owner ruling, 2026-08-12 — `AGENTS.md` §Bloat prevention). Command's pre-existing deploy-time check, which reds out a missing command *or* wire message, is unchanged. Every tier — build included — honours the configured carrier. Positional params are always degrees; the INT carrier scales ×1e7 per the dialect XML's own classification (`intCoordKinds`: `hasLocation` + not-degE7 → scale; natively-degE7 params carry raw; non-location param5/6 like gimbal flags never scale; unknown command → historical scaling). NaN in param5/6 refuses the INT build loud — the spec routes NaN-meaning commands to COMMAND_LONG, and coercion would aim at null island. On `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns and rebuilds once from the canonical degree params in the other form; second wrong-carrier fails loud (no auto-swap in Fan-out/Payload — homogeneous fleets per node, the named result tells the operator which way to flip). Fan-out command/payload actions and Payload command-backed verbs use the same `lib/command` builders; message-kind payload verbs ignore the carrier. |
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
 | **Param definition catalog** | **done ✅** | 30,938 definitions ship in `seed/param-defs-*.seed.gz` (ArduPilot's six vehicle documents + PX4), keyed firmware × vehicle family, so the Build tier reaches definitions without naming a profile. A profile's own holding file still overrides the seed id by id, because it came from the firmware being flown; a corrupt one is reported *and* falls back to the seed. Authenticated GET stays local-only; the Vehicle editor's explicit authenticated Update downloads its optional `paramDefsUrl`, validates, and atomically replaces the file. Param id is a search panel matching name *and* description (the datalist could only match a name prefix), free entry preserved for parameters no metadata file lists. Value follows the definition: documented enumerations become a select with a Custom value escape, documented bounds are refused at edit time, units and increment ride along. An `unknown` vehicle gets the union of parameter *names* only — no bounds, no enumerations, because the documents disagree and there is no basis to pick (§14). A parameter is addressed by name **or** by index, offered only on a read since `PARAM_SET` has no `param_index` and a by-index read sends no name; each action shows only the fields its message carries, and the checks are hidden with the rows (§14). Where the firmware publishes a wire type — PX4 does, for all 1836, and ArduPilot for none — Type narrows to that one option rather than being guessed. The Param id hover names the definition set that answered, composed by the route because only the route knows which document it resolved (§14). Regenerate with `npm run generate-param-seed`. |
 | **Full command-param `enum=` recovery** | **done** | Seed compile carries common.xml `<param enum=`> links into the bundle (e.g. Arm → `MAV_BOOL`). The old `hints.js` overlay is gone. |
