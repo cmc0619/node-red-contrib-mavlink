@@ -8,7 +8,7 @@ test('mavlink-move node builds a position message and emits status on output 1',
   const RED = redStub({});
   require('../../nodes/mavlink-move')(RED);
   const Node = RED.nodes.types['mavlink-move'];
-  const node = new Node({ delivery: 'build', dialect: 'common', mode: 'position',
+  const node = new Node({ delivery: 'build', dialect: 'common', action: 'steer',
     north: 0,
     east: 0,
     up: 0, targetSystem: 5, targetComponent: 1 });
@@ -36,7 +36,7 @@ test('mavlink-move inherits Vehicle Profile target when Build dialect uses Vehic
   const node = new Node({
     delivery: 'build',
     dialect: '__vehicle',
-    mode: 'position',
+    action: 'steer',
     north: 0,
     east: 0,
     up: 0,
@@ -65,7 +65,7 @@ test('mavlink-move explicit config value wins over Vehicle Profile', () => {
   const node = new Node({
     delivery: 'build',
     dialect: '__vehicle',
-    mode: 'position',
+    action: 'steer',
     north: 0,
     east: 0,
     up: 0,
@@ -94,7 +94,7 @@ test('mavlink-move config 0 (broadcast) wins over Vehicle Profile', () => {
   const node = new Node({
     delivery: 'build',
     dialect: '__vehicle',
-    mode: 'position',
+    action: 'steer',
     north: 0,
     east: 0,
     up: 0,
@@ -130,7 +130,7 @@ test('mavlink-move companion identity derives sysid from airframe and pins compi
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'send',
-    mode: 'position',
+    action: 'steer',
     north: 0,
     east: 0,
     up: 0,
@@ -164,7 +164,7 @@ test('mavlink-move reuses its deploy-resolved Connection during input delivery',
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'send',
-    mode: 'position',
+    action: 'steer',
     north: 0,
     east: 0,
     up: 0,
@@ -194,7 +194,7 @@ test('mavlink-move payload.target beats companion derivation', () => {
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'send',
-    mode: 'position',
+    action: 'steer',
     north: 0,
     east: 0,
     up: 0,
@@ -223,7 +223,7 @@ test('mavlink-move build tier inherits from config.vehicle stub only with Vehicl
   const node = new Node({
     delivery: 'build',
     dialect: '__vehicle',
-    mode: 'position',
+    action: 'steer',
     north: 0,
     east: 0,
     up: 0,
@@ -253,7 +253,7 @@ test('mavlink-move build tier ignores connection vehicle when vehicle field is s
   const node = new Node({
     delivery: 'build',
     dialect: '__vehicle',
-    mode: 'position',
+    action: 'steer',
     north: 0,
     east: 0,
     up: 0,
@@ -283,7 +283,7 @@ test('mavlink-move concrete Build dialect does not inherit stale Vehicle Profile
   const node = new Node({
     delivery: 'build',
     dialect: 'common',
-    mode: 'position',
+    action: 'steer',
     north: 0,
     east: 0,
     up: 0,
@@ -304,40 +304,55 @@ test('mavlink-move concrete Build dialect does not inherit stale Vehicle Profile
   assert.ok(Number.isNaN(sent[0].payload.fields.target_component), 'concrete Build dialect has no profile inheritance rung');
 });
 
-test('mavlink-move blank payload frame inherits the configured frame, not LOCAL_NED', () => {
-  const RED = redStub({});
+test('mavlink-move blank payload altRef/reference inherit the configured value; explicit payload wins (§6)', () => {
+  const veh = { firmware: 'ardupilot' };
+  const RED = redStub({ veh });
   require('../../nodes/mavlink-move')(RED);
   const Node = RED.nodes.types['mavlink-move'];
-  const node = new Node({
+
+  // goto: a blank payload.altRef keeps the configured msl rather than
+  // resetting to the home default.
+  const goto = new Node({
     delivery: 'build',
     dialect: 'common',
-    mode: 'position',
-    frame: 'GLOBAL_RELATIVE_ALT_INT',
+    action: 'goto',
+    altRef: 'msl',
     lat: 47,
     lon: 8,
     alt: 10,
     targetSystem: 5,
     targetComponent: 1,
   });
-
-  // Blank means inherit (§6): an unset/null/'' payload frame keeps the
-  // configured global frame rather than resetting to the LOCAL_NED default.
   for (const blank of [undefined, null, '']) {
     let sent;
-    node.emit('input', { payload: { frame: blank } }, (m) => { sent = m; }, () => {});
-    assert.equal(sent[0].payload.name, 'SET_POSITION_TARGET_GLOBAL_INT', `blank frame ${JSON.stringify(blank)} inherits config`);
-    assert.equal(sent[0].payload.fields.coordinate_frame, 6);
+    goto.emit('input', { payload: { altRef: blank } }, (m) => { sent = m; }, () => {});
+    assert.equal(sent[0].payload.name, 'COMMAND_INT', `blank altRef ${JSON.stringify(blank)} still builds the goto`);
+    assert.equal(sent[0].payload.fields.frame, 0, `blank altRef ${JSON.stringify(blank)} inherits msl`);
   }
-
-  // An explicit payload frame still wins.
   let sent;
-  node.emit(
-    'input',
-    { payload: { frame: 'LOCAL_NED', position: { north: 1, east: 2, up: 3 } } },
-    (m) => { sent = m; },
-    () => {}
-  );
-  assert.equal(sent[0].payload.name, 'SET_POSITION_TARGET_LOCAL_NED');
+  goto.emit('input', { payload: { altRef: 'home' } }, (m) => { sent = m; }, () => {});
+  assert.equal(sent[0].payload.fields.frame, 3, 'an explicit payload altRef wins');
+
+  // steer: same rule for the reference — Build has no connection, so the
+  // body derivation reads the node's own Vehicle Profile (firmwareFor).
+  const steer = new Node({
+    delivery: 'build',
+    dialect: 'common',
+    action: 'steer',
+    reference: 'body',
+    vehicle: 'veh',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    targetSystem: 5,
+    targetComponent: 1,
+  });
+  for (const blank of [undefined, null, '']) {
+    steer.emit('input', { payload: { reference: blank } }, (m) => { sent = m; }, () => {});
+    assert.equal(sent[0].payload.fields.coordinate_frame, 9, `blank reference ${JSON.stringify(blank)} inherits body (ArduPilot)`);
+  }
+  steer.emit('input', { payload: { reference: 'world' } }, (m) => { sent = m; }, () => {});
+  assert.equal(sent[0].payload.fields.coordinate_frame, 1, 'an explicit payload reference wins');
 });
 
 test('mavlink-move stream: payload rateHz overrides config (§6 payload overrides values)', async () => {
@@ -351,7 +366,7 @@ test('mavlink-move stream: payload rateHz overrides config (§6 payload override
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -384,7 +399,7 @@ test('mavlink-move stream: malformed payload timing overrides refuse the input',
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -442,7 +457,7 @@ test('mavlink-move stream: TTL expiry emits an expired message the flow can chai
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -495,7 +510,7 @@ test('mavlink-move stream: a whitespace ttl inherits the configured TTL, never "
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -530,7 +545,7 @@ test('mavlink-move stream: a replaced or closed stream expires silently', async 
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -565,7 +580,7 @@ test('mavlink-move stream: rejected timing override leaves the active stream run
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -608,7 +623,7 @@ test('mavlink-move stream: one owner per (connection, target) — a second node 
   const Node = RED.nodes.types['mavlink-move'];
   const cfg = {
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -656,7 +671,7 @@ test('mavlink-move stream: TTL expiry frees the target for another node (#176)',
   const Node = RED.nodes.types['mavlink-move'];
   const cfg = {
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -694,7 +709,7 @@ test('mavlink-move stream: replacement hands over with no brake; close still bra
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -738,7 +753,7 @@ test('mavlink-move stream: a tick send failure never kills the stream and report
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -800,7 +815,7 @@ test('mavlink-move stream: a brake-send throw on close still completes close', (
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -831,7 +846,7 @@ test('mavlink-move stream: {action:"stop"} halts the stream, brakes, and records
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -880,7 +895,7 @@ test('mavlink-move stream: stop with nothing running reports stopped with detail
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -910,7 +925,7 @@ test('mavlink-move send delivery refuses {action:"stop"} — only the stream tie
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'send',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -935,7 +950,7 @@ test('mavlink-move: an unknown action throws naming the valid actions', () => {
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -963,7 +978,7 @@ test('mavlink-move stream: {action:"stop"} releases the target for a new stream 
   const Node = RED.nodes.types['mavlink-move'];
   const cfg = {
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -993,83 +1008,55 @@ test('mavlink-move stream: {action:"stop"} releases the target for a new stream 
 });
 
 test('mavlink-move advisory dedup: one warn per streak, cleared by a clean input (C8)', () => {
-  const conn = { vehicle: { firmware: 'px4' }, send() {} };
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-move')(RED);
-  const Node = RED.nodes.types['mavlink-move'];
   const make = () => {
+    // Firmware rides the connection's Vehicle Profile, so the stub's profile
+    // is mutable per input — a real flow's connection can rebind too.
+    const conn = { vehicle: { firmware: 'px4' }, send() {} };
+    const RED = redStub({ conn });
+    require('../../nodes/mavlink-move')(RED);
+    const Node = RED.nodes.types['mavlink-move'];
     const node = new Node({
       delivery: 'send',
-      mode: 'position',
-      north: 1,
-      east: 2,
-      up: 3,
+      action: 'steer',
       connection: 'conn',
       targetSystem: 1,
       targetComponent: 1,
     });
     const warns = [];
     node.warn = (text) => { warns.push(text); };
-    return { node, warns };
+    return { node, conn, warns };
   };
-  const offset = { frame: 'LOCAL_OFFSET_NED' };
-  const body = { frame: 'BODY_NED' };
-  const clean = { frame: 'LOCAL_NED' };
+  // A: PX4 body reference derives BODY_NED (8) — position discarded (§14).
+  const bodyOnPx4 = { reference: 'body', velocity: { north: 1, east: 0, up: 0 } };
+  // B: ArduPilot absolute-yaw yaw-only — held heading in measurement (§14).
+  const yawOnAp = { yaw: 90 };
+  // Clean: world velocity works everywhere.
+  const clean = { velocity: { north: 1, east: 0, up: 0 } };
 
   // A refresh-fed stream repeating the same combo must not spam the sidebar —
   // noise gets ignored, which defeats the advisory's whole purpose.
   let s = make();
-  s.node.emit('input', { payload: offset }, () => {}, () => {});
-  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
+  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
   assert.equal(s.warns.length, 1, 'same advisory twice → exactly one warn');
-  assert.match(s.warns[0], /OFFSET/);
+  assert.match(s.warns[0], /BODY_NED/);
 
   // Only consecutive repeats dedup: a change is news, and so is the return.
   s = make();
-  s.node.emit('input', { payload: offset }, () => {}, () => {});
-  s.node.emit('input', { payload: body }, () => {}, () => {});
-  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
+  s.conn.vehicle.firmware = 'ardupilot';
+  s.node.emit('input', { payload: yawOnAp }, () => {}, () => {});
+  s.conn.vehicle.firmware = 'px4';
+  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
   assert.equal(s.warns.length, 3, 'advisory A, B, A → three warns');
-  assert.match(s.warns[1], /BODY_NED/);
+  assert.match(s.warns[1], /yaw-only/);
 
   // A clean input clears the memory, so the advisory's next appearance warns.
   s = make();
-  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
   s.node.emit('input', { payload: clean }, () => {}, () => {});
-  s.node.emit('input', { payload: offset }, () => {}, () => {});
+  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
   assert.equal(s.warns.length, 2, 'advisory, clean, same advisory → two warns');
-});
-
-test('mavlink-move passes px4Compat from config: missing sends *_INT, false sends spec-current and warns', () => {
-  const sends = [];
-  const conn = { vehicle: { firmware: 'px4' }, send(message) { sends.push(message); } };
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-move')(RED);
-  const Node = RED.nodes.types['mavlink-move'];
-  const cfg = {
-    delivery: 'send',
-    mode: 'position',
-    frame: 'GLOBAL_RELATIVE_ALT',
-    lat: 47,
-    lon: 8,
-    alt: 10,
-    connection: 'conn',
-    targetSystem: 1,
-    targetComponent: 1,
-  };
-
-  // A saved config missing the value parses as checked — the safe direction.
-  const legacy = new Node({ ...cfg });
-  legacy.emit('input', { payload: {} }, () => {}, () => {});
-  assert.equal(sends[0].fields.coordinate_frame, 6, 'missing px4Compat keeps the *_INT wire number');
-
-  const optedOut = new Node({ ...cfg, px4Compat: false });
-  const warns = [];
-  optedOut.warn = (text) => { warns.push(text); };
-  optedOut.emit('input', { payload: {} }, () => {}, () => {});
-  assert.equal(sends[1].fields.coordinate_frame, 3, 'opt-out sends the spec-current number');
-  assert.equal(warns.length, 1, 'opt-out under a px4 profile draws the advisory');
-  assert.match(warns[0], /source-read/);
 });
 
 function redStub(nodesById) {
@@ -1117,7 +1104,7 @@ test('mavlink-move stream: expiry brake failure keeps the documented discriminat
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -1160,7 +1147,7 @@ test('mavlink-move stream: a failed handover send leaves the old stream running 
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -1200,7 +1187,7 @@ test('mavlink-move stream: a retarget brakes the old target after the new stream
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -1236,7 +1223,7 @@ test('mavlink-move stream: a failed retarget frees only the new scope, old strea
   const Node = RED.nodes.types['mavlink-move'];
   const cfg = {
     delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -1286,9 +1273,8 @@ function repositionConn() {
 }
 
 const repositionCfg = {
-  carrier: 'reposition',
-  mode: 'position',
-  frame: 'GLOBAL_RELATIVE_ALT',
+  action: 'goto',
+  altRef: 'home',
   lat: 47.1234567,
   lon: 8.5,
   alt: 25,
@@ -1335,75 +1321,86 @@ test('mavlink-move reposition Send tier rides the Control band, not Streaming', 
   assert.equal(sent[1].detail, null);
 });
 
-test('mavlink-move payload.carrier overrides config like mode/frame; unknown carrier refuses', () => {
+test('mavlink-move retired overrides refuse loud: payload carrier/mode/frame/px4Compat throw, nothing reaches the wire', () => {
   const conn = repositionConn();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-move')(RED);
   const Node = RED.nodes.types['mavlink-move'];
-  // A setpoint-configured Send node: the payload flips the carrier per input.
   const node = new Node({
     delivery: 'send',
-    mode: 'position',
-    frame: 'GLOBAL_RELATIVE_ALT',
-    lat: 47,
-    lon: 8,
-    alt: 10,
-    connection: 'conn',
-    targetSystem: 1,
-    targetComponent: 1,
-  });
-
-  node.emit('input', { payload: { carrier: 'reposition' } }, () => {}, () => {});
-  assert.equal(conn.sends[0].message.name, 'COMMAND_INT');
-  node.emit('input', { payload: {} }, () => {}, () => {});
-  assert.equal(conn.sends[1].message.name, 'SET_POSITION_TARGET_GLOBAL_INT', 'blank inherits the configured setpoint carrier');
-
-  let out;
-  let doneError;
-  node.emit('input', { payload: { carrier: 'teleport' } }, (m) => { out = m; }, (err) => { doneError = err; });
-  assert.equal(out[0], null);
-  assert.equal(out[1].result, 'failed');
-  assert.match(doneError.message, /unknown Move carrier "teleport"/);
-  assert.match(doneError.message, /setpoint, reposition/, 'names the valid set');
-});
-
-test('mavlink-move reposition refuses Stream delivery and leaves a running stream untouched', async () => {
-  const conn = repositionConn();
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-move')(RED);
-  const Node = RED.nodes.types['mavlink-move'];
-  const node = new Node({
-    delivery: 'stream',
-    mode: 'velocity',
+    action: 'steer',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
+  });
+
+  // A payload written for the old surface must not be silently reinterpreted
+  // into the wrong wire message — every retired key refuses, naming the new
+  // vocabulary, before anything is built or sent.
+  const retired = [
+    { carrier: 'reposition' },
+    { mode: 'velocity' },
+    { frame: 'LOCAL_NED' },
+    { px4Compat: false },
+  ];
+  for (const payload of retired) {
+    const key = Object.keys(payload)[0];
+    let out;
+    let doneError;
+    node.emit('input', { payload }, (m) => { out = m; }, (err) => { doneError = err; });
+    assert.equal(out[0], null, `payload.${key} must not fire the continue port`);
+    assert.equal(out[1].result, 'failed', `payload.${key} fails the input`);
+    assert.match(doneError.message, new RegExp(`msg\\.payload\\.${key} is retired`), `payload.${key} refuses by name`);
+    assert.match(doneError.message, /action-shaped overrides/, 'the error teaches the new vocabulary');
+  }
+  assert.equal(conn.sends.length, 0, 'nothing reached the wire');
+
+  // The new vocabulary on the same node still works.
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  assert.equal(conn.sends[0].message.name, 'SET_POSITION_TARGET_LOCAL_NED');
+});
+
+test('mavlink-move goto + Stream streams global position setpoints on the *_INT twin; command-path params refuse and leave it running', async () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    ...repositionCfg,
+    delivery: 'stream',
+    connection: 'conn',
     rateHz: 200,
     ttlMs: 0,
   });
 
-  node.emit('input', { payload: {} }, () => {}, () => {});
+  // goto + Stream: the same intent, streamed — the wire is the setpoint twin
+  // of the altitude reference, always the *_INT number (§6 redesign).
+  let started;
+  node.emit('input', { payload: {} }, (m) => { started = m; }, () => {});
+  assert.equal(started[1].result, 'streaming');
+  assert.equal(conn.sends[0].message.name, 'SET_POSITION_TARGET_GLOBAL_INT');
+  assert.equal(conn.sends[0].message.fields.coordinate_frame, 6, 'altRef home streams the *_INT twin');
+  assert.equal(conn.sends[0].message.fields.lat_int, 471234567);
   let deadline = Date.now() + 2000;
   while (conn.sends.length < 2 && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
-  assert.ok(conn.sends.length >= 2, 'stream running before the reposition input');
+  assert.ok(conn.sends.length >= 2, 'stream running before the bad input');
 
-  // COMMAND_INT has no streaming semantics: the refusal is thrown before any
-  // stream bookkeeping, so the running stream keeps going.
-  let out;
-  let doneError;
-  node.emit(
-    'input',
-    { payload: { carrier: 'reposition', position: { lat: 47, lon: 8, alt: 10 }, frame: 'GLOBAL_RELATIVE_ALT' } },
-    (m) => { out = m; },
-    (err) => { doneError = err; }
-  );
-  assert.equal(out[0], null);
-  assert.match(doneError.message, /Move reposition cannot stream/);
+  // speed/radius/changeMode belong to the command path — a streamed setpoint
+  // cannot carry them, and the refusal must leave the running stream running.
+  for (const payload of [{ speed: 5 }, { radius: 80 }, { changeMode: true }]) {
+    const key = Object.keys(payload)[0];
+    let out;
+    let doneError;
+    node.emit('input', { payload }, (m) => { out = m; }, (err) => { doneError = err; });
+    assert.equal(out[0], null, `payload.${key} must not fire the continue port`);
+    assert.equal(out[1].result, 'failed');
+    assert.match(doneError.message, new RegExp(`payload\\.${key} belongs to the Go to command path`));
+  }
 
   const before = conn.sends.length;
   deadline = Date.now() + 2000;
@@ -1411,25 +1408,92 @@ test('mavlink-move reposition refuses Stream delivery and leaves a running strea
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   node.emit('close', () => {});
-  assert.ok(conn.sends.length >= before + 2, 'the stream survived the refused reposition');
+  assert.ok(conn.sends.length >= before + 2, 'the stream survived the refused command params');
 });
 
-test('mavlink-move setpoint carrier refuses Send & confirm — setpoints carry no ack', () => {
+test('mavlink-move goto + Send refuses a yaw rate through the reposition builder\'s own guard', () => {
+  // DO_REPOSITION carries a yaw heading only: the node adds no second guard —
+  // buildRepositionMessage's refusal is the single deploy-time error path.
   const conn = repositionConn();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-move')(RED);
   const Node = RED.nodes.types['mavlink-move'];
-  // Editor-valid config (confirm is only offered on reposition); the payload
-  // flips the carrier back to setpoint, which must refuse loudly.
-  const node = new Node({ ...repositionCfg, delivery: 'confirm', connection: 'conn' });
+  const node = new Node({ ...repositionCfg, delivery: 'send', connection: 'conn' });
 
   let out;
   let doneError;
-  node.emit('input', { payload: { carrier: 'setpoint' } }, (m) => { out = m; }, (err) => { doneError = err; });
+  node.emit('input', { payload: { yawRate: 10 } }, (m) => { out = m; }, (err) => { doneError = err; });
   assert.equal(out[0], null);
   assert.equal(out[1].result, 'failed');
-  assert.match(doneError.message, /setpoints carry no acknowledgement/);
+  assert.match(doneError.message, /no yaw rate/);
   assert.equal(conn.sends.length, 0, 'nothing reached the wire');
+});
+
+test('mavlink-move steer refuses Send & confirm — setpoints carry no ack', () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  // The editor never offers confirm on steer; the runtime refuses it loud
+  // rather than waiting on an acknowledgement that cannot exist (§9).
+  const node = new Node({
+    delivery: 'confirm',
+    action: 'steer',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+  });
+
+  let out;
+  let doneError;
+  node.emit('input', { payload: {} }, (m) => { out = m; }, (err) => { doneError = err; });
+  assert.equal(out[0], null);
+  assert.equal(out[1].result, 'failed');
+  assert.match(doneError.message, /Send & confirm exists on the Go to action only/);
+  assert.equal(conn.sends.length, 0, 'nothing reached the wire');
+});
+
+test('mavlink-move steer body reference derives the frame from the connection firmware and fails closed without one (§14)', () => {
+  const make = (firmware) => {
+    const conn = { vehicle: firmware ? { firmware } : {}, sends: [], send(message) { this.sends.push(message); } };
+    const RED = redStub({ conn });
+    require('../../nodes/mavlink-move')(RED);
+    const Node = RED.nodes.types['mavlink-move'];
+    const node = new Node({
+      delivery: 'send',
+      action: 'steer',
+      reference: 'body',
+      vNorth: 1,
+      vEast: 0,
+      vUp: 0,
+      connection: 'conn',
+      targetSystem: 1,
+      targetComponent: 1,
+    });
+    return { node, conn };
+  };
+
+  // Measured (§14 2026-08-05): the stacks read different body frames.
+  const ap = make('ardupilot');
+  ap.node.emit('input', { payload: {} }, () => {}, () => {});
+  assert.equal(ap.conn.sends[0].fields.coordinate_frame, 9, 'ArduPilot body rides BODY_OFFSET_NED');
+
+  const px4 = make('px4');
+  px4.node.emit('input', { payload: {} }, () => {}, () => {});
+  assert.equal(px4.conn.sends[0].fields.coordinate_frame, 8, 'PX4 body rides BODY_NED');
+
+  // No firmware fails closed — an unadapted guess would be silently dropped.
+  const bare = make(null);
+  let out;
+  let doneError;
+  bare.node.emit('input', { payload: {} }, (m) => { out = m; }, (err) => { doneError = err; });
+  assert.equal(out[0], null);
+  assert.equal(out[1].result, 'failed');
+  assert.match(doneError.message, /Vehicle Profile with firmware ardupilot or px4/);
+  assert.equal(bare.conn.sends.length, 0, 'nothing reached the wire');
 });
 
 test('mavlink-move reposition confirm: ACCEPTED fires continue with resultCode 0', async () => {
