@@ -1,4 +1,47 @@
 <script type="text/javascript">
+  /**
+   * A Steer position triplet is all-or-nothing.
+   *
+   * Filling any axis makes this a position setpoint — the runtime derives the
+   * type_mask from which groups carry values — and the axes left blank encode
+   * 0, which on an absolute local frame is the EKF origin. A real place, and
+   * rarely where the vehicle is. Group-level optionality is what makes Steer
+   * work ("filling fields IS the mode"); within a group it is a half-typed
+   * form, reachable by tabbing past two boxes.
+   *
+   * The runtime does not check this (AGENTS.md, input trust), so the triplet
+   * is enforced here or nowhere. Velocity and acceleration are deliberately
+   * exempt: a blank rate encodes a zero rate, which is inert, not a place.
+   *
+   * Siblings are read through `ownDialogField`, NOT `liveOr` (Codex, #284).
+   * `liveOr` treats a blank live value as "no answer" and falls back to the
+   * saved one — right for a field that inherits, wrong here, where an empty
+   * box is the operator's answer. With `liveOr` a saved full triplet could
+   * never be cleared: each cleared axis still read its siblings as filled, so
+   * all three stayed red and there was no way to switch a position Steer to a
+   * velocity one. Reproduced by execution before the fix, pinned below.
+   *
+   * @param {string} name  which axis this validator guards
+   * @returns {function(*, object): (boolean|string)} arity 2, so a returned
+   *   reason counts as invalid rather than coercing truthy (§14)
+   */
+  function positionAxisValidator(name) {
+    var AXES = ['north', 'east', 'up'];
+    return function (v, opt) {
+      if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'steer') return true;
+      if (!RED.mavlink.isBlank(v)) return RED.validators.number(true).call(this, v, opt);
+      for (var i = 0; i < AXES.length; i++) {
+        if (AXES[i] === name) continue;
+        var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + AXES[i]);
+        var sibling = $sibling ? $sibling.val() : this[AXES[i]];
+        if (!RED.mavlink.isBlank(sibling)) {
+          return 'is required once another position axis is filled — a blank axis commands the origin, not "no change"';
+        }
+      }
+      return true;
+    };
+  }
+
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
   // Move's mode field is `delivery` and it has no firmware selector.
   var moveDefaults = Object.assign(
@@ -71,23 +114,27 @@
         },
       },
       targetComponent: { value: '', validate: RED.validators.number(true) },
-      // Steer fields are all optional and default blank: filling fields IS
-      // the mode — the runtime derives the type_mask from the non-blank
-      // groups and refuses an all-blank steer at input time, so deploy-time
-      // validation requires nothing here.
-      north: { value: '', validate: RED.validators.number(true) },
-      east: { value: '', validate: RED.validators.number(true) },
-      up: { value: '', validate: RED.validators.number(true) },
+      // Steer groups are optional and default blank: filling fields IS the
+      // mode — the runtime derives the type_mask from the non-blank groups and
+      // refuses an all-blank steer at input time. That is a per-*group* rule;
+      // a half-filled position triplet is a different thing, and
+      // positionAxisValidator is the only layer that catches it.
+      north: { value: '', validate: positionAxisValidator('north') },
+      east: { value: '', validate: positionAxisValidator('east') },
+      up: { value: '', validate: positionAxisValidator('up') },
       vNorth: { value: '', validate: RED.validators.number(true) },
       vEast: { value: '', validate: RED.validators.number(true) },
       vUp: { value: '', validate: RED.validators.number(true) },
       aNorth: { value: '', validate: RED.validators.number(true) },
       aEast: { value: '', validate: RED.validators.number(true) },
       aUp: { value: '', validate: RED.validators.number(true) },
-      // Go to's global position is required — saved or live — matching the
-      // runtime's requireGlobalPosition (§10: blank coordinates must not
-      // become 0,0 at ground level), so a blank reds at deploy rather than
-      // refusing every input. The blank-action fallback is 'steer', mirroring
+      // Go to's global position is required — saved or live. This is the only
+      // check on the *configured* path: the runtime trusts what it is handed
+      // (AGENTS.md, input trust), so §10's "blank coordinates must not become
+      // 0,0 at ground level" is enforced here or nowhere. A coordinate
+      // arriving on msg.payload.position is not checked at all — blank encodes
+      // 0 and out-of-range scales and rides the wire, deliberately (§14). The
+      // blank-action fallback is 'steer', mirroring
       // resolveMoveAction: a saved config without `action` parses as steer.
       lat: {
         value: '',
@@ -117,8 +164,15 @@
       },
       yaw: { value: '', validate: RED.validators.number(true) },
       yawRate: { value: '', validate: RED.validators.number(true) },
-      // 0.1 Hz floor: the runtime divides 1000/rateHz to arm the timer, so a
-      // zero or near-zero rate degenerates into a setInterval clamp flood.
+      // The runtime divides 1000/rateHz to arm the timer, and setInterval
+      // substitutes 1 ms for a delay it cannot represent instead of refusing —
+      // so a rate of 0, a negative, or anything that coerces to NaN inverts
+      // into a ~1000 Hz flood (measured, §14). This is the only check on that:
+      // the runtime takes msg.payload.rateHz as given. The floor is 0.1 Hz
+      // rather than "any positive number" because one setpoint per 10 s is
+      // already far below every firmware's setpoint watchdog, so nothing real
+      // is excluded — a UI choice, not a wire limit; the wire does not care
+      // until roughly 4.7e-7 Hz, where 1000/rate finally overflows int32.
       // Both fields exist only on Stream delivery — a cleared value must not
       // red a Build or Send node that never reads it (same liveOr gating as
       // mission's items). Two args so the reasons render (§14).

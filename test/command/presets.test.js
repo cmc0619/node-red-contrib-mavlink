@@ -279,7 +279,7 @@ test('local MAV_FRAME metres skip the ±90/±180 degree gate (§14 / SITL 07)', 
 test('a present location must also be in range: |lat| ≤ 90, |lon| ≤ 180 (§9, #263)', () => {
   // The degE7 int32 ceiling is ±214.7°, so lat 91 scales into a
   // garbage-but-valid coordinate the vehicle would accept — the C4 hazard
-  // class Move's requireGlobalPosition names, on the preset path.
+  // class §10 names for a global coordinate, on the preset path.
   const reposition = getPreset('reposition');
   assert.match(
     blankLocationRefusal(reposition, { 5: 91, 6: 8.5, 7: 30 }),

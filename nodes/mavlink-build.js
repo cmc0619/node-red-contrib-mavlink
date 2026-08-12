@@ -37,7 +37,7 @@ const {
   shouldSuppress,
   applyActionStatus,
 } = require('../lib/delivery');
-const { dialectFromVehicleId, dialectFromConnection } = require('../lib/addressing');
+const { dialectFromVehicleId, dialectFromConnection, applyConnectionStatus } = require('../lib/addressing');
 const { loadMetadata } = require('../lib/metadata/load');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
@@ -104,13 +104,11 @@ module.exports = function registerMavlinkBuild(RED) {
     }
     const messageMeta = bundle ? bundle.messages[messageName] : null;
 
-    // §6: misconfigured at deploy → red ring; resolved → clear, because the
-    // runtime never publishes a status clear on redeploy and a fixed node
-    // would keep its dead badge otherwise (§14). Badge only — the handlers
-    // below register regardless, so a triggered message fails loudly through
-    // Catch instead of vanishing into a node that never listened.
-    if (messageMeta) node.status({});
-    else applyActionStatus(node, 'invalid', 'invalid config');
+    // §6 (ruled 2026-08-12): config validity is the editor's verdict — Node-RED
+    // draws that as a red triangle on the node body, and the status line is for
+    // external verdicts only. A wire tier whose Connection did not resolve is
+    // one of those: no transport, the same badge every other sender publishes.
+    applyConnectionStatus(node, tier !== TIER.BUILD, connectionNode);
 
     /**
      * Core action: merge fields, encode, and emit based on the tier.

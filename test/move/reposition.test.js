@@ -88,32 +88,6 @@ test('reposition refusal matrix: yaw rate has no DO_REPOSITION field', () => {
   assert.equal(buildRepositionMessage(input({ yawRate: '' })).name, 'COMMAND_INT');
 });
 
-test('reposition reuses the shared blank/range coordinate guards (§10)', () => {
-  for (const position of [
-    { lat: '', lon: 8, alt: 10 },
-    { lat: 47, lon: 8 }, // blank alt: no documented sentinel, ground level refuses
-  ]) {
-    assert.throws(
-      () => buildRepositionMessage(input({ position })),
-      /blank coordinates must not become 0,0/
-    );
-  }
-  assert.throws(
-    () => buildRepositionMessage(input({ position: { lat: 90.1, lon: 8, alt: 10 } })),
-    /lat must be within \[-90, 90\]/
-  );
-  assert.throws(
-    () => buildRepositionMessage(input({ position: { lat: 47, lon: -180.1, alt: 10 } })),
-    /lon must be within \[-180, 180\]/
-  );
-  // A non-numeric coordinate refuses with the finite-number error, not the
-  // carrier module's COMMAND_LONG advice.
-  assert.throws(
-    () => buildRepositionMessage(input({ position: { lat: 'abc', lon: 8, alt: 10 } })),
-    /expected a finite number/
-  );
-});
-
 test('reposition blank sentinels: speed −1, radius 0, yaw NaN; explicit values win (presets convention)', () => {
   // Blank encodes the spec's no-change sentinel — what QGC/MAVSDK transmit
   // for unspecified fields (lib/command/presets.js blankParams, #240).

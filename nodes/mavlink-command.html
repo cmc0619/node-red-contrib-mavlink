@@ -139,7 +139,18 @@
       name:              { value: '' },
       mode:              { value: 'preset' },
       preset:            { value: 'arm' },
-      advancedCommand:   { value: '' },
+      // Advanced mode's command *is* the message — blank builds MAV_CMD(null)
+      // and sends it. Config validity is the editor's verdict (§6), so this is
+      // the only thing standing between a half-filled dialog and the wire.
+      // Preset mode never reads the field, hence the conditional. Two args so
+      // the reason renders.
+      advancedCommand:   {
+        value: '',
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-mode', this.mode, 'preset') !== 'advanced') return true;
+          return !RED.mavlink.isBlank(v) || 'is required in Advanced mode — pick a command';
+        },
+      },
       delivery:          { value: 'confirm' },
       sendAs:            { value: 'int' },
       frame:             { value: '' },

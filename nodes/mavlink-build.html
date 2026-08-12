@@ -84,7 +84,26 @@
     var buildDefaults = Object.assign(
       {
         name:        { value: '' },
-        messageName: { value: 'HEARTBEAT' },
+        // A name this dialect cannot resolve — blank, or a name the catalog
+        // does not carry — resolves no message metadata, so every input fails
+        // with "dialect or message unresolved". Config validity is the
+        // editor's verdict (§6), so this validator is the only thing between
+        // that and a deployed node. Two args so the reason renders.
+        //
+        // The second case is normal use, not hand-edited JSON: switch an
+        // existing node's dialect or Connection and fillEnumSelect keeps the
+        // old name selectable as `#NAME (not in dialect)` so it survives
+        // open-and-save (#198). Surviving is right; deploying is not.
+        messageName: {
+          value: 'HEARTBEAT',
+          validate: function (v, _opt) {
+            if (RED.mavlink.isBlank(v)) return 'is required — pick a message from the dialect';
+            if (RED.mavlink.isMissingFromDialect(this, '#node-input-messageName', v)) {
+              return 'is not in this dialect — pick a message the Connection speaks';
+            }
+            return true;
+          },
+        },
         fields:      {
           value: '{}',
           // Two args so a returned reason counts as invalid rather than being

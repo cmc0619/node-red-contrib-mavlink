@@ -393,7 +393,7 @@ test('mavlink-move stream: payload rateHz overrides config (§6 payload override
   assert.ok(sends.length >= 3, `payload interval override must re-send (got ${sends.length} sends)`);
 });
 
-test('mavlink-move stream: malformed payload timing overrides refuse the input', () => {
+test('mavlink-move stream: payload timing overrides are taken as given, not vetted', () => {
   const conn = {
     vehicle: {},
     send() {},
@@ -414,31 +414,30 @@ test('mavlink-move stream: malformed payload timing overrides refuse the input',
     ttlMs: 1000,
   });
 
-  // A NaN ttl would never satisfy the stream's `ttl > 0` expiry check (the
-  // stream runs forever); a zero or near-zero rate makes the derived
-  // 1000/rate interval degenerate into a setInterval clamp flood. Both must
-  // fail the input instead.
-  const bad = [
-    { payload: { ttlMs: 'forever' }, why: 'non-numeric ttl', rule: /milliseconds/ },
-    { payload: { rateHz: 'fast' }, why: 'non-numeric rate', rule: /Hz/ },
-    { payload: { rateHz: -5 }, why: 'negative rate', rule: /Hz/ },
-    { payload: { rateHz: 0 }, why: 'zero rate', rule: /Hz/ },
-    { payload: { rateHz: 0.05 }, why: 'below-minimum rate', rule: /Hz/ },
-    { payload: { ttlMs: -1 }, why: 'negative ttl', rule: /milliseconds/ },
-    // Bare Number() coercion would make these numeric: true → a 1 Hz stream
-    // nobody asked for, false/[] → 0. Only numbers and numeric strings are
-    // values.
-    { payload: { rateHz: true }, why: 'boolean rate', rule: /Hz/ },
-    { payload: { ttlMs: false }, why: 'boolean ttl', rule: /milliseconds/ },
-    { payload: { rateHz: [5] }, why: 'array rate', rule: /Hz/ },
-  ];
-  for (const { payload, why, rule } of bad) {
+  // msg is trusted (AGENTS.md, input trust): a timing override is coerced and
+  // used, never vetted. Every one of these used to fail the input.
+  //
+  // The one that is genuinely lossy is a rate that coerces to NaN, 0 or
+  // negative: `1000 / rate` is then NaN, Infinity or negative, and setInterval
+  // substitutes 1 ms rather than refusing — so "never" becomes ~1000 Hz.
+  // Measured 2026-08-12, and ruled an acceptable cost: a rate like that
+  // reaching the node is a bug in the flow to hunt at its source, and the
+  // editor is what stops an operator typing one. Note that the 0.1 Hz floor
+  // this used to enforce was justified by a claim measurement does not support
+  // — 0.1 Hz is a 10 s delay, nowhere near setInterval's 32-bit ceiling, which
+  // needs roughly 4.7e-7 Hz.
+  //
+  // Sync on purpose: no timer tick can land between these emits and the close.
+  for (const payload of [
+    { ttlMs: 'forever' }, { rateHz: 'fast' }, { rateHz: -5 }, { rateHz: 0 },
+    { rateHz: 0.05 }, { ttlMs: -1 }, { rateHz: true }, { ttlMs: false },
+    { rateHz: [5] },
+  ]) {
     let sent;
     let doneError;
     node.emit('input', { payload }, (m) => { sent = m; }, (err) => { doneError = err; });
-    assert.equal(sent[0], null, `${why} must not start a stream`);
-    assert.equal(sent[1].result, 'failed', `${why} fails the input`);
-    assert.match(doneError.message, rule, `${why} names the timing rule`);
+    assert.equal(doneError, undefined, `${JSON.stringify(payload)} must not raise`);
+    assert.equal(sent[1].result, 'streaming', `${JSON.stringify(payload)} streams`);
   }
 
   // Blank still inherits config, and an explicit payload ttl of 0 is a value
@@ -571,53 +570,6 @@ test('mavlink-move stream: a replaced or closed stream expires silently', async 
   await new Promise((resolve) => setTimeout(resolve, 20));
 
   assert.equal(emitted.length, 0, 'replacement and close emit nothing');
-});
-
-test('mavlink-move stream: rejected timing override leaves the active stream running', async () => {
-  const sends = [];
-  const conn = {
-    vehicle: {},
-    send(message) { sends.push(message); },
-  };
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-move')(RED);
-  const Node = RED.nodes.types['mavlink-move'];
-  const node = new Node({
-    delivery: 'stream',
-    action: 'steer',
-    vNorth: 1,
-    vEast: 0,
-    vUp: 0,
-    connection: 'conn',
-    targetSystem: 1,
-    targetComponent: 1,
-    rateHz: 200,
-    ttlMs: 0,
-  });
-
-  node.emit('input', { payload: {} }, () => {}, () => {});
-  let deadline = Date.now() + 2000;
-  while (sends.length < 2 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  assert.ok(sends.length >= 2, 'stream must be running before the bad input');
-
-  // The rejected replacement must not stop the running stream: validation
-  // happens before stream.stop(), same as a buildMoveMessage refusal.
-  let doneError;
-  node.emit('input', { payload: { ttlMs: 'forever' } }, () => {}, (err) => { doneError = err; });
-  assert.match(doneError.message, /milliseconds/);
-
-  const before = sends.length;
-  deadline = Date.now() + 2000;
-  while (sends.length < before + 2 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  node.emit('close', () => {});
-  assert.ok(
-    sends.length >= before + 2,
-    `stream must keep sending after a rejected override (got ${sends.length - before} further sends)`
-  );
 });
 
 test('mavlink-move stream: one owner per (connection, target) — a second node is refused, the owner may replace itself (#176)', () => {
@@ -1011,60 +963,6 @@ test('mavlink-move stream: {action:"stop"} releases the target for a new stream 
   a.emit('close', () => {});
 });
 
-test('mavlink-move advisory dedup: one warn per streak, cleared by a clean input (C8)', () => {
-  const make = () => {
-    // Firmware rides the connection's Vehicle Profile, so the stub's profile
-    // is mutable per input — a real flow's connection can rebind too.
-    const conn = { vehicle: { firmware: 'px4' }, send() {} };
-    const RED = redStub({ conn });
-    require('../../nodes/mavlink-move')(RED);
-    const Node = RED.nodes.types['mavlink-move'];
-    const node = new Node({
-      delivery: 'send',
-      action: 'steer',
-      connection: 'conn',
-      targetSystem: 1,
-      targetComponent: 1,
-    });
-    const warns = [];
-    node.warn = (text) => { warns.push(text); };
-    return { node, conn, warns };
-  };
-  // A: PX4 body reference derives BODY_NED (8) with position commanded —
-  // position discarded (§14). Velocity-only body no longer warns (Codex,
-  // #277: it is PX4's intended body path), so the streak needs a position.
-  const bodyOnPx4 = { reference: 'body', position: { north: 5, east: 0, up: 0 } };
-  // B: ArduPilot absolute-yaw yaw-only — held heading in measurement (§14).
-  const yawOnAp = { yaw: 90 };
-  // Clean: world velocity works everywhere.
-  const clean = { velocity: { north: 1, east: 0, up: 0 } };
-
-  // A refresh-fed stream repeating the same combo must not spam the sidebar —
-  // noise gets ignored, which defeats the advisory's whole purpose.
-  let s = make();
-  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
-  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
-  assert.equal(s.warns.length, 1, 'same advisory twice → exactly one warn');
-  assert.match(s.warns[0], /BODY_NED/);
-
-  // Only consecutive repeats dedup: a change is news, and so is the return.
-  s = make();
-  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
-  s.conn.vehicle.firmware = 'ardupilot';
-  s.node.emit('input', { payload: yawOnAp }, () => {}, () => {});
-  s.conn.vehicle.firmware = 'px4';
-  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
-  assert.equal(s.warns.length, 3, 'advisory A, B, A → three warns');
-  assert.match(s.warns[1], /yaw-only/);
-
-  // A clean input clears the memory, so the advisory's next appearance warns.
-  s = make();
-  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
-  s.node.emit('input', { payload: clean }, () => {}, () => {});
-  s.node.emit('input', { payload: bodyOnPx4 }, () => {}, () => {});
-  assert.equal(s.warns.length, 2, 'advisory, clean, same advisory → two warns');
-});
-
 function redStub(nodesById) {
   return {
     nodes: {
@@ -1327,7 +1225,7 @@ test('mavlink-move reposition Send tier rides the Control band, not Streaming', 
   assert.equal(sent[1].detail, null);
 });
 
-test('mavlink-move goto + Stream streams global position setpoints on the *_INT twin; command-path params refuse and leave it running', async () => {
+test('mavlink-move goto + Stream streams global position setpoints on the *_INT twin; command-path params are ignored and the stream keeps running', async () => {
   const conn = repositionConn();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-move')(RED);
@@ -1354,26 +1252,17 @@ test('mavlink-move goto + Stream streams global position setpoints on the *_INT 
   }
   assert.ok(conn.sends.length >= 2, 'stream running before the bad input');
 
-  // speed/radius/changeMode belong to the command path — a streamed setpoint
-  // cannot carry them, and the refusal must leave the running stream running.
-  for (const payload of [{ speed: 5 }, { radius: 80 }, { changeMode: true }]) {
+  // speed/radius/changeMode/yawRate belong to the command path. A setpoint has
+  // no field to carry them, so the stream ignores them and keeps streaming —
+  // msg is trusted and a key the wire has no room for is not a refusal
+  // (AGENTS.md, input trust).
+  for (const payload of [{ speed: 5 }, { radius: 80 }, { changeMode: true }, { yawRate: 10 }]) {
     const key = Object.keys(payload)[0];
     let out;
     let doneError;
     node.emit('input', { payload }, (m) => { out = m; }, (err) => { doneError = err; });
-    assert.equal(out[0], null, `payload.${key} must not fire the continue port`);
-    assert.equal(out[1].result, 'failed');
-    assert.match(doneError.message, new RegExp(`payload\\.${key} belongs to the Go to command path`));
-  }
-  // yawRate is a steer field on every goto tier — DO_REPOSITION carries a
-  // heading only — and the stream must refuse it rather than drop it in
-  // silence (CodeRabbit, #277).
-  {
-    let out;
-    let doneError;
-    node.emit('input', { payload: { yawRate: 10 } }, (m) => { out = m; }, (err) => { doneError = err; });
-    assert.equal(out[0], null);
-    assert.match(doneError.message, /yawRate is a Steer field/);
+    assert.equal(doneError, undefined, `payload.${key} must not raise`);
+    assert.equal(out[1].result, 'streaming', `payload.${key} restreams like any other retrigger`);
   }
 
   const before = conn.sends.length;

@@ -219,32 +219,33 @@ test('global setpoint frames always transmit the *_INT twin — the wire number 
   assert.equal(local.fields.coordinate_frame, 1);
 });
 
-test('global lat/lon out of range refuses — the degE7 int32 ceiling is ±214.7° (C4)', () => {
+test('a blank global coordinate encodes 0 — deliberate, ruled, and pinned here (§14)', () => {
+  // NOT a bug and not an oversight. Both inputs to this builder are handled
+  // elsewhere: config coordinates are editor-validated, and msg.payload is
+  // trusted and checked nowhere by design. Null island is the accepted cost,
+  // recorded in §14. Do not add a guard here — this test is what makes doing
+  // so fail loudly instead of passing quietly.
+  //
+  // Only the blank is pinned. An out-of-range coordinate takes the same
+  // multiply as a legal one (degreesToDegE7 is numberOr + Math.round), so
+  // asserting on 200° would restate the extremes test below without covering
+  // a single extra branch.
+  const blank = buildMoveMessage({
+    mode: 'position',
+    frame: 3,
+    target: { sysid: 2, compid: 1 },
+    position: { lat: '', lon: 8, alt: 10 },
+  });
+  assert.equal(blank.fields.lat_int, 0, 'blank lat encodes 0, it does not throw');
+  assert.equal(blank.fields.alt, 10, 'and the fields around it are untouched');
+});
+
+test('degE7 encoding is exact at the coordinate extremes', () => {
+  // This layer does not range-check: an out-of-range coordinate scales and
+  // rides the wire, and the editor is where it is caught (AGENTS.md, input
+  // trust). What matters here is that the legal extremes encode exactly —
+  // degE7 is an int32 and ±180° is 1.8e9, well inside it.
   const base = { mode: 'position', frame: 3, target: { sysid: 2, compid: 1 } };
-  // An out-of-range longitude still fits degE7's int32 and scales into a
-  // garbage coordinate the vehicle would accept — same hazard class as the
-  // blank guards.
-  for (const position of [
-    { lat: 90.0001, lon: 8, alt: 10 },
-    { lat: -90.0001, lon: 8, alt: 10 },
-  ]) {
-    assert.throws(
-      () => buildMoveMessage({ ...base, position }),
-      /lat must be within \[-90, 90\]/,
-      `lat ${position.lat} must refuse`
-    );
-  }
-  for (const position of [
-    { lat: 47, lon: 180.0001, alt: 10 },
-    { lat: 47, lon: -180.0001, alt: 10 },
-  ]) {
-    assert.throws(
-      () => buildMoveMessage({ ...base, position }),
-      /lon must be within \[-180, 180\]/,
-      `lon ${position.lon} must refuse`
-    );
-  }
-  // Exact boundaries are valid coordinates.
   const poles = buildMoveMessage({ ...base, position: { lat: 90, lon: -180, alt: 10 } });
   assert.equal(poles.fields.lat_int, 900000000);
   assert.equal(poles.fields.lon_int, -1800000000);
@@ -349,84 +350,45 @@ test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw
   }
 });
 
-test('local position with a blank coordinate refuses — never the origin (§10)', () => {
-  // A blank north zero-filled into a LOCAL_NED position setpoint commands the
-  // world origin. Explicit 0 is a value; blank refuses. Velocity blanks stay
-  // 0 — a zero rate is inert, not a place.
-  assert.throws(
-    () =>
-      buildMoveMessage({
-        mode: 'position',
-        target: { sysid: 2, compid: 1 },
-        position: { north: '', east: 2, up: 3 },
-      }),
-    /blank coordinates must not become the origin/
-  );
+test('a blank local coordinate encodes 0, on every frame — deliberate, ruled (§14)', () => {
+  // The local twin of the global rule, and the same reasoning: config
+  // coordinates are editor-validated and msg.payload is trusted and checked
+  // nowhere, so the builder coerces. On an absolute frame that 0 is the EKF
+  // origin — a real place, and the accepted cost. Do not add a guard here.
+  //
+  // Frames used to differ: absolute ones refused and BODY_OFFSET_NED (9) let
+  // blanks through as "no change". They behave alike now, which is why one
+  // test covers all three.
+  const target = { sysid: 2, compid: 1 };
+  for (const frame of [1, 8, 9]) {
+    const message = buildMoveMessage({
+      mode: 'position', frame, target, position: { north: '', east: 2, up: 3 },
+    });
+    assert.equal(message.fields.x, 0, `frame ${frame}: blank north encodes 0`);
+    assert.equal(message.fields.y, 2, `frame ${frame}: the axes around it are untouched`);
+  }
+
+  // Velocity and acceleration blanks were never the question — a zero rate is
+  // inert, not a place — and they still encode 0.
   const velocityBlanks = buildMoveMessage({
     mode: 'velocity',
-    target: { sysid: 2, compid: 1 },
+    target,
     velocity: { north: 1 },
   });
   assert.equal(velocityBlanks.fields.vy, 0);
 });
 
-test('global position with blank lat, lon or alt refuses — never 0,0 at ground level (§10)', () => {
-  assert.throws(
-    () =>
-      buildMoveMessage({
-        mode: 'position',
-        frame: 3,
-        target: { sysid: 2, compid: 1 },
-        position: { lat: '', lon: 8, alt: 10 },
-      }),
-    /blank coordinates must not become 0,0/
-  );
-  // A blank alt zero-filled is the same hazard on the vertical axis: 0 m above
-  // home (frame 3, wire twin 6) is the ground, 0 m MSL (frame 0, wire twin 5)
-  // may be below it. An explicit 0 stays a value; blank refuses.
-  for (const frame of [3, 0]) {
-    assert.throws(
-      () =>
-        buildMoveMessage({
-          mode: 'position',
-          frame,
-          target: { sysid: 2, compid: 1 },
-          position: { lat: 47, lon: 8 },
-        }),
-      /blank coordinates must not become 0,0/,
-      `frame ${frame} must refuse a blank alt`
-    );
-  }
-  const explicitZero = buildMoveMessage({
-    mode: 'position',
-    frame: 3,
-    target: { sysid: 2, compid: 1 },
-    position: { lat: 47, lon: 8, alt: 0 },
-  });
-  assert.equal(explicitZero.fields.alt, 0);
-});
-
 test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)', () => {
-  // The blank guards are only as good as the blank test: ' ' is not '', so
-  // without trimming it reaches numberOr, and Number(' ') === 0 passes the
-  // finite check. Every one of these zero-fills somewhere dangerous.
-  assert.throws(
-    () => buildMoveMessage({
-      mode: 'position',
-      target: { sysid: 2, compid: 1 },
-      position: { north: ' ', east: 2, up: 3 },
-    }),
-    /blank coordinates must not become the origin/
-  );
-  assert.throws(
-    () => buildMoveMessage({
-      mode: 'position',
-      frame: 3,
-      target: { sysid: 2, compid: 1 },
-      position: { lat: 47, lon: 8, alt: '  ' },
-    }),
-    /blank coordinates must not become 0,0/
-  );
+  // Still load-bearing, now for the presence rules rather than the deleted
+  // coordinate guards: ' ' is not '', so without trimming it reaches Number()
+  // and comes back a finite 0. Where that decides an *ignore bit* it changes
+  // the command; where it decides a coordinate it just encodes 0.
+  const whitespaceAxis = buildMoveMessage({
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { north: ' ', east: 2, up: 3 },
+  });
+  assert.equal(whitespaceAxis.fields.x, 0, 'a whitespace axis encodes 0, same as blank');
 
   // Yaw follows the presence rule: whitespace is absent, so the ignore bit
   // stays set rather than commanding a yaw of 0 (north) nobody asked for.
@@ -446,76 +408,6 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
     position: { north: ' 4 ', east: 2, up: 3 },
   });
   assert.equal(padded.fields.x, 4);
-});
-
-test('advisoryFor fires only on measured-unsupported combos (§14)', () => {
-  const { advisoryFor } = require('../../lib/move');
-  // Confirmed: PX4 1.18 produced no motion at all for BODY_OFFSET_NED (9) —
-  // the only OFFSET frame still reachable since the Action surface.
-  assert.match(advisoryFor({ mode: 'position', frame: 9, firmware: 'px4' }), /BODY_OFFSET_NED/);
-  // New from measurement: PX4 does not read BODY_NED (8) as a body offset.
-  assert.match(advisoryFor({ mode: 'position', frame: 8, firmware: 'px4' }), /BODY_NED/);
-  assert.match(advisoryFor({ mode: 'position-velocity', frame: 8, firmware: 'px4' }), /BODY_NED/);
-  // …but only when position is actually commanded (Codex, #277): BODY_NED
-  // velocity is PX4's intended body path — the very frame the steer body
-  // reference derives — and warning on it would be advisory noise.
-  assert.equal(advisoryFor({ mode: 'velocity', frame: 8, firmware: 'px4' }), null);
-  // Confirmed 2026-08-08: ArduPilot GUIDED held heading under an absolute-yaw
-  // yaw-only stream (type_mask 2559, 0.2° in 5 s).
-  assert.match(advisoryFor({ mode: 'yaw-only', frame: 1, firmware: 'ardupilot' }), /yaw-only/);
-  // ...but only that mask was measured. A yaw *rate* rides mask 1535 (or 511
-  // with both), and the same run clocked AP slewing ~60 °/s on a commanded
-  // rate — so the advisory must not claim "no yaw change" there (§14 / #179).
-  assert.equal(
-    advisoryFor({ mode: 'yaw-only', frame: 1, firmware: 'ardupilot', yawRate: 20 }),
-    null
-  );
-  assert.equal(
-    advisoryFor({ mode: 'yaw-only', frame: 1, firmware: 'ardupilot', yawRate: 0 }),
-    null
-  );
-  // Supported combos and unknown firmware stay silent.
-  assert.equal(advisoryFor({ mode: 'yaw-only', frame: 1, firmware: 'px4' }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 1, firmware: 'px4' }), null);
-  assert.equal(advisoryFor({ mode: 'acceleration', frame: 1, firmware: 'px4' }), null);
-  assert.equal(advisoryFor({ mode: 'acceleration', frame: 1, firmware: 'custom' }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 1 }), null);
-});
-
-test('measurement-refuted advisories are silent — a warning on working behaviour is noise (§14)', () => {
-  const { advisoryFor } = require('../../lib/move');
-  // ArduPilot Copter-4.7.0 *moved* ~43 m on an acceleration-only setpoint, so
-  // "ArduPilot ignores acceleration-only" was wrong.
-  assert.equal(advisoryFor({ mode: 'acceleration', frame: 1, firmware: 'ardupilot' }), null);
-  // ArduPilot treated BODY_NED (8) and BODY_OFFSET_NED (9) identically
-  // (body-axis offset), so "ArduPilot expects BODY_OFFSET_NED" was wrong.
-  assert.equal(advisoryFor({ mode: 'position', frame: 8, firmware: 'ardupilot' }), null);
-  assert.equal(advisoryFor({ mode: 'position', frame: 9, firmware: 'ardupilot' }), null);
-});
-
-test('blank local coordinates: refused in absolute frames, inert in the measured OFFSET frame (§14)', () => {
-  const target = { sysid: 2, compid: 1 };
-  // Absolute local frames — a blank zero-filled here commands the EKF origin.
-  // BODY_NED (8) is included deliberately: ArduPilot reads it as a body offset
-  // but PX4 moved absolute-like, so it cannot claim the exemption.
-  for (const frame of [1, 8]) {
-    assert.throws(
-      () => buildMoveMessage({ mode: 'position', frame, target, position: { north: '', east: 2, up: 3 } }),
-      /blank coordinates must not become the origin/,
-      `frame ${frame} must refuse a blank coordinate`
-    );
-  }
-  // Measured OFFSET frame BODY_OFFSET_NED (9) — zero means "no change" on
-  // every axis, so a blank is inert and passes as 0.
-  const message = buildMoveMessage({
-    mode: 'position',
-    frame: 9,
-    target,
-    position: { north: 10, east: '', up: '' },
-  });
-  assert.equal(message.fields.x, 10, 'BODY_OFFSET_NED keeps the commanded axis');
-  assert.equal(message.fields.y, 0, 'BODY_OFFSET_NED blank east is a zero offset');
-  assert.equal(message.fields.z, -0, 'BODY_OFFSET_NED blank up is a zero offset');
 });
 
 test('buildStopMessage copies target ids and does not invent system 1', () => {

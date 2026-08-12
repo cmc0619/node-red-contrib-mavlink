@@ -4,6 +4,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [0.4.0] - 2026-08-12
+
+### Removed
+
+- **The runtime stops second-guessing its inputs — breaking for flows that
+  relied on being refused.** The driver (`lib/**`, `nodes/*.js`) coerces what
+  it is handed and sends it; the editor is the only layer that validates. What
+  no longer throws: a blank or out-of-range coordinate on
+  `msg.payload.position` (a blank encodes 0, and on an absolute frame that is
+  the origin — null island globally, the EKF origin locally); a
+  `msg.payload.rateHz` or `ttlMs` that is non-numeric, zero or negative (note
+  that `setInterval` substitutes 1 ms for a delay it cannot represent, so a
+  rate of 0 or NaN becomes a ~1000 Hz stream); and `speed`, `radius`,
+  `changeMode` or `yawRate` on a streamed Go to, which the setpoint has no
+  field to carry and now ignores. Firmware advisories (`advisoryFor`) are gone
+  with them — the measurements behind them are kept in `DESIGN.md` §10/§14, and
+  where operators hear about them is open in #285.
+
+  The editor gained the checks that were worth keeping: Go to's lat/lon/alt are
+  required and range-checked, Steer's north/east/up are all-or-nothing, Build's
+  message must be one this dialect carries (not just non-blank), and Advanced
+  mode's command cannot be blank.
+
+### Fixed
+
+- **An unresolvable Connection says `no connection`, not `invalid config`.**
+  The node status line reports what something outside the node said — the
+  vehicle, the link, or another node, including by silence — never "your
+  settings are wrong", which is the editor's job and shows as the red triangle.
+  The `invalid` badge is struck from the vocabulary; `sending`, `ok`,
+  `preview` and `error` are what is left.
+
 ## [0.3.0] "Move it" - 2026-08-12
 
 The release Move stopped speaking MAVLink's vocabulary and started taking

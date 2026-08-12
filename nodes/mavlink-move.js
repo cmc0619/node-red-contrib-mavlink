@@ -4,7 +4,6 @@ const {
   buildMoveMessage,
   createMoveStream,
   streamLocks,
-  advisoryFor,
   buildRepositionMessage,
   positionFrom,
   velocityFrom,
@@ -36,15 +35,11 @@ module.exports = function registerMavlinkMove(RED) {
     // Reposition-carrier confirm transaction — at most one in flight per node,
     // like the Command node's waiter (§9).
     let activeWaiter = null;
-    // Last advisory warned, for per-streak dedup (C8): a refresh-fed stream
-    // repeating the same combo would spam the debug sidebar, and noise gets
-    // ignored. Redeploy resets naturally — new node instance.
-    let lastAdvisory = null;
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
     // Resolve the Vehicle Profile once, like the Connection (guideline:
     // config-node references resolve at deploy, not per input). Build-tier
-    // body derivation and advisories read firmware through it.
+    // body derivation reads firmware through it.
     const vehicleAtDeploy = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
     applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
 
@@ -217,8 +212,6 @@ module.exports = function registerMavlinkMove(RED) {
             // DENIED (2).
             changeMode: firstDefined(payload.changeMode, config.changeMode),
           });
-          // No advisories on this carrier: the ack is the feedback channel,
-          // and every advisory candidate still needs SITL measurement (§14).
           if (delivery === 'build') {
             completeBuild(node, send, message);
           } else {
@@ -260,23 +253,11 @@ module.exports = function registerMavlinkMove(RED) {
         let moveInput;
         if (action === 'goto') {
           // goto + Stream: the same intent, streamed — position setpoints on
-          // the global frame the altitude reference names. The command-path
-          // params have no meaning on a setpoint and refuse loud rather than
-          // silently not happening.
-          for (const key of ['speed', 'radius', 'changeMode']) {
-            if (payload[key] !== undefined) {
-              throw new Error(
-                `msg.payload.${key} belongs to the Go to command path (Build/Send/Send & confirm) — a streamed setpoint cannot carry it`
-              );
-            }
-          }
-          // yawRate is a steer field on every goto tier (CodeRabbit, #277):
-          // DO_REPOSITION carries a heading only (the builder refuses it on
-          // the command path), and the goto stream's position setpoint never
-          // forwards it — so without this it would drop in silence.
-          if (payload.yawRate !== undefined) {
-            throw new Error('msg.payload.yawRate is a Steer field — Go to carries a heading (yaw) only');
-          }
+          // the global frame the altitude reference names. `speed`, `radius`,
+          // `changeMode` and `yawRate` belong to the command path; a setpoint
+          // has no field to carry them, so they are not read here. Ignoring a
+          // key the wire has no room for is what the driver does with msg
+          // (AGENTS.md, input trust) — it does not refuse over one.
           moveInput = {
             mode: 'position',
             frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),
@@ -311,28 +292,6 @@ module.exports = function registerMavlinkMove(RED) {
         }
         const message = buildMoveMessage(moveInput);
 
-        // Known-unsupported firmware combos still send, but never silently
-        // (§14: setpoints carry no ack, so this warning is all the feedback
-        // the operator will get). Firmware resolves the same way the body
-        // frame does (CodeRabbit, #277): the connection's bound Vehicle
-        // Profile first, the node's own Vehicle Profile on Build — a Build
-        // node that knows its firmware well enough to derive a body frame
-        // knows it well enough to warn. Build without a profile stays silent:
-        // every advisory is firmware-keyed.
-        const advisory = advisoryFor({
-          mode: moveInput.mode,
-          frame: moveInput.frame,
-          // The ArduPilot yaw-only advisory was measured on absolute yaw only,
-          // so it needs to see whether a yaw rate is riding along (§14 / #179).
-          yawRate: moveInput.yawRate,
-          firmware: firmwareFor(vehicleAtDeploy, connectionNode),
-        });
-        // One warn per advisory streak (C8): a stream feed repeating the same
-        // combo warns once; a clean input clears the memory so the advisory's
-        // next appearance warns again.
-        if (advisory && advisory !== lastAdvisory) node.warn(advisory);
-        lastAdvisory = advisory;
-
         if (delivery === 'build') {
           completeBuild(node, send, message);
         } else {
@@ -346,8 +305,10 @@ module.exports = function registerMavlinkMove(RED) {
             // never stop it as a side effect of a failed replacement.
             // Payload overrides config (§6 runtime override of last resort);
             // the editor default guarantees config when the payload is silent.
-            const rateHz = streamValue(payload.rateHz, config.rateHz, 'rateHz', 0.1, 'Hz');
-            const ttlMs = streamValue(payload.ttlMs, config.ttlMs, 'ttlMs', 0, 'milliseconds');
+            // Blank inherits the editor-validated config; anything else is
+            // taken as given and coerced (AGENTS.md, input trust).
+            const rateHz = Number(isBlank(payload.rateHz) ? config.rateHz : payload.rateHz);
+            const ttlMs = Number(isBlank(payload.ttlMs) ? config.ttlMs : payload.ttlMs);
             // One stream per (connection, target) (#176): a second node
             // streaming to the same vehicle would alternate contradictory
             // setpoints — the vehicle oscillates while both nodes report
@@ -542,11 +503,10 @@ function statusRecord(result, detail, extra = {}) {
 }
 
 /**
- * Firmware for the body-reference derivation and the advisories: the
- * connection's bound Vehicle Profile on the wire tiers, the node's own
- * Vehicle Profile (resolved once at deploy) on Build. Returns undefined when
- * neither names one — the body derivation fails closed on that, world never
- * asks, and advisories stay silent.
+ * Firmware for the body-reference derivation: the connection's bound Vehicle
+ * Profile on the wire tiers, the node's own Vehicle Profile (resolved once at
+ * deploy) on Build. Returns undefined when neither names one — the body
+ * derivation fails closed on that, and world never asks.
  *
  * @param {object|null} vehicleNode  the node's own Vehicle Profile, from deploy
  * @param {object|null} connectionNode
@@ -556,38 +516,3 @@ function firmwareFor(vehicleNode, connectionNode) {
   return connectionNode?.vehicle?.firmware ?? vehicleNode?.firmware;
 }
 
-/**
- * Stream timing: config is editor-validated and trusted; a payload override is
- * runtime-boundary data and must refuse rather than misbehave silently — a NaN
- * ttl never satisfies the stream's `ttl > 0` expiry check (the stream runs
- * forever), and setInterval coerces a NaN or out-of-range interval to ~1 ms.
- * Minimum 0 keeps ttl 0 = "stream until replaced or closed". The rate minimum
- * is 0.1 Hz: a rate must be positive to be a rate at all, and a near-zero rate
- * is the same hazard in disguise — its 1000/rate interval overflows
- * setInterval's 32-bit ceiling, which Node clamps to 1 ms, turning "almost
- * never" into a 1000 Hz flood. One setpoint per 10 s is already far below any
- * firmware's setpoint watchdog, so nothing real is excluded.
- *
- * @param {*} payloadValue  value from msg.payload, blank = inherit config
- * @param {*} configValue   value from the editor-validated config
- * @param {string} name     payload property name, for the error
- * @param {number} minimum  smallest valid value
- * @param {string} unit     unit name, for the error
- * @returns {number}
- */
-function streamValue(payloadValue, configValue, name, minimum, unit) {
-  if (isBlank(payloadValue)) {
-    return Number(configValue);
-  }
-  // Only numbers and numeric strings: bare Number() coercion turns `true`
-  // into a 1 ms flood and `false`/`[]` into 0.
-  const n = typeof payloadValue === 'number' || typeof payloadValue === 'string'
-    ? Number(payloadValue)
-    : NaN;
-  if (!Number.isFinite(n) || n < minimum) {
-    throw new Error(
-      `payload.${name} must be a finite number of ${unit} >= ${minimum}, got ${JSON.stringify(payloadValue)}`
-    );
-  }
-  return n;
-}

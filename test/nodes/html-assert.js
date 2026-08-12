@@ -56,11 +56,22 @@ function assertChangeHandlerContains(html, binder, needle, msg) {
  * The shared resource is executed first in the same context, so
  * `RED.mavlink.*` is populated the way the browser populates it.
  *
+ * The default DOM is empty, which is the state Node-RED validates in on import
+ * and on deploy. `opts.dom` opens one dialog instead: keys are selectors,
+ * values are `{ val, selectedText }`. Pair it with `opts.editStack` — the
+ * live-read helpers consult a field only while the node under validation owns
+ * the top of that stack (#217), so a dom without a matching stack entry is
+ * still the closed-dialog state.
+ *
  * @param {string} nodeName  e.g. 'mavlink-build'
  * @param {object} [nodeLookup]  ids visible to RED.nodes.node()
+ * @param {{dom?: Object<string,{val?: *, selectedText?: string}>,
+ *   editStack?: Array<{id: string}>}} [opts]
  * @returns {object} the registered `defaults`
  */
-function loadNodeDefaults(nodeName, nodeLookup = {}) {
+function loadNodeDefaults(nodeName, nodeLookup = {}, opts = {}) {
+  const dom = opts.dom || {};
+  const editStack = opts.editStack || [];
   const root = path.join(__dirname, '..', '..');
   const html = fs.readFileSync(path.join(root, 'nodes', `${nodeName}.html`), 'utf8');
   const start = html.indexOf('<script type="text/javascript">');
@@ -70,13 +81,22 @@ function loadNodeDefaults(nodeName, nodeLookup = {}) {
   const script = html.slice(open, end);
 
   const registered = {};
-  function $() {
-    // No dialog is open: every live-field lookup misses, which is the state
-    // Node-RED validates in on import and on deploy.
-    return { length: 0, val() { return undefined; }, toggle() { return this; }, empty() { return this; },
-      append() { return this; }, on() { return this; }, each() { return this; }, find() { return this; },
+  function $(selector) {
+    const entry = Object.prototype.hasOwnProperty.call(dom, selector) ? dom[selector] : null;
+    const node = { length: entry ? 1 : 0, val() { return entry ? entry.val : undefined; },
+      toggle() { return this; }, empty() { return this; },
+      append() { return this; }, on() { return this; }, each() { return this; },
+      // Only `option:selected` carries text; anything else keeps the old
+      // chainable-stub shape so unrelated dialog code still runs.
+      find(sub) {
+        if (entry && sub === 'option:selected' && entry.selectedText !== undefined) {
+          return { length: 1, text: () => entry.selectedText };
+        }
+        return this;
+      },
       attr() { return this; }, text() { return this; }, prop() { return this; }, is() { return false; },
       css() { return this; }, replaceWith() { return this; }, next() { return { length: 0 }; } };
+    return node;
   }
   $.getJSON = () => ({ fail() { return this; } });
   $.ajax = () => ({ done() { return this; }, fail() { return this; } });
@@ -87,7 +107,7 @@ function loadNodeDefaults(nodeName, nodeLookup = {}) {
       mavlink: {},
       validators: { number: () => () => true, regex: () => () => true },
       _: (k) => k,
-      editor: {},
+      editor: { getEditStack: () => editStack },
       nodes: {
         registerType(name, def) { registered[name] = def; },
         getType: (t) => (/^mavlink-/.test(t) ? function () {} : undefined),
