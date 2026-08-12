@@ -39,6 +39,15 @@ config-node shapes and message contracts may still change without a major bump.
   `timeout`). Stream expiry and stop now discriminate on `result` (`expired` /
   `stopped`), not `detail`. `failed` still means the input never took effect.
 
+### Removed
+
+- **`lib/move` sheds the retired frame vocabulary's parsing layer.** The
+  deprecated `*_INT` aliases (names and numbers 5/6/11), string frame names,
+  `LOCAL_OFFSET_NED`, and the terrain frames are deleted — unreachable since
+  the Action surface, which derives only numeric frames (goto: 0/3, steer:
+  1/8/9). The builders now validate a numeric frame against the derivable set
+  and nothing else.
+
 ## [0.2.0] - 2026-08-11
 
 Three weeks of transaction work: every node that waits for a vehicle now
