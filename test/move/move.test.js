@@ -453,6 +453,61 @@ test('buildStopMessage copies target ids and does not invent system 1', () => {
   assert.equal(missing.fields.target_component, undefined);
 });
 
+test('time_boot_ms stamps from the shared boot clock, explicit value wins', () => {
+  const { buildMoveMessage, buildStopMessage } = require('../../lib/move');
+  const input = (extra = {}) => ({
+    mode: 'velocity',
+    target: { sysid: 1, compid: 1 },
+    velocity: { north: 1, east: 0, up: 0 },
+    ...extra,
+  });
+
+  // Absent → the boot clock: a finite uint32, not a hardcoded 0, and
+  // non-decreasing across builds (the clock only moves forward).
+  const first = buildMoveMessage(input()).fields.time_boot_ms;
+  const second = buildMoveMessage(input()).fields.time_boot_ms;
+  assert.ok(Number.isInteger(first) && first >= 0, `stamp is a uint32 (got ${first})`);
+  assert.ok(second >= first, 'the clock never runs backward');
+
+  // Explicit timeBootMs is trusted input and rides through untouched.
+  assert.equal(buildMoveMessage(input({ timeBootMs: 12345 })).fields.time_boot_ms, 12345);
+
+  // The brake packet is synthesized at stop time: its stamp is the clock's,
+  // never a copy of the streamed setpoint's build-time stamp.
+  const stop = buildStopMessage({ fields: { time_boot_ms: 9, target_system: 4 } });
+  assert.notEqual(stop.fields.time_boot_ms, 9, 'stop does not inherit a stale stamp');
+  assert.ok(stop.fields.time_boot_ms >= first, 'stop stamp comes from the same clock');
+});
+
+test('stream ticks re-stamp time_boot_ms without mutating the built message', () => {
+  const { createMoveStream } = require('../../lib/move');
+  const sent = [];
+  const message = {
+    name: 'SET_POSITION_TARGET_LOCAL_NED',
+    fields: { time_boot_ms: 0, target_system: 1, target_component: 1, type_mask: 3527 },
+  };
+  let tick = null;
+  const stream = createMoveStream({
+    message,
+    connection: { send: (m) => sent.push(m) },
+    rateHz: 4,
+    ttlMs: 0,
+    // Injected no-ops: the test drives ticks by hand — there is no real timer
+    // to unref or clear, only the captured callback.
+    setInterval: (fn) => { tick = fn; return { unref() { /* not a real timer */ } }; },
+    clearInterval: () => { /* no timer to clear */ },
+  });
+  stream.start();
+  tick();
+  stream.stop({ brake: false });
+  assert.equal(sent.length, 2, 'start + one tick');
+  for (const m of sent) {
+    assert.ok(m.fields.time_boot_ms >= 0 && Number.isInteger(m.fields.time_boot_ms));
+    assert.notEqual(m.fields, message.fields, 'each send carries its own fields copy');
+  }
+  assert.equal(message.fields.time_boot_ms, 0, 'the built message is never mutated');
+});
+
 test('buildStopMessage is zero-velocity (mask 3527), not all-ignore (3583)', () => {
   // #115 / §14: PX4 rejects all-ignore; our stop keeps VX/VY/VZ usable at 0.
   const { buildStopMessage, buildMoveMessage } = require('../../lib/move');

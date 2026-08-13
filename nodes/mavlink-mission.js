@@ -21,7 +21,10 @@
  *
  * Guards (§9 "What triggers an action node"):
  *   msg.payload === false → suppress
- *   clear is destructive → a confirmation gate (config checkbox or msg.confirmed)
+ * Clear carries no confirmation gate: selecting the Clear operation in the
+ * editor IS the confirmation (owner ruling, 2026-08-13). The destructive
+ * guard this node keeps is the empty-upload refusal — an upload can never
+ * degrade into an accidental clear.
  */
 
 const {
@@ -166,23 +169,6 @@ module.exports = function registerMavlinkMission(RED) {
           done(new Error(`mavlink-mission: ${check.reason}`));
           return;
         }
-      }
-
-      // ── Clear confirmation gate (destructive, §9). ────────────────────────
-      // Runs *before* Build: a built MISSION_CLEAR_ALL emitted on output 0 can
-      // be forwarded straight to mavlink-out, so the destructive gate must
-      // block construction — not just sending — without an explicit confirm
-      // (same lesson as the Command node's Flight Termination Build gate).
-      if (operation === OPERATION.CLEAR && !(config.confirmClear || msg.confirmed === true)) {
-        const rec = record(operation, missionTypeKey, target, {
-          result: 'failed',
-          phase: 'unconfirmed',
-          reason: 'clear is destructive — enable confirmation or set msg.confirmed = true',
-        });
-        applyActionStatus(node, 'error', `confirm clear ${missionTypeKey}`);
-        send([null, rec]);
-        done(new Error(`mavlink-mission: ${rec.reason}`));
-        return;
       }
 
       // ── Build tier: emit the protocol plan, send nothing. ─────────────────

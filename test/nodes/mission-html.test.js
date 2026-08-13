@@ -128,19 +128,20 @@ test('mavlink-mission items validator rejects a configured empty array (#241)', 
   assert.match(itemsValidator[0], /length === 0/, 'empty array is checked');
   assert.match(itemsValidator[0], /must not be empty[^']*Clear/, 'refusal names the Clear operation');
   // The placeholder must not advertise the one value the validator rejects.
-  const itemsInput = /<input[^>]*id="node-input-items"[^>]*>/.exec(html);
-  assert.ok(itemsInput, 'items input must be extractable');
+  // Items is a multi-line textarea (a mission is a list, not a line).
+  const itemsInput = /<textarea[^>]*id="node-input-items"[^>]*>/.exec(html);
+  assert.ok(itemsInput, 'items textarea must be extractable');
   assert.doesNotMatch(itemsInput[0], /placeholder="\[\]/, 'placeholder no longer offers []');
   assert.match(itemsInput[0], /placeholder="non-empty JSON array, or set msg\.payload\.items"/,
     'placeholder asks for a non-empty array or the payload');
 });
 
-test('mavlink-mission confirmClear stays visible for clear on every tier', () => {
-  // The runtime confirm gate guards construction (it runs before the Build
-  // branch), so the checkbox must not hide on the build tier — hidden is not
-  // honored (§6), and a hidden-but-honored checkbox would be worse.
-  assert.match(html, /mavlink-mission-confirm'\)\.toggle\(op === 'clear'\)/,
-    'confirmClear visibility depends only on the clear operation');
+test('mavlink-mission has no clear-confirmation control (owner ruling, 2026-08-13)', () => {
+  // Selecting the Clear operation IS the confirmation. The checkbox and the
+  // msg.confirmed escape were removed together — a control resurrected here
+  // would silently re-gate a documented behavior.
+  assert.ok(!html.includes('confirmClear'), 'confirmClear is gone from the editor');
+  assert.ok(!/msg\.confirmed/.test(html), 'help no longer documents msg.confirmed');
 });
 
 test('mavlink-mission ensureConfigNodePicker called for vehicle', () => {

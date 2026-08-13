@@ -182,7 +182,11 @@ test('an unknown payload.missionType string fails loud through missionTypeValue'
   assert.equal(outputs[0][1].result, 'failed');
 });
 
-test('clear is refused without confirmation and runs once confirmed', async () => {
+test('clear runs on any input — selecting the operation is the confirmation', async () => {
+  // The confirm gate (config checkbox / msg.confirmed) was removed by owner
+  // ruling (2026-08-13): an operator who selected the Clear operation has
+  // already answered the question. This pins the gate's absence — a plain
+  // input with no confirmation flag anywhere must clear.
   const conn = new StubConnection();
   conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
   conn.onSend((message, deliver) => {
@@ -192,35 +196,19 @@ test('clear is refused without confirmation and runs once confirmed', async () =
   });
 
   const Node = loadNode(conn);
-
-  const unconfirmed = new Node({ operation: 'clear', connection: 'conn', delivery: 'confirm', confirmClear: false });
-  let res = await runInput(unconfirmed, { payload: {} });
-  assert.equal(res.outputs[0][0], null);
-  assert.equal(res.outputs[0][1].phase, 'unconfirmed');
-  assert.equal(conn.sent.length, 0, 'nothing sent without confirmation');
-
-  const confirmed = new Node({ operation: 'clear', connection: 'conn', delivery: 'confirm', confirmClear: true });
-  res = await runInput(confirmed, { payload: {} });
+  const node = new Node({ operation: 'clear', connection: 'conn', delivery: 'confirm' });
+  const res = await runInput(node, { payload: {} });
   const last = res.outputs.at(-1);
   assert.equal(last[0].payload.result, 'succeeded', 'continue port fires on success');
   assert.equal(last[1].result, 'succeeded');
   assert.equal(conn.sentNames().includes('MISSION_CLEAR_ALL'), true);
 });
 
-test('clear Build tier is gated before the plan is built (§9 destructive gate)', async () => {
+test('clear Build tier emits the plan without any confirmation flag', async () => {
   const conn = new StubConnection();
   const Node = loadNode(conn);
-
-  // Build tier + no confirmation → no MISSION_CLEAR_ALL plan on output 0.
-  const unconfirmed = new Node({ operation: 'clear', connection: 'conn', delivery: 'build', confirmClear: false });
-  const refused = await runInput(unconfirmed, { payload: {} });
-  assert.equal(refused.outputs.length, 1);
-  assert.equal(refused.outputs[0][0], null, 'no destructive plan emitted on output 0 without confirm');
-  assert.equal(refused.outputs[0][1].phase, 'unconfirmed');
-
-  // Build tier + confirmation → the plan is produced.
-  const confirmed = new Node({ operation: 'clear', connection: 'conn', delivery: 'build', confirmClear: true });
-  const ok = await runInput(confirmed, { payload: {} });
+  const node = new Node({ operation: 'clear', connection: 'conn', delivery: 'build' });
+  const ok = await runInput(node, { payload: {} });
   assert.deepEqual(ok.outputs[0][0].payload.messages.map((m) => m.name), ['MISSION_CLEAR_ALL']);
 });
 
@@ -415,7 +403,6 @@ test('broadcast clear still builds — MISSION_CLEAR_ALL is an addressed single 
     firmware: 'ardupilot',
     missionType: 'mission',
     targetSystem: 0,
-    confirmClear: true,
   });
 
   const { outputs, err } = await runInput(node, { payload: {} });
