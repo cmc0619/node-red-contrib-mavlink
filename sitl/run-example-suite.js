@@ -522,7 +522,7 @@ function verdictFrom(profile, summary, log) {
     // what the row must show is `failed` with a transfer-shaped reason. The
     // reason text is the vehicle's answer (or the deadline's), so the check
     // keys on the result, not on any one wording.
-    const px4FailsLoud = !!px4Fence && px4Fence.result === 'failed';
+    const px4FailsLoud = Boolean(px4Fence) && px4Fence.result === 'failed';
     if (apOk && px4FailsLoud) {
       return { status: 'PASS', reason: 'AP mission/fence/rally ok; PX4 fence fails loud' };
     }
