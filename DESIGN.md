@@ -4383,3 +4383,25 @@ bytewise-int wire and within float32 tolerance otherwise — is already ahead of
 confirm-time honesty fix (#298) is not a wheel to import; it is a step the ecosystem skips.
 *Check:* `lib/codec/mask.js` header (operator ban), `lib/codec/param-union.js`,
 `matchesParamEcho` in `lib/param/index.js`; pymavlink `mavparm.py` `mavset` upstream.
+
+**The c-cast mask defect is real and effectively unreachable — documented, not built
+(ruled 2026-08-13).**
+*Wrong belief:* the two entries above establish a defect, therefore the confirm path needs
+fixing.
+*Fact:* reachability kills it. Thirty-seven ArduCopter parameters carry a documented bit ≥ 24,
+and every one is a 32-channel ESC / servo / CAN mask. Losing a bit requires a selection whose
+*signed* value is not float32-exact, which in practice means a low channel and a high channel in
+the same mask. Channels 1+32 loses channel 1; channels 1–24, 9+32, 25+32, and every 4-, 6- or
+8-output airframe are exact. So the trigger needs hardware with outputs in the high twenties
+*and* a sparse selection spanning the range. Param `delivery` also defaults to `build`, so the
+false-success half only reaches an operator who chose Confirm.
+
+No operator has reported it. The only demonstrated failure is a SITL case constructed to
+provoke it, which is exactly what the YAGNI rule says does not count. **#298 stays open as
+documented-not-built**; the §14 record means a future report is diagnosed in minutes.
+
+One trap for whoever revisits: the natural shorthand "a span of more than 23 bit positions
+breaks" is *wrong*. Channels 8+32 span 24 positions and are exact, because the two's-complement
+fold turns that mask into 24 consecutive set bits. The only reliable test is
+`Math.fround(v) === v` on the signed value.
+*Check:* #298 carries the reproduction recipe and the exact/inexact table.
