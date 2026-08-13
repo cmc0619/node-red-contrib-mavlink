@@ -102,6 +102,13 @@ declined. If a human leaves findings, handle those too.
 DESIGN.md / §14 reason), mark its GitHub review thread Resolved — do not leave fixed threads
 open for the next passer-by.
 
+**Issues labelled `sitl-results` are records, not work — skip them.** They hold SITL suite
+measurements, kept as issues deliberately so every agent can read the same numbers. The label
+is the filter. Do not count them as outstanding work, do not include them when triaging or
+proposing what to do next, and above all do not offer to close one as stale because the `main`
+it references has moved on — being pinned to a commit is the point. The *rulings* a run
+produces still go to `DESIGN.md` §14; the issue is the raw evidence behind them.
+
 **GitHub → Cursor wake-up (owner setup).** Create a private automation at
 https://cursor.com/automations (or `/automate` in the Agents Window) on this repo with
 triggers: **CI completed** (covers CodeRabbit check completion) and **PR review submitted**
