@@ -151,6 +151,25 @@ gh issue close <prior> --comment "Superseded by #<new>"
 Attach or paste a short summary table in the issue body. Keep the full JSON
 local or paste a collapsed `<details>` block — do not land it in git.
 
+**Harness JSON field names (do not invent aliases):** each
+`results[]` row exposes `status` (`PASS`/`PARTIAL`/`FAIL`/`SKIP`) and
+`reason` (curated note). There is no `verdict` or `note` key on the row —
+rendering `e.verdict` into the Status column prints `undefined` for every
+row while Reason still looks fine (#290). Map explicitly:
+
+```js
+const rows = results.map((e) => {
+  const num = String(e.file).match(/^(\d+)/)[1];
+  return `| ${num} | \`${e.file}\` | ${e.status} | ${e.reason || ""} |`;
+});
+```
+
+**Example 02 after #287:** a green run on pre-#287 `main` still measures the
+node-side fence gate. Once #287 merges, the PX4 fence leg fails loud from the
+vehicle (`MAV_MISSION_UNSUPPORTED` ack or transfer deadline), and the
+tightened `verdictFrom` predicate expects that shape — the first post-merge
+full suite is the end-to-end confirmation of the vehicle-judges refactor.
+
 ### Harness auto-verdict traps
 
 - Example **02** historically false-PASS’d on the word “timeout” in node names;
