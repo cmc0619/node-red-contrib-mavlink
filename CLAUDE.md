@@ -44,6 +44,15 @@ duplicate validation the editor already performed. When a saved value is unreada
 anyway, the parse falls back to the safe direction — it does not fall open and it does not
 grow a second deploy-time error path.
 
+**Asked why something was removed or why it behaves that way, read `DESIGN.md` §14 before
+answering.** The CHANGELOG says *what* changed and compresses hard; §14 says *why*, and
+carries the measurement. They routinely disagree in emphasis — §6 can call a frame
+"unmeasured" while §14 holds a SITL run that settles half the question. Three times in one
+session (2026-08-13) an answer about the Move redesign was reasoned from the CHANGELOG and
+was wrong each time: a deletion called a rig-blocked deferral when the rig predated it by
+nine days, and a frame twice mis-assessed while its measurement sat in §14. `grep` §14 for
+the thing being asked about first. It is a fast search and it is the authority.
+
 ## Measurement outranks source
 
 Reference implementations (`/workspace/node-red-contrib-mavlink-ai`, `-kimi`, ArduPilot, PX4,
