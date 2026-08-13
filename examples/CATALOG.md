@@ -430,6 +430,48 @@ importable tab per file with shared config nodes inline.
   coalesced or dropped (§7).
 - **Inject buttons:** **`⚠ Force disarm (21196)`**, **`⚠⚠ Flight termination (confirm)`**.
 
+### 28 — Peer table inspector
+
+- **File:** `examples/28-peer-table-inspector.json`
+- **Tab label:** `28 Peer table inspector`
+- **Story:** Every field the Connection-owned peer table holds, decoded and laid out as
+  text. Example 14 shows the same snapshot raw, where `type: 2, autopilot: 3` tells the
+  operator nothing; this one renders identity, mode, per-section ages, position, GPS,
+  battery, home, endpoints and the STATUSTEXT ring, and names the enums. Nothing in the
+  table is configured — it is built entirely from received traffic, so fields stay `null`
+  until a message carrying them arrives.
+- **Nodes:** config triplet, `inject` (2 s repeat), `state` `snapshot`, `function`
+  (decode + lay out), `debug` ×2 (rendered text, raw snapshot), `state` `feed` subscribed
+  to all ten event types, `debug`.
+- **Key config:** the feed node lists the complete event set
+  (`peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,
+  multi-endpoint,profile-mismatch,statustext`) rather than the three-event default, so a
+  run shows every transition the table can emit. The Function node's enum tables are
+  display-only labels, not authoritative metadata — the wire carries numbers and the
+  editor's catalog is the authority.
+- **Inject buttons:** **`every 2s`** (fires once 3 s after deploy, then repeats).
+
+### 29 — Peer table dashboard (requires Dashboard 2.0)
+
+- **File:** `examples/29-peer-table-dashboard.json`
+- **Tab label:** `29 Peer table dashboard`
+- **Requires:** `@flowfuse/node-red-dashboard` — the only shipped example with a dependency
+  outside core Node-RED and this package. Example 28 is the same data with none.
+- **Story:** The peer table as a live table at `/dashboard/peers`, one row per component,
+  replaced every 2 s from a `state` snapshot; underneath, a rolling log of all ten
+  peer-table events, appended and capped at 200 rows. The point of both is that nothing on
+  the page is configured — every cell is built from received traffic, so columns fill in as
+  the vehicle starts talking.
+- **Nodes:** config triplet, `ui-theme`/`ui-base`/`ui-page`/`ui-group` ×2, `inject` (2 s),
+  `state` `snapshot`, `function` (one row per component), `ui-table` (`action: replace`),
+  `state` `feed` (all ten events), `function` (event → row), `ui-table`
+  (`action: append`, `maxrows: 200`).
+- **Key config:** both tables run `autocols: true`, so column order follows the key order
+  the Function nodes emit rather than an explicit `columns` array. The snapshot table
+  replaces; the event table appends. Enum labels in the Function nodes are display-only —
+  the wire carries numbers and the dialect catalog is the authority.
+- **Inject buttons:** **`every 2s`** (fires once 3 s after deploy, then repeats).
+
 ---
 
 ## 2. SITL folder (`examples/sitl/`)
