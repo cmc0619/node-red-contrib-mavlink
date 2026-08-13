@@ -226,7 +226,7 @@ test('02 requires AP mission/fence/rally success plus a loud PX4 fence failure (
   const px4Fail = row(
     'debug:px4 fence status',
     'failed',
-    "reason: 'mission transfer failed: MAV_MISSION_UNSUPPORTED'"
+    "phase: 'ack'\nreason: 'vehicle rejected upload: MAV_MISSION_UNSUPPORTED'"
   );
   const emptyAp = [
     row('debug:mission status', 'failed', "phase: 'empty'"),
@@ -248,13 +248,25 @@ test('02 requires AP mission/fence/rally success plus a loud PX4 fence failure (
   assert.equal(pass.status, 'PASS');
   assert.equal(isSpecializedPass(pass), true);
 
-  // A deadline timeout is the same loud answer with different words.
-  const timedOut = ok.slice(0, 3).concat(row('debug:px4 fence status', 'failed', 'no progress for 60000 ms'));
+  // A deadline abort is the same loud answer with different words — the
+  // transfer machine settles it as phase 'aborted'.
+  const timedOut = ok.slice(0, 3).concat(
+    row('debug:px4 fence status', 'failed', "phase: 'aborted'\nreason: 'no progress for 60000 ms'")
+  );
   assert.equal(verdictFrom(profile, { debug: timedOut, errors: [] }, '').status, 'PASS');
 
   // A missing PX4 row is not a measurement.
   const missing = ok.slice(0, 3);
   assert.notEqual(verdictFrom(profile, { debug: missing, errors: [] }, '').status, 'PASS');
+
+  // Neither is a row that died before the mission protocol ran: an empty
+  // upload, a connection fault — `failed` with a non-transfer phase measured
+  // nothing, and must not PASS on the AP rows' coattails (Codex, #287).
+  for (const excerpt of ["phase: 'empty'", "phase: 'error'\nreason: 'requires a Connection'"]) {
+    const preProtocol = ok.slice(0, 3).concat(row('debug:px4 fence status', 'failed', excerpt));
+    assert.notEqual(verdictFrom(profile, { debug: preProtocol, errors: [] }, '').status, 'PASS',
+      `${excerpt.split('\n')[0]} is not a mission-protocol measurement`);
+  }
 });
 
 test('27/30 read the unified vocabulary — and \'succeeded\' stays banned', () => {

@@ -28,18 +28,23 @@
         if (mode === 'serial') return true;
         return RED.validators.number()(v);
       } },
+      // Sibling reads go through ownDialogField, not `live || saved` (the
+      // #284 lesson, same trap one node over): an emptied box is the
+      // operator's answer, and a truthiness fallback would resurrect the
+      // saved value — clearing both fields to go listen-only would red
+      // forever, each blank vouched against by the other's ghost.
       remoteHost: { value: '', validate: function (v, _opt) {
         var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
         if (mode === 'serial') return true;
-        var port = $('#node-config-input-remotePort').val() || this.remotePort || '';
-        return remotePairReason(v, port);
+        var $port = RED.mavlink.ownDialogField(this, '#node-config-input-remotePort');
+        return remotePairReason(v, $port ? $port.val() : this.remotePort);
       } },
       remotePort: { value: '', validate: function (v, _opt) {
         if (!RED.validators.number(true)(v)) return false;
         var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
         if (mode === 'serial') return true;
-        var host = $('#node-config-input-remoteHost').val() || this.remoteHost || '';
-        return remotePairReason(v, host);
+        var $host = RED.mavlink.ownDialogField(this, '#node-config-input-remoteHost');
+        return remotePairReason(v, $host ? $host.val() : this.remoteHost);
       } },
       broadcastHost: { value: '' },
       broadcastPort: { value: '', validate: RED.validators.number(true) },

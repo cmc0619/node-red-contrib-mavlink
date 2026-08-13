@@ -503,3 +503,26 @@ test('a config with no numeric keys at all inherits the lib absence defaults (Gi
   // observable difference between "default applied" and "absence became NaN".
   assert.ok(Date.now() - started >= 80, 'the lib default interval paced the run');
 });
+
+test('a wrapper concurrency of 0 completes instead of hanging (Codex, #287)', async () => {
+  // Trusted-msg garbage, but the failure shape matters: with nothing in
+  // flight there is nothing to race, and Promise.race([]) never settles — a
+  // run that hangs forever is not GIGO, it is a broken promise. The launch
+  // loop's liveness guard degenerates 0 (and negatives) to strict
+  // one-at-a-time; the value is still never repaired.
+  const connection = connectionStub([peer(1), peer(2)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({ connection: 'conn', executionMode: 'sequential', delivery: 'send', intervalMs: 0 });
+  let sent;
+
+  await emitInput(
+    node,
+    { payload: { message: builtCommand(), options: { concurrency: 0 } } },
+    (messages) => { sent = messages; }
+  );
+
+  assert.equal(sent[1].result, 'succeeded', 'the run completes rather than hanging');
+  assert.equal(connection.sends.length, 2, 'both members still sent');
+});

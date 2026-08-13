@@ -518,11 +518,16 @@ function verdictFrom(profile, summary, log) {
     const px4Fence = lastByTag.get('debug:px4 fence status');
     const apOk = [apMission, apFence, apRally].every((d) => d && d.result === 'succeeded');
     // The PX4 fence leg fails loud from the vehicle side now — an UNSUPPORTED
-    // MISSION_ACK or the transfer deadline — not from a node-side gate, so
-    // what the row must show is `failed` with a transfer-shaped reason. The
-    // reason text is the vehicle's answer (or the deadline's), so the check
-    // keys on the result, not on any one wording.
-    const px4FailsLoud = Boolean(px4Fence) && px4Fence.result === 'failed';
+    // MISSION_ACK or the transfer deadline — not from a node-side gate. Only
+    // the transfer machine's own phases count as that measurement: 'ack' (the
+    // vehicle answered) and 'aborted' (the deadline/retry ceiling). A `failed`
+    // row wearing any other phase — 'empty', 'error', a connection fault —
+    // died before the mission protocol ran, so it measured nothing and must
+    // not PASS on the AP rows' coattails (the #267 fiction, one example over).
+    const px4FailsLoud =
+      Boolean(px4Fence) &&
+      px4Fence.result === 'failed' &&
+      /phase:\s*'(ack|aborted)'/.test(px4Fence.excerpt || '');
     if (apOk && px4FailsLoud) {
       return { status: 'PASS', reason: 'AP mission/fence/rally ok; PX4 fence fails loud' };
     }

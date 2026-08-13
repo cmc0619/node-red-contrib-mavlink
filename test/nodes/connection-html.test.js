@@ -196,6 +196,48 @@ test('remote host/port pairing: one without the other reds, both-or-neither pass
   );
 });
 
+test('remote pairing: clearing both live fields switches back to listen-only (Codex, #287)', () => {
+  // The other half of the pairing rule: the dialog is OPEN and the operator
+  // empties both boxes over a saved full pair. Sibling reads go through
+  // ownDialogField, so the emptied box is the answer — a `live || saved`
+  // fallback would resurrect the saved sibling and red both fields forever,
+  // making a configured remote impossible to un-configure (the #284 emptied-
+  // box lesson, one node over).
+  const saved = { id: 'c1', mode: 'udp', remoteHost: '10.0.0.9', remotePort: '14551' };
+  const open = (dom) => loadNodeDefaults('mavlink-connection', {}, {
+    dom, editStack: [{ id: 'c1' }],
+  });
+
+  const bothCleared = open({
+    '#node-config-input-remoteHost': { val: '' },
+    '#node-config-input-remotePort': { val: '' },
+  });
+  assert.equal(bothCleared.remoteHost.validate.call(saved, '', {}), true,
+    'cleared host sees the cleared port, not its ghost');
+  assert.equal(bothCleared.remotePort.validate.call(saved, '', {}), true,
+    'cleared port sees the cleared host, not its ghost');
+
+  // Clearing only one still reds — the live half-pair is real.
+  const halfCleared = open({
+    '#node-config-input-remoteHost': { val: '10.0.0.9' },
+    '#node-config-input-remotePort': { val: '' },
+  });
+  assert.match(String(halfCleared.remoteHost.validate.call(saved, '10.0.0.9', {})),
+    /Remote host and port are a pair/);
+
+  // Same DOM but another node's dialog on top: these boxes are not this
+  // node's answer, so the saved pair stands (#217 scoping).
+  const foreign = loadNodeDefaults('mavlink-connection', {}, {
+    dom: {
+      '#node-config-input-remoteHost': { val: '' },
+      '#node-config-input-remotePort': { val: '' },
+    },
+    editStack: [{ id: 'someone-else' }],
+  });
+  assert.equal(foreign.remoteHost.validate.call(saved, '10.0.0.9', {}), true,
+    'a foreign dialog\'s empty boxes do not clear this node\'s pair');
+});
+
 test('Local Identity editor exposes heartbeatIntervalMs', () => {
   assert.match(
     identityHtml,
