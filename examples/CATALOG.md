@@ -158,8 +158,11 @@ importable tab per file with shared config nodes inline.
   Move node's config, not the payload. Move TTL means the stream
   self-stops if injects stop arriving. Comment states plainly: no arc primitive exists;
   the ring is the flow author's maths.
-- **Inject buttons:** **`Arm+GUIDED+Takeoff`**, **`◯ Fly circle`** (repeat inject at 5 Hz
-  feeding the Function), **`■ Stop circle`** (`payload:false` to suppress), **`Land`**.
+- **Inject buttons:** **`Arm+GUIDED+Takeoff`**, **`◯ Fly circle`** (one-shot, sets
+  `flow.circling`), **`■ Stop circle`** (clears it and sends `{action:"stop"}`), **`Land`**.
+  A separate **`◯ circle tick (0.2 s)`** repeat inject drives the Function, which emits
+  only while `flow.circling` is true — nothing on the repeating path writes the flag, or
+  it would overwrite Stop within 200 ms.
 
 ### 12 — Ebony & Ivory (ArduPilot + PX4 side by side)
 

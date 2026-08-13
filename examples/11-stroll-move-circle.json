@@ -296,7 +296,7 @@
         "payload": "",
         "payloadType": "date",
         "x": 120,
-        "y": 280,
+        "y": 260,
         "wires": [
             [
                 "ex11-fly-gate"
@@ -323,7 +323,7 @@
         "payload": "{\"action\": \"stop\"}",
         "payloadType": "json",
         "x": 120,
-        "y": 280,
+        "y": 300,
         "wires": [
             [
                 "ex11-stop-gate"
@@ -349,8 +349,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 270,
-        "y": 280,
+        "x": 300,
+        "y": 300,
         "wires": [
             [
                 "ex11-move-circle"
@@ -377,7 +377,7 @@
         "to": "",
         "reg": false,
         "x": 320,
-        "y": 280,
+        "y": 260,
         "wires": [
             [
                 "ex11-fn-ring"
@@ -402,7 +402,7 @@
         "payload": "",
         "payloadType": "date",
         "x": 120,
-        "y": 340,
+        "y": 360,
         "wires": [
             [
                 "ex11-cmd-land"
