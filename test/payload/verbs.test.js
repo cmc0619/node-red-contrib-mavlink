@@ -139,6 +139,46 @@ test('gimbal roi-set refuses a blank coordinate rather than aiming at 0,0 (#88)'
   assert.equal(built.message.fields.param6, 0);
 });
 
+test('an explicit NaN rate rides onto the wire — a legal float, not an error', () => {
+  // GIMBAL_MANAGER_SET_PITCHYAW selects angle vs rate control by NaN-ing the
+  // unused pair; the dialect marks all four fields invalid=NaN. A driver never
+  // refuses trusted input, so NaN passes through as the value it is.
+  const built = buildPayloadMessage({
+    topic: 'gimbal',
+    verb: 'aim',
+    path: 'manager',
+    target: { sysid: 1, compid: 1 },
+    values: { pitch: 15, pitchRate: NaN },
+  });
+  assert.equal(built.message.name, 'GIMBAL_MANAGER_SET_PITCHYAW');
+  assert.equal(built.message.fields.pitch, 15);
+  assert.ok(Number.isNaN(built.message.fields.pitch_rate), 'pitch_rate carries NaN');
+});
+
+test('an unparseable value coerces to NaN and still builds (driver rule)', () => {
+  // Blank falls back; anything else is Number()'d. 'abc' is not blank, so the
+  // field carries Number('abc') = NaN rather than a throw.
+  const built = buildPayloadMessage({
+    topic: 'gimbal',
+    verb: 'aim',
+    path: 'manager',
+    target: { sysid: 1, compid: 1 },
+    values: { pitch: 'abc' },
+  });
+  assert.ok(Number.isNaN(built.message.fields.pitch), 'pitch carries NaN');
+});
+
+test("carrier 'int' builds COMMAND_INT; anything else the frameless COMMAND_LONG (§9)", () => {
+  const base = {
+    topic: 'servo',
+    verb: 'set',
+    target: { sysid: 1, compid: 1 },
+    values: {},
+  };
+  assert.equal(buildPayloadMessage({ ...base, carrier: 'int' }).message.name, 'COMMAND_INT');
+  assert.equal(buildPayloadMessage({ ...base, carrier: 'bogus' }).message.name, 'COMMAND_LONG');
+});
+
 test('whitespace is blank for a required ROI coordinate (#141)', () => {
   // The pre-#141 presence check treated ' ' as a value and Number(' ') is 0,
   // so a whitespace latitude slipped past the required check and aimed at the

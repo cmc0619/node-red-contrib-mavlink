@@ -216,34 +216,45 @@ test('real 23/29 branch: the arm ack alone no longer classifies PASS (#267)', ()
   assert.equal(isSpecializedPass(ok), true, 'goto-accepted PASS stays early-exit eligible');
 });
 
-test('02 requires AP mission/fence/rally success plus PX4 fence gate (no empty false PASS)', () => {
+test('02 requires AP mission/fence/rally success plus a loud PX4 fence failure (no empty false PASS)', () => {
+  // The PX4 fence leg fails from the vehicle side — an UNSUPPORTED
+  // MISSION_ACK or the transfer deadline — so the profile keys on the row's
+  // `failed` result, not on any node-side wording.
   const profile = PROFILE['02-mission-fence-rally'];
   assert.ok(profile, 'profile 02 exists');
   const row = (tag, result, excerpt = '') => ({ tag, result, excerpt, detail: null, resultCode: null });
-  const px4Gate = row(
+  const px4Fail = row(
     'debug:px4 fence status',
     'failed',
-    "phase: 'gated'\nreason: 'px4 does not support fence over the mission protocol'"
+    "reason: 'mission transfer failed: MAV_MISSION_UNSUPPORTED'"
   );
   const emptyAp = [
     row('debug:mission status', 'failed', "phase: 'empty'"),
     row('debug:fence status', 'failed', "phase: 'empty'"),
     row('debug:rally status', 'failed', "phase: 'empty'"),
-    px4Gate,
+    px4Fail,
   ];
   const emptyVerdict = verdictFrom(profile, { debug: emptyAp, errors: [] }, '');
-  assert.equal(emptyVerdict.status, 'FAIL', 'AP empty uploads must not PASS on the PX4 gate alone');
+  assert.equal(emptyVerdict.status, 'FAIL', 'AP empty uploads must not PASS on the PX4 failure alone');
   assert.match(emptyVerdict.reason, /AP uploads incomplete/);
 
   const ok = [
     row('debug:mission status', 'succeeded'),
     row('debug:fence status', 'succeeded'),
     row('debug:rally status', 'succeeded'),
-    px4Gate,
+    px4Fail,
   ];
-  const pass = verdictFrom(profile, { debug: ok, errors: [] }, "does not support fence");
+  const pass = verdictFrom(profile, { debug: ok, errors: [] }, '');
   assert.equal(pass.status, 'PASS');
   assert.equal(isSpecializedPass(pass), true);
+
+  // A deadline timeout is the same loud answer with different words.
+  const timedOut = ok.slice(0, 3).concat(row('debug:px4 fence status', 'failed', 'no progress for 60000 ms'));
+  assert.equal(verdictFrom(profile, { debug: timedOut, errors: [] }, '').status, 'PASS');
+
+  // A missing PX4 row is not a measurement.
+  const missing = ok.slice(0, 3);
+  assert.notEqual(verdictFrom(profile, { debug: missing, errors: [] }, '').status, 'PASS');
 });
 
 test('27/30 read the unified vocabulary — and \'succeeded\' stays banned', () => {

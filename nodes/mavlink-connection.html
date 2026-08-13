@@ -7,6 +7,16 @@
 -->
 
 <script type="text/javascript">
+  // Remote host and port are a pair — both blank (listen-only) or both set.
+  // The runtime trusts this: a half-configured remote never deploys, so the
+  // UDP send path treats any missing half as no destination and drops quietly.
+  function remotePairReason(v, other) {
+    var mine = String(v == null ? '' : v).trim();
+    var theirs = String(other == null ? '' : other).trim();
+    if ((mine === '') === (theirs === '')) return true;
+    return 'Remote host and port are a pair — set both or neither';
+  }
+
   RED.nodes.registerType('mavlink-connection', {
     category: 'config',
     defaults: {
@@ -18,8 +28,19 @@
         if (mode === 'serial') return true;
         return RED.validators.number()(v);
       } },
-      remoteHost: { value: '' },
-      remotePort: { value: '', validate: RED.validators.number(true) },
+      remoteHost: { value: '', validate: function (v, _opt) {
+        var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
+        if (mode === 'serial') return true;
+        var port = $('#node-config-input-remotePort').val() || this.remotePort || '';
+        return remotePairReason(v, port);
+      } },
+      remotePort: { value: '', validate: function (v, _opt) {
+        if (!RED.validators.number(true)(v)) return false;
+        var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
+        if (mode === 'serial') return true;
+        var host = $('#node-config-input-remoteHost').val() || this.remoteHost || '';
+        return remotePairReason(v, host);
+      } },
       broadcastHost: { value: '' },
       broadcastPort: { value: '', validate: RED.validators.number(true) },
       serialPath: { value: '', validate: function (v) {

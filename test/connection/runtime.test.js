@@ -269,7 +269,10 @@ test('listen-only UDP drops outbound quietly when no remote and no peer endpoint
   connection.close();
 });
 
-test('partial UDP remote config still warns (incomplete destination is a misconfig)', async () => {
+test('partial UDP remote config drops quietly (the editor pairs host and port)', async () => {
+  // The editor's pairing rule means a half-configured remote never deploys;
+  // one that arrives anyway (hand-edited flow JSON) is no destination at all
+  // and behaves as listen-only — quiet, like the no-remote case above.
   const warns = [];
   const { connection, dg } = build(
     {
@@ -289,9 +292,10 @@ test('partial UDP remote config still warns (incomplete destination is a misconf
   await delay(30);
 
   assert.equal(dg.sockets[0].sent.length, 0);
-  assert.ok(
-    warns.some((m) => /incomplete destination/i.test(m)),
-    'half-configured remote must still warn'
+  assert.equal(
+    warns.filter((m) => /outbound send failed|destination/i.test(m)).length,
+    0,
+    'a half destination must not spam the Node-RED log'
   );
   connection.close();
 });

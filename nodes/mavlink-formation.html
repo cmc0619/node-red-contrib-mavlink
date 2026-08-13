@@ -61,7 +61,17 @@
       sendAs: { value: 'int' },
       delivery: { value: 'build' },
       intervalMs: { value: 100, validate: RED.validators.number() },
-      timeoutMs: { value: 10000, validate: RED.validators.number() }
+      timeoutMs: {
+        value: 10000,
+        // RED.validators.number() accepts 0 and negatives, and the input's
+        // min="1" is not enforced on save: a saved 0 arms the confirm wait at
+        // 0 ms, so every member reports unconfirmed before an ack could
+        // arrive — silently blaming the vehicles for a config bug.
+        validate: function (v) {
+          var n = Number(v);
+          return Number.isInteger(n) && n >= 1;
+        }
+      }
     },
     inputs: 1,
     outputs: 2,

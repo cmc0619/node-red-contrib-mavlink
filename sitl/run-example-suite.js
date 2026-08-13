@@ -517,13 +517,13 @@ function verdictFrom(profile, summary, log) {
     const apRally = lastByTag.get('debug:rally status');
     const px4Fence = lastByTag.get('debug:px4 fence status');
     const apOk = [apMission, apFence, apRally].every((d) => d && d.result === 'succeeded');
-    const px4Gated =
-      !!px4Fence &&
-      px4Fence.result === 'failed' &&
-      (/does not support fence/i.test(px4Fence.excerpt || '') ||
-        /phase:\s*'gated'/i.test(px4Fence.excerpt || '') ||
-        /does not support fence/i.test(log));
-    if (apOk && px4Gated) {
+    // The PX4 fence leg fails loud from the vehicle side now — an UNSUPPORTED
+    // MISSION_ACK or the transfer deadline — not from a node-side gate, so
+    // what the row must show is `failed` with a transfer-shaped reason. The
+    // reason text is the vehicle's answer (or the deadline's), so the check
+    // keys on the result, not on any one wording.
+    const px4FailsLoud = !!px4Fence && px4Fence.result === 'failed';
+    if (apOk && px4FailsLoud) {
       return { status: 'PASS', reason: 'AP mission/fence/rally ok; PX4 fence fails loud' };
     }
     if (!apOk) {

@@ -11,6 +11,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { loadNodeDefaults } = require('./html-assert');
+
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-connection.html'),
   'utf8'
@@ -137,6 +139,60 @@ test('Connection editor offers UDP, TCP, and serial without “not yet” stubs'
     html,
     /serialPath:[\s\S]*validate:[\s\S]*mode !== 'serial'[\s\S]*trim\(\)\.length > 0/,
     'serial path is required in serial mode'
+  );
+});
+
+test('remote host/port pairing: one without the other reds, both-or-neither passes', () => {
+  // These drive the REAL validators — the html script evaluated whole, the
+  // real RED.mavlink resource underneath — with no dialog open, which is the
+  // state Node-RED validates in on import and on deploy: the saved config is
+  // all there is. The runtime trusts this rule (udp.js sends only with both).
+  const defaults = loadNodeDefaults('mavlink-connection');
+  const reason = /Remote host and port are a pair/;
+
+  // host set + port blank → reason on the host field
+  assert.match(
+    String(defaults.remoteHost.validate.call(
+      { id: 'c1', mode: 'udp', remotePort: '' }, '10.0.0.9', {}
+    )),
+    reason
+  );
+  // port set + host blank → reason on the port field
+  assert.match(
+    String(defaults.remotePort.validate.call(
+      { id: 'c1', mode: 'udp', remoteHost: '' }, '14551', {}
+    )),
+    reason
+  );
+  // both blank → listen-only, valid on both fields
+  assert.equal(
+    defaults.remoteHost.validate.call({ id: 'c1', mode: 'udp', remotePort: '' }, '', {}),
+    true
+  );
+  assert.equal(
+    defaults.remotePort.validate.call({ id: 'c1', mode: 'udp', remoteHost: '' }, '', {}),
+    true
+  );
+  // both set → valid on both fields
+  assert.equal(
+    defaults.remoteHost.validate.call(
+      { id: 'c1', mode: 'udp', remotePort: '14551' }, '10.0.0.9', {}
+    ),
+    true
+  );
+  assert.equal(
+    defaults.remotePort.validate.call(
+      { id: 'c1', mode: 'udp', remoteHost: '10.0.0.9' }, '14551', {}
+    ),
+    true
+  );
+  // serial mode hides the fields, so a stale half-pair must not red a
+  // control the operator cannot see (same gate as bindPort).
+  assert.equal(
+    defaults.remoteHost.validate.call(
+      { id: 'c1', mode: 'serial', remotePort: '' }, '10.0.0.9', {}
+    ),
+    true
   );
 });
 

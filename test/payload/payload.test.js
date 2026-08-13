@@ -242,18 +242,6 @@ test('gimbal roi-set with carrier int builds COMMAND_INT with degE7 lat/lon (§9
   assert.equal('confirmation' in built.message.fields, false, 'COMMAND_INT has no confirmation byte');
 });
 
-test('a command-backed verb without a carrier throws — no default wire form (§9)', () => {
-  assert.throws(
-    () => buildPayloadMessage({
-      topic: 'servo',
-      verb: 'set',
-      target: { sysid: 1, compid: 1 },
-      values: { servo: 8, pwm: 1600 },
-    }),
-    /carrier 'int' or 'long'/
-  );
-});
-
 test('message-kind verbs ignore the carrier entirely', () => {
   // Gimbal manager aiming is a plain message, not a MAV_CMD — it must build
   // with no carrier at all.

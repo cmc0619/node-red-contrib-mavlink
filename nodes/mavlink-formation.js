@@ -3,9 +3,8 @@
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
 const { applyConnectionStatus, isBlank, dialectFromConnection } = require('../lib/addressing');
-const { formationTargets, finite } = require('../lib/formation');
+const { formationTargets } = require('../lib/formation');
 const {
-  DEFAULT_TIMEOUT_MS,
   getPreset,
   buildParamArray,
   buildCommandLong,
@@ -119,8 +118,10 @@ module.exports = function registerMavlinkFormation(RED) {
           targets: memberTargets,
           mode: 'sequential',
           delivery: config.delivery,
-          intervalMs: config.intervalMs === undefined || config.intervalMs === '' ? 100 : config.intervalMs,
-          timeoutMs: config.timeoutMs === undefined || config.timeoutMs === '' ? DEFAULT_TIMEOUT_MS : config.timeoutMs,
+          // The editor validators reject blank at deploy, so the saved values
+          // are guaranteed numeric — trust them (Number only, no second default).
+          intervalMs: Number(config.intervalMs),
+          timeoutMs: Number(config.timeoutMs),
         }));
 
         // A redeploy cancelled us: finish quietly rather than emitting or
@@ -168,9 +169,9 @@ module.exports = function registerMavlinkFormation(RED) {
  * 0 (pattern faces north) rather than refusing: unlike a defaulted coordinate
  * or altitude, any heading yields a geometrically valid, fully separated
  * formation — the value orients the pattern, it cannot collapse it (§2:
- * refusals are for inputs whose default is silently dangerous). A *payload*
- * heading that is present but not numeric is a refusal, not a default — absent
- * means "don't care", garbage means the flow is wired wrong.
+ * refusals are for inputs whose default is silently dangerous). A present
+ * payload heading is trusted input like every other: Number() coercion, never
+ * a refusal.
  *
  * Pitch follows the same payload-then-config rule via {@link resolvePitch}
  * (default 0 = level). Pitch tumbles the pattern around body +Y; it is not
@@ -182,13 +183,12 @@ module.exports = function registerMavlinkFormation(RED) {
  * @returns {{anchor: {lat: *, lon: *, alt: *}, headingDeg: number}}
  */
 function resolveAnchor(config, payload, peerTable) {
-  // Only msg.payload.headingDeg is runtime-boundary input — validate it where
-  // it enters with the lib's strict finite(), naming the raw value.
-  // config.headingDeg is editor-validated (trust it: Number() only, no
-  // re-validation), and a leader's telemetry heading is projected to a finite
-  // number or null by the peer table.
+  // Payload and config headings are both trusted input (driver rule): the
+  // defined Number() coercion, never a refusal. Blank means "not set"; a
+  // leader's telemetry heading is projected to a finite number or null by the
+  // peer table.
   let heading = !isBlank(payload.headingDeg)
-    ? finite(payload.headingDeg, 'payload.headingDeg')
+    ? Number(payload.headingDeg)
     : isBlank(config.headingDeg) ? null : Number(config.headingDeg);
 
   const explicit = payload.anchor
@@ -222,15 +222,15 @@ function resolveAnchor(config, payload, peerTable) {
 }
 
 /**
- * Pitch for this formation run. Payload override is runtime-boundary input
- * (finite()); config.pitchDeg is editor-validated (Number() only). Absent → 0.
+ * Pitch for this formation run. Payload override and config value are both
+ * trusted input: Number() coercion, never a refusal. Absent → 0.
  *
  * @param {object} config
  * @param {object} payload
  * @returns {number}
  */
 function resolvePitch(config, payload) {
-  if (!isBlank(payload.pitchDeg)) return finite(payload.pitchDeg, 'payload.pitchDeg');
+  if (!isBlank(payload.pitchDeg)) return Number(payload.pitchDeg);
   // Editor default is 0 — trust config.pitchDeg (Number only, no second default).
   return Number(config.pitchDeg);
 }

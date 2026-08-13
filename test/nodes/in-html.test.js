@@ -8,6 +8,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
+
+const { installEditorHelpers } = require('../helpers/editor-resource');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-in.html'),
@@ -68,6 +71,24 @@ test('message rows survive an async catalog load', () => {
   // to select rather than reading the live control a second time.
   assert.match(html, /var want = saved !== undefined \? saved : \$sel\.val\(\)/, 'the live selection is carried across a repaint');
   assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'unknown saved values use shared fillEnumSelect sentinel');
+});
+
+test('compid filter validates as uint8 0..255 via the shared helper; blank = any', () => {
+  // Same rule as the sibling sysid: a compid outside 0..255 can never match a
+  // frame, so the editor reds it instead of the node sitting silent. Executed,
+  // not just source-pinned — evaluate the real descriptor and call it.
+  const match = html.match(/compid:\s*(\{[^}]*\})/);
+  assert.ok(match, 'compid descriptor not found');
+  const context = { RED: { mavlink: {} }, $: () => ({ length: 0, val: () => undefined }) };
+  installEditorHelpers(context);
+  const descriptor = vm.runInNewContext(`(${match[1]})`, context);
+  const validate = (v) => descriptor.validate.call({}, v, {});
+
+  assert.equal(validate(''), true, 'blank means any component');
+  assert.equal(validate(0), true, 'MAV_COMP_ID_ALL');
+  assert.equal(validate(255), true, 'the uint8 ceiling');
+  assert.match(String(validate(256)), /between 0 and 255/, 'out of range reds the node');
+  assert.match(String(validate(-1)), /between 0 and 255/);
 });
 
 test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)', () => {

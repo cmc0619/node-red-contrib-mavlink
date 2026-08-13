@@ -3,7 +3,6 @@
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
 const { applyConnectionStatus } = require('../lib/addressing');
-const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
 
 module.exports = function registerMavlinkFanout(RED) {
   function MavlinkFanoutNode(config) {
@@ -58,13 +57,14 @@ module.exports = function registerMavlinkFanout(RED) {
           targets: opts.targets,
           members: configMembersFor(config, opts),
           selection,
-          mode: opts.executionMode || config.executionMode || 'sequential',
+          // lib/fanout owns the absence default for mode ('sequential').
+          mode: opts.executionMode || config.executionMode,
           delivery: effectiveDelivery,
           dryRun: opts.dryRun !== undefined ? !!opts.dryRun : !!config.dryRun,
-          intervalMs: numberOption(opts, config, 'intervalMs', 100),
-          timeoutMs: numberOption(opts, config, 'timeoutMs', DEFAULT_TIMEOUT_MS),
-          maxRetries: numberOption(opts, config, 'maxRetries', 0),
-          concurrency: numberOption(opts, config, 'concurrency', 1),
+          intervalMs: numberOption(opts, config, 'intervalMs'),
+          timeoutMs: numberOption(opts, config, 'timeoutMs'),
+          maxRetries: numberOption(opts, config, 'maxRetries'),
+          concurrency: numberOption(opts, config, 'concurrency'),
           stopOnError: opts.stopOnError !== undefined ? !!opts.stopOnError : !!config.stopOnError,
           identityId: opts.identityId || config.identity,
           confirmed: msg.confirmed === true || config.confirm === true,
@@ -198,10 +198,14 @@ function assignIfPresent(target, key, value) {
   if (value !== undefined && value !== null && value !== '') target[key] = value;
 }
 
-function numberOption(opts, config, key, fallback) {
+/**
+ * A numeric run option: the payload wrapper overrides, else the saved config
+ * value — whose blank-rejecting editor validator guarantees it numeric, so
+ * the runtime takes the Number() coercion and never re-validates.
+ */
+function numberOption(opts, config, key) {
   if (opts[key] !== undefined) return opts[key];
-  if (config[key] !== undefined && config[key] !== '') return config[key];
-  return fallback;
+  return Number(config[key]);
 }
 
 /**
