@@ -16,7 +16,11 @@
       "Bash(npm test)",
       "Bash(npm test *)",
       "Bash(npm run lint)",
-      "Bash(npm run lint *)"
+      "Bash(npm run lint *)",
+      "mcp__github__subscribe_pr_activity",
+      "mcp__github__unsubscribe_pr_activity",
+      "mcp__Claude_Code_Remote__subscribe_pr_activity",
+      "mcp__Claude_Code_Remote__unsubscribe_pr_activity"
     ]
   },
   "hooks": {
