@@ -1406,7 +1406,7 @@ remains the wire truth the derivation targets (`lib/move/index.js` `MODES` / `MA
 | Velocity | vx/vy/vz | also the shape of the stream-stop packet |
 | Position + Velocity | both | feed-forward, PX4 offboard |
 | Acceleration | afx/afy/afz | |
-| Yaw only | neither | requires yaw or yaw rate, else the packet is the all-ignore PX4 rejects (§14 / #115) |
+| Yaw only | neither | the *editor* requires yaw or yaw rate (§6) — the runtime trusts what arrives; without either the packet is the all-ignore PX4 rejects (§14 / #115) |
 
 There is **no Force mode**. It was removed once measurement showed neither stack actuates on the
 force bit (512) — a mode that warns "expect this to be ignored" on every use is not a capability,
@@ -2084,7 +2084,7 @@ before each one.
 | Item | Status | Notes |
 |---|---|---|
 | **Custom dialect upload in the Vehicle editor** | deferred | Superseded by the dialect library (Seed + catalog dates). No path/upload UI and no path resolution behind it. Private-dialect library ingestion is future work. |
-| **Command node `COMMAND_INT`** | **done** | Carrier defaults to `COMMAND_INT` in the Command, Payload, and Formation editors (config key `sendAs` since #278; Fan-out never held the key — that row selects the identity, and is labelled **Identity**); the only other choice is `COMMAND_LONG`, with no blank prompt or conditional editor validator. Runtime reads the saved choice and does not repair it; there is no migration machinery for the retired `carrier` key, and no helper or test exists to classify a config the editor cannot produce (owner ruling, 2026-08-12 — `AGENTS.md` §Bloat prevention). Command's pre-existing deploy-time check, which reds out a missing command *or* wire message, is unchanged. Every tier — build included — honours the configured carrier. Positional params are always degrees; the INT carrier scales ×1e7 per the dialect XML's own classification (`intCoordKinds`: `hasLocation` + not-degE7 → scale; natively-degE7 params carry raw; non-location param5/6 like gimbal flags never scale; unknown command → historical scaling). NaN in param5/6 refuses the INT build loud — the spec routes NaN-meaning commands to COMMAND_LONG, and coercion would aim at null island. On `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns and rebuilds once from the canonical degree params in the other form; second wrong-carrier fails loud (no auto-swap in Fan-out/Payload — homogeneous fleets per node, the named result tells the operator which way to flip). Fan-out command/payload actions and Payload command-backed verbs use the same `lib/command` builders; message-kind payload verbs ignore the carrier. |
+| **Command node `COMMAND_INT`** | **done** | Carrier defaults to `COMMAND_INT` in the Command, Payload, and Formation editors (config key `sendAs` since #278; Fan-out never held the key — that row selects the identity, and is labelled **Identity**); the only other choice is `COMMAND_LONG`, with no blank prompt or conditional editor validator. Runtime reads the saved choice and does not repair it; there is no migration machinery for the retired `carrier` key, and no helper or test exists to classify a config the editor cannot produce (owner ruling, 2026-08-12 — `AGENTS.md` §Bloat prevention). Command's pre-existing deploy-time check, which reds out a missing command *or* wire message, is unchanged. Every tier — build included — honours the configured carrier. Positional params are always degrees; the INT carrier scales ×1e7 per the dialect XML's own classification (`intCoordKinds`: `hasLocation` + not-degE7 → scale; natively-degE7 params carry raw; non-location param5/6 like gimbal flags never scale; unknown command → historical scaling). NaN in param5/6 refuses the INT build loud — the spec routes NaN-meaning commands to COMMAND_LONG, and coercion would aim at null island. On `COMMAND_INT_ONLY`/`COMMAND_LONG_ONLY` warns and rebuilds once from the canonical degree params in the other form; second wrong-carrier fails loud (no auto-swap in Fan-out — homogeneous fleets per node, the named result tells the operator which way to flip; Payload swaps once per §9, same as Command). Fan-out command/payload actions and Payload command-backed verbs use the same `lib/command` builders; message-kind payload verbs ignore the carrier. |
 | **DSCP socket marking** | **done** | Optional `sockopt` marks `IP_TOS`/`IPV6_TCLASS` from band DSCP immediately before each IP send; absent → unmarked, queue unchanged. |
 | **Param definition catalog** | **done ✅** | 30,938 definitions ship in `seed/param-defs-*.seed.gz` (ArduPilot's six vehicle documents + PX4), keyed firmware × vehicle family, so the Build tier reaches definitions without naming a profile. A profile's own holding file still overrides the seed id by id, because it came from the firmware being flown; a corrupt one is reported *and* falls back to the seed. Authenticated GET stays local-only; the Vehicle editor's explicit authenticated Update downloads its optional `paramDefsUrl`, validates, and atomically replaces the file. Param id is a search panel matching name *and* description (the datalist could only match a name prefix), free entry preserved for parameters no metadata file lists. Value follows the definition: documented enumerations become a select with a Custom value escape, documented bounds are refused at edit time, units and increment ride along. An `unknown` vehicle gets the union of parameter *names* only — no bounds, no enumerations, because the documents disagree and there is no basis to pick (§14). A parameter is addressed by name **or** by index, offered only on a read since `PARAM_SET` has no `param_index` and a by-index read sends no name; each action shows only the fields its message carries, and the checks are hidden with the rows (§14). Where the firmware publishes a wire type — PX4 does, for all 1836, and ArduPilot for none — Type narrows to that one option rather than being guessed. The Param id hover names the definition set that answered, composed by the route because only the route knows which document it resolved (§14). Regenerate with `npm run generate-param-seed`. |
 | **Full command-param `enum=` recovery** | **done** | Seed compile carries common.xml `<param enum=`> links into the bundle (e.g. Arm → `MAV_BOOL`). The old `hints.js` overlay is gone. |
@@ -4239,3 +4239,39 @@ from ~2 s to ~25 s (an explicit NAV_TAKEOFF altitude would not do: PX4 reads par
 the lab's Zurich home sits near 488 m).
 *Check:* example 36 for the ground half; the airborne refusal is recorded in commit 7be10a7 and
 the probe-40 rig row (2026-08-12).
+
+**Position + Acceleration without velocity is not a Move mode (2026-08-13).**
+*Wrong belief:* the setpoint groups compose freely — every per-group ignore-bit combination the
+wire can spell is a mode, so position + acceleration (mask 3128) belongs in the matrix like the
+others.
+*Fact (source-read, ArduPilot Copter-4.7.0
+`GCS_MAVLink_Copter.cpp::handle_message_set_position_target_local_ned`):* the handler's branches
+are PosVelAccel / VelAccel / Accel / Pos — everything else falls to
+`copter.mode_guided.hold_position()`. Mask 3128 matches no branch: the vehicle holds, the node
+reports `sent`, and setpoints carry no ack to say otherwise — a silent no-op, PX4-only
+territory (accel feed-forward). Removed from `MODES` (#287); the Move editor reds the
+combination naming the reason.
+*Check:* `rg 'position-acceleration' lib/move` → no mode row. Restoring it costs one line plus
+a SITL measurement of mask 3128 actually actuating (backlog).
+
+**Coerce vs refuse — the driver's one question (owner ruling, affirmed 2026-08-13).**
+*Wrong belief:* the driver/protector split (§ "Two things are being built") means the runtime
+never refuses anything — every guard belongs to the editor.
+*Fact:* the runtime never refuses trusted input *that has a defined safe coercion*. The test is
+"is there a defined, safe value to coerce to?" Yes → coerce and send (an explicit NaN rides as
+the legal float it is; an unknown carrier token builds `COMMAND_LONG`). No → refuse loud: a
+blank anchor coordinate would coerce to null island, a blank altitude to a descent to sea
+level, and no firmware exists to resolve a body frame nobody named — the no-safe-default class
+survives every audit because deleting it converts garbage into a commanded position.
+*Check:* `lib/formation/index.js` `formationTargets` (refusals) and `lib/payload/index.js`
+`valueOr` (coercion) — both halves are test-pinned.
+
+**Mission Clear needs no confirmation gate (owner ruling, 2026-08-13).**
+*Wrong belief:* destructive operations need a second yes — a `confirmClear` checkbox or
+`msg.confirmed === true` — before a MISSION_CLEAR_ALL may be built or sent.
+*Fact:* selecting the Clear operation in the editor already answers that question; the gate
+made every clearing flow carry boilerplate to do what the node plainly says. The checkbox, the
+`msg.confirmed` escape, and the `unconfirmed` phase are removed together (#292). The
+destructive guard that stays is the empty-upload refusal — an upload still can never degrade
+into an accidental clear (#241).
+*Check:* `rg confirmClear` → only the test pinning its absence.
