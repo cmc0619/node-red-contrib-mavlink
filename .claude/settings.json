@@ -7,6 +7,9 @@
       }
     }
   },
+  "enabledPlugins": {
+    "mem0@mem0-plugins": true
+  },
   "permissions": {
     "allow": [
       "mcp__github__pull_request_read",
