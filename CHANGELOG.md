@@ -40,6 +40,18 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Fixed
 
+- **The ack-timeout re-send is gated on per-command idempotency.** `AckWaiter`'s
+  contract is explicit — pass `DEFAULT_MAX_RESENDS` *"only for a command
+  affirmatively known to tolerate re-issue"* — because re-sending is premised on
+  a lost command and a lost ack being indistinguishable. That premise is per
+  *command*, and generalising Move's reposition confirm path to serve every
+  acked action carried it somewhere it does not hold: a **relative**
+  `CONDITION_YAW` is a delta, so a re-send after a lost ack turns the aircraft a
+  second time. Relative turns now settle `unconfirmed` instead, which §9 already
+  treats as a report rather than a failure. Absolute turns, speed changes and
+  repositions are unchanged — re-issuing each lands the vehicle in the state it
+  was already asked for. (Gitar, #303)
+
 - Three hand-editable states that reported success while doing nothing useful,
   all found by the same editor-round-trip lens: `steer` × `stream` × `offset`
   (a repeating offset walks the vehicle instead of holding a target), and

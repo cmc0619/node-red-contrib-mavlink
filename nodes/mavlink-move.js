@@ -74,7 +74,7 @@ module.exports = function registerMavlinkMove(RED) {
     // COMMAND_INT_ONLY (8) and UNSUPPORTED_MAV_FRAME (9) included — is a
     // failure with its MAV_RESULT name, never silence; Move does no carrier
     // swap, because DO_REPOSITION is COMMAND_INT-only by spec and ArduPilot.
-    async function confirmCommand(label, message, target, identityId, connectionNode, send, done) {
+    async function confirmCommand(label, message, target, identityId, connectionNode, send, done, idempotent) {
       if (activeWaiter) {
         activeWaiter.cancel();
         activeWaiter = null;
@@ -92,9 +92,21 @@ module.exports = function registerMavlinkMove(RED) {
         sourceIds: connectionNode.resolveSourceIds(identityId),
         // Blank inherits the AckWaiter default, like the Command node's field.
         timeoutMs: isBlank(config.ackTimeout) ? undefined : Number(config.ackTimeout),
-        // A re-sent goto is the same goto, so this carrier opts into the
-        // timeout re-send the library leaves off by default (#249).
-        maxResends: DEFAULT_MAX_RESENDS,
+        // The timeout re-send is opt-in and the library's contract is explicit
+        // (lib/command/ack.js): pass DEFAULT_MAX_RESENDS "only for a command
+        // affirmatively known to tolerate re-issue", because re-sending is
+        // premised on a lost command and a lost ack being indistinguishable.
+        //
+        // That premise is per command, not per carrier — a distinction this
+        // node lost when confirmReposition was generalised to serve every acked
+        // action (Gitar, #303). It holds for a reposition (the same absolute
+        // place), an absolute turn (the same heading) and a speed change (the
+        // same speed): re-issuing lands the vehicle in the state it was already
+        // asked for. It does NOT hold for a *relative* CONDITION_YAW — if the
+        // vehicle turned and only the ack was lost, a re-send turns it again.
+        // Caller decides; a non-idempotent command settles 'unconfirmed'
+        // instead, which §9 already treats as a report rather than a failure.
+        maxResends: idempotent ? DEFAULT_MAX_RESENDS : 0,
         // A long reposition answers IN_PROGRESS repeatedly (§9); the badge
         // follows the vehicle's own progress instead of standing still.
         onInProgress: (progress) => {
@@ -152,10 +164,13 @@ module.exports = function registerMavlinkMove(RED) {
      * vocabulary across all of them (#276), not one per action.
      *
      * @param {string} label  the action word, used in status and error text
+     * @param {boolean} idempotent  whether re-issuing this exact message leaves
+     *   the vehicle in the state it was already asked for. Gates the ack-timeout
+     *   re-send, per the AckWaiter contract — see confirmCommand.
      * @returns {boolean} true when the async confirm flow has taken ownership
      *   of `done`; the caller must return without calling it
      */
-    function deliverCommand(label, message, target, identityId, connectionNode, send, done) {
+    function deliverCommand(label, message, target, identityId, connectionNode, send, done, idempotent) {
       if (delivery === 'build') {
         completeBuild(node, send, message);
         return false;
@@ -175,7 +190,7 @@ module.exports = function registerMavlinkMove(RED) {
             'mavlink-fanout broadcast (per-vehicle acks)'
           );
         }
-        confirmCommand(label, message, target, identityId, connectionNode, send, done)
+        confirmCommand(label, message, target, identityId, connectionNode, send, done, idempotent)
           .catch((err) => failInput(node, send, err, done));
         return true;
       }
@@ -242,6 +257,12 @@ module.exports = function registerMavlinkMove(RED) {
         // fails closed off ArduPilot, because CONDITION_YAW is an ArduPilot
         // command; Speed is standard on both stacks and asks nothing.
         if (COMMAND_ACTIONS.has(action)) {
+          const relative = firstDefined(payload.relative, config.relative);
+          // Re-issue safety is per command (see confirmCommand). A speed change
+          // and an absolute heading are both "the state you already asked for";
+          // a relative turn is a *delta*, so a re-send after a lost ack turns
+          // the aircraft a second time.
+          const idempotent = !(action === 'turn' && relative === true);
           const message = action === 'turn'
             ? buildTurnMessage({
               heading: valueFrom(payload, config, 'heading'),
@@ -249,7 +270,7 @@ module.exports = function registerMavlinkMove(RED) {
               direction: valueFrom(payload, config, 'direction'),
               // Relative changes what the heading number means, so it is a
               // strict boolean opt-in like changeMode — never a truthy token.
-              relative: firstDefined(payload.relative, config.relative),
+              relative,
               firmware: firmwareFor(vehicleAtDeploy, connectionNode),
               target,
             })
@@ -259,7 +280,7 @@ module.exports = function registerMavlinkMove(RED) {
               speedType: firstDefined(payload.speedType, config.speedType),
               target,
             });
-          if (deliverCommand(action, message, target, identityId, connectionNode, send, done)) return;
+          if (deliverCommand(action, message, target, identityId, connectionNode, send, done, idempotent)) return;
           done();
           return;
         }
@@ -285,7 +306,9 @@ module.exports = function registerMavlinkMove(RED) {
           });
           // Async on the confirm tier: the ack arrives later and the confirm
           // flow owns done() from here.
-          if (deliverCommand('reposition', message, target, identityId, connectionNode, send, done)) return;
+          // Idempotent: a re-sent goto is the same goto — the same absolute
+          // lat/lon/alt, so re-issuing lands where it was already going.
+          if (deliverCommand('reposition', message, target, identityId, connectionNode, send, done, true)) return;
           done();
           return;
         }
