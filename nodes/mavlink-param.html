@@ -230,54 +230,32 @@
       var _paramDefs = {};
       var _defsLoaded = false;
       var _defsNotice = '';
-      /** Documented bits of the parameter the Value field is shaped for. */
-      var _valueBits = [];
+      /**
+       * The documented flag entries ({value} per bit) and their OR-ed mask for
+       * the parameter the Value field is shaped for. Bit math rides the shared
+       * BigInt pair (RED.mavlink.selectedBitmaskValues / bitmaskFromSelection,
+       * same as Command's Advanced params): BigInt bitwise has no int32
+       * truncation, and a negative value behaves as infinite two's complement
+       * — so LOG_BITMASK's signed int32 spelling (-1 is every bit, per
+       * readInt32LE) selects, masks, and round-trips with no sign juggling
+       * (Gitar, #296). lib/codec/mask.js is the runtime home of the same rule.
+       */
+      var _valueBitEntries = [];
+      var _valueDocMask = 0n;
 
       /**
-       * Whether `bit` is set in a saved value — arithmetic, not bitwise: JS
-       * bitwise operators truncate to int32, which corrupts bit 31.
+       * A saved box value as a BigInt, or null when it carries no bits to
+       * preserve (blank defers to msg.payload; a non-integer has no bits).
        */
-      function bitIsSet(value, bit) {
-        return Math.floor(value / Math.pow(2, bit)) % 2 === 1;
-      }
-
-      /**
-       * A bitmask value in the unsigned domain the bit math needs. Bitmask
-       * params are int32 on the wire and decode signed (readInt32LE), so a
-       * value with bit 31 set arrives spelled negative — LOG_BITMASK -1 is
-       * every bit, not garbage (Gitar, #296). Anything outside int32 range
-       * has no bits to interpret and passes through for the guards to drop.
-       */
-      function unsignedInt32(value) {
-        if (!Number.isInteger(value)) return value;
-        if (value < 0 && value >= -2147483648) return value + 4294967296;
-        return value;
-      }
-
-      /**
-       * A bit-math result back in the box's spelling: the encoder writes
-       * int32 (writeInt32LE), so a sum with bit 31 set must leave as the
-       * negative it reads back as, or the Set would throw at encode.
-       */
-      function signedInt32(value) {
-        return value >= 2147483648 ? value - 4294967296 : value;
-      }
-
-      /**
-       * The part of a saved value the documented bits do NOT explain.
-       * Firmware accepts bits no metadata file lists; a picker change must
-       * carry them through untouched, not silently zero them (same survival
-       * rule as the enum path's custom sentinel). Takes and returns the
-       * unsigned domain; anything that is not a non-negative integer there
-       * has no bits to preserve.
-       */
-      function bitsRemainder(value, bits) {
-        if (!Number.isInteger(value) || value < 0) return 0;
-        var documented = 0;
-        for (var i = 0; i < bits.length; i++) {
-          if (bitIsSet(value, bits[i].bit)) documented += Math.pow(2, bits[i].bit);
+      function bitmaskBoxValue(raw) {
+        var text = String(raw === undefined || raw === null ? '' : raw).trim();
+        if (text === '') return null;
+        try {
+          return BigInt(text);
+        } catch (_e) {
+          var n = Number(text);
+          return Number.isInteger(n) ? BigInt(n) : null;
         }
-        return value - documented;
       }
       /**
        * Which definition set answered, in words -- composed by the route,
@@ -615,27 +593,29 @@
         else $value.removeAttr('step');
 
         $select.empty();
-        _valueBits = hasBits ? def.bits : [];
+        _valueBitEntries = [];
+        _valueDocMask = 0n;
         if (hasBits) {
           // A bitmask parameter is a set of switches, not "a number" —
           // ARMING_CHECK takes checks, not a sum the operator computes by
-          // hand. One option per documented bit; the picker writes the sum
+          // hand. One option per documented bit; the picker writes the mask
           // through to the box. The box stays visible beside it: a blank
           // value still defers to msg.payload, and undocumented remainder
-          // bits stay reachable and survive picker changes (bitsRemainder).
+          // bits stay reachable and survive picker changes.
           $select.attr('multiple', 'multiple').attr('size', Math.min(8, def.bits.length));
-          var saved = unsignedInt32(Number(String($value.val() === undefined ? '' : $value.val()).trim()));
-          var picked = [];
           for (var b = 0; b < def.bits.length; b++) {
             var bit = def.bits[b];
-            var flag = Math.pow(2, bit.bit);
-            var $opt = $('<option></option>').val(String(flag)).text(bit.label + ' (bit ' + bit.bit + ')');
-            $select.append($opt);
-            if (Number.isInteger(saved) && saved >= 0 && bitIsSet(saved, bit.bit)) {
-              picked.push(String(flag));
-            }
+            var flag = String(Math.pow(2, bit.bit));
+            $select.append(
+              $('<option></option>').val(flag).text(bit.label + ' (bit ' + bit.bit + ')')
+            );
+            _valueBitEntries.push({ value: flag });
+            _valueDocMask = _valueDocMask | BigInt(flag);
           }
-          $select.val(picked);
+          var saved = bitmaskBoxValue($value.val());
+          $select.val(saved === null
+            ? []
+            : RED.mavlink.selectedBitmaskValues(saved.toString(), _valueBitEntries));
           $select.toggle(true);
           $value.toggle(true);
           return;
@@ -774,16 +754,14 @@
         var $box = $('#node-input-value');
         if ($('#mav-param-value-select').attr('multiple') !== undefined) {
           // Bitmask mode: the picker owns the documented bits, the box keeps
-          // any undocumented remainder the operator set by hand. The math
-          // runs unsigned; the result leaves in int32 spelling (signedInt32)
-          // so a bit-31 mask stays encodable.
-          var flags = $('#mav-param-value-select').val() || [];
-          var sum = bitsRemainder(
-            unsignedInt32(Number(String($box.val() === undefined ? '' : $box.val()).trim())),
-            _valueBits
-          );
-          for (var i = 0; i < flags.length; i++) sum += Number(flags[i]);
-          $box.val(String(signedInt32(sum)));
+          // any undocumented remainder the operator set by hand. BigInt
+          // two's complement preserves the box's own spelling: a signed
+          // int32 mask stays signed (encodable by writeInt32LE), a positive
+          // one stays positive.
+          var pickedMask = RED.mavlink.bitmaskFromSelection($('#mav-param-value-select').val());
+          var current = bitmaskBoxValue($box.val());
+          var remainder = current === null ? 0n : (current & ~_valueDocMask);
+          $box.val((remainder | BigInt(pickedMask === null ? 0 : pickedMask)).toString());
           return;
         }
         var picked = $('#mav-param-value-select').val();
