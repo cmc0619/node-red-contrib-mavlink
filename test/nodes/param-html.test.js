@@ -272,6 +272,20 @@ test('mavlink-param value validator: refuses a value outside the documented rang
   assert.equal(validate(9000), false, 'above max');
 });
 
+test('mavlink-param value validator: documented bits imply the int32 wire bound', () => {
+  // Bitmask metadata rarely states a Range, but the value rides the wire as
+  // int32 in either spelling: both int32 extremes are legal, one past either
+  // is not. Catching bit-32 typos here is what lets the picker refuse to
+  // silently rewrite them (CodeRabbit, #296).
+  const validate = mountValueValidator(
+    { ARMING_CHECK: { bits: [{ bit: 0, label: 'All' }] } }, 'ARMING_CHECK'
+  );
+  assert.equal(validate('-2147483648'), true, 'int32 min, the signed bit-31 spelling');
+  assert.equal(validate('2147483647'), true, 'int32 max');
+  assert.equal(validate('4294967296'), false, 'bit 32 cannot encode');
+  assert.equal(validate('-2147483649'), false, 'below int32 min cannot encode');
+});
+
 test('a value only reaches the wire on a set, so only a set is checked for it', () => {
   // PARAM_SET is the only message carrying param_value, and the Value row is
   // shown only for a set. Configure a set with an out-of-range value, switch

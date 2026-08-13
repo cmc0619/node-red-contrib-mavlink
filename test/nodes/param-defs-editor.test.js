@@ -430,10 +430,16 @@ function mountValueField(defs, values) {
   assert.ok(handlerStart > 0, 'the value select change handler is present');
   const handlerClose = '\n      });';
   const handlerEnd = paramHtml.indexOf(handlerClose, handlerStart) + handlerClose.length;
+  // The box's input handler keeps the switches honest after a hand edit; it
+  // registers alongside the select handler and belongs in the harness with it.
+  const boxHandlerStart = paramHtml.indexOf("$('#node-input-value').on('input'");
+  assert.ok(boxHandlerStart > 0, 'the value box input handler is present');
+  const boxHandlerEnd = paramHtml.indexOf(handlerClose, boxHandlerStart) + handlerClose.length;
 
   vm.runInNewContext(
     `${paramHtml.slice(start, end)}
      ${paramHtml.slice(handlerStart, handlerEnd)}
+     ${paramHtml.slice(boxHandlerStart, boxHandlerEnd)}
      this.loadParamDefsForTest = loadParamDefs;
      this.refreshInfoForTest = refreshParamInfo;`,
     context
@@ -572,6 +578,46 @@ test('freshly picking bit 31 from a blank box writes the signed spelling (Gitar,
   // And the written value round-trips: reopening preselects the High bit.
   context.refreshInfoForTest();
   assert.deepEqual(element('#mav-param-value-select').val(), ['1', '2147483648']);
+});
+
+test('a box value outside signed int32 is left alone, not folded (CodeRabbit, #296)', () => {
+  // 4294967296 is bit 32 — unencodable by writeInt32LE in either spelling.
+  // The fold would silently rewrite it to whatever survives truncation; the
+  // picker must refuse instead, leaving the red-flagged value for the
+  // operator to fix.
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'ARMING_CHECK',
+    '#node-input-value': '4294967296',
+  });
+  context.refreshInfoForTest();
+
+  const select = element('#mav-param-value-select');
+  assert.deepEqual(select.val(), [], 'no documented bit pretends to cover bit 32');
+  select.val(['2']);
+  select.trigger('change');
+  assert.equal(element('#node-input-value').val(), '4294967296', 'the box is untouched');
+});
+
+test('hand-editing the box resyncs the switches before the next pick (Codex, #296)', () => {
+  // Open with mask 1 (bit 0 selected), hand-edit the box to the undocumented
+  // mask 8. Stale switches would fold the deselected bit 0 straight back in
+  // on the next pick: picking Barometer must produce 2 + 8, not 1 + 2 + 8.
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'ARMING_CHECK',
+    '#node-input-value': '1',
+  });
+  context.refreshInfoForTest();
+
+  const select = element('#mav-param-value-select');
+  assert.deepEqual(select.val(), ['1'], 'the saved bit preselects');
+
+  element('#node-input-value').val('8');
+  element('#node-input-value').trigger('input');
+  assert.deepEqual(select.val(), [], 'the hand-edited mask deselects the stale switch');
+
+  select.val(['2']);
+  select.trigger('change');
+  assert.equal(element('#node-input-value').val(), '10', '2 (picked) + 8 (remainder), no resurrected bit 0');
 });
 
 test('switching from a bitmask parameter back to an enum restores single-select mode', () => {

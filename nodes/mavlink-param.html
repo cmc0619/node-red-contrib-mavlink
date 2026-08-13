@@ -71,6 +71,11 @@
           if (!def) return true;
           if (def.min !== undefined && n < def.min) return false;
           if (def.max !== undefined && n > def.max) return false;
+          // Documented bits imply the bound the metadata rarely states: the
+          // value rides the wire as int32, in either spelling. Outside that,
+          // the Set cannot encode and the picker refuses to touch the box —
+          // this red field is where the operator can see why.
+          if (def.bits && (n < -2147483648 || n > 2147483647)) return false;
           return true;
         },
       },
@@ -761,6 +766,11 @@
           // 2147483648 would throw at Set (Gitar, #296 round 2).
           var pickedMask = RED.mavlink.bitmaskFromSelection($('#mav-param-value-select').val());
           var current = bitmaskBoxValue($box.val());
+          // A box value outside signed int32 cannot ride the wire, and the
+          // fold below would silently rewrite it to one that can (CodeRabbit,
+          // #296). Leave it alone: validate() has the field red, which is
+          // where the operator sees and fixes it — not a truncated substitute.
+          if (current !== null && BigInt.asIntN(32, current) !== current) return;
           var remainder = current === null ? 0n : (current & ~_valueDocMask);
           var result = remainder | BigInt(pickedMask === null ? 0 : pickedMask);
           $box.val(BigInt.asIntN(32, result).toString());
@@ -774,6 +784,18 @@
           return;
         }
         $box.val(picked).toggle(false);
+      });
+      $('#node-input-value').on('input', function () {
+        // Bitmask mode: a hand-edited box is the new truth. Switches still
+        // showing the old mask would fold a deselected documented bit straight
+        // back in on the next pick (Codex, #296) — re-derive the selection
+        // exactly the way reopening the dialog does.
+        var $select = $('#mav-param-value-select');
+        if ($select.attr('multiple') === undefined) return;
+        var saved = bitmaskBoxValue($('#node-input-value').val());
+        $select.val(saved === null
+          ? []
+          : RED.mavlink.selectedBitmaskValues(saved.toString(), _valueBitEntries));
       });
 
       /* Initial state. */
