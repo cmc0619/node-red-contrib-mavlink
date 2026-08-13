@@ -33,14 +33,23 @@ test('unreadable params JSON throws — drifted config must not send preset defa
   assert.throws(() => mergeParams({ params: '{ not valid json' }, null), SyntaxError);
 });
 
-test('absent orbit velocity and altitude encode the spec NaN sentinels; explicit values win', () => {
-  // DO_ORBIT blesses NaN: velocity NaN = vehicle default, altitude NaN =
-  // current vehicle altitude. The old zero-fill commanded zero tangential
-  // velocity and an orbit at ground level — GCS parity sends the sentinels.
+test('absent orbit centre, velocity and altitude encode the spec NaN sentinels; explicit values win', () => {
+  // DO_ORBIT blesses NaN on four params, in the dialect's own words: velocity
+  // NaN = vehicle default, altitude NaN = current vehicle altitude, and
+  // param5/6 NaN = "use current vehicle position, or current center if already
+  // orbiting". A zero-fill commanded zero tangential velocity and an orbit
+  // centred on null island at ground level — GCS parity sends the sentinels.
   const user = mergeParams({ params: '{"1":100,"2":5,"3":0}' }, null);
   const arr = buildParamArray(getPreset('orbit'), user);
-  assert.deepEqual(arr.slice(0, 6), [100, 5, 0, 0, 0, 0]);
+  assert.deepEqual(arr.slice(0, 4), [100, 5, 0, 0]);
+  assert.ok(Number.isNaN(arr[4]) && Number.isNaN(arr[5]),
+    'an absent centre encodes NaN — orbit here, not orbit 0,0');
   assert.ok(Number.isNaN(arr[6]), 'absent altitude encodes NaN (current altitude)');
+
+  // A typed centre still wins, and rides as given.
+  const placed = buildParamArray(getPreset('orbit'), mergeParams({ params: '{"5":47.4,"6":8.5}' }, null));
+  assert.equal(placed[4], 47.4);
+  assert.equal(placed[5], 8.5);
 
   const blankVelocity = buildParamArray(getPreset('orbit'), mergeParams({ params: '{"1":100}' }, null));
   assert.ok(Number.isNaN(blankVelocity[1]), 'absent velocity encodes NaN (vehicle default)');

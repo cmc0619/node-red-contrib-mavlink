@@ -138,10 +138,12 @@
   // asserts this map matches it exactly, so the pair cannot drift in silence.
   // `reposition` is listed: false — Move owns the goto — so it is unreachable
   // from the dropdown; it is kept here only to keep that equality total.
+  // Orbit is deliberately absent: DO_ORBIT documents NaN on param5/6 as "use
+  // current vehicle position", so a blank centre is the spec's own "orbit
+  // where I am" and demanding coordinates refused a legal command.
   const PRESET_LOCATION = {
     set_home:   { require: { unless: { param: 1, equals: 1 } } },
     reposition: { require: true, altitude: true },
-    orbit:      { require: true },
   };
 
   /** A param value that is actually a value: not blank, and finite. */

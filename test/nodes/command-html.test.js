@@ -521,12 +521,18 @@ test('mavlink-command: preset coordinates are checked here, and nowhere else', (
 
   assert.equal(params.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
 
-  // Presence, on the two presets that require a location.
-  for (const preset of ['set_home', 'orbit']) {
-    assert.match(String(verdict({ preset }, {})), /needs a latitude and longitude/, `${preset} blank`);
-    assert.match(String(verdict({ preset }, { 5: 47.4 })), /needs a latitude and longitude/, `${preset} half`);
-    assert.equal(verdict({ preset }, { 5: 47.4, 6: 8.5 }), true, `${preset} complete`);
-  }
+  // Presence, on Set Home — the only listed preset that requires a location.
+  assert.match(String(verdict({ preset: 'set_home' }, {})), /needs a latitude and longitude/, 'blank');
+  assert.match(String(verdict({ preset: 'set_home' }, { 5: 47.4 })), /needs a latitude and longitude/, 'half');
+  assert.equal(verdict({ preset: 'set_home' }, { 5: 47.4, 6: 8.5 }), true, 'complete');
+
+  // Orbit is NOT one of them, and this is the case that proves the rule is
+  // read from the command rather than assumed: DO_ORBIT documents param5/6
+  // NaN as "use current vehicle position", so a blank centre means "orbit
+  // where I am" and must not red. examples/10-sunday-stroll.json ships
+  // exactly that, and could not fly while orbit carried requireLocation.
+  assert.equal(verdict({ preset: 'orbit' }, {}), true, 'a blank orbit centre is "here"');
+  assert.equal(verdict({ preset: 'orbit' }, { 5: 47.4, 6: 8.5 }), true, 'a placed orbit is fine too');
   // Set Home's param1 = 1 is "use current position" — the vehicle ignores the
   // coordinates, so blank is correct rather than dangerous.
   assert.equal(verdict({ preset: 'set_home' }, { 1: 1 }), true);
