@@ -21,6 +21,11 @@ const assert = require('node:assert/strict');
 const OFFERED = {
   goto: { deliveries: ['build', 'send', 'confirm', 'stream'], variants: ['home', 'msl'] },
   steer: { deliveries: ['build', 'send', 'stream'], variants: ['world', 'body', 'offset'] },
+  // The acked motion commands (§9 roster). No Stream — a MAV_CMD has no
+  // streaming semantics — and no frame variant, so the variant axis carries
+  // the one operator choice that changes the wire.
+  turn: { deliveries: ['build', 'send', 'confirm'], variants: ['absolute', 'relative'] },
+  speed: { deliveries: ['build', 'send', 'confirm'], variants: ['groundspeed', 'airspeed'] },
 };
 
 /**
@@ -84,7 +89,13 @@ function makeConn(vehicle) {
  */
 function configFor(action, delivery, variant) {
   const config = { action, delivery, targetSystem: 1, targetComponent: 1 };
-  if (action === 'goto') {
+  if (action === 'turn') {
+    config.heading = 90;
+    config.relative = variant === 'relative';
+  } else if (action === 'speed') {
+    config.speed = 5;
+    config.speedType = variant;
+  } else if (action === 'goto') {
     config.altRef = variant;
     config.lat = 47;
     config.lon = 8;
@@ -101,7 +112,10 @@ function configFor(action, delivery, variant) {
     // concrete dialect gives Build no firmware source and the node would
     // deploy clean and refuse every input. The matrix drives the offered
     // shape, not the hidden-field shortcut it originally used.
-    if (variant === 'body') {
+    // Body and Turn both need a firmware, and Build has no Connection to get
+    // one from — the Vehicle Profile dialect escape is the only source, which
+    // is exactly the shape the editor offers (Codex, #277).
+    if (variant === 'body' || action === 'turn') {
       config.dialect = '__vehicle';
       config.vehicle = 'veh';
     } else {
@@ -116,6 +130,13 @@ function configFor(action, delivery, variant) {
   }
   return config;
 }
+
+/**
+ * The MAV_CMD each acked action rides, so the confirm tier's stub ack matches
+ * the AckWaiter's command filter. A wrong id here does not fail the assertion —
+ * it hangs the test, because the waiter ignores an ack for another command.
+ */
+const ACK_COMMAND = { goto: 192, turn: 115, speed: 178 };
 
 /** Drive one input on a fresh real node; resolve on done(). */
 function drive(config, { firmware } = {}) {
@@ -140,7 +161,8 @@ function drive(config, { firmware } = {}) {
     // instead of failing with a name.
     if (config.delivery === 'confirm') {
       assert.ok(conn.subs.length, 'the confirm tier subscribes before the handler returns');
-      conn.subs[0].handler({ sysid: 1, compid: 1, fields: { command: 192, result: 0 } });
+      const command = ACK_COMMAND[config.action] || ACK_COMMAND.goto;
+      conn.subs[0].handler({ sysid: 1, compid: 1, fields: { command, result: 0 } });
     }
   });
 }
@@ -154,7 +176,8 @@ for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
     for (const variant of variants) {
       if (NOT_OFFERED.has(`${action}/${delivery}/${variant}`)) continue;
       test(`offered: ${action} × ${delivery} × ${variant} completes on the real node`, async () => {
-        const firmware = variant === 'body' ? 'ardupilot' : undefined;
+        // Turn is CONDITION_YAW, an ArduPilot command; Body derives per stack.
+        const firmware = (variant === 'body' || action === 'turn') ? 'ardupilot' : undefined;
         const { out, err, node } = await drive(configFor(action, delivery, variant), { firmware });
         // Streams and waiters must not leak into the next combo: the stream
         // lock is module-global, keyed on (connection, target).
@@ -185,11 +208,35 @@ for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
 // the honest all-ignore packet.
 
 const REFUSED = [
+  // Turn is CONDITION_YAW and PX4 has no handler for it (§14). Fails closed
+  // rather than sending a command the vehicle will never act on — the same
+  // class as body-without-firmware: no right answer to give.
+  {
+    name: 'turn on PX4',
+    config: { ...configFor('turn', 'send', 'absolute'), connection: 'conn' },
+    firmware: 'px4',
+    error: /Move turn needs a Vehicle Profile with firmware ardupilot/,
+  },
+  {
+    name: 'turn without a firmware at all',
+    config: { ...configFor('turn', 'send', 'absolute'), connection: 'conn' },
+    error: /Move turn needs a Vehicle Profile with firmware ardupilot/,
+  },
+  // Relative changes what the heading number means, so it is a strict boolean
+  // opt-in like changeMode — a truthy token must refuse, not silently pick.
+  {
+    name: 'turn relative as a truthy token',
+    config: { ...configFor('turn', 'send', 'absolute'), connection: 'conn', relative: 'yes' },
+    firmware: 'ardupilot',
+    error: /relative must be boolean/,
+  },
   // The action vocabulary is closed: goto and steer, nothing else.
   {
     name: 'unknown action',
     config: { ...configFor('goto', 'send', 'home'), action: 'orbit' },
-    error: /unknown Move action "orbit" — expected goto or steer/,
+    // 'orbit' is deliberately still unknown: DO_ORBIT is on the §9 roster as a
+    // forward entry, PX4-only and unmeasured, so it is not on the surface yet.
+    error: /unknown Move action "orbit" — expected one of goto, steer, turn, speed/,
   },
   // Body without a firmware fails closed — the stacks read different body
   // frames, and an unadapted guess is silently dropped by the vehicle (§14).

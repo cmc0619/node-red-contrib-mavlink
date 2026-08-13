@@ -9,7 +9,10 @@ const {
   velocityFrom,
   accelFrom,
   valueFrom,
+  COMMAND_ACTIONS,
   resolveMoveAction,
+  buildTurnMessage,
+  buildSpeedMessage,
   frameForAltRef,
   frameForReference,
   deriveSteerMode,
@@ -71,12 +74,12 @@ module.exports = function registerMavlinkMove(RED) {
     // COMMAND_INT_ONLY (8) and UNSUPPORTED_MAV_FRAME (9) included — is a
     // failure with its MAV_RESULT name, never silence; Move does no carrier
     // swap, because DO_REPOSITION is COMMAND_INT-only by spec and ArduPilot.
-    async function confirmReposition(message, target, identityId, connectionNode, send, done) {
+    async function confirmCommand(label, message, target, identityId, connectionNode, send, done) {
       if (activeWaiter) {
         activeWaiter.cancel();
         activeWaiter = null;
       }
-      applyActionStatus(node, 'sending', 'reposition…');
+      applyActionStatus(node, 'sending', `${label}…`);
       const waiter = new AckWaiter({
         subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
         // COMMAND_INT has no confirmation byte, so the retry counter is unused.
@@ -95,7 +98,7 @@ module.exports = function registerMavlinkMove(RED) {
         // A long reposition answers IN_PROGRESS repeatedly (§9); the badge
         // follows the vehicle's own progress instead of standing still.
         onInProgress: (progress) => {
-          applyActionStatus(node, 'sending', progress === null ? 'reposition…' : `reposition ${progress}%…`);
+          applyActionStatus(node, 'sending', progress === null ? `${label}…` : `${label} ${progress}%…`);
         },
       });
       activeWaiter = waiter;
@@ -128,18 +131,58 @@ module.exports = function registerMavlinkMove(RED) {
         // completion condition exists for a goto in this node, so a lost ack
         // reports exactly what the Command node reports: unconfirmed, with
         // nothing having confirmed it. Same word, same meaning, same machinery.
-        applyActionStatus(node, 'error', 'reposition unconfirmed');
+        applyActionStatus(node, 'error', `${label} unconfirmed`);
         send([null, statusRecord('unconfirmed', outcome.detail, { ...shared, confirmedBy: 'none' })]);
-        done(new Error('Move reposition timed out waiting for COMMAND_ACK'));
+        done(new Error(`Move ${label} timed out waiting for COMMAND_ACK`));
         return;
       }
       // Terminal ack — the MAV_RESULT name IS the result ('denied',
       // 'command_int_only', 'command_unsupported_mav_frame', …), passed
       // through verbatim like mavlink-command's, because it is the same
       // AckWaiter outcome. One vocabulary, no translation layer to drift.
-      applyActionStatus(node, 'error', `reposition ${outcome.result}`);
+      applyActionStatus(node, 'error', `${label} ${outcome.result}`);
       send([null, statusRecord(outcome.result, outcome.detail, { ...shared, confirmedBy: 'ack' })]);
-      done(new Error(`Move reposition ${outcome.result}`));
+      done(new Error(`Move ${label} ${outcome.result}`));
+    }
+
+    /**
+     * Deliver an acked MAV_CMD on the Build / Send / Send & confirm tiers.
+     * Shared by every Move action that rides a command rather than a setpoint —
+     * reposition, turn, speed — so there is one AckWaiter and one result
+     * vocabulary across all of them (#276), not one per action.
+     *
+     * @param {string} label  the action word, used in status and error text
+     * @returns {boolean} true when the async confirm flow has taken ownership
+     *   of `done`; the caller must return without calling it
+     */
+    function deliverCommand(label, message, target, identityId, connectionNode, send, done) {
+      if (delivery === 'build') {
+        completeBuild(node, send, message);
+        return false;
+      }
+      if (!connectionNode) {
+        throw new Error('mavlink-move requires a Connection for send/confirm delivery');
+      }
+      if (delivery === 'confirm') {
+        // Broadcast + confirm: the ack matcher accepts any source at sysid 0,
+        // so the first vehicle to answer would settle for the fleet (#260, §9).
+        // Send stays broadcast-legal; the expected-set aggregator is fan-out
+        // broadcast (§10).
+        if (target.sysid === 0) {
+          throw new Error(
+            `Move ${label} confirm cannot target broadcast (sysid 0) — the first ` +
+            'vehicle to ack would answer for the whole fleet; use Send or ' +
+            'mavlink-fanout broadcast (per-vehicle acks)'
+          );
+        }
+        confirmCommand(label, message, target, identityId, connectionNode, send, done)
+          .catch((err) => failInput(node, send, err, done));
+        return true;
+      }
+      // Send tier: commands ride the Control band, not Streaming.
+      connectionNode.send(message, { band: BAND.CONTROL, target, identityId });
+      completeResult(node, send, 'sent', null, { message });
+      return false;
     }
 
     node.on('input', (msg, send, done) => {
@@ -193,6 +236,34 @@ module.exports = function registerMavlinkMove(RED) {
         // code.
         const action = resolveMoveAction(config.action);
 
+        // Turn and Speed are acked MAV_CMDs, not setpoints (§9 roster): the
+        // command tiers only, no Stream — a command has no streaming semantics,
+        // and the editor does not offer the tier. Turn is firmware-derived and
+        // fails closed off ArduPilot, because CONDITION_YAW is an ArduPilot
+        // command; Speed is standard on both stacks and asks nothing.
+        if (COMMAND_ACTIONS.has(action)) {
+          const message = action === 'turn'
+            ? buildTurnMessage({
+              heading: valueFrom(payload, config, 'heading'),
+              rate: valueFrom(payload, config, 'turnRate'),
+              direction: valueFrom(payload, config, 'direction'),
+              // Relative changes what the heading number means, so it is a
+              // strict boolean opt-in like changeMode — never a truthy token.
+              relative: firstDefined(payload.relative, config.relative),
+              firmware: firmwareFor(vehicleAtDeploy, connectionNode),
+              target,
+            })
+            : buildSpeedMessage({
+              speed: valueFrom(payload, config, 'speed'),
+              throttle: valueFrom(payload, config, 'throttle'),
+              speedType: firstDefined(payload.speedType, config.speedType),
+              target,
+            });
+          if (deliverCommand(action, message, target, identityId, connectionNode, send, done)) return;
+          done();
+          return;
+        }
+
         if (action === 'goto' && delivery !== 'stream') {
           // One-shot guided goto: DO_REPOSITION as COMMAND_INT, the acked
           // path. The altitude reference is the one frame choice that exists.
@@ -212,34 +283,9 @@ module.exports = function registerMavlinkMove(RED) {
             // DENIED (2).
             changeMode: firstDefined(payload.changeMode, config.changeMode),
           });
-          if (delivery === 'build') {
-            completeBuild(node, send, message);
-          } else {
-            if (!connectionNode) {
-              throw new Error('mavlink-move requires a Connection for send/confirm delivery');
-            }
-            if (delivery === 'confirm') {
-              // Broadcast + confirm: the ack matcher accepts any source at
-              // sysid 0, so the first vehicle to answer would settle for the
-              // fleet (#260, §9). Send stays broadcast-legal; the expected-set
-              // aggregator is fan-out broadcast (§10).
-              if (target.sysid === 0) {
-                throw new Error(
-                  'Move reposition confirm cannot target broadcast (sysid 0) — the first ' +
-                  'vehicle to ack would answer for the whole fleet; use Send or ' +
-                  'mavlink-fanout broadcast (per-vehicle acks)'
-                );
-              }
-              // Async: the ack arrives later. done() is owned by the confirm
-              // flow; a throw anywhere in it fails this input like any other.
-              confirmReposition(message, target, identityId, connectionNode, send, done)
-                .catch((err) => failInput(node, send, err, done));
-              return;
-            }
-            // Send tier: commands ride the Control band, not Streaming.
-            connectionNode.send(message, { band: BAND.CONTROL, target, identityId });
-            completeResult(node, send, 'sent', null, { message });
-          }
+          // Async on the confirm tier: the ack arrives later and the confirm
+          // flow owns done() from here.
+          if (deliverCommand('reposition', message, target, identityId, connectionNode, send, done)) return;
           done();
           return;
         }

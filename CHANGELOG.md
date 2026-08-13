@@ -4,6 +4,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [Unreleased]
+
+### Added
+
+- **Move's primitive roster: Turn, Speed, and Offset-from-here.** The node's
+  charter moved from "`SET_POSITION_TARGET_*`" to *where the vehicle goes and
+  how it moves* (`DESIGN.md` §3, §9 "Move primitive roster"), and the roster is
+  curated by one rule: a primitive earns its place by being emitted in the wild
+  — QGC, MAVSDK, pymavlink — or by being the only way a supported vehicle family
+  can do the thing.
+
+  - **Turn** (`MAV_CMD_CONDITION_YAW`) exists because ArduPilot has no other
+    working yaw. Both yaw fields Move already carried are measured inert on
+    ArduCopter: `DO_REPOSITION`'s heading param is ignored outright, and a
+    yaw-only setpoint stream *holds* heading rather than turning (§14 / #179).
+    ArduPilot's own test suite yaws in guided through this command. Heading is
+    editor-bounded to 0–360 because the vehicle answers `FAILED` outside it;
+    direction defaults to the dialect's own "shortest direction"; `relative` is
+    a strict boolean opt-in like `changeMode`. PX4 has no handler, so the action
+    fails closed there and names the escape that works — Steer's yaw field.
+  - **Speed** (`MAV_CMD_DO_CHANGE_SPEED`) is the guided speed change QGC offers
+    beside goto. Airspeed / groundspeed / climb / descent from the dialect enum;
+    blank speed and throttle send the spec's −1 "no change".
+  - **Offset from here** — `MAV_FRAME_LOCAL_OFFSET_NED` (7) returns as Steer's
+    third reference. It was swept out by #278 with the deprecated aliases and
+    never weighed on its own: common.xml carries no successor for it, while the
+    body frames we kept *are* superseded. It is what QGC sends for a guided
+    altitude change on ArduPilot, and the **only** local frame ArduPlane accepts
+    at all — World and Body do nothing on a fixed wing, silently. A blank axis is
+    legal here and nowhere else, because a zero *offset* is no movement.
+
+  Both new actions ride the existing `AckWaiter` and result vocabulary — one
+  confirm path for every acked Move command, not one per action.
+
+### Fixed
+
+- Three hand-editable states that reported success while doing nothing useful,
+  all found by the same editor-round-trip lens: `steer` × `stream` × `offset`
+  (a repeating offset walks the vehicle instead of holding a target), and
+  `turn` / `speed` × `stream` (a MAV_CMD sent once and reported as a stream).
+  Each now gets a deploy-time verdict naming the working alternative.
+
 ## [0.4.0] - 2026-08-12
 
 ### Removed

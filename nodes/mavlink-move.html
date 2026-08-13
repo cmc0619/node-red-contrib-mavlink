@@ -95,6 +95,16 @@
               + 'position at that moment, so a repeating offset walks it away instead of holding '
               + 'a target. Use Send, or switch the reference to World';
           }
+          // Third of the same family, and found by the same lens: a MAV_CMD has
+          // no streaming semantics, so the dialog never offers Stream for Turn
+          // or Speed — but a hand-edited flow can hold it, and deliverCommand
+          // would fall through to the Send branch and report `sent`. True of
+          // the wire, a lie about the tier. Known at deploy, so said here.
+          if (v === 'stream' && (action === 'turn' || action === 'speed')) {
+            return 'a command cannot stream — ' + action + ' rides an acknowledged MAV_CMD, '
+              + 'which is sent once and answered. Use Send, or Send & confirm to wait for '
+              + 'the acknowledgement';
+          }
           if (v !== 'confirm') return true;
           if (action !== 'steer') return true;
           return 'Steer cannot confirm — a setpoint carries no COMMAND_ACK, so there is '
@@ -116,6 +126,19 @@
       action: {
         value: 'goto',
         validate: function (v, _opt) {
+          // CONDITION_YAW is an ArduPilot command and PX4 has no handler for it
+          // (§14). Same class as the Body reference: the editor knows the
+          // profile at deploy, so it says so rather than letting the node
+          // deploy clean and refuse every input. The message names the escape
+          // that works on PX4 — Steer's yaw field, which PX4 does honour.
+          if (v === 'turn') {
+            var firmware = RED.mavlink.resolveCatalogTarget({ source: this }).firmware;
+            if (firmware && firmware !== 'ardupilot') {
+              return 'Turn is an ArduPilot command (CONDITION_YAW) and this profile is '
+                + firmware + ' — on PX4, yaw with a Steer setpoint instead';
+            }
+            return true;
+          }
           if (v !== 'steer') return true;
           var owner = this;
           var filled = function (names) {
@@ -187,6 +210,37 @@
       // MAV_DO_REPOSITION_FLAGS_CHANGE_MODE: flies the vehicle into guided —
       // a mode change, so an explicit opt-in, default off.
       changeMode: { value: false },
+      // ── Turn (CONDITION_YAW) ──────────────────────────────────────────
+      // Heading is required and bounded 0-360 because ArduCopter *answers
+      // FAILED* outside that range (source-read 2026-08-13) — the vehicle is
+      // the one refusing, so the editor is where an operator finds out before
+      // flying. Two args so the reason renders (§14).
+      heading: {
+        value: '',
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'turn') return true;
+          if (RED.mavlink.isBlank(v)) return 'is required for Turn';
+          var n = Number(v);
+          return (Number.isFinite(n) && n >= 0 && n <= 360)
+            || 'must be within [0, 360] degrees — ArduPilot answers FAILED outside it';
+        },
+      },
+      turnRate: { value: '', validate: RED.validators.number(true) },
+      // -1 ccw, 0 shortest, 1 cw — common.xml defines 0 as "shortest
+      // direction", so the default is the dialect's, not one we invented.
+      direction: { value: '0' },
+      // Changes what the heading number means, so a strict boolean opt-in like
+      // changeMode. ArduCopter also answers FAILED for a param4 that is not
+      // exactly 0 or 1.
+      relative: { value: false },
+
+      // ── Speed (DO_CHANGE_SPEED) ───────────────────────────────────────────
+      // Blank speed and throttle encode the dialect's -1 "no change" sentinel,
+      // the blankParams convention. -2 ("return to default") is a real value an
+      // operator types, not a sentinel this node owns.
+      throttle: { value: '', validate: RED.validators.number(true) },
+      speedType: { value: 'groundspeed' },
+
       // Blank inherits the AckWaiter default (10 s), like mavlink-command.
       // Zero or negative is not a shorter wait, it is an ack timer that fires
       // before the vehicle can answer, so the wait must be positive. Two args
@@ -327,6 +381,8 @@
       // the whole mode — hiding behind a collapsed section leaves the
       // operator staring at a red node with no visible cause.
       if (!RED.mavlink.isBlank(node.ackTimeout) || !RED.mavlink.isBlank(node.radius)
+        || !RED.mavlink.isBlank(node.turnRate) || !RED.mavlink.isBlank(node.throttle)
+        || node.relative
         || !RED.mavlink.isBlank(node.aNorth) || !RED.mavlink.isBlank(node.aEast)
         || !RED.mavlink.isBlank(node.aUp) || node.changeMode) {
         $('#move-advanced').show();
@@ -350,6 +406,19 @@
           ['build', 'Build'],
           ['send', 'Send'],
           ['stream', 'Stream']
+        ],
+        // Turn and Speed are acked MAV_CMDs. A command has no streaming
+        // semantics, so the tier is not offered; it does have an ack, so
+        // confirm is.
+        turn: [
+          ['build', 'Build'],
+          ['send', 'Send'],
+          ['confirm', 'Send & confirm']
+        ],
+        speed: [
+          ['build', 'Build'],
+          ['send', 'Send'],
+          ['confirm', 'Send & confirm']
         ]
       };
       // Steer's reference list, rebuilt per firmware the same way delivery is
@@ -433,6 +502,12 @@
       function refreshVisibility() {
         var action = $('#node-input-action').val() || 'goto';
         var isGoto = action === 'goto';
+        var isTurn = action === 'turn';
+        var isSpeed = action === 'speed';
+        // Steer and Go to own the position surface; Turn and Speed own none of
+        // it. Everything positional keys off this rather than !isGoto, so a
+        // command action shows neither family's fields.
+        var isSteer = action === 'steer';
         // Both selects are rebuilt before anything reads them back: the
         // reference list depends on firmware, and the delivery list depends on
         // the reference (Offset has no streaming meaning).
@@ -475,22 +550,33 @@
           lat: isGoto,
           lon: isGoto,
           alt: isGoto,
-          reference: !isGoto,
-          north: !isGoto,
-          east: !isGoto,
-          up: !isGoto,
-          vNorth: !isGoto,
-          vEast: !isGoto,
-          vUp: !isGoto,
-          aNorth: !isGoto,
-          aEast: !isGoto,
-          aUp: !isGoto,
-          yaw: true,
-          yawRate: !isGoto,
-          speed: isCommandPath,
+          reference: isSteer,
+          north: isSteer,
+          east: isSteer,
+          up: isSteer,
+          vNorth: isSteer,
+          vEast: isSteer,
+          vUp: isSteer,
+          aNorth: isSteer,
+          aEast: isSteer,
+          aUp: isSteer,
+          // Yaw rides Go to's command path and every Steer setpoint by
+          // presence; Turn has its own heading field, and Speed has no heading.
+          yaw: isGoto || isSteer,
+          yawRate: isSteer,
+          // Ground speed is shared: DO_REPOSITION's speed param on Go to, and
+          // DO_CHANGE_SPEED's own speed on the Speed action. One spelling for
+          // one operator concept (§14).
+          speed: isCommandPath || isSpeed,
           radius: isCommandPath,
           changeMode: isCommandPath,
-          ackTimeout: isGoto && delivery === 'confirm',
+          heading: isTurn,
+          turnRate: isTurn,
+          direction: isTurn,
+          relative: isTurn,
+          throttle: isSpeed,
+          speedType: isSpeed,
+          ackTimeout: (isGoto || isTurn || isSpeed) && delivery === 'confirm',
           rate: isStream,
           ttl: isStream
         };
@@ -501,6 +587,12 @@
         $('#row-move-speed').toggle(!!show.speed);
         $('#row-move-radius').toggle(!!show.radius);
         $('#row-move-changeMode').toggle(!!show.changeMode);
+        $('#row-move-heading').toggle(!!show.heading);
+        $('#row-move-turnRate').toggle(!!show.turnRate);
+        $('#row-move-direction').toggle(!!show.direction);
+        $('#row-move-relative').toggle(!!show.relative);
+        $('#row-move-throttle').toggle(!!show.throttle);
+        $('#row-move-speedType').toggle(!!show.speedType);
         $('#row-move-ackTimeout').toggle(!!show.ackTimeout);
         $('#row-move-north').toggle(!!show.north);
         $('#row-move-east').toggle(!!show.east);
@@ -533,6 +625,9 @@
         $('#label-move-north').text((isBody ? 'Metres forward' : 'Metres north') + fromHere);
         $('#label-move-east').text((isBody ? 'Metres right' : 'Metres east') + fromHere);
         $('#label-move-up').text('Metres up' + fromHere);
+        // Go to's speed is "fly there at"; the Speed action's is "fly at from
+        // now on". Same field, same units, different sentence.
+        $('#label-move-speed').text(isSpeed ? 'Speed' : 'Ground speed');
         $('#label-move-vNorth').text(isBody ? 'Forward m/s' : 'North m/s');
         $('#label-move-vEast').text(isBody ? 'Right m/s' : 'East m/s');
         $('#label-move-aNorth').text(isBody ? 'Accel forward' : 'Accel north');
@@ -577,6 +672,8 @@
   <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action" style="width:70%">
     <option value="goto">Go to (guided goto, acknowledged)</option>
     <option value="steer">Steer (setpoints, fire-and-forget)</option>
+    <option value="turn">Turn (heading, acknowledged)</option>
+    <option value="speed">Speed (change speed, acknowledged)</option>
   </select></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option><option value="stream">Stream</option></select></div>
   <div class="form-row" id="row-move-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
@@ -600,13 +697,28 @@
   <div class="form-row" id="row-move-vUp"><label for="node-input-vUp">Up m/s</label><input type="text" id="node-input-vUp" step="any" style="width:120px"> m/s</div>
   <div class="form-row" id="row-move-yaw"><label for="node-input-yaw">Yaw</label><input type="text" id="node-input-yaw" step="any" style="width:120px" placeholder="(keep heading)"> deg</div>
   <div class="form-row" id="row-move-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="text" id="node-input-yawRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>
-  <div class="form-row" id="row-move-speed"><label for="node-input-speed">Ground speed</label><input type="text" id="node-input-speed" step="any" style="width:120px" placeholder="(vehicle default)"> m/s</div>
+  <div class="form-row" id="row-move-heading"><label for="node-input-heading">Heading</label><input type="text" id="node-input-heading" step="any" style="width:120px"> deg</div>
+  <div class="form-row" id="row-move-direction"><label for="node-input-direction">Direction</label><select id="node-input-direction" style="width:70%">
+    <option value="0">Shortest way round</option>
+    <option value="1">Clockwise</option>
+    <option value="-1">Counter-clockwise</option>
+  </select></div>
+  <div class="form-row" id="row-move-speedType"><label for="node-input-speedType">Speed type</label><select id="node-input-speedType" style="width:70%">
+    <option value="groundspeed">Ground speed</option>
+    <option value="airspeed">Airspeed</option>
+    <option value="climb">Climb speed</option>
+    <option value="descent">Descent speed</option>
+  </select></div>
+  <div class="form-row" id="row-move-speed"><label for="node-input-speed" id="label-move-speed">Ground speed</label><input type="text" id="node-input-speed" step="any" style="width:120px" placeholder="(vehicle default)"> m/s</div>
   <div class="form-row" id="row-move-rate"><label for="node-input-rateHz">Stream rate</label><input type="number" id="node-input-rateHz" min="0.1" step="any" style="width:80px"> Hz</div>
   <div class="form-row" id="row-move-ttl"><label for="node-input-ttlMs">TTL</label><input type="number" id="node-input-ttlMs" style="width:80px"> ms</div>
   <div class="form-row"><a href="#" id="move-advanced-toggle">&#x25B8; Advanced</a></div>
   <div id="move-advanced" style="display:none">
     <div class="form-row" id="row-move-changeMode"><label for="node-input-changeMode">Change mode</label><input type="checkbox" id="node-input-changeMode" style="display:inline-block;width:auto;"> <span class="form-tips">off: the vehicle must already be in GUIDED (ArduPilot) / Hold (PX4) or it answers DENIED; on: the vehicle flies itself into guided mode (§14)</span></div>
     <div class="form-row" id="row-move-ackTimeout"><label for="node-input-ackTimeout">ACK timeout</label><input type="number" id="node-input-ackTimeout" style="width:80px" placeholder="10000"> ms</div>
+    <div class="form-row" id="row-move-turnRate"><label for="node-input-turnRate">Turn rate</label><input type="text" id="node-input-turnRate" step="any" style="width:120px" placeholder="(vehicle default)"> deg/s</div>
+    <div class="form-row" id="row-move-relative"><label for="node-input-relative">Relative</label><input type="checkbox" id="node-input-relative" style="display:inline-block;width:auto;"> <span class="form-tips">off: the heading is absolute, 0 = north; on: it is an offset from the current heading</span></div>
+    <div class="form-row" id="row-move-throttle"><label for="node-input-throttle">Throttle</label><input type="text" id="node-input-throttle" step="any" style="width:120px" placeholder="(no change)"> %</div>
     <div class="form-row" id="row-move-radius"><label for="node-input-radius">Loiter radius</label><input type="text" id="node-input-radius" step="any" style="width:120px" placeholder="(ignored)"> m</div>
     <div class="form-row" id="row-move-aNorth"><label for="node-input-aNorth" id="label-move-aNorth">Accel north</label><input type="text" id="node-input-aNorth" step="any" style="width:120px"> m/s²</div>
     <div class="form-row" id="row-move-aEast"><label for="node-input-aEast" id="label-move-aEast">Accel east</label><input type="text" id="node-input-aEast" step="any" style="width:120px"> m/s²</div>
@@ -623,6 +735,8 @@
   <p><b>Steer</b> sends <code>SET_POSITION_TARGET_LOCAL_NED</code> setpoints — the streaming/offboard path, fire-and-forget. The <b>Reference</b> picks the axes: <i>World (Local NED)</i> works on every firmware; <i>Body</i> adapts to the bound Vehicle Profile's firmware, because the two stacks read different body frames (measured, §14): ArduPilot reads BODY_OFFSET_NED (9) as the body-axis offset, while PX4 ignores 9 and reads BODY_NED (8) — and PX4 discards position in body frames, so body setpoints on PX4 carry velocity only. Without a firmware the body reference refuses rather than guess — a wrong frame number is silently dropped by the vehicle. Body labels read forward/right.</p>
   <p><i>Offset from here</i> is <code>MAV_FRAME_LOCAL_OFFSET_NED</code> (7): the position triplet is a world-axis offset added to wherever the vehicle currently is, so <b>Metres up</b> 10 with the other two blank climbs 10 m from here. Unlike World, a blank axis is legal and means a zero offset — no movement — rather than a coordinate, so single-axis moves are the normal use. This is the frame QGroundControl itself sends for a guided altitude change on ArduPilot, and the <b>only</b> local frame <b>ArduPlane</b> accepts at all (it reads the vertical component and ignores the rest) — World and Body do nothing on a fixed wing. ArduCopter, Rover and Sub apply all three axes. Velocity and acceleration are unaffected by the offset: on this frame they are plain NED rates, identical to World. <b>PX4 accepts frame 7 and never acts on it</b> (measured, §14), so the option is not offered when the Vehicle Profile says PX4. <b>Stream</b> delivery is not offered either — each setpoint is resolved against the vehicle's position at that moment, so a repeating offset walks the vehicle away instead of holding a target.</p>
   <p>Every Steer field is optional, because filling fields IS the mode: the type_mask derives from which groups carry values — position, velocity, acceleration, any combination of them (feed-forward), or yaw / yaw rate alone. Blank means mask-ignored; a value (including 0) means commanded. The editor requires at least one field, because an all-blank steer is the all-ignore packet PX4 logs as invalid.</p>
+  <p><b>Turn</b> sends <code>MAV_CMD_CONDITION_YAW</code> — and on ArduPilot it is the <i>only</i> working yaw. Both of the yaw fields the position carriers already carry are measured inert on ArduCopter (§14): <code>DO_REPOSITION</code>'s heading param is ignored outright, and a yaw-only setpoint stream holds heading instead of turning. ArduPilot's own test suite yaws in guided through this command. <b>Heading</b> is 0-360 degrees, absolute (0 = north) unless <b>Relative</b> (Advanced) is ticked, which makes it an offset from the current heading; the range is enforced here because the vehicle answers <code>FAILED</code> outside it. <b>Direction</b> defaults to the shortest way round, which is the dialect's own meaning for 0. Blank <b>Turn rate</b> (Advanced) leaves the vehicle's default. PX4 has no handler for this command, so the action refuses on a PX4 profile and points you at Steer's yaw field, which PX4 does honour.</p>
+  <p><b>Speed</b> sends <code>MAV_CMD_DO_CHANGE_SPEED</code>, the guided speed change QGroundControl offers beside goto. <b>Speed type</b> picks which speed is being set — ground speed means something on every vehicle, airspeed is a fixed-wing concept, and climb/descent set the vertical rates. Blank <b>Speed</b> or <b>Throttle</b> (Advanced) sends the spec's -1 &ldquo;no change&rdquo;; -2 is the spec's &ldquo;return to default&rdquo; and you reach it by typing it. Both stacks and every moving vehicle family accept this command, so it asks no firmware question.</p>
   <p>Action and delivery reshape the form (§6): only the parameters for the selection are shown, and the Delivery options themselves follow the action — steer setpoints cannot confirm, so Send &amp; confirm is offered on Go to only. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
   <p>Output 0 continues only on success, once per input, and the result word IS the outcome, one meaning per word: <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — Go to confirm only). Output 1 carries the status record for every outcome.</p>
   <p>On <b>Stream</b> delivery a running stream ends three ways. When the <b>TTL</b> elapses the node sends the zero-velocity brake and reports on output 1 with <code>result: "expired"</code> and <code>sent</code> (setpoints handed to the connection — the streaming link may coalesce under backpressure, so this counts sends, not wire deliveries) — switch on <code>result === "expired"</code> to run whatever follows a timed move; deliberately not on output 0, since that port is a trigger and the stream's start already fired it. If the expiry brake send itself fails, <code>result</code> stays <code>"expired"</code> and the failure rides a <code>brakeError</code> field. An input of <code>{action: "stop"}</code> halts the stream, sends the brake, and completes like any input — output 0 fires once, and the status record carries <code>result: "stopped"</code> with <code>sent</code>; a stop with nothing streaming completes with <code>detail: "no stream"</code>, and the action is refused on Build and Send delivery. A <b>new input</b> replaces the stream as a direct handover — no brake between consecutive targets, matching GCS practice; retargeting a different vehicle brakes the abandoned target once the new stream is live. A redeploy closes the node and brakes. A stream that keeps running through send failures reports once per failure streak on output 1 and never quits on its own — the firmware's setpoint watchdog is the failsafe on a dead link.</p>

@@ -78,16 +78,28 @@ test('mavlink-move editor reshapes fields by action and delivery (§6)', () => {
   // params exist only on goto's Build/Send/Send & confirm.
   assert.match(html, /altRef:\s*isGoto/, 'altitude reference shown on goto only');
   assert.match(html, /lat:\s*isGoto/, 'global position gated on goto');
-  assert.match(html, /reference:\s*!isGoto/, 'reference shown on steer only');
-  assert.match(html, /north:\s*!isGoto/, 'steer position fields gated on steer');
-  assert.match(html, /vNorth:\s*!isGoto/, 'velocity fields gated on steer');
-  assert.match(html, /aNorth:\s*!isGoto/, 'accel fields gated on steer');
-  assert.match(html, /yawRate:\s*!isGoto/, 'yaw rate is a setpoint field — steer only');
+  // isSteer, not !isGoto: the roster added the command actions (Turn, Speed),
+  // which own none of the position surface. Gating on "not goto" would have
+  // shown Steer's reference and field groups on both of them.
+  assert.match(html, /reference:\s*isSteer/, 'reference shown on steer only');
+  assert.match(html, /heading:\s*isTurn/, 'heading shown on turn only');
+  assert.match(html, /throttle:\s*isSpeed/, 'throttle shown on speed only');
+  assert.match(html, /north:\s*isSteer/, 'steer position fields gated on steer');
+  assert.match(html, /vNorth:\s*isSteer/, 'velocity fields gated on steer');
+  assert.match(html, /aNorth:\s*isSteer/, 'accel fields gated on steer');
+  assert.match(html, /yawRate:\s*isSteer/, 'yaw rate is a setpoint field — steer only');
   assert.match(html, /var isCommandPath = isGoto && !isStream/, 'the command path is goto off Stream');
-  assert.match(html, /speed:\s*isCommandPath/, 'ground speed hides on Stream (the runtime refuses it there)');
+  // Ground speed is shared by Go to's DO_REPOSITION param and the Speed
+  // action's own — one spelling for one operator concept (§14).
+  assert.match(html, /speed:\s*isCommandPath \|\| isSpeed/, 'ground speed on goto command path and on Speed');
   assert.match(html, /radius:\s*isCommandPath/, 'loiter radius hides on Stream');
   assert.match(html, /changeMode:\s*isCommandPath/, 'change mode hides on Stream');
-  assert.match(html, /ackTimeout:\s*isGoto && delivery === 'confirm'/, 'ACK timeout on goto confirm only');
+  // Every acked action can wait for its ack, not just goto.
+  assert.match(
+    html,
+    /ackTimeout:\s*\(isGoto \|\| isTurn \|\| isSpeed\) && delivery === 'confirm'/,
+    'ACK timeout on the confirm tier of every acked action'
+  );
   assert.match(html, /delivery === 'stream'/, 'stream rate and TTL gated on delivery');
 });
 
@@ -865,4 +877,106 @@ test('mavlink-move: Offset cannot be set to the stream tier', () => {
   // The pre-existing confirm verdict is untouched by the new arm.
   assert.match(String(verdict({ action: 'steer', delivery: 'confirm' })), /Steer cannot confirm/);
   assert.equal(verdict({ action: 'goto', delivery: 'confirm' }), true);
+});
+
+// ── Turn and Speed: the acked motion commands ───────────────────────────────
+
+test('mavlink-move: Turn and Speed are offered, with the command tiers only', () => {
+  assert.match(html, /option value="turn"/, 'turn action offered');
+  assert.match(html, /option value="speed"/, 'speed action offered');
+  const map = /var DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
+  assert.ok(map, 'DELIVERY_OPTIONS map must be extractable');
+  for (const action of ['turn', 'speed']) {
+    const list = new RegExp(`${action}:\\s*\\[[\\s\\S]*?\\n {8}\\]`).exec(map[0]);
+    assert.ok(list, `${action} option list must be extractable`);
+    // A MAV_CMD has no streaming semantics; it does have an ack.
+    assert.doesNotMatch(list[0], /stream/, `${action} never offers Stream`);
+    for (const tier of ['build', 'send', 'confirm']) {
+      assert.match(list[0], new RegExp(`'${tier}'`), `${action} offers ${tier}`);
+    }
+  }
+  for (const id of ['row-move-heading', 'row-move-turnRate', 'row-move-direction',
+    'row-move-relative', 'row-move-throttle', 'row-move-speedType']) {
+    assert.match(html, new RegExp(`id="${id}"`), `${id} row must exist`);
+  }
+});
+
+test('mavlink-move: Turn heading is required and bounded 0-360, because the vehicle FAILS outside it', () => {
+  // ArduCopter answers MAV_RESULT_FAILED for a heading outside 0-360
+  // (source-read 2026-08-13). The runtime sends it anyway — it is a legal
+  // message and the ack is the feedback — so the editor is the only place an
+  // operator learns before flying.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const verdict = (over) => defaults.heading.validate.call(
+    Object.assign({ id: 'm1', action: 'turn' }, over), over.heading, {}
+  );
+
+  assert.equal(defaults.heading.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+  assert.match(String(verdict({ heading: '' })), /required for Turn/);
+  assert.match(String(verdict({ heading: 400 })), /\[0, 360\]/);
+  assert.match(String(verdict({ heading: -1 })), /\[0, 360\]/);
+  assert.match(String(verdict({ heading: 'north' })), /\[0, 360\]/);
+  assert.equal(verdict({ heading: 0 }), true, '0 is north, a real heading');
+  assert.equal(verdict({ heading: 360 }), true, 'the upper bound is inclusive');
+  assert.equal(verdict({ heading: 90 }), true);
+  // Every other action ignores the field, so a stale blank cannot red them.
+  for (const action of ['goto', 'steer', 'speed']) {
+    assert.equal(
+      defaults.heading.validate.call({ id: 'm1', action }, '', {}),
+      true,
+      `${action} does not read the heading`
+    );
+  }
+});
+
+test('mavlink-move: Turn reds on a non-ArduPilot profile and names the escape', () => {
+  // CONDITION_YAW is an ArduPilot command; PX4 has no handler (§14). The
+  // editor knows the profile at deploy, so it says so rather than letting the
+  // node deploy clean and refuse every input.
+  const lookup = {
+    connPx4: { vehicle: 'vehPx4' },
+    vehPx4: { firmware: 'px4', dialect: 'common' },
+    connAp: { vehicle: 'vehAp' },
+    vehAp: { firmware: 'ardupilot', dialect: 'ardupilotmega' },
+  };
+  const { action } = loadNodeDefaults('mavlink-move', lookup);
+  const verdict = (over) => action.validate.call(
+    Object.assign({ id: 'm1' }, over), over.action, {}
+  );
+
+  const denied = String(verdict({ action: 'turn', delivery: 'send', connection: 'connPx4' }));
+  assert.match(denied, /ArduPilot command/);
+  assert.match(denied, /Steer setpoint/, 'the reason names the path that works on PX4');
+  assert.equal(
+    verdict({ action: 'turn', delivery: 'send', connection: 'connAp' }),
+    true,
+    'ArduPilot is what the command is for'
+  );
+  // No profile to consult is not a refusal in the editor: Build with a
+  // concrete dialect has no firmware source, and the runtime fails closed on
+  // it with the same reason.
+  assert.equal(verdict({ action: 'turn', delivery: 'build', dialect: 'common' }), true);
+  // Speed asks no firmware question at all.
+  assert.equal(verdict({ action: 'speed', delivery: 'send', connection: 'connPx4' }), true);
+});
+
+test('mavlink-move: a command action cannot be set to the stream tier', () => {
+  // Third instance of the same finding (steer × confirm, offset × stream, and
+  // now command × stream): the dialog cannot produce it, a text editor can, and
+  // the runtime would report `sent` — true of the wire, a lie about the tier.
+  const { delivery } = loadNodeDefaults('mavlink-move');
+  const verdict = (over) => delivery.validate.call(
+    Object.assign({ id: 'm1' }, over), over.delivery, {}
+  );
+
+  for (const action of ['turn', 'speed']) {
+    assert.match(String(verdict({ action, delivery: 'stream' })), /a command cannot stream/);
+    // The escapes named in the message work.
+    assert.equal(verdict({ action, delivery: 'send' }), true, `${action} + send`);
+    assert.equal(verdict({ action, delivery: 'confirm' }), true, `${action} + confirm`);
+    assert.equal(verdict({ action, delivery: 'build' }), true, `${action} + build`);
+  }
+  // The setpoint actions still stream.
+  assert.equal(verdict({ action: 'steer', reference: 'world', delivery: 'stream' }), true);
+  assert.equal(verdict({ action: 'goto', delivery: 'stream' }), true);
 });

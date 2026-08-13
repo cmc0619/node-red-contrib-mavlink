@@ -270,7 +270,14 @@ test('resolveMoveAction: blank parses steer (the old setpoint default), unknown 
   }
   assert.equal(resolveMoveAction('goto'), 'goto');
   assert.equal(resolveMoveAction('steer'), 'steer');
-  assert.throws(() => resolveMoveAction('teleport'), /unknown Move action "teleport" — expected goto or steer/);
+  assert.throws(
+    () => resolveMoveAction('teleport'),
+    /unknown Move action "teleport" — expected one of goto, steer, turn, speed/
+  );
+  // The roster grew with the §9 curation; the vocabulary stays closed.
+  for (const action of ['turn', 'speed']) {
+    assert.equal(resolveMoveAction(action), action, `${action} is on the roster`);
+  }
 });
 
 test('frameForAltRef is total: msl → 0, everything else → home (§14)', () => {
