@@ -45,6 +45,14 @@
     return function (v, opt) {
       if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'steer') return true;
       if (!RED.mavlink.isBlank(v)) return RED.validators.number(true).call(this, v, opt);
+      // Offset is exempt, and the exemption rests on measurement rather than
+      // convenience. The all-or-nothing rule exists because a blank axis
+      // encodes 0, and on an absolute local frame 0 is the EKF origin — a real
+      // place. On LOCAL_OFFSET_NED a 0 is a zero *offset*, which is no
+      // movement at all (§14 2026-08-05, the frame-7 probe). Filling one axis
+      // is the whole point of the reference: QGC's guided altitude change
+      // fills only z, and ArduPlane reads only z.
+      if (RED.mavlink.liveOr(this, '#node-input-reference', this.reference, 'world') === 'offset') return true;
       for (var i = 0; i < AXES.length; i++) {
         if (AXES[i] === name) continue;
         var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + AXES[i]);
@@ -72,8 +80,23 @@
       delivery: {
         value: 'build',
         validate: function (v, _opt) {
+          var action = RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer');
+          // Same class of finding as steer × confirm below, and caught the same
+          // way: the dialog never offers this pair (refreshDeliveryOptions
+          // withdraws the tier for Offset), but a hand-edited flow can hold it
+          // and the runtime would stream it happily. Every tick of an offset
+          // setpoint is resolved against the vehicle's position at that moment,
+          // so repeating one does not hold a target — it walks the vehicle
+          // away until the TTL. Both fields are known at deploy, so the editor
+          // says so rather than letting it fly.
+          if (v === 'stream' && action === 'steer'
+            && RED.mavlink.liveOr(this, '#node-input-reference', this.reference, 'world') === 'offset') {
+            return 'Offset cannot stream — each setpoint is resolved against the vehicle\'s '
+              + 'position at that moment, so a repeating offset walks it away instead of holding '
+              + 'a target. Use Send, or switch the reference to World';
+          }
           if (v !== 'confirm') return true;
-          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'steer') return true;
+          if (action !== 'steer') return true;
           return 'Steer cannot confirm — a setpoint carries no COMMAND_ACK, so there is '
             + 'nothing to wait for. Use Send, or switch the action to Go to';
         },
@@ -136,8 +159,21 @@
         value: 'world',
         validate: function (v, _opt) {
           var ref = RED.mavlink.liveOr(this, '#node-input-reference', v, 'world');
-          if (ref !== 'body') return true;
           if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'steer') return true;
+          // Offset on PX4 is measured inert — accepted and no motion at all,
+          // burst and stream (§14 2026-08-05). The dropdown stops offering it
+          // when the profile says PX4, but a node that already had it saved
+          // must not be silently rewritten to World: that would change what
+          // the operator configured without telling them. So the option stays
+          // visible and reds here instead. Read from the saved config, not the
+          // DOM — validate runs for every node at deploy, and only this node's
+          // own dialog may be open.
+          if (ref === 'offset'
+            && RED.mavlink.resolveCatalogTarget({ source: this }).firmware === 'px4') {
+            return 'Offset from here does nothing on PX4 — it accepts MAV_FRAME_LOCAL_OFFSET_NED '
+              + 'and never acts on it (measured, §14). Use World, or Body (PX4 reads BODY_NED)';
+          }
+          if (ref !== 'body') return true;
           if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery, 'build') !== 'build') return true;
           if (RED.mavlink.liveOr(this, '#node-input-dialect', this.dialect, '') === '__vehicle') return true;
           return 'Body on Build needs a firmware to adapt to — set Dialect to "from Vehicle Profile…", or use World';
@@ -316,9 +352,61 @@
           ['stream', 'Stream']
         ]
       };
-      function refreshDeliveryOptions(action) {
+      // Steer's reference list, rebuilt per firmware the same way delivery is
+      // rebuilt per action. Offset is LOCAL_OFFSET_NED (7): a world-axis offset
+      // from wherever the vehicle is, and the only local frame ArduPlane
+      // accepts at all.
+      var REFERENCE_OPTIONS = [
+        ['world', 'World (Local NED)'],
+        ['body', 'Body (adapts to firmware)'],
+        ['offset', 'Offset from here (relative)']
+      ];
+
+      /**
+       * PX4 accepts frame 7 and never acts on it — measured, no motion at all,
+       * burst and stream (§14 2026-08-05). The runtime still sends it to
+       * anything it is handed (§9: known-unsupported combos send, and the
+       * driver says nothing); this is the protector's half, and it simply
+       * stops offering a choice the editor knows is inert.
+       *
+       * A saved `offset` survives the filter rather than being rewritten to
+       * World — a silent downgrade would change the operator's configuration
+       * without telling them. It stays selectable and the `reference`
+       * validator reds it with the reason.
+       */
+      function refreshReferenceOptions() {
+        var $reference = $('#node-input-reference');
+        var firmware = RED.mavlink.resolveCatalogTarget().firmware;
+        var live = $reference.val();
+        var options = REFERENCE_OPTIONS.filter(function (opt) {
+          if (opt[0] !== 'offset') return true;
+          if (firmware !== 'px4') return true;
+          return live === 'offset' || node.reference === 'offset';
+        });
+        $reference.empty();
+        options.forEach(function (opt) {
+          $('<option></option>').val(opt[0]).text(opt[1]).appendTo($reference);
+        });
+        var keep = [live, node.reference].filter(function (value) {
+          return options.some(function (opt) { return opt[0] === value; });
+        })[0];
+        $reference.val(keep || 'world');
+      }
+
+      function refreshDeliveryOptions(action, reference) {
         var $delivery = $('#node-input-delivery');
         var options = DELIVERY_OPTIONS[action] || DELIVERY_OPTIONS.goto;
+        // Streaming an offset walks the vehicle away. Every tick is resolved
+        // against the vehicle's *current* position — ArduCopter/Rover/Sub add
+        // `get_relative_position_NED_origin()` per message, and ArduPlane's
+        // handler is `next_WP_loc.alt += -z*100`, which accumulates outright —
+        // so a 10 m nudge at 5 Hz retargets 10 m from wherever it now is,
+        // five times a second, until the TTL. The reference has no streaming
+        // meaning, so the tier is not offered (source-read 2026-08-13; not yet
+        // SITL-measured).
+        if (action === 'steer' && reference === 'offset') {
+          options = options.filter(function (opt) { return opt[0] !== 'stream'; });
+        }
         var live = $delivery.val();
         $delivery.empty();
         options.forEach(function (opt) {
@@ -345,7 +433,12 @@
       function refreshVisibility() {
         var action = $('#node-input-action').val() || 'goto';
         var isGoto = action === 'goto';
-        refreshDeliveryOptions(action);
+        // Both selects are rebuilt before anything reads them back: the
+        // reference list depends on firmware, and the delivery list depends on
+        // the reference (Offset has no streaming meaning).
+        refreshReferenceOptions();
+        var reference = $('#node-input-reference').val() || 'world';
+        refreshDeliveryOptions(action, reference);
 
         var delivery = $('#node-input-delivery').val() || 'build';
         var dialect = $('#node-input-dialect').val() || node.dialect || '';
@@ -356,8 +449,8 @@
         // Its params have no meaning on a streamed setpoint (runtime refuses
         // them there), so Stream withdraws the rows.
         var isCommandPath = isGoto && !isStream;
-        var reference = $('#node-input-reference').val() || 'world';
         var isBody = !isGoto && reference === 'body';
+        var isOffset = !isGoto && reference === 'offset';
         var altRef = $('#node-input-altRef').val() || 'home';
         var tgt = RED.mavlink.applyCompanionTargetVisibility({
           isBuild: isBuild,
@@ -431,8 +524,15 @@
         // heading relative (forward/right). Vertical inputs stay up-positive
         // everywhere (§ "NED is down-positive": the sign flips once, at
         // encode) — and the altitude label names the reference in force.
-        $('#label-move-north').text(isBody ? 'Metres forward' : 'Metres north');
-        $('#label-move-east').text(isBody ? 'Metres right' : 'Metres east');
+        // Offset qualifies the *position* triplet only: on frame 7 the rates
+        // are plain NED, byte-identical in meaning to frame 1 (ArduCopter
+        // source-read 2026-08-13), so velocity and acceleration keep their
+        // world labels. isBody and isOffset are mutually exclusive — both read
+        // the one reference select — so the qualifier composes safely.
+        var fromHere = isOffset ? ' (from here)' : '';
+        $('#label-move-north').text((isBody ? 'Metres forward' : 'Metres north') + fromHere);
+        $('#label-move-east').text((isBody ? 'Metres right' : 'Metres east') + fromHere);
+        $('#label-move-up').text('Metres up' + fromHere);
         $('#label-move-vNorth').text(isBody ? 'Forward m/s' : 'North m/s');
         $('#label-move-vEast').text(isBody ? 'Right m/s' : 'East m/s');
         $('#label-move-aNorth').text(isBody ? 'Accel forward' : 'Accel north');
@@ -490,10 +590,11 @@
   <div class="form-row" id="row-move-reference"><label for="node-input-reference">Reference</label><select id="node-input-reference" style="width:70%">
     <option value="world">World (Local NED)</option>
     <option value="body">Body (adapts to firmware)</option>
+    <option value="offset">Offset from here (relative)</option>
   </select></div>
   <div class="form-row" id="row-move-north"><label for="node-input-north" id="label-move-north">Metres north</label><input type="text" id="node-input-north" step="any" style="width:120px"> m</div>
   <div class="form-row" id="row-move-east"><label for="node-input-east" id="label-move-east">Metres east</label><input type="text" id="node-input-east" step="any" style="width:120px"> m</div>
-  <div class="form-row" id="row-move-up"><label for="node-input-up">Metres up</label><input type="text" id="node-input-up" step="any" style="width:120px"> m</div>
+  <div class="form-row" id="row-move-up"><label for="node-input-up" id="label-move-up">Metres up</label><input type="text" id="node-input-up" step="any" style="width:120px"> m</div>
   <div class="form-row" id="row-move-vNorth"><label for="node-input-vNorth" id="label-move-vNorth">North m/s</label><input type="text" id="node-input-vNorth" step="any" style="width:120px"> m/s</div>
   <div class="form-row" id="row-move-vEast"><label for="node-input-vEast" id="label-move-vEast">East m/s</label><input type="text" id="node-input-vEast" step="any" style="width:120px"> m/s</div>
   <div class="form-row" id="row-move-vUp"><label for="node-input-vUp">Up m/s</label><input type="text" id="node-input-vUp" step="any" style="width:120px"> m/s</div>
@@ -520,6 +621,7 @@
   <p><b>Change mode</b> (Advanced) sets MAV_DO_REPOSITION_FLAGS_CHANGE_MODE, and the flag is the gate on both stacks (measured, §14 2026-08-12): the goto is accepted iff the flag is set or the vehicle is already in GUIDED (ArduPilot) / Hold (PX4), else it answers denied (2). It flies the vehicle into guided mode — a mode change, and therefore an explicit opt-in (checkbox, or boolean <code>msg.payload.changeMode</code>).</p>
   <p>On <b>Send &amp; confirm</b> delivery (Go to only — setpoints carry no acknowledgement) the node waits for the terminal COMMAND_ACK and reports it in the same vocabulary as <b>mavlink-command</b>: output 0 fires on <code>ACCEPTED</code> with an <code>accepted</code> record carrying <code>resultCode</code> 0; every other terminal result fails on output 1 with its MAV_RESULT name as the result — <code>denied</code>, <code>command_int_only</code>, <code>command_unsupported_mav_frame</code>, … — and its code, and a missing ack reports <code>unconfirmed</code> (§9: a missing ack is not a failure). The result IS the discriminator — branch on it with a switch. <code>TEMPORARILY_REJECTED</code> retries with back-off before failing. <b>ACK timeout</b> (blank = 10 s) bounds the wait. Every ack-confirmed record also carries the ack's <code>resultParam2</code> (command-specific detail, often the reason for a denial), and while the vehicle answers <code>IN_PROGRESS</code> the status badge shows the progress it reports. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use Send or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
   <p><b>Steer</b> sends <code>SET_POSITION_TARGET_LOCAL_NED</code> setpoints — the streaming/offboard path, fire-and-forget. The <b>Reference</b> picks the axes: <i>World (Local NED)</i> works on every firmware; <i>Body</i> adapts to the bound Vehicle Profile's firmware, because the two stacks read different body frames (measured, §14): ArduPilot reads BODY_OFFSET_NED (9) as the body-axis offset, while PX4 ignores 9 and reads BODY_NED (8) — and PX4 discards position in body frames, so body setpoints on PX4 carry velocity only. Without a firmware the body reference refuses rather than guess — a wrong frame number is silently dropped by the vehicle. Body labels read forward/right.</p>
+  <p><i>Offset from here</i> is <code>MAV_FRAME_LOCAL_OFFSET_NED</code> (7): the position triplet is a world-axis offset added to wherever the vehicle currently is, so <b>Metres up</b> 10 with the other two blank climbs 10 m from here. Unlike World, a blank axis is legal and means a zero offset — no movement — rather than a coordinate, so single-axis moves are the normal use. This is the frame QGroundControl itself sends for a guided altitude change on ArduPilot, and the <b>only</b> local frame <b>ArduPlane</b> accepts at all (it reads the vertical component and ignores the rest) — World and Body do nothing on a fixed wing. ArduCopter, Rover and Sub apply all three axes. Velocity and acceleration are unaffected by the offset: on this frame they are plain NED rates, identical to World. <b>PX4 accepts frame 7 and never acts on it</b> (measured, §14), so the option is not offered when the Vehicle Profile says PX4. <b>Stream</b> delivery is not offered either — each setpoint is resolved against the vehicle's position at that moment, so a repeating offset walks the vehicle away instead of holding a target.</p>
   <p>Every Steer field is optional, because filling fields IS the mode: the type_mask derives from which groups carry values — position, velocity, acceleration, any combination of them (feed-forward), or yaw / yaw rate alone. Blank means mask-ignored; a value (including 0) means commanded. The editor requires at least one field, because an all-blank steer is the all-ignore packet PX4 logs as invalid.</p>
   <p>Action and delivery reshape the form (§6): only the parameters for the selection are shown, and the Delivery options themselves follow the action — steer setpoints cannot confirm, so Send &amp; confirm is offered on Go to only. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
   <p>Output 0 continues only on success, once per input, and the result word IS the outcome, one meaning per word: <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — Go to confirm only). Output 1 carries the status record for every outcome.</p>

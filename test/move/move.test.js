@@ -184,9 +184,12 @@ test('string frame names throw — the retired operator vocabulary is deleted, n
       `string frame ${JSON.stringify(frame)} must throw`
     );
   }
-  // The deprecated wire numbers and the retired terrain/offset frames are not
-  // in the vocabulary either — same simplified error.
-  for (const frame of [5, 6, 7, 10, 11]) {
+  // The deprecated wire numbers and the retired terrain frames are not in the
+  // vocabulary either — same simplified error. LOCAL_OFFSET_NED (7) is NOT in
+  // this list any more: it came back as Steer's Offset reference (2026-08-13),
+  // being both un-deprecated in common.xml and the only local frame ArduPlane
+  // accepts. Terrain stays out until its datum is measured.
+  for (const frame of [5, 6, 10, 11]) {
     assert.throws(
       () => resolveModeAndFrame({ mode: 'position', frame }),
       /not a SET_POSITION_TARGET frame/,
@@ -310,6 +313,44 @@ test('frameForReference: world is LOCAL_NED and never needs firmware; body deriv
   for (const unknown of ['sideways', 'BODY', 7, {}]) {
     assert.equal(frameForReference(unknown, undefined), 1, `${JSON.stringify(unknown)} resolves to world`);
   }
+});
+
+test('frameForReference: offset is LOCAL_OFFSET_NED on every stack and asks no firmware question', () => {
+  const { frameForReference } = require('../../lib/move');
+  // Unlike body, frame 7 is one number everywhere — the firmware question is
+  // whether the vehicle *acts* on it, which is the editor's business (PX4 is
+  // measured inert, §14 2026-08-05, and the dropdown stops offering it there).
+  // The driver has a frame number to give, so it gives it.
+  for (const firmware of [undefined, 'ardupilot', 'px4', 'custom']) {
+    assert.equal(
+      frameForReference('offset', firmware),
+      7,
+      `offset is 7 regardless of firmware ${JSON.stringify(firmware)}`
+    );
+  }
+});
+
+test('offset setpoints ride LOCAL_NED carrier at frame 7, and a blank axis is an inert zero offset', () => {
+  // The whole point of the reference: QGC's guided altitude change fills only
+  // the vertical, and ArduPlane reads only the vertical. A blank axis here is
+  // a zero *offset* — no movement — not the EKF origin, which is why the
+  // editor's all-or-nothing triplet rule is gated off for it.
+  const message = buildMoveMessage({
+    mode: 'position',
+    frame: 7,
+    target: { sysid: 2, compid: 1 },
+    position: { north: '', east: '', up: 10 },
+    timeBootMs: 0,
+  });
+  assert.equal(message.name, 'SET_POSITION_TARGET_LOCAL_NED');
+  // Not remapped: the *_INT twin substitution is global-frames-only, and 7 is
+  // local. The wire carries the spec number.
+  assert.equal(message.fields.coordinate_frame, 7);
+  assert.equal(message.fields.x, 0, 'a blank north is a zero offset');
+  assert.equal(message.fields.y, 0, 'a blank east is a zero offset');
+  assert.equal(message.fields.z, -10, 'up 10 flips to NED down exactly once');
+  // Position-only: velocity and acceleration stay mask-ignored.
+  assert.equal(message.fields.type_mask, 3576);
 });
 
 test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the edges', () => {

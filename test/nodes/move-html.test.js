@@ -730,3 +730,139 @@ test('mavlink-move: Steer cannot be set to the confirm tier', () => {
   // A config with no action parses as steer (resolveMoveAction), so it reds too.
   assert.match(String(verdict({ delivery: 'confirm' })), /Steer cannot confirm/);
 });
+
+// ── Offset from here: LOCAL_OFFSET_NED as Steer's third reference ────────────
+
+test('mavlink-move: Offset is offered as a Steer reference and the markup carries it', () => {
+  assert.match(
+    html,
+    /<option value="offset">Offset from here \(relative\)<\/option>/,
+    'the static template offers Offset'
+  );
+  assert.match(html, /var REFERENCE_OPTIONS = \[/, 'the reference list is rebuildable, like delivery');
+  assert.match(html, /function refreshReferenceOptions/, 'the list is rebuilt per firmware');
+  // The rebuild has to run before anything reads the reference back, because
+  // the delivery list depends on it.
+  const order = html.indexOf('refreshReferenceOptions();');
+  const read = html.indexOf("var reference = $('#node-input-reference').val()");
+  assert.ok(order > 0 && read > order, 'the reference select is rebuilt before it is read');
+});
+
+test('mavlink-move: Stream is withdrawn for Offset — a repeating offset walks the vehicle', () => {
+  // Every tick is resolved against the vehicle's position at that moment, so
+  // the tier has no meaning here (source-read 2026-08-13).
+  assert.match(
+    html,
+    /if \(action === 'steer' && reference === 'offset'\)[\s\S]{0,200}?opt\[0\] !== 'stream'/,
+    'refreshDeliveryOptions drops the stream tier for offset'
+  );
+  assert.match(
+    html,
+    /function refreshDeliveryOptions\(action, reference\)/,
+    'the delivery list keys on the reference, not the action alone'
+  );
+});
+
+test('mavlink-move: a blank position axis is legal on Offset — a zero offset is not a place', () => {
+  // The all-or-nothing triplet exists because a blank encodes 0, and 0 on an
+  // absolute local frame is the EKF origin. On frame 7 it is a zero *offset*
+  // — no movement — so filling one axis is the normal use, not a half-typed
+  // form. QGC fills only the vertical; ArduPlane reads only the vertical.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const AXES = ['north', 'east', 'up'];
+  const verdict = (cfg) => AXES.map((axis) => defaults[axis].validate.call(cfg, cfg[axis], {}));
+
+  const offsetUpOnly = { id: 'm1', action: 'steer', reference: 'offset', north: '', east: '', up: '10' };
+  assert.deepEqual(verdict(offsetUpOnly), [true, true, true], 'up alone is legal on offset');
+
+  // World is unchanged: the same half-filled triplet still reds its blanks.
+  const worldUpOnly = { id: 'm1', action: 'steer', reference: 'world', north: '', east: '', up: '10' };
+  const worldVerdict = verdict(worldUpOnly);
+  assert.equal(worldVerdict[2], true, 'the filled axis passes');
+  assert.match(String(worldVerdict[0]), /blank axis commands the origin/, 'world still reds a blank north');
+  assert.match(String(worldVerdict[1]), /blank axis commands the origin/, 'world still reds a blank east');
+
+  // A non-numeric value is still a non-numeric value on offset.
+  assert.notEqual(
+    defaults.north.validate.call({ id: 'm1', action: 'steer', reference: 'offset' }, 'abc', {}),
+    undefined,
+    'offset does not disable the numeric check'
+  );
+});
+
+test('mavlink-move: Offset reds on a PX4 profile rather than being silently rewritten', () => {
+  // PX4 accepts frame 7 and never acts on it (§14 2026-08-05). The dropdown
+  // stops offering it, but a node that already had it saved must not be
+  // quietly downgraded to World — that would change what the operator
+  // configured without telling them. So it stays selectable and reds here.
+  const lookup = {
+    connPx4: { vehicle: 'vehPx4' },
+    vehPx4: { firmware: 'px4', dialect: 'common' },
+    connAp: { vehicle: 'vehAp' },
+    vehAp: { firmware: 'ardupilot', dialect: 'ardupilotmega' },
+  };
+  const { reference } = loadNodeDefaults('mavlink-move', lookup);
+  const verdict = (over) => reference.validate.call(
+    Object.assign({ id: 'm1', action: 'steer' }, over), over.reference, {}
+  );
+
+  assert.equal(reference.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+  assert.match(
+    String(verdict({ reference: 'offset', delivery: 'send', connection: 'connPx4' })),
+    /does nothing on PX4/,
+    'offset on a PX4 profile reds with the reason'
+  );
+  assert.equal(
+    verdict({ reference: 'offset', delivery: 'send', connection: 'connAp' }),
+    true,
+    'offset on ArduPilot is the whole point'
+  );
+  // No profile to consult is not a refusal: frame 7 is one number everywhere,
+  // and the driver has an answer to give (unlike body, which does not).
+  assert.equal(
+    verdict({ reference: 'offset', delivery: 'build', dialect: 'common' }),
+    true,
+    'offset on Build with a concrete dialect is offered'
+  );
+  // Go to never reads the reference, so it cannot red on it.
+  assert.equal(
+    verdict({ action: 'goto', reference: 'offset', delivery: 'send', connection: 'connPx4' }),
+    true,
+    'the reference is a Steer field'
+  );
+  // The body rules are untouched by the new arm.
+  assert.match(
+    String(verdict({ reference: 'body', delivery: 'build', dialect: 'common' })),
+    /Body on Build needs a firmware/,
+    'body on Build with a concrete dialect still reds'
+  );
+});
+
+test('mavlink-move: Offset cannot be set to the stream tier', () => {
+  // The dialog never offers it — refreshDeliveryOptions withdraws Stream for
+  // Offset — but a hand-edited flow can hold it, and the runtime streams it
+  // happily, re-resolving against the vehicle's position every tick until the
+  // TTL. Same shape as the steer × confirm verdict, and known at deploy.
+  const { delivery } = loadNodeDefaults('mavlink-move');
+  const verdict = (over) => delivery.validate.call(
+    Object.assign({ id: 'm1' }, over), over.delivery, {}
+  );
+
+  assert.match(
+    String(verdict({ action: 'steer', reference: 'offset', delivery: 'stream' })),
+    /Offset cannot stream/
+  );
+  // Both escapes named in the message actually work.
+  assert.equal(verdict({ action: 'steer', reference: 'offset', delivery: 'send' }), true, 'Send');
+  assert.equal(verdict({ action: 'steer', reference: 'world', delivery: 'stream' }), true, 'World');
+  assert.equal(verdict({ action: 'steer', reference: 'offset', delivery: 'build' }), true, 'Build');
+  // Go to never reads the reference, so a stale saved 'offset' cannot red it.
+  assert.equal(
+    verdict({ action: 'goto', reference: 'offset', delivery: 'stream' }),
+    true,
+    'Go to streams global setpoints and does not read the reference'
+  );
+  // The pre-existing confirm verdict is untouched by the new arm.
+  assert.match(String(verdict({ action: 'steer', delivery: 'confirm' })), /Steer cannot confirm/);
+  assert.equal(verdict({ action: 'goto', delivery: 'confirm' }), true);
+});

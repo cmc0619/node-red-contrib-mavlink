@@ -20,8 +20,23 @@ const assert = require('node:assert/strict');
 /** The offered surface, verbatim from the editor (nodes/mavlink-move.html). */
 const OFFERED = {
   goto: { deliveries: ['build', 'send', 'confirm', 'stream'], variants: ['home', 'msl'] },
-  steer: { deliveries: ['build', 'send', 'stream'], variants: ['world', 'body'] },
+  steer: { deliveries: ['build', 'send', 'stream'], variants: ['world', 'body', 'offset'] },
 };
+
+/**
+ * Cells the dropdowns cannot produce even though both axes are offered on
+ * their own — `refreshDeliveryOptions` withdraws the tier for the reference.
+ * Kept as an explicit set rather than a ragged OFFERED table so the hole is
+ * visible: a combo silently dropped from a cross-product reads as covered.
+ *
+ * Offset × Stream: every setpoint on LOCAL_OFFSET_NED is resolved against the
+ * vehicle's position at that moment, so repeating one walks the vehicle away
+ * rather than holding a target (ArduCopter/Rover/Sub add
+ * `get_relative_position_NED_origin()` per message; ArduPlane's handler is
+ * `next_WP_loc.alt +=`, which accumulates outright). Source-read 2026-08-13,
+ * not yet SITL-measured.
+ */
+const NOT_OFFERED = new Set(['steer/stream/offset']);
 
 function redStub(nodesById) {
   return {
@@ -137,6 +152,7 @@ const COMPLETES = { build: 'built', send: 'sent', confirm: 'accepted', stream: '
 for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
   for (const delivery of deliveries) {
     for (const variant of variants) {
+      if (NOT_OFFERED.has(`${action}/${delivery}/${variant}`)) continue;
       test(`offered: ${action} × ${delivery} × ${variant} completes on the real node`, async () => {
         const firmware = variant === 'body' ? 'ardupilot' : undefined;
         const { out, err, node } = await drive(configFor(action, delivery, variant), { firmware });

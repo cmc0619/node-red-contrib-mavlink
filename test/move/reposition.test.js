@@ -56,17 +56,26 @@ test('reposition refusal matrix: setpoint modes refuse with named errors', () =>
 });
 
 test('reposition refusal matrix: local frames refuse naming the frame; retired frames refuse upstream', () => {
-  for (const [frame, name] of [[1, 'LOCAL_NED'], [8, 'BODY_NED'], [9, 'BODY_OFFSET_NED']]) {
+  // LOCAL_OFFSET_NED (7) joined this list when it came back as Steer's Offset
+  // reference (2026-08-13): it is a known setpoint frame now, so reposition
+  // refuses it *by name* like the other local frames rather than through the
+  // generic vocabulary error. DO_REPOSITION carries a global location; an
+  // offset-from-here has no meaning on that carrier.
+  for (const [frame, name] of [
+    [1, 'LOCAL_NED'],
+    [7, 'LOCAL_OFFSET_NED'],
+    [8, 'BODY_NED'],
+    [9, 'BODY_OFFSET_NED'],
+  ]) {
     assert.throws(
       () => buildRepositionMessage(input({ frame })),
       new RegExp(`GLOBAL and GLOBAL_RELATIVE_ALT — ${name}`),
       `frame ${name} must refuse`
     );
   }
-  // Terrain (10) and LOCAL_OFFSET_NED (7) left the vocabulary with the Action
-  // surface: they still refuse on the goto path, now with the simplified
-  // numeric-only frame error.
-  for (const frame of [7, 10]) {
+  // Terrain (10) is still outside the vocabulary entirely — unmeasured datum
+  // — so it refuses upstream with the simplified numeric-only frame error.
+  for (const frame of [10]) {
     assert.throws(
       () => buildRepositionMessage(input({ frame })),
       /not a SET_POSITION_TARGET frame/,
