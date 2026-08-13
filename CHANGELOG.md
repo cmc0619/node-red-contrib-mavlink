@@ -27,6 +27,17 @@ config-node shapes and message contracts may still change without a major bump.
   message must be one this dialect carries (not just non-blank), and Advanced
   mode's command cannot be blank.
 
+### Added
+
+- **Bitmask parameters edit as switches.** The param-definition catalog now
+  parses `Bitmask` from all three published shapes (ArduPilot's `bit:Label`
+  field text and JSON object, PX4's `bitmask` array and its XML mirror), and
+  the Param editor's Value field renders a documented bitmask as a
+  multi-select — `ARMING_CHECK` takes checks, not a sum computed by hand. The
+  picker writes the sum through to the value box, which stays visible beside
+  it: blank still defers to `msg.payload`, and bits no metadata file lists
+  survive picker changes untouched. Editor-only; the runtime is unchanged.
+
 ### Fixed
 
 - **Example 11's Stop button stopped the circle.** It emitted a boolean `false`

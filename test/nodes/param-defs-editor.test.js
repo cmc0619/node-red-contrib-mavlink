@@ -376,6 +376,14 @@ const VALUE_DEFS = {
     max: 2200,
     increment: 1,
   },
+  ARMING_CHECK: {
+    description: 'Which checks arm requires',
+    bits: [
+      { bit: 0, label: 'All' },
+      { bit: 1, label: 'Barometer' },
+      { bit: 2, label: 'Compass' },
+    ],
+  },
 };
 
 function mountValueField(defs, values) {
@@ -466,6 +474,66 @@ test('a parameter with no enumeration keeps the plain box', () => {
 
   assert.equal(element('#mav-param-value-select').visible, false);
   assert.equal(element('#node-input-value').visible, true);
+});
+
+test('a bitmask parameter becomes a multi-select of switches, box still visible', () => {
+  // ARMING_CHECK takes checks, not a sum the operator computes by hand.
+  // Saved 6 = bits 1+2; the box stays visible so blank-defers-to-payload and
+  // undocumented bits remain reachable.
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'ARMING_CHECK',
+    '#node-input-value': '6',
+  });
+  context.refreshInfoForTest();
+
+  const select = element('#mav-param-value-select');
+  assert.equal(select.attr('multiple'), 'multiple');
+  assert.deepEqual(select.options.map((o) => o.label),
+    ['All (bit 0)', 'Barometer (bit 1)', 'Compass (bit 2)']);
+  assert.deepEqual(select.val(), ['2', '4'], 'saved bits preselect their flags');
+  assert.equal(select.visible, true);
+  assert.equal(element('#node-input-value').visible, true, 'the box stays beside the picker');
+});
+
+test('picking bits writes the sum through, preserving undocumented remainder bits', () => {
+  // Saved 9 = documented bit 0 (1) + undocumented bit 3 (8). Re-picking to
+  // Barometer only must produce 2 + the untouched remainder 8 — firmware
+  // accepts bits no metadata file lists, and a picker change must not
+  // silently zero one the operator set by hand.
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'ARMING_CHECK',
+    '#node-input-value': '9',
+  });
+  context.refreshInfoForTest();
+
+  const select = element('#mav-param-value-select');
+  assert.deepEqual(select.val(), ['1'], 'only the documented bit preselects');
+  select.val(['2']);
+  select.trigger('change');
+  assert.equal(element('#node-input-value').val(), '10', '2 (picked) + 8 (remainder)');
+
+  // Deselecting everything leaves exactly the remainder.
+  select.val([]);
+  select.trigger('change');
+  assert.equal(element('#node-input-value').val(), '8');
+});
+
+test('switching from a bitmask parameter back to an enum restores single-select mode', () => {
+  // The multiple attribute must not leak between parameters: an enum select
+  // wearing it would return arrays to the single-value handler.
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'ARMING_CHECK',
+    '#node-input-value': '1',
+  });
+  context.refreshInfoForTest();
+  assert.equal(element('#mav-param-value-select').attr('multiple'), 'multiple');
+
+  element('#node-input-paramId').val('FLTMODE1');
+  element('#node-input-value').val('2');
+  context.refreshInfoForTest();
+  const select = element('#mav-param-value-select');
+  assert.equal(select.attr('multiple'), undefined, 'multiple cleared for the enum');
+  assert.equal(select.val(), '2', 'single-select semantics restored');
 });
 
 test('bounds, step and unit are published on the field', () => {

@@ -230,6 +230,32 @@
       var _paramDefs = {};
       var _defsLoaded = false;
       var _defsNotice = '';
+      /** Documented bits of the parameter the Value field is shaped for. */
+      var _valueBits = [];
+
+      /**
+       * Whether `bit` is set in a saved value — arithmetic, not bitwise: JS
+       * bitwise operators truncate to int32, which corrupts bit 31.
+       */
+      function bitIsSet(value, bit) {
+        return Math.floor(value / Math.pow(2, bit)) % 2 === 1;
+      }
+
+      /**
+       * The part of a saved value the documented bits do NOT explain.
+       * Firmware accepts bits no metadata file lists; a picker change must
+       * carry them through untouched, not silently zero them (same survival
+       * rule as the enum path's custom sentinel). Anything that is not a
+       * non-negative integer has no bits to preserve.
+       */
+      function bitsRemainder(value, bits) {
+        if (!Number.isInteger(value) || value < 0) return 0;
+        var documented = 0;
+        for (var i = 0; i < bits.length; i++) {
+          if (bitIsSet(value, bits[i].bit)) documented += Math.pow(2, bits[i].bit);
+        }
+        return value - documented;
+      }
       /**
        * Which definition set answered, in words -- composed by the route,
        * because only the route knows what it resolved. A Connection whose
@@ -544,7 +570,8 @@
         var action = $('#node-input-action').val() || 'read';
         var $value = $('#node-input-value');
         var $select = $('#mav-param-value-select');
-        var hasValues = !!(action === 'set' && def && def.values && def.values.length);
+        var hasBits = !!(action === 'set' && def && def.bits && def.bits.length);
+        var hasValues = !hasBits && !!(action === 'set' && def && def.values && def.values.length);
 
         // Shared helper (§6): sets the hover text on the input *and* its label,
         // and maintains the units hint. A private span here would be a second
@@ -565,6 +592,32 @@
         else $value.removeAttr('step');
 
         $select.empty();
+        _valueBits = hasBits ? def.bits : [];
+        if (hasBits) {
+          // A bitmask parameter is a set of switches, not "a number" —
+          // ARMING_CHECK takes checks, not a sum the operator computes by
+          // hand. One option per documented bit; the picker writes the sum
+          // through to the box. The box stays visible beside it: a blank
+          // value still defers to msg.payload, and undocumented remainder
+          // bits stay reachable and survive picker changes (bitsRemainder).
+          $select.attr('multiple', 'multiple').attr('size', Math.min(8, def.bits.length));
+          var saved = Number(String($value.val() === undefined ? '' : $value.val()).trim());
+          var picked = [];
+          for (var b = 0; b < def.bits.length; b++) {
+            var bit = def.bits[b];
+            var flag = Math.pow(2, bit.bit);
+            var $opt = $('<option></option>').val(String(flag)).text(bit.label + ' (bit ' + bit.bit + ')');
+            $select.append($opt);
+            if (Number.isInteger(saved) && saved >= 0 && bitIsSet(saved, bit.bit)) {
+              picked.push(String(flag));
+            }
+          }
+          $select.val(picked);
+          $select.toggle(true);
+          $value.toggle(true);
+          return;
+        }
+        $select.removeAttr('multiple').removeAttr('size');
         if (!hasValues) {
           $select.toggle(false);
           $value.toggle(true);
@@ -695,14 +748,24 @@
         refreshParamInfo();
       });
       $('#mav-param-value-select').on('change', function () {
+        var $box = $('#node-input-value');
+        if ($('#mav-param-value-select').attr('multiple') !== undefined) {
+          // Bitmask mode: the picker owns the documented bits, the box keeps
+          // any undocumented remainder the operator set by hand.
+          var flags = $('#mav-param-value-select').val() || [];
+          var sum = bitsRemainder(Number(String($box.val() === undefined ? '' : $box.val()).trim()), _valueBits);
+          for (var i = 0; i < flags.length; i++) sum += Number(flags[i]);
+          $box.val(String(sum));
+          return;
+        }
         var picked = $('#mav-param-value-select').val();
         if (picked === VALUE_CUSTOM) {
           // Reveal the box rather than clearing it: whatever was there is more
           // likely the value they wanted than an empty field.
-          $('#node-input-value').toggle(true);
+          $box.toggle(true);
           return;
         }
-        $('#node-input-value').val(picked).toggle(false);
+        $box.val(picked).toggle(false);
       });
 
       /* Initial state. */

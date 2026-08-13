@@ -66,6 +66,7 @@ test('parsePdefJson parses namespaced ArduPilot format', () => {
       { value: 0, label: 'Disabled' },
       { value: 1, label: 'Enabled' },
     ],
+    bits: undefined,
   });
   assert.equal(map.get('PILOT_SPEED_UP').unit, 'cm/s');
 });
@@ -83,10 +84,57 @@ test('parsePdefJson parses the canonical ArduPilot PascalCase document shape', (
     increment: 1,
     type: undefined,
     values: undefined,
+    bits: undefined,
   });
   assert.deepEqual(map.get('ALAND_ENABLE').values, [
     { value: 0, label: 'Disabled' },
     { value: 1, label: 'Enabled' },
+  ]);
+});
+
+test('parsePdefJson parses bitmask definitions from all three published shapes', () => {
+  const map = parsePdefJson({
+    Vehicle: {
+      // ArduPilot XML-derived field text: "bit:Label" pairs; a colon inside a
+      // label belongs to the label.
+      ARMING_CHECK: {
+        humanName: 'Arming checks',
+        documentation: 'Which checks arm requires.',
+        fields: { Bitmask: '0:All,1:Barometer,3:Board voltage: main' },
+      },
+      // ArduPilot JSON object shape — bit positions as keys, unlike Values.
+      LOG_BITMASK: {
+        humanName: 'Log bitmask',
+        documentation: 'What to log.',
+        Bitmask: { 2: 'GPS', 0: 'Fast attitude' },
+        fields: {},
+      },
+      // PX4 shape: [{index, description}] — out-of-int32-range bits dropped.
+      COM_ARM_AUTH: {
+        shortDesc: 'Arm authorization',
+        bitmask: [
+          { index: 31, description: 'High bit' },
+          { index: 1, description: 'Second' },
+          { index: 32, description: 'Outside int32' },
+          { index: -1, description: 'Negative' },
+        ],
+      },
+    },
+  });
+
+  assert.deepEqual(map.get('ARMING_CHECK').bits, [
+    { bit: 0, label: 'All' },
+    { bit: 1, label: 'Barometer' },
+    { bit: 3, label: 'Board voltage: main' },
+  ]);
+  // Sorted by bit position regardless of published order.
+  assert.deepEqual(map.get('LOG_BITMASK').bits, [
+    { bit: 0, label: 'Fast attitude' },
+    { bit: 2, label: 'GPS' },
+  ]);
+  assert.deepEqual(map.get('COM_ARM_AUTH').bits, [
+    { bit: 1, label: 'Second' },
+    { bit: 31, label: 'High bit' },
   ]);
 });
 
@@ -480,6 +528,7 @@ test('PX4 parameters.xml is read, walking groups and mapping snake_case elements
     increment: 0.5,
     type: 'MAV_PARAM_TYPE_REAL32',
     values: undefined,
+    bits: undefined,
   });
   assert.equal(
     map.get('RC1_TRIM').description, 'RC trim',
