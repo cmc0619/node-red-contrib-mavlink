@@ -84,18 +84,13 @@
           var filled = function (names) {
             return names.some(function (n) { return !RED.mavlink.isBlank(fieldValue(owner, n)); });
           };
-          var position = filled(['north', 'east', 'up']);
-          var velocity = filled(['vNorth', 'vEast', 'vUp']);
-          var accel = filled(['aNorth', 'aEast', 'aUp']);
-          // The setpoint vocabulary has no accel+position or accel+velocity
-          // mode, so one group would be dropped in silence. The runtime used to
-          // refuse this; the groups are all on screen together, so it is the
-          // editor's to catch.
-          if (accel && (position || velocity)) {
-            return 'Steer cannot mix acceleration with position or velocity — '
-              + 'the setpoint vocabulary has no such mode; clear one group';
-          }
-          if (position || velocity || accel) return true;
+          // Any combination of groups is a mode — the type_mask carries an
+          // independent ignore bit per group, and ArduPilot implements the
+          // mixes as named guided submodes (§14). So the only rule left is
+          // that *something* is filled.
+          if (filled(['north', 'east', 'up'])) return true;
+          if (filled(['vNorth', 'vEast', 'vUp'])) return true;
+          if (filled(['aNorth', 'aEast', 'aUp'])) return true;
           if (filled(['yaw', 'yawRate'])) return true;
           return 'Steer needs at least one field filled — a position, a velocity, '
             + 'an acceleration, or a yaw';
@@ -499,7 +494,7 @@
   <p><b>Change mode</b> (Advanced) sets MAV_DO_REPOSITION_FLAGS_CHANGE_MODE, and the flag is the gate on both stacks (measured, §14 2026-08-12): the goto is accepted iff the flag is set or the vehicle is already in GUIDED (ArduPilot) / Hold (PX4), else it answers denied (2). It flies the vehicle into guided mode — a mode change, and therefore an explicit opt-in (checkbox, or boolean <code>msg.payload.changeMode</code>).</p>
   <p>On <b>Send &amp; confirm</b> delivery (Go to only — setpoints carry no acknowledgement) the node waits for the terminal COMMAND_ACK and reports it in the same vocabulary as <b>mavlink-command</b>: output 0 fires on <code>ACCEPTED</code> with an <code>accepted</code> record carrying <code>resultCode</code> 0; every other terminal result fails on output 1 with its MAV_RESULT name as the result — <code>denied</code>, <code>command_int_only</code>, <code>command_unsupported_mav_frame</code>, … — and its code, and a missing ack reports <code>unconfirmed</code> (§9: a missing ack is not a failure). The result IS the discriminator — branch on it with a switch. <code>TEMPORARILY_REJECTED</code> retries with back-off before failing. <b>ACK timeout</b> (blank = 10 s) bounds the wait. Every ack-confirmed record also carries the ack's <code>resultParam2</code> (command-specific detail, often the reason for a denial), and while the vehicle answers <code>IN_PROGRESS</code> the status badge shows the progress it reports. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use Send or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
   <p><b>Steer</b> sends <code>SET_POSITION_TARGET_LOCAL_NED</code> setpoints — the streaming/offboard path, fire-and-forget. The <b>Reference</b> picks the axes: <i>World (Local NED)</i> works on every firmware; <i>Body</i> adapts to the bound Vehicle Profile's firmware, because the two stacks read different body frames (measured, §14): ArduPilot reads BODY_OFFSET_NED (9) as the body-axis offset, while PX4 ignores 9 and reads BODY_NED (8) — and PX4 discards position in body frames, so body setpoints on PX4 carry velocity only. Without a firmware the body reference refuses rather than guess — a wrong frame number is silently dropped by the vehicle. Body labels read forward/right.</p>
-  <p>Every Steer field is optional, because filling fields IS the mode: the type_mask derives from which groups carry values — position, velocity, both (feed-forward), acceleration (Advanced; cannot mix with position or velocity), or yaw / yaw rate alone. Blank means mask-ignored; a value (including 0) means commanded. An all-blank steer refuses at input time, not at deploy.</p>
+  <p>Every Steer field is optional, because filling fields IS the mode: the type_mask derives from which groups carry values — position, velocity, acceleration, any combination of them (feed-forward), or yaw / yaw rate alone. Blank means mask-ignored; a value (including 0) means commanded. The editor requires at least one field, because an all-blank steer is the all-ignore packet PX4 logs as invalid.</p>
   <p>Action and delivery reshape the form (§6): only the parameters for the selection are shown, and the Delivery options themselves follow the action — steer setpoints cannot confirm, so Send &amp; confirm is offered on Go to only. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
   <p>Output 0 continues only on success, once per input, and the result word IS the outcome, one meaning per word: <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — Go to confirm only). Output 1 carries the status record for every outcome.</p>
   <p>On <b>Stream</b> delivery a running stream ends three ways. When the <b>TTL</b> elapses the node sends the zero-velocity brake and reports on output 1 with <code>result: "expired"</code> and <code>sent</code> (setpoints handed to the connection — the streaming link may coalesce under backpressure, so this counts sends, not wire deliveries) — switch on <code>result === "expired"</code> to run whatever follows a timed move; deliberately not on output 0, since that port is a trigger and the stream's start already fired it. If the expiry brake send itself fails, <code>result</code> stays <code>"expired"</code> and the failure rides a <code>brakeError</code> field. An input of <code>{action: "stop"}</code> halts the stream, sends the brake, and completes like any input — output 0 fires once, and the status record carries <code>result: "stopped"</code> with <code>sent</code>; a stop with nothing streaming completes with <code>detail: "no stream"</code>, and the action is refused on Build and Send delivery. A <b>new input</b> replaces the stream as a direct handover — no brake between consecutive targets, matching GCS practice; retargeting a different vehicle brakes the abandoned target once the new stream is live. A redeploy closes the node and brakes. A stream that keeps running through send failures reports once per failure streak on output 1 and never quits on its own — the firmware's setpoint watchdog is the failsafe on a dead link.</p>

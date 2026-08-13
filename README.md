@@ -60,10 +60,10 @@ which ships in the package too.
 | `10-sunday-stroll.json` | A full flight: arm, takeoff, waypoints, return |
 | `24-formation-nudge.json` | Formation node moving a group as one |
 | `27-safety-estop.json` | Flight termination behind a confirmation gate |
-| `sitl/01-completion-takeoff.json` | Arm + completion-tier takeoff against ArduPilot Copter SITL |
-| `sitl/08-fanout-sequential-five.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
-| `sitl/13-param-defs-live.json` | Param read, set, and list — with live definition catalog |
-| `sitl/14-command-mission-basics.json` | Command presets, advanced `SET_MESSAGE_INTERVAL`, mission upload/download |
+| `sitl/20-completion-takeoff.json` | Arm + completion-tier takeoff against ArduPilot Copter SITL |
+| `sitl/31-fanout-sequential-five.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
+| `sitl/04-param-defs-live.json` | Param read, set, and list — with live definition catalog |
+| `sitl/22-command-mission-basics.json` | Command presets, advanced `SET_MESSAGE_INTERVAL`, mission upload/download |
 
 The nested `sitl/` entries need a live SITL rig; they cover completion timing, mode tables,
 PX4 param union, mission/fence/rally gating, fan-out pacing, signing, and companion mode.

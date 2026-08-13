@@ -610,7 +610,7 @@ test('mavlink-move help documents the action-shaped overrides and refuses the re
   assert.match(html, /msg\.payload === false<\/code> suppresses/, 'the suppress sentinel is documented');
 });
 
-test('mavlink-move: Steer must command something, and must not mix acceleration', () => {
+test('mavlink-move: Steer must command something — any combination of groups counts', () => {
   // Both rules moved out of the runtime (AGENTS.md, input trust): the configured
   // path is the editor's, and a msg that blanks or mixes the groups is trusted.
   //
@@ -634,10 +634,11 @@ test('mavlink-move: Steer must command something, and must not mix acceleration'
   assert.equal(verdict({ vNorth: '0' }), true, 'a zero velocity is a commanded zero');
   assert.match(String(verdict({ vNorth: ' ' })), /needs at least one field filled/, 'whitespace is blank');
 
-  // The setpoint vocabulary has no accel+position or accel+velocity mode, so
-  // one group would be dropped in silence. All three groups are on screen
-  // together, which is what makes this the editor's to catch.
-  assert.match(String(verdict({ aUp: '0.5', north: '5' })), /cannot mix acceleration/);
-  assert.match(String(verdict({ aUp: '0.5', vNorth: '1' })), /cannot mix acceleration/);
-  assert.equal(verdict({ north: '5', vNorth: '1' }), true, 'position + velocity IS a mode');
+  // Every combination of groups is a mode: one ignore bit each on the wire,
+  // and ArduPilot implements the mixes as named guided submodes (§14). Nothing
+  // here may red a filled form.
+  assert.equal(verdict({ aUp: '0.5', north: '5' }), true, 'acceleration + position');
+  assert.equal(verdict({ aUp: '0.5', vNorth: '1' }), true, 'acceleration + velocity');
+  assert.equal(verdict({ north: '5', vNorth: '1', aUp: '0.5' }), true, 'all three together');
+  assert.equal(verdict({ north: '5', vNorth: '1' }), true, 'position + velocity');
 });

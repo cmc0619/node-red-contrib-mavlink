@@ -329,12 +329,16 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the
   // Yaw rides any mode by presence — it does not change the derived group.
   assert.equal(deriveSteerMode(g({ velocity: filled, yaw: 90 })), 'velocity');
 
-  // Acceleration composes with nothing in the wire vocabulary, so a mix drops
-  // the other group — acceleration wins. That used to refuse here; the editor
-  // catches it now (mavlink-move.html `action`), where all three groups are on
-  // screen together, and a msg that fills both is trusted and takes the drop.
-  assert.equal(deriveSteerMode(g({ accel: filled, position: filled })), 'acceleration');
-  assert.equal(deriveSteerMode(g({ accel: filled, velocity: filled })), 'acceleration');
+  // Acceleration composes. The wire always allowed it — one ignore bit per
+  // group — and ArduPilot implements the mixes as named guided submodes
+  // (PosVelAccel / VelAccel, §14 source read). The refusal that used to live
+  // here was reading a gap in the MODES table as a rule about the protocol.
+  assert.equal(deriveSteerMode(g({ accel: filled, position: filled })), 'position-acceleration');
+  assert.equal(deriveSteerMode(g({ accel: filled, velocity: filled })), 'velocity-acceleration');
+  assert.equal(
+    deriveSteerMode(g({ position: filled, velocity: filled, accel: filled })),
+    'position-velocity-acceleration'
+  );
   // Nothing filled derives yaw-only, which with no yaw is the all-ignore
   // packet (§14 / #115). It used to refuse; the editor requires at least one
   // Steer field now, so the configured path cannot get here.

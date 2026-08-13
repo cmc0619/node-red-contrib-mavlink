@@ -99,10 +99,10 @@ entries appear under the package examples folder).
 | `03-param-read-set.json` | Param read (MAV_SYSID) and set (FS_GCS_ENABLE) as separate injects |
 | `04-mission-upload-download.json` | Mission upload then download |
 | `05-fanout-arm.json` | Fan-out sequential arm — dry-run then live |
-| `sitl/01-completion-takeoff.json` | Arm + completion-tier takeoff against ArduPilot Copter SITL |
-| `sitl/08-fanout-sequential-five.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
-| `sitl/13-param-defs-live.json` | Param read, set, and list — with live definition catalog |
-| `sitl/14-command-mission-basics.json` | Command presets, advanced `SET_MESSAGE_INTERVAL`, mission upload/download |
+| `sitl/20-completion-takeoff.json` | Arm + completion-tier takeoff against ArduPilot Copter SITL |
+| `sitl/31-fanout-sequential-five.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
+| `sitl/04-param-defs-live.json` | Param read, set, and list — with live definition catalog |
+| `sitl/22-command-mission-basics.json` | Command presets, advanced `SET_MESSAGE_INTERVAL`, mission upload/download |
 
 The `examples/sitl/` folder contains flows covering completion timing, mode tables,
 PX4 param union, mission/fence/rally gating, fan-out pacing, signing, and companion mode.
