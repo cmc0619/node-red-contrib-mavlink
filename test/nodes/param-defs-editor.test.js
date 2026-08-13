@@ -384,6 +384,13 @@ const VALUE_DEFS = {
       { bit: 2, label: 'Compass' },
     ],
   },
+  HIGH_OPTS: {
+    description: 'A mask documenting the sign bit',
+    bits: [
+      { bit: 0, label: 'Low' },
+      { bit: 31, label: 'High' },
+    ],
+  },
 };
 
 function mountValueField(defs, values) {
@@ -541,6 +548,30 @@ test('bit-31 masks arrive spelled negative and leave the same way (Gitar, #296)'
   select.val([]);
   select.trigger('change');
   assert.equal(element('#node-input-value').val(), '-8', 'remainder alone, still int32 spelling');
+});
+
+test('freshly picking bit 31 from a blank box writes the signed spelling (Gitar, #296 round 2)', () => {
+  // The option value for bit 31 is the positive 2147483648, but the box must
+  // receive the int32 spelling writeInt32LE accepts — the fold is
+  // BigInt.asIntN(32), so a fresh pick and a preselected round-trip agree.
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'HIGH_OPTS',
+    '#node-input-value': '',
+  });
+  context.refreshInfoForTest();
+
+  const select = element('#mav-param-value-select');
+  select.val(['2147483648']);
+  select.trigger('change');
+  assert.equal(element('#node-input-value').val(), '-2147483648');
+
+  select.val(['1', '2147483648']);
+  select.trigger('change');
+  assert.equal(element('#node-input-value').val(), '-2147483647');
+
+  // And the written value round-trips: reopening preselects the High bit.
+  context.refreshInfoForTest();
+  assert.deepEqual(element('#mav-param-value-select').val(), ['1', '2147483648']);
 });
 
 test('switching from a bitmask parameter back to an enum restores single-select mode', () => {

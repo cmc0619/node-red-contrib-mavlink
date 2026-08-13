@@ -754,14 +754,16 @@
         var $box = $('#node-input-value');
         if ($('#mav-param-value-select').attr('multiple') !== undefined) {
           // Bitmask mode: the picker owns the documented bits, the box keeps
-          // any undocumented remainder the operator set by hand. BigInt
-          // two's complement preserves the box's own spelling: a signed
-          // int32 mask stays signed (encodable by writeInt32LE), a positive
-          // one stays positive.
+          // any undocumented remainder the operator set by hand. The result
+          // folds to canonical signed-int32 spelling (BigInt.asIntN): these
+          // params ride the wire as at most int32, so a freshly picked bit 31
+          // must leave as the negative writeInt32LE accepts — a positive
+          // 2147483648 would throw at Set (Gitar, #296 round 2).
           var pickedMask = RED.mavlink.bitmaskFromSelection($('#mav-param-value-select').val());
           var current = bitmaskBoxValue($box.val());
           var remainder = current === null ? 0n : (current & ~_valueDocMask);
-          $box.val((remainder | BigInt(pickedMask === null ? 0 : pickedMask)).toString());
+          var result = remainder | BigInt(pickedMask === null ? 0 : pickedMask);
+          $box.val(BigInt.asIntN(32, result).toString());
           return;
         }
         var picked = $('#mav-param-value-select').val();
