@@ -208,18 +208,51 @@ test('formationTargets refuses a missing anchor altitude rather than defaulting 
   }
 });
 
-test('formationTargets refuses a malformed sysid instead of silently omitting the vehicle', () => {
-  assert.throws(
-    () => formationTargets({ shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: 30 }, sysids: [1, 'abc'] }),
-    /sysids entry/
-  );
-  assert.throws(() => assignSlots([1, null]), /sysids entry/);
+test('formationTargets refuses blank anchor coordinates rather than defaulting to null island', () => {
+  // Same three-state rule as altitude: blank (undefined/null/'') is "not
+  // given", not a value — Number(null) and Number('') are 0, and lat/lon 0,0
+  // would silently send the fleet to null island (Codacy, #287).
+  for (const blank of [undefined, null, '']) {
+    assert.throws(
+      () => formationTargets({
+        shape: 'line', spacing: 10, anchor: { lat: blank, lon: 8, alt: 30 }, sysids: [1],
+      }),
+      /needs an anchor/
+    );
+    assert.throws(
+      () => formationTargets({
+        shape: 'line', spacing: 10, anchor: { lat: 47, lon: blank, alt: 30 }, sysids: [1],
+      }),
+      /needs an anchor/
+    );
+  }
 });
 
-test('slotOffsets refuses a non-positive spacing — all followers would collide', () => {
-  for (const spacing of [0, -5]) {
-    assert.throws(() => slotOffsets('line', 3, spacing), /greater than 0/);
+test('sysid entries are trusted input: Number() coercion, never a refusal', () => {
+  // A non-numeric entry coerces to NaN and flows through — garbage on a
+  // trusted surface is the flow author's to fix, not the driver's to refuse.
+  const targets = formationTargets({
+    shape: 'line',
+    spacing: 10,
+    anchor: { lat: 47, lon: 8, alt: 30 },
+    sysids: [1, 'abc'],
+  });
+  assert.equal(targets.length, 2, 'both entries keep their slots');
+  assert.equal(targets[0].sysid, 1);
+  assert.ok(Number.isNaN(targets[1].sysid), 'the malformed entry coerces to NaN');
+  // null takes the defined coercion too: Number(null) is 0.
+  assert.deepEqual([...assignSlots([1, null])], [[0, 0], [1, 1]]);
+});
+
+test('spacing is trusted config: Number() coercion only — the editor validator is the guard', () => {
+  // A numeric string behaves as the number it coerces to.
+  assert.deepEqual(slotOffsets('line', 2, '10')[1], { forward: 0, right: 10, down: 0 });
+  // 0 stacks every slot on the origin and a negative spacing mirrors the
+  // pattern — the editor validator (finite, > 0) is the only guard.
+  for (const offset of slotOffsets('line', 3, 0)) {
+    assert.deepEqual(offset, { forward: 0, right: 0, down: 0 });
   }
+  assert.deepEqual(slotOffsets('line', 3, -5)[1], { forward: 0, right: -5, down: 0 });
 });
 
 test('formationTargets refuses an empty sysid list', () => {

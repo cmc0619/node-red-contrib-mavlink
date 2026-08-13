@@ -216,34 +216,72 @@ test('real 23/29 branch: the arm ack alone no longer classifies PASS (#267)', ()
   assert.equal(isSpecializedPass(ok), true, 'goto-accepted PASS stays early-exit eligible');
 });
 
-test('02 requires AP mission/fence/rally success plus PX4 fence gate (no empty false PASS)', () => {
+test('02 requires AP mission/fence/rally success plus a loud PX4 fence failure (no empty false PASS)', () => {
+  // The PX4 fence leg fails from the vehicle side — an UNSUPPORTED
+  // MISSION_ACK or the transfer deadline — so the profile keys on the row's
+  // `failed` result, not on any node-side wording.
   const profile = PROFILE['02-mission-fence-rally'];
   assert.ok(profile, 'profile 02 exists');
   const row = (tag, result, excerpt = '') => ({ tag, result, excerpt, detail: null, resultCode: null });
-  const px4Gate = row(
+  const px4Fail = row(
     'debug:px4 fence status',
     'failed',
-    "phase: 'gated'\nreason: 'px4 does not support fence over the mission protocol'"
+    "phase: 'ack'\nreason: 'vehicle rejected upload: MAV_MISSION_UNSUPPORTED'"
   );
   const emptyAp = [
     row('debug:mission status', 'failed', "phase: 'empty'"),
     row('debug:fence status', 'failed', "phase: 'empty'"),
     row('debug:rally status', 'failed', "phase: 'empty'"),
-    px4Gate,
+    px4Fail,
   ];
   const emptyVerdict = verdictFrom(profile, { debug: emptyAp, errors: [] }, '');
-  assert.equal(emptyVerdict.status, 'FAIL', 'AP empty uploads must not PASS on the PX4 gate alone');
+  assert.equal(emptyVerdict.status, 'FAIL', 'AP empty uploads must not PASS on the PX4 failure alone');
   assert.match(emptyVerdict.reason, /AP uploads incomplete/);
 
   const ok = [
     row('debug:mission status', 'succeeded'),
     row('debug:fence status', 'succeeded'),
     row('debug:rally status', 'succeeded'),
-    px4Gate,
+    px4Fail,
   ];
-  const pass = verdictFrom(profile, { debug: ok, errors: [] }, "does not support fence");
+  const pass = verdictFrom(profile, { debug: ok, errors: [] }, '');
   assert.equal(pass.status, 'PASS');
   assert.equal(isSpecializedPass(pass), true);
+
+  // A bounded abort is the same loud answer with different words — the
+  // transfer machine settles the no-progress deadline and the retry ceiling
+  // as phase 'aborted', with reasons spelled by transfer.js.
+  for (const reason of [
+    'no progress at count for 90000 ms (transfer deadline)',
+    'stalled at count after 4 retries',
+  ]) {
+    const bounded = ok.slice(0, 3).concat(
+      row('debug:px4 fence status', 'failed', `phase: 'aborted'\nreason: '${reason}'`)
+    );
+    assert.equal(verdictFrom(profile, { debug: bounded, errors: [] }, '').status, 'PASS',
+      `${reason} is a measured bound`);
+  }
+
+  // A missing PX4 row is not a measurement.
+  const missing = ok.slice(0, 3);
+  assert.notEqual(verdictFrom(profile, { debug: missing, errors: [] }, '').status, 'PASS');
+
+  // Neither is a row that died before the mission protocol ran: an empty
+  // upload, a connection fault — `failed` with a non-transfer phase measured
+  // nothing, and must not PASS on the AP rows' coattails (Codex, #287).
+  // A synchronous send failure wears phase 'aborted' too (start() and the
+  // retry path both settle a throwing send that way), so the phase alone is
+  // not the discriminator — the reason is (Codex, #287, round 2).
+  for (const excerpt of [
+    "phase: 'empty'",
+    "phase: 'error'\nreason: 'requires a Connection'",
+    "phase: 'aborted'\nreason: 'count send failed: bulk queue saturated'",
+    "phase: 'aborted'\nreason: 'start send failed: connection closed'",
+  ]) {
+    const preProtocol = ok.slice(0, 3).concat(row('debug:px4 fence status', 'failed', excerpt));
+    assert.notEqual(verdictFrom(profile, { debug: preProtocol, errors: [] }, '').status, 'PASS',
+      `${excerpt.split('\n')[0]} is not a mission-protocol measurement`);
+  }
 });
 
 test('27/30 read the unified vocabulary — and \'succeeded\' stays banned', () => {

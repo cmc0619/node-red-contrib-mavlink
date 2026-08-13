@@ -3,9 +3,8 @@
 /**
  * mavlink-mission node tests (DESIGN.md §9 chain model, §6, §13). Exercises the
  * thin wrapper: the suppress guard, the Build tier plan, the clear confirmation
- * gate, firmware gating at the node, and an end-to-end download
- * whose progress and terminal records land on output 1 while success fires
- * output 0.
+ * gate, and an end-to-end download whose progress and terminal records land on
+ * output 1 while success fires output 0.
  */
 
 const { EventEmitter } = require('node:events');
@@ -95,7 +94,7 @@ test('Build tier refuses a missing operation instead of planning an upload', asy
   );
 });
 
-test('mission Build concrete dialect uses config firmware and no Vehicle Profile target rung', async () => {
+test('mission Build concrete dialect has no Vehicle Profile target rung', async () => {
   const conn = new StubConnection();
   const vehicleNode = {
     defaultTargetSystem: 77,
@@ -116,17 +115,21 @@ test('mission Build concrete dialect uses config firmware and no Vehicle Profile
   });
 
   const { outputs } = await runInput(node, { payload: {} });
-  assert.notEqual(outputs[0][0], null, 'concrete Build dialect must build rather than gate on stale profile firmware');
+  assert.notEqual(outputs[0][0], null, 'concrete Build dialect builds the plan');
   const plan = outputs[0][0].payload;
-  assert.equal(plan.missionType, 1, 'ardupilot config firmware permits fence');
+  assert.equal(plan.missionType, 1, 'fence plan carries mission_type 1');
   assert.ok(Number.isNaN(plan.target.sysid), 'concrete Build dialect has no profile sysid rung');
   assert.ok(Number.isNaN(plan.target.compid), 'concrete Build dialect has no profile compid rung');
 });
 
-test('firmware gating: PX4 refuses a fence transfer at the node (§11)', async () => {
+test('a fence transfer under a px4 firmware profile runs — the vehicle judges type support (§9)', async () => {
   const conn = new StubConnection();
-  // Vehicle profile with px4 firmware — the node must consult the profile, not config.firmware.
   conn.vehicle = { firmware: 'px4', targetSystem: 1, targetComponent: 1 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 0, mission_type: 1 } });
+    }
+  });
   const Node = loadNode(conn);
   const node = new Node({
     operation: 'download',
@@ -134,10 +137,49 @@ test('firmware gating: PX4 refuses a fence transfer at the node (§11)', async (
     delivery: 'confirm',
     missionType: 'fence',
   });
-  const { outputs } = await runInput(node, { payload: {} });
-  assert.equal(outputs.length, 1);
-  assert.equal(outputs[0][0], null);
-  assert.equal(outputs[0][1].phase, 'gated');
+  const { outputs, err } = await runInput(node, { payload: {} });
+  assert.equal(err, undefined, 'the transfer is not refused at input');
+  assert.equal(conn.sentNames()[0], 'MISSION_REQUEST_LIST', 'the transfer opens on the wire');
+  assert.equal(outputs.at(-1)[1].result, 'succeeded');
+});
+
+test('build tier plans a fence transfer under a px4 firmware profile (mission_type 1)', async () => {
+  const conn = new StubConnection();
+  const vehicleNode = { defaultTargetSystem: 1, defaultTargetComponent: 1, firmware: 'px4' };
+  const Node = loadNode(conn, { veh: vehicleNode });
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'build',
+    dialect: '__vehicle',
+    vehicle: 'veh',
+    missionType: 'fence',
+    targetSystem: '',
+    targetComponent: '',
+  });
+  const { outputs, err } = await runInput(node, { payload: {} });
+  assert.equal(err, undefined);
+  const plan = outputs[0][0].payload;
+  assert.equal(plan.missionType, 1, 'fence plan builds with mission_type 1');
+  assert.deepEqual(plan.messages.map((m) => m.name), ['MISSION_REQUEST_LIST']);
+});
+
+test('an unknown payload.missionType string fails loud through missionTypeValue', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+  });
+  const { outputs, err } = await runInput(node, { payload: { missionType: 'bogus' } });
+  assert.ok(err, 'an unknown mission type must fail loud');
+  assert.match(String(err), /unknown mission type/);
+  assert.equal(conn.sent.length, 0, 'nothing was sent');
+  assert.equal(outputs[0][0], null, 'output 0 stays silent');
+  assert.equal(outputs[0][1].result, 'failed');
 });
 
 test('clear is refused without confirmation and runs once confirmed', async () => {
@@ -180,40 +222,6 @@ test('clear Build tier is gated before the plan is built (§9 destructive gate)'
   const confirmed = new Node({ operation: 'clear', connection: 'conn', delivery: 'build', confirmClear: true });
   const ok = await runInput(confirmed, { payload: {} });
   assert.deepEqual(ok.outputs[0][0].payload.messages.map((m) => m.name), ['MISSION_CLEAR_ALL']);
-});
-
-test('firmware gate follows the Connection Vehicle Profile, not stale node config (§11)', async () => {
-  const conn = new StubConnection();
-  // Bound profile is PX4; the node config independently (and stalely) says ardupilot.
-  conn.vehicle = { firmware: 'px4', targetSystem: 1, targetComponent: 1 };
-  const Node = loadNode(conn);
-  const node = new Node({
-    operation: 'download',
-    connection: 'conn',
-    delivery: 'confirm', // wire tier — profile comes from conn.vehicle
-    firmware: 'ardupilot', // stale config value, must NOT be consulted
-    missionType: 'fence',
-  });
-
-  const { outputs } = await runInput(node, { payload: {} });
-  assert.equal(outputs[0][1].phase, 'gated', 'PX4 profile gates the fence transfer');
-  assert.match(outputs[0][1].reason, /px4/);
-});
-
-test('payload.firmware overrides profile firmware', async () => {
-  const conn = new StubConnection();
-  // Profile is ardupilot (allows fence), but payload overrides to px4 (blocks fence).
-  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
-  const Node = loadNode(conn);
-  const node = new Node({
-    operation: 'download',
-    connection: 'conn',
-    delivery: 'confirm',
-    missionType: 'fence',
-  });
-
-  const { outputs } = await runInput(node, { payload: { firmware: 'px4' } });
-  assert.equal(outputs[0][1].phase, 'gated', 'payload.firmware=px4 gates the fence transfer');
 });
 
 test('download end-to-end: progress on output 1, success on both ports', async () => {

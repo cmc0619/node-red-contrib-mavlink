@@ -57,7 +57,7 @@
         // message, which is what a blank single filter used to mean.
         messages:    { value: [] },
         sysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
-        compid:      { value: '' },
+        compid:      { value: '', validate: RED.mavlink.validateUint8(0) },
         changedOnly: { value: false },
         changedFields: { value: '' },
         fieldName:   { value: '' },

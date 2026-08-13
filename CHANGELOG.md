@@ -8,6 +8,36 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Removed
 
+- **The guardrail audit's runtime cuts — the driver trusts its callers
+  everywhere now, not just on the motion paths.** A full sweep of every node
+  family found and removed the refusals that vetted trusted input or
+  duplicated an editor validator:
+  - Mission no longer refuses a mission type the profile's firmware does not
+    list — the request goes to the wire and the vehicle answers
+    (`MAV_MISSION_UNSUPPORTED`, or the transfer deadline). The firmware
+    support table is the editor dropdown's, and only the editor's.
+  - Formation no longer validates `msg.payload` heading, pitch, anchor,
+    spacing, or sysid entries — they coerce with `Number()` like every other
+    trusted value. Fan-out's concurrency clamp and both nodes' second copies
+    of editor defaults are gone with them.
+  - Payload accepts an explicit `NaN` slot value — the spec's own "not used"
+    sentinel, which its recipes already defaulted to — and an unknown carrier
+    token builds `COMMAND_LONG`, the same coercion the Command node applies.
+  - The codec's BigInt pre-range check is gone; the Buffer write already
+    fails loud on overflow. The UDP transport's half-configured-destination
+    error is gone; the editor now refuses the half-pair at deploy instead
+    (Remote host and port validate as a pair), and a destination-less send
+    stays a quiet drop.
+
+### Added
+
+- **Three editor validators, each covering a silent failure.** Formation's
+  confirm timeout requires an integer ≥ 1 (a saved 0 armed the ack wait at
+  0 ms and reported every member unconfirmed); `mavlink-in`'s component filter
+  gets the same 0–255 check its system filter had (an out-of-range compid
+  silently matched nothing); the Connection editor pairs Remote host and port
+  (both or neither).
+
 - **The runtime stops second-guessing its inputs — breaking for flows that
   relied on being refused.** The driver (`lib/**`, `nodes/*.js`) coerces what
   it is handed and sends it; the editor is the only layer that validates. What
