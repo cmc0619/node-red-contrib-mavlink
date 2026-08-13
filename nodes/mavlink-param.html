@@ -242,11 +242,34 @@
       }
 
       /**
+       * A bitmask value in the unsigned domain the bit math needs. Bitmask
+       * params are int32 on the wire and decode signed (readInt32LE), so a
+       * value with bit 31 set arrives spelled negative — LOG_BITMASK -1 is
+       * every bit, not garbage (Gitar, #296). Anything outside int32 range
+       * has no bits to interpret and passes through for the guards to drop.
+       */
+      function unsignedInt32(value) {
+        if (!Number.isInteger(value)) return value;
+        if (value < 0 && value >= -2147483648) return value + 4294967296;
+        return value;
+      }
+
+      /**
+       * A bit-math result back in the box's spelling: the encoder writes
+       * int32 (writeInt32LE), so a sum with bit 31 set must leave as the
+       * negative it reads back as, or the Set would throw at encode.
+       */
+      function signedInt32(value) {
+        return value >= 2147483648 ? value - 4294967296 : value;
+      }
+
+      /**
        * The part of a saved value the documented bits do NOT explain.
        * Firmware accepts bits no metadata file lists; a picker change must
        * carry them through untouched, not silently zero them (same survival
-       * rule as the enum path's custom sentinel). Anything that is not a
-       * non-negative integer has no bits to preserve.
+       * rule as the enum path's custom sentinel). Takes and returns the
+       * unsigned domain; anything that is not a non-negative integer there
+       * has no bits to preserve.
        */
       function bitsRemainder(value, bits) {
         if (!Number.isInteger(value) || value < 0) return 0;
@@ -601,7 +624,7 @@
           // value still defers to msg.payload, and undocumented remainder
           // bits stay reachable and survive picker changes (bitsRemainder).
           $select.attr('multiple', 'multiple').attr('size', Math.min(8, def.bits.length));
-          var saved = Number(String($value.val() === undefined ? '' : $value.val()).trim());
+          var saved = unsignedInt32(Number(String($value.val() === undefined ? '' : $value.val()).trim()));
           var picked = [];
           for (var b = 0; b < def.bits.length; b++) {
             var bit = def.bits[b];
@@ -751,11 +774,16 @@
         var $box = $('#node-input-value');
         if ($('#mav-param-value-select').attr('multiple') !== undefined) {
           // Bitmask mode: the picker owns the documented bits, the box keeps
-          // any undocumented remainder the operator set by hand.
+          // any undocumented remainder the operator set by hand. The math
+          // runs unsigned; the result leaves in int32 spelling (signedInt32)
+          // so a bit-31 mask stays encodable.
           var flags = $('#mav-param-value-select').val() || [];
-          var sum = bitsRemainder(Number(String($box.val() === undefined ? '' : $box.val()).trim()), _valueBits);
+          var sum = bitsRemainder(
+            unsignedInt32(Number(String($box.val() === undefined ? '' : $box.val()).trim())),
+            _valueBits
+          );
           for (var i = 0; i < flags.length; i++) sum += Number(flags[i]);
-          $box.val(String(sum));
+          $box.val(String(signedInt32(sum)));
           return;
         }
         var picked = $('#mav-param-value-select').val();

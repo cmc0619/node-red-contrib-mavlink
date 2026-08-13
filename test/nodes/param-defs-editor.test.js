@@ -518,6 +518,31 @@ test('picking bits writes the sum through, preserving undocumented remainder bit
   assert.equal(element('#node-input-value').val(), '8');
 });
 
+test('bit-31 masks arrive spelled negative and leave the same way (Gitar, #296)', () => {
+  // Bitmask params are int32 on the wire and decode signed: LOG_BITMASK -2 is
+  // every bit except bit 0, not garbage. The picker must read the unsigned
+  // magnitude (bits 1 and 2 preselect) and write results back in int32
+  // spelling so the Set stays encodable (writeInt32LE).
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'ARMING_CHECK',
+    '#node-input-value': '-2',
+  });
+  context.refreshInfoForTest();
+
+  const select = element('#mav-param-value-select');
+  assert.deepEqual(select.val(), ['2', '4'], 'documented bits of the unsigned magnitude preselect');
+
+  // Re-pick to bit 0 only: remainder (bits 3..31 = 4294967288) survives and
+  // the sum leaves as the negative int32 it will read back as.
+  select.val(['1']);
+  select.trigger('change');
+  assert.equal(element('#node-input-value').val(), '-7', '1 + high remainder, int32 spelling');
+
+  select.val([]);
+  select.trigger('change');
+  assert.equal(element('#node-input-value').val(), '-8', 'remainder alone, still int32 spelling');
+});
+
 test('switching from a bitmask parameter back to an enum restores single-select mode', () => {
   // The multiple attribute must not leak between parameters: an enum select
   // wearing it would return arrays to the single-value handler.
