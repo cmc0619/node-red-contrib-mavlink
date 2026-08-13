@@ -1,49 +1,49 @@
 {
-  "file": "param-defs-2026-08-05-42b5dcb.seed.gz",
-  "stamp": "2026-08-05-42b5dcb",
-  "generatedAt": "2026-08-05T20:31:47.332Z",
+  "file": "param-defs-2026-08-13-522aed3.seed.gz",
+  "stamp": "2026-08-13-522aed3",
+  "generatedAt": "2026-08-13T13:53:48.914Z",
   "sources": [
     {
       "firmware": "ardupilot",
       "vehicle": "ArduCopter",
       "url": "https://autotest.ardupilot.org/Parameters/ArduCopter/apm.pdef.json",
-      "bytes": 2187375,
-      "parameters": 5719
+      "bytes": 2191155,
+      "parameters": 5740
     },
     {
       "firmware": "ardupilot",
       "vehicle": "ArduPlane",
       "url": "https://autotest.ardupilot.org/Parameters/ArduPlane/apm.pdef.json",
-      "bytes": 2248695,
-      "parameters": 5764
+      "bytes": 2252475,
+      "parameters": 5785
     },
     {
       "firmware": "ardupilot",
       "vehicle": "Rover",
       "url": "https://autotest.ardupilot.org/Parameters/Rover/apm.pdef.json",
-      "bytes": 2025969,
-      "parameters": 5472
+      "bytes": 2029749,
+      "parameters": 5493
     },
     {
       "firmware": "ardupilot",
       "vehicle": "ArduSub",
       "url": "https://autotest.ardupilot.org/Parameters/ArduSub/apm.pdef.json",
-      "bytes": 2177362,
-      "parameters": 5403
+      "bytes": 2181072,
+      "parameters": 5424
     },
     {
       "firmware": "ardupilot",
       "vehicle": "Blimp",
       "url": "https://autotest.ardupilot.org/Parameters/Blimp/apm.pdef.json",
-      "bytes": 1380260,
+      "bytes": 1380292,
       "parameters": 3127
     },
     {
       "firmware": "ardupilot",
       "vehicle": "AntennaTracker",
       "url": "https://autotest.ardupilot.org/Parameters/AntennaTracker/apm.pdef.json",
-      "bytes": 1457445,
-      "parameters": 3617
+      "bytes": 1461155,
+      "parameters": 3638
     },
     {
       "firmware": "px4",
