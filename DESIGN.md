@@ -4275,3 +4275,22 @@ made every clearing flow carry boilerplate to do what the node plainly says. The
 destructive guard that stays is the empty-upload refusal — an upload still can never degrade
 into an accidental clear (#241).
 *Check:* `rg confirmClear` → only the test pinning its absence.
+
+**Bit 31 is a sign bit three times over (2026-08-13).**
+*Wrong belief:* JavaScript numbers handle 32-bit values, so `value & flag` is a fine way to
+test a MAVLink bitmask, and a mask is just a non-negative number.
+*Fact:* three systems disagree at exactly bit 31. JS bitwise operators coerce to *signed*
+int32, so `1 << 31` is negative and corrupts any mask using the top bit. The param wire
+decodes int32 via `readInt32LE`, so a legitimate full mask arrives spelled negative
+(`LOG_BITMASK -1` is every bit, not garbage) — a `>= 0` sanity guard silently discards it.
+And `writeInt32LE` rejects anything ≥ 2^31, so a value normalized to unsigned cannot leave
+again. The repo already owns the solution twice — reuse it, do not re-derive it:
+`lib/codec/mask.js` (runtime; power-of-two arithmetic, `no-bitwise` enforced over the
+directory) and the editor pair `RED.mavlink.selectedBitmaskValues` /
+`bitmaskFromSelection` (BigInt, whose bitwise ops have no int32 truncation and treat
+negatives as infinite two's complement — the signed spelling selects, masks, and
+round-trips with no sign juggling). The same family produced the §14 denormal-echo entry,
+the deleted BigInt codec pre-check (#287), and the bitmask picker's first two review
+rounds (#296).
+*Check:* `test/nodes/param-defs-editor.test.js` "bit-31 masks arrive spelled negative and
+leave the same way"; `lib/codec/mask.js` header for the operator ban.
