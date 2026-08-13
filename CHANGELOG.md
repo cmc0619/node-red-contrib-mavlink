@@ -35,8 +35,9 @@ config-node shapes and message contracts may still change without a major bump.
   the Param editor's Value field renders a documented bitmask as a
   multi-select — `ARMING_CHECK` takes checks, not a sum computed by hand. The
   picker writes the sum through to the value box, which stays visible beside
-  it: blank still defers to `msg.payload`, and bits no metadata file lists
-  survive picker changes untouched. Editor-only; the runtime is unchanged.
+  it: blank still defers to `msg.payload`, and bits that no metadata file
+  lists survive picker changes untouched. Editor-only; the runtime is
+  unchanged.
 
 ### Fixed
 

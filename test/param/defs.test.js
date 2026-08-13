@@ -119,6 +119,12 @@ test('parsePdefJson parses bitmask definitions from all three published shapes',
           { index: -1, description: 'Negative' },
         ],
       },
+      // Bitmask present but every entry invalid: the editor gates its picker
+      // on `def.bits` being falsy, so this must normalise to undefined, not [].
+      BAD_BITS: {
+        shortDesc: 'All bits unusable',
+        fields: { Bitmask: '32:Out of range,notabit:Garbage' },
+      },
     },
   });
 
@@ -136,6 +142,7 @@ test('parsePdefJson parses bitmask definitions from all three published shapes',
     { bit: 1, label: 'Second' },
     { bit: 31, label: 'High bit' },
   ]);
+  assert.strictEqual(map.get('BAD_BITS').bits, undefined);
 });
 
 test('parsePdefJson parses flat format and normalises IDs', () => {
@@ -496,6 +503,9 @@ const PX4_XML = `<?xml version="1.0"?>
         <value code="0">NoEmergency</value>
         <value code="-1.0">Negative float code</value>
       </values>
+      <bitmask>
+        <bit index="2">Squawk</bit>
+      </bitmask>
     </parameter>
     <parameter name="ADSB_IDENT" type="INT32" boolean="true">
       <short_desc>ADSB-Out Ident Configuration</short_desc>
@@ -534,6 +544,10 @@ test('PX4 parameters.xml is read, walking groups and mapping snake_case elements
     map.get('RC1_TRIM').description, 'RC trim',
     'short_desc carries the entry when long_desc is absent'
   );
+  // A single <bit> is the shape that breaks without the parser's isArray
+  // config — one element parses as a bare object, not a one-entry array.
+  assert.deepEqual(map.get('ADSB_EMERGC').bits, [{ bit: 2, label: 'Squawk' }],
+    '<bitmask><bit index> parses through the PX4 XML mirror');
 });
 
 test('XML value codes are not always integers', () => {
