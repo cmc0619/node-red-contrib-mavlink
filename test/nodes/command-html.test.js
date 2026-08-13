@@ -703,17 +703,30 @@ test('mavlink-command: a form that rendered nothing falls back to the saved para
   // "every param is blank" and reds a node whose saved params are perfectly
   // intact (Codex, #286).
   const saved = JSON.stringify({ 5: 47.4, 6: 8.5 });
-  const open = (over) => loadNodeDefaults('mavlink-command', {}, {
-    dom: { '#node-input-params': { val: saved }, '.param-input': { items: [] } },
+  const open = (over, items = []) => loadNodeDefaults('mavlink-command', {}, {
+    dom: { '#node-input-params': { val: saved }, '.param-input': { items } },
     editStack: [{ id: 'c1' }],
   }).params.validate.call(
     Object.assign({ id: 'c1', mode: 'preset', preset: 'set_home' }, over), saved, {}
   );
 
+  // Set Home does declare param rows, so "no controls, flag off" is not a
+  // contradiction — `refreshParamFields` clears the flag at the top and only
+  // sets it inside `loadCommandsCatalog`'s callback. Everything between is a
+  // "Loading command parameters…" placeholder with zero `.param-input`, which
+  // is the Codex #36 window this guard exists for.
   assert.equal(open({ _mavParamsRendered: false }), true, 'nothing rendered: judge the saved blob');
   assert.equal(open({}), true, 'the flag absent entirely is the same case');
   assert.match(String(open({ _mavParamsRendered: true })), /needs a latitude and longitude/,
-    'a real form that is genuinely empty still reds — the flag is the whole difference');
+    'a form marked rendered but holding nothing still reds — the flag is the whole difference');
+  // And the ordinary reachable shape: real controls, blank coordinates, an
+  // unticked "use current position". Reds for the reason an operator can act
+  // on rather than through the empty-scrape accident (CodeRabbit, #286).
+  assert.match(String(open({ _mavParamsRendered: true }, [
+    { val: 'on', checked: false, attrs: { 'data-idx': '1', 'data-kind': 'boolean', 'data-true': '1' } },
+    { val: '', attrs: { 'data-idx': '5' } },
+    { val: '', attrs: { 'data-idx': '6' } },
+  ])), /needs a latitude and longitude/, 'a rendered form with blank coordinates reds');
 });
 
 test('mavlink-command: a NaN centre cannot ride COMMAND_INT', () => {

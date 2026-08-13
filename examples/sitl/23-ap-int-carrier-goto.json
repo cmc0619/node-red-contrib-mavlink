@@ -4,7 +4,7 @@
         "type": "tab",
         "label": "SITL 23 AP INT carrier goto",
         "disabled": false,
-        "info": "ArduPilot version of the INT carrier goto proof: Arm and takeoff use COMMAND_LONG, then DO_REPOSITION rides COMMAND_INT with GLOBAL_RELATIVE_ALT. GUIDED mode is expected to be prepared externally before firing the chain.",
+        "info": "ArduPilot version of the INT carrier goto proof: Arm and takeoff use COMMAND_LONG, then Move's Go to action rides DO_REPOSITION on COMMAND_INT with GLOBAL_RELATIVE_ALT. The Move node has Change mode on, so it requests GUIDED as part of the reposition \u2014 the rig's ap-guided-1 prep is belt and braces, not a prerequisite.",
         "env": []
     },
     {
@@ -12,7 +12,7 @@
         "type": "comment",
         "z": "sitl19-tab",
         "name": "ArduPilot DO_REPOSITION via COMMAND_INT",
-        "info": "Clone of SITL 17 adapted to ArduCopter sysid 1 on the default Docker lab AP port pair.\n\nFlow: Arm (COMMAND_LONG) -> Takeoff (COMMAND_LONG) -> delay -> DO_REPOSITION (COMMAND_INT, MAV_FRAME_GLOBAL_RELATIVE_ALT = 3).\n\nPrerequisite: put ArduCopter in GUIDED before firing this chain, or insert your own GUIDED setup flow first. The goto target is near the common AP Canberra home, about 100 m north of -35.36, 149.16, with a relative-altitude z value.",
+        "info": "The ArduCopter sibling of SITL 29, adapted to ArduCopter sysid 1 on the default Docker lab AP port pair.\n\nFlow: Arm (COMMAND_LONG) -> Takeoff (COMMAND_LONG) -> delay -> Move Go to (Send & confirm), which rides DO_REPOSITION as COMMAND_INT with MAV_FRAME_GLOBAL_RELATIVE_ALT = 3.\n\nChange mode is on, so the goto asks for GUIDED itself; no separate GUIDED setup flow is needed. The goto target is near the common AP Canberra home, about 100 m north of -35.36, 149.16, with a relative-altitude z value.",
         "x": 280,
         "y": 40,
         "wires": []

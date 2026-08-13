@@ -863,7 +863,7 @@
           if (presetId === null || presetId === undefined) {
             container.append($('<div class="form-row"><em>The preset list could not be '
               + 'loaded, so this node\'s parameters cannot be shown. They are preserved; '
-              + 'deploy the Vehicle Profile and reopen to edit them.</em></div>'));
+              + 'restore the preset list and reopen this dialog to edit them.</em></div>'));
             return;
           }
           const paramSpec = PRESET_PARAMS[presetId] || [];
