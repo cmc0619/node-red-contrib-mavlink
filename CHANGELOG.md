@@ -40,9 +40,13 @@ config-node shapes and message contracts may still change without a major bump.
   Blank centre and blank altitude now encode the sentinels. int32 cannot carry
   NaN, so the editor reds a blank centre on the COMMAND_INT carrier and names
   COMMAND_LONG as the fix.
-- **Acceleration composes with position and velocity.** The mode table had
-  three gaps that read as a rule about the wire; the wire carries an
-  independent ignore bit per group.
+- **Acceleration composes where the firmware names the mix.** `VelAccel` and
+  `PosVelAccel` are real ArduPilot guided submodes, so velocity+acceleration
+  and position+velocity+acceleration are modes now; the wire carries an
+  independent ignore bit per group. Position+acceleration *without* velocity
+  is the one mix with no named submode and no §14 measurement — it refuses
+  loud in the editor and at derivation, because a setpoint carries no ack and
+  a silently held position would be the only symptom.
 - **Go To / Reposition is out of the Command node.** Move owns the goto (§6),
   so the preset is not offered — and the parameter rows, location rule, and
   altitude rule it left behind in the Command editor are gone with it. The

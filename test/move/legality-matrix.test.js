@@ -159,11 +159,14 @@ for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
 // vocabularies are coerced now rather than checked (AGENTS.md, input trust —
 // both are payload-overridable, and msg is trusted). What is left refuses for
 // reasons that are not about vetting operator input: an action the surface
-// does not define, and a body frame with no firmware to derive it from — we
-// asked the vehicle what it is and got no answer, so there is no frame number
-// to pick. A steer with no field filled is not here any more: the editor
-// requires one (mavlink-move.html `action`), and a payload that blanks every
-// group builds the honest all-ignore packet.
+// does not define; a body frame with no firmware to derive it from — we asked
+// the vehicle what it is and got no answer, so there is no frame number to
+// pick; and the one steer mix with no wire encoding we can vouch for —
+// position + acceleration without velocity has no named ArduPilot submode and
+// no §14 measurement, and a setpoint's missing ack would hide the failure.
+// A steer with no field filled is not here any more: the editor requires one
+// (mavlink-move.html `action`), and a payload that blanks every group builds
+// the honest all-ignore packet.
 
 const REFUSED = [
   // The action vocabulary is closed: goto and steer, nothing else.
@@ -178,6 +181,16 @@ const REFUSED = [
     name: 'body reference without firmware',
     config: configFor('steer', 'send', 'body'),
     error: /Vehicle Profile with firmware ardupilot or px4/,
+  },
+  // The unmeasured steer mix. The editor reds the configured shape; a
+  // hand-edited flow or a payload override still reaches the derivation,
+  // which refuses with the actual reason rather than "unknown mode".
+  {
+    name: 'position + acceleration without velocity',
+    // All three velocity axes blank: an explicit 0 is a value and names the
+    // group, which would make this the measured PosVelAccel instead.
+    config: { ...configFor('steer', 'send', 'world'), vNorth: '', vEast: '', vUp: '', north: 5, aUp: 0.5 },
+    error: /position \+ acceleration needs a velocity too/,
   },
 ];
 

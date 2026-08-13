@@ -634,10 +634,11 @@ test('mavlink-move: Steer must command something — any combination of groups c
   assert.equal(verdict({ vNorth: '0' }), true, 'a zero velocity is a commanded zero');
   assert.match(String(verdict({ vNorth: ' ' })), /needs at least one field filled/, 'whitespace is blank');
 
-  // Every combination of groups is a mode: one ignore bit each on the wire,
-  // and ArduPilot implements the mixes as named guided submodes (§14). Nothing
-  // here may red a filled form.
-  assert.equal(verdict({ aUp: '0.5', north: '5' }), true, 'acceleration + position');
+  // The measured combinations are modes: one ignore bit each on the wire, and
+  // ArduPilot names them as guided submodes (§14). Nothing here may red a
+  // filled form. position+acceleration-without-velocity is the exception and
+  // has its own test — it is the one combination with no submode and no
+  // measurement.
   assert.equal(verdict({ aUp: '0.5', vNorth: '1' }), true, 'acceleration + velocity');
   assert.equal(verdict({ north: '5', vNorth: '1', aUp: '0.5' }), true, 'all three together');
   assert.equal(verdict({ north: '5', vNorth: '1' }), true, 'position + velocity');
@@ -688,4 +689,44 @@ test('mavlink-move: clearing the last live Steer field reds while the dialog is 
     true,
     'another dialog\'s fields are not this node\'s answer'
   );
+});
+
+test('mavlink-move: position + acceleration without velocity reds', () => {
+  // The one steer combination lib/move/frames.js MODES does not carry: no
+  // named ArduPilot guided submode on the Copter-4.7.0 read, and no §14
+  // measurement either way. A setpoint gets no COMMAND_ACK, so the operator
+  // would see "sent" while the vehicle held position.
+  const { action } = loadNodeDefaults('mavlink-move');
+  const verdict = (over) =>
+    action.validate.call(Object.assign({ id: 'm1', action: 'steer' }, over), 'steer', {});
+
+  assert.match(String(verdict({ north: '5', aUp: '0.5' })), /has no guided submode/);
+  assert.match(String(verdict({ up: '5', aNorth: '0.5' })), /has no guided submode/,
+    'any axis of either group is the group');
+  // Both escapes named in the message actually work.
+  assert.equal(verdict({ north: '5', aUp: '0.5', vNorth: '1' }), true, 'adding a velocity');
+  assert.equal(verdict({ north: '5' }), true, 'clearing the acceleration');
+  // And the measured combinations are untouched.
+  assert.equal(verdict({ vNorth: '1', aUp: '0.5' }), true, 'velocity + acceleration');
+  assert.equal(verdict({ aUp: '0.5' }), true, 'acceleration alone');
+});
+
+test('mavlink-move: Steer cannot be set to the confirm tier', () => {
+  // The dialog never offers it — DELIVERY_OPTIONS.steer is build/send/stream —
+  // but a hand-edited flow can hold it, and the runtime falls through to the
+  // Send branch and reports `sent`. True of the wire, misleading about the
+  // tier. Both fields are known at deploy, so the editor says so.
+  const { delivery } = loadNodeDefaults('mavlink-move');
+  const verdict = (over) => delivery.validate.call(
+    Object.assign({ id: 'm1' }, over), over.delivery, {}
+  );
+
+  assert.equal(delivery.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+  assert.match(String(verdict({ action: 'steer', delivery: 'confirm' })), /Steer cannot confirm/);
+  assert.equal(verdict({ action: 'goto', delivery: 'confirm' }), true, 'Go to has an ack to wait for');
+  for (const tier of ['build', 'send', 'stream']) {
+    assert.equal(verdict({ action: 'steer', delivery: tier }), true, `steer + ${tier} is offered`);
+  }
+  // A config with no action parses as steer (resolveMoveAction), so it reds too.
+  assert.match(String(verdict({ delivery: 'confirm' })), /Steer cannot confirm/);
 });

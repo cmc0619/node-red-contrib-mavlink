@@ -330,15 +330,22 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the
   // Yaw rides any mode by presence — it does not change the derived group.
   assert.equal(deriveSteerMode(g({ velocity: filled, yaw: 90 })), 'velocity');
 
-  // Acceleration composes. The wire always allowed it — one ignore bit per
-  // group — and ArduPilot implements the mixes as named guided submodes
-  // (PosVelAccel / VelAccel, §14 source read). The refusal that used to live
-  // here was reading a gap in the MODES table as a rule about the protocol.
-  assert.equal(deriveSteerMode(g({ accel: filled, position: filled })), 'position-acceleration');
+  // Acceleration composes where the firmware names the mix: VelAccel and
+  // PosVelAccel are real ArduPilot guided submodes (§14 source read), so
+  // those two derive. The wire has one ignore bit per group either way.
   assert.equal(deriveSteerMode(g({ accel: filled, velocity: filled })), 'velocity-acceleration');
   assert.equal(
     deriveSteerMode(g({ position: filled, velocity: filled, accel: filled })),
     'position-velocity-acceleration'
+  );
+  // Position + acceleration WITHOUT velocity is the one mix with no named
+  // submode and no §14 measurement — unmeasured stays off the surface (the
+  // terrain-frame precedent). It refuses loud, here at derivation, because
+  // the operator never typed a mode name for "unknown mode" to make sense of,
+  // and a setpoint's missing ack would otherwise make the failure symptomless.
+  assert.throws(
+    () => deriveSteerMode(g({ accel: filled, position: filled })),
+    /position \+ acceleration needs a velocity too/
   );
   // Nothing filled derives yaw-only, which with no yaw is the all-ignore
   // packet (§14 / #115). It used to refuse; the editor requires at least one

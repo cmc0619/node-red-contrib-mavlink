@@ -101,10 +101,6 @@
     change_speed:  [{ index: 1 },
                     { index: 2, label: 'Speed (blank = no change)' },
                     { index: 3, label: 'Throttle (blank = no change)' }],
-    yaw:           [{ index: 1 }, { index: 2 },
-                    { index: 3, label: 'Direction (-1=CCW 0=CW)' }],
-    rotate:        [{ index: 1 }, { index: 2 },
-                    { index: 3, label: 'Direction (-1=CCW 0=CW)' }],
     orbit:         [{ index: 1 },
                     { index: 2, label: 'Velocity (blank = default)' },
                     { index: 3 },
@@ -269,7 +265,22 @@
     {
       name:              { value: '' },
       mode:              { value: 'preset' },
-      preset:            { value: 'arm' },
+      // The dropdown cannot produce an unknown preset; a hand-edited flow can.
+      // The runtime does not repair it (AGENTS.md, input trust) — `getPreset`
+      // returns undefined, `resolveCommandId` yields null, and the node builds
+      // and sends MAV_CMD(null), then reports success. A false success is a
+      // different animal from garbage-out, and this is the layer that can tell
+      // the difference: PRESET_PARAMS enumerates exactly the offered presets
+      // (drift-tested against the library), so the check is synchronous and
+      // needs no catalog fetch. Advanced mode has its own field and rule.
+      preset: {
+        value: 'arm',
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-mode', this.mode, 'preset') !== 'preset') return true;
+          return Object.prototype.hasOwnProperty.call(PRESET_PARAMS, v)
+            || 'is not a preset this palette offers — pick one from the list';
+        },
+      },
       // Advanced mode's command *is* the message — blank builds MAV_CMD(null)
       // and sends it. Config validity is the editor's verdict (§6), so this is
       // the only thing standing between a half-filled dialog and the wire.

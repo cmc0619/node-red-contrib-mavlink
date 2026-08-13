@@ -172,7 +172,9 @@ test('PRESET_PARAMS is curation-only — the dialect catalog is the data source'
     'the only curated units are lat/lon deg — the XML leaves those unitless (carrier-dependent)');
   // Curation that XML cannot know stays.
   assert.match(table, /request_message:[\s\S]*messages:\s*true/, 'message-picker flags are curation');
-  assert.match(table, /label:\s*'Direction \(-1=CCW 0=CW\)'/, 'operator-guidance labels are curation');
+  // Blank-means-what guidance is the clearest case: the XML declares the
+  // param, but only the preset row knows what leaving it empty transmits.
+  assert.match(table, /label:\s*'Speed \(blank = no change\)'/, 'operator-guidance labels are curation');
   // Guidance that only made sense on a number box goes when the control does:
   // Force and Use Current render as checkboxes now, and the XML already calls
   // them 'Force' and 'Use Current'.
@@ -748,4 +750,41 @@ test('mavlink-command: a NaN centre cannot ride COMMAND_INT', () => {
   // leaves param5/6 out of blankParams, so its blank coordinates are 0-fills,
   // not sentinels, and int carries them.
   assert.equal(verdict({ preset: 'takeoff', sendAs: 'int' }, {}), true);
+});
+
+test('mavlink-command: PRESET_PARAMS covers exactly the presets the dropdown offers', () => {
+  // Third mirrored rule, and the one that had already drifted: it carried
+  // curation rows for `yaw` and `rotate`, presets deleted from the library
+  // entirely when Move took the motion intents. Dead rows are cheap to ignore
+  // until something reads the table as authoritative — which the `preset`
+  // validator below now does, so the equality has to be executed.
+  const { PRESETS } = require('../../lib/command');
+  const table = /const PRESET_PARAMS = \{[\s\S]*?\n {2}\};/.exec(html);
+  assert.ok(table, 'PRESET_PARAMS must be extractable');
+
+  const fromEditor = [...table[0].matchAll(/^\s{4}(\w+):/gm)].map((m) => m[1]).sort();
+  const offered = PRESETS.filter((p) => p.listed !== false).map((p) => p.id).sort();
+  assert.deepEqual(fromEditor, offered, 'every offered preset has a row, and no row outlives its preset');
+});
+
+test('mavlink-command: an unknown preset reds instead of sending MAV_CMD(null)', () => {
+  // The dropdown cannot produce one; a hand-edited flow can. The runtime
+  // trusts what it is handed and sends `command: null`, reporting success —
+  // so this is the only layer that can tell a typo from a command.
+  const { preset } = loadNodeDefaults('mavlink-command');
+  const verdict = (over) => preset.validate.call(
+    Object.assign({ id: 'c1', mode: 'preset' }, over), over.preset, {}
+  );
+
+  assert.equal(preset.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+  assert.match(String(verdict({ preset: 'bogus' })), /not a preset this palette offers/);
+  assert.equal(verdict({ preset: 'arm' }), true, 'a real preset passes');
+  assert.equal(verdict({ preset: 'set_home' }), true);
+  // Deleted presets are unknown like any other typo — Move owns motion now.
+  for (const dead of ['yaw', 'rotate', 'reposition']) {
+    assert.match(String(verdict({ preset: dead })), /not a preset this palette offers/,
+      `${dead} is not a Command preset any more`);
+  }
+  // Advanced mode never reads the field, so it must not red there.
+  assert.equal(verdict({ mode: 'advanced', preset: 'bogus' }), true);
 });

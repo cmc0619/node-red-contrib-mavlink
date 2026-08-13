@@ -63,7 +63,21 @@
     {
       name: { value: '' },
       identity: { value: '' },
-      delivery: { value: 'build' },
+      // The dialog only ever offers the tiers DELIVERY_OPTIONS lists for the
+      // chosen action, so a Steer node cannot be *set* to confirm through the
+      // UI. A hand-edited flow can hold one, and the runtime does not refuse
+      // it (AGENTS.md, input trust) — it falls through to the Send branch and
+      // reports `sent`, which is true of the wire and misleading about the
+      // tier. The editor knows both fields at deploy, so it says so here.
+      delivery: {
+        value: 'build',
+        validate: function (v, _opt) {
+          if (v !== 'confirm') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'steer') return true;
+          return 'Steer cannot confirm — a setpoint carries no COMMAND_ACK, so there is '
+            + 'nothing to wait for. Use Send, or switch the action to Go to';
+        },
+      },
       // Action × Delivery derives the wire (§6 redesign, 2026-08-12): the
       // operator states an intent; carrier, message name, frame number, and
       // mask are code. goto = the acked guided goto (DO_REPOSITION as
@@ -84,13 +98,25 @@
           var filled = function (names) {
             return names.some(function (n) { return !RED.mavlink.isBlank(fieldValue(owner, n)); });
           };
-          // Any combination of groups is a mode — the type_mask carries an
-          // independent ignore bit per group, and ArduPilot implements the
-          // mixes as named guided submodes (§14). So the only rule left is
-          // that *something* is filled.
-          if (filled(['north', 'east', 'up'])) return true;
-          if (filled(['vNorth', 'vEast', 'vUp'])) return true;
-          if (filled(['aNorth', 'aEast', 'aUp'])) return true;
+          var hasPos = filled(['north', 'east', 'up']);
+          var hasVel = filled(['vNorth', 'vEast', 'vUp']);
+          var hasAcc = filled(['aNorth', 'aEast', 'aUp']);
+          // Position + acceleration with no velocity is the one combination
+          // the wire vocabulary does not carry (lib/move/frames.js MODES): no
+          // named ArduPilot guided submode, no §14 measurement either way. A
+          // setpoint gets no ack, so if the source read is right the operator
+          // sees "sent" while the vehicle holds — the failure mode with no
+          // symptom. Adding a velocity makes it a measured submode; so does
+          // clearing the acceleration.
+          if (hasPos && hasAcc && !hasVel) {
+            return 'position + acceleration needs a velocity too — that pair alone has no '
+              + 'guided submode on ArduPilot and is unmeasured (§14), and a setpoint carries '
+              + 'no ack to tell you it was ignored';
+          }
+          // Every other combination is a mode: the type_mask carries an
+          // independent ignore bit per group. So the rule left is that
+          // *something* is filled.
+          if (hasPos || hasVel || hasAcc) return true;
           if (filled(['yaw', 'yawRate'])) return true;
           return 'Steer needs at least one field filled — a position, a velocity, '
             + 'an acceleration, or a yaw';
