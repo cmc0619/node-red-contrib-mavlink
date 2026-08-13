@@ -558,6 +558,20 @@ test('mavlink-command: preset coordinates are checked here, and nowhere else', (
   assert.match(String(verdict({ preset: 'set_home', sendAs: 'long', frame: '1' }, far)), /within ±90°/,
     'the LONG carrier has no frame — degrees apply whatever the stale field says');
 
+  // requireAltitude — the branch only `reposition` declares. It is not dead
+  // code despite being off the dropdown: a saved reposition node validates
+  // through here at deploy with the dialog closed, which is exactly what
+  // examples/sitl/23-ap-int-carrier-goto.json and 29-int-carrier-goto.json
+  // are. DO_REPOSITION documents no blank-altitude sentinel, so a zero-fill is
+  // ground level (or below it at MSL) — the Move F1 rule on the command path.
+  assert.match(String(verdict({ preset: 'reposition' }, { 5: 47.4, 6: 8.5 })), /needs an altitude/,
+    'lat/lon without an altitude reds');
+  assert.match(String(verdict({ preset: 'reposition' }, {})), /needs a latitude and longitude/,
+    'the location rule still comes first');
+  assert.equal(verdict({ preset: 'reposition' }, { 5: 47.4, 6: 8.5, 7: 20 }), true, 'complete passes');
+  assert.equal(verdict({ preset: 'reposition' }, { 5: 47.4, 6: 8.5, 7: 0 }), true,
+    'an explicit 0 altitude is a commanded value, not a blank');
+
   // Gates: Advanced never reads the preset rules, and an unreadable blob reds
   // rather than falling open.
   assert.equal(verdict({ mode: 'advanced', preset: 'orbit' }, {}), true);
