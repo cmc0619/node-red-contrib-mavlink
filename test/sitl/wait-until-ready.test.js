@@ -248,12 +248,19 @@ test('02 requires AP mission/fence/rally success plus a loud PX4 fence failure (
   assert.equal(pass.status, 'PASS');
   assert.equal(isSpecializedPass(pass), true);
 
-  // A deadline abort is the same loud answer with different words — the
-  // transfer machine settles it as phase 'aborted'.
-  const timedOut = ok.slice(0, 3).concat(
-    row('debug:px4 fence status', 'failed', "phase: 'aborted'\nreason: 'no progress for 60000 ms'")
-  );
-  assert.equal(verdictFrom(profile, { debug: timedOut, errors: [] }, '').status, 'PASS');
+  // A bounded abort is the same loud answer with different words — the
+  // transfer machine settles the no-progress deadline and the retry ceiling
+  // as phase 'aborted', with reasons spelled by transfer.js.
+  for (const reason of [
+    'no progress at count for 90000 ms (transfer deadline)',
+    'stalled at count after 4 retries',
+  ]) {
+    const bounded = ok.slice(0, 3).concat(
+      row('debug:px4 fence status', 'failed', `phase: 'aborted'\nreason: '${reason}'`)
+    );
+    assert.equal(verdictFrom(profile, { debug: bounded, errors: [] }, '').status, 'PASS',
+      `${reason} is a measured bound`);
+  }
 
   // A missing PX4 row is not a measurement.
   const missing = ok.slice(0, 3);
@@ -262,7 +269,15 @@ test('02 requires AP mission/fence/rally success plus a loud PX4 fence failure (
   // Neither is a row that died before the mission protocol ran: an empty
   // upload, a connection fault — `failed` with a non-transfer phase measured
   // nothing, and must not PASS on the AP rows' coattails (Codex, #287).
-  for (const excerpt of ["phase: 'empty'", "phase: 'error'\nreason: 'requires a Connection'"]) {
+  // A synchronous send failure wears phase 'aborted' too (start() and the
+  // retry path both settle a throwing send that way), so the phase alone is
+  // not the discriminator — the reason is (Codex, #287, round 2).
+  for (const excerpt of [
+    "phase: 'empty'",
+    "phase: 'error'\nreason: 'requires a Connection'",
+    "phase: 'aborted'\nreason: 'count send failed: bulk queue saturated'",
+    "phase: 'aborted'\nreason: 'start send failed: connection closed'",
+  ]) {
     const preProtocol = ok.slice(0, 3).concat(row('debug:px4 fence status', 'failed', excerpt));
     assert.notEqual(verdictFrom(profile, { debug: preProtocol, errors: [] }, '').status, 'PASS',
       `${excerpt.split('\n')[0]} is not a mission-protocol measurement`);

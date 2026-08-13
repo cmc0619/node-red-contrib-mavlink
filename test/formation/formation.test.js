@@ -208,6 +208,26 @@ test('formationTargets refuses a missing anchor altitude rather than defaulting 
   }
 });
 
+test('formationTargets refuses blank anchor coordinates rather than defaulting to null island', () => {
+  // Same three-state rule as altitude: blank (undefined/null/'') is "not
+  // given", not a value — Number(null) and Number('') are 0, and lat/lon 0,0
+  // would silently send the fleet to null island (Codacy, #287).
+  for (const blank of [undefined, null, '']) {
+    assert.throws(
+      () => formationTargets({
+        shape: 'line', spacing: 10, anchor: { lat: blank, lon: 8, alt: 30 }, sysids: [1],
+      }),
+      /needs an anchor/
+    );
+    assert.throws(
+      () => formationTargets({
+        shape: 'line', spacing: 10, anchor: { lat: 47, lon: blank, alt: 30 }, sysids: [1],
+      }),
+      /needs an anchor/
+    );
+  }
+});
+
 test('sysid entries are trusted input: Number() coercion, never a refusal', () => {
   // A non-numeric entry coerces to NaN and flows through — garbage on a
   // trusted surface is the flow author's to fix, not the driver's to refuse.
