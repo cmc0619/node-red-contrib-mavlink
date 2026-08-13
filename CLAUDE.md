@@ -13,6 +13,13 @@ be lost that way are repeated here, in context, where they cannot be missed.
 diff size buries the number that matters; the runtime delta is what the net-code-budget
 rule (`AGENTS.md`) governs.
 
+**Run the bot gauntlet locally before you push.** (`AGENTS.md:66`, owner standing order,
+2026-08-13) Every push to a reviewed branch re-runs six review bots against a metered org cap. The
+churn is the cost: self-review the diff with their lenses *first* — regenerated `seed/` artifacts,
+union/merge boundaries where new metadata acts, editor hand-edit and out-of-range and stale-widget
+paths, wire limits in both spellings — and fix what you find before pushing, not after. `npm test`
+and `npm run lint` are the floor, not the gauntlet. Target a first bot round that finds nothing.
+
 **PRs are opened as drafts. Only the repo owner marks them ready.** (`AGENTS.md:57`) Bot
 reviews are a finite resource and the org has a spending cap; a ready-for-review PR spends
 it on work in progress. A `PreToolUse` hook in `.claude/settings.json` enforces this and

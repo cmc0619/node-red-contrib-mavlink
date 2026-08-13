@@ -58,9 +58,30 @@ the PR current, and stop. The repo owner reviews the code and merges when satisf
 resource; never spend them on work-in-progress. Open every PR as a draft and keep pushing to
 it while iterating. The boundary is absolute: an agent never flips a PR to ready-for-review —
 not when the work looks done, not when tests are green, not when told to "wrap up." The owner
-flips it when they're satisfied, and that flip is what triggers the reviewers (today:
-**CodeRabbit**, **Codex** (`chatgpt-codex-connector`), and sometimes
-**GitHub Advanced Security** / CodeQL inline comments — Greptile is gone).
+flips it when they're satisfied, and that flip is what triggers the reviewers (measured on #296,
+2026-08-13: **CodeRabbit**, **Codex** (`chatgpt-codex-connector`), **Sourcery**, **Gitar**,
+**Codacy** and **DeepSource** all review, and sometimes **GitHub Advanced Security** / CodeQL
+inline comments — Greptile is gone).
+
+**Run the bot gauntlet locally before you push.** (owner standing order, 2026-08-13) Every push to
+a reviewed branch re-runs all six reviewers against an org spending cap CodeRabbit has already hit
+this week, so the review they would give is one you owe yourself first: re-read your own diff
+wearing their lenses, fix what you find, and let the push spend one round instead of three.
+`npm test` and `npm run lint` are the floor, not the gauntlet — `/code-review` at high effort is
+the local stand-in for the reading. The lenses that have actually caught things here:
+
+- **Generated artifacts go stale silently.** A parser that learns a new field leaves every
+  committed blob under `seed/` without it. #296 shipped a bitmask picker that could never render
+  on a fresh install — 30,938 definitions, zero `bits` — until the seed was regenerated.
+- **Union and merge boundaries.** New metadata that *acts* must be listed where "whichever
+  document came first wins" is a wrong answer, not just where it is parsed (`unionSafe()`).
+- **Editor round-trips, not just the happy click.** Every field the operator can *type* into has a
+  hand-edited state, an out-of-range state, and a stale-widget state. All three were findings.
+- **Wire limits in both spellings.** int32/uint8 edges, and the signed and unsigned readings of
+  the same bits.
+
+The target is a first bot round that finds nothing. Three pushed rounds on #296 were all findable
+from the repo alone.
 
 **Bot feedback is event-driven or timer-driven, never blocking.** After the owner marks a PR
 ready, do not sit waiting for reviewers and do not busy-poll. If the environment supports
