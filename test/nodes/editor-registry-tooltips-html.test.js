@@ -215,17 +215,23 @@ test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
     each() {},
     val(value) { written[selector] = value; return this; },
   });
-  const save = new Function('$', body);
+  // The scrape itself is shared with the params validator and tested there
+  // (command-html.test.js); what is under test here is the guard in front of
+  // it, so it is injected as a stub that reports an empty form.
+  let scraped = 0;
+  const scrapeStub = () => { scraped += 1; return {}; };
+  const save = new Function('$', 'scrapeParamInputs', body);
 
   // Premature Done: the form never rendered → the hidden field is left alone,
   // so Node-RED's edit pane copies the dialog-open params straight back.
   written = {};
-  save.call({ _mavParamsRendered: false }, $stub);
+  save.call({ _mavParamsRendered: false }, $stub, scrapeStub);
   assert.deepEqual(written, {}, 'premature save writes nothing');
+  assert.equal(scraped, 0, 'and the form is never even read');
 
   // A rendered zero-param form legitimately saves {}.
   written = {};
-  save.call({ _mavParamsRendered: true }, $stub);
+  save.call({ _mavParamsRendered: true }, $stub, scrapeStub);
   // The scrape must land in the hidden input: Node-RED runs oneditsave and
   // then overwrites node.params from `#node-input-params`, so a save that
   // only assigns `this.params` is discarded.

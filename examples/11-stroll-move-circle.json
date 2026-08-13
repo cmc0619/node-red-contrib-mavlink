@@ -12,7 +12,7 @@
         "type": "comment",
         "z": "ex11-tab",
         "name": "Streamed circle via Move",
-        "info": "No arc primitive \u2014 Function computes lat/lon ring points (\u00a7 coordinate frames). Move action Go to (altitude above home), delivery stream @ 5 Hz, TTL 1500 ms. Stop inject sends payload:false; letting injects stop also lets TTL expire. SITL bind 14550 \u2192 14551.",
+        "info": "No arc primitive \u2014 Function computes lat/lon ring points (\u00a7 coordinate frames). Move action Go to (altitude above home), delivery stream @ 5 Hz, TTL 1500 ms. The 0.2 s tick only emits while flow.circling is true: \u25ef Fly circle sets it, \u25a0 Stop circle clears it and sends {action:\"stop\"}, then TTL lets the setpoint lapse. SITL bind 14550 \u2192 14551.",
         "x": 180,
         "y": 40,
         "wires": []
@@ -178,7 +178,7 @@
         "type": "function",
         "z": "ex11-tab",
         "name": "Ring points",
-        "func": "// Ring setpoint generator \u2014 no arc primitive; the ring is flow-author maths.\n// The Move node's action (goto) and altitude reference (above home) live in\n// its config; the payload carries only the coordinates.\n//\n// The gate matters as much as the maths: this inject repeats every 0.2 s, so\n// without it the Stop button is overwritten within 200 ms and the circle\n// never ends. Stop clears the flag; this returns null and the stream's TTL\n// (1500 ms) lets it lapse.\nif (flow.get('circling') === false) { return null; }\nflow.set('circling', true);\nconst R = 100;\nconst alt = 20;\nconst c_lat = -35.363261;\nconst c_lon = 149.165230;\nlet theta = context.get('theta') || 0;\ntheta += Math.PI / 18;\ncontext.set('theta', theta);\nconst lat = c_lat + (R * Math.sin(theta)) / 111320;\nconst lon = c_lon + (R * Math.cos(theta)) / (111320 * Math.cos(c_lat * Math.PI / 180));\nmsg.payload = {\n    position: { lat, lon, alt }\n};\nreturn msg;\n",
+        "func": "// Ring setpoint generator \u2014 no arc primitive; the ring is flow-author maths.\n// The Move node's action (goto) and altitude reference (above home) live in\n// its config; the payload carries only the coordinates.\n//\n// The gate matters as much as the maths. A 0.2 s inject drives this whether\n// or not anyone asked to fly, so the flag is what makes the buttons real:\n// Fly circle sets it, Stop clears it and sends the stop, and every tick in\n// between returns null so the stream's TTL (1500 ms) lets the setpoint lapse.\n// Nothing on this repeating path may set the flag \u2014 doing so overwrote Stop\n// within 200 ms and the circle never ended.\nif (flow.get('circling') !== true) { return null; }\nconst R = 100;\nconst alt = 20;\nconst c_lat = -35.363261;\nconst c_lon = 149.165230;\nlet theta = context.get('theta') || 0;\ntheta += Math.PI / 18;\ncontext.set('theta', theta);\nconst lat = c_lat + (R * Math.sin(theta)) / 111320;\nconst lon = c_lon + (R * Math.cos(theta)) / (111320 * Math.cos(c_lat * Math.PI / 180));\nmsg.payload = {\n    position: { lat, lon, alt }\n};\nreturn msg;\n",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -257,7 +257,7 @@
         "id": "ex11-inject-circle",
         "type": "inject",
         "z": "ex11-tab",
-        "name": "\u25ef Fly circle",
+        "name": "\u25ef circle tick (0.2 s)",
         "props": [
             {
                 "p": "payload"
@@ -274,6 +274,31 @@
         "y": 220,
         "wires": [
             [
+                "ex11-fn-ring"
+            ]
+        ]
+    },
+    {
+        "id": "ex11-inject-fly",
+        "type": "inject",
+        "z": "ex11-tab",
+        "name": "\u25ef Fly circle",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 120,
+        "y": 280,
+        "wires": [
+            [
                 "ex11-fly-gate"
             ]
         ]
@@ -286,8 +311,8 @@
         "props": [
             {
                 "p": "payload",
-                "v": "false",
-                "vt": "bool"
+                "v": "{\"action\":\"stop\"}",
+                "vt": "json"
             }
         ],
         "repeat": "",
@@ -351,8 +376,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 270,
-        "y": 220,
+        "x": 320,
+        "y": 280,
         "wires": [
             [
                 "ex11-fn-ring"

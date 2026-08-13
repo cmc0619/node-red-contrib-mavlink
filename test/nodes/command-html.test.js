@@ -139,12 +139,15 @@ test('a saved enum value the table lacks survives open-and-save (Codex #198)', (
 });
 
 test('advanced bitmask command params save one numeric mask value', () => {
+  // The scrape is shared with the params validator, so it is read here rather
+  // than inside `oneditsave` — one function, one set of typed reads, and no
+  // way for Done to write a value the validator never judged.
   const saver = html.slice(
-    html.indexOf('oneditsave: function'),
-    html.indexOf('oneditcancel: function')
+    html.indexOf('function scrapeParamInputs'),
+    html.indexOf('function paramValues')
   );
 
-  assert.match(saver, /data-kind['"]\)\s*===\s*['"]bitmask['"]/, 'save path detects bitmask controls');
+  assert.match(saver, /kind\s*===\s*['"]bitmask['"]/, 'save path detects bitmask controls');
   // The fold itself — multi-select normalisation and the BigInt OR — lives in
   // the shared helper and is tested there (mavlink-editor-resource.test.js).
   assert.match(saver, /RED\.mavlink\.bitmaskFromSelection\(raw\)/, 'the fold comes from the shared helper');
@@ -531,7 +534,9 @@ test('mavlink-command: preset coordinates are checked here, and nowhere else', (
   // NaN as "use current vehicle position", so a blank centre means "orbit
   // where I am" and must not red. examples/10-sunday-stroll.json ships
   // exactly that, and could not fly while orbit carried requireLocation.
-  assert.equal(verdict({ preset: 'orbit' }, {}), true, 'a blank orbit centre is "here"');
+  // The carrier is the one thing a blank orbit centre still depends on — NaN
+  // needs COMMAND_LONG, checked by its own test below.
+  assert.equal(verdict({ preset: 'orbit', sendAs: 'long' }, {}), true, 'a blank orbit centre is "here"');
   assert.equal(verdict({ preset: 'orbit' }, { 5: 47.4, 6: 8.5 }), true, 'a placed orbit is fine too');
   // Set Home's param1 = 1 is "use current position" — the vehicle ignores the
   // coordinates, so blank is correct rather than dangerous.
@@ -594,11 +599,14 @@ test('mavlink-command: the editor\'s location rules match the library\'s, exactl
     .filter((p) => p.requireLocation)
     .map((p) => p.id)
     .sort();
-  const fromEditor = [...map[0].matchAll(/^\s{4}(\w+):/gm)].map((m) => m[1]).sort();
+  // Line-anchored, not indentation- or nesting-counted: an entry's value is
+  // the rest of its line, so `set_home`'s three nested braces read the same as
+  // `reposition`'s one, and a reformat cannot quietly stop matching.
+  const fromEditor = [...map[0].matchAll(/^\s+(\w+):\s*\{/gm)].map((m) => m[1]).sort();
   assert.deepEqual(fromEditor, fromLibrary, 'the same presets require a location on both sides');
 
   for (const preset of PRESETS.filter((p) => p.requireLocation)) {
-    const entry = new RegExp(`${preset.id}:\\s*\\{([^}]*\\}?[^}]*)\\}`).exec(map[0]);
+    const entry = new RegExp(`^\\s+${preset.id}:\\s*(.+)$`, 'm').exec(map[0]);
     assert.ok(entry, `${preset.id} entry must be extractable`);
     assert.equal(
       /altitude:\s*true/.test(entry[1]),
@@ -613,4 +621,111 @@ test('mavlink-command: the editor\'s location rules match the library\'s, exactl
       `${preset.id}: the conditional-vs-always form must agree`
     );
   }
+});
+
+test('mavlink-command: NAN_CENTRE_PRESETS matches the library\'s NaN param5/6 sentinels', () => {
+  // Second mirrored rule, same deal as PRESET_LOCATION: the editor cannot wait
+  // on the async catalog, so it carries its own copy and this compares them.
+  // A preset that starts encoding a blank centre as NaN — or stops — must land
+  // on both sides or fail here.
+  const { PRESETS } = require('../../lib/command');
+  const set = /const NAN_CENTRE_PRESETS = new Set\(\[([^\]]*)\]\);/.exec(html);
+  assert.ok(set, 'NAN_CENTRE_PRESETS must be extractable');
+  const fromEditor = [...set[1].matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
+
+  const fromLibrary = PRESETS
+    .filter((p) => {
+      const blank = p.blankParams || {};
+      return Number.isNaN(blank[5]) || Number.isNaN(blank[6]);
+    })
+    .map((p) => p.id)
+    .sort();
+
+  assert.deepEqual(fromEditor, fromLibrary, 'the same presets carry a NaN centre on both sides');
+  assert.ok(fromLibrary.length, 'the rule is not vacuous — at least one preset uses the sentinel');
+});
+
+test('mavlink-command: the params validator reads the live form the way Done writes it', () => {
+  // The validator and `oneditsave` share one scrape (`scrapeParamInputs`)
+  // because they must agree: a validator that judged different values than
+  // Done writes either reds a config the operator cannot fix, or passes one
+  // that cannot be sent.
+  //
+  // The controls are not all text boxes. A checkbox built by
+  // `booleanEnumInput` carries no value attribute, so `.val()` is the literal
+  // string "on" whether ticked or not, and `Number("on")` is NaN — which read
+  // Set Home's ticked "use current position" as 0 and demanded coordinates the
+  // vehicle was about to ignore. A multi-select's `.val()` is an array, NaN by
+  // the same route. `data-kind` is what distinguishes them (CodeRabbit, #286).
+  const live = (items) => loadNodeDefaults('mavlink-command', {}, {
+    dom: { '#node-input-params': { val: '{}' }, '.param-input': { items } },
+    editStack: [{ id: 'c1' }],
+  }).params;
+  const node = { id: 'c1', mode: 'preset', preset: 'set_home', _mavParamsRendered: true };
+
+  // Ticked "use current position": the escape the coordinates hang on.
+  assert.equal(
+    live([{ val: 'on', checked: true, attrs: { 'data-idx': '1', 'data-kind': 'boolean', 'data-true': '1' } }])
+      .validate.call(node, '{}', {}),
+    true,
+    'a ticked boolean reads as its data-true, not NaN'
+  );
+  // Unticked reads 0 — same "on" from `.val()`, opposite answer.
+  assert.match(
+    String(live([{ val: 'on', checked: false, attrs: { 'data-idx': '1', 'data-kind': 'boolean', 'data-true': '1' } }])
+      .validate.call(node, '{}', {})),
+    /needs a latitude and longitude/,
+    'an unticked boolean is 0, which is still "no"'
+  );
+  // A number field still reads as a number, and the live form beats the blob.
+  assert.equal(
+    live([
+      { val: '47.4', attrs: { 'data-idx': '5' } },
+      { val: '8.5', attrs: { 'data-idx': '6' } },
+    ]).validate.call(node, '{}', {}),
+    true,
+    'live coordinates pass even though the saved blob is empty'
+  );
+});
+
+test('mavlink-command: a form that rendered nothing falls back to the saved params', () => {
+  // `_mavParamsRendered` is the same authority `oneditsave` scrapes behind,
+  // and for the same reason: a dialog can be open over a form that rendered
+  // no controls — the catalog is still loading, or the saved preset is one the
+  // palette no longer offers (the `listed: false` branch). Scraping zero
+  // fields there reads as "every param is blank" and reds a node whose saved
+  // params are perfectly intact (Codex, #286).
+  const saved = JSON.stringify({ 5: 47.4, 6: 8.5, 7: 20 });
+  const open = (over) => loadNodeDefaults('mavlink-command', {}, {
+    dom: { '#node-input-params': { val: saved }, '.param-input': { items: [] } },
+    editStack: [{ id: 'c1' }],
+  }).params.validate.call(
+    Object.assign({ id: 'c1', mode: 'preset', preset: 'reposition' }, over), saved, {}
+  );
+
+  assert.equal(open({ _mavParamsRendered: false }), true, 'nothing rendered: judge the saved blob');
+  assert.equal(open({}), true, 'the flag absent entirely is the same case');
+  assert.match(String(open({ _mavParamsRendered: true })), /needs a latitude and longitude/,
+    'a real form that is genuinely empty still reds — the flag is the whole difference');
+});
+
+test('mavlink-command: a NaN centre cannot ride COMMAND_INT', () => {
+  // DO_ORBIT documents NaN in param5/6 as "orbit where I am", and int32 has no
+  // NaN — `longToIntFields` refuses the pair at build. Both halves are editor
+  // fields, so the operator meets it at deploy rather than on the first
+  // message (Codex, #286).
+  const { params } = loadNodeDefaults('mavlink-command');
+  const verdict = (over, blob) => params.validate.call(
+    Object.assign({ id: 'c1', mode: 'preset', preset: 'orbit' }, over), JSON.stringify(blob), {}
+  );
+
+  assert.match(String(verdict({}, {})), /COMMAND_INT cannot carry/,
+    'int is the default carrier, so a blank centre reds out of the box');
+  assert.match(String(verdict({ sendAs: 'int' }, { 5: 47.4 })), /COMMAND_INT cannot carry/, 'half a centre too');
+  assert.equal(verdict({ sendAs: 'long' }, {}), true, 'the LONG carrier can express NaN');
+  assert.equal(verdict({ sendAs: 'int' }, { 5: 47.4, 6: 8.5 }), true, 'a placed centre is finite');
+  // The rule is keyed on the preset, not on blankness in general: takeoff
+  // leaves param5/6 out of blankParams, so its blank coordinates are 0-fills,
+  // not sentinels, and int carries them.
+  assert.equal(verdict({ preset: 'takeoff', sendAs: 'int' }, {}), true);
 });

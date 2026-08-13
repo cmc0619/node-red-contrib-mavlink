@@ -276,9 +276,10 @@ module.exports = function registerMavlinkCommand(RED) {
 
       // Frame for the COMMAND_INT carrier (§9 "Coordinate frames"): shared
       // precedence chain — msg.mavFrame beats node config, blank falls to the
-      // carrier module's documented default (GLOBAL_RELATIVE_ALT, §14).
-      // Resolved before getParams so the location-range guard can exempt local
-      // frames (metres in param5/6) from the ±90/±180 degree check (#263).
+      // carrier module's documented default (GLOBAL_RELATIVE_ALT, §14). The
+      // ±90/±180 degree check that used to read it here is the editor's now —
+      // it is the frame the COMMAND_INT builder scales param5/6 by, nothing
+      // more.
       const frame = resolveFrame(msg.mavFrame, config.frame);
       const paramArray = getParams(msg.payload);
 

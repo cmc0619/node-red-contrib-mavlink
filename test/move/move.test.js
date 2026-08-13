@@ -112,10 +112,11 @@ test('yaw-only Move ignores every translation vector and requires yaw or yaw rat
   assert.equal(message.fields.yaw, Math.PI);
 
   // Both blank builds the all-ignore packet PX4 logs as invalid (§14 / #115).
-  // It no longer throws: deriveSteerMode only returns 'yaw-only' when one of
-  // them is present, so the node cannot reach this — the only caller that can
-  // is somebody using lib/move directly, and the driver does not refuse its
-  // own SDK (AGENTS.md, driver and protector).
+  // It no longer throws. The editor is what keeps a configured node off this
+  // packet — mavlink-move.html's `action` validator requires at least one
+  // Steer field — so what reaches it is a payload that blanked every group, or
+  // somebody using lib/move directly, and the driver does not refuse its own
+  // SDK or its own trusted msg (AGENTS.md, driver and protector).
   const allIgnore = buildMoveMessage({ mode: 'yaw-only', target: { sysid: 2, compid: 1 } });
   assert.equal(allIgnore.fields.type_mask, 7 + 56 + 448 + 1024 + 2048, 'every group ignored');
 });

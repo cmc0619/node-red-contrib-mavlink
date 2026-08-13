@@ -159,8 +159,11 @@ for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
 // vocabularies are coerced now rather than checked (AGENTS.md, input trust —
 // both are payload-overridable, and msg is trusted). What is left refuses for
 // reasons that are not about vetting operator input: an action the surface
-// does not define, a body frame with no firmware to derive it from, and a
-// steer with no field filled at all.
+// does not define, and a body frame with no firmware to derive it from — we
+// asked the vehicle what it is and got no answer, so there is no frame number
+// to pick. A steer with no field filled is not here any more: the editor
+// requires one (mavlink-move.html `action`), and a payload that blanks every
+// group builds the honest all-ignore packet.
 
 const REFUSED = [
   // The action vocabulary is closed: goto and steer, nothing else.

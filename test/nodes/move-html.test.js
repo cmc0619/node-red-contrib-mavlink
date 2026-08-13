@@ -642,3 +642,50 @@ test('mavlink-move: Steer must command something — any combination of groups c
   assert.equal(verdict({ north: '5', vNorth: '1', aUp: '0.5' }), true, 'all three together');
   assert.equal(verdict({ north: '5', vNorth: '1' }), true, 'position + velocity');
 });
+
+test('mavlink-move: clearing the last live Steer field reds while the dialog is open', () => {
+  // The saved-property path above is deploy-time. This is the other one: the
+  // dialog is open, the operator empties the box that was carrying the config,
+  // and the verdict has to follow the box, not the property behind it.
+  //
+  // That is why `fieldValue` reads through `ownDialogField` rather than
+  // `liveOr`. `liveOr` treats a blank live value as "no answer" and falls back
+  // to the saved one — right for a field that inherits, wrong here, where an
+  // empty box is the operator's answer. With `liveOr` a saved `north` would
+  // keep vouching for a form the operator has just emptied, and the node would
+  // deploy an all-ignore Steer that reported clean.
+  const open = (dom) => loadNodeDefaults('mavlink-move', {}, {
+    dom, editStack: [{ id: 'm1' }],
+  }).action;
+  const node = { id: 'm1', action: 'steer', north: '5', east: '0', up: '0' };
+
+  assert.match(
+    String(open({
+      '#node-input-north': { val: '' },
+      '#node-input-east': { val: '' },
+      '#node-input-up': { val: '' },
+    }).validate.call(node, 'steer', {})),
+    /needs at least one field filled/,
+    'cleared live boxes beat the saved triplet'
+  );
+  assert.equal(
+    open({
+      '#node-input-north': { val: '' },
+      '#node-input-east': { val: '' },
+      '#node-input-up': { val: '' },
+      '#node-input-vNorth': { val: '2' },
+    }).validate.call(node, 'steer', {}),
+    true,
+    'clearing position and typing a velocity is a legal switch of mode'
+  );
+  // Same DOM, no edit-stack entry: some *other* node's dialog is on top, so
+  // the live boxes are not this node's and the saved triplet stands (#217).
+  assert.equal(
+    loadNodeDefaults('mavlink-move', {}, {
+      dom: { '#node-input-north': { val: '' }, '#node-input-east': { val: '' }, '#node-input-up': { val: '' } },
+      editStack: [{ id: 'someone-else' }],
+    }).action.validate.call(node, 'steer', {}),
+    true,
+    'another dialog\'s fields are not this node\'s answer'
+  );
+});

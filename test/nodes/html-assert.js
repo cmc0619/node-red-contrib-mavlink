@@ -58,14 +58,18 @@ function assertChangeHandlerContains(html, binder, needle, msg) {
  *
  * The default DOM is empty, which is the state Node-RED validates in on import
  * and on deploy. `opts.dom` opens one dialog instead: keys are selectors,
- * values are `{ val, selectedText }`. Pair it with `opts.editStack` — the
- * live-read helpers consult a field only while the node under validation owns
- * the top of that stack (#217), so a dom without a matching stack entry is
- * still the closed-dialog state.
+ * values are `{ val, selectedText }`, or `{ items: [...] }` for a class
+ * selector that matches several controls — each item is
+ * `{ val, attrs, checked }` and `.each()` walks them, so a scrape of a
+ * rendered form runs for real instead of over an empty collection. Pair any of
+ * it with `opts.editStack` — the live-read helpers consult a field only while
+ * the node under validation owns the top of that stack (#217), so a dom
+ * without a matching stack entry is still the closed-dialog state.
  *
  * @param {string} nodeName  e.g. 'mavlink-build'
  * @param {object} [nodeLookup]  ids visible to RED.nodes.node()
- * @param {{dom?: Object<string,{val?: *, selectedText?: string}>,
+ * @param {{dom?: Object<string,{val?: *, selectedText?: string,
+ *   items?: Array<{val?: *, attrs?: object, checked?: boolean}>}>,
  *   editStack?: Array<{id: string}>}} [opts]
  * @returns {object} the registered `defaults`
  */
@@ -81,11 +85,43 @@ function loadNodeDefaults(nodeName, nodeLookup = {}, opts = {}) {
   const script = html.slice(open, end);
 
   const registered = {};
+
+  /**
+   * One member of a collection selector — the shape `$(this)` sees inside an
+   * `.each()`. Unlike the chainable stub below, `attr` and `is` answer rather
+   * than returning `this`: code that scrapes a rendered form reads a control's
+   * `data-kind`/`data-idx` and its checked state, and a stub that returned
+   * itself from `attr` would make every branch of that scrape untestable.
+   *
+   * @param {{val?: *, attrs?: Object<string,string>, checked?: boolean}} spec
+   */
+  function collectionMember(spec) {
+    const attrs = spec.attrs || {};
+    return {
+      length: 1,
+      val: () => spec.val,
+      attr: (name) => (Object.prototype.hasOwnProperty.call(attrs, name) ? attrs[name] : undefined),
+      is: (sel) => (sel === ':checked' ? !!spec.checked : false),
+      find() { return { length: 0 }; },
+      text() { return ''; },
+      prop() { return this; },
+      each() { return this; },
+    };
+  }
+
   function $(selector) {
+    // `$(this)` inside an `.each()` hands back an element, not a selector.
+    if (selector && typeof selector === 'object') return selector;
     const entry = Object.prototype.hasOwnProperty.call(dom, selector) ? dom[selector] : null;
-    const node = { length: entry ? 1 : 0, val() { return entry ? entry.val : undefined; },
+    const members = entry && entry.items ? entry.items.map(collectionMember) : null;
+    const node = { length: members ? members.length : (entry ? 1 : 0),
+      val() { return entry ? entry.val : undefined; },
       toggle() { return this; }, empty() { return this; },
-      append() { return this; }, on() { return this; }, each() { return this; },
+      append() { return this; }, on() { return this; },
+      each(fn) {
+        if (members) members.forEach((m, i) => fn.call(m, i, m));
+        return this;
+      },
       // Only `option:selected` carries text; anything else keeps the old
       // chainable-stub shape so unrelated dialog code still runs.
       find(sub) {
