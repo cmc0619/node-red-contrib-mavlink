@@ -101,7 +101,7 @@ function loadNodeDefaults(nodeName, nodeLookup = {}, opts = {}) {
       length: 1,
       val: () => spec.val,
       attr: (name) => (Object.prototype.hasOwnProperty.call(attrs, name) ? attrs[name] : undefined),
-      is: (sel) => (sel === ':checked' ? !!spec.checked : false),
+      is: (sel) => (sel === ':checked' ? Boolean(spec.checked) : false),
       find() { return { length: 0 }; },
       text() { return ''; },
       prop() { return this; },
@@ -113,7 +113,7 @@ function loadNodeDefaults(nodeName, nodeLookup = {}, opts = {}) {
     // `$(this)` inside an `.each()` hands back an element, not a selector.
     if (selector && typeof selector === 'object') return selector;
     const entry = Object.prototype.hasOwnProperty.call(dom, selector) ? dom[selector] : null;
-    const members = entry && entry.items ? entry.items.map(collectionMember) : null;
+    const members = entry?.items ? entry.items.map(collectionMember) : null;
     const node = { length: members ? members.length : (entry ? 1 : 0),
       val() { return entry ? entry.val : undefined; },
       toggle() { return this; }, empty() { return this; },
