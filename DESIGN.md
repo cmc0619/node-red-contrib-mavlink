@@ -4306,3 +4306,47 @@ the deleted BigInt codec pre-check (#287), and the bitmask picker's first two re
 rounds (#296).
 *Check:* `test/nodes/param-defs-editor.test.js` "bit-31 masks arrive spelled negative and
 leave the same way"; `lib/codec/mask.js` header for the operator ban.
+
+**A parameter's encoding is not discoverable, and a wide mask does not survive c-cast
+(SITL-measured, 2026-08-13).**
+*Wrong belief:* the `PARAM_ENCODE_*` capability bits let a vehicle declare how it carries
+integer parameters, so asking for `AUTOPILOT_VERSION` resolves the encoding for any stack; and
+a bitmask parameter round-trips intact as long as its value fits in int32.
+*Fact:* measured on ArduPilot Copter-4.7.0 SITL and PX4 1.18.0 SITL, raw pymavlink, raw bytes
+recorded and re-read independently after each set.
+
+Discovery half. Neither stack streams `AUTOPILOT_VERSION` unsolicited (60 s watch);
+`MAV_CMD_REQUEST_MESSAGE` (512) fetches it on both. PX4 reports `capabilities = 59647` with
+bit 4 `PARAM_ENCODE_BYTEWISE` set. **ArduPilot reports `capabilities = 64495` — neither
+encoding bit set.** So the capability rung can only ever *correct a PX4 hiding behind a
+non-PX4 label*; it can never identify ArduPilot, which stays reliant on the profile's firmware
+field. `HEARTBEAT.autopilot` carries that same correction unsolicited at 1 Hz and costs no
+request, so deriving firmware from HEARTBEAT (#297) subsumes the capability probe (#299) for
+every case either could fix.
+
+Fidelity half. ArduPilot is c-cast, PX4 is bytewise — the long-standing hypothesis, now
+measured. What breaks under c-cast is **bit span, not magnitude**: float32 carries 24 mantissa
+bits, so `-1` (all 32 bits) and `-2147483648` (−2³¹, a power of two) survive *exactly*, while
+`16777217` (bits 24+0) stores as `16777216` and `-2147483647` (bits 31+0) stores as
+`-2147483648`. The loss is in storage, not just the echo — an independent re-read after
+reconnect returns the truncated value. A bitmask parameter is precisely a sparse mask over a
+wide range, so "ESC 1 and ESC 32" is the shape that cannot be set on ArduPilot at all.
+
+The sharp end is not the loss, it is that the loss reports success. `matchesParamEcho` applies
+float32 tolerance whenever the wire is not bytewise-int (correctly — a c-cast value really did
+pass through a float), so a request for `-2147483647` is *confirmed* by a stored
+`-2147483648`: `Math.fround` collapses them. The toolkit currently reports a clean set for a
+mask that silently lost a bit.
+
+Sending the wrong encoding corrupts silently in both directions, and asymmetrically.
+Bytewise → ArduPilot: the tiny denormal casts to **0**, so the parameter is zeroed rather than
+refused; the one exception is bytewise `-1`, whose bit pattern is NaN, which ArduPilot ignores
+outright (no echo, prior value kept). C-cast → PX4: the float's bit pattern is stored verbatim,
+so `9` becomes `1091567616`. Neither stack rejects cleanly.
+
+*Check:* `resolveParamEncoding` (`lib/param/index.js`) — rung 2 is documented as
+opportunistic, not authoritative, because of the ArduPilot result above; the float-tolerance
+branch in `matchesParamEcho` and its `exactWire` comment; #298 (mask fidelity) and #299
+(discovery) carry the rulings. Measured with `BATT_SERIAL_NUM` and `LOG_BITMASK` — note
+`BATT_ESC_MASK` is published in ArduPilot's parameter metadata but absent from the
+Copter-4.7.0 SITL build, so metadata presence does not imply the vehicle has the parameter.
