@@ -40,7 +40,7 @@ config-node shapes and message contracts may still change without a major bump.
 ### Added
 
 - **Setpoints carry a real `time_boot_ms`.** Move stamps a shared boot clock
-  (module load = boot) instead of `0`: builds without an explicit
+  (process start = boot, monotonic via performance.now) instead of `0`: builds without an explicit
   `timeBootMs` take the clock, stream ticks re-stamp at every send, and the
   synthesized brake packet stamps its own send time rather than inheriting
   the stream's build-time stamp. An explicit caller `timeBootMs` still rides
