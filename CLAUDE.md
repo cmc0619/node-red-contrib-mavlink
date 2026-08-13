@@ -46,7 +46,7 @@ grow a second deploy-time error path.
 
 ## Measurement outranks source
 
-Reference implementations (`../node-red-contrib-mavlink-ai`, `-kimi`, ArduPilot, PX4,
+Reference implementations (`/workspace/node-red-contrib-mavlink-ai`, `-kimi`, ArduPilot, PX4,
 pymavlink) are the *default hypothesis*. A SITL measurement recorded in `DESIGN.md` §14 is
 the *authority*. In that order — hypothesis from source, authority from measurement. Where
 they disagree, the measurement wins and the disagreement gets written down rather than
