@@ -34,9 +34,10 @@ reference these by name rather than re-explaining them each time.
 **Command presets** (`mode: "preset"`, `preset: <id>`): `arm`, `disarm`, `set_mode`,
 `takeoff`, `land`, `rtl`, `set_home`, `change_speed`, `orbit`, `mission_start`, `pause`,
 `resume`, `request_message`, `set_message_interval`, `stop_message_interval`,
-`reboot_autopilot`, `flight_termination`. `reposition` still resolves at runtime but is
-off the dropdown (`listed: false`) — Move owns the goto; only the §14 INT-carrier anchors
-(SITL 23/29) still pin it. The old `yaw`/`rotate` presets are **gone**: `CONDITION_YAW`
+`reboot_autopilot`, `flight_termination`. `reposition` is **not** a Command preset: Move
+owns the goto, and the library row survives only as the `DO_REPOSITION` metadata
+`mavlink-formation` builds from (`listed: false`). The old `yaw`/`rotate` presets are
+**gone**: `CONDITION_YAW`
 rides advanced mode now (`advancedCommand: "115"`, param4 = 0 absolute / 1 relative).
 Advanced mode is `mode: "advanced"`, `advancedCommand: "<MAV_CMD numeric>"`. `params` is
 a JSON string keyed by param index (`"{\"7\":20}"` = param7 = 20).
@@ -157,8 +158,11 @@ importable tab per file with shared config nodes inline.
   Move node's config, not the payload. Move TTL means the stream
   self-stops if injects stop arriving. Comment states plainly: no arc primitive exists;
   the ring is the flow author's maths.
-- **Inject buttons:** **`Arm+GUIDED+Takeoff`**, **`◯ Fly circle`** (repeat inject at 5 Hz
-  feeding the Function), **`■ Stop circle`** (`payload:false` to suppress), **`Land`**.
+- **Inject buttons:** **`Arm+GUIDED+Takeoff`**, **`◯ Fly circle`** (one-shot, sets
+  `flow.circling`), **`■ Stop circle`** (clears it and sends `{action:"stop"}`), **`Land`**.
+  A separate **`◯ circle tick (0.2 s)`** repeat inject drives the Function, which emits
+  only while `flow.circling` is true — nothing on the repeating path writes the flag, or
+  it would overwrite Stop within 200 ms.
 
 ### 12 — Ebony & Ivory (ArduPilot + PX4 side by side)
 
@@ -621,9 +625,9 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 ### sitl/23 — AP INT carrier goto
 
 - **File:** `examples/sitl/23-ap-int-carrier-goto.json` · **Tab:** `SITL 23 AP INT carrier goto`
-- **Story:** Live `COMMAND_INT` / `DO_REPOSITION` goto on ArduCopter sysid 1 (decimal
-  degrees → degE7 on the wire).
-- **Nodes:** config triplet, `command` arm/takeoff/reposition, `inject`, `debug`.
+- **Story:** Live `COMMAND_INT` / `DO_REPOSITION` goto on ArduCopter sysid 1 via Move's
+  goto action (decimal degrees → degE7 on the wire).
+- **Nodes:** config triplet, `command` arm/takeoff, `move` goto (Send & confirm), `inject`, `debug`.
 - **Config/launch:** `restart: ap-1`.
 
 ### sitl/24 — Move stream + stop
@@ -675,9 +679,9 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 ### sitl/29 — INT carrier goto (PX4)
 
 - **File:** `examples/sitl/29-int-carrier-goto.json` · **Tab:** `SITL 29 INT carrier goto`
-- **Story:** Arm → takeoff (LONG) → `DO_REPOSITION` on the INT carrier against PX4 sysid 11;
-  decimal degrees become degE7 on the wire.
-- **Nodes:** config triplet (PX4), `command` arm/takeoff/reposition, `inject`, `debug`.
+- **Story:** Arm → takeoff (LONG) → Move goto, which rides `DO_REPOSITION` on the INT
+  carrier, against PX4 sysid 11; decimal degrees become degE7 on the wire.
+- **Nodes:** config triplet (PX4), `command` arm/takeoff, `move` goto (Send & confirm), `inject`, `debug`.
 - **Config/launch:** `restart: px4-1`.
 
 ### sitl/30 — PX4 Move reposition

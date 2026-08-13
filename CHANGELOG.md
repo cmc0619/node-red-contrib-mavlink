@@ -29,6 +29,31 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Fixed
 
+- **Example 11's Stop button stopped the circle.** It emitted a boolean `false`
+  rather than `{action:"stop"}` — a Node-RED inject reads its payload from
+  `props[0]`, and the legacy top-level fields are consulted only when `props[0]`
+  carries no value of its own. The 0.2 s repeat also drove the flag that gates
+  the ring, so a Stop was overwritten within 200 ms; the flag is set by a
+  separate one-shot inject now and nothing on the repeating path writes it.
+- **Orbit accepts its own spec sentinel.** `MAV_CMD_DO_ORBIT` documents NaN in
+  param5/6 as "orbit where I am", and the preset was refusing exactly that.
+  Blank centre and blank altitude now encode the sentinels. int32 cannot carry
+  NaN, so the editor reds a blank centre on the COMMAND_INT carrier and names
+  COMMAND_LONG as the fix.
+- **Acceleration composes where the firmware names the mix.** `VelAccel` and
+  `PosVelAccel` are real ArduPilot guided submodes, so velocity+acceleration
+  and position+velocity+acceleration are modes now; the wire carries an
+  independent ignore bit per group. Position+acceleration *without* velocity
+  is the one mix with no named submode and no §14 measurement — it refuses
+  loud in the editor and at derivation, because a setpoint carries no ack and
+  a silently held position would be the only symptom.
+- **Go To / Reposition is out of the Command node.** Move owns the goto (§6),
+  so the preset is not offered — and the parameter rows, location rule, and
+  altitude rule it left behind in the Command editor are gone with it. The
+  library row survives as the `DO_REPOSITION` metadata `mavlink-formation`
+  builds from. SITL examples 23 and 29 are Move goto nodes now, same wire.
+- **Four SITL example paths in both READMEs.** They still named the pre-#270
+  numbering, which was renumbered by restart class.
 - **An unresolvable Connection says `no connection`, not `invalid config`.**
   The node status line reports what something outside the node said — the
   vehicle, the link, or another node, including by silence — never "your

@@ -39,7 +39,6 @@ const {
   RESULT_NAME,
   getPreset,
   buildParamArray,
-  blankLocationRefusal,
   mergeParams,
   AckWaiter,
   checkCompletion,
@@ -176,17 +175,15 @@ module.exports = function registerMavlinkCommand(RED) {
      * Build the 7-element param array for this send, merging config + payload.
      *
      * @param {*} payload
-     * @param {number} [frame]  resolved MAV_FRAME (local ⇒ metres, not degrees)
      * @returns {number[]}
      */
-    function getParams(payload, frame) {
+    function getParams(payload) {
       const userParams = mergeParams(config, payload);
       if (preset) {
-        // Refuse before the zero-fill, not after: buildParamArray turns a blank
-        // lat/lon into 0,0 — a legal coordinate the vehicle will happily fly to
-        // (§9, §10 "blank coordinates must not become 0,0").
-        const refusal = blankLocationRefusal(preset, userParams, frame);
-        if (refusal) throw new Error(`mavlink-command: ${refusal}`);
+        // buildParamArray zero-fills a blank param, so a blank lat/lon becomes
+        // 0,0 — a legal coordinate the vehicle will fly to. The editor is what
+        // stops that being configured (mavlink-command.html `params`); on the
+        // payload path it is trusted and rides (AGENTS.md, input trust).
         return buildParamArray(preset, userParams);
       }
       // Advanced: build a full 7-element array from userParams, default 0.
@@ -279,11 +276,12 @@ module.exports = function registerMavlinkCommand(RED) {
 
       // Frame for the COMMAND_INT carrier (§9 "Coordinate frames"): shared
       // precedence chain — msg.mavFrame beats node config, blank falls to the
-      // carrier module's documented default (GLOBAL_RELATIVE_ALT, §14).
-      // Resolved before getParams so the location-range guard can exempt local
-      // frames (metres in param5/6) from the ±90/±180 degree check (#263).
+      // carrier module's documented default (GLOBAL_RELATIVE_ALT, §14). The
+      // ±90/±180 degree check that used to read it here is the editor's now —
+      // it is the frame the COMMAND_INT builder scales param5/6 by, nothing
+      // more.
       const frame = resolveFrame(msg.mavFrame, config.frame);
-      const paramArray = getParams(msg.payload, frame);
+      const paramArray = getParams(msg.payload);
 
       /**
        * Build the wire message for a carrier at a given confirmation counter.

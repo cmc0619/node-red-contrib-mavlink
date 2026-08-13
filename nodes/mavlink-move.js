@@ -244,12 +244,6 @@ module.exports = function registerMavlinkMove(RED) {
           return;
         }
 
-        if (delivery === 'confirm') {
-          // Setpoints carry no acknowledgement of any kind (§9) — there is
-          // nothing for confirm to wait on. Only goto's command path confirms.
-          throw new Error('Move setpoints carry no acknowledgement — Send & confirm exists on the Go to action only');
-        }
-
         let moveInput;
         if (action === 'goto') {
           // goto + Stream: the same intent, streamed — position setpoints on

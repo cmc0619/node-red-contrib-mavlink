@@ -1292,33 +1292,6 @@ test('mavlink-move goto + Send refuses a yaw rate through the reposition builder
   assert.equal(conn.sends.length, 0, 'nothing reached the wire');
 });
 
-test('mavlink-move steer refuses Send & confirm — setpoints carry no ack', () => {
-  const conn = repositionConn();
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-move')(RED);
-  const Node = RED.nodes.types['mavlink-move'];
-  // The editor never offers confirm on steer; the runtime refuses it loud
-  // rather than waiting on an acknowledgement that cannot exist (§9).
-  const node = new Node({
-    delivery: 'confirm',
-    action: 'steer',
-    vNorth: 1,
-    vEast: 0,
-    vUp: 0,
-    connection: 'conn',
-    targetSystem: 1,
-    targetComponent: 1,
-  });
-
-  let out;
-  let doneError;
-  node.emit('input', { payload: {} }, (m) => { out = m; }, (err) => { doneError = err; });
-  assert.equal(out[0], null);
-  assert.equal(out[1].result, 'failed');
-  assert.match(doneError.message, /Send & confirm exists on the Go to action only/);
-  assert.equal(conn.sends.length, 0, 'nothing reached the wire');
-});
-
 test('mavlink-move steer body reference derives the frame from the connection firmware and fails closed without one (§14)', () => {
   const make = (firmware) => {
     const conn = { vehicle: firmware ? { firmware } : {}, sends: [], send(message) { this.sends.push(message); } };

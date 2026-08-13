@@ -1,469 +1,548 @@
 [
-  {
-    "id": "ex11-tab",
-    "type": "tab",
-    "label": "11 Streamed circle (Move)",
-    "disabled": false,
-    "info": "Same joyride idea but the circle is flown by streaming SET_POSITION_TARGET_GLOBAL_INT setpoints from a Function node. Contrast with DO_ORBIT in example 10. Move TTL self-stops when injects cease.",
-    "env": []
-  },
-  {
-    "id": "ex11-comment",
-    "type": "comment",
-    "z": "ex11-tab",
-    "name": "Streamed circle via Move",
-    "info": "No arc primitive \u2014 Function computes lat/lon ring points (\u00a7 coordinate frames). Move action Go to (altitude above home), delivery stream @ 5 Hz, TTL 1500 ms. Stop inject sends payload:false; letting injects stop also lets TTL expire. SITL bind 14550 \u2192 14551.",
-    "x": 180,
-    "y": 40,
-    "wires": []
-  },
-  {
-    "id": "ex11-identity",
-    "type": "mavlink-local-identity",
-    "name": "GCS identity",
-    "role": "gcs",
-    "sourceSystemId": 255,
-    "sourceComponentId": 190,
-    "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
-  },
-  {
-    "id": "ex11-vehicle",
-    "type": "mavlink-vehicle",
-    "name": "Vehicle profile",
-    "vehicleFamily": "copter",
-    "firmware": "ardupilot",
-    "dialect": "ardupilotmega",
-    "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1
-  },
-  {
-    "id": "ex11-connection",
-    "type": "mavlink-connection",
-    "name": "UDP SITL",
-    "mode": "udp",
-    "bindHost": "127.0.0.1",
-    "bindPort": 14550,
-    "remoteHost": "127.0.0.1",
-    "remotePort": 14551,
-    "vehicle": "ex11-vehicle",
-    "localIdentity": "ex11-identity",
-    "additionalIdentities": [],
-    "signOutbound": false,
-    "requireSigned": false,
-    "acceptInvalid": false,
-    "linkId": 0,
-    "staleMs": "",
-    "expireMs": "",
-    "disabled": false
-  },
-  {
-    "id": "ex11-cmd-arm",
-    "type": "mavlink-command",
-    "z": "ex11-tab",
-    "name": "Arm",
-    "mode": "preset",
-    "preset": "arm",
-    "advancedCommand": "",
-    "delivery": "complete",
-    "connection": "ex11-connection",
-    "timeout": "10000",
-    "maxRetries": "3",
-    "unconfirmedContinue": false,
-    "completionTimeout": "120000",
-    "params": "{}",
-    "x": 300,
-    "y": 100,
-    "wires": [
-      [
-        "ex11-cmd-guided"
-      ],
-      [
-        "ex11-dbg-arm"
-      ]
-    ],
-    "sendAs": "long",
-    "targetSystem": "",
-    "targetComponent": ""
-  },
-  {
-    "id": "ex11-cmd-guided",
-    "type": "mavlink-command",
-    "z": "ex11-tab",
-    "name": "GUIDED",
-    "mode": "preset",
-    "preset": "set_mode",
-    "advancedCommand": "",
-    "delivery": "complete",
-    "connection": "ex11-connection",
-    "timeout": "10000",
-    "maxRetries": "3",
-    "unconfirmedContinue": false,
-    "completionTimeout": "120000",
-    "params": "{\"1\":1,\"2\":4}",
-    "x": 480,
-    "y": 100,
-    "wires": [
-      [
-        "ex11-cmd-takeoff"
-      ],
-      [
-        "ex11-dbg-guided"
-      ]
-    ],
-    "sendAs": "long",
-    "targetSystem": "",
-    "targetComponent": ""
-  },
-  {
-    "id": "ex11-cmd-takeoff",
-    "type": "mavlink-command",
-    "z": "ex11-tab",
-    "name": "Takeoff 20 m",
-    "mode": "preset",
-    "preset": "takeoff",
-    "advancedCommand": "",
-    "delivery": "complete",
-    "connection": "ex11-connection",
-    "timeout": "10000",
-    "maxRetries": "3",
-    "unconfirmedContinue": false,
-    "completionTimeout": "120000",
-    "params": "{\"7\":20}",
-    "x": 660,
-    "y": 100,
-    "wires": [
-      [
-        "ex11-dbg-takeoff"
-      ],
-      [
-        "ex11-dbg-takeoff-st"
-      ]
-    ],
-    "sendAs": "long",
-    "targetSystem": "",
-    "targetComponent": ""
-  },
-  {
-    "id": "ex11-cmd-land",
-    "type": "mavlink-command",
-    "z": "ex11-tab",
-    "name": "Land",
-    "mode": "preset",
-    "preset": "land",
-    "advancedCommand": "",
-    "delivery": "complete",
-    "connection": "ex11-connection",
-    "timeout": "10000",
-    "maxRetries": "3",
-    "unconfirmedContinue": false,
-    "completionTimeout": "120000",
-    "params": "{}",
-    "x": 300,
-    "y": 280,
-    "wires": [
-      [
-        "ex11-dbg-land"
-      ],
-      [
-        "ex11-dbg-land-st"
-      ]
-    ],
-    "sendAs": "long",
-    "targetSystem": "",
-    "targetComponent": ""
-  },
-  {
-    "id": "ex11-fn-ring",
-    "type": "function",
-    "z": "ex11-tab",
-    "name": "Ring points",
-    "func": "// Ring setpoint generator \u2014 no arc primitive; the ring is flow-author maths.\n// The Move node's action (goto) and altitude reference (above home) live in\n// its config; the payload carries only the coordinates.\nconst R = 100;\nconst alt = 20;\nconst c_lat = -35.363261;\nconst c_lon = 149.165230;\nlet theta = context.get('theta') || 0;\ntheta += Math.PI / 18;\ncontext.set('theta', theta);\nconst lat = c_lat + (R * Math.sin(theta)) / 111320;\nconst lon = c_lon + (R * Math.cos(theta)) / (111320 * Math.cos(c_lat * Math.PI / 180));\nmsg.payload = {\n    position: { lat, lon, alt }\n};\nreturn msg;",
-    "outputs": 1,
-    "timeout": 0,
-    "noerr": 0,
-    "initialize": "",
-    "finalize": "",
-    "libs": [],
-    "x": 480,
-    "y": 220,
-    "wires": [
-      [
-        "ex11-move-circle"
-      ]
-    ]
-  },
-  {
-    "id": "ex11-move-circle",
-    "type": "mavlink-move",
-    "z": "ex11-tab",
-    "name": "Stream circle",
-    "connection": "ex11-connection",
-    "delivery": "stream",
-    "action": "goto",
-    "altRef": "home",
-    "targetSystem": 1,
-    "targetComponent": 1,
-    "north": "",
-    "east": "",
-    "up": "",
-    "vNorth": "",
-    "vEast": "",
-    "vUp": "",
-    "lat": -35.363261,
-    "lon": 149.16523,
-    "alt": 20,
-    "yaw": "",
-    "yawRate": "",
-    "rateHz": 5,
-    "ttlMs": 1500,
-    "x": 660,
-    "y": 220,
-    "wires": [
-      [
-        "ex11-dbg-move"
-      ],
-      [
-        "ex11-dbg-move-st"
-      ]
-    ]
-  },
-  {
-    "id": "ex11-inject-prep",
-    "type": "inject",
-    "z": "ex11-tab",
-    "name": "Arm+GUIDED+Takeoff",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 120,
-    "y": 100,
-    "wires": [
-      [
-        "ex11-cmd-arm"
-      ]
-    ]
-  },
-  {
-    "id": "ex11-inject-circle",
-    "type": "inject",
-    "z": "ex11-tab",
-    "name": "\u25ef Fly circle",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
-    "repeat": "0.2",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 120,
-    "y": 220,
-    "wires": [
-      [
-        "ex11-fn-ring"
-      ]
-    ]
-  },
-  {
-    "id": "ex11-inject-stop",
-    "type": "inject",
-    "z": "ex11-tab",
-    "name": "\u25a0 Stop circle",
-    "props": [
-      {
-        "p": "payload",
-        "v": "false",
-        "vt": "bool"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 120,
-    "y": 280,
-    "wires": [
-      [
-        "ex11-move-circle"
-      ]
-    ]
-  },
-  {
-    "id": "ex11-inject-land",
-    "type": "inject",
-    "z": "ex11-tab",
-    "name": "Land",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 120,
-    "y": 340,
-    "wires": [
-      [
-        "ex11-cmd-land"
-      ]
-    ]
-  },
-  {
-    "id": "ex11-dbg-arm",
-    "type": "debug",
-    "z": "ex11-tab",
-    "name": "arm status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 300,
-    "y": 160,
-    "wires": []
-  },
-  {
-    "id": "ex11-dbg-guided",
-    "type": "debug",
-    "z": "ex11-tab",
-    "name": "guided status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 480,
-    "y": 160,
-    "wires": []
-  },
-  {
-    "id": "ex11-dbg-takeoff",
-    "type": "debug",
-    "z": "ex11-tab",
-    "name": "takeoff continue",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 660,
-    "y": 160,
-    "wires": []
-  },
-  {
-    "id": "ex11-dbg-takeoff-st",
-    "type": "debug",
-    "z": "ex11-tab",
-    "name": "takeoff status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 660,
-    "y": 180,
-    "wires": []
-  },
-  {
-    "id": "ex11-dbg-move",
-    "type": "debug",
-    "z": "ex11-tab",
-    "name": "move continue",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 820,
-    "y": 220,
-    "wires": []
-  },
-  {
-    "id": "ex11-dbg-move-st",
-    "type": "debug",
-    "z": "ex11-tab",
-    "name": "move status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 820,
-    "y": 260,
-    "wires": []
-  },
-  {
-    "id": "ex11-dbg-land",
-    "type": "debug",
-    "z": "ex11-tab",
-    "name": "land continue",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 480,
-    "y": 280,
-    "wires": []
-  },
-  {
-    "id": "ex11-dbg-land-st",
-    "type": "debug",
-    "z": "ex11-tab",
-    "name": "land status",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 480,
-    "y": 320,
-    "wires": []
-  }
+    {
+        "id": "ex11-tab",
+        "type": "tab",
+        "label": "11 Streamed circle (Move)",
+        "disabled": false,
+        "info": "Same joyride idea but the circle is flown by streaming SET_POSITION_TARGET_GLOBAL_INT setpoints from a Function node. Contrast with DO_ORBIT in example 10. Move TTL self-stops when injects cease.",
+        "env": []
+    },
+    {
+        "id": "ex11-comment",
+        "type": "comment",
+        "z": "ex11-tab",
+        "name": "Streamed circle via Move",
+        "info": "No arc primitive \u2014 Function computes lat/lon ring points (\u00a7 coordinate frames). Move action Go to (altitude above home), delivery stream @ 5 Hz, TTL 1500 ms. The 0.2 s tick only emits while flow.circling is true: \u25ef Fly circle sets it, \u25a0 Stop circle clears it and sends {action:\"stop\"}, then TTL lets the setpoint lapse. SITL bind 14550 \u2192 14551.",
+        "x": 180,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "ex11-identity",
+        "type": "mavlink-local-identity",
+        "name": "GCS identity",
+        "role": "gcs",
+        "sourceSystemId": 255,
+        "sourceComponentId": 190,
+        "heartbeatType": "MAV_TYPE_GCS",
+        "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    },
+    {
+        "id": "ex11-vehicle",
+        "type": "mavlink-vehicle",
+        "name": "Vehicle profile",
+        "vehicleFamily": "copter",
+        "firmware": "ardupilot",
+        "dialect": "ardupilotmega",
+        "defaultTargetSystem": 1,
+        "defaultTargetComponent": 1
+    },
+    {
+        "id": "ex11-connection",
+        "type": "mavlink-connection",
+        "name": "UDP SITL",
+        "mode": "udp",
+        "bindHost": "127.0.0.1",
+        "bindPort": 14550,
+        "remoteHost": "127.0.0.1",
+        "remotePort": 14551,
+        "vehicle": "ex11-vehicle",
+        "localIdentity": "ex11-identity",
+        "additionalIdentities": [],
+        "signOutbound": false,
+        "requireSigned": false,
+        "acceptInvalid": false,
+        "linkId": 0,
+        "staleMs": "",
+        "expireMs": "",
+        "disabled": false
+    },
+    {
+        "id": "ex11-cmd-arm",
+        "type": "mavlink-command",
+        "z": "ex11-tab",
+        "name": "Arm",
+        "mode": "preset",
+        "preset": "arm",
+        "advancedCommand": "",
+        "delivery": "complete",
+        "connection": "ex11-connection",
+        "timeout": "10000",
+        "maxRetries": "3",
+        "unconfirmedContinue": false,
+        "completionTimeout": "120000",
+        "params": "{}",
+        "x": 300,
+        "y": 100,
+        "wires": [
+            [
+                "ex11-cmd-guided"
+            ],
+            [
+                "ex11-dbg-arm"
+            ]
+        ],
+        "sendAs": "long",
+        "targetSystem": "",
+        "targetComponent": ""
+    },
+    {
+        "id": "ex11-cmd-guided",
+        "type": "mavlink-command",
+        "z": "ex11-tab",
+        "name": "GUIDED",
+        "mode": "preset",
+        "preset": "set_mode",
+        "advancedCommand": "",
+        "delivery": "complete",
+        "connection": "ex11-connection",
+        "timeout": "10000",
+        "maxRetries": "3",
+        "unconfirmedContinue": false,
+        "completionTimeout": "120000",
+        "params": "{\"1\":1,\"2\":4}",
+        "x": 480,
+        "y": 100,
+        "wires": [
+            [
+                "ex11-cmd-takeoff"
+            ],
+            [
+                "ex11-dbg-guided"
+            ]
+        ],
+        "sendAs": "long",
+        "targetSystem": "",
+        "targetComponent": ""
+    },
+    {
+        "id": "ex11-cmd-takeoff",
+        "type": "mavlink-command",
+        "z": "ex11-tab",
+        "name": "Takeoff 20 m",
+        "mode": "preset",
+        "preset": "takeoff",
+        "advancedCommand": "",
+        "delivery": "complete",
+        "connection": "ex11-connection",
+        "timeout": "10000",
+        "maxRetries": "3",
+        "unconfirmedContinue": false,
+        "completionTimeout": "120000",
+        "params": "{\"7\":20}",
+        "x": 660,
+        "y": 100,
+        "wires": [
+            [
+                "ex11-dbg-takeoff"
+            ],
+            [
+                "ex11-dbg-takeoff-st"
+            ]
+        ],
+        "sendAs": "long",
+        "targetSystem": "",
+        "targetComponent": ""
+    },
+    {
+        "id": "ex11-cmd-land",
+        "type": "mavlink-command",
+        "z": "ex11-tab",
+        "name": "Land",
+        "mode": "preset",
+        "preset": "land",
+        "advancedCommand": "",
+        "delivery": "complete",
+        "connection": "ex11-connection",
+        "timeout": "10000",
+        "maxRetries": "3",
+        "unconfirmedContinue": false,
+        "completionTimeout": "120000",
+        "params": "{}",
+        "x": 300,
+        "y": 280,
+        "wires": [
+            [
+                "ex11-dbg-land"
+            ],
+            [
+                "ex11-dbg-land-st"
+            ]
+        ],
+        "sendAs": "long",
+        "targetSystem": "",
+        "targetComponent": ""
+    },
+    {
+        "id": "ex11-fn-ring",
+        "type": "function",
+        "z": "ex11-tab",
+        "name": "Ring points",
+        "func": "// Ring setpoint generator \u2014 no arc primitive; the ring is flow-author maths.\n// The Move node's action (goto) and altitude reference (above home) live in\n// its config; the payload carries only the coordinates.\n//\n// The gate matters as much as the maths. A 0.2 s inject drives this whether\n// or not anyone asked to fly, so the flag is what makes the buttons real:\n// Fly circle sets it, Stop clears it and sends the stop, and every tick in\n// between returns null so the stream's TTL (1500 ms) lets the setpoint lapse.\n// Nothing on this repeating path may set the flag \u2014 doing so overwrote Stop\n// within 200 ms and the circle never ended.\nif (flow.get('circling') !== true) { return null; }\nconst R = 100;\nconst alt = 20;\nconst c_lat = -35.363261;\nconst c_lon = 149.165230;\nlet theta = context.get('theta') || 0;\ntheta += Math.PI / 18;\ncontext.set('theta', theta);\nconst lat = c_lat + (R * Math.sin(theta)) / 111320;\nconst lon = c_lon + (R * Math.cos(theta)) / (111320 * Math.cos(c_lat * Math.PI / 180));\nmsg.payload = {\n    position: { lat, lon, alt }\n};\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 480,
+        "y": 220,
+        "wires": [
+            [
+                "ex11-move-circle"
+            ]
+        ]
+    },
+    {
+        "id": "ex11-move-circle",
+        "type": "mavlink-move",
+        "z": "ex11-tab",
+        "name": "Stream circle",
+        "connection": "ex11-connection",
+        "delivery": "stream",
+        "action": "goto",
+        "altRef": "home",
+        "targetSystem": 1,
+        "targetComponent": 1,
+        "north": "",
+        "east": "",
+        "up": "",
+        "vNorth": "",
+        "vEast": "",
+        "vUp": "",
+        "lat": -35.363261,
+        "lon": 149.16523,
+        "alt": 20,
+        "yaw": "",
+        "yawRate": "",
+        "rateHz": 5,
+        "ttlMs": 1500,
+        "x": 660,
+        "y": 220,
+        "wires": [
+            [
+                "ex11-dbg-move"
+            ],
+            [
+                "ex11-dbg-move-st"
+            ]
+        ]
+    },
+    {
+        "id": "ex11-inject-prep",
+        "type": "inject",
+        "z": "ex11-tab",
+        "name": "Arm+GUIDED+Takeoff",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 120,
+        "y": 100,
+        "wires": [
+            [
+                "ex11-cmd-arm"
+            ]
+        ]
+    },
+    {
+        "id": "ex11-inject-circle",
+        "type": "inject",
+        "z": "ex11-tab",
+        "name": "\u25ef circle tick (0.2 s)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "0.2",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 120,
+        "y": 220,
+        "wires": [
+            [
+                "ex11-fn-ring"
+            ]
+        ]
+    },
+    {
+        "id": "ex11-inject-fly",
+        "type": "inject",
+        "z": "ex11-tab",
+        "name": "\u25ef Fly circle",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 120,
+        "y": 260,
+        "wires": [
+            [
+                "ex11-fly-gate"
+            ]
+        ]
+    },
+    {
+        "id": "ex11-inject-stop",
+        "type": "inject",
+        "z": "ex11-tab",
+        "name": "\u25a0 Stop circle",
+        "props": [
+            {
+                "p": "payload",
+                "v": "{\"action\":\"stop\"}",
+                "vt": "json"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"action\": \"stop\"}",
+        "payloadType": "json",
+        "x": 120,
+        "y": 300,
+        "wires": [
+            [
+                "ex11-stop-gate"
+            ]
+        ]
+    },
+    {
+        "id": "ex11-stop-gate",
+        "type": "change",
+        "z": "ex11-tab",
+        "name": "circling = false",
+        "rules": [
+            {
+                "t": "set",
+                "p": "circling",
+                "pt": "flow",
+                "to": "false",
+                "tot": "bool"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 300,
+        "y": 300,
+        "wires": [
+            [
+                "ex11-move-circle"
+            ]
+        ]
+    },
+    {
+        "id": "ex11-fly-gate",
+        "type": "change",
+        "z": "ex11-tab",
+        "name": "circling = true",
+        "rules": [
+            {
+                "t": "set",
+                "p": "circling",
+                "pt": "flow",
+                "to": "true",
+                "tot": "bool"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 320,
+        "y": 260,
+        "wires": [
+            [
+                "ex11-fn-ring"
+            ]
+        ]
+    },
+    {
+        "id": "ex11-inject-land",
+        "type": "inject",
+        "z": "ex11-tab",
+        "name": "Land",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 120,
+        "y": 360,
+        "wires": [
+            [
+                "ex11-cmd-land"
+            ]
+        ]
+    },
+    {
+        "id": "ex11-dbg-arm",
+        "type": "debug",
+        "z": "ex11-tab",
+        "name": "arm status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 300,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "ex11-dbg-guided",
+        "type": "debug",
+        "z": "ex11-tab",
+        "name": "guided status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 480,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "ex11-dbg-takeoff",
+        "type": "debug",
+        "z": "ex11-tab",
+        "name": "takeoff continue",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 660,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "ex11-dbg-takeoff-st",
+        "type": "debug",
+        "z": "ex11-tab",
+        "name": "takeoff status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 660,
+        "y": 180,
+        "wires": []
+    },
+    {
+        "id": "ex11-dbg-move",
+        "type": "debug",
+        "z": "ex11-tab",
+        "name": "move continue",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 820,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "ex11-dbg-move-st",
+        "type": "debug",
+        "z": "ex11-tab",
+        "name": "move status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 820,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "ex11-dbg-land",
+        "type": "debug",
+        "z": "ex11-tab",
+        "name": "land continue",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 480,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "ex11-dbg-land-st",
+        "type": "debug",
+        "z": "ex11-tab",
+        "name": "land status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 480,
+        "y": 320,
+        "wires": []
+    }
 ]

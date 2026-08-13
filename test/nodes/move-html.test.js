@@ -95,7 +95,9 @@ test('mavlink-move Action surface: goto default, both actions offered, retired f
   // A wrong or missing default changes the wire message for every Move node
   // that never touched the field; goto is the acked direction the redesign
   // leads with.
-  assert.match(html, /action:\s*\{\s*value:\s*'goto'\s*\}/, 'action defaults to goto');
+  // Defaults-based, not a source regex: action grew a validator (the Steer
+  // "something to command" rule), so its literal is no longer one line.
+  assert.equal(loadNodeDefaults('mavlink-move').action.value, 'goto', 'action defaults to goto');
   assert.match(html, /option value="goto"/, 'goto action offered');
   assert.match(html, /option value="steer"/, 'steer action offered');
   assert.match(html, /altRef:\s*\{\s*value:\s*'home'\s*\}/, 'altRef defaults to home (the GCS default)');
@@ -606,4 +608,125 @@ test('mavlink-move help documents the action-shaped overrides and refuses the re
   }
   assert.match(html, /action: "stop"/, 'the stop action is documented');
   assert.match(html, /msg\.payload === false<\/code> suppresses/, 'the suppress sentinel is documented');
+});
+
+test('mavlink-move: Steer must command something — any combination of groups counts', () => {
+  // Both rules moved out of the runtime (AGENTS.md, input trust): the configured
+  // path is the editor's, and a msg that blanks or mixes the groups is trusted.
+  //
+  // No *individual* Steer field can be required — filling fields IS the mode —
+  // but "at least one of them" can be, which is what makes an all-blank Steer
+  // catchable at all. It reds on Action because Action is what gives the
+  // fields meaning.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const verdict = (over) =>
+    defaults.action.validate.call(Object.assign({ id: 'm1', action: 'steer' }, over), 'steer', {});
+
+  assert.equal(defaults.action.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+  assert.equal(defaults.action.validate.call({ id: 'm1', action: 'goto' }, 'goto', {}), true,
+    'Go to reads none of these fields, so it never fires');
+
+  assert.match(String(verdict({})), /needs at least one field filled/, 'an all-blank Steer reds');
+  for (const filled of [{ north: '5' }, { vNorth: '1' }, { aUp: '0.5' }, { yaw: '90' }, { yawRate: '10' }]) {
+    assert.equal(verdict(filled), true, `${Object.keys(filled)[0]} alone is something to command`);
+  }
+  // An explicit 0 is a value; whitespace is not (#174).
+  assert.equal(verdict({ vNorth: '0' }), true, 'a zero velocity is a commanded zero');
+  assert.match(String(verdict({ vNorth: ' ' })), /needs at least one field filled/, 'whitespace is blank');
+
+  // The measured combinations are modes: one ignore bit each on the wire, and
+  // ArduPilot names them as guided submodes (§14). Nothing here may red a
+  // filled form. position+acceleration-without-velocity is the exception and
+  // has its own test — it is the one combination with no submode and no
+  // measurement.
+  assert.equal(verdict({ aUp: '0.5', vNorth: '1' }), true, 'acceleration + velocity');
+  assert.equal(verdict({ north: '5', vNorth: '1', aUp: '0.5' }), true, 'all three together');
+  assert.equal(verdict({ north: '5', vNorth: '1' }), true, 'position + velocity');
+});
+
+test('mavlink-move: clearing the last live Steer field reds while the dialog is open', () => {
+  // The saved-property path above is deploy-time. This is the other one: the
+  // dialog is open, the operator empties the box that was carrying the config,
+  // and the verdict has to follow the box, not the property behind it.
+  //
+  // That is why `fieldValue` reads through `ownDialogField` rather than
+  // `liveOr`. `liveOr` treats a blank live value as "no answer" and falls back
+  // to the saved one — right for a field that inherits, wrong here, where an
+  // empty box is the operator's answer. With `liveOr` a saved `north` would
+  // keep vouching for a form the operator has just emptied, and the node would
+  // deploy an all-ignore Steer that reported clean.
+  const open = (dom) => loadNodeDefaults('mavlink-move', {}, {
+    dom, editStack: [{ id: 'm1' }],
+  }).action;
+  const node = { id: 'm1', action: 'steer', north: '5', east: '0', up: '0' };
+
+  assert.match(
+    String(open({
+      '#node-input-north': { val: '' },
+      '#node-input-east': { val: '' },
+      '#node-input-up': { val: '' },
+    }).validate.call(node, 'steer', {})),
+    /needs at least one field filled/,
+    'cleared live boxes beat the saved triplet'
+  );
+  assert.equal(
+    open({
+      '#node-input-north': { val: '' },
+      '#node-input-east': { val: '' },
+      '#node-input-up': { val: '' },
+      '#node-input-vNorth': { val: '2' },
+    }).validate.call(node, 'steer', {}),
+    true,
+    'clearing position and typing a velocity is a legal switch of mode'
+  );
+  // Same DOM, no edit-stack entry: some *other* node's dialog is on top, so
+  // the live boxes are not this node's and the saved triplet stands (#217).
+  assert.equal(
+    loadNodeDefaults('mavlink-move', {}, {
+      dom: { '#node-input-north': { val: '' }, '#node-input-east': { val: '' }, '#node-input-up': { val: '' } },
+      editStack: [{ id: 'someone-else' }],
+    }).action.validate.call(node, 'steer', {}),
+    true,
+    'another dialog\'s fields are not this node\'s answer'
+  );
+});
+
+test('mavlink-move: position + acceleration without velocity reds', () => {
+  // The one steer combination lib/move/frames.js MODES does not carry: no
+  // named ArduPilot guided submode on the Copter-4.7.0 read, and no §14
+  // measurement either way. A setpoint gets no COMMAND_ACK, so the operator
+  // would see "sent" while the vehicle held position.
+  const { action } = loadNodeDefaults('mavlink-move');
+  const verdict = (over) =>
+    action.validate.call(Object.assign({ id: 'm1', action: 'steer' }, over), 'steer', {});
+
+  assert.match(String(verdict({ north: '5', aUp: '0.5' })), /has no guided submode/);
+  assert.match(String(verdict({ up: '5', aNorth: '0.5' })), /has no guided submode/,
+    'any axis of either group is the group');
+  // Both escapes named in the message actually work.
+  assert.equal(verdict({ north: '5', aUp: '0.5', vNorth: '1' }), true, 'adding a velocity');
+  assert.equal(verdict({ north: '5' }), true, 'clearing the acceleration');
+  // And the measured combinations are untouched.
+  assert.equal(verdict({ vNorth: '1', aUp: '0.5' }), true, 'velocity + acceleration');
+  assert.equal(verdict({ aUp: '0.5' }), true, 'acceleration alone');
+});
+
+test('mavlink-move: Steer cannot be set to the confirm tier', () => {
+  // The dialog never offers it — DELIVERY_OPTIONS.steer is build/send/stream —
+  // but a hand-edited flow can hold it, and the runtime falls through to the
+  // Send branch and reports `sent`. True of the wire, misleading about the
+  // tier. Both fields are known at deploy, so the editor says so.
+  const { delivery } = loadNodeDefaults('mavlink-move');
+  const verdict = (over) => delivery.validate.call(
+    Object.assign({ id: 'm1' }, over), over.delivery, {}
+  );
+
+  assert.equal(delivery.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+  assert.match(String(verdict({ action: 'steer', delivery: 'confirm' })), /Steer cannot confirm/);
+  assert.equal(verdict({ action: 'goto', delivery: 'confirm' }), true, 'Go to has an ack to wait for');
+  for (const tier of ['build', 'send', 'stream']) {
+    assert.equal(verdict({ action: 'steer', delivery: tier }), true, `steer + ${tier} is offered`);
+  }
+  // A config with no action parses as steer (resolveMoveAction), so it reds too.
+  assert.match(String(verdict({ delivery: 'confirm' })), /Steer cannot confirm/);
 });

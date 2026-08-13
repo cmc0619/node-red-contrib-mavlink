@@ -98,19 +98,9 @@
                     { index: 5, units: 'deg' },
                     { index: 6, units: 'deg' },
                     { index: 7 }],
-    reposition:    [{ index: 1, label: 'Ground speed (blank = default)' },
-                    { index: 2 }, { index: 3 },
-                    { index: 4, label: 'Yaw (blank = keep heading)' },
-                    { index: 5, units: 'deg' },
-                    { index: 6, units: 'deg' },
-                    { index: 7 }],
     change_speed:  [{ index: 1 },
                     { index: 2, label: 'Speed (blank = no change)' },
                     { index: 3, label: 'Throttle (blank = no change)' }],
-    yaw:           [{ index: 1 }, { index: 2 },
-                    { index: 3, label: 'Direction (-1=CCW 0=CW)' }],
-    rotate:        [{ index: 1 }, { index: 2 },
-                    { index: 3, label: 'Direction (-1=CCW 0=CW)' }],
     orbit:         [{ index: 1 },
                     { index: 2, label: 'Velocity (blank = default)' },
                     { index: 3 },
@@ -127,6 +117,143 @@
     flight_termination: [{ index: 1, label: 'Terminate (1=yes)' }],
   };
 
+  // Presets whose *blank* param5/6 encodes the spec's NaN "use current
+  // position" sentinel (`blankParams` in lib/command/presets.js). int32 has no
+  // NaN, so those presets can only say "here" over COMMAND_LONG —
+  // `longToIntFields` refuses the pair at build. The carrier is an editor
+  // field, so the impossibility is a deploy-time verdict rather than a
+  // first-message surprise. Drift-tested against the library, like the map
+  // below.
+  const NAN_CENTRE_PRESETS = new Set(['orbit']);
+
+  // Which presets cannot be sent with a blank coordinate — a mirror of
+  // `requireLocation` in lib/command/presets.js. It lives here because a
+  // Node-RED validator is synchronous and the preset catalog is fetched
+  // asynchronously: a node whose dialog was never opened still has to be
+  // checked at deploy, so the rule cannot wait on a fetch.
+  //
+  // Two copies of one rule is a real cost. It is paid down by an executed test
+  // (test/nodes/command-html.test.js) that reads the library's PRESETS and
+  // asserts this map matches the *offered* ones exactly, so the pair cannot
+  // drift in silence. Offered is the right side of the comparison: a row the
+  // dropdown does not carry is not this node's surface to police, and
+  // `reposition` is exactly that — Move owns the goto, and the row survives
+  // only as the DO_REPOSITION metadata mavlink-formation builds from.
+  //
+  // Orbit is deliberately absent: DO_ORBIT documents NaN on param5/6 as "use
+  // current vehicle position", so a blank centre is the spec's own "orbit
+  // where I am" and demanding coordinates refused a legal command.
+  const PRESET_LOCATION = {
+    set_home: { require: { unless: { param: 1, equals: 1 } } },
+  };
+
+  /** A param value that is actually a value: not blank, and finite. */
+  function presentParam(value) {
+    return !RED.mavlink.isBlank(value) && Number.isFinite(Number(value));
+  }
+
+  /**
+   * Whether this invocation needs lat/lon, reading the same shape the library
+   * declares on the preset row.
+   * Set Home's "use current position" flag makes the vehicle ignore the
+   * coordinates; a blank flag is 0, which is still "no".
+   */
+  function locationRequired(rule, values) {
+    if (rule === true) return true;
+    if (!rule || !rule.unless) return false;
+    return Number(values[rule.unless.param] || 0) !== rule.unless.equals;
+  }
+
+  /**
+   * Scrape the rendered param controls into the `{index: number}` shape the
+   * saved blob carries. Every control is read by its `data-kind`, because
+   * `.val()` alone lies on two of the three: a checkbox with no value attribute
+   * returns the literal string `"on"` whether it is ticked or not, and a
+   * multi-select returns an array of the chosen values. `Number()` reads both
+   * as NaN.
+   *
+   * The single scrape is shared by `oneditsave` and the validator on purpose —
+   * a validator that judged different values than Done writes would red a
+   * config the operator cannot fix, or pass one it cannot send.
+   *
+   * @returns {Object<number, number>}
+   */
+  function scrapeParamInputs() {
+    const params = {};
+    $('.param-input').each(function () {
+      const $input = $(this);
+      const idx = Number($input.attr('data-idx'));
+      const kind = $input.attr('data-kind');
+      if (kind === 'boolean') {
+        params[idx] = RED.mavlink.booleanEnumValue($input);
+        return;
+      }
+      const raw = $input.val();
+      if (kind === 'bitmask') {
+        // Nothing selected omits the param, which resolves to 0 on the wire
+        // anyway — the same shape as the blank number field below.
+        const mask = RED.mavlink.bitmaskFromSelection(raw);
+        if (mask !== null) params[idx] = mask;
+        return;
+      }
+      const val = String(raw === undefined || raw === null ? '' : raw).trim();
+      if (val !== '') params[idx] = Number(val);
+    });
+    return params;
+  }
+
+  /**
+   * Param values to validate: the live rendered fields while this node's own
+   * dialog is on top *and* a real form is on screen, otherwise the saved blob.
+   * `oneditsave` writes `#node-input-params` only on Done, so mid-edit the
+   * hidden field still holds the pre-edit JSON and validating it would judge
+   * the wrong values.
+   *
+   * `_mavParamsRendered` is the same authority `oneditsave` scrapes behind, and
+   * for the same reason: a dialog can be open over a form that rendered nothing
+   * — the catalog is still loading, or the saved preset is one the palette no
+   * longer offers. Scraping zero fields there reads as "every param is blank"
+   * and reds a node whose saved params are intact.
+   *
+   * Returns null when the saved blob is unreadable — the caller reds rather
+   * than falling open.
+   */
+  function paramValues(owner, savedJson) {
+    const values = {};
+    if (owner && owner._mavParamsRendered && RED.mavlink.ownDialogField(owner, '#node-input-params')) {
+      return scrapeParamInputs();
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(savedJson || '{}');
+    } catch {
+      return null;
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    for (const key of Object.keys(parsed)) {
+      if (!RED.mavlink.isBlank(parsed[key])) values[Number(key)] = Number(parsed[key]);
+    }
+    return values;
+  }
+
+  /**
+   * True when param5/6 carry metres rather than degrees, so the ±90/±180 gate
+   * must not fire. Only COMMAND_INT carries a frame at all; the LONG carrier
+   * and every unknown frame stay on the degree path, which is the safe
+   * direction — a missing frame must not buy a bypass (§9, #263).
+   */
+  /** Whether the COMMAND_INT carrier is selected — the int32 param5/6 path. */
+  function intCarrierSelected(owner) {
+    return RED.mavlink.liveOr(owner, '#node-input-sendAs', owner.sendAs, 'int') === 'int';
+  }
+
+  function localFrameSelected(owner) {
+    if (!intCarrierSelected(owner)) return false;
+    const frame = Number(RED.mavlink.liveOr(owner, '#node-input-frame', owner.frame, ''));
+    return frame === 1 || frame === 7 || frame === 8 || frame === 9 ||
+      frame === 20 || frame === 21;
+  }
+
   // Presets with completion conditions — determines if "await completion" is shown.
   const HAS_COMPLETION = new Set(['arm', 'disarm', 'takeoff', 'land', 'rtl', 'set_mode']);
   // Safety presets that require msg.confirmed.
@@ -138,7 +265,22 @@
     {
       name:              { value: '' },
       mode:              { value: 'preset' },
-      preset:            { value: 'arm' },
+      // The dropdown cannot produce an unknown preset; a hand-edited flow can.
+      // The runtime does not repair it (AGENTS.md, input trust) — `getPreset`
+      // returns undefined, `resolveCommandId` yields null, and the node builds
+      // and sends MAV_CMD(null), then reports success. A false success is a
+      // different animal from garbage-out, and this is the layer that can tell
+      // the difference: PRESET_PARAMS enumerates exactly the offered presets
+      // (drift-tested against the library), so the check is synchronous and
+      // needs no catalog fetch. Advanced mode has its own field and rule.
+      preset: {
+        value: 'arm',
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-mode', this.mode, 'preset') !== 'preset') return true;
+          return Object.prototype.hasOwnProperty.call(PRESET_PARAMS, v)
+            || 'is not a preset this palette offers — pick one from the list';
+        },
+      },
       // Advanced mode's command *is* the message — blank builds MAV_CMD(null)
       // and sends it. Config validity is the editor's verdict (§6), so this is
       // the only thing standing between a half-filled dialog and the wire.
@@ -182,7 +324,46 @@
       maxRetries:        { value: '3', validate: RED.validators.number(true) },
       unconfirmedContinue: { value: false },
       completionTimeout: { value: '60000', validate: RED.validators.number(true) },
-      params:            { value: '{}' },
+      // The preset params blob. Nothing checked it before, and the runtime
+      // refused blank/out-of-range coordinates on its behalf; that refusal is
+      // gone (AGENTS.md, input trust), so this is now the only thing between a
+      // half-filled Set Home and a vehicle told its home is 0,0 — null island,
+      // Gulf of Guinea, at sea level. Range is checked wherever a degree
+      // coordinate is *present*, independently of whether the preset requires
+      // one: takeoff and land expose lat/lon without requiring them, and 200°
+      // there is still garbage that scales into a real place (§9, #263).
+      // Two args so the reasons render (§14).
+      params: {
+        value: '{}',
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-mode', this.mode, 'preset') !== 'preset') return true;
+          const values = paramValues(this, v);
+          if (values === null) return 'is not valid JSON';
+          if (!localFrameSelected(this)) {
+            if (presentParam(values[5]) && Math.abs(Number(values[5])) > 90) {
+              return 'latitude must be within ±90°';
+            }
+            if (presentParam(values[6]) && Math.abs(Number(values[6])) > 180) {
+              return 'longitude must be within ±180°';
+            }
+          }
+          const preset = RED.mavlink.liveOr(this, '#node-input-preset', this.preset, 'arm');
+          // A blank centre on these presets is the NaN sentinel, and int32 has
+          // no NaN: the build refuses the pair, so the operator would meet it
+          // on the first message instead of at deploy.
+          if (NAN_CENTRE_PRESETS.has(preset) && intCarrierSelected(this) &&
+              (!presentParam(values[5]) || !presentParam(values[6]))) {
+            return 'with a blank centre this means "here" (NaN), which COMMAND_INT cannot carry — ' +
+              'set Send as to COMMAND_LONG, or fill in the centre';
+          }
+          const rule = PRESET_LOCATION[preset];
+          if (!rule || !locationRequired(rule.require, values)) return true;
+          if (!presentParam(values[5]) || !presentParam(values[6])) {
+            return 'needs a latitude and longitude — a blank coordinate is sent as 0,0';
+          }
+          return true;
+        },
+      },
     },
     RED.mavlink.buildTierDialectDefaults()
   );
@@ -676,6 +857,26 @@
           node._mavParamsRendered = true;
         } else {
           const presetId = $('#node-input-preset').val();
+          // A select with no option matching the saved preset leaves nothing
+          // selected, so val() is null. The reachable cause is a failed preset
+          // fetch: `loadPresets`'s .fail() hands back an empty group list, and
+          // buildPresetDropdown then paints a select with no options at all.
+          //
+          // Null is NOT "this preset has no parameters". Treating it as such
+          // rendered an empty form, marked it rendered, and let oneditsave
+          // scrape zero `.param-input` fields over the saved blob — open the
+          // node while the admin API is down, click Done, params gone.
+          //
+          // Same class as the rendered-guard itself (Codex #36) with a
+          // different trigger — there the form had not rendered yet, here it
+          // rendered nothing — so the answer is the same: leave the flag off
+          // and oneditsave keeps its hands off the saved params.
+          if (presetId === null || presetId === undefined) {
+            container.append($('<div class="form-row"><em>The preset list could not be '
+              + 'loaded, so this node\'s parameters cannot be shown. They are preserved; '
+              + 'restore the preset list and reopen this dialog to edit them.</em></div>'));
+            return;
+          }
           const paramSpec = PRESET_PARAMS[presetId] || [];
           if (paramSpec.length === 0) {
             container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
@@ -739,26 +940,9 @@
       // loading (or an error placeholder is showing), the container holds no
       // inputs — scraping it would silently wipe the saved params (Codex #36).
       if (!this._mavParamsRendered) return;
-      // Collect param values from the dynamic fields.
-      const params = {};
-      $('.param-input').each(function () {
-        const $input = $(this);
-        const idx = Number($input.attr('data-idx'));
-        if ($input.attr('data-kind') === 'boolean') {
-          params[idx] = RED.mavlink.booleanEnumValue($input);
-          return;
-        }
-        const raw = $input.val();
-        if ($input.attr('data-kind') === 'bitmask') {
-          // Nothing selected omits the param, which resolves to 0 on the wire
-          // anyway — the same shape as the blank number field below.
-          const mask = RED.mavlink.bitmaskFromSelection(raw);
-          if (mask !== null) params[idx] = mask;
-          return;
-        }
-        const val = String(raw || '').trim();
-        if (val !== '') params[idx] = Number(val);
-      });
+      // Collect param values from the dynamic fields — the same scrape the
+      // validator judges, so Done cannot write values the validator never saw.
+      const params = scrapeParamInputs();
       // Write the hidden input, not `this.params`. Node-RED runs oneditsave
       // first, then its own edit pane walks `defaults` and copies
       // `#node-input-<key>` over the node property (editor red.js

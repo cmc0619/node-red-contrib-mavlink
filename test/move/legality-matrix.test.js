@@ -153,39 +153,27 @@ for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
   }
 }
 
-// ── Every unoffered combo refuses loud ───────────────────────────────────────
+// ── The combos that still refuse ─────────────────────────────────────────────
+//
+// Not "everything the editor does not offer": the altRef and reference
+// vocabularies are coerced now rather than checked (AGENTS.md, input trust —
+// both are payload-overridable, and msg is trusted). What is left refuses for
+// reasons that are not about vetting operator input: an action the surface
+// does not define; a body frame with no firmware to derive it from — we asked
+// the vehicle what it is and got no answer, so there is no frame number to
+// pick; and the one steer mix with no wire encoding we can vouch for —
+// position + acceleration without velocity has no named ArduPilot submode and
+// no §14 measurement, and a setpoint's missing ack would hide the failure.
+// A steer with no field filled is not here any more: the editor requires one
+// (mavlink-move.html `action`), and a payload that blanks every group builds
+// the honest all-ignore packet.
 
 const REFUSED = [
-  // Setpoints carry no acknowledgement — confirm exists on goto only.
-  {
-    name: 'steer × confirm (world)',
-    config: configFor('steer', 'confirm', 'world'),
-    error: /Send & confirm exists on the Go to action only/,
-  },
-  {
-    name: 'steer × confirm (body)',
-    config: configFor('steer', 'confirm', 'body'),
-    firmware: 'ardupilot',
-    error: /Send & confirm exists on the Go to action only/,
-  },
   // The action vocabulary is closed: goto and steer, nothing else.
   {
     name: 'unknown action',
     config: { ...configFor('goto', 'send', 'home'), action: 'orbit' },
     error: /unknown Move action "orbit" — expected goto or steer/,
-  },
-  // altRef has no terrain: unmeasured on both stacks, dropped from the
-  // surface until it isn't (§14).
-  {
-    name: "altRef 'terrain'",
-    config: { ...configFor('goto', 'send', 'home'), altRef: 'terrain' },
-    error: /unknown Move altitude reference "terrain"/,
-  },
-  // The reference vocabulary is closed too.
-  {
-    name: 'unknown reference',
-    config: { ...configFor('steer', 'send', 'world'), reference: 'diagonal' },
-    error: /unknown Move reference "diagonal"/,
   },
   // Body without a firmware fails closed — the stacks read different body
   // frames, and an unadapted guess is silently dropped by the vehicle (§14).
@@ -194,20 +182,15 @@ const REFUSED = [
     config: configFor('steer', 'send', 'body'),
     error: /Vehicle Profile with firmware ardupilot or px4/,
   },
-  // Every steer field is optional at deploy — the widest gap between the
-  // editor surface and the runtime — so the all-blank refusal lands at
-  // input time, and the matrix must own it (CodeRabbit, #277).
+  // The unmeasured steer mix. The editor reds the configured shape; a
+  // hand-edited flow or a payload override still reaches the derivation,
+  // which refuses with the actual reason rather than "unknown mode".
   {
-    name: 'steer with no motion fields',
-    config: {
-      action: 'steer',
-      delivery: 'send',
-      reference: 'world',
-      connection: 'conn',
-      targetSystem: 1,
-      targetComponent: 1,
-    },
-    error: /nothing to command/,
+    name: 'position + acceleration without velocity',
+    // All three velocity axes blank: an explicit 0 is a value and names the
+    // group, which would make this the measured PosVelAccel instead.
+    config: { ...configFor('steer', 'send', 'world'), vNorth: '', vEast: '', vUp: '', north: 5, aUp: 0.5 },
+    error: /position \+ acceleration needs a velocity too/,
   },
 ];
 
