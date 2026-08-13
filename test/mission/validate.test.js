@@ -1,10 +1,8 @@
 'use strict';
 
 /**
- * Per-type item validators and firmware gating (DESIGN.md §9 "Item validation
- * is per type", §11, §13). Each validator's job is to reject the other
- * families; the firmware gate offers only what a stack carries over this
- * protocol.
+ * Per-type item validators (DESIGN.md §9 "Item validation is per type", §13).
+ * Each validator's job is to reject the other families.
  */
 
 const test = require('node:test');
@@ -15,7 +13,6 @@ const {
   validateMissionItems,
   validateFenceItems,
   validateRallyItems,
-  supportedMissionTypes,
   MISSION_TYPE,
 } = require('../../lib/mission');
 
@@ -112,12 +109,4 @@ test('a non-uint16 command is rejected before the family test (would corrupt the
 
   // A genuine uint16 command id still passes.
   assert.equal(validateMissionItems([{ command: 16 }]).ok, true);
-});
-
-test('firmware gates the mission type list (§11)', () => {
-  assert.deepEqual(supportedMissionTypes('ardupilot'), ['mission', 'fence', 'rally']);
-  // PX4 does not carry fence and rally the same way — mission only.
-  assert.deepEqual(supportedMissionTypes('px4'), ['mission']);
-  assert.deepEqual(supportedMissionTypes('custom'), ['mission']);
-  assert.deepEqual(supportedMissionTypes(undefined), ['mission']);
 });

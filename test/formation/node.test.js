@@ -256,36 +256,46 @@ test('msg.payload.anchor and headingDeg override the configured leader anchor', 
   assert.ok(bySysid[2].param6 > 8.0, 'payload heading 0 (not leader 180) orients the line east');
 });
 
-test('non-numeric msg.payload.headingDeg is refused with the raw value named', async () => {
-  // config.headingDeg is editor-validated; payload.headingDeg is a runtime
-  // boundary. The refusal must land at the node (naming 'north'), not deep in
-  // lib/formation as an anonymous NaN.
+test('msg.payload.headingDeg is trusted input: Number() coercion, never a refusal', async () => {
+  // The driver never refuses trusted payload input. A numeric string behaves
+  // exactly as the number it coerces to; garbage coerces to NaN and flows
+  // through — the flow author's to fix, not the driver's to refuse.
   const connection = connectionStub([peer(1), peer(2)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-formation')(RED);
   const node = new (RED.nodes.types['mavlink-formation'])({
     connection: 'conn',
-    shape: 'line',
+    shape: 'column',
     spacing: 10,
     sysids: '1,2',
     anchorMode: 'fixed',
-    lat: ANCHOR.lat,
-    lon: ANCHOR.lon,
-    alt: ANCHOR.alt,
+    lat: 47.397742,
+    lon: 8.545594,
+    alt: 30,
     pitchDeg: 0,
     sendAs: 'long',
     delivery: 'send',
     intervalMs: 0,
+    timeoutMs: 10000,
   });
   let sent;
-  const err = await emitInput(node, { payload: { headingDeg: 'north' } }, (m) => { sent = m; })
-    .then(() => null, (e) => e);
 
-  assert.ok(err, 'non-numeric heading fails the input');
-  assert.match(err.message, /heading/);
-  assert.match(err.message, /north/, 'error names the raw payload value');
-  assert.equal(connection.sends.length, 0, 'nothing was sent');
-  assert.equal(sent[1].result, 'failed');
+  await emitInput(node, { payload: { headingDeg: '90' } }, (m) => { sent = m; });
+
+  assert.equal(sent[1].result, 'succeeded');
+  const bySysid = Object.fromEntries(connection.sends.map((s) => [s.message.fields.target_system, s.message.fields]));
+  // Column facing east (heading 90): the trailing slot is 10 m west — the
+  // same hand-computed longitude delta as the lib tests.
+  assert.ok(Math.abs(bySysid[2].param6 - (8.545594 - 1.32709215145987e-4)) < 1e-12, 'slot 1 lon');
+  assert.ok(Math.abs(bySysid[2].param5 - 47.397742) < 1e-12, 'slot 1 lat');
+
+  // 'north' coerces to NaN: the run still executes, and the NaN geometry
+  // rides the patches as-is (Fan-out is a raw surface).
+  connection.sends.length = 0;
+  await emitInput(node, { payload: { headingDeg: 'north' } }, (m) => { sent = m; });
+  assert.equal(sent[1].result, 'succeeded');
+  assert.equal(connection.sends.length, 2);
+  assert.ok(connection.sends.every((s) => Number.isNaN(s.message.fields.param5)));
 });
 
 test('default carrier int builds COMMAND_INT with per-member degE7 coords (§9)', async () => {

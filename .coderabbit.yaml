@@ -13,3 +13,15 @@ knowledge_base:
     enabled: true
     filePatterns:
       - "**/.greptile/rules.md"
+
+# Keep the bots off machine-generated and binary content — exported example
+# flows, wire seeds, screenshots, param dumps, the lockfile. Review budget is
+# capped (org spending cap); it belongs to hand-written code. Mirrors
+# .sourcery.yaml's ignore list.
+reviews:
+  path_filters:
+    - "!examples/**"
+    - "!seed/**"
+    - "!docs/**"
+    - "!sitl/params/**"
+    - "!package-lock.json"

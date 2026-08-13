@@ -7,8 +7,8 @@
  * Runs one of three state machines over the mission item-transfer protocol —
  * download, upload, or clear — for one of three plan types — mission, fence,
  * or rally. All protocol logic lives in `lib/mission`; this node is the thin
- * wrapper (§2): read config, resolve the connection/target/firmware, run the
- * machine, and shape the two-output chain (§9).
+ * wrapper (§2): read config, resolve the connection/target, run the machine,
+ * and shape the two-output chain (§9).
  *
  *   output 0 = continue  (fires only on success)
  *   output 1 = status    (progress updates *and* the terminal record)
@@ -35,7 +35,6 @@ const {
   createMachine,
   validateItems,
   missionTypeValue,
-  supportedMissionTypes,
   locks,
   OPERATION,
   buildRequestList,
@@ -45,7 +44,6 @@ const {
 } = require('../lib/mission');
 const {
   resolveDeliveryContext,
-  firstDefined,
   applyConnectionStatus,
 } = require('../lib/addressing');
 
@@ -99,31 +97,19 @@ module.exports = function registerMavlinkMission(RED) {
       const payload = msg.payload ?? {};
       const missionTypeKey = payload.missionType || config.missionType || 'mission';
 
-      const { profile, target } = resolveDeliveryContext(RED, {
+      const { target } = resolveDeliveryContext(RED, {
         delivery,
         config,
         payload,
         connectionNode: connNode,
-        buildFirmwareProfile: true,
       });
 
-      // Firmware: dynamic override → selected profile (incl. concrete Build).
-      const firmware = firstDefined(payload.firmware, profile && profile.firmware);
-
-      // Refuse a type the selected stack does not carry over this protocol rather
-      // than sending a request it will silently no-op (§9, §11).
-      const supported = supportedMissionTypes(firmware);
-      if (!supported.includes(missionTypeKey)) {
-        const rec = record(operation, missionTypeKey, target, {
-          result: 'failed',
-          phase: 'gated',
-          reason: `${firmware} does not support ${missionTypeKey} over the mission protocol`,
-        });
-        applyActionStatus(node, 'error', `no ${missionTypeKey} on ${firmware}`);
-        send([null, rec]);
-        done(new Error(`mavlink-mission: ${rec.reason}`));
-        return;
-      }
+      // The vehicle judges type support: a stack that does not carry this type
+      // answers the transfer with a MAV_MISSION_UNSUPPORTED ack (upload) or
+      // stays silent until the transfer deadline (download) — operational
+      // failures the existing paths already report loud (§9). The editor's
+      // Type dropdown is the firmware protector (§11). An unknown string key
+      // still throws here, routed through failInput.
       const missionType = missionTypeValue(missionTypeKey);
 
       // A download or upload is a two-way conversation with one vehicle: the

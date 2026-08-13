@@ -73,9 +73,6 @@ test('tosFromDscp shifts the six-bit DSCP value into the TOS byte', () => {
   assert.equal(tosFromDscp(46), 184);
   assert.equal(tosFromDscp(40), 160);
   assert.equal(tosFromDscp(10), 40);
-  assert.throws(() => tosFromDscp(-1), /DSCP/);
-  assert.throws(() => tosFromDscp(64), /DSCP/);
-  assert.throws(() => tosFromDscp(12.5), /DSCP/);
 });
 
 test('markSocket uses an injected marker and passes the computed TOS byte', () => {

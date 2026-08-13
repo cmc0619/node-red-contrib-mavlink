@@ -11,6 +11,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { loadNodeDefaults } = require('./html-assert');
+
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-connection.html'),
   'utf8'
@@ -138,6 +140,102 @@ test('Connection editor offers UDP, TCP, and serial without “not yet” stubs'
     /serialPath:[\s\S]*validate:[\s\S]*mode !== 'serial'[\s\S]*trim\(\)\.length > 0/,
     'serial path is required in serial mode'
   );
+});
+
+test('remote host/port pairing: one without the other reds, both-or-neither passes', () => {
+  // These drive the REAL validators — the html script evaluated whole, the
+  // real RED.mavlink resource underneath — with no dialog open, which is the
+  // state Node-RED validates in on import and on deploy: the saved config is
+  // all there is. The runtime trusts this rule (udp.js sends only with both).
+  const defaults = loadNodeDefaults('mavlink-connection');
+  const reason = /Remote host and port are a pair/;
+
+  // host set + port blank → reason on the host field
+  assert.match(
+    String(defaults.remoteHost.validate.call(
+      { id: 'c1', mode: 'udp', remotePort: '' }, '10.0.0.9', {}
+    )),
+    reason
+  );
+  // port set + host blank → reason on the port field
+  assert.match(
+    String(defaults.remotePort.validate.call(
+      { id: 'c1', mode: 'udp', remoteHost: '' }, '14551', {}
+    )),
+    reason
+  );
+  // both blank → listen-only, valid on both fields
+  assert.equal(
+    defaults.remoteHost.validate.call({ id: 'c1', mode: 'udp', remotePort: '' }, '', {}),
+    true
+  );
+  assert.equal(
+    defaults.remotePort.validate.call({ id: 'c1', mode: 'udp', remoteHost: '' }, '', {}),
+    true
+  );
+  // both set → valid on both fields
+  assert.equal(
+    defaults.remoteHost.validate.call(
+      { id: 'c1', mode: 'udp', remotePort: '14551' }, '10.0.0.9', {}
+    ),
+    true
+  );
+  assert.equal(
+    defaults.remotePort.validate.call(
+      { id: 'c1', mode: 'udp', remoteHost: '10.0.0.9' }, '14551', {}
+    ),
+    true
+  );
+  // serial mode hides the fields, so a stale half-pair must not red a
+  // control the operator cannot see (same gate as bindPort).
+  assert.equal(
+    defaults.remoteHost.validate.call(
+      { id: 'c1', mode: 'serial', remotePort: '' }, '10.0.0.9', {}
+    ),
+    true
+  );
+});
+
+test('remote pairing: clearing both live fields switches back to listen-only (Codex, #287)', () => {
+  // The other half of the pairing rule: the dialog is OPEN and the operator
+  // empties both boxes over a saved full pair. Sibling reads go through
+  // ownDialogField, so the emptied box is the answer — a `live || saved`
+  // fallback would resurrect the saved sibling and red both fields forever,
+  // making a configured remote impossible to un-configure (the #284 emptied-
+  // box lesson, one node over).
+  const saved = { id: 'c1', mode: 'udp', remoteHost: '10.0.0.9', remotePort: '14551' };
+  const open = (dom) => loadNodeDefaults('mavlink-connection', {}, {
+    dom, editStack: [{ id: 'c1' }],
+  });
+
+  const bothCleared = open({
+    '#node-config-input-remoteHost': { val: '' },
+    '#node-config-input-remotePort': { val: '' },
+  });
+  assert.equal(bothCleared.remoteHost.validate.call(saved, '', {}), true,
+    'cleared host sees the cleared port, not its ghost');
+  assert.equal(bothCleared.remotePort.validate.call(saved, '', {}), true,
+    'cleared port sees the cleared host, not its ghost');
+
+  // Clearing only one still reds — the live half-pair is real.
+  const halfCleared = open({
+    '#node-config-input-remoteHost': { val: '10.0.0.9' },
+    '#node-config-input-remotePort': { val: '' },
+  });
+  assert.match(String(halfCleared.remoteHost.validate.call(saved, '10.0.0.9', {})),
+    /Remote host and port are a pair/);
+
+  // Same DOM but another node's dialog on top: these boxes are not this
+  // node's answer, so the saved pair stands (#217 scoping).
+  const foreign = loadNodeDefaults('mavlink-connection', {}, {
+    dom: {
+      '#node-config-input-remoteHost': { val: '' },
+      '#node-config-input-remotePort': { val: '' },
+    },
+    editStack: [{ id: 'someone-else' }],
+  });
+  assert.equal(foreign.remoteHost.validate.call(saved, '10.0.0.9', {}), true,
+    'a foreign dialog\'s empty boxes do not clear this node\'s pair');
 });
 
 test('Local Identity editor exposes heartbeatIntervalMs', () => {

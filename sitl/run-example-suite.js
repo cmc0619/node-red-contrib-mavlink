@@ -517,13 +517,25 @@ function verdictFrom(profile, summary, log) {
     const apRally = lastByTag.get('debug:rally status');
     const px4Fence = lastByTag.get('debug:px4 fence status');
     const apOk = [apMission, apFence, apRally].every((d) => d && d.result === 'succeeded');
-    const px4Gated =
-      !!px4Fence &&
+    // The PX4 fence leg fails loud from the vehicle side now — an UNSUPPORTED
+    // MISSION_ACK or the transfer deadline — not from a node-side gate. Only
+    // the transfer machine's own phases count as that measurement: 'ack' (the
+    // vehicle answered) or 'aborted' with the retry ceiling / no-progress
+    // deadline as the reason — the transfer ran against the vehicle and hit
+    // its bound. 'aborted' alone is not enough: a synchronous send failure
+    // (dead link, saturated queue) wears the same phase with a `send failed`
+    // reason and measured nothing (Codex, #287). Any other phase — 'empty',
+    // 'error', a connection fault — died before the mission protocol ran and
+    // must not PASS on the AP rows' coattails (the #267 fiction, one example
+    // over).
+    const px4Excerpt = px4Fence?.excerpt || '';
+    const px4FailsLoud =
+      Boolean(px4Fence) &&
       px4Fence.result === 'failed' &&
-      (/does not support fence/i.test(px4Fence.excerpt || '') ||
-        /phase:\s*'gated'/i.test(px4Fence.excerpt || '') ||
-        /does not support fence/i.test(log));
-    if (apOk && px4Gated) {
+      (/phase:\s*'ack'/.test(px4Excerpt) ||
+        (/phase:\s*'aborted'/.test(px4Excerpt) &&
+          /after \d+ retries|transfer deadline/.test(px4Excerpt)));
+    if (apOk && px4FailsLoud) {
       return { status: 'PASS', reason: 'AP mission/fence/rally ok; PX4 fence fails loud' };
     }
     if (!apOk) {

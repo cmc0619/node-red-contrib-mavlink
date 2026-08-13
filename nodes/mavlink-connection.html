@@ -7,6 +7,16 @@
 -->
 
 <script type="text/javascript">
+  // Remote host and port are a pair — both blank (listen-only) or both set.
+  // The runtime trusts this: a half-configured remote never deploys, so the
+  // UDP send path treats any missing half as no destination and drops quietly.
+  function remotePairReason(v, other) {
+    var mine = String(v == null ? '' : v).trim();
+    var theirs = String(other == null ? '' : other).trim();
+    if ((mine === '') === (theirs === '')) return true;
+    return 'Remote host and port are a pair — set both or neither';
+  }
+
   RED.nodes.registerType('mavlink-connection', {
     category: 'config',
     defaults: {
@@ -18,8 +28,24 @@
         if (mode === 'serial') return true;
         return RED.validators.number()(v);
       } },
-      remoteHost: { value: '' },
-      remotePort: { value: '', validate: RED.validators.number(true) },
+      // Sibling reads go through ownDialogField, not `live || saved` (the
+      // #284 lesson, same trap one node over): an emptied box is the
+      // operator's answer, and a truthiness fallback would resurrect the
+      // saved value — clearing both fields to go listen-only would red
+      // forever, each blank vouched against by the other's ghost.
+      remoteHost: { value: '', validate: function (v, _opt) {
+        var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
+        if (mode === 'serial') return true;
+        var $port = RED.mavlink.ownDialogField(this, '#node-config-input-remotePort');
+        return remotePairReason(v, $port ? $port.val() : this.remotePort);
+      } },
+      remotePort: { value: '', validate: function (v, _opt) {
+        if (!RED.validators.number(true)(v)) return false;
+        var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
+        if (mode === 'serial') return true;
+        var $host = RED.mavlink.ownDialogField(this, '#node-config-input-remoteHost');
+        return remotePairReason(v, $host ? $host.val() : this.remoteHost);
+      } },
       broadcastHost: { value: '' },
       broadcastPort: { value: '', validate: RED.validators.number(true) },
       serialPath: { value: '', validate: function (v) {
