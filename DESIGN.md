@@ -202,7 +202,7 @@ makes unreachable.
 | `mavlink-out` | Transmit content not constructed by an action node — raw buffers, messages forwarded from another connection, envelopes built in a Function node |
 | `mavlink-build` | Any message in the loaded dialect. Full Delivery tiers, plus an optional repeat interval that reports achieved rate against configured rate in status |
 | `mavlink-command` | `MAV_CMD`, grouped presets through to the full dialect |
-| `mavlink-move` | `SET_POSITION_TARGET_*` over the full mode × frame matrix (position, velocity, position+velocity, acceleration, yaw-only × local/body/global frames), streamed, with TTL, stop, and an expiry message |
+| `mavlink-move` | Where the vehicle goes and how it moves — guided goto, setpoints, attitude, manual sticks, heading, speed — deriving carrier, frame and type_mask from the stated intent, streamed where the wire streams, with TTL, stop, and an expiry message. Command owns vehicle *state* (arm, mode, takeoff, land, RTL); Move owns motion. The primitive roster is curated to what the ecosystem emits (QGC, MAVSDK, pymavlink) plus what a supported vehicle family has no other way to do — §9 "Move primitive roster" |
 | `mavlink-mission` | download / upload / clear × mission / fence / rally |
 | `mavlink-param` | read one, set one, request list |
 | `mavlink-payload` | camera, gimbal, servo, gripper, winch, parachute |
@@ -1623,6 +1623,69 @@ feedback channel, and the loudest former candidates are measured moot — outsid
 mode with the flag clear, both stacks answer `DENIED` (2) themselves (§14, 2026-08-12), better
 feedback than any advisory; `CONDITION_YAW` interplay and param4 actuation still await
 measurement.
+
+### Move primitive roster
+
+**A primitive earns a row by being emitted in the wild or by being the only way a supported
+vehicle family can do the thing** (owner directive, 2026-08-13: *"I just want to use the
+MAVLink messages that everyone else — QGC, pymavlink, MAVSDK — use and support in the wild,
+and be forward thinking enough to use the new ones as well"*). Neither half is optional: a
+message no GCS emits is not validated by anything, and a family with no other path (ArduSub
+has only `MANUAL_CONTROL`; ArduPlane has only frame 7) is not served by elegance.
+
+| Action | Wire | Why it is on the list |
+|---|---|---|
+| **Go to** | `DO_REPOSITION` (192) / `COMMAND_INT`; `SET_POSITION_TARGET_GLOBAL_INT` on Stream | QGC's guided goto on both stacks; the Stream form is byte-identical to MAVSDK `send_position_global` (frame 6, mask 2552) |
+| **Steer** | `SET_POSITION_TARGET_LOCAL_NED` | MAVSDK offboard. World (1) / Body (9 AP, 8 PX4) / Offset (7) |
+| **Attitude** | `SET_ATTITUDE_TARGET` (82) | MAVSDK Offboard attitude + attitude-rate |
+| **Manual** | `MANUAL_CONTROL` (69) | QGC joystick; **the** ArduSub control path, and the only motion primitive Blimp has |
+| **Turn** | `CONDITION_YAW` (115) on ArduPilot | The *only* working yaw on AP — see the §14 entry; ArduPilot's own autotest yaws in guided this way |
+| **Speed** | `DO_CHANGE_SPEED` (178) | QGC's guided speed change |
+| **Orbit** ⏩ | `DO_ORBIT` (34) | QGC orbit UI + MAVSDK orbit plugin, **PX4 only** — no ArduPilot handler found. Off the surface until measured |
+
+⏩ **Forward entries** — in the shipped seed and in firmware `master`, emitted by no GCS yet:
+`GUIDED_CHANGE_SPEED` (43000), `GUIDED_CHANGE_ALTITUDE` (43001), `GUIDED_CHANGE_HEADING`
+(43002), ArduPlane's guided trio. They ride the matching action as firmware-gated arms **once
+measured**, never before (the terrain-frame precedent).
+
+**Deliberately excluded, so a future reference sweep does not re-file them:** takeoff / land /
+RTL / mode changes (Command owns vehicle state); global velocity and global position+velocity
+(both stacks honour them — PX4 decodes each component independently, Rover and Sub honour
+pos+vel — but **nobody emits them**: MAVSDK's global setpoint is position+yaw only, QGC never
+sends the message at all); `FOLLOW_TARGET` (Formation, #200); `DO_SET_ROI_LOCATION` (Payload
+already owns it as `roi-set`/`roi-clear`, matching MAVSDK's gimbal-plugin placement — one
+implementation per concept); the force bit and the terrain frames (both measured dead or
+unmeasured, §14); `TRAJECTORY_REPRESENTATION_*` and `SET_ACTUATOR_CONTROL_TARGET` (no emitter;
+`mavlink-build` is the escape hatch for raw anything).
+
+**Six surface rulings, each resolved by ecosystem practice rather than taste** (owner
+directive, 2026-08-13: *"What's everyone else doing? That's the answer"*). Four of them
+turned out to be this repo's own prior rulings, re-confirmed from outside:
+
+1. **A stream of any kind ends by ceasing to transmit.** MAVSDK `Offboard::stop()` does two
+   things: removes the setpoint timer, then commands `FlightMode::Hold`. The silence half is
+   copied — both stacks carry their own watchdog (`COM_OF_LOSS_T`, `GUID_TIMEOUT`) and silence
+   is the protocol's own end of control. The Hold half is a **mode change**, which this
+   codebase already rules a strict opt-in (`changeMode`, default off), so it is not built
+   until asked. Steer keeps its zero-velocity brake — that is a *setpoint*, not a mode change,
+   and it is measured (#115). Attitude gets no brake: zero thrust is not a brake.
+2. **One stream lock per (connection, target), shared across every streaming action.** MAVSDK
+   runs one sending loop per vehicle; switching setpoint type removes the old periodic call and
+   installs the new. Two nodes commanding one vehicle's motion is the same hazard whatever the
+   message (#176).
+3. **ROI belongs to Payload**, already built there.
+4. **Speed is a Move action**, not a Command preset — QGC presents it as a guided action beside
+   goto, and #277 already moved motion out of Command.
+5. **No sender-side TTL is invented for Manual.** The ecosystem has none: QGC streams while the
+   joystick is enabled and the firmware failsafe is the deadman (ArduSub *disarms* on
+   `MANUAL_CONTROL` silence). Manual reuses Move's existing 1000 ms default, which sits under
+   every firmware watchdog.
+6. **The dialog hides what the vehicle cannot do; the runtime still sends it.** §9's
+   known-unsupported-combos ruling binds the *runtime*: `lib/**` never editorialises. The
+   editor is the protector and may withhold an option it knows is inert — but **hide from new,
+   red on saved**: a node already holding that option keeps it and gets a deploy-time reason,
+   because silently rewriting a saved config changes what the operator built without telling
+   them.
 
 ### Command presets
 
@@ -4405,3 +4468,91 @@ breaks" is *wrong*. Channels 8+32 span 24 positions and are exact, because the t
 fold turns that mask into 24 consecutive set bits. The only reliable test is
 `Math.fround(v) === v` on the signed value.
 *Check:* #298 carries the reproduction recipe and the exact/inexact table.
+
+---
+
+**`LOCAL_OFFSET_NED` (7) is not a deprecated alias, and on ArduPlane it is the only local
+setpoint frame there is (2026-08-13).**
+*Wrong belief:* frame 7 belongs with the retired spellings #278 swept out — the `*_INT` twins,
+the string frame names, the terrain frames — so deleting it alongside them lost nothing. The
+grouping is what makes this plausible: 7 sits numerically between frames we kept, and "offset"
+reads like a convenience spelling of a frame that already exists.
+*Fact:* it is the opposite way round. common.xml carries **no successor for frame 7**, while
+`BODY_NED` (8) and `BODY_OFFSET_NED` (9) — both of which we kept and derive today — are
+superseded by `BODY_FRD` (12). Spec-deprecated and actually-used point in opposite directions
+here: neither QGC nor MAVSDK emits `BODY_FRD` anywhere, while QGC's *only*
+`SET_POSITION_TARGET_LOCAL_NED` send is `APMFirmwarePlugin::guidedModeChangeAltitude` with
+`coordinate_frame = MAV_FRAME_LOCAL_OFFSET_NED`, `type_mask 0xFFF8`, `x=0 y=0 z=-altitudeChange`
+— guided altitude change on every ArduPilot vehicle.
+
+The load-bearing part is per-vehicle, read at source 2026-08-13. ArduPlane's
+`handle_set_position_target_local_ned` opens `if (packet.coordinate_frame !=
+MAV_FRAME_LOCAL_OFFSET_NED) { return; }` and then uses only `z`
+(`plane.next_WP_loc.alt += -packet.z*100.0`). **Frame 7 is the only local frame a fixed wing
+accepts at all**, and every other frame returns silently — no log, no NAK, no STATUSTEXT. A
+Steer node set to World or Body, pointed at a plane, does nothing forever with no symptom.
+Copter and Rover accept 1/7/8/9; Sub accepts those plus `BODY_FRD` (12); Blimp and Tracker
+implement neither setpoint message. Acceleration is honoured on Copter only — Rover and Sub
+ignore it (Rover complains).
+
+ArduCopter's handler adds the vehicle's current position for frames 7, **8** and 9 — the
+`get_relative_position_NED_origin()` branch names all three — which is why §14's 2026-08-05
+measurement found 8 and 9 behaving identically. A deepwiki summary claiming the add applied to
+9 alone was wrong; the raw source settles it, and our measurement was right all along.
+
+*PX4:* frame 7 appears exactly once in `mavlink_receiver.cpp` on `main`, in
+`handle_message_command_int`'s frame-scaling chain, and **nowhere in the setpoint handler** —
+so the 2026-08-05 "accepted, no motion at all, burst and stream" measurement is still current
+on `main`, not merely on 1.18. That single appearance also independently confirms the
+COMMAND_INT scaling entry above, which lists 7 in PX4's ÷1e4 local set.
+*Restored* as Steer's third reference, "Offset from here". A blank axis is legal there and
+nowhere else: on an absolute local frame a blank encodes 0 = the EKF origin, a real place,
+while on frame 7 it is a zero offset, which is no movement. Stream is not offered — every tick
+is resolved against the vehicle's position at that moment, so a repeating offset walks the
+vehicle instead of holding a target (source-read; **not yet SITL-measured** — the one open
+claim in the change).
+*Check:* `grep -c 'LOCAL_OFFSET_NED' ArduPlane/GCS_MAVLink_Plane.cpp` upstream, and the frame-7
+row of the 2026-08-05 local-frame matrix.
+
+---
+
+**There is no working way to yaw an ArduPilot copter with a setpoint or a reposition — yaw is
+a command (2026-08-13).**
+*Wrong belief:* Move covers heading, because both carriers have a yaw field: `DO_REPOSITION`
+takes `param4`, and every `SET_POSITION_TARGET_*` carries `yaw` and `yaw_rate` with their own
+ignore bits. A field that exists is a capability.
+*Fact:* both are inert on ArduCopter, and each was established separately. ArduCopter's
+`DO_REPOSITION` handler calls `set_destination(..., use_yaw=false)` and ignores `param4`
+outright (source-read 2026-08-12; ArduPlane reads it as loiter direction instead). And a
+yaw-only setpoint stream measured as *heading held* on AP GUIDED — `type_mask` 2559, SITL
+2026-08-08 (#179). Two independent yaw fields, neither of which turns the aircraft.
+
+What ArduPilot actually uses is `MAV_CMD_CONDITION_YAW` (115): param1 heading, param2 rate
+deg/s, param3 direction ∓1, param4 relative-vs-absolute. ArduPilot's own autotest yaws in
+guided through it (`guided_achieve_heading`), and both Copter and Sub carry handlers. PX4 has
+no `CONDITION_YAW` handler, so heading there rides the setpoint yaw field it does honour.
+*Consequence:* Turn is a Move primitive that derives per firmware exactly like the Body
+reference — ArduPilot to the acked command, PX4 to a yaw-bearing setpoint, unknown firmware
+fails closed. It is not a nicety; without it the toolkit cannot point an ArduPilot copter.
+*Check:* `MAV_CMD_CONDITION_YAW` in `ArduCopter/GCS_MAVLink_Copter.cpp`, and #179's mask-2559
+result.
+
+---
+
+**ArduSub's `MANUAL_CONTROL` vertical axis is 0..1000 with neutral 500, not −1000..1000 with
+neutral 0 (2026-08-13).**
+*Wrong belief:* `MANUAL_CONTROL`'s four axes share one convention, so a neutral stick is
+`{x:0, y:0, z:0, r:0}` and a zeroed message is inert — the obvious reading, and the one the
+message's own "movement axes" description invites.
+*Fact:* on ArduSub `x`/`y`/`r` are pitch/roll/yaw over −1000..1000 neutral **0**, while `z` is
+thrust over 0..1000 neutral **500** — 0–499 is reverse thrust. A naive all-zero "neutral"
+message therefore commands **full reverse vertical thrust**. Consequence for the operator
+surface: Move speaks −1..1 per axis and maps to the family's wire convention exactly once, at
+encode, the same rule as degE7 and radians.
+
+`MANUAL_CONTROL` is also the message ArduSub is actually flown with, and its **silence is a
+failsafe**: `handle_manual_control_axes` stamps `last_pilot_input_ms`, and the GCS failsafe
+disarms the vehicle by default when that stops being updated. So ceasing to transmit is a real
+stop rather than an abandonment, and no sender-side TTL needs inventing (§9 ruling 5).
+*Check:* `GCS_MAVLINK_Sub::handle_manual_control_axes` upstream; the z-neutral is the line to
+look at.
