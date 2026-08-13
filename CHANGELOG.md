@@ -8,6 +8,14 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Removed
 
+- **Mission Clear's confirmation gate.** The `confirmClear` checkbox and the
+  `msg.confirmed === true` escape are gone: selecting the Clear operation in
+  the editor is the confirmation (owner ruling, 2026-08-13). The `unconfirmed`
+  phase disappears from Mission's vocabulary with it; the destructive guard
+  that stays is the empty-upload refusal, so an upload still can never degrade
+  into an accidental clear. Repo examples updated in place (pre-1.0, no
+  migrations).
+
 - **The guardrail audit's runtime cuts — the driver trusts its callers
   everywhere now, not just on the motion paths.** A full sweep of every node
   family found and removed the refusals that vetted trusted input or
@@ -31,6 +39,14 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Added
 
+- **Setpoints carry a real `time_boot_ms`.** Move stamps a shared boot clock
+  (module load = boot) instead of `0`: builds without an explicit
+  `timeBootMs` take the clock, stream ticks re-stamp at every send, and the
+  synthesized brake packet stamps its own send time rather than inheriting
+  the stream's build-time stamp. An explicit caller `timeBootMs` still rides
+  through untouched.
+- **Mission's Items box is a textarea.** A mission is a list, not a line —
+  the Upload items JSON now edits in a resizable multi-line box.
 - **Three editor validators, each covering a silent failure.** Formation's
   confirm timeout requires an integer ≥ 1 (a saved 0 armed the ack wait at
   0 ms and reported every member unconfirmed); `mavlink-in`'s component filter

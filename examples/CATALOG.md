@@ -315,7 +315,7 @@ importable tab per file with shared config nodes inline.
 - **File:** `examples/21-mission-designer.json`
 - **Tab label:** `21 Mission designer`
 - **Story:** Build a small survey: upload a 4-item mission, read it back to confirm, upload
-  a polygon geofence and a rally point, then clear behind a confirmation gate. Exercises
+  a polygon geofence and a rally point, then clear the plan. Exercises
   all three mission actions and all three plan types, and shows that a failed upload never
   degrades into a clear.
 - **Nodes:** config triplet (ArduPilot — carries all three plan types), `mission` ×:
@@ -323,10 +323,11 @@ importable tab per file with shared config nodes inline.
   (each carrying the item array); `debug` on status ports for progress records.
 - **Key config:** mission items are NAV_WAYPOINT (`command:16`) + a `DO_CHANGE_SPEED`
   (`command:178`) to show DO items are legal in a plan (§9 / §14); fence items
-  `MAV_CMD_NAV_FENCE_POLYGON_VERTEX_*`; rally `MAV_CMD_NAV_RALLY_POINT`. Clear inject
-  carries `{confirmed:true}`. Comment: fence/rally only on ArduPilot (see SITL S6).
+  `MAV_CMD_NAV_FENCE_POLYGON_VERTEX_*`; rally `MAV_CMD_NAV_RALLY_POINT`. Clear runs on
+  any input — selecting the operation is the confirmation. Comment: fence/rally only on
+  ArduPilot (see SITL S6).
 - **Inject buttons:** **`Upload mission`**, **`Download mission`**, **`Upload fence`**,
-  **`Upload rally`**, **`⚠ Clear mission (confirm)`**.
+  **`Upload rally`**, **`⚠ Clear mission`**.
 
 ### 22 — Go-to tour (Move goto, blank-yaw heading hold)
 

@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex21-tab",
     "name": "Mission designer",
-    "info": "Four-item survey mission (NAV_WAYPOINT + DO_CHANGE_SPEED). Fence/rally are ArduPilot-only. Failed upload never degrades into clear. Bind 14550→14551.",
+    "info": "Four-item survey mission (NAV_WAYPOINT + DO_CHANGE_SPEED). Fence/rally are ArduPilot-only. Failed upload never degrades into clear. Bind 14550\u219214551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -95,7 +95,6 @@
     "targetSystem": 1,
     "targetComponent": 1,
     "items": "",
-    "confirmClear": false,
     "timeout": "",
     "maxRetries": "",
     "x": 360,
@@ -147,7 +146,6 @@
     "targetSystem": 1,
     "targetComponent": 1,
     "items": "",
-    "confirmClear": false,
     "timeout": "",
     "maxRetries": "",
     "x": 360,
@@ -199,7 +197,6 @@
     "targetSystem": 1,
     "targetComponent": 1,
     "items": "",
-    "confirmClear": false,
     "timeout": "",
     "maxRetries": "",
     "x": 360,
@@ -251,7 +248,6 @@
     "targetSystem": 1,
     "targetComponent": 1,
     "items": "",
-    "confirmClear": false,
     "timeout": "",
     "maxRetries": "",
     "x": 360,
@@ -269,15 +265,10 @@
     "id": "ex21-inject-clear-mission",
     "type": "inject",
     "z": "ex21-tab",
-    "name": "⚠ Clear mission (confirm)",
+    "name": "\u26a0 Clear mission",
     "props": [
       {
         "p": "payload"
-      },
-      {
-        "p": "confirmed",
-        "v": "true",
-        "vt": "bool"
       }
     ],
     "repeat": "",
@@ -308,7 +299,6 @@
     "targetSystem": 1,
     "targetComponent": 1,
     "items": "",
-    "confirmClear": false,
     "timeout": "",
     "maxRetries": "",
     "x": 360,
