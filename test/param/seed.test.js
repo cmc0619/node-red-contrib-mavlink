@@ -131,6 +131,17 @@ test('the unknown-vehicle union carries no type either', () => {
   }
 });
 
+test('a named vehicle serves bits; the unknown-vehicle union strips them (Codex, #296)', () => {
+  // Bits act — the editor renders switches from them and folds masks — so the
+  // union cannot serve whichever document was enumerated first: wrong labels
+  // set wrong flags with the confidence of a wrong enumeration.
+  const copter = defsFor({ firmware: 'ardupilot', vehicleFamily: 'copter' });
+  assert.ok(Array.isArray(copter.get('LOG_BITMASK').bits), 'the per-vehicle document keeps bits');
+  for (const [id, def] of defsFor({ firmware: 'ardupilot', vehicleFamily: 'unknown' })) {
+    assert.equal(def.bits, undefined, `${id} must not carry union bits`);
+  }
+});
+
 test('catalogLabel names the definition set the operator is actually looking at', () => {
   // The case this exists for: a Connection named "PX4" bound to a profile set
   // to ArduPilot serves ArduPilot definitions, and every symptom — an unknown

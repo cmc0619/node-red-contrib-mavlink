@@ -69,6 +69,17 @@
           var defs = _paramDefsByKey[paramDefsKey(this)];
           var def = defs && defs[editedParamId(this)];
           if (!def) return true;
+          if (def.bits) {
+            // A documented bitmask's legal values are its flags, not a scalar
+            // range. PX4 publishes max 32 for GPS_UBX_CFG_INTF while
+            // documenting bits 0-5 (full mask 63), so the published bound
+            // would red a value the picker itself just built, with no message
+            // and nothing to fix. The bound that does apply is the wire's:
+            // these ride as int32, in either spelling, and outside it the Set
+            // cannot encode — so the picker refuses to touch the box and this
+            // red field is where the operator sees why.
+            return n >= -2147483648 && n <= 2147483647;
+          }
           if (def.min !== undefined && n < def.min) return false;
           if (def.max !== undefined && n > def.max) return false;
           return true;
@@ -230,6 +241,33 @@
       var _paramDefs = {};
       var _defsLoaded = false;
       var _defsNotice = '';
+      /**
+       * The documented flag entries ({value} per bit) and their OR-ed mask for
+       * the parameter the Value field is shaped for. Bit math rides the shared
+       * BigInt pair (RED.mavlink.selectedBitmaskValues / bitmaskFromSelection,
+       * same as Command's Advanced params): BigInt bitwise has no int32
+       * truncation, and a negative value behaves as infinite two's complement
+       * — so LOG_BITMASK's signed int32 spelling (-1 is every bit, per
+       * readInt32LE) selects, masks, and round-trips with no sign juggling
+       * (Gitar, #296). lib/codec/mask.js is the runtime home of the same rule.
+       */
+      var _valueBitEntries = [];
+      var _valueDocMask = 0n;
+
+      /**
+       * A saved box value as a BigInt, or null when it carries no bits to
+       * preserve (blank defers to msg.payload; a non-integer has no bits).
+       */
+      function bitmaskBoxValue(raw) {
+        var text = String(raw === undefined || raw === null ? '' : raw).trim();
+        if (text === '') return null;
+        try {
+          return BigInt(text);
+        } catch (_e) {
+          var n = Number(text);
+          return Number.isInteger(n) ? BigInt(n) : null;
+        }
+      }
       /**
        * Which definition set answered, in words -- composed by the route,
        * because only the route knows what it resolved. A Connection whose
@@ -544,7 +582,8 @@
         var action = $('#node-input-action').val() || 'read';
         var $value = $('#node-input-value');
         var $select = $('#mav-param-value-select');
-        var hasValues = !!(action === 'set' && def && def.values && def.values.length);
+        var hasBits = !!(action === 'set' && def && def.bits && def.bits.length);
+        var hasValues = !hasBits && !!(action === 'set' && def && def.values && def.values.length);
 
         // Shared helper (§6): sets the hover text on the input *and* its label,
         // and maintains the units hint. A private span here would be a second
@@ -565,6 +604,34 @@
         else $value.removeAttr('step');
 
         $select.empty();
+        _valueBitEntries = [];
+        _valueDocMask = 0n;
+        if (hasBits) {
+          // A bitmask parameter is a set of switches, not "a number" —
+          // ARMING_CHECK takes checks, not a sum the operator computes by
+          // hand. One option per documented bit; the picker writes the mask
+          // through to the box. The box stays visible beside it: a blank
+          // value still defers to msg.payload, and undocumented remainder
+          // bits stay reachable and survive picker changes.
+          $select.attr('multiple', 'multiple').attr('size', Math.min(8, def.bits.length));
+          for (var b = 0; b < def.bits.length; b++) {
+            var bit = def.bits[b];
+            var flag = String(Math.pow(2, bit.bit));
+            $select.append(
+              $('<option></option>').val(flag).text(bit.label + ' (bit ' + bit.bit + ')')
+            );
+            _valueBitEntries.push({ value: flag });
+            _valueDocMask = _valueDocMask | BigInt(flag);
+          }
+          var saved = bitmaskBoxValue($value.val());
+          $select.val(saved === null
+            ? []
+            : RED.mavlink.selectedBitmaskValues(saved.toString(), _valueBitEntries));
+          $select.toggle(true);
+          $value.toggle(true);
+          return;
+        }
+        $select.removeAttr('multiple').removeAttr('size');
         if (!hasValues) {
           $select.toggle(false);
           $value.toggle(true);
@@ -695,14 +762,53 @@
         refreshParamInfo();
       });
       $('#mav-param-value-select').on('change', function () {
+        var $box = $('#node-input-value');
+        if ($('#mav-param-value-select').attr('multiple') !== undefined) {
+          // Bitmask mode: the picker owns the documented bits, the box keeps
+          // any undocumented remainder the operator set by hand. The result
+          // folds to canonical signed-int32 spelling (BigInt.asIntN): these
+          // params ride the wire as at most int32, so a freshly picked bit 31
+          // must leave as the negative writeInt32LE accepts — a positive
+          // 2147483648 would throw at Set (Gitar, #296 round 2).
+          var pickedMask = RED.mavlink.bitmaskFromSelection($('#mav-param-value-select').val());
+          var current = bitmaskBoxValue($box.val());
+          // A box value outside signed int32 cannot ride the wire, and the
+          // fold below would silently rewrite it to one that can (CodeRabbit,
+          // #296). Leave it alone: validate() has the field red, which is
+          // where the operator sees and fixes it — not a truncated substitute.
+          if (current !== null && BigInt.asIntN(32, current) !== current) return;
+          // Nothing picked and nothing in the box: leave it alone rather than
+          // writing "0". Blank deferred to msg.payload, and a look-and-untick
+          // that turns it into an explicit mask of zero is a different node —
+          // ARMING_CHECK 0 is every check disabled, which is the opposite of
+          // "whatever the flow sends". This is why bitmaskFromSelection
+          // reports no-selection as null instead of 0.
+          if (pickedMask === null && current === null) return;
+          var remainder = current === null ? 0n : (current & ~_valueDocMask);
+          var result = remainder | BigInt(pickedMask === null ? 0 : pickedMask);
+          $box.val(BigInt.asIntN(32, result).toString());
+          return;
+        }
         var picked = $('#mav-param-value-select').val();
         if (picked === VALUE_CUSTOM) {
           // Reveal the box rather than clearing it: whatever was there is more
           // likely the value they wanted than an empty field.
-          $('#node-input-value').toggle(true);
+          $box.toggle(true);
           return;
         }
-        $('#node-input-value').val(picked).toggle(false);
+        $box.val(picked).toggle(false);
+      });
+      $('#node-input-value').on('input', function () {
+        // Bitmask mode: a hand-edited box is the new truth. Switches still
+        // showing the old mask would fold a deselected documented bit straight
+        // back in on the next pick (Codex, #296) — re-derive the selection
+        // exactly the way reopening the dialog does.
+        var $select = $('#mav-param-value-select');
+        if ($select.attr('multiple') === undefined) return;
+        var saved = bitmaskBoxValue($('#node-input-value').val());
+        $select.val(saved === null
+          ? []
+          : RED.mavlink.selectedBitmaskValues(saved.toString(), _valueBitEntries));
       });
 
       /* Initial state. */

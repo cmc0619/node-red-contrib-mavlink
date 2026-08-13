@@ -89,6 +89,16 @@ class FakeElement {
   }
 
   val(value) {
+    // jQuery semantics for a multi-select: `.val()` answers an array of the
+    // selected option values, and setting takes an array. The dialog's
+    // bitmask picker is the consumer; single-value elements are unchanged.
+    if (this.attrs.multiple !== undefined) {
+      if (value === undefined) return this.selectedValues ? [...this.selectedValues] : [];
+      this.selectedValues = new Set(
+        (Array.isArray(value) ? value : [value]).map(String)
+      );
+      return this;
+    }
     if (value === undefined) return this.value;
     this.value = String(value);
     return this;
