@@ -42,6 +42,35 @@ const { applyConnectionStatus, isBlank } = require('../lib/addressing');
  */
 const STATUS_MIN_INTERVAL_MS = 250;
 
+/**
+ * Fields excluded from the changed-only comparison when `changedFields` is
+ * blank. Every one advances on every frame, so comparing them makes each
+ * message look changed and the filter delivers the whole stream — the exact
+ * opposite of what changed-only is for, and the defect this set fixes (#300).
+ * The four names are MAVLink's own timestamp spellings, matching the reference
+ * implementation's blank-means-all-except-timestamps rule.
+ *
+ * A message whose *only* fields are timestamps (SYSTEM_TIME) therefore
+ * compares as an empty subject and delivers once. That is correct rather than
+ * a corner: nothing but the clock moved, and an operator who wants the clock
+ * names it in `changedFields`, which is compared verbatim.
+ */
+const TIMESTAMP_FIELDS = new Set(['time_boot_ms', 'time_usec', 'time_unix_usec', 'timestamp']);
+
+/**
+ * The decoded fields minus the timestamps — the default changed-only subject.
+ *
+ * @param {object} fields  decoded message fields
+ * @returns {object}
+ */
+function withoutTimestamps(fields) {
+  const subject = {};
+  for (const name of Object.keys(fields)) {
+    if (!TIMESTAMP_FIELDS.has(name)) subject[name] = fields[name];
+  }
+  return subject;
+}
+
 module.exports = function registerMavlinkIn(RED) {
   /**
    * @param {object} config  Node-RED node config from the editor
@@ -150,12 +179,16 @@ module.exports = function registerMavlinkIn(RED) {
       }
 
       // Changed-only: drop if the compared fields are byte-for-byte identical
-      // to the last delivery; `changedFields` restricts the comparison so a
-      // hot timestamp does not make every frame look "changed".
+      // to the last delivery. `changedFields` restricts the comparison; blank
+      // means every field *except* the timestamps, which is what makes the
+      // feature work at all — comparing decoded.fields wholesale meant any
+      // message carrying time_boot_ms differed on every frame, so changed-only
+      // silently passed the entire stream (#300). The comment here used to
+      // describe that exclusion while the code did not implement it.
       if (changedOnly) {
         const subject = changedFields
           ? Object.fromEntries(changedFields.map((name) => [name, decoded.fields ? decoded.fields[name] : undefined]))
-          : decoded.fields;
+          : withoutTimestamps(decoded.fields || {});
         // 64-bit fields decode as BigInt (node-mavlink); JSON.stringify throws
         // on those unless given a replacer. This only affects the comparison
         // key — msg.payload below still carries the original decoded.fields.

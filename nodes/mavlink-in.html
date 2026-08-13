@@ -195,7 +195,7 @@
   </div>
   <div class="form-row" id="row-in-changedFields">
     <label for="node-input-changedFields"><i class="fa fa-list"></i> Compare fields</label>
-    <input type="text" id="node-input-changedFields" placeholder="all fields (e.g. base_mode,custom_mode)">
+    <input type="text" id="node-input-changedFields" placeholder="blank = all fields except timestamps">
   </div>
   <div class="form-row">
     <label for="node-input-fieldName"><i class="fa fa-crosshairs"></i> Field</label>
@@ -247,8 +247,13 @@
   <p><b>Changed only</b>: only forward a message when its field values differ
   from the previous delivery for the same (message, sysid, compid) tuple.
   <b>Compare fields</b> restricts the comparison to the listed fields (comma
-  separated) — so a hot timestamp doesn't make every frame look changed; blank
-  compares every field.</p>
+  separated). Blank compares every field <i>except</i> the timestamps
+  (<code>time_boot_ms</code>, <code>time_usec</code>, <code>time_unix_usec</code>,
+  <code>timestamp</code>), which advance on every frame and would otherwise make
+  every message look changed and pass the whole stream. Naming a timestamp in
+  <b>Compare fields</b> compares it verbatim, so the clock is reachable when you
+  actually want it — and a message whose only fields are timestamps delivers
+  once.</p>
   <p><b>Field</b>: pass only messages where the named field exists — and, when
   a value is given, equals it (compared as strings, so enums and 64-bit values
   work naturally). Example: <code>base_mode</code> = <code>217</code>.</p>
