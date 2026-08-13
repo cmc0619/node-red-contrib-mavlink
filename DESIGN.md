@@ -4350,3 +4350,36 @@ branch in `matchesParamEcho` and its `exactWire` comment; #298 (mask fidelity) a
 (discovery) carry the rulings. Measured with `BATT_SERIAL_NUM` and `LOG_BITMASK` — note
 `BATT_ESC_MASK` is published in ArduPilot's parameter metadata but absent from the
 Copter-4.7.0 SITL build, so metadata presence does not imply the vehicle has the parameter.
+
+**No library is coming for the parameter bit/int hazards — and the two references verify less
+than we do (source-checked, 2026-08-13).**
+*Wrong belief:* this is a solved problem; some MAVLink library already handles integer
+parameters in the float slot, and writing `lib/codec/mask.js` and `lib/codec/param-union.js`
+was reinventing a wheel.
+*Fact:* "bitmask trouble" is three separate hazards and only one of them is library-shaped.
+
+**JS signed-int32 bitwise truncation** — the answer is language-level (`BigInt`, or
+power-of-two arithmetic), not a dependency. `node-mavlink` ships no bitmask helper of any kind.
+
+**The union (bytewise vs c-cast)** — solved everywhere, in about fifteen lines each, and never
+packaged. pymavlink does it in `mavparm.py` `MAVParmDict.mavset`: `struct.pack(">i", …)` then
+`struct.unpack(">f", …)`, branching on the caller's `parm_type` — **not** on the capability
+bits, which pymavlink never reads. QGroundControl uses `mavlink_param_union_t` plus an
+ArduPilot-specific firmware plugin that re-encodes in both directions. **`node-mavlink`, our own
+dependency, does neither** — it serializes `param_value` as a plain float32 and leaves the union
+to the application. So `param-union.js` has nothing upstream to import; the library layer stops
+at the wire type, by design.
+
+**The float32 mantissa** — nobody solves it, because it is not solvable (see the c-cast entry
+above).
+
+The load-bearing discovery: **neither reference checks the echoed value at all.** pymavlink's
+ack loop is `if str(name).upper() == str(ack.param_id).upper()` — parameter *name* only, never
+`ack.param_value`; its `mindelta` tolerance exists but is used solely in `load`/`diff`. It then
+caches the *encoded* float, so a bytewise INT32 set of `9` leaves `1.26e-44` in its parameter
+dict. QGroundControl clears `_waitingWriteParamNameMap` on receipt of any `PARAM_VALUE` for that
+name, with no comparison either. Our echo matching — which compares the value, exactly on a
+bytewise-int wire and within float32 tolerance otherwise — is already ahead of both. So the
+confirm-time honesty fix (#298) is not a wheel to import; it is a step the ecosystem skips.
+*Check:* `lib/codec/mask.js` header (operator ban), `lib/codec/param-union.js`,
+`matchesParamEcho` in `lib/param/index.js`; pymavlink `mavparm.py` `mavset` upstream.
