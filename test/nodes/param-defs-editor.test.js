@@ -620,6 +620,38 @@ test('hand-editing the box resyncs the switches before the next pick (Codex, #29
   assert.equal(element('#node-input-value').val(), '10', '2 (picked) + 8 (remainder), no resurrected bit 0');
 });
 
+test('deselecting every switch on a blank box leaves it blank, not "0"', () => {
+  // Blank defers to msg.payload. A look-and-untick that writes "0" silently
+  // converts that node into one that sets the mask to zero — for ARMING_CHECK,
+  // every check disabled. Deselect-to-remainder still applies when there is a
+  // remainder to keep; here there is none.
+  const { context, element } = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'ARMING_CHECK',
+    '#node-input-value': '',
+  });
+  context.refreshInfoForTest();
+
+  const select = element('#mav-param-value-select');
+  select.val(['2']);
+  select.trigger('change');
+  assert.equal(element('#node-input-value').val(), '2', 'picking still writes the mask');
+
+  select.val([]);
+  select.trigger('change');
+  assert.equal(element('#node-input-value').val(), '0',
+    'a mask the operator built and then cleared is an explicit zero');
+
+  // But a box that was never filled stays blank through the same gesture.
+  const blank = mountValueField(VALUE_DEFS, {
+    '#node-input-paramId': 'ARMING_CHECK',
+    '#node-input-value': '',
+  });
+  blank.context.refreshInfoForTest();
+  blank.element('#mav-param-value-select').trigger('change');
+  assert.equal(blank.element('#node-input-value').val(), '',
+    'no selection and no box value: still deferring to msg.payload');
+});
+
 test('switching from a bitmask parameter back to an enum restores single-select mode', () => {
   // The multiple attribute must not leak between parameters: an enum select
   // wearing it would return arrays to the single-value handler.

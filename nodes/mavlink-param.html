@@ -69,13 +69,19 @@
           var defs = _paramDefsByKey[paramDefsKey(this)];
           var def = defs && defs[editedParamId(this)];
           if (!def) return true;
+          if (def.bits) {
+            // A documented bitmask's legal values are its flags, not a scalar
+            // range. PX4 publishes max 32 for GPS_UBX_CFG_INTF while
+            // documenting bits 0-5 (full mask 63), so the published bound
+            // would red a value the picker itself just built, with no message
+            // and nothing to fix. The bound that does apply is the wire's:
+            // these ride as int32, in either spelling, and outside it the Set
+            // cannot encode — so the picker refuses to touch the box and this
+            // red field is where the operator sees why.
+            return n >= -2147483648 && n <= 2147483647;
+          }
           if (def.min !== undefined && n < def.min) return false;
           if (def.max !== undefined && n > def.max) return false;
-          // Documented bits imply the bound the metadata rarely states: the
-          // value rides the wire as int32, in either spelling. Outside that,
-          // the Set cannot encode and the picker refuses to touch the box —
-          // this red field is where the operator can see why.
-          if (def.bits && (n < -2147483648 || n > 2147483647)) return false;
           return true;
         },
       },
@@ -771,6 +777,13 @@
           // #296). Leave it alone: validate() has the field red, which is
           // where the operator sees and fixes it — not a truncated substitute.
           if (current !== null && BigInt.asIntN(32, current) !== current) return;
+          // Nothing picked and nothing in the box: leave it alone rather than
+          // writing "0". Blank deferred to msg.payload, and a look-and-untick
+          // that turns it into an explicit mask of zero is a different node —
+          // ARMING_CHECK 0 is every check disabled, which is the opposite of
+          // "whatever the flow sends". This is why bitmaskFromSelection
+          // reports no-selection as null instead of 0.
+          if (pickedMask === null && current === null) return;
           var remainder = current === null ? 0n : (current & ~_valueDocMask);
           var result = remainder | BigInt(pickedMask === null ? 0 : pickedMask);
           $box.val(BigInt.asIntN(32, result).toString());

@@ -286,6 +286,20 @@ test('mavlink-param value validator: documented bits imply the int32 wire bound'
   assert.equal(validate('-2147483649'), false, 'below int32 min cannot encode');
 });
 
+test('mavlink-param value validator: a documented bitmask is not bound by a published range', () => {
+  // PX4 ships GPS_UBX_CFG_INTF with max 32 while documenting bits 0-5 — full
+  // mask 63. Ticking two switches builds 33, and the scalar bound would red
+  // the node over a value the picker itself just produced. For a bitmask the
+  // flags are the authority; only the int32 wire bound still applies.
+  const validate = mountValueValidator(
+    { GPS_UBX_CFG_INTF: { min: 0, max: 32, bits: [{ bit: 0, label: 'A' }, { bit: 5, label: 'B' }] } },
+    'GPS_UBX_CFG_INTF'
+  );
+  assert.equal(validate('33'), true, 'bits 0+5 are legal even above the published max');
+  assert.equal(validate('63'), true, 'the full documented mask is legal');
+  assert.equal(validate('4294967296'), false, 'the wire bound still applies');
+});
+
 test('a value only reaches the wire on a set, so only a set is checked for it', () => {
   // PARAM_SET is the only message carrying param_value, and the Value row is
   // shown only for a set. Configure a set with an out-of-range value, switch
