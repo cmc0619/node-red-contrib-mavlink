@@ -492,8 +492,10 @@ test('stream ticks re-stamp time_boot_ms without mutating the built message', ()
     connection: { send: (m) => sent.push(m) },
     rateHz: 4,
     ttlMs: 0,
-    setInterval: (fn) => { tick = fn; return { unref() {} }; },
-    clearInterval: () => {},
+    // Injected no-ops: the test drives ticks by hand — there is no real timer
+    // to unref or clear, only the captured callback.
+    setInterval: (fn) => { tick = fn; return { unref() { /* not a real timer */ } }; },
+    clearInterval: () => { /* no timer to clear */ },
   });
   stream.start();
   tick();
