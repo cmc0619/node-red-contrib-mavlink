@@ -98,12 +98,6 @@
                     { index: 5, units: 'deg' },
                     { index: 6, units: 'deg' },
                     { index: 7 }],
-    reposition:    [{ index: 1, label: 'Ground speed (blank = default)' },
-                    { index: 2 }, { index: 3 },
-                    { index: 4, label: 'Yaw (blank = keep heading)' },
-                    { index: 5, units: 'deg' },
-                    { index: 6, units: 'deg' },
-                    { index: 7 }],
     change_speed:  [{ index: 1 },
                     { index: 2, label: 'Speed (blank = no change)' },
                     { index: 3, label: 'Throttle (blank = no change)' }],
@@ -127,32 +121,34 @@
     flight_termination: [{ index: 1, label: 'Terminate (1=yes)' }],
   };
 
-  // Which presets cannot be sent with a blank coordinate — a mirror of
-  // `requireLocation` / `requireAltitude` in lib/command/presets.js. It lives
-  // here because a Node-RED validator is synchronous and the preset catalog is
-  // fetched asynchronously: a node whose dialog was never opened still has to
-  // be checked at deploy, so the rule cannot wait on a fetch.
-  //
-  // Two copies of one rule is a real cost. It is paid down by an executed test
-  // (test/nodes/command-html.test.js) that reads the library's PRESETS and
-  // asserts this map matches it exactly, so the pair cannot drift in silence.
-  // `reposition` is listed: false — Move owns the goto — so it is unreachable
-  // from the dropdown; it is kept here only to keep that equality total.
-  // Orbit is deliberately absent: DO_ORBIT documents NaN on param5/6 as "use
-  // current vehicle position", so a blank centre is the spec's own "orbit
-  // where I am" and demanding coordinates refused a legal command.
   // Presets whose *blank* param5/6 encodes the spec's NaN "use current
   // position" sentinel (`blankParams` in lib/command/presets.js). int32 has no
   // NaN, so those presets can only say "here" over COMMAND_LONG —
   // `longToIntFields` refuses the pair at build. The carrier is an editor
   // field, so the impossibility is a deploy-time verdict rather than a
   // first-message surprise. Drift-tested against the library, like the map
-  // above.
+  // below.
   const NAN_CENTRE_PRESETS = new Set(['orbit']);
 
+  // Which presets cannot be sent with a blank coordinate — a mirror of
+  // `requireLocation` in lib/command/presets.js. It lives here because a
+  // Node-RED validator is synchronous and the preset catalog is fetched
+  // asynchronously: a node whose dialog was never opened still has to be
+  // checked at deploy, so the rule cannot wait on a fetch.
+  //
+  // Two copies of one rule is a real cost. It is paid down by an executed test
+  // (test/nodes/command-html.test.js) that reads the library's PRESETS and
+  // asserts this map matches the *offered* ones exactly, so the pair cannot
+  // drift in silence. Offered is the right side of the comparison: a row the
+  // dropdown does not carry is not this node's surface to police, and
+  // `reposition` is exactly that — Move owns the goto, and the row survives
+  // only as the DO_REPOSITION metadata mavlink-formation builds from.
+  //
+  // Orbit is deliberately absent: DO_ORBIT documents NaN on param5/6 as "use
+  // current vehicle position", so a blank centre is the spec's own "orbit
+  // where I am" and demanding coordinates refused a legal command.
   const PRESET_LOCATION = {
-    set_home:   { require: { unless: { param: 1, equals: 1 } } },
-    reposition: { require: true, altitude: true },
+    set_home: { require: { unless: { param: 1, equals: 1 } } },
   };
 
   /** A param value that is actually a value: not blank, and finite. */
@@ -353,9 +349,6 @@
           if (!rule || !locationRequired(rule.require, values)) return true;
           if (!presentParam(values[5]) || !presentParam(values[6])) {
             return 'needs a latitude and longitude — a blank coordinate is sent as 0,0';
-          }
-          if (rule.altitude && !presentParam(values[7])) {
-            return 'needs an altitude — a blank altitude is sent as ground level';
           }
           return true;
         },
@@ -853,22 +846,24 @@
           node._mavParamsRendered = true;
         } else {
           const presetId = $('#node-input-preset').val();
-          // A saved preset the dropdown does not offer — `listed: false`, or a
-          // preset deleted since the flow was written — leaves the select with
-          // nothing selected, so val() is null. That is NOT "this preset has
-          // no parameters": treating it as such rendered an empty form, marked
-          // it rendered, and let oneditsave scrape zero `.param-input` fields
-          // over the saved blob. Open a Go To command node, click Done,
-          // coordinates gone.
+          // A select with no option matching the saved preset leaves nothing
+          // selected, so val() is null. The reachable cause is a failed preset
+          // fetch: `loadPresets`'s .fail() hands back an empty group list, and
+          // buildPresetDropdown then paints a select with no options at all.
+          //
+          // Null is NOT "this preset has no parameters". Treating it as such
+          // rendered an empty form, marked it rendered, and let oneditsave
+          // scrape zero `.param-input` fields over the saved blob — open the
+          // node while the admin API is down, click Done, params gone.
           //
           // Same class as the rendered-guard itself (Codex #36) with a
           // different trigger — there the form had not rendered yet, here it
           // rendered nothing — so the answer is the same: leave the flag off
           // and oneditsave keeps its hands off the saved params.
           if (presetId === null || presetId === undefined) {
-            container.append($('<div class="form-row"><em>This node is set to a preset the '
-              + 'palette no longer offers. Its parameters are preserved; pick a preset to '
-              + 'edit them.</em></div>'));
+            container.append($('<div class="form-row"><em>The preset list could not be '
+              + 'loaded, so this node\'s parameters cannot be shown. They are preserved; '
+              + 'deploy the Vehicle Profile and reopen to edit them.</em></div>'));
             return;
           }
           const paramSpec = PRESET_PARAMS[presetId] || [];

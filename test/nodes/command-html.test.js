@@ -563,19 +563,10 @@ test('mavlink-command: preset coordinates are checked here, and nowhere else', (
   assert.match(String(verdict({ preset: 'set_home', sendAs: 'long', frame: '1' }, far)), /within ±90°/,
     'the LONG carrier has no frame — degrees apply whatever the stale field says');
 
-  // requireAltitude — the branch only `reposition` declares. It is not dead
-  // code despite being off the dropdown: a saved reposition node validates
-  // through here at deploy with the dialog closed, which is exactly what
-  // examples/sitl/23-ap-int-carrier-goto.json and 29-int-carrier-goto.json
-  // are. DO_REPOSITION documents no blank-altitude sentinel, so a zero-fill is
-  // ground level (or below it at MSL) — the Move F1 rule on the command path.
-  assert.match(String(verdict({ preset: 'reposition' }, { 5: 47.4, 6: 8.5 })), /needs an altitude/,
-    'lat/lon without an altitude reds');
-  assert.match(String(verdict({ preset: 'reposition' }, {})), /needs a latitude and longitude/,
-    'the location rule still comes first');
-  assert.equal(verdict({ preset: 'reposition' }, { 5: 47.4, 6: 8.5, 7: 20 }), true, 'complete passes');
-  assert.equal(verdict({ preset: 'reposition' }, { 5: 47.4, 6: 8.5, 7: 0 }), true,
-    'an explicit 0 altitude is a commanded value, not a blank');
+  // A preset the dropdown does not offer is not this node's surface to police
+  // — `reposition` reaches here through no path at all now that Move owns the
+  // goto, so it gets no rule rather than an unreachable one.
+  assert.equal(verdict({ preset: 'reposition' }, {}), true, 'an unoffered preset carries no rule');
 
   // Gates: Advanced never reads the preset rules, and an unreadable blob reds
   // rather than falling open.
@@ -586,34 +577,39 @@ test('mavlink-command: preset coordinates are checked here, and nowhere else', (
 
 test('mavlink-command: the editor\'s location rules match the library\'s, exactly', () => {
   // PRESET_LOCATION is a second copy of lib/command/presets.js's
-  // requireLocation/requireAltitude, and it exists because a Node-RED
-  // validator is synchronous while the preset catalog is fetched. Two copies
-  // of one rule only stay honest if something compares them, so: executed, in
-  // both directions, so neither a new location preset nor a deleted one can
-  // land on one side alone.
+  // requireLocation, and it exists because a Node-RED validator is synchronous
+  // while the preset catalog is fetched. Two copies of one rule only stay
+  // honest if something compares them, so: executed, in both directions, so
+  // neither a new location preset nor a deleted one can land on one side alone.
+  //
+  // The library side is filtered to the *offered* presets. A row the dropdown
+  // does not carry cannot be configured, so a rule for it would be a rule
+  // nothing can reach — `reposition` is the case, kept in PRESETS only as the
+  // DO_REPOSITION metadata mavlink-formation builds from. Filtering here is
+  // what makes `listed: false` mean one thing in both files.
   const { PRESETS } = require('../../lib/command');
+  const offered = PRESETS.filter((p) => p.listed !== false);
   const map = /const PRESET_LOCATION = \{[\s\S]*?\n {2}\};/.exec(html);
   assert.ok(map, 'PRESET_LOCATION must be extractable');
 
-  const fromLibrary = PRESETS
+  const fromLibrary = offered
     .filter((p) => p.requireLocation)
     .map((p) => p.id)
     .sort();
   // Line-anchored, not indentation- or nesting-counted: an entry's value is
   // the rest of its line, so `set_home`'s three nested braces read the same as
-  // `reposition`'s one, and a reformat cannot quietly stop matching.
+  // a one-brace entry, and a reformat cannot quietly stop matching.
   const fromEditor = [...map[0].matchAll(/^\s+(\w+):\s*\{/gm)].map((m) => m[1]).sort();
   assert.deepEqual(fromEditor, fromLibrary, 'the same presets require a location on both sides');
+  assert.ok(
+    PRESETS.some((p) => p.listed === false && p.requireLocation),
+    'the offered-filter is load-bearing — an unoffered requireLocation row exists to exclude'
+  );
 
-  for (const preset of PRESETS.filter((p) => p.requireLocation)) {
+  for (const preset of offered.filter((p) => p.requireLocation)) {
     const entry = new RegExp(`^\\s+${preset.id}:\\s*(.+)$`, 'm').exec(map[0]);
     assert.ok(entry, `${preset.id} entry must be extractable`);
-    assert.equal(
-      /altitude:\s*true/.test(entry[1]),
-      Boolean(preset.requireAltitude),
-      `${preset.id}: requireAltitude must agree`
-    );
-    // `true` vs the conditional `{ unless: … }` form must agree too — the
+    // `true` vs the conditional `{ unless: … }` form must agree — the
     // difference is Set Home's "use current position" escape.
     assert.equal(
       /require:\s*true/.test(entry[1]),
@@ -621,6 +617,17 @@ test('mavlink-command: the editor\'s location rules match the library\'s, exactl
       `${preset.id}: the conditional-vs-always form must agree`
     );
   }
+
+  // The altitude rule is gone from the editor because `reposition` was the
+  // only row that declared it and nothing offers that preset. This is the
+  // tripwire for putting it back: an offered preset with requireAltitude
+  // would need a validator branch that no longer exists, and would otherwise
+  // deploy clean while sending a blank altitude as ground level.
+  assert.equal(
+    offered.filter((p) => p.requireAltitude).length, 0,
+    'an offered preset needs an altitude — restore the altitude branch in the params validator'
+  );
+  assert.doesNotMatch(map[0], /altitude:/, 'and PRESET_LOCATION carries no rule the validator ignores');
 });
 
 test('mavlink-command: NAN_CENTRE_PRESETS matches the library\'s NaN param5/6 sentinels', () => {
@@ -690,17 +697,17 @@ test('mavlink-command: the params validator reads the live form the way Done wri
 
 test('mavlink-command: a form that rendered nothing falls back to the saved params', () => {
   // `_mavParamsRendered` is the same authority `oneditsave` scrapes behind,
-  // and for the same reason: a dialog can be open over a form that rendered
-  // no controls — the catalog is still loading, or the saved preset is one the
-  // palette no longer offers (the `listed: false` branch). Scraping zero
-  // fields there reads as "every param is blank" and reds a node whose saved
-  // params are perfectly intact (Codex, #286).
-  const saved = JSON.stringify({ 5: 47.4, 6: 8.5, 7: 20 });
+  // and for the same reason: a dialog can be open over a form that rendered no
+  // controls — the catalog is still loading, or the preset fetch failed and
+  // the select has no options at all. Scraping zero fields there reads as
+  // "every param is blank" and reds a node whose saved params are perfectly
+  // intact (Codex, #286).
+  const saved = JSON.stringify({ 5: 47.4, 6: 8.5 });
   const open = (over) => loadNodeDefaults('mavlink-command', {}, {
     dom: { '#node-input-params': { val: saved }, '.param-input': { items: [] } },
     editStack: [{ id: 'c1' }],
   }).params.validate.call(
-    Object.assign({ id: 'c1', mode: 'preset', preset: 'reposition' }, over), saved, {}
+    Object.assign({ id: 'c1', mode: 'preset', preset: 'set_home' }, over), saved, {}
   );
 
   assert.equal(open({ _mavParamsRendered: false }), true, 'nothing rendered: judge the saved blob');
