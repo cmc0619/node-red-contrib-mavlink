@@ -791,6 +791,24 @@
           node._mavParamsRendered = true;
         } else {
           const presetId = $('#node-input-preset').val();
+          // A saved preset the dropdown does not offer — `listed: false`, or a
+          // preset deleted since the flow was written — leaves the select with
+          // nothing selected, so val() is null. That is NOT "this preset has
+          // no parameters": treating it as such rendered an empty form, marked
+          // it rendered, and let oneditsave scrape zero `.param-input` fields
+          // over the saved blob. Open a Go To command node, click Done,
+          // coordinates gone.
+          //
+          // Same class as the rendered-guard itself (Codex #36) with a
+          // different trigger — there the form had not rendered yet, here it
+          // rendered nothing — so the answer is the same: leave the flag off
+          // and oneditsave keeps its hands off the saved params.
+          if (presetId === null || presetId === undefined) {
+            container.append($('<div class="form-row"><em>This node is set to a preset the '
+              + 'palette no longer offers. Its parameters are preserved; pick a preset to '
+              + 'edit them.</em></div>'));
+            return;
+          }
           const paramSpec = PRESET_PARAMS[presetId] || [];
           if (paramSpec.length === 0) {
             container.append($('<div class="form-row"><em>No exposed parameters for this preset.</em></div>'));
