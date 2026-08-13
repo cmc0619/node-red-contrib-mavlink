@@ -1,4 +1,12 @@
 {
+  "extraKnownMarketplaces": {
+    "mem0-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "mem0ai/mem0"
+      }
+    }
+  },
   "permissions": {
     "allow": [
       "mcp__github__pull_request_read",
