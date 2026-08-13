@@ -4239,3 +4239,15 @@ from ~2 s to ~25 s (an explicit NAV_TAKEOFF altitude would not do: PX4 reads par
 the lab's Zurich home sits near 488 m).
 *Check:* example 36 for the ground half; the airborne refusal is recorded in commit 7be10a7 and
 the probe-40 rig row (2026-08-12).
+
+**SITL 02 green on pre-#287 main does not yet confirm the vehicle-judges fence path
+(2026-08-13).**
+*Wrong belief:* #290’s PASS on `02-mission-fence-rally` already proves the post-#287
+predicate (PX4 fence fails loud from the vehicle via `MAV_MISSION_UNSUPPORTED` or transfer
+deadline).
+*Fact:* that run was on `main@9a29744` with #287 still open, so the PX4 fence leg still
+failed at the **node-side** firmware gate. After #287 merges, the same example’s mechanics
+change — the vehicle is the judge — and the tightened `verdictFrom` expects that shape.
+The first full suite after #287 lands is the end-to-end measurement.
+*Check:* `examples/sitl/02-mission-fence-rally.json`, `sitl/run-example-suite.js` verdict for
+expect `AP mission/fence/rally ok`, PR #287.
