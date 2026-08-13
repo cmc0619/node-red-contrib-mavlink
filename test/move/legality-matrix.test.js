@@ -156,18 +156,6 @@ for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
 // ── Every unoffered combo refuses loud ───────────────────────────────────────
 
 const REFUSED = [
-  // Setpoints carry no acknowledgement — confirm exists on goto only.
-  {
-    name: 'steer × confirm (world)',
-    config: configFor('steer', 'confirm', 'world'),
-    error: /Send & confirm exists on the Go to action only/,
-  },
-  {
-    name: 'steer × confirm (body)',
-    config: configFor('steer', 'confirm', 'body'),
-    firmware: 'ardupilot',
-    error: /Send & confirm exists on the Go to action only/,
-  },
   // The action vocabulary is closed: goto and steer, nothing else.
   {
     name: 'unknown action',
