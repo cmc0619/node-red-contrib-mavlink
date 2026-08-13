@@ -95,7 +95,9 @@ test('mavlink-move Action surface: goto default, both actions offered, retired f
   // A wrong or missing default changes the wire message for every Move node
   // that never touched the field; goto is the acked direction the redesign
   // leads with.
-  assert.match(html, /action:\s*\{\s*value:\s*'goto'\s*\}/, 'action defaults to goto');
+  // Defaults-based, not a source regex: action grew a validator (the Steer
+  // "something to command" rule), so its literal is no longer one line.
+  assert.equal(loadNodeDefaults('mavlink-move').action.value, 'goto', 'action defaults to goto');
   assert.match(html, /option value="goto"/, 'goto action offered');
   assert.match(html, /option value="steer"/, 'steer action offered');
   assert.match(html, /altRef:\s*\{\s*value:\s*'home'\s*\}/, 'altRef defaults to home (the GCS default)');
@@ -606,4 +608,36 @@ test('mavlink-move help documents the action-shaped overrides and refuses the re
   }
   assert.match(html, /action: "stop"/, 'the stop action is documented');
   assert.match(html, /msg\.payload === false<\/code> suppresses/, 'the suppress sentinel is documented');
+});
+
+test('mavlink-move: Steer must command something, and must not mix acceleration', () => {
+  // Both rules moved out of the runtime (AGENTS.md, input trust): the configured
+  // path is the editor's, and a msg that blanks or mixes the groups is trusted.
+  //
+  // No *individual* Steer field can be required — filling fields IS the mode —
+  // but "at least one of them" can be, which is what makes an all-blank Steer
+  // catchable at all. It reds on Action because Action is what gives the
+  // fields meaning.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const verdict = (over) =>
+    defaults.action.validate.call(Object.assign({ id: 'm1', action: 'steer' }, over), 'steer', {});
+
+  assert.equal(defaults.action.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+  assert.equal(defaults.action.validate.call({ id: 'm1', action: 'goto' }, 'goto', {}), true,
+    'Go to reads none of these fields, so it never fires');
+
+  assert.match(String(verdict({})), /needs at least one field filled/, 'an all-blank Steer reds');
+  for (const filled of [{ north: '5' }, { vNorth: '1' }, { aUp: '0.5' }, { yaw: '90' }, { yawRate: '10' }]) {
+    assert.equal(verdict(filled), true, `${Object.keys(filled)[0]} alone is something to command`);
+  }
+  // An explicit 0 is a value; whitespace is not (#174).
+  assert.equal(verdict({ vNorth: '0' }), true, 'a zero velocity is a commanded zero');
+  assert.match(String(verdict({ vNorth: ' ' })), /needs at least one field filled/, 'whitespace is blank');
+
+  // The setpoint vocabulary has no accel+position or accel+velocity mode, so
+  // one group would be dropped in silence. All three groups are on screen
+  // together, which is what makes this the editor's to catch.
+  assert.match(String(verdict({ aUp: '0.5', north: '5' })), /cannot mix acceleration/);
+  assert.match(String(verdict({ aUp: '0.5', vNorth: '1' })), /cannot mix acceleration/);
+  assert.equal(verdict({ north: '5', vNorth: '1' }), true, 'position + velocity IS a mode');
 });

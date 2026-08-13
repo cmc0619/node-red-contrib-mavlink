@@ -153,7 +153,14 @@ for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
   }
 }
 
-// ── Every unoffered combo refuses loud ───────────────────────────────────────
+// ── The combos that still refuse ─────────────────────────────────────────────
+//
+// Not "everything the editor does not offer": the altRef and reference
+// vocabularies are coerced now rather than checked (AGENTS.md, input trust —
+// both are payload-overridable, and msg is trusted). What is left refuses for
+// reasons that are not about vetting operator input: an action the surface
+// does not define, a body frame with no firmware to derive it from, and a
+// steer with no field filled at all.
 
 const REFUSED = [
   // The action vocabulary is closed: goto and steer, nothing else.
@@ -162,40 +169,12 @@ const REFUSED = [
     config: { ...configFor('goto', 'send', 'home'), action: 'orbit' },
     error: /unknown Move action "orbit" — expected goto or steer/,
   },
-  // altRef has no terrain: unmeasured on both stacks, dropped from the
-  // surface until it isn't (§14).
-  {
-    name: "altRef 'terrain'",
-    config: { ...configFor('goto', 'send', 'home'), altRef: 'terrain' },
-    error: /unknown Move altitude reference "terrain"/,
-  },
-  // The reference vocabulary is closed too.
-  {
-    name: 'unknown reference',
-    config: { ...configFor('steer', 'send', 'world'), reference: 'diagonal' },
-    error: /unknown Move reference "diagonal"/,
-  },
   // Body without a firmware fails closed — the stacks read different body
   // frames, and an unadapted guess is silently dropped by the vehicle (§14).
   {
     name: 'body reference without firmware',
     config: configFor('steer', 'send', 'body'),
     error: /Vehicle Profile with firmware ardupilot or px4/,
-  },
-  // Every steer field is optional at deploy — the widest gap between the
-  // editor surface and the runtime — so the all-blank refusal lands at
-  // input time, and the matrix must own it (CodeRabbit, #277).
-  {
-    name: 'steer with no motion fields',
-    config: {
-      action: 'steer',
-      delivery: 'send',
-      reference: 'world',
-      connection: 'conn',
-      targetSystem: 1,
-      targetComponent: 1,
-    },
-    error: /nothing to command/,
   },
 ];
 

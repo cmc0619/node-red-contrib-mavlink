@@ -1,5 +1,20 @@
 <script type="text/javascript">
   /**
+   * A field's value as the operator currently has it: the live input while
+   * this node's own dialog is on top, else the saved property. Same rule as
+   * `positionAxisValidator`'s sibling reads and for the same reason — an empty
+   * box is an answer, so `liveOr`'s fall-back-to-saved would hide a clearing.
+   *
+   * @param {object} owner  the node being validated
+   * @param {string} name   config property, which is also the input id suffix
+   * @returns {*}
+   */
+  function fieldValue(owner, name) {
+    var $live = RED.mavlink.ownDialogField(owner, '#node-input-' + name);
+    return $live ? $live.val() : owner[name];
+  }
+
+  /**
    * A Steer position triplet is all-or-nothing.
    *
    * Filling any axis makes this a position setpoint — the runtime derives the
@@ -54,7 +69,38 @@
       // mask are code. goto = the acked guided goto (DO_REPOSITION as
       // COMMAND_INT on the command tiers, SET_POSITION_TARGET_GLOBAL_INT on
       // Stream); steer = setpoints, fire-and-forget.
-      action: { value: 'goto' },
+      // A Steer node with every field blank has nothing to command: the mask
+      // derives from which groups carry values, so all-blank is the all-ignore
+      // packet PX4 logs as invalid. No *individual* field can be required —
+      // filling fields IS the mode — but "at least one of them" can be, and
+      // that is the rule. It reds on Action because Action is what makes the
+      // fields mean anything; Go to reads none of them, so it never fires.
+      // Two args so the reason renders (§14).
+      action: {
+        value: 'goto',
+        validate: function (v, _opt) {
+          if (v !== 'steer') return true;
+          var owner = this;
+          var filled = function (names) {
+            return names.some(function (n) { return !RED.mavlink.isBlank(fieldValue(owner, n)); });
+          };
+          var position = filled(['north', 'east', 'up']);
+          var velocity = filled(['vNorth', 'vEast', 'vUp']);
+          var accel = filled(['aNorth', 'aEast', 'aUp']);
+          // The setpoint vocabulary has no accel+position or accel+velocity
+          // mode, so one group would be dropped in silence. The runtime used to
+          // refuse this; the groups are all on screen together, so it is the
+          // editor's to catch.
+          if (accel && (position || velocity)) {
+            return 'Steer cannot mix acceleration with position or velocity — '
+              + 'the setpoint vocabulary has no such mode; clear one group';
+          }
+          if (position || velocity || accel) return true;
+          if (filled(['yaw', 'yawRate'])) return true;
+          return 'Steer needs at least one field filled — a position, a velocity, '
+            + 'an acceleration, or a yaw';
+        },
+      },
       // Go to's one frame choice: altitude above home vs absolute MSL.
       altRef: { value: 'home' },
       // Steer's axes: world = LOCAL_NED everywhere; body adapts to the bound

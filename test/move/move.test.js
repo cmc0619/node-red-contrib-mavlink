@@ -111,11 +111,13 @@ test('yaw-only Move ignores every translation vector and requires yaw or yaw rat
   // Degrees in, radians out: 180 deg is exactly π.
   assert.equal(message.fields.yaw, Math.PI);
 
-  // Both blank would be the all-ignore packet PX4 rejects (§14 / #115).
-  assert.throws(
-    () => buildMoveMessage({ mode: 'yaw-only', target: { sysid: 2, compid: 1 } }),
-    /yaw or yaw rate/
-  );
+  // Both blank builds the all-ignore packet PX4 logs as invalid (§14 / #115).
+  // It no longer throws: deriveSteerMode only returns 'yaw-only' when one of
+  // them is present, so the node cannot reach this — the only caller that can
+  // is somebody using lib/move directly, and the driver does not refuse its
+  // own SDK (AGENTS.md, driver and protector).
+  const allIgnore = buildMoveMessage({ mode: 'yaw-only', target: { sysid: 2, compid: 1 } });
+  assert.equal(allIgnore.fields.type_mask, 7 + 56 + 448 + 1024 + 2048, 'every group ignored');
 });
 
 test('numeric frames select the carrier message and coordinate_frame value', () => {
@@ -267,17 +269,24 @@ test('resolveMoveAction: blank parses steer (the old setpoint default), unknown 
   assert.throws(() => resolveMoveAction('teleport'), /unknown Move action "teleport" — expected goto or steer/);
 });
 
-test('frameForAltRef: home → 3, msl → 0, blank → home; terrain is unreachable from the surface (§14)', () => {
+test('frameForAltRef is total: msl → 0, everything else → home (§14)', () => {
   const { frameForAltRef } = require('../../lib/move');
   assert.equal(frameForAltRef('home'), 3);
   assert.equal(frameForAltRef('msl'), 0);
   for (const blank of [undefined, null, '']) {
-    assert.equal(frameForAltRef(blank), 3, `blank ${JSON.stringify(blank)} defaults to home, the GCS default`);
+    assert.equal(frameForAltRef(blank), 3, `blank ${JSON.stringify(blank)} is home, the GCS default`);
   }
-  // Terrain is deliberately absent — unmeasured on both stacks, dropped from
-  // the surface until it isn't. It refuses loud, never a silent global guess.
-  assert.throws(() => frameForAltRef('terrain'), /unknown Move altitude reference "terrain"/);
-  assert.throws(() => frameForAltRef('agl'), /expected home \(above home\) or msl \(absolute\)/);
+  // Unknown values used to throw. The config is a two-option select and a
+  // payload override is trusted (AGENTS.md, input trust), so there was nothing
+  // to protect against — this is a coercion now, not a check, and it is total
+  // so that no input can leave the frame undefined.
+  //
+  // Undefined is the outcome that matters: resolveModeAndFrame reads a blank
+  // frame as LOCAL_NED, so returning undefined would turn a goto into a local
+  // setpoint with lat/lon read as metres. A defined answer beats that.
+  for (const unknown of ['terrain', 'agl', 'TERRAIN', 42, {}]) {
+    assert.equal(frameForAltRef(unknown), 3, `${JSON.stringify(unknown)} resolves to home, never undefined`);
+  }
 });
 
 test('frameForReference: world is LOCAL_NED and never needs firmware; body derives per stack and fails closed (§14)', () => {
@@ -295,10 +304,14 @@ test('frameForReference: world is LOCAL_NED and never needs firmware; body deriv
   // by the vehicle, exactly the wrong the derivation exists to prevent.
   assert.throws(() => frameForReference('body', undefined), /Vehicle Profile with firmware ardupilot or px4/);
   assert.throws(() => frameForReference('body', 'custom'), /Vehicle Profile with firmware ardupilot or px4/);
-  assert.throws(() => frameForReference('sideways', undefined), /unknown Move reference "sideways"/);
+  // Anything that is not 'body' is world, coerced rather than checked — same
+  // ruling as frameForAltRef, and never undefined.
+  for (const unknown of ['sideways', 'BODY', 7, {}]) {
+    assert.equal(frameForReference(unknown, undefined), 1, `${JSON.stringify(unknown)} resolves to world`);
+  }
 });
 
-test('deriveSteerMode: filling fields IS the mode — the CSV rule, with loud refusals at the edges', () => {
+test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the edges', () => {
   const { deriveSteerMode } = require('../../lib/move');
   const blank = { north: '', east: '', up: '' };
   const filled = { north: 1, east: 0, up: 0 };
@@ -316,12 +329,16 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, with loud re
   // Yaw rides any mode by presence — it does not change the derived group.
   assert.equal(deriveSteerMode(g({ velocity: filled, yaw: 90 })), 'velocity');
 
-  // Acceleration composes with nothing in the wire vocabulary: mixing refuses
-  // loud rather than silently dropping a group.
-  assert.throws(() => deriveSteerMode(g({ accel: filled, position: filled })), /cannot mix acceleration/);
-  assert.throws(() => deriveSteerMode(g({ accel: filled, velocity: filled })), /cannot mix acceleration/);
-  // Nothing filled is nothing to command — never an all-ignore packet (§14 / #115).
-  assert.throws(() => deriveSteerMode(g()), /nothing to command/);
+  // Acceleration composes with nothing in the wire vocabulary, so a mix drops
+  // the other group — acceleration wins. That used to refuse here; the editor
+  // catches it now (mavlink-move.html `action`), where all three groups are on
+  // screen together, and a msg that fills both is trusted and takes the drop.
+  assert.equal(deriveSteerMode(g({ accel: filled, position: filled })), 'acceleration');
+  assert.equal(deriveSteerMode(g({ accel: filled, velocity: filled })), 'acceleration');
+  // Nothing filled derives yaw-only, which with no yaw is the all-ignore
+  // packet (§14 / #115). It used to refuse; the editor requires at least one
+  // Steer field now, so the configured path cannot get here.
+  assert.equal(deriveSteerMode(g()), 'yaw-only');
 
   // Only the LOCAL triplet names the position group (Codex, #277): a node
   // switched from Go to keeps its hidden lat/lon/alt serialized, and
@@ -330,7 +347,9 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, with loud re
   const staleGlobals = { north: '', east: '', up: '', lat: 47.1, lon: 8.5, alt: 25 };
   assert.equal(deriveSteerMode(g({ position: staleGlobals, velocity: filled })), 'velocity');
   assert.equal(deriveSteerMode(g({ position: staleGlobals, accel: filled })), 'acceleration');
-  assert.throws(() => deriveSteerMode(g({ position: staleGlobals })), /nothing to command/);
+  // A stale global cannot rescue an empty steer either — it derives yaw-only
+  // (the all-ignore packet), not position.
+  assert.equal(deriveSteerMode(g({ position: staleGlobals })), 'yaw-only');
 });
 
 test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw', () => {
