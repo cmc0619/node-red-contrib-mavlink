@@ -118,10 +118,13 @@ module.exports = function registerMavlinkFormation(RED) {
           targets: memberTargets,
           mode: 'sequential',
           delivery: config.delivery,
-          // The editor validators reject blank at deploy, so the saved values
-          // are guaranteed numeric — trust them (Number only, no second default).
-          intervalMs: Number(config.intervalMs),
-          timeoutMs: Number(config.timeoutMs),
+          // The editor validators reject blank at deploy, so a present value
+          // is guaranteed numeric — trust it (Number only, no second default).
+          // Absence stays absence: a config with no key passes undefined so
+          // lib/fanout's own absence default fires, rather than NaN silencing
+          // every pacing comparison (Gitar, #287).
+          intervalMs: config.intervalMs === undefined ? undefined : Number(config.intervalMs),
+          timeoutMs: config.timeoutMs === undefined ? undefined : Number(config.timeoutMs),
         }));
 
         // A redeploy cancelled us: finish quietly rather than emitting or

@@ -200,12 +200,18 @@ function assignIfPresent(target, key, value) {
 
 /**
  * A numeric run option: the payload wrapper overrides, else the saved config
- * value — whose blank-rejecting editor validator guarantees it numeric, so
- * the runtime takes the Number() coercion and never re-validates.
+ * value — whose blank-rejecting editor validator guarantees it numeric, so a
+ * present value takes the Number() coercion and is never re-validated.
+ *
+ * Absence stays absence (§5: blank ≠ 0 ≠ absent): a config with no key at
+ * all passes `undefined` through so lib/fanout's own absence default fires.
+ * Coercing absence would hand the run NaN, and every pacing comparison
+ * against NaN is false — an unthrottled fleet send with no symptom (Gitar,
+ * #287).
  */
 function numberOption(opts, config, key) {
   if (opts[key] !== undefined) return opts[key];
-  return Number(config[key]);
+  return config[key] === undefined ? undefined : Number(config[key]);
 }
 
 /**
