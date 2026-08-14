@@ -155,15 +155,35 @@ benchmark is pymavlink: **if you can fly a drone into the ground at 500 mph with
 can — and *should* be able to* — do it with this code.** A driver that second-guesses its caller
 is a worse driver.
 
-**Thing one never refuses input. It coerces and sends.** Not "refuses only dangerous things",
-not "refuses only impossible things" — never. There is no value, combination, or omission that
-makes runtime code throw on the way to the wire. A field with no slot in the message being built
-is ignored, not rejected. An unrecognised token is passed along, not named in an error. Whatever
-comes out the other side is what the vehicle gets to judge.
+**Thing one never refuses a value you gave it. It coerces and sends.** Not "refuses only
+dangerous things", not "refuses only impossible things" — never. There is no value or
+combination of values that makes runtime code throw on the way to the wire. A field with no slot
+in the message being built is ignored, not rejected. An out-of-range number, a `NaN`, a heading
+of 4000° — all of it rides. Whatever comes out the other side is what the vehicle gets to judge.
 
-If bad data reaches thing one, **that is a bug, and the job is to hunt it down and stomp on it
-at its source** — in the editor, in the flow, in our own wiring. It is never a reason to add a
-check at the point where the bad data surfaced. Adding the check hides the bug and costs code.
+**Thing one also never invents a value you did not give it** (owner ruling, 2026-08-14: *"if a
+flow sends nonsense then it deserves to fail"*, *"if I don't correctly set a variable don't
+default it to something"*, *"we want a nice big crater sized hole if we don't put the right data
+in"*). Not refusing and not inventing are the same discipline, not opposite ones: both say the
+caller decides and the driver does not substitute its own judgement. Coercing a value is
+obeying; conjuring one is guessing.
+
+So a **missing** required input, or a token that is not a member of its enum, **throws** — loud,
+at the point where the meaning was lost, naming what was expected. It does not fall back to a
+"safe" member, a "frame that works everywhere", or the first option in a list. Those defaults do
+not fail safe; they fail *silently*, and the wire carries a legal message nobody asked for. The
+worked example is `frameForAltRef`: a typo'd `msg.payload.altRef` of `'MSL'` used to coerce to
+above-home and fly the entire goto at the wrong altitude datum — hundreds of metres — with a
+clean `ACCEPTED` ack and nothing in any log (`DESIGN.md` §14, 2026-08-14).
+
+The benchmark holds on both halves. pymavlink's generated `*_send()` methods take positional
+arguments: pass a garbage frame number and it packs it without comment; omit the argument and
+Python raises `TypeError`. Neither is second-guessing the caller.
+
+If bad data reaches thing one, **that is still a bug, and the job is to hunt it down and stomp
+on it at its source** — in the editor, in the flow, in our own wiring. The crater is how you
+find the source; it is not a licence to add a *value* check at the point where the bad data
+surfaced. Adding that check hides the bug and costs code.
 
 **Thing two is a protector.** `nodes/*.html` — the editor dialog — is the *only* place that
 protects the user from a dumb decision. It validates operator input at configure time: field
