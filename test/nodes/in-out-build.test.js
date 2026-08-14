@@ -1497,8 +1497,10 @@ test('mavlink-build Send tier: a blank msg.band refuses instead of coercing to E
   // Absent falls back to the config band; a numeric string member still works.
   node._input({ payload: {} });
   assert.equal(sent.length, 1, 'absent msg.band rides the config default');
+  assert.equal(sent[0].opts.band, 2, 'and the enqueued band is the configured one');
   node._input({ payload: {}, band: '1' });
   assert.equal(sent.length, 2, 'a numeric string naming a real band keeps working');
+  assert.equal(sent[1].opts.band, 1, 'and rides as the band it names');
 });
 
 test('mavlink-build: close stops the repeat timer', () => {
