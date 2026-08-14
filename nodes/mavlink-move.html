@@ -229,7 +229,8 @@
    * scale to 500000 and clip. The runtime scales whatever it is handed (§2), so
    * this is the only layer that notices.
    *
-   * @param {string} axis  'x' | 'y' | 'z' | 'r', named in the blank refusal
+   * @param {string} [axis]  passed only as 'z', by the one caller whose value is
+   *   read — naming the other three would be arguments that never reach a branch
    * @returns {function(*, object): (boolean|string)} arity 2 so a reason renders (§14)
    */
   function stickValidator(axis) {
@@ -530,10 +531,10 @@
       // option either — ArduSub reads z as 0..1000 neutral 500, where a
       // helpfully-centred 0 is full reverse thrust (§14). So the editor asks
       // for all four, and the runtime refuses anything less.
-      stickX: { value: '', validate: stickValidator('x') },
-      stickY: { value: '', validate: stickValidator('y') },
+      stickX: { value: '', validate: stickValidator() },
+      stickY: { value: '', validate: stickValidator() },
       stickZ: { value: '', validate: stickValidator('z') },
-      stickR: { value: '', validate: stickValidator('r') },
+      stickR: { value: '', validate: stickValidator() },
       buttons: {
         value: '',
         validate: function (v, _opt) {
