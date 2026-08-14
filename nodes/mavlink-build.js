@@ -66,8 +66,13 @@ module.exports = function registerMavlinkBuild(RED) {
     // gate, so an unknown token — a typo'd hand-edit of 'build' included —
     // fell through to the Send side and put a real frame on the wire the
     // operator asked only to construct. Blank throws too: the editor's select
-    // has no blank option.
+    // has no blank option. Known-ness is computed once here because the
+    // repeat timer must also read it: refusing per-run stops the wire, but an
+    // autonomous tick against a dead tier would flood output 1 with the
+    // refusal at the configured rate (Gitar, #310) — the exact behavior the
+    // timer's messageMeta guard already promises to avoid.
     const tier = config.tier;
+    const tierKnown = tier === TIER.BUILD || tier === TIER.SEND;
 
     // No `|| 'HEARTBEAT'`: an absent name leaves messageMeta null, which
     // badges the node invalid at deploy and fails loud on input. Building a
@@ -150,14 +155,17 @@ module.exports = function registerMavlinkBuild(RED) {
         return false;
       }
 
-      if (!messageMeta) {
-        return failRun(new Error('dialect or message unresolved — fix the node config and redeploy'));
-      }
-
-      if (tier !== TIER.BUILD && tier !== TIER.SEND) {
+      // Tier first: on a wire tier the dialect resolves *through* the
+      // Connection, so a typo'd tier can be the reason messageMeta is null —
+      // the generic refusal below would mask the specific one (Codacy, #310).
+      if (!tierKnown) {
         return failRun(new Error(
           `unknown Build tier ${JSON.stringify(tier)} — expected one of ${TIER.BUILD}, ${TIER.SEND}`
         ));
+      }
+
+      if (!messageMeta) {
+        return failRun(new Error('dialect or message unresolved — fix the node config and redeploy'));
       }
 
       // Merge config defaults with any per-message overrides from the trigger.
@@ -291,7 +299,7 @@ module.exports = function registerMavlinkBuild(RED) {
     // an autonomous tick against a dead config would flood output 1 and every
     // Catch flow at the configured rate with the refusal the badge already
     // reports. Manual triggers still fail loudly through the input handler.
-    if (repeatMs > 0 && messageMeta) {
+    if (repeatMs > 0 && messageMeta && tierKnown) {
       rateWindowStart = Date.now();
       repeatTimer = setInterval(() => {
         execute(null);

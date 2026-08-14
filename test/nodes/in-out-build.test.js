@@ -1432,6 +1432,34 @@ test('mavlink-build: a typo\'d tier refuses instead of falling through to Send (
   assert.match(out1.detail, /unknown Build tier "sned" — expected one of build, send/);
 });
 
+test('mavlink-build: a typo\'d tier never arms the repeat timer — the refusal must not become the flood (Gitar, #310)', async () => {
+  const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
+  const { stub, sent } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ vehicle: 'v1', connection: 'conn-1' });
+  Constructor.call(node, {
+    vehicle: 'v1',
+    connection: 'conn-1',
+    messageName: 'HEARTBEAT',
+    tier: 'sned',
+    repeatMs: 10,
+    fields: JSON.stringify({ type: 6 }),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 45));
+  assert.equal(node._sends.length, 0, 'no autonomous tick may repeat the refusal at the configured rate');
+  assert.equal(sent.length, 0);
+
+  // A manual trigger still fails loudly, once.
+  node._input({ payload: {} });
+  assert.equal(node._sends.length, 1);
+  assert.equal(node._sends[0][1].result, 'failed');
+  node._close();
+});
+
 test('mavlink-build Send tier: a blank msg.band refuses instead of coercing to Emergency (the mavlink-out twin, §14)', () => {
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
@@ -1459,6 +1487,12 @@ test('mavlink-build Send tier: a blank msg.band refuses instead of coercing to E
   node._input({ payload: {}, band: 'urgent' });
   assert.equal(sent.length, 0);
   assert.match(node._sends[1][1].detail, /unknown msg\.band "urgent"/);
+
+  // Number(true) is 1, a member — a boolean must refuse, not ride as a band
+  // nobody named (Codacy, #310).
+  node._input({ payload: {}, band: true });
+  assert.equal(sent.length, 0);
+  assert.match(node._sends[2][1].detail, /unknown msg\.band true/);
 
   // Absent falls back to the config band; a numeric string member still works.
   node._input({ payload: {} });
