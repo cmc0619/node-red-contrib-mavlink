@@ -1020,8 +1020,9 @@ test('mavlink-move: only the acked actions can confirm — stated once, not per 
 test('mavlink-move: Manual hides the target compid — the message has no such field', () => {
   // MANUAL_CONTROL's addressing field is `target`, a system id. Showing a
   // compid row would offer a control the wire has no room for.
-  assert.match(html, /if \(isManual\) show\.targetComponent = false;/,
-    'the compid row is withdrawn for manual regardless of identity role');
+  assert.match(html, /if \(isManual\) \$\('#row-move-targetComponent'\)\.hide\(\);/,
+    'the compid row is hidden directly — applyCompanionTargetVisibility owns it, so a '
+    + '`show` assignment would be a no-op (Gitar, #303)');
   for (const id of ['row-move-stickX', 'row-move-stickY', 'row-move-stickZ',
     'row-move-stickR', 'row-move-buttons', 'row-move-roll', 'row-move-pitch',
     'row-move-thrust', 'row-move-rollRate', 'row-move-pitchRate']) {
@@ -1044,4 +1045,42 @@ test('mavlink-move: sticks are bounded -1..1 and thrust 0..1 in the editor', () 
   assert.equal(defaults.thrust.validate.call({ id: 'm1' }, 1, {}), true);
   assert.match(String(defaults.thrust.validate.call({ id: 'm1' }, 60, {})), /not a percentage/);
   assert.match(String(defaults.buttons.validate.call({ id: 'm1' }, 70000, {})), /16-bit/);
+});
+
+test('mavlink-move: every `show` key actually reaches a toggle', () => {
+  // The structural lint for the bug Gitar found: `show.targetComponent = false`
+  // was dead, because the two target rows are the ones refreshVisibility does
+  // NOT drive from `show` — applyCompanionTargetVisibility owns them. A source
+  // grep for the assignment passed happily on code that did nothing.
+  //
+  // So the invariant is asserted directly: every key assigned into `show` is
+  // either toggled from it, or named in the helper-managed allowlist below.
+  // Adding a key without a toggle now fails here instead of silently leaving a
+  // row on screen.
+  const HELPER_MANAGED = new Set(['targetSystem', 'targetComponent']);
+
+  const block = /var show = \{([\s\S]*?)\n {8}\};/.exec(html);
+  assert.ok(block, 'the show object must be extractable');
+  const keys = [...block[1].matchAll(/^\s*([a-zA-Z]+):/gm)].map((m) => m[1]);
+  assert.ok(keys.length > 20, `expected the full show map, got ${keys.length} keys`);
+
+  for (const key of keys) {
+    if (HELPER_MANAGED.has(key)) continue;
+    const row = key === 'rate' || key === 'ttl' ? key : key;
+    assert.match(
+      html,
+      new RegExp(`\\$\\('#row-move-${row}'\\)\\.toggle\\(!!show\\.${key}\\)`),
+      `show.${key} must be fed to its row toggle, or the assignment is dead code`
+    );
+  }
+
+  // And the allowlist is not a place to hide things: both members must be
+  // handed to the helper that does own them.
+  for (const managed of HELPER_MANAGED) {
+    assert.match(
+      html,
+      new RegExp(`${managed}Row: '#row-move-${managed}'`),
+      `${managed} is allowlisted, so it must be passed to applyCompanionTargetVisibility`
+    );
+  }
 });

@@ -676,7 +676,12 @@
         // target_component on the wire at all. So the compid row is withdrawn
         // for this action regardless of what the identity role would allow: an
         // operator must not be shown a control the message has no room for.
-        if (isManual) show.targetComponent = false;
+        //
+        // Hidden directly, not through `show`: the target rows are the two this
+        // function does NOT toggle from that object — applyCompanionTargetVisibility
+        // owns them, and it ran above. Setting show.targetComponent here was a
+        // no-op that left the row on screen (Gitar, #303).
+        if (isManual) $('#row-move-targetComponent').hide();
 
         $('#row-move-identity').toggle(!!show.identity);
         $('#row-move-altRef').toggle(!!show.altRef);
