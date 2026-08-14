@@ -17,6 +17,33 @@ const { createWire } = require('../../lib/connection/wire');
 const wire = createWire({ bundle: loadBundled('common') });
 
 
+test('a string target_system that coerces to NaN refuses, not just a bare NaN', () => {
+  // The typeof hole: 'abc' is not `typeof value === 'number'`, but it still
+  // hits the same Buffer write*Int* coercion-to-0 as a bare NaN.
+  assert.throws(
+    () => wire.serialize(
+      {
+        name: 'SET_POSITION_TARGET_LOCAL_NED',
+        fields: { target_system: 'abc', target_component: 1, coordinate_frame: 1, type_mask: 3527, x: 0, y: 0, z: 0 },
+      },
+      { sysid: 255, compid: 190, seq: 0 }
+    ),
+    /must be finite/
+  );
+});
+
+test('a numeric string target_system still serializes — Number("7") is finite', () => {
+  const frame = wire.serialize(
+    {
+      name: 'SET_POSITION_TARGET_LOCAL_NED',
+      fields: { target_system: '7', target_component: 1, coordinate_frame: 1, type_mask: 3527, x: 0, y: 0, z: 0 },
+    },
+    { sysid: 255, compid: 190, seq: 0 }
+  );
+  const decoded = wire.decode(frame)[0];
+  assert.equal(decoded.fields.target_system, 7);
+});
+
 test('a NaN float field still serializes — NaN floats are legal MAVLink', () => {
   // SET_POSITION_TARGET floats use NaN as "no value" in ecosystem practice;
   // only integer fields get the finite guard.
