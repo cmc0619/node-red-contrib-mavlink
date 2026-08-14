@@ -1406,6 +1406,67 @@ test('mavlink-build Build tier: codec error emits error status on output 1', () 
   assert.ok(typeof out1.detail === 'string');
 });
 
+test('mavlink-build: a typo\'d tier refuses instead of falling through to Send (§14 selection-typo cluster)', () => {
+  const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
+  const { stub, sent } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ vehicle: 'v1', connection: 'conn-1' });
+  Constructor.call(node, {
+    vehicle: 'v1',
+    connection: 'conn-1',
+    messageName: 'HEARTBEAT',
+    tier: 'sned',
+    fields: JSON.stringify({ type: 6 }),
+  });
+
+  node._input({ payload: {} });
+
+  assert.equal(sent.length, 0, 'a typo of the tier must not put a frame on the wire');
+  assert.equal(node._sends.length, 1);
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null, 'output 0 must not fire on a refused tier');
+  assert.equal(out1.result, 'failed');
+  assert.match(out1.detail, /unknown Build tier "sned" — expected one of build, send/);
+});
+
+test('mavlink-build Send tier: a blank msg.band refuses instead of coercing to Emergency (the mavlink-out twin, §14)', () => {
+  const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
+  const { stub, sent } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ vehicle: 'v1', connection: 'conn-1' });
+  Constructor.call(node, {
+    vehicle: 'v1',
+    connection: 'conn-1',
+    messageName: 'HEARTBEAT',
+    tier: 'send',
+    band: '2',
+    fields: JSON.stringify({ type: 6 }),
+  });
+
+  node._input({ payload: {}, band: '' });
+  assert.equal(sent.length, 0, 'Number("") is Emergency — a blank band must never outrank the link');
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null);
+  assert.equal(out1.result, 'failed');
+  assert.match(out1.detail, /msg\.band is blank/);
+
+  node._input({ payload: {}, band: 'urgent' });
+  assert.equal(sent.length, 0);
+  assert.match(node._sends[1][1].detail, /unknown msg\.band "urgent"/);
+
+  // Absent falls back to the config band; a numeric string member still works.
+  node._input({ payload: {} });
+  assert.equal(sent.length, 1, 'absent msg.band rides the config default');
+  node._input({ payload: {}, band: '1' });
+  assert.equal(sent.length, 2, 'a numeric string naming a real band keeps working');
+});
+
 test('mavlink-build: close stops the repeat timer', () => {
   // We can't assert that clearInterval was called without a fake timer,
   // but we can verify close() completes without error when a timer is active.

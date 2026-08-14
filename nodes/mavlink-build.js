@@ -37,6 +37,7 @@ const {
   shouldSuppress,
   applyActionStatus,
 } = require('../lib/delivery');
+const { resolveBand } = require('../lib/connection/bands');
 const { dialectFromVehicleId, dialectFromConnection, applyConnectionStatus } = require('../lib/addressing');
 const { loadMetadata } = require('../lib/metadata/load');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
@@ -60,8 +61,13 @@ module.exports = function registerMavlinkBuild(RED) {
     // constructed message on output 0 and reports success for something that
     // was never transmitted, which is the degrade §9 forbids everywhere else.
     // A Send with no Connection is a misconfiguration; it says so at deploy and
-    // fails loud per message.
-    const tier = config.tier || TIER.SEND;
+    // fails loud per message. Membership is judged per-run (§14 selection-typo
+    // cluster, the Move/Mission shape): `tier === TIER.BUILD` was the only
+    // gate, so an unknown token — a typo'd hand-edit of 'build' included —
+    // fell through to the Send side and put a real frame on the wire the
+    // operator asked only to construct. Blank throws too: the editor's select
+    // has no blank option.
+    const tier = config.tier;
 
     // No `|| 'HEARTBEAT'`: an absent name leaves messageMeta null, which
     // badges the node invalid at deploy and fails loud on input. Building a
@@ -148,6 +154,12 @@ module.exports = function registerMavlinkBuild(RED) {
         return failRun(new Error('dialect or message unresolved — fix the node config and redeploy'));
       }
 
+      if (tier !== TIER.BUILD && tier !== TIER.SEND) {
+        return failRun(new Error(
+          `unknown Build tier ${JSON.stringify(tier)} — expected one of ${TIER.BUILD}, ${TIER.SEND}`
+        ));
+      }
+
       // Merge config defaults with any per-message overrides from the trigger.
       const overrides =
         triggerMsg &&
@@ -207,10 +219,18 @@ module.exports = function registerMavlinkBuild(RED) {
         return true;
       }
 
-      // Send tier: enqueue on the connection queue.
-      const band = (triggerMsg && triggerMsg.band !== undefined)
-        ? Number(triggerMsg.band)
-        : defaultBand;
+      // Send tier: enqueue on the connection queue. Band membership is the
+      // shared `resolveBand` — the twin of mavlink-out's site §14 flagged
+      // ("the identical Number() coercion... not yet fixed"): `Number('')` is
+      // 0, BAND.EMERGENCY, so a blank msg.band silently outranked every other
+      // message on the link. Absent msg.band still falls back to the config
+      // default the operator chose.
+      let band;
+      try {
+        band = resolveBand(triggerMsg ? triggerMsg.band : undefined, defaultBand);
+      } catch (err) {
+        return failRun(err, { tier: TIER.SEND });
+      }
       const target = (triggerMsg && triggerMsg.target) || null;
       const identityId = (triggerMsg && triggerMsg.identityId) || undefined;
 
