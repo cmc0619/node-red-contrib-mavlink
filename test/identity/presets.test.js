@@ -47,11 +47,16 @@ test('normalizeRole passes through known roles', () => {
   assert.equal(normalizeRole('custom'), 'custom');
 });
 
-test('normalizeRole returns custom for unknown input', () => {
-  assert.equal(normalizeRole('unknown'), 'custom');
-  assert.equal(normalizeRole(''), 'custom');
-  assert.equal(normalizeRole(undefined), 'custom');
-  assert.equal(normalizeRole(null), 'custom');
+test('normalizeRole refuses a non-member instead of silently answering custom (§14 selection-typo cluster)', () => {
+  // The custom preset is a choice, not a landing pad: a typo'd role used to
+  // ship a MAV_TYPE_GENERIC heartbeat in place of the identity the flow meant.
+  // Blank throws too — the editor's role select has no blank option.
+  for (const bad of ['unknown', 'gsc', '', undefined, null]) {
+    assert.throws(
+      () => normalizeRole(bad),
+      /unknown Local Identity role .* — expected one of gcs, companion, custom/
+    );
+  }
 });
 
 /* ---------- rolePreset ---------- */
@@ -62,6 +67,6 @@ test('rolePreset returns the correct preset for each known role', () => {
   assert.equal(rolePreset('custom'), ROLE_PRESETS.custom);
 });
 
-test('rolePreset falls back to custom for unknown role', () => {
-  assert.equal(rolePreset('bogus'), ROLE_PRESETS.custom);
+test('rolePreset refuses an unknown role the same way', () => {
+  assert.throws(() => rolePreset('bogus'), /unknown Local Identity role "bogus"/);
 });
