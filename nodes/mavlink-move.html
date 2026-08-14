@@ -2,7 +2,7 @@
   /**
    * A field's value as the operator currently has it: the live input while
    * this node's own dialog is on top, else the saved property. Same rule as
-   * `positionAxisValidator`'s sibling reads and for the same reason — an empty
+   * `steerAxisValidator`'s sibling reads and for the same reason — an empty
    * box is an answer, so `liveOr`'s fall-back-to-saved would hide a clearing.
    *
    * @param {object} owner  the node being validated
@@ -119,18 +119,29 @@
   }
 
   /**
-   * A Steer position triplet is all-or-nothing.
+   * A Steer group is all-or-nothing.
    *
-   * Filling any axis makes this a position setpoint — the runtime derives the
-   * type_mask from which groups carry values — and the axes left blank encode
-   * 0, which on an absolute local frame is the EKF origin. A real place, and
-   * rarely where the vehicle is. Group-level optionality is what makes Steer
-   * work ("filling fields IS the mode"); within a group it is a half-typed
-   * form, reachable by tabbing past two boxes.
+   * Filling any axis makes this a position / velocity / acceleration setpoint —
+   * the runtime derives the type_mask from which groups carry values — and the
+   * axes left blank used to encode 0. Under that mask a 0 is a *commanded*
+   * zero, not a blank: on an absolute local frame a blank position lands on the
+   * EKF origin, a real place and rarely where the vehicle is, and a blank
+   * velocity axis commands "hold zero" on an axis nobody mentioned. Group-level
+   * optionality is what makes Steer work ("filling fields IS the mode"); within
+   * a group it is a half-typed form, reachable by tabbing past two boxes.
    *
-   * The runtime does not check this (AGENTS.md, input trust), so the triplet
-   * is enforced here or nowhere. Velocity and acceleration are deliberately
-   * exempt: a blank rate encodes a zero rate, which is inert, not a place.
+   * The runtime refuses these too now (owner ruling, 2026-08-14), so this is
+   * the editor half of one rule rather than the only layer that holds it — the
+   * dialog is where an operator finds out, before deploying a node that fails
+   * every input.
+   *
+   * Position on **offset** is the one exemption, and it rests on measurement
+   * rather than convenience: on LOCAL_OFFSET_NED a 0 is a zero *offset*, which
+   * is no movement at all (§14 2026-08-05, the frame-7 probe). Filling one axis
+   * is the whole point of that reference — QGC's guided altitude change fills
+   * only z, and ArduPlane reads only z. lib/move/index.js draws the same line.
+   * Velocity and acceleration get no such exemption on any frame: a zero rate
+   * is a rate, whatever the origin is measured from.
    *
    * Siblings are read through `ownDialogField`, NOT `liveOr` (Codex, #284).
    * `liveOr` treats a blank live value as "no answer" and falls back to the
@@ -140,29 +151,31 @@
    * all three stayed red and there was no way to switch a position Steer to a
    * velocity one. Reproduced by execution before the fix, pinned below.
    *
-   * @param {string} name  which axis this validator guards
+   * @param {string[]} axes  the group's three field names
+   * @param {string} name    which axis this validator guards
+   * @param {string} label   how the refusal names the group
    * @returns {function(*, object): (boolean|string)} arity 2, so a returned
    *   reason counts as invalid rather than coercing truthy (§14)
    */
-  function positionAxisValidator(name) {
-    var AXES = ['north', 'east', 'up'];
+  var POSITION_AXES = ['north', 'east', 'up'];
+  var VELOCITY_AXES = ['vNorth', 'vEast', 'vUp'];
+  var ACCEL_AXES = ['aNorth', 'aEast', 'aUp'];
+
+  function steerAxisValidator(axes, name, label) {
     return function (v, opt) {
       if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'steer') return true;
       if (!RED.mavlink.isBlank(v)) return RED.validators.number(true).call(this, v, opt);
-      // Offset is exempt, and the exemption rests on measurement rather than
-      // convenience. The all-or-nothing rule exists because a blank axis
-      // encodes 0, and on an absolute local frame 0 is the EKF origin — a real
-      // place. On LOCAL_OFFSET_NED a 0 is a zero *offset*, which is no
-      // movement at all (§14 2026-08-05, the frame-7 probe). Filling one axis
-      // is the whole point of the reference: QGC's guided altitude change
-      // fills only z, and ArduPlane reads only z.
-      if (RED.mavlink.liveOr(this, '#node-input-reference', this.reference, 'world') === 'offset') return true;
-      for (var i = 0; i < AXES.length; i++) {
-        if (AXES[i] === name) continue;
-        var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + AXES[i]);
-        var sibling = $sibling ? $sibling.val() : this[AXES[i]];
+      if (label === 'position'
+        && RED.mavlink.liveOr(this, '#node-input-reference', this.reference, 'world') === 'offset') {
+        return true;
+      }
+      for (var i = 0; i < axes.length; i++) {
+        if (axes[i] === name) continue;
+        var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + axes[i]);
+        var sibling = $sibling ? $sibling.val() : this[axes[i]];
         if (!RED.mavlink.isBlank(sibling)) {
-          return 'is required once another position axis is filled — a blank axis commands the origin, not "no change"';
+          return 'is required once another ' + label + ' axis is filled — a blank axis is '
+            + 'commanded 0 under the type_mask, not left alone';
         }
       }
       return true;
@@ -170,21 +183,64 @@
   }
 
   /**
-   * A manual-control stick: blank (axis disabled) or -1..1.
+   * An Attitude angle is all-or-nothing with the other two.
    *
-   * The range is enforced here because the wire is ±1000 and the operator
-   * surface is ±1 — a 500 typed into a stick box is someone thinking in wire
-   * units, which would scale to 500000 and clip. The runtime scales whatever it
-   * is handed (§2), so this is the only layer that notices.
+   * ATTITUDE_IGNORE is a single bit over the whole quaternion, so unlike the
+   * body rates — which each have their own bit — there is no encoding for
+   * "roll 10, yaw unsaid". A blank yaw used to reach the wire as 0, a commanded
+   * heading of north the vehicle would swing to on a setpoint that carries no
+   * ack to argue with. So filling any angle requires all three, and the runtime
+   * refuses the same shape (lib/move/attitude.js).
    *
+   * `yaw` is shared with Steer and Go to, so this only applies when the action
+   * is Attitude — the same live-or-saved read every other action gate uses.
+   *
+   * @param {string} name  which angle this validator guards
+   * @returns {function(*, object): (boolean|string)} arity 2 so a reason renders (§14)
+   */
+  function attitudeAngleValidator(name) {
+    var ANGLES = ['roll', 'pitch', 'yaw'];
+    return function (v, opt) {
+      if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'attitude') {
+        return RED.validators.number(true).call(this, v, opt);
+      }
+      if (!RED.mavlink.isBlank(v)) return RED.validators.number(true).call(this, v, opt);
+      for (var i = 0; i < ANGLES.length; i++) {
+        if (ANGLES[i] === name) continue;
+        var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + ANGLES[i]);
+        var sibling = $sibling ? $sibling.val() : this[ANGLES[i]];
+        if (!RED.mavlink.isBlank(sibling)) {
+          return 'is required once another angle is filled — the three share one ignore '
+            + 'bit, so a blank angle is commanded 0 rather than left alone';
+        }
+      }
+      return true;
+    };
+  }
+
+  /**
+   * A manual-control stick: required, -1..1.
+   *
+   * Required because the runtime refuses a blank axis (owner ruling,
+   * 2026-08-14) — the INT16_MAX "not driven" sentinel is gone, so a node saved
+   * with an empty stick would deploy clean and fail every input. The range is
+   * enforced here because the wire is ±1000 and the operator surface is ±1 — a
+   * 500 typed into a stick box is someone thinking in wire units, which would
+   * scale to 500000 and clip. The runtime scales whatever it is handed (§2), so
+   * this is the only layer that notices.
+   *
+   * @param {string} axis  'x' | 'y' | 'z' | 'r', named in the blank refusal
    * @returns {function(*, object): (boolean|string)} arity 2 so a reason renders (§14)
    */
   function stickValidator(axis) {
-    // `axis` is passed only by the one caller whose value is read — the thrust
-    // stick. Naming 'x'/'y'/'r' at the other three would be three arguments
-    // that never reach a branch.
     return function (v, _opt) {
-      if (RED.mavlink.isBlank(v)) return true;
+      if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'manual') return true;
+      if (RED.mavlink.isBlank(v)) {
+        return 'is required for Manual — MANUAL_CONTROL carries all four axes in every '
+          + 'frame, and a blank one is refused rather than centred (0 is full reverse '
+          + 'thrust on an ArduSub z axis, §14). Use the value that means "not moving" on '
+          + 'this axis: 0 for pitch, roll and yaw, 0.5 for thrust on a Sub';
+      }
       var n = Number(v);
       if (!Number.isFinite(n) || n < -1 || n > 1) {
         return 'must be -1..1 (stick deflection, not wire units)';
@@ -198,9 +254,10 @@
       //
       // What that leaves is an operator surface that *lies* on a Sub: −1..1
       // reads as "0 is neutral", while 0 scales to 0 and lands on full reverse
-      // vertical thrust (Codex, #303 — the blank-axis INT16_MAX sentinel covers
-      // an axis nobody touched, but not one deliberately set to 0). The editor
-      // is the layer that knows the family, so it says so here. Negative values
+      // vertical thrust (Codex, #303). With the blank sentinel gone there is no
+      // escape hatch at all — every axis is sent — so this check is the only
+      // thing between an operator's "neutral" and a dive. The editor is the
+      // layer that knows the family, so it says so here. Negative values
       // have no representation at all on that axis; the rest of the range maps
       // straight through, with 0.5 as the neutral an operator means by 0.
       // `n <= 0`, not `n < 0`: 0 is the trap Codex named, because it is exactly
@@ -211,8 +268,7 @@
       if (!isArduSubProfile(this)) return true;
       return 'ArduSub reads the thrust axis as 0..1000 with neutral 0.5, not −1..1 with '
         + 'neutral 0 (§14) — a negative value has no wire representation there, and 0 is '
-        + 'full reverse thrust rather than a stop. Use 0.5 for neutral, or leave it blank '
-        + 'to not drive the axis at all';
+        + 'full reverse thrust rather than a stop. Use 0.5 for the neutral you mean by 0';
     };
   }
 
@@ -327,12 +383,11 @@
           // is the failure mode with no symptom, and the editor is the only
           // layer that can see it (Codex, #303).
           //
-          // Manual is deliberately NOT held to this. Its all-blank form sends
-          // INT16_MAX on all four axes — every axis explicitly *not* driven —
-          // which is a real message rather than an empty one: ArduSub's GCS
-          // failsafe disarms when MANUAL_CONTROL stops arriving, so a stream of
-          // no-axis frames is a legitimate deadman keepalive, and `buttons`
-          // alone is a legitimate press.
+          // Manual needs no equivalent: every one of its four sticks is
+          // required outright (stickValidator), so there is no all-blank form
+          // left to catch. That changed with the INT16_MAX sentinel's removal —
+          // an all-blank Manual used to be a real message, every axis
+          // explicitly not driven, and now it is simply refused.
           if (v === 'attitude') {
             if (filled(['roll', 'pitch', 'yaw', 'rollRate', 'pitchRate', 'yawRate', 'thrust'])) {
               return true;
@@ -445,10 +500,12 @@
       // ── Attitude (SET_ATTITUDE_TARGET) ────────────────────────────────────
       // Degrees in, quaternion out — the operator never sees q[4]. Presence
       // drives ATTITUDE_TARGET_TYPEMASK exactly like Steer's groups, so no
-      // individual field can be required. `yaw` and `yawRate` are the fields
-      // Steer and Go to already use: one spelling per operator concept (§14).
-      roll: { value: '', validate: RED.validators.number(true) },
-      pitch: { value: '', validate: RED.validators.number(true) },
+      // field is required on its own — but the three *angles* are one group
+      // with one ignore bit, so they go all-or-nothing
+      // (attitudeAngleValidator). `yaw` and `yawRate` are the fields Steer and
+      // Go to already use: one spelling per operator concept (§14).
+      roll: { value: '', validate: attitudeAngleValidator('roll') },
+      pitch: { value: '', validate: attitudeAngleValidator('pitch') },
       rollRate: { value: '', validate: RED.validators.number(true) },
       pitchRate: { value: '', validate: RED.validators.number(true) },
       // Normalised 0..1. Out of range is the vehicle's to judge, but a value
@@ -466,15 +523,17 @@
 
       // ── Manual (MANUAL_CONTROL) ───────────────────────────────────────────
       // Sticks are -1..1, the joystick convention, scaled to the wire's ±1000
-      // at encode. A blank axis is not centred — it encodes the dialect's
-      // INT16_MAX "axis is invalid", so an axis the operator did not touch is
-      // not commanded at all. That matters most on ArduSub, which reads z as
-      // 0..1000 neutral 500, where a helpfully-centred 0 would be full reverse
-      // thrust (§14).
-      stickX: { value: '', validate: stickValidator() },
-      stickY: { value: '', validate: stickValidator() },
+      // at encode. All four are required (owner ruling, 2026-08-14): the
+      // dialect's INT16_MAX "axis is invalid" sentinel is not sent for a blank
+      // any more, because a blank box in a saved flow is a field nobody filled
+      // rather than a pilot's hand off the stick. Centring at 0 was never an
+      // option either — ArduSub reads z as 0..1000 neutral 500, where a
+      // helpfully-centred 0 is full reverse thrust (§14). So the editor asks
+      // for all four, and the runtime refuses anything less.
+      stickX: { value: '', validate: stickValidator('x') },
+      stickY: { value: '', validate: stickValidator('y') },
       stickZ: { value: '', validate: stickValidator('z') },
-      stickR: { value: '', validate: stickValidator() },
+      stickR: { value: '', validate: stickValidator('r') },
       buttons: {
         value: '',
         validate: function (v, _opt) {
@@ -525,17 +584,17 @@
       // Steer groups are optional and default blank: filling fields IS the
       // mode — the runtime derives the type_mask from the non-blank groups and
       // refuses an all-blank steer at input time. That is a per-*group* rule;
-      // a half-filled position triplet is a different thing, and
-      // positionAxisValidator is the only layer that catches it.
-      north: { value: '', validate: positionAxisValidator('north') },
-      east: { value: '', validate: positionAxisValidator('east') },
-      up: { value: '', validate: positionAxisValidator('up') },
-      vNorth: { value: '', validate: RED.validators.number(true) },
-      vEast: { value: '', validate: RED.validators.number(true) },
-      vUp: { value: '', validate: RED.validators.number(true) },
-      aNorth: { value: '', validate: RED.validators.number(true) },
-      aEast: { value: '', validate: RED.validators.number(true) },
-      aUp: { value: '', validate: RED.validators.number(true) },
+      // a half-filled triplet is a different thing, and steerAxisValidator is
+      // where the dialog catches it before the runtime does.
+      north: { value: '', validate: steerAxisValidator(POSITION_AXES, 'north', 'position') },
+      east: { value: '', validate: steerAxisValidator(POSITION_AXES, 'east', 'position') },
+      up: { value: '', validate: steerAxisValidator(POSITION_AXES, 'up', 'position') },
+      vNorth: { value: '', validate: steerAxisValidator(VELOCITY_AXES, 'vNorth', 'velocity') },
+      vEast: { value: '', validate: steerAxisValidator(VELOCITY_AXES, 'vEast', 'velocity') },
+      vUp: { value: '', validate: steerAxisValidator(VELOCITY_AXES, 'vUp', 'velocity') },
+      aNorth: { value: '', validate: steerAxisValidator(ACCEL_AXES, 'aNorth', 'acceleration') },
+      aEast: { value: '', validate: steerAxisValidator(ACCEL_AXES, 'aEast', 'acceleration') },
+      aUp: { value: '', validate: steerAxisValidator(ACCEL_AXES, 'aUp', 'acceleration') },
       // Go to's global position is required — saved or live. This is the only
       // check on the *configured* path: the runtime trusts what it is handed
       // (AGENTS.md, input trust), so §10's "blank coordinates must not become
@@ -570,7 +629,10 @@
           return Number.isFinite(Number(v)) || 'must be a number of metres';
         },
       },
-      yaw: { value: '', validate: RED.validators.number(true) },
+      // Shared by Steer, Go to and Attitude — one spelling per operator concept
+      // (§14). Only Attitude holds it to the all-or-nothing angle rule; on the
+      // other two a blank yaw is a cleared ignore bit, which is its own answer.
+      yaw: { value: '', validate: attitudeAngleValidator('yaw') },
       yawRate: { value: '', validate: RED.validators.number(true) },
       // The runtime divides 1000/rateHz to arm the timer, and setInterval
       // substitutes 1 ms for a delay it cannot represent instead of refusing —

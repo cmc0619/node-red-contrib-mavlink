@@ -3,16 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildAttitudeMessage, quaternionFromEuler } = require('../../lib/move');
-
-const target = { sysid: 5, compid: 1 };
-
-/** ATTITUDE_TARGET_TYPEMASK bits, from the dialect. */
-const IGNORE = {
-  ROLL_RATE: 1, PITCH_RATE: 2, YAW_RATE: 4, THROTTLE: 64, ATTITUDE: 128,
-};
-
-
+const { quaternionFromEuler } = require('../../lib/move');
 
 
 test('quaternionFromEuler is MAVLink order [w,x,y,z] and unit length', () => {

@@ -95,12 +95,24 @@ function configFor(action, delivery, variant) {
   const config = { action, delivery, targetSystem: 1, targetComponent: 1 };
   if (action === 'attitude') {
     if (variant === 'rates') {
+      // Each body rate has its own ignore bit, so one rate alone is a complete
+      // command — the other two are genuinely not commanded.
       config.rollRate = 5;
     } else {
+      // All three angles, because ATTITUDE_IGNORE is one bit over the whole
+      // quaternion: there is no encoding for "roll 10, yaw unsaid", so the
+      // minimal *valid* attitude names every angle (owner ruling, 2026-08-14).
       config.roll = 10;
+      config.pitch = 0;
+      config.yaw = 0;
       config.thrust = 0.5;
     }
   } else if (action === 'manual') {
+    // All four sticks: MANUAL_CONTROL's per-axis "invalid" sentinel is not sent
+    // any more, so a blank axis refuses rather than going out uncommanded.
+    config.stickX = 0;
+    config.stickY = 0;
+    config.stickZ = 0.5;
     config.stickR = 0.5;
   } else if (action === 'turn') {
     config.heading = 90;

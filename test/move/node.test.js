@@ -27,6 +27,7 @@ test('mavlink-move stream: a replaced or closed stream expires silently', async 
   const node = new Node({
     delivery: 'stream',
     action: 'steer',
+    reference: 'world',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -58,6 +59,7 @@ test('mavlink-move stream: one owner per (connection, target) — a second node 
   const cfg = {
     delivery: 'stream',
     action: 'steer',
+    reference: 'world',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -106,6 +108,7 @@ test('mavlink-move stream: TTL expiry frees the target for another node (#176)',
   const cfg = {
     delivery: 'stream',
     action: 'steer',
+    reference: 'world',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -148,6 +151,7 @@ test('mavlink-move stream: stop with nothing running reports stopped with detail
   const node = new Node({
     delivery: 'stream',
     action: 'steer',
+    reference: 'world',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -178,6 +182,7 @@ test('mavlink-move send delivery refuses {action:"stop"} — only the stream tie
   const node = new Node({
     delivery: 'send',
     action: 'steer',
+    reference: 'world',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -203,6 +208,7 @@ test('mavlink-move: an unknown action throws naming the valid actions', () => {
   const node = new Node({
     delivery: 'stream',
     action: 'steer',
+    reference: 'world',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -231,6 +237,7 @@ test('mavlink-move stream: {action:"stop"} releases the target for a new stream 
   const cfg = {
     delivery: 'stream',
     action: 'steer',
+    reference: 'world',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -305,6 +312,7 @@ test('mavlink-move stream: expiry brake failure keeps the documented discriminat
   const node = new Node({
     delivery: 'stream',
     action: 'steer',
+    reference: 'world',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -348,6 +356,7 @@ test('mavlink-move stream: a failed handover send leaves the old stream running 
   const node = new Node({
     delivery: 'stream',
     action: 'steer',
+    reference: 'world',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -388,6 +397,7 @@ test('mavlink-move stream: a retarget brakes the old target after the new stream
   const node = new Node({
     delivery: 'stream',
     action: 'steer',
+    reference: 'world',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -424,6 +434,7 @@ test('mavlink-move stream: a failed retarget frees only the new scope, old strea
   const cfg = {
     delivery: 'stream',
     action: 'steer',
+    reference: 'world',
     vNorth: 1,
     vEast: 0,
     vUp: 0,
@@ -531,32 +542,5 @@ test('mavlink-move reposition confirm refuses a broadcast target (sysid 0): noth
 
 
 
-
-
-// ── Coupling pin: the SITL verdict against REAL Move status records ──────────
-//
-// Move's and Command's result vocabularies are now unified: the reposition
-// confirm tier passes the AckWaiter outcome.result through verbatim, exactly
-// like mavlink-command — 'accepted' for MAV_RESULT_ACCEPTED, the MAV_RESULT
-// name for every terminal refusal ('denied', 'command_int_only', …), and
-// 'unconfirmed' for a lost ack. 'succeeded' is banned from this node: it once
-// meant both "on the wire" and "the vehicle agreed", which is how silence
-// could classify as success. These pins drive the real node and feed its real
-// record to the real verdictFrom, so any drift back toward 'succeeded' — in
-// either the node or the harness — fails here first. Only the debug tag is
-// authored, because that genuinely is flow configuration.
-
-const { PROFILE, verdictFrom } = require('../../sitl/run-example-suite');
-
-/** Wrap a real Move status record the way the SITL harness scrapes it. */
-function asRepositionSummary(record) {
-  return {
-    debug: [
-      { tag: 'debug:arm status', result: 'accepted', detail: null, resultCode: 0, excerpt: '' },
-      { ...record, tag: 'debug:reposition status (resultCode + retries)', excerpt: '' },
-    ],
-    errors: [],
-  };
-}
 
 

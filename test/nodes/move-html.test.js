@@ -262,12 +262,12 @@ test('mavlink-move steer fields default blank and an all-blank steer stays clean
   }
 });
 
-test('mavlink-move: a Steer position triplet is all-or-nothing (the runtime no longer checks)', () => {
-  // Filling any axis makes this a position setpoint and the blanks encode 0 —
-  // the EKF origin on an absolute frame. The runtime coerces without looking
-  // (AGENTS.md, input trust), so this validator is the only layer that sees a
-  // half-typed triplet. Velocity and acceleration are exempt by design: a
-  // blank rate is a zero rate, which is inert.
+test('mavlink-move: a Steer group is all-or-nothing, in the dialog and on the wire', () => {
+  // Filling any axis names the group, and under the derived type_mask the
+  // blanks are commanded zeros — the EKF origin for a position on an absolute
+  // frame, a commanded zero rate for a velocity. The runtime refuses these too
+  // now (owner ruling, 2026-08-14), so the dialog is where an operator finds
+  // out rather than the only layer that looks.
   const defaults = loadNodeDefaults('mavlink-move');
   const AXES = ['north', 'east', 'up'];
   const verdicts = (north, east, up, action = 'steer') => {
@@ -284,7 +284,23 @@ test('mavlink-move: a Steer position triplet is all-or-nothing (the runtime no l
   // Whitespace is blank (#174), so it reds rather than passing as Number(' ') = 0.
   assert.deepEqual(verdicts('5', ' ', '3'), [true, false, true], 'a whitespace axis is blank');
   assert.match(String(defaults.east.validate.call({ id: 'm1', action: 'steer', north: '5' }, '', {})),
-    /commands the origin/, 'the reason names the hazard');
+    /commanded 0 under the type_mask/, 'the reason names the hazard');
+
+  // Velocity and acceleration are held to the same rule now. They used to be
+  // exempt on the reasoning that a blank rate is a zero rate and so inert —
+  // but under the mask a zero rate is *commanded* zero, which is how a
+  // velocity north with the other two left empty became "and hold 0 sideways".
+  const groupVerdicts = (cfg, axes) => axes.map((a) => defaults[a].validate.call(cfg, cfg[a], {}) === true);
+  assert.deepEqual(
+    groupVerdicts({ id: 'm1', action: 'steer', vNorth: '1', vEast: '', vUp: '' }, ['vNorth', 'vEast', 'vUp']),
+    [true, false, false],
+    'one velocity axis reds the other two'
+  );
+  assert.deepEqual(
+    groupVerdicts({ id: 'm1', action: 'steer', aNorth: '1', aEast: '0', aUp: '0' }, ['aNorth', 'aEast', 'aUp']),
+    [true, true, true],
+    'a full acceleration triplet passes'
+  );
 
   // Go to does not show the triplet, so a stale value there must never red a
   // node that will not read it — the same gating every Steer-only field uses.
@@ -806,11 +822,11 @@ test('mavlink-move: a blank position axis is legal on Offset — a zero offset i
   const worldUpOnly = { id: 'm1', action: 'steer', reference: 'world', north: '', east: '', up: '10' };
   const worldVerdict = verdict(worldUpOnly);
   assert.equal(worldVerdict[2], true, 'the filled axis passes');
-  assert.match(String(worldVerdict[0]), /blank axis commands the origin/, 'world still reds a blank north');
-  assert.match(String(worldVerdict[1]), /blank axis commands the origin/, 'world still reds a blank east');
+  assert.match(String(worldVerdict[0]), /commanded 0 under the type_mask/, 'world still reds a blank north');
+  assert.match(String(worldVerdict[1]), /commanded 0 under the type_mask/, 'world still reds a blank east');
 
   // There was an assertion here that offset "does not disable the numeric
-  // check". It could not fail: positionAxisValidator never returns undefined,
+  // check". It could not fail: steerAxisValidator never returns undefined,
   // and html-assert stubs RED.validators.number as `() => () => true`, so the
   // numeric arm answers true in this harness whether or not it runs. Removed
   // rather than reworded — the offset exemption is what this test owns, and the
@@ -1045,16 +1061,24 @@ test('mavlink-move: Manual hides the target compid — the message has no such f
   }
 });
 
-test('mavlink-move: sticks are bounded -1..1 and thrust 0..1 in the editor', () => {
+test('mavlink-move: sticks are required and bounded -1..1, thrust 0..1, in the editor', () => {
   // The wire is ±1000 and the surface is ±1, so a wire-unit value typed into a
   // stick is the mistake worth catching — the runtime scales whatever it gets.
+  // Blank is a mistake too now: the runtime refuses an unfilled axis since the
+  // INT16_MAX sentinel was dropped, so a blank box here would deploy a node
+  // that fails every input.
   const defaults = loadNodeDefaults('mavlink-move');
+  const manual = { id: 'm1', action: 'manual' };
   for (const stick of ['stickX', 'stickY', 'stickZ', 'stickR']) {
-    assert.equal(defaults[stick].validate.call({ id: 'm1' }, '', {}), true, 'blank disables the axis');
-    assert.equal(defaults[stick].validate.call({ id: 'm1' }, 0.5, {}), true);
-    assert.equal(defaults[stick].validate.call({ id: 'm1' }, -1, {}), true);
-    assert.match(String(defaults[stick].validate.call({ id: 'm1' }, 500, {})), /not wire units/);
-    assert.match(String(defaults[stick].validate.call({ id: 'm1' }, -1.5, {})), /-1\.\.1/);
+    assert.match(String(defaults[stick].validate.call(manual, '', {})), /is required for Manual/);
+    assert.equal(defaults[stick].validate.call(manual, 0.5, {}), true);
+    assert.equal(defaults[stick].validate.call(manual, -1, {}), true);
+    assert.match(String(defaults[stick].validate.call(manual, 500, {})), /not wire units/);
+    assert.match(String(defaults[stick].validate.call(manual, -1.5, {})), /-1\.\.1/);
+    // Another action does not show the sticks, so a stale blank must not red a
+    // node that will never read it — the gate every action-scoped field uses.
+    assert.equal(defaults[stick].validate.call({ id: 'm1', action: 'steer' }, '', {}), true,
+      'a non-Manual action ignores the sticks entirely');
   }
   assert.equal(defaults.thrust.validate.call({ id: 'm1' }, 0, {}), true, '0 is a commanded zero');
   assert.equal(defaults.thrust.validate.call({ id: 'm1' }, 1, {}), true);
@@ -1412,9 +1436,9 @@ test('mavlink-move: the thrust stick warns on ArduSub, where the -1..1 surface l
   // ArduSub reads z as 0..1000 with neutral 500, not -1000..1000 neutral 0
   // (§14, source-read). The runtime keeps the dialect's uniform scaling — a
   // per-family map is the unmeasured guess doctrine keeps off the wire — so
-  // the editor is where an operator finds out. The blank-axis INT16_MAX
-  // sentinel covers an axis nobody touched; this covers one set to 0 or below
-  // (Codex, #303).
+  // the editor is where an operator finds out. With the blank-axis INT16_MAX
+  // sentinel gone there is no unset escape either, so this check is all that
+  // stands between an operator's "neutral" and a dive (Codex, #303).
   const { stickZ, stickX } = loadNodeDefaults('mavlink-move', FAMILY_LOOKUP);
   const onSub = (v) => stickZ.validate.call(
     { id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-sub' }, v, {}
@@ -1427,7 +1451,7 @@ test('mavlink-move: the thrust stick warns on ArduSub, where the -1..1 surface l
   assert.match(String(onSub('0')), /full reverse thrust/, 'and so does the 0 an operator means as neutral');
   assert.equal(onSub('0.5'), true, 'the neutral a Sub actually reads passes');
   assert.equal(onSub('1'), true, 'full up passes');
-  assert.equal(onSub(''), true, 'blank is still the untouched-axis sentinel');
+  assert.match(String(onSub('')), /is required for Manual/, 'and blank is refused outright now');
 
   // Only the thrust axis, and only on a Sub — the other three match the
   // dialect's declared range everywhere.

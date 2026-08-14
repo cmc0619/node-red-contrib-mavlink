@@ -13,7 +13,6 @@ const assert = require('node:assert/strict');
 
 const { loadBundled } = require('../../lib/metadata');
 const { createWire } = require('../../lib/connection/wire');
-const { buildMoveMessage } = require('../../lib/move');
 
 const wire = createWire({ bundle: loadBundled('common') });
 

@@ -179,16 +179,19 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the
 
 
 test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)', () => {
-  // Still load-bearing, now for the presence rules rather than the deleted
-  // coordinate guards: ' ' is not '', so without trimming it reaches Number()
-  // and comes back a finite 0. Where that decides an *ignore bit* it changes
-  // the command; where it decides a coordinate it just encodes 0.
-  const whitespaceAxis = buildMoveMessage({ frame: 1,
-    mode: 'position',
-    target: { sysid: 2, compid: 1 },
-    position: { north: ' ', east: 2, up: 3 },
-  });
-  assert.equal(whitespaceAxis.fields.x, 0, 'a whitespace axis encodes 0, same as blank');
+  // Still load-bearing: ' ' is not '', so without trimming it reaches Number()
+  // and comes back a finite 0. That 0 is what isBlank exists to stop — inside a
+  // commanded group it would be a commanded zero, and on the ignore-bit rules
+  // it would flip a bit. Whitespace has to read as absent in both places.
+  assert.throws(
+    () => buildMoveMessage({ frame: 1,
+      mode: 'position',
+      target: { sysid: 2, compid: 1 },
+      position: { north: ' ', east: 2, up: 3 },
+    }),
+    /Move needs a north position/,
+    'a whitespace axis is absent, and an absent axis in a commanded group refuses'
+  );
 
   // Yaw follows the presence rule: whitespace is absent, so the ignore bit
   // stays set rather than commanding a yaw of 0 (north) nobody asked for.
@@ -208,6 +211,47 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
     position: { north: ' 4 ', east: 2, up: 3 },
   });
   assert.equal(padded.fields.x, 4);
+});
+
+test('a blank position axis is a zero offset on frame 7, and a missing value on frame 1', () => {
+  // The one place a blank coordinate is not a hole. On an absolute local frame
+  // a 0 is the EKF origin — a real place — so a half-filled triplet refuses.
+  // On LOCAL_OFFSET_NED a 0 is a zero *offset*, which is no movement on that
+  // axis (§14 2026-08-05, the frame-7 probe), and filling one axis is the whole
+  // point of the reference: QGC's guided altitude change fills only the
+  // vertical, and ArduPlane's handler reads only the vertical. The editor draws
+  // the same line (steerAxisValidator); this is the runtime half.
+  const offset = buildMoveMessage({ frame: 7,
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { north: '', east: '', up: 10 },
+  });
+  assert.equal(offset.fields.coordinate_frame, 7);
+  assert.equal(offset.fields.x, 0, 'a blank north is a zero offset');
+  assert.equal(offset.fields.y, 0, 'a blank east is a zero offset');
+  assert.equal(offset.fields.z, -10, 'and the filled axis still flips to NED');
+
+  assert.throws(
+    () => buildMoveMessage({ frame: 1,
+      mode: 'position',
+      target: { sysid: 2, compid: 1 },
+      position: { north: '', east: '', up: 10 },
+    }),
+    /Move needs a north position/,
+    'the same triplet on LOCAL_NED refuses — 0 there is the origin, not "no change"'
+  );
+
+  // The exemption is position-only. A velocity is a rate whatever the origin is
+  // measured from, so a zero one is commanded rather than absent.
+  assert.throws(
+    () => buildMoveMessage({ frame: 7,
+      mode: 'velocity',
+      target: { sysid: 2, compid: 1 },
+      velocity: { north: 1, east: '', up: '' },
+    }),
+    /Move needs an east velocity/,
+    'offset does not exempt the velocity group'
+  );
 });
 
 test('buildStopMessage copies target ids and does not invent system 1', () => {
