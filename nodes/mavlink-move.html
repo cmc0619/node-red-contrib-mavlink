@@ -2,7 +2,7 @@
   /**
    * A field's value as the operator currently has it: the live input while
    * this node's own dialog is on top, else the saved property. Same rule as
-   * `positionAxisValidator`'s sibling reads and for the same reason — an empty
+   * `steerAxisValidator`'s sibling reads and for the same reason — an empty
    * box is an answer, so `liveOr`'s fall-back-to-saved would hide a clearing.
    *
    * @param {object} owner  the node being validated
@@ -15,18 +15,133 @@
   }
 
   /**
-   * A Steer position triplet is all-or-nothing.
+   * Which Move actions an ArduPilot vehicle actually has a handler for.
    *
-   * Filling any axis makes this a position setpoint — the runtime derives the
-   * type_mask from which groups carry values — and the axes left blank encode
-   * 0, which on an absolute local frame is the EKF origin. A real place, and
-   * rarely where the vehicle is. Group-level optionality is what makes Steer
-   * work ("filling fields IS the mode"); within a group it is a half-typed
-   * form, reachable by tabbing past two boxes.
+   * Read across all six vehicles' GCS dispatch tables at source (§14
+   * 2026-08-14), because a gate that hides an action is only as good as the
+   * knowledge behind it — and two of the claims this table replaces were
+   * wrong. The surprises are the load-bearing rows: **Blimp ignores the
+   * joystick** (`handle_manual_control_axes` is a virtual with an empty body
+   * and Blimp does not override it — the sticks are decoded, counted as a GCS
+   * heartbeat, and discarded), while an **Antenna Tracker does move**, just
+   * through Attitude and Manual rather than any position carrier. Neither
+   * ArduPlane nor Rover has a `CONDITION_YAW` handler anywhere, so Turn is a
+   * Copter-and-Sub action rather than an ArduPilot one.
    *
-   * The runtime does not check this (AGENTS.md, input trust), so the triplet
-   * is enforced here or nowhere. Velocity and acceleration are deliberately
-   * exempt: a blank rate encodes a zero rate, which is inert, not a place.
+   * A family absent from this table — `unknown`, or a value a future profile
+   * adds — gates nothing, because hiding requires knowledge.
+   */
+  // Everything but Turn — no CONDITION_YAW handler. A boat IS Rover firmware,
+  // so the two families share the row rather than repeating it.
+  var NO_YAW_ACTIONS = ['goto', 'steer', 'speed', 'attitude', 'manual'];
+  var ARDUPILOT_FAMILY_ACTIONS = {
+    copter: ['goto', 'steer', 'turn', 'speed', 'attitude', 'manual'],
+    sub: ['goto', 'steer', 'turn', 'speed', 'attitude', 'manual'],
+    // Plane also takes frame 7 only, and its handler reads `z` alone.
+    plane: NO_YAW_ACTIONS,
+    rover: NO_YAW_ACTIONS,
+    boat: NO_YAW_ACTIONS,
+    // handle_message is a bare switch; handle_command_int_packet has
+    // DO_REPOSITION and NAV_TAKEOFF. Its capabilities() advertises three
+    // setpoint messages it does not implement — not evidence of a handler.
+    blimp: ['goto'],
+    'antenna-tracker': ['attitude', 'manual'],
+  };
+
+  /** The wire each action rides, for the refusal message. */
+  var ACTION_WIRE = {
+    goto: 'DO_REPOSITION',
+    steer: 'SET_POSITION_TARGET_LOCAL_NED',
+    turn: 'CONDITION_YAW',
+    speed: 'DO_CHANGE_SPEED',
+    attitude: 'SET_ATTITUDE_TARGET',
+    manual: 'MANUAL_CONTROL',
+  };
+
+  var ACTION_LABEL = {
+    goto: 'Go to', steer: 'Steer', turn: 'Turn',
+    speed: 'Speed', attitude: 'Attitude', manual: 'Manual',
+  };
+
+  var FAMILY_LABEL = {
+    copter: 'Copter', plane: 'Plane', rover: 'Rover', boat: 'Boat',
+    sub: 'Sub', blimp: 'Blimp', 'antenna-tracker': 'Antenna Tracker',
+  };
+
+  /**
+   * What to do instead, per family — each one loses a different thing. Copter
+   * and Sub have no entry because they refuse nothing, so `reason` never looks
+   * them up; a family that starts refusing needs a line here, and the test
+   * matrix is what catches its absence.
+   */
+  var NO_YAW_INSTEAD = 'give it a destination instead — Go to, or a Steer setpoint';
+  var FAMILY_INSTEAD = {
+    plane: 'a fixed wing has no guided yaw command at all (GUIDED_CHANGE_HEADING is the '
+      + 'forward entry, not built), so turn it by giving it somewhere to go — Go to',
+    rover: NO_YAW_INSTEAD,
+    boat: NO_YAW_INSTEAD,
+    blimp: 'DO_REPOSITION is the one motion message a Blimp implements — use Go to',
+    'antenna-tracker': 'a tracker does not travel — point it with Attitude or Manual',
+  };
+
+  /**
+   * The bound vehicle's Move surface: what it can act on, and why not.
+   *
+   * Family gating is ArduPilot-only on purpose. This matrix is ArduPilot's
+   * per-vehicle dispatch; PX4 has one receiver with no vehicle branch in it,
+   * and nothing here was measured against PX4 — so a PX4 profile gates on
+   * firmware alone, as it did before.
+   *
+   * @param {object} [source]  saved config, for `validate`; omit inside a dialog
+   * @returns {{family: string, gated: boolean, allows: function(string): boolean,
+   *   reason: function(string): (string|null)}} `gated` is whether this matrix
+   *   applies at all — a caller reshaping rows must ask it rather than infer it
+   *   from some action happening to be allowed.
+   */
+  function moveFamilyGate(source) {
+    var target = RED.mavlink.resolveCatalogTarget(source ? { source: source } : undefined);
+    var family = target.vehicleFamily || '';
+    var allowed = target.firmware === 'ardupilot' ? ARDUPILOT_FAMILY_ACTIONS[family] : null;
+    function allows(action) {
+      return !allowed || allowed.indexOf(action) !== -1;
+    }
+    return {
+      family: family,
+      gated: !!allowed,
+      allows: allows,
+      reason: function (action) {
+        if (allows(action)) return null;
+        return ACTION_LABEL[action] + ' has no handler on ArduPilot ' + FAMILY_LABEL[family]
+          + ' — the vehicle never implements ' + ACTION_WIRE[action] + ' (§14), so the message '
+          + 'goes out and nothing happens. Instead: ' + FAMILY_INSTEAD[family];
+      },
+    };
+  }
+
+  /**
+   * A Steer group is all-or-nothing.
+   *
+   * Filling any axis makes this a position / velocity / acceleration setpoint —
+   * the runtime derives the type_mask from which groups carry values — and the
+   * axes left blank used to encode 0. Under that mask a 0 is a *commanded*
+   * zero, not a blank: on an absolute local frame a blank position lands on the
+   * EKF origin, a real place and rarely where the vehicle is, and a blank
+   * velocity axis commands "hold zero" on an axis nobody mentioned. Group-level
+   * optionality is what makes Steer work ("filling fields IS the mode"); within
+   * a group it is a half-typed form, reachable by tabbing past two boxes.
+   *
+   * The runtime refuses these too now (owner ruling, 2026-08-14), so this is
+   * the editor half of one rule rather than the only layer that holds it — the
+   * dialog is where an operator finds out, before deploying a node that fails
+   * every input.
+   *
+   * Position on **offset** is the one exemption, and it rests on measurement
+   * rather than convenience: on LOCAL_OFFSET_NED a 0 is a zero *offset*, which
+   * is no movement at all (§14 2026-08-05, the frame-7 probe). Filling one axis
+   * is the whole point of that reference — QGC's guided altitude change fills
+   * only z, and ArduPlane reads only z. lib/move/index.js draws the same line.
+   * Velocity and acceleration get no such exemption on any frame: a zero rate
+   * is a rate, whatever the origin is measured from.
    *
    * Siblings are read through `ownDialogField`, NOT `liveOr` (Codex, #284).
    * `liveOr` treats a blank live value as "no answer" and falls back to the
@@ -36,25 +151,138 @@
    * all three stayed red and there was no way to switch a position Steer to a
    * velocity one. Reproduced by execution before the fix, pinned below.
    *
-   * @param {string} name  which axis this validator guards
+   * @param {string[]} axes  the group's three field names
+   * @param {string} name    which axis this validator guards
+   * @param {string} label   how the refusal names the group
    * @returns {function(*, object): (boolean|string)} arity 2, so a returned
    *   reason counts as invalid rather than coercing truthy (§14)
    */
-  function positionAxisValidator(name) {
-    var AXES = ['north', 'east', 'up'];
+  var POSITION_AXES = ['north', 'east', 'up'];
+  var VELOCITY_AXES = ['vNorth', 'vEast', 'vUp'];
+  var ACCEL_AXES = ['aNorth', 'aEast', 'aUp'];
+
+  function steerAxisValidator(axes, name, label) {
     return function (v, opt) {
-      if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'steer') return true;
+      if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'steer') return true;
       if (!RED.mavlink.isBlank(v)) return RED.validators.number(true).call(this, v, opt);
-      for (var i = 0; i < AXES.length; i++) {
-        if (AXES[i] === name) continue;
-        var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + AXES[i]);
-        var sibling = $sibling ? $sibling.val() : this[AXES[i]];
+      if (label === 'position'
+        && RED.mavlink.liveOr(this, '#node-input-reference', this.reference, 'world') === 'offset') {
+        return true;
+      }
+      for (var i = 0; i < axes.length; i++) {
+        if (axes[i] === name) continue;
+        var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + axes[i]);
+        var sibling = $sibling ? $sibling.val() : this[axes[i]];
         if (!RED.mavlink.isBlank(sibling)) {
-          return 'is required once another position axis is filled — a blank axis commands the origin, not "no change"';
+          return 'is required once another ' + label + ' axis is filled — a blank axis is '
+            + 'commanded 0 under the type_mask, not left alone';
         }
       }
       return true;
     };
+  }
+
+  /**
+   * An Attitude angle is all-or-nothing with the other two.
+   *
+   * ATTITUDE_IGNORE is a single bit over the whole quaternion, so unlike the
+   * body rates — which each have their own bit — there is no encoding for
+   * "roll 10, yaw unsaid". A blank yaw used to reach the wire as 0, a commanded
+   * heading of north the vehicle would swing to on a setpoint that carries no
+   * ack to argue with. So filling any angle requires all three, and the runtime
+   * refuses the same shape (lib/move/attitude.js).
+   *
+   * `yaw` is shared with Steer and Go to, so this only applies when the action
+   * is Attitude — the same live-or-saved read every other action gate uses.
+   *
+   * @param {string} name  which angle this validator guards
+   * @returns {function(*, object): (boolean|string)} arity 2 so a reason renders (§14)
+   */
+  function attitudeAngleValidator(name) {
+    var ANGLES = ['roll', 'pitch', 'yaw'];
+    return function (v, opt) {
+      if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'attitude') {
+        return RED.validators.number(true).call(this, v, opt);
+      }
+      if (!RED.mavlink.isBlank(v)) return RED.validators.number(true).call(this, v, opt);
+      for (var i = 0; i < ANGLES.length; i++) {
+        if (ANGLES[i] === name) continue;
+        var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + ANGLES[i]);
+        var sibling = $sibling ? $sibling.val() : this[ANGLES[i]];
+        if (!RED.mavlink.isBlank(sibling)) {
+          return 'is required once another angle is filled — the three share one ignore '
+            + 'bit, so a blank angle is commanded 0 rather than left alone';
+        }
+      }
+      return true;
+    };
+  }
+
+  /**
+   * A manual-control stick: required, -1..1.
+   *
+   * Required because the runtime refuses a blank axis (owner ruling,
+   * 2026-08-14) — the INT16_MAX "not driven" sentinel is gone, so a node saved
+   * with an empty stick would deploy clean and fail every input. The range is
+   * enforced here because the wire is ±1000 and the operator surface is ±1 — a
+   * 500 typed into a stick box is someone thinking in wire units, which would
+   * scale to 500000 and clip. The runtime scales whatever it is handed (§2), so
+   * this is the only layer that notices.
+   *
+   * @param {string} [axis]  passed only as 'z', by the one caller whose value is
+   *   read — naming the other three would be arguments that never reach a branch
+   * @returns {function(*, object): (boolean|string)} arity 2 so a reason renders (§14)
+   */
+  function stickValidator(axis) {
+    return function (v, _opt) {
+      if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'manual') return true;
+      if (RED.mavlink.isBlank(v)) {
+        return 'is required for Manual — MANUAL_CONTROL carries all four axes in every '
+          + 'frame, and a blank one is refused rather than centred (0 is full reverse '
+          + 'thrust on an ArduSub z axis, §14). Use the value that means "not moving" on '
+          + 'this axis: 0 for pitch, roll and yaw, 0.5 for thrust on a Sub';
+      }
+      var n = Number(v);
+      if (!Number.isFinite(n) || n < -1 || n > 1) {
+        return 'must be -1..1 (stick deflection, not wire units)';
+      }
+      // ArduSub reads the thrust axis as 0..1000 with neutral **500**, not
+      // −1000..1000 with neutral 0 like the other three (§14, source-read). The
+      // ±1000 scaling is the dialect's own declaration for all four axes, so
+      // the runtime keeps applying it uniformly — a per-family map is exactly
+      // the unmeasured guess doctrine keeps off the wire, and #304 §5 item 4
+      // is the rig run that would settle it.
+      //
+      // What that leaves is an operator surface that *lies* on a Sub: −1..1
+      // reads as "0 is neutral", while 0 scales to 0 and lands on full reverse
+      // vertical thrust (Codex, #303). With the blank sentinel gone there is no
+      // escape hatch at all — every axis is sent — so this check is the only
+      // thing between an operator's "neutral" and a dive. The editor is the
+      // layer that knows the family, so it says so here. Negative values
+      // have no representation at all on that axis; the rest of the range maps
+      // straight through, with 0.5 as the neutral an operator means by 0.
+      // `n <= 0`, not `n < 0`: 0 is the trap Codex named, because it is exactly
+      // what an operator types for "neutral" on a −1..1 surface and exactly
+      // what lands on full reverse. 0.5 is the neutral a Sub reads, so the
+      // usable range there is (0, 1] and everything at or below 0 is refused.
+      if (axis !== 'z' || n > 0) return true;
+      if (!isArduSubProfile(this)) return true;
+      return 'ArduSub reads the thrust axis as 0..1000 with neutral 0.5, not −1..1 with '
+        + 'neutral 0 (§14) — a negative value has no wire representation there, and 0 is '
+        + 'full reverse thrust rather than a stop. Use 0.5 for the neutral you mean by 0';
+    };
+  }
+
+  /**
+   * Whether the bound profile is an ArduPilot Sub — the one family whose
+   * `MANUAL_CONTROL` z axis does not match the dialect's declared range.
+   *
+   * @param {object} owner  the node being validated
+   * @returns {boolean}
+   */
+  function isArduSubProfile(owner) {
+    var gate = moveFamilyGate(owner);
+    return gate.gated && gate.family === 'sub';
   }
 
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
@@ -72,10 +300,56 @@
       delivery: {
         value: 'build',
         validate: function (v, _opt) {
+          var action = RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer');
+          // Same class of finding as steer × confirm below, and caught the same
+          // way: the dialog never offers this pair (refreshDeliveryOptions
+          // withdraws the tier for Offset), but a hand-edited flow can hold it
+          // and the runtime would stream it happily. Every tick of an offset
+          // setpoint is resolved against the vehicle's position at that moment,
+          // so repeating one does not hold a target — it walks the vehicle
+          // away until the TTL. Both fields are known at deploy, so the editor
+          // says so rather than letting it fly.
+          if (v === 'stream' && action === 'steer'
+            && RED.mavlink.liveOr(this, '#node-input-reference', this.reference, 'world') === 'offset') {
+            return 'Offset cannot stream — each setpoint is resolved against the vehicle\'s '
+              + 'position at that moment, so a repeating offset walks it away instead of holding '
+              + 'a target. Use Send, or switch the reference to World';
+          }
+          // Third of the same family, and found by the same lens: a MAV_CMD has
+          // no streaming semantics, so the dialog never offers Stream for Turn
+          // or Speed — but a hand-edited flow can hold it, and deliverCommand
+          // would fall through to the Send branch and report `sent`. True of
+          // the wire, a lie about the tier. Known at deploy, so said here.
+          if (v === 'stream' && (action === 'turn' || action === 'speed')) {
+            return 'a command cannot stream — ' + action + ' rides an acknowledged MAV_CMD, '
+              + 'which is sent once and answered. Use Send, or Send & confirm to wait for '
+              + 'the acknowledgement';
+          }
+          // Same family as Offset above and found by its absence: the dropdown
+          // withholds Stream for Go to on a Blimp (no SET_POSITION_TARGET
+          // handler — streamed setpoints are discarded in silence, §14), but a
+          // node saved with the pair, or rebound to a blimp profile, deployed
+          // clean and reported `streaming` at a vehicle hearing nothing. Every
+          // other withheld option in this dialog reds on saved; this one now
+          // does too.
+          if (v === 'stream' && action === 'goto') {
+            var gate = moveFamilyGate(this);
+            if (gate.gated && gate.family === 'blimp') {
+              return 'a Blimp cannot stream Go to — it implements DO_REPOSITION but has no '
+                + 'SET_POSITION_TARGET handler (§14), so streamed setpoints are silently '
+                + 'discarded. Use Send or Send & confirm';
+            }
+          }
+          // Fourth instance of the family, so it is stated generally rather than
+          // per action: only the acked actions have anything to wait for. Go
+          // to rides DO_REPOSITION, Turn CONDITION_YAW, Speed DO_CHANGE_SPEED
+          // — every one answers a COMMAND_ACK. Steer, Attitude and Manual are
+          // setpoints and sticks, which no vehicle acknowledges, so a confirm
+          // tier there would wait forever and the runtime reports `sent`.
           if (v !== 'confirm') return true;
-          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'steer') return true;
-          return 'Steer cannot confirm — a setpoint carries no COMMAND_ACK, so there is '
-            + 'nothing to wait for. Use Send, or switch the action to Go to';
+          if (action === 'goto' || action === 'turn' || action === 'speed') return true;
+          return 'this action cannot confirm — setpoints and sticks carry no COMMAND_ACK, so '
+            + 'there is nothing to wait for. Use Send, or switch to Go to, Turn or Speed';
         },
       },
       // Action × Delivery derives the wire (§6 redesign, 2026-08-12): the
@@ -93,11 +367,52 @@
       action: {
         value: 'goto',
         validate: function (v, _opt) {
-          if (v !== 'steer') return true;
+          // The vehicle half of §9 ruling 6's "red on saved": the dropdown
+          // stops offering an action the bound vehicle has no handler for, and
+          // a node that already held one keeps it and lands here. Every entry
+          // is a message the vehicle accepts and does nothing with — no NAK on
+          // the setpoint carriers, so without this the operator has no symptom
+          // to read at all.
+          var familyReason = moveFamilyGate(this).reason(v);
+          if (familyReason) return familyReason;
+          // CONDITION_YAW is an ArduPilot command and PX4 has no handler for it
+          // (§14). The family table above answers the ArduPilot half; this is
+          // the firmware half, which is all PX4 gets — its receiver has no
+          // vehicle branch, so there is no family knowledge to gate on. The
+          // message names the escape that works there: Steer's yaw field.
+          if (v === 'turn') {
+            var firmware = RED.mavlink.resolveCatalogTarget({ source: this }).firmware;
+            if (firmware && firmware !== 'ardupilot') {
+              return 'Turn is an ArduPilot command (CONDITION_YAW) and this profile is '
+                + firmware + ' — on PX4, yaw with a Steer setpoint instead';
+            }
+            return true;
+          }
           var owner = this;
           var filled = function (names) {
             return names.some(function (n) { return !RED.mavlink.isBlank(fieldValue(owner, n)); });
           };
+          // Attitude has Steer's shape and needed Steer's rule: presence drives
+          // ATTITUDE_TARGET_TYPEMASK, so an all-blank Attitude sets *every*
+          // ignore bit — 199 — and commands nothing while the node still
+          // reports `sent` or `streaming`. A setpoint carries no ack, so that
+          // is the failure mode with no symptom, and the editor is the only
+          // layer that can see it (Codex, #303).
+          //
+          // Manual needs no equivalent: every one of its four sticks is
+          // required outright (stickValidator), so there is no all-blank form
+          // left to catch. That changed with the INT16_MAX sentinel's removal —
+          // an all-blank Manual used to be a real message, every axis
+          // explicitly not driven, and now it is simply refused.
+          if (v === 'attitude') {
+            if (filled(['roll', 'pitch', 'yaw', 'rollRate', 'pitchRate', 'yawRate', 'thrust'])) {
+              return true;
+            }
+            return 'Attitude needs at least one field filled — an angle, a body rate, or '
+              + 'thrust. All-blank sets every ignore bit, so the vehicle is commanded nothing '
+              + 'and no ack comes back to tell you';
+          }
+          if (v !== 'steer') return true;
           var hasPos = filled(['north', 'east', 'up']);
           var hasVel = filled(['vNorth', 'vEast', 'vUp']);
           var hasAcc = filled(['aNorth', 'aEast', 'aUp']);
@@ -136,8 +451,34 @@
         value: 'world',
         validate: function (v, _opt) {
           var ref = RED.mavlink.liveOr(this, '#node-input-reference', v, 'world');
+          // 'steer' fallback like every other action gate in this file — two of
+          // these read blank as 'goto' until 2026-08-14, so a hand-edited flow
+          // with no action key skipped exactly the Steer checks it needed.
+          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'steer') return true;
+          // Offset on PX4 is measured inert — accepted and no motion at all,
+          // burst and stream (§14 2026-08-05). The dropdown stops offering it
+          // when the profile says PX4, but a node that already had it saved
+          // must not be silently rewritten to World: that would change what
+          // the operator configured without telling them. So the option stays
+          // visible and reds here instead. Read from the saved config, not the
+          // DOM — validate runs for every node at deploy, and only this node's
+          // own dialog may be open.
+          if (ref === 'offset'
+            && RED.mavlink.resolveCatalogTarget({ source: this }).firmware === 'px4') {
+            return 'Offset from here does nothing on PX4 — it accepts MAV_FRAME_LOCAL_OFFSET_NED '
+              + 'and never acts on it (measured, §14). Use World, or Body (PX4 reads BODY_NED)';
+          }
+          // The mirror image on a fixed wing, and the same ruling: ArduPlane's
+          // handler opens `if (coordinate_frame != MAV_FRAME_LOCAL_OFFSET_NED)
+          // { return; }` (§14), so World and Body are the two that do nothing
+          // there — silently, with no NAK. Offset is not a preference on a
+          // plane, it is the only local frame there is.
+          var planeGate = moveFamilyGate(this);
+          if (ref !== 'offset' && planeGate.gated && planeGate.family === 'plane') {
+            return 'a fixed wing accepts only MAV_FRAME_LOCAL_OFFSET_NED — ArduPlane\'s handler '
+              + 'returns immediately on every other frame, with no NAK (§14). Use Offset from here';
+          }
           if (ref !== 'body') return true;
-          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'steer') return true;
           if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery, 'build') !== 'build') return true;
           if (RED.mavlink.liveOr(this, '#node-input-dialect', this.dialect, '') === '__vehicle') return true;
           return 'Body on Build needs a firmware to adapt to — set Dialect to "from Vehicle Profile…", or use World';
@@ -151,6 +492,84 @@
       // MAV_DO_REPOSITION_FLAGS_CHANGE_MODE: flies the vehicle into guided —
       // a mode change, so an explicit opt-in, default off.
       changeMode: { value: false },
+      // ── Turn (CONDITION_YAW) ──────────────────────────────────────────
+      // Heading is required and bounded 0-360 because ArduCopter *answers
+      // FAILED* outside that range (source-read 2026-08-13) — the vehicle is
+      // the one refusing, so the editor is where an operator finds out before
+      // flying. Two args so the reason renders (§14).
+      heading: {
+        value: '',
+        validate: function (v, _opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'turn') return true;
+          if (RED.mavlink.isBlank(v)) return 'is required for Turn';
+          var n = Number(v);
+          return (Number.isFinite(n) && n >= 0 && n <= 360)
+            || 'must be within [0, 360] degrees — ArduPilot answers FAILED outside it';
+        },
+      },
+      turnRate: { value: '', validate: RED.validators.number(true) },
+      // -1 ccw, 0 shortest, 1 cw — common.xml defines 0 as "shortest
+      // direction", so the default is the dialect's, not one we invented.
+      direction: { value: '0' },
+      // Changes what the heading number means, so a strict boolean opt-in like
+      // changeMode. ArduCopter also answers FAILED for a param4 that is not
+      // exactly 0 or 1.
+      relative: { value: false },
+
+      // ── Attitude (SET_ATTITUDE_TARGET) ────────────────────────────────────
+      // Degrees in, quaternion out — the operator never sees q[4]. Presence
+      // drives ATTITUDE_TARGET_TYPEMASK exactly like Steer's groups, so no
+      // field is required on its own — but the three *angles* are one group
+      // with one ignore bit, so they go all-or-nothing
+      // (attitudeAngleValidator). `yaw` and `yawRate` are the fields Steer and
+      // Go to already use: one spelling per operator concept (§14).
+      roll: { value: '', validate: attitudeAngleValidator('roll') },
+      pitch: { value: '', validate: attitudeAngleValidator('pitch') },
+      rollRate: { value: '', validate: RED.validators.number(true) },
+      pitchRate: { value: '', validate: RED.validators.number(true) },
+      // Normalised 0..1. Out of range is the vehicle's to judge, but a value
+      // outside it is almost certainly a percent typed by mistake, and the
+      // editor is where that gets caught rather than flown.
+      thrust: {
+        value: '',
+        validate: function (v, _opt) {
+          if (RED.mavlink.isBlank(v)) return true;
+          var n = Number(v);
+          return (Number.isFinite(n) && n >= 0 && n <= 1)
+            || 'must be 0..1 (normalised thrust, not a percentage)';
+        },
+      },
+
+      // ── Manual (MANUAL_CONTROL) ───────────────────────────────────────────
+      // Sticks are -1..1, the joystick convention, scaled to the wire's ±1000
+      // at encode. All four are required (owner ruling, 2026-08-14): the
+      // dialect's INT16_MAX "axis is invalid" sentinel is not sent for a blank
+      // any more, because a blank box in a saved flow is a field nobody filled
+      // rather than a pilot's hand off the stick. Centring at 0 was never an
+      // option either — ArduSub reads z as 0..1000 neutral 500, where a
+      // helpfully-centred 0 is full reverse thrust (§14). So the editor asks
+      // for all four, and the runtime refuses anything less.
+      stickX: { value: '', validate: stickValidator() },
+      stickY: { value: '', validate: stickValidator() },
+      stickZ: { value: '', validate: stickValidator('z') },
+      stickR: { value: '', validate: stickValidator() },
+      buttons: {
+        value: '',
+        validate: function (v, _opt) {
+          if (RED.mavlink.isBlank(v)) return true;
+          var n = Number(v);
+          return (Number.isInteger(n) && n >= 0 && n <= 65535)
+            || 'must be a 16-bit button bitmask (0-65535)';
+        },
+      },
+
+      // ── Speed (DO_CHANGE_SPEED) ───────────────────────────────────────────
+      // Blank speed and throttle encode the dialect's -1 "no change" sentinel,
+      // the blankParams convention. -2 ("return to default") is a real value an
+      // operator types, not a sentinel this node owns.
+      throttle: { value: '', validate: RED.validators.number(true) },
+      speedType: { value: 'groundspeed' },
+
       // Blank inherits the AckWaiter default (10 s), like mavlink-command.
       // Zero or negative is not a shorter wait, it is an ack timer that fires
       // before the vehicle can answer, so the wait must be positive. Two args
@@ -164,7 +583,8 @@
         },
       },
       // Broadcast (0) is refused only where an ack is actually awaited: the
-      // Send & confirm tier — which the delivery rebuild offers on Go to only
+      // Send & confirm tier — which the delivery rebuild offers on the acked
+      // actions (Go to, Turn, Speed)
       // (#260). Send/Stream/Build stay broadcast-legal, so this reds nothing
       // they configure. The runtime guard stays for profile defaults and
       // payload overrides.
@@ -183,18 +603,21 @@
       targetComponent: { value: '', validate: RED.validators.number(true) },
       // Steer groups are optional and default blank: filling fields IS the
       // mode — the runtime derives the type_mask from the non-blank groups and
-      // refuses an all-blank steer at input time. That is a per-*group* rule;
-      // a half-filled position triplet is a different thing, and
-      // positionAxisValidator is the only layer that catches it.
-      north: { value: '', validate: positionAxisValidator('north') },
-      east: { value: '', validate: positionAxisValidator('east') },
-      up: { value: '', validate: positionAxisValidator('up') },
-      vNorth: { value: '', validate: RED.validators.number(true) },
-      vEast: { value: '', validate: RED.validators.number(true) },
-      vUp: { value: '', validate: RED.validators.number(true) },
-      aNorth: { value: '', validate: RED.validators.number(true) },
-      aEast: { value: '', validate: RED.validators.number(true) },
-      aUp: { value: '', validate: RED.validators.number(true) },
+      // builds the honest all-ignore packet for an all-blank steer (the editor
+      // requires one filled field, so the configured path never sends it) —
+      // this used to say the runtime refuses it, which stopped being true when
+      // deriveSteerMode grew its yaw-only arm. That is a per-*group* rule;
+      // a half-filled triplet is a different thing, and steerAxisValidator is
+      // where the dialog catches it before the runtime does.
+      north: { value: '', validate: steerAxisValidator(POSITION_AXES, 'north', 'position') },
+      east: { value: '', validate: steerAxisValidator(POSITION_AXES, 'east', 'position') },
+      up: { value: '', validate: steerAxisValidator(POSITION_AXES, 'up', 'position') },
+      vNorth: { value: '', validate: steerAxisValidator(VELOCITY_AXES, 'vNorth', 'velocity') },
+      vEast: { value: '', validate: steerAxisValidator(VELOCITY_AXES, 'vEast', 'velocity') },
+      vUp: { value: '', validate: steerAxisValidator(VELOCITY_AXES, 'vUp', 'velocity') },
+      aNorth: { value: '', validate: steerAxisValidator(ACCEL_AXES, 'aNorth', 'acceleration') },
+      aEast: { value: '', validate: steerAxisValidator(ACCEL_AXES, 'aEast', 'acceleration') },
+      aUp: { value: '', validate: steerAxisValidator(ACCEL_AXES, 'aUp', 'acceleration') },
       // Go to's global position is required — saved or live. This is the only
       // check on the *configured* path: the runtime trusts what it is handed
       // (AGENTS.md, input trust), so §10's "blank coordinates must not become
@@ -229,7 +652,10 @@
           return Number.isFinite(Number(v)) || 'must be a number of metres';
         },
       },
-      yaw: { value: '', validate: RED.validators.number(true) },
+      // Shared by Steer, Go to and Attitude — one spelling per operator concept
+      // (§14). Only Attitude holds it to the all-or-nothing angle rule; on the
+      // other two a blank yaw is a cleared ignore bit, which is its own answer.
+      yaw: { value: '', validate: attitudeAngleValidator('yaw') },
       yawRate: { value: '', validate: RED.validators.number(true) },
       // The runtime divides 1000/rateHz to arm the timer, and setInterval
       // substitutes 1 ms for a delay it cannot represent instead of refusing —
@@ -287,19 +713,24 @@
         $(this).text(($adv.is(':visible') ? '▾' : '▸') + ' Advanced');
       });
       // A configured Advanced value must be visible on open (CodeRabbit,
-      // #277): an invalid ackTimeout — or a commanded acceleration, which is
-      // the whole mode — hiding behind a collapsed section leaves the
-      // operator staring at a red node with no visible cause.
+      // #277): an invalid ackTimeout hiding behind a collapsed section leaves
+      // the operator staring at a red node with no visible cause. The
+      // acceleration triplet used to be checked here too and no longer is —
+      // it left Advanced for the Steer group disclosure, which opens it
+      // whenever it holds a value by the same rule and in the same place as
+      // position and velocity.
       if (!RED.mavlink.isBlank(node.ackTimeout) || !RED.mavlink.isBlank(node.radius)
-        || !RED.mavlink.isBlank(node.aNorth) || !RED.mavlink.isBlank(node.aEast)
-        || !RED.mavlink.isBlank(node.aUp) || node.changeMode) {
+        || !RED.mavlink.isBlank(node.turnRate) || !RED.mavlink.isBlank(node.throttle)
+        || !RED.mavlink.isBlank(node.rollRate) || !RED.mavlink.isBlank(node.pitchRate)
+        || !RED.mavlink.isBlank(node.buttons)
+        || node.relative || node.changeMode) {
         $('#move-advanced').show();
         $('#move-advanced-toggle').text('▾ Advanced');
       }
 
       // Delivery tiers follow the action (§9: tiers are computed, not fixed):
-      // goto's command path confirms via COMMAND_ACK; steer setpoints carry
-      // no ack, so Send & confirm exists on Go to only. The options are
+      // the acked MAV_CMD actions (Go to, Turn, Speed) confirm via
+      // COMMAND_ACK; setpoints carry no ack and cannot. The options are
       // rebuilt per action so the select never offers a tier the action makes
       // illegal; the in-progress (then saved) value survives when still
       // legal, and an illegal one falls back to Send — still a wire tier.
@@ -314,20 +745,275 @@
           ['build', 'Build'],
           ['send', 'Send'],
           ['stream', 'Stream']
+        ],
+        // Turn and Speed are acked MAV_CMDs. A command has no streaming
+        // semantics, so the tier is not offered; it does have an ack, so
+        // confirm is.
+        turn: [
+          ['build', 'Build'],
+          ['send', 'Send'],
+          ['confirm', 'Send & confirm']
+        ],
+        speed: [
+          ['build', 'Build'],
+          ['send', 'Send'],
+          ['confirm', 'Send & confirm']
+        ],
+        // Setpoint-shaped: no ack to confirm, and streaming is the normal use.
+        attitude: [
+          ['build', 'Build'],
+          ['send', 'Send'],
+          ['stream', 'Stream']
+        ],
+        manual: [
+          ['build', 'Build'],
+          ['send', 'Send'],
+          ['stream', 'Stream']
         ]
       };
-      function refreshDeliveryOptions(action) {
-        var $delivery = $('#node-input-delivery');
-        var options = DELIVERY_OPTIONS[action] || DELIVERY_OPTIONS.goto;
-        var live = $delivery.val();
-        $delivery.empty();
-        options.forEach(function (opt) {
-          $('<option></option>').val(opt[0]).text(opt[1]).appendTo($delivery);
+      // The Action list, rebuilt per bound vehicle. Same labels as the static
+      // markup — that copy is what a browser renders before oneditprepare runs.
+      var ACTION_OPTIONS = [
+        ['goto', 'Go to (guided goto, acknowledged)'],
+        ['steer', 'Steer (setpoints, fire-and-forget)'],
+        ['turn', 'Turn (heading, acknowledged)'],
+        ['speed', 'Speed (change speed, acknowledged)'],
+        ['attitude', 'Attitude (setpoints, fire-and-forget)'],
+        ['manual', 'Manual (joystick sticks)']
+      ];
+
+      // Steer's reference list, rebuilt per firmware the same way delivery is
+      // rebuilt per action. Offset is LOCAL_OFFSET_NED (7): a world-axis offset
+      // from wherever the vehicle is, and the only local frame ArduPlane
+      // accepts at all.
+      var REFERENCE_OPTIONS = [
+        ['world', 'World (Local NED)'],
+        ['body', 'Body (adapts to firmware)'],
+        ['offset', 'Offset from here (relative)']
+      ];
+
+      // Rows applyCompanionTargetVisibility owns; `show` reports them, the
+      // toggle loop leaves them alone.
+      var HELPER_ROWS = ['targetSystem', 'targetComponent'];
+
+      // Steer's optional groups, in disclosure order. Each is revealed by its
+      // own checkbox and hidden — and cleared — when that box is cleared.
+      var STEER_GROUPS = [
+        ['position', ['north', 'east', 'up']],
+        ['velocity', ['vNorth', 'vEast', 'vUp']],
+        ['accel', ['aNorth', 'aEast', 'aUp']],
+        ['yaw', ['yaw', 'yawRate']]
+      ];
+
+      /**
+       * Rebuild the Action list for the bound vehicle: an action the vehicle
+       * has no handler for is withheld, and a saved one survives and reds
+       * (§9 ruling 6, via the shared `refreshOptionSelect`).
+       *
+       * @param {object} gate  from `moveFamilyGate()`
+       * @returns {string} the action now selected
+       */
+      function refreshActionOptions(gate) {
+        return RED.mavlink.refreshOptionSelect({
+          select: '#node-input-action',
+          options: ACTION_OPTIONS,
+          saved: node.action,
+          withhold: function (value) { return !gate.allows(value); }
         });
-        var keep = [live, node.delivery].filter(function (value) {
-          return options.some(function (opt) { return opt[0] === value; });
-        })[0];
-        $delivery.val(keep || 'send');
+      }
+
+      /**
+       * Rebuild Steer's Reference list. Two withholdings, both measured, and
+       * they point opposite ways: PX4 accepts frame 7 and never acts on it
+       * (§14 2026-08-05), while ArduPlane accepts *nothing else* — its handler
+       * opens with an early return on any other frame (§14 2026-08-13).
+       *
+       * Neither rewrites a saved value: the option stays selectable for a node
+       * that already holds it and the `reference` validator supplies the
+       * reason, because a silent downgrade would change what the operator
+       * configured without telling them.
+       *
+       * @param {object} gate
+       * @returns {string} the reference now selected
+       */
+      function refreshReferenceOptions(gate) {
+        var firmware = RED.mavlink.resolveCatalogTarget().firmware;
+        return RED.mavlink.refreshOptionSelect({
+          select: '#node-input-reference',
+          options: REFERENCE_OPTIONS,
+          saved: node.reference,
+          withhold: function (value) {
+            if (value === 'offset') return firmware === 'px4';
+            return firmware === 'ardupilot' && gate.family === 'plane';
+          }
+        });
+      }
+
+      /**
+       * Rebuild the Delivery list. Which tiers *exist* is a property of the
+       * carrier (a one-shot MAV_CMD has no streaming semantics), so an absent
+       * tier falls back; which tiers *do anything on this vehicle* is
+       * knowledge, so those are withheld and kept on saved.
+       *
+       * @param {string} action
+       * @param {string} reference
+       * @param {object} gate
+       */
+      function refreshDeliveryOptions(action, reference, gate) {
+        RED.mavlink.refreshOptionSelect({
+          select: '#node-input-delivery',
+          options: DELIVERY_OPTIONS[action] || DELIVERY_OPTIONS.goto,
+          saved: node.delivery,
+          withhold: function (value) {
+            if (value !== 'stream') return false;
+            // Streaming an offset walks the vehicle away. Every tick is
+            // resolved against the vehicle's *current* position —
+            // ArduCopter/Rover/Sub add `get_relative_position_NED_origin()`
+            // per message, and ArduPlane's handler is
+            // `next_WP_loc.alt += -z*100`, which accumulates outright — so a
+            // 10 m nudge at 5 Hz retargets 10 m from wherever it now is, five
+            // times a second, until the TTL (source-read 2026-08-13; not yet
+            // SITL-measured).
+            if (action === 'steer' && reference === 'offset') return true;
+            // Go to is the one action whose two delivery paths ride different
+            // wires, and a Blimp implements only one of them: DO_REPOSITION on
+            // the command tiers, but no SET_POSITION_TARGET_GLOBAL_INT handler
+            // for the streamed form (§14). Streaming would be silence.
+            return action === 'goto' && gate.gated && gate.family === 'blimp';
+          },
+          fallback: 'send'
+        });
+      }
+
+      /**
+       * Which Steer groups the operator currently has open. Seeded from the
+       * saved fields on first paint, then owned by the checkboxes.
+       */
+      var disclosed = null;
+
+      /**
+       * Seed the disclosure from the fields themselves: a group is open iff one
+       * of its fields carries a value. Nothing to migrate, and a hand-edited
+       * flow discloses correctly without knowing this feature exists. A Steer
+       * node with nothing filled opens on Position, which is the common case.
+       *
+       * @returns {Object<string, boolean>}
+       */
+      function seedDisclosure() {
+        var seeded = {};
+        var any = false;
+        STEER_GROUPS.forEach(function (entry) {
+          seeded[entry[0]] = entry[1].some(function (name) {
+            return !RED.mavlink.isBlank(node[name]);
+          });
+          if (seeded[entry[0]]) any = true;
+        });
+        if (!any) seeded.position = true;
+        return seeded;
+      }
+
+      /**
+       * Steer's group disclosure — ☑ Position ☐ Velocity ☐ Acceleration ☐ Yaw
+       * (owner request, §9 roster). The boxes reveal rows and **nothing new is
+       * saved to config**: they carry no `node-input-` prefix, so Node-RED
+       * never persists them, and the type_mask still derives at runtime from
+       * which fields carry values. This is the curated-easy path `-ai`'s preset
+       * dropdown served, without re-growing a preset vocabulary.
+       *
+       * Clearing a box clears its fields, and that is the contract rather than
+       * a side effect. A blank group is mask-ignored and a filled one is
+       * commanded — so a group hidden with values still in it would keep
+       * commanding a velocity with nothing on screen to explain it. What is on
+       * the form is what the mask carries.
+       *
+       * @param {boolean} isSteer
+       * @param {boolean} planeSteer  fixed wing: one field, and no boxes at all
+       * @returns {Object<string, boolean>} which groups' rows to show
+       */
+      function applyGroupDisclosure(isSteer, planeSteer) {
+        if (!disclosed) disclosed = seedDisclosure();
+        // On a plane the form is fixed at the one field frame 7 reads, so there
+        // is no choice to offer and Position is simply on. It is written into
+        // `disclosed` rather than applied per-paint because the state has to
+        // survive the collapse ending: an operator who types an altitude here
+        // and then rebinds the node to a copter would otherwise get the row
+        // hidden underneath them, value and all, by a seed that ran before the
+        // value existed.
+        if (planeSteer) disclosed.position = true;
+        var shown = {};
+        STEER_GROUPS.forEach(function (entry) {
+          var name = entry[0];
+          shown[name] = isSteer && (planeSteer ? name === 'position' : !!disclosed[name]);
+          var $box = $('#move-group-' + name);
+          if ($box.length) $box.prop('checked', !!disclosed[name]);
+        });
+        return shown;
+      }
+
+      /**
+       * Which rows the current selection shows. Lifted out of
+       * `refreshVisibility` so the branching lives in one place a reader can
+       * hold, and so the toggles below stay a loop rather than forty lines.
+       *
+       * @param {object} state  the derived booleans refreshVisibility computed
+       * @returns {Object<string, boolean>} keyed by row suffix — `north` is
+       *   `#row-move-north`. `targetSystem`/`targetComponent` are reported for
+       *   completeness but owned by applyCompanionTargetVisibility (HELPER_ROWS).
+       */
+      function moveRowVisibility(state) {
+        return {
+          identity: state.isWire,
+          targetSystem: state.tgt.targetSystem,
+          targetComponent: state.tgt.targetComponent,
+          altRef: state.isGoto,
+          lat: state.isGoto,
+          lon: state.isGoto,
+          alt: state.isGoto,
+          reference: state.isSteer,
+          // Steer's groups are disclosed, not always-on: a box reveals its
+          // rows, and clearing it clears them. `groups` already folds in the
+          // plane collapse, so a fixed wing reaches only `up`.
+          north: state.groups.position && !state.planeSteer,
+          east: state.groups.position && !state.planeSteer,
+          up: state.groups.position,
+          vNorth: state.groups.velocity,
+          vEast: state.groups.velocity,
+          vUp: state.groups.velocity,
+          aNorth: state.groups.accel,
+          aEast: state.groups.accel,
+          aUp: state.groups.accel,
+          groups: state.isSteer && !state.planeSteer,
+          // Yaw rides Go to's command path by itself, Attitude's whole surface,
+          // and Steer's yaw group by disclosure; Turn has its own heading
+          // field, and Speed has no heading.
+          yaw: state.isGoto || state.groups.yaw || state.isAttitude,
+          yawRate: state.groups.yaw || state.isAttitude,
+          roll: state.isAttitude,
+          pitch: state.isAttitude,
+          rollRate: state.isAttitude,
+          pitchRate: state.isAttitude,
+          thrust: state.isAttitude,
+          stickX: state.isManual,
+          stickY: state.isManual,
+          stickZ: state.isManual,
+          stickR: state.isManual,
+          buttons: state.isManual,
+          // Ground speed is shared: DO_REPOSITION's speed param on Go to, and
+          // DO_CHANGE_SPEED's own speed on the Speed action. One spelling for
+          // one operator concept (§14).
+          speed: state.isCommandPath || state.isSpeed,
+          radius: state.isCommandPath,
+          changeMode: state.isCommandPath,
+          heading: state.isTurn,
+          turnRate: state.isTurn,
+          direction: state.isTurn,
+          relative: state.isTurn,
+          throttle: state.isSpeed,
+          speedType: state.isSpeed,
+          ackTimeout: (state.isGoto || state.isTurn || state.isSpeed) && state.delivery === 'confirm',
+          rate: state.isStream,
+          ttl: state.isStream
+        };
       }
 
       /**
@@ -343,9 +1029,47 @@
        * Companion (wire) → target sysid AND compid hidden (derived from airframe).
        */
       function refreshVisibility() {
-        var action = $('#node-input-action').val() || 'goto';
+        // The three selects are rebuilt in dependency order before anything
+        // reads them back: the Action list depends on the bound vehicle, the
+        // reference list on firmware and family, and the delivery list on both
+        // the action and the reference (Offset has no streaming meaning).
+        var gate = moveFamilyGate();
+        var action = refreshActionOptions(gate) || 'goto';
         var isGoto = action === 'goto';
-        refreshDeliveryOptions(action);
+        var isTurn = action === 'turn';
+        var isSpeed = action === 'speed';
+        var isAttitude = action === 'attitude';
+        var isManual = action === 'manual';
+        // Steer and Go to own the position surface; Turn and Speed own none of
+        // it. Everything positional keys off this rather than !isGoto, so a
+        // command action shows neither family's fields.
+        var isSteer = action === 'steer';
+        var reference = refreshReferenceOptions(gate) || 'world';
+        refreshDeliveryOptions(action, reference, gate);
+        // ArduPlane's local handler reads `z` and returns — no lateral axis, no
+        // velocity, no acceleration, no yaw (§14). So Steer on a plane is a
+        // one-field form: an altitude change, which is exactly what QGC offers
+        // a fixed wing beside goto. The groups it cannot fly are not offered,
+        // rather than offered and ignored.
+        //
+        // This hides fields without clearing them, unlike the disclosure
+        // checkbox, and the difference is the ruling rather than an oversight.
+        // A cleared checkbox is the *operator* saying "not this group", so
+        // clearing the values is obeying them. The plane collapse is
+        // *knowledge about the vehicle*, and §9 ruling 6 is explicit that
+        // knowledge may withhold but must never rewrite what was saved —
+        // re-binding the node to a copter has to give the operator their
+        // triplet back, not a form silently emptied on their behalf.
+        //
+        // It keys on the reference actually in force, not on the family alone.
+        // The dropdown withholds World and Body on a plane but keeps either if
+        // the node already holds it (ruling 6 again), so "plane" and "frame 7"
+        // are not the same condition — and a form that collapsed to one field
+        // while the Reference still read World would be describing a message it
+        // is not sending.
+        var planeSteer = isSteer && gate.gated && gate.family === 'plane'
+          && reference === 'offset';
+        var groups = applyGroupDisclosure(isSteer, planeSteer);
 
         var delivery = $('#node-input-delivery').val() || 'build';
         var dialect = $('#node-input-dialect').val() || node.dialect || '';
@@ -356,8 +1080,8 @@
         // Its params have no meaning on a streamed setpoint (runtime refuses
         // them there), so Stream withdraws the rows.
         var isCommandPath = isGoto && !isStream;
-        var reference = $('#node-input-reference').val() || 'world';
         var isBody = !isGoto && reference === 'body';
+        var isOffset = !isGoto && reference === 'offset';
         var altRef = $('#node-input-altRef').val() || 'home';
         var tgt = RED.mavlink.applyCompanionTargetVisibility({
           isBuild: isBuild,
@@ -374,71 +1098,72 @@
           connectionRow: '#row-move-connection'
         });
 
-        var show = {
-          identity: isWire,
-          targetSystem: tgt.targetSystem,
-          targetComponent: tgt.targetComponent,
-          altRef: isGoto,
-          lat: isGoto,
-          lon: isGoto,
-          alt: isGoto,
-          reference: !isGoto,
-          north: !isGoto,
-          east: !isGoto,
-          up: !isGoto,
-          vNorth: !isGoto,
-          vEast: !isGoto,
-          vUp: !isGoto,
-          aNorth: !isGoto,
-          aEast: !isGoto,
-          aUp: !isGoto,
-          yaw: true,
-          yawRate: !isGoto,
-          speed: isCommandPath,
-          radius: isCommandPath,
-          changeMode: isCommandPath,
-          ackTimeout: isGoto && delivery === 'confirm',
-          rate: isStream,
-          ttl: isStream
-        };
+        var show = moveRowVisibility({
+          isWire: isWire, tgt: tgt, isGoto: isGoto, isSteer: isSteer, isTurn: isTurn,
+          isSpeed: isSpeed, isAttitude: isAttitude, isManual: isManual,
+          isCommandPath: isCommandPath, isStream: isStream, delivery: delivery,
+          planeSteer: planeSteer, groups: groups
+        });
 
-        $('#row-move-identity').toggle(!!show.identity);
-        $('#row-move-altRef').toggle(!!show.altRef);
-        $('#row-move-reference').toggle(!!show.reference);
-        $('#row-move-speed').toggle(!!show.speed);
-        $('#row-move-radius').toggle(!!show.radius);
-        $('#row-move-changeMode').toggle(!!show.changeMode);
-        $('#row-move-ackTimeout').toggle(!!show.ackTimeout);
-        $('#row-move-north').toggle(!!show.north);
-        $('#row-move-east').toggle(!!show.east);
-        $('#row-move-up').toggle(!!show.up);
-        $('#row-move-lat').toggle(!!show.lat);
-        $('#row-move-lon').toggle(!!show.lon);
-        $('#row-move-alt').toggle(!!show.alt);
-        $('#row-move-vNorth').toggle(!!show.vNorth);
-        $('#row-move-vEast').toggle(!!show.vEast);
-        $('#row-move-vUp').toggle(!!show.vUp);
-        $('#row-move-aNorth').toggle(!!show.aNorth);
-        $('#row-move-aEast').toggle(!!show.aEast);
-        $('#row-move-aUp').toggle(!!show.aUp);
-        $('#row-move-yaw').toggle(!!show.yaw);
-        $('#row-move-yawRate').toggle(!!show.yawRate);
-        $('#row-move-rate').toggle(!!show.rate);
-        $('#row-move-ttl').toggle(!!show.ttl);
+        // MANUAL_CONTROL's addressing field is `target` — a system id, with no
+        // target_component on the wire at all. So the compid row is withdrawn
+        // for this action regardless of what the identity role would allow: an
+        // operator must not be shown a control the message has no room for.
+        //
+        // Hidden directly, not through `show`: the target rows are the two this
+        // function does NOT toggle from that object — applyCompanionTargetVisibility
+        // owns them, and it ran above. Setting show.targetComponent here was a
+        // no-op that left the row on screen (Gitar, #303).
+        if (isManual) $('#row-move-targetComponent').hide();
+
+        // Every key of `show` is a row suffix, so the toggles are a loop: a
+        // key that reaches no toggle is the exact bug Gitar found in #303
+        // (`show.targetComponent` was assigned and never read), and a loop
+        // makes it unrepresentable rather than caught by review. The two
+        // target rows are skipped because applyCompanionTargetVisibility
+        // already toggled them above — listing them here would fight it.
+        Object.keys(show).forEach(function (key) {
+          if (HELPER_ROWS.indexOf(key) !== -1) return;
+          $('#row-move-' + key).toggle(!!show[key]);
+        });
 
         // Labels follow the reference so the operator never translates
         // MAVLink axis conventions in their head: the body reference is
         // heading relative (forward/right). Vertical inputs stay up-positive
         // everywhere (§ "NED is down-positive": the sign flips once, at
         // encode) — and the altitude label names the reference in force.
-        $('#label-move-north').text(isBody ? 'Metres forward' : 'Metres north');
-        $('#label-move-east').text(isBody ? 'Metres right' : 'Metres east');
+        // Offset qualifies the *position* triplet only: on frame 7 the rates
+        // are plain NED, byte-identical in meaning to frame 1 (ArduCopter
+        // source-read 2026-08-13), so velocity and acceleration keep their
+        // world labels. isBody and isOffset are mutually exclusive — both read
+        // the one reference select — so the qualifier composes safely.
+        var fromHere = isOffset ? ' (from here)' : '';
+        $('#label-move-north').text((isBody ? 'Metres forward' : 'Metres north') + fromHere);
+        $('#label-move-east').text((isBody ? 'Metres right' : 'Metres east') + fromHere);
+        $('#label-move-up').text('Metres up' + fromHere);
+        // Go to's speed is "fly there at"; the Speed action's is "fly at from
+        // now on". Same field, same units, different sentence.
+        $('#label-move-speed').text(isSpeed ? 'Speed' : 'Ground speed');
         $('#label-move-vNorth').text(isBody ? 'Forward m/s' : 'North m/s');
         $('#label-move-vEast').text(isBody ? 'Right m/s' : 'East m/s');
         $('#label-move-aNorth').text(isBody ? 'Accel forward' : 'Accel north');
         $('#label-move-aEast').text(isBody ? 'Accel right' : 'Accel east');
         $('#label-move-alt').text(altRef === 'msl' ? 'Metres alt (MSL)' : 'Metres alt (above home)');
       }
+
+      // Clearing a group clears its fields before the repaint, so the form and
+      // the type_mask never disagree (see applyGroupDisclosure).
+      STEER_GROUPS.forEach(function (entry) {
+        $('#move-group-' + entry[0]).on('change', function () {
+          var open = $(this).is(':checked');
+          if (!disclosed) disclosed = seedDisclosure();
+          disclosed[entry[0]] = open;
+          if (!open) {
+            entry[1].forEach(function (name) { $('#node-input-' + name).val(''); });
+          }
+          refreshVisibility();
+        });
+      });
 
       $('#node-input-action').on('change', refreshVisibility);
       $('#node-input-altRef').on('change', refreshVisibility);
@@ -477,6 +1202,10 @@
   <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action" style="width:70%">
     <option value="goto">Go to (guided goto, acknowledged)</option>
     <option value="steer">Steer (setpoints, fire-and-forget)</option>
+    <option value="turn">Turn (heading, acknowledged)</option>
+    <option value="speed">Speed (change speed, acknowledged)</option>
+    <option value="attitude">Attitude (setpoints, fire-and-forget)</option>
+    <option value="manual">Manual (joystick sticks)</option>
   </select></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option><option value="stream">Stream</option></select></div>
   <div class="form-row" id="row-move-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
@@ -490,26 +1219,61 @@
   <div class="form-row" id="row-move-reference"><label for="node-input-reference">Reference</label><select id="node-input-reference" style="width:70%">
     <option value="world">World (Local NED)</option>
     <option value="body">Body (adapts to firmware)</option>
+    <option value="offset">Offset from here (relative)</option>
   </select></div>
+  <div class="form-row" id="row-move-groups"><label>Fields</label>
+    <span style="display:inline-block">
+      <label style="width:auto;margin-right:12px" for="move-group-position"><input type="checkbox" id="move-group-position" style="display:inline-block;width:auto;margin-right:4px;"> Position</label>
+      <label style="width:auto;margin-right:12px" for="move-group-velocity"><input type="checkbox" id="move-group-velocity" style="display:inline-block;width:auto;margin-right:4px;"> Velocity</label>
+      <label style="width:auto;margin-right:12px" for="move-group-accel"><input type="checkbox" id="move-group-accel" style="display:inline-block;width:auto;margin-right:4px;"> Acceleration</label>
+      <label style="width:auto" for="move-group-yaw"><input type="checkbox" id="move-group-yaw" style="display:inline-block;width:auto;margin-right:4px;"> Yaw</label>
+    </span>
+    <div class="form-tips" style="margin-top:4px">Filling fields IS the mode — these only reveal rows, and nothing extra is saved. Clearing a box clears its fields, because a hidden value would still be commanded.</div>
+  </div>
   <div class="form-row" id="row-move-north"><label for="node-input-north" id="label-move-north">Metres north</label><input type="text" id="node-input-north" step="any" style="width:120px"> m</div>
   <div class="form-row" id="row-move-east"><label for="node-input-east" id="label-move-east">Metres east</label><input type="text" id="node-input-east" step="any" style="width:120px"> m</div>
-  <div class="form-row" id="row-move-up"><label for="node-input-up">Metres up</label><input type="text" id="node-input-up" step="any" style="width:120px"> m</div>
+  <div class="form-row" id="row-move-up"><label for="node-input-up" id="label-move-up">Metres up</label><input type="text" id="node-input-up" step="any" style="width:120px"> m</div>
   <div class="form-row" id="row-move-vNorth"><label for="node-input-vNorth" id="label-move-vNorth">North m/s</label><input type="text" id="node-input-vNorth" step="any" style="width:120px"> m/s</div>
   <div class="form-row" id="row-move-vEast"><label for="node-input-vEast" id="label-move-vEast">East m/s</label><input type="text" id="node-input-vEast" step="any" style="width:120px"> m/s</div>
   <div class="form-row" id="row-move-vUp"><label for="node-input-vUp">Up m/s</label><input type="text" id="node-input-vUp" step="any" style="width:120px"> m/s</div>
+  <div class="form-row" id="row-move-aNorth"><label for="node-input-aNorth" id="label-move-aNorth">Accel north</label><input type="text" id="node-input-aNorth" step="any" style="width:120px"> m/s²</div>
+  <div class="form-row" id="row-move-aEast"><label for="node-input-aEast" id="label-move-aEast">Accel east</label><input type="text" id="node-input-aEast" step="any" style="width:120px"> m/s²</div>
+  <div class="form-row" id="row-move-aUp"><label for="node-input-aUp" id="label-move-aUp">Accel up</label><input type="text" id="node-input-aUp" step="any" style="width:120px"> m/s²</div>
   <div class="form-row" id="row-move-yaw"><label for="node-input-yaw">Yaw</label><input type="text" id="node-input-yaw" step="any" style="width:120px" placeholder="(keep heading)"> deg</div>
   <div class="form-row" id="row-move-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="text" id="node-input-yawRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>
-  <div class="form-row" id="row-move-speed"><label for="node-input-speed">Ground speed</label><input type="text" id="node-input-speed" step="any" style="width:120px" placeholder="(vehicle default)"> m/s</div>
+  <div class="form-row" id="row-move-roll"><label for="node-input-roll">Roll</label><input type="text" id="node-input-roll" step="any" style="width:120px" placeholder="(ignored)"> deg</div>
+  <div class="form-row" id="row-move-pitch"><label for="node-input-pitch">Pitch</label><input type="text" id="node-input-pitch" step="any" style="width:120px" placeholder="(ignored)"> deg</div>
+  <div class="form-row" id="row-move-thrust"><label for="node-input-thrust">Thrust</label><input type="text" id="node-input-thrust" step="any" style="width:120px" placeholder="(ignored)"> 0..1</div>
+  <div class="form-row" id="row-move-stickX"><label for="node-input-stickX">Pitch stick</label><input type="text" id="node-input-stickX" step="any" style="width:120px" placeholder="(axis off)"> -1..1</div>
+  <div class="form-row" id="row-move-stickY"><label for="node-input-stickY">Roll stick</label><input type="text" id="node-input-stickY" step="any" style="width:120px" placeholder="(axis off)"> -1..1</div>
+  <div class="form-row" id="row-move-stickZ"><label for="node-input-stickZ">Thrust stick</label><input type="text" id="node-input-stickZ" step="any" style="width:120px" placeholder="(axis off)"> -1..1</div>
+  <div class="form-row" id="row-move-stickR"><label for="node-input-stickR">Yaw stick</label><input type="text" id="node-input-stickR" step="any" style="width:120px" placeholder="(axis off)"> -1..1</div>
+  <div class="form-row" id="row-move-heading"><label for="node-input-heading">Heading</label><input type="text" id="node-input-heading" step="any" style="width:120px"> deg</div>
+  <div class="form-row" id="row-move-direction"><label for="node-input-direction">Direction</label><select id="node-input-direction" style="width:70%">
+    <option value="0">Shortest way round</option>
+    <option value="1">Clockwise</option>
+    <option value="-1">Counter-clockwise</option>
+  </select></div>
+  <div class="form-row" id="row-move-speedType"><label for="node-input-speedType">Speed type</label><select id="node-input-speedType" style="width:70%">
+    <option value="groundspeed">Ground speed</option>
+    <option value="airspeed">Airspeed</option>
+    <option value="climb">Climb speed</option>
+    <option value="descent">Descent speed</option>
+  </select></div>
+  <div class="form-row" id="row-move-speed"><label for="node-input-speed" id="label-move-speed">Ground speed</label><input type="text" id="node-input-speed" step="any" style="width:120px" placeholder="(vehicle default)"> m/s</div>
   <div class="form-row" id="row-move-rate"><label for="node-input-rateHz">Stream rate</label><input type="number" id="node-input-rateHz" min="0.1" step="any" style="width:80px"> Hz</div>
   <div class="form-row" id="row-move-ttl"><label for="node-input-ttlMs">TTL</label><input type="number" id="node-input-ttlMs" style="width:80px"> ms</div>
   <div class="form-row"><a href="#" id="move-advanced-toggle">&#x25B8; Advanced</a></div>
   <div id="move-advanced" style="display:none">
     <div class="form-row" id="row-move-changeMode"><label for="node-input-changeMode">Change mode</label><input type="checkbox" id="node-input-changeMode" style="display:inline-block;width:auto;"> <span class="form-tips">off: the vehicle must already be in GUIDED (ArduPilot) / Hold (PX4) or it answers DENIED; on: the vehicle flies itself into guided mode (§14)</span></div>
     <div class="form-row" id="row-move-ackTimeout"><label for="node-input-ackTimeout">ACK timeout</label><input type="number" id="node-input-ackTimeout" style="width:80px" placeholder="10000"> ms</div>
+    <div class="form-row" id="row-move-rollRate"><label for="node-input-rollRate">Roll rate</label><input type="text" id="node-input-rollRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>
+    <div class="form-row" id="row-move-pitchRate"><label for="node-input-pitchRate">Pitch rate</label><input type="text" id="node-input-pitchRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>
+    <div class="form-row" id="row-move-buttons"><label for="node-input-buttons">Buttons</label><input type="text" id="node-input-buttons" style="width:120px" placeholder="0"> bitmask</div>
+    <div class="form-row" id="row-move-turnRate"><label for="node-input-turnRate">Turn rate</label><input type="text" id="node-input-turnRate" step="any" style="width:120px" placeholder="(vehicle default)"> deg/s</div>
+    <div class="form-row" id="row-move-relative"><label for="node-input-relative">Relative</label><input type="checkbox" id="node-input-relative" style="display:inline-block;width:auto;"> <span class="form-tips">off: the heading is absolute, 0 = north; on: it is an offset from the current heading</span></div>
+    <div class="form-row" id="row-move-throttle"><label for="node-input-throttle">Throttle</label><input type="text" id="node-input-throttle" step="any" style="width:120px" placeholder="(no change)"> %</div>
     <div class="form-row" id="row-move-radius"><label for="node-input-radius">Loiter radius</label><input type="text" id="node-input-radius" step="any" style="width:120px" placeholder="(ignored)"> m</div>
-    <div class="form-row" id="row-move-aNorth"><label for="node-input-aNorth" id="label-move-aNorth">Accel north</label><input type="text" id="node-input-aNorth" step="any" style="width:120px"> m/s²</div>
-    <div class="form-row" id="row-move-aEast"><label for="node-input-aEast" id="label-move-aEast">Accel east</label><input type="text" id="node-input-aEast" step="any" style="width:120px"> m/s²</div>
-    <div class="form-row" id="row-move-aUp"><label for="node-input-aUp" id="label-move-aUp">Accel up</label><input type="text" id="node-input-aUp" step="any" style="width:120px"> m/s²</div>
     <div class="form-row" id="row-move-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   </div>
 </script>
@@ -518,11 +1282,19 @@
   <p>Builds or sends vehicle movement commands. The operator picks an intent — <b>Action</b> × <b>Delivery</b> — and the wire message, frame number, and type_mask follow as code; you never enter a bitmask. Vertical inputs — altitude, climb, vertical acceleration — are entered up-positive everywhere; the node flips them once to MAVLink NED down-positive values. Yaw and yaw rate are entered in degrees (deg, deg/s) and converted exactly once to the radians on the wire.</p>
   <p><b>Go to</b> is the one-shot GCS-style guided goto. On Build, Send, and Send &amp; confirm it rides <code>MAV_CMD_DO_REPOSITION</code> as <code>COMMAND_INT</code> — the acked command path; on Stream it rides <code>SET_POSITION_TARGET_GLOBAL_INT</code> at rate, the same intent streamed. The <b>Altitude reference</b> is the only frame choice: <i>Above home</i> (frame 3) or <i>Absolute (MSL)</i> (frame 0). Latitude/longitude are entered in degrees; yaw is entered in degrees and converted once to the radians the dialect declares for DO_REPOSITION. Blank optional params send the spec's no-change sentinels, matching what QGC and MAVSDK transmit: blank <b>Ground speed</b> → −1 (vehicle default), blank <b>Loiter radius</b> → 0 (ignored, planes), blank <b>Yaw</b> → NaN (keep the current heading mode; an explicit 0 commands north). Ground speed, Loiter radius, and Change mode are command-path params — they hide on Stream delivery, and the runtime refuses their payload overrides on a streamed setpoint.</p>
   <p><b>Change mode</b> (Advanced) sets MAV_DO_REPOSITION_FLAGS_CHANGE_MODE, and the flag is the gate on both stacks (measured, §14 2026-08-12): the goto is accepted iff the flag is set or the vehicle is already in GUIDED (ArduPilot) / Hold (PX4), else it answers denied (2). It flies the vehicle into guided mode — a mode change, and therefore an explicit opt-in (checkbox, or boolean <code>msg.payload.changeMode</code>).</p>
-  <p>On <b>Send &amp; confirm</b> delivery (Go to only — setpoints carry no acknowledgement) the node waits for the terminal COMMAND_ACK and reports it in the same vocabulary as <b>mavlink-command</b>: output 0 fires on <code>ACCEPTED</code> with an <code>accepted</code> record carrying <code>resultCode</code> 0; every other terminal result fails on output 1 with its MAV_RESULT name as the result — <code>denied</code>, <code>command_int_only</code>, <code>command_unsupported_mav_frame</code>, … — and its code, and a missing ack reports <code>unconfirmed</code> (§9: a missing ack is not a failure). The result IS the discriminator — branch on it with a switch. <code>TEMPORARILY_REJECTED</code> retries with back-off before failing. <b>ACK timeout</b> (blank = 10 s) bounds the wait. Every ack-confirmed record also carries the ack's <code>resultParam2</code> (command-specific detail, often the reason for a denial), and while the vehicle answers <code>IN_PROGRESS</code> the status badge shows the progress it reports. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use Send or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
+  <p>On <b>Send &amp; confirm</b> delivery (Go to, Turn and Speed — setpoints carry no acknowledgement) the node waits for the terminal COMMAND_ACK and reports it in the same vocabulary as <b>mavlink-command</b>: output 0 fires on <code>ACCEPTED</code> with an <code>accepted</code> record carrying <code>resultCode</code> 0; every other terminal result fails on output 1 with its MAV_RESULT name as the result — <code>denied</code>, <code>command_int_only</code>, <code>command_unsupported_mav_frame</code>, … — and its code, and a missing ack reports <code>unconfirmed</code> (§9: a missing ack is not a failure). The result IS the discriminator — branch on it with a switch. <code>TEMPORARILY_REJECTED</code> retries with back-off before failing. <b>ACK timeout</b> (blank = 10 s) bounds the wait. Every ack-confirmed record also carries the ack's <code>resultParam2</code> (command-specific detail, often the reason for a denial), and while the vehicle answers <code>IN_PROGRESS</code> the status badge shows the progress it reports. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use Send or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
   <p><b>Steer</b> sends <code>SET_POSITION_TARGET_LOCAL_NED</code> setpoints — the streaming/offboard path, fire-and-forget. The <b>Reference</b> picks the axes: <i>World (Local NED)</i> works on every firmware; <i>Body</i> adapts to the bound Vehicle Profile's firmware, because the two stacks read different body frames (measured, §14): ArduPilot reads BODY_OFFSET_NED (9) as the body-axis offset, while PX4 ignores 9 and reads BODY_NED (8) — and PX4 discards position in body frames, so body setpoints on PX4 carry velocity only. Without a firmware the body reference refuses rather than guess — a wrong frame number is silently dropped by the vehicle. Body labels read forward/right.</p>
+  <p><i>Offset from here</i> is <code>MAV_FRAME_LOCAL_OFFSET_NED</code> (7): the position triplet is a world-axis offset added to wherever the vehicle currently is, so <b>Metres up</b> 10 with the other two blank climbs 10 m from here. Unlike World, a blank axis is legal and means a zero offset — no movement — rather than a coordinate, so single-axis moves are the normal use. This is the frame QGroundControl itself sends for a guided altitude change on ArduPilot, and the <b>only</b> local frame <b>ArduPlane</b> accepts at all (it reads the vertical component and ignores the rest) — World and Body do nothing on a fixed wing. ArduCopter, Rover and Sub apply all three axes. Velocity and acceleration are unaffected by the offset: on this frame they are plain NED rates, identical to World. <b>PX4 accepts frame 7 and never acts on it</b> (measured, §14), so the option is not offered when the Vehicle Profile says PX4. <b>Stream</b> delivery is not offered either — each setpoint is resolved against the vehicle's position at that moment, so a repeating offset walks the vehicle away instead of holding a target.</p>
   <p>Every Steer field is optional, because filling fields IS the mode: the type_mask derives from which groups carry values — position, velocity, acceleration, any combination of them (feed-forward), or yaw / yaw rate alone. Blank means mask-ignored; a value (including 0) means commanded. The editor requires at least one field, because an all-blank steer is the all-ignore packet PX4 logs as invalid.</p>
-  <p>Action and delivery reshape the form (§6): only the parameters for the selection are shown, and the Delivery options themselves follow the action — steer setpoints cannot confirm, so Send &amp; confirm is offered on Go to only. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
-  <p>Output 0 continues only on success, once per input, and the result word IS the outcome, one meaning per word: <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — Go to confirm only). Output 1 carries the status record for every outcome.</p>
+  <p>The <b>Fields</b> checkboxes — Position, Velocity, Acceleration, Yaw — decide which of those groups the form shows. They are disclosure only: nothing extra is saved, and the type_mask still derives from the values you enter. Clearing a box <b>clears that group's fields</b>, deliberately — a hidden field that still held a value would still be commanded, with nothing on screen to explain it. The boxes open themselves on whichever groups already carry values, so an imported flow shows what it sends.</p>
+  <p><b>The Action list follows the vehicle.</b> When the bound Vehicle Profile names an ArduPilot family, actions that family has no handler for are not offered — an Antenna Tracker shows Attitude and Manual, a Blimp shows Go to, and Turn appears only on Copter and Sub, because neither ArduPlane nor Rover implements <code>CONDITION_YAW</code> (§14). These are all messages the vehicle <i>accepts</i> and then ignores, mostly with no NAK, so the dialog is the only place the difference can be seen. A profile whose family is <i>Unknown</i>, or no profile at all, offers everything: hiding requires knowledge. PX4 profiles are not gated by family either — that matrix is ArduPilot's per-vehicle dispatch, and PX4 has one receiver with no vehicle branch in it. A node that already holds a withheld action keeps it and reds at deploy with the reason, rather than being silently rewritten.</p>
+  <p>On a <b>Plane</b> profile Steer collapses to a single field. ArduPlane's local-setpoint handler returns immediately on any frame that is not <code>LOCAL_OFFSET_NED</code> and then reads only the vertical component, so <i>World</i> and <i>Body</i> are withheld from the Reference list — and with <i>Offset from here</i> selected, <b>Metres up</b> is the whole form: a guided altitude change, which is exactly what QGroundControl offers a fixed wing beside goto. A node that already had World or Body saved keeps it and reds with the reason rather than being rewritten, so the form stays whatever the Reference actually says.</p>
+  <p><b>Turn</b> sends <code>MAV_CMD_CONDITION_YAW</code> — and on ArduPilot it is the <i>only</i> working yaw. Both of the yaw fields the position carriers already carry are measured inert on ArduCopter (§14): <code>DO_REPOSITION</code>'s heading param is ignored outright, and a yaw-only setpoint stream holds heading instead of turning. ArduPilot's own test suite yaws in guided through this command. <b>Heading</b> is 0-360 degrees, absolute (0 = north) unless <b>Relative</b> (Advanced) is ticked, which makes it an offset from the current heading; the range is enforced here because the vehicle answers <code>FAILED</code> outside it. <b>Direction</b> defaults to the shortest way round, which is the dialect's own meaning for 0. Blank <b>Turn rate</b> (Advanced) leaves the vehicle's default. PX4 has no handler for this command, so the action refuses on a PX4 profile and points you at Steer's yaw field, which PX4 does honour.</p>
+  <p><b>Speed</b> sends <code>MAV_CMD_DO_CHANGE_SPEED</code>, the guided speed change QGroundControl offers beside goto. <b>Speed type</b> picks which speed is being set — ground speed means something on every vehicle, airspeed is a fixed-wing concept, and climb/descent set the vertical rates. Blank <b>Speed</b> or <b>Throttle</b> (Advanced) sends the spec's -1 &ldquo;no change&rdquo;; -2 is the spec's &ldquo;return to default&rdquo; and you reach it by typing it. Both stacks and every moving vehicle family accept this command, so it asks no firmware question.</p>
+  <p><b>Attitude</b> sends <code>SET_ATTITUDE_TARGET</code> — MAVSDK's offboard attitude path. You enter <b>Roll</b>, <b>Pitch</b> and <b>Yaw</b> in degrees and the node builds the quaternion the wire wants; you never type <code>q[4]</code>. Presence drives the mask exactly as it does on Steer: any angle commands the whole attitude (the wire has one ignore bit for all three), each body rate clears only its own bit, and <b>Thrust</b> is normalised 0..1 where an explicit 0 is a commanded zero rather than a blank. On <b>Stream</b> delivery the stream ends by <i>going quiet</i> — there is no braking packet, because zero thrust is a descent rather than a stop, and both stacks watch for setpoint silence themselves.</p>
+  <p><b>Manual</b> sends <code>MANUAL_CONTROL</code>, the joystick message: QGroundControl's stick path, how ArduSub is flown, and one of the two ways an Antenna Tracker can be pointed. It is <i>not</i> how a Blimp moves — ArduPilot's Blimp never overrides the stick handler, whose base implementation is empty, so it decodes the message, counts it as a ground-station heartbeat, and discards it (§14). Sticks are entered <b>-1..1</b> and scale to the wire's ±1000 once, at encode. Two things differ from every other action. It addresses a <b>system only</b> — the message has no target component, so that row is hidden. And <b>a blank stick is a disabled axis, not a centred one</b>: it sends the dialect's <code>INT16_MAX</code> "axis is invalid" rather than 0. That matters — ArduSub reads the thrust axis as 0..1000 with neutral <i>500</i>, so an axis helpfully centred at 0 would command full reverse thrust. Leaving an axis blank means the vehicle is not driven on it at all, on any firmware. Ceasing to transmit is a real stop here: ArduSub's GCS failsafe disarms when stick messages stop arriving.</p>
+  <p>Action and delivery reshape the form (§6): only the parameters for the selection are shown, and the Delivery options themselves follow the action — setpoints cannot confirm, so Send &amp; confirm is offered on the acked actions — Go to, Turn and Speed — only. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
+  <p>Output 0 continues only on success, once per input, and the result word IS the outcome, one meaning per word: <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — confirm tier only). Output 1 carries the status record for every outcome.</p>
   <p>On <b>Stream</b> delivery a running stream ends three ways. When the <b>TTL</b> elapses the node sends the zero-velocity brake and reports on output 1 with <code>result: "expired"</code> and <code>sent</code> (setpoints handed to the connection — the streaming link may coalesce under backpressure, so this counts sends, not wire deliveries) — switch on <code>result === "expired"</code> to run whatever follows a timed move; deliberately not on output 0, since that port is a trigger and the stream's start already fired it. If the expiry brake send itself fails, <code>result</code> stays <code>"expired"</code> and the failure rides a <code>brakeError</code> field. An input of <code>{action: "stop"}</code> halts the stream, sends the brake, and completes like any input — output 0 fires once, and the status record carries <code>result: "stopped"</code> with <code>sent</code>; a stop with nothing streaming completes with <code>detail: "no stream"</code>, and the action is refused on Build and Send delivery. A <b>new input</b> replaces the stream as a direct handover — no brake between consecutive targets, matching GCS practice; retargeting a different vehicle brakes the abandoned target once the new stream is live. A redeploy closes the node and brakes. A stream that keeps running through send failures reports once per failure streak on output 1 and never quits on its own — the firmware's setpoint watchdog is the failsafe on a dead link.</p>
   <p><code>msg.payload</code> overrides speak the action-shaped vocabulary: <code>altRef</code> (<code>"home"</code>/<code>"msl"</code>, Go to), <code>reference</code> (<code>"world"</code>/<code>"body"</code>, Steer), <code>position</code> (<code>{lat, lon, alt}</code> on Go to, <code>{north, east, up}</code> on Steer), <code>velocity</code> and <code>accel</code> (<code>{north, east, up}</code>, Steer), <code>yaw</code>, <code>yawRate</code>, <code>speed</code>, <code>radius</code>, <code>changeMode</code> (boolean, Go to command path), <code>target</code> (<code>{sysid, compid}</code>), <code>rateHz</code> and <code>ttlMs</code> (Stream), <code>timeBootMs</code>, and <code>action: "stop"</code>. <code>msg.payload === false</code> suppresses the input silently (§9).</p>
   <p>On <b>Build</b> delivery the Dialect dropdown selects the bundled dialect used for catalogs; choose <i>from Vehicle Profile…</i> to inherit dialect and target defaults from a Vehicle Profile. On <b>Send</b>, <b>Send &amp; confirm</b>, or <b>Stream</b> delivery a Connection is required and the Identity determines addressing: a companion identity derives the target sysid from its airframe and pins compid to 1 (the autopilot).</p>

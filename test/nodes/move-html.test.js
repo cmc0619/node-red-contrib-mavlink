@@ -76,18 +76,35 @@ test('mavlink-move editor reshapes fields by action and delivery (§6)', () => {
   // The gates themselves: goto owns the global position + altitude reference;
   // steer owns the reference and the optional field groups; the command-path
   // params exist only on goto's Build/Send/Send & confirm.
-  assert.match(html, /altRef:\s*isGoto/, 'altitude reference shown on goto only');
-  assert.match(html, /lat:\s*isGoto/, 'global position gated on goto');
-  assert.match(html, /reference:\s*!isGoto/, 'reference shown on steer only');
-  assert.match(html, /north:\s*!isGoto/, 'steer position fields gated on steer');
-  assert.match(html, /vNorth:\s*!isGoto/, 'velocity fields gated on steer');
-  assert.match(html, /aNorth:\s*!isGoto/, 'accel fields gated on steer');
-  assert.match(html, /yawRate:\s*!isGoto/, 'yaw rate is a setpoint field — steer only');
+  assert.match(html, /altRef:\s*state\.isGoto/, 'altitude reference shown on goto only');
+  assert.match(html, /lat:\s*state\.isGoto/, 'global position gated on goto');
+  // isSteer, not !isGoto: the roster added the command actions (Turn, Speed),
+  // which own none of the position surface. Gating on "not goto" would have
+  // shown Steer's reference and field groups on both of them.
+  assert.match(html, /reference:\s*state\.isSteer/, 'reference shown on steer only');
+  assert.match(html, /heading:\s*state\.isTurn/, 'heading shown on turn only');
+  assert.match(html, /throttle:\s*state\.isSpeed/, 'throttle shown on speed only');
+  // Steer's field groups moved behind the disclosure checkboxes (#304 §4), so
+  // the gate is the group rather than `isSteer` — `groups` is computed from
+  // isSteer AND the box AND the plane collapse, and the executable test below
+  // proves each of those arms rather than trusting this shape.
+  assert.match(html, /north:\s*state\.groups\.position && !state\.planeSteer/, 'north is disclosed, and off on a plane');
+  assert.match(html, /up:\s*state\.groups\.position/, 'the vertical axis survives the plane collapse');
+  assert.match(html, /vNorth:\s*state\.groups\.velocity/, 'velocity fields gated on the velocity group');
+  assert.match(html, /aNorth:\s*state\.groups\.accel/, 'accel fields gated on the acceleration group');
+  assert.match(html, /yawRate:\s*state\.groups\.yaw \|\| state\.isAttitude/, 'yaw rate rides the yaw group or Attitude');
   assert.match(html, /var isCommandPath = isGoto && !isStream/, 'the command path is goto off Stream');
-  assert.match(html, /speed:\s*isCommandPath/, 'ground speed hides on Stream (the runtime refuses it there)');
-  assert.match(html, /radius:\s*isCommandPath/, 'loiter radius hides on Stream');
-  assert.match(html, /changeMode:\s*isCommandPath/, 'change mode hides on Stream');
-  assert.match(html, /ackTimeout:\s*isGoto && delivery === 'confirm'/, 'ACK timeout on goto confirm only');
+  // Ground speed is shared by Go to's DO_REPOSITION param and the Speed
+  // action's own — one spelling for one operator concept (§14).
+  assert.match(html, /speed:\s*state\.isCommandPath \|\| state\.isSpeed/, 'ground speed on goto command path and on Speed');
+  assert.match(html, /radius:\s*state\.isCommandPath/, 'loiter radius hides on Stream');
+  assert.match(html, /changeMode:\s*state\.isCommandPath/, 'change mode hides on Stream');
+  // Every acked action can wait for its ack, not just goto.
+  assert.match(
+    html,
+    /ackTimeout:\s*\(state\.isGoto \|\| state\.isTurn \|\| state\.isSpeed\) && state\.delivery === 'confirm'/,
+    'ACK timeout on the confirm tier of every acked action'
+  );
   assert.match(html, /delivery === 'stream'/, 'stream rate and TTL gated on delivery');
 });
 
@@ -159,10 +176,13 @@ test('mavlink-move delivery options are rebuilt per action — confirm is goto-o
   for (const tier of ['build', 'send', 'stream']) {
     assert.match(steer[0], new RegExp(`'${tier}'`), `steer offers ${tier}`);
   }
-  // The saved (or in-progress) value survives when still legal; an illegal
-  // one falls back to Send — still a wire tier, like the old coercion.
-  assert.match(html, /\[live, node\.delivery\]\.filter/, 'live then saved value preserved when legal');
-  assert.match(html, /\$delivery\.val\(keep \|\| 'send'\)/, 'illegal saved delivery falls back to Send');
+  // The keep-live-then-saved rule and the Send fallback moved into the shared
+  // `refreshOptionSelect` (#304 §4), which is proven executably in
+  // mavlink-editor-resource.test.js. What this file still owns is that Move
+  // hands it the right inputs.
+  assert.match(html, /select: '#node-input-delivery'/, 'the delivery select is rebuilt through the shared helper');
+  assert.match(html, /saved: node\.delivery/, 'the saved delivery is what survives a withholding');
+  assert.match(html, /fallback: 'send'/, 'an illegal saved delivery falls back to Send — still a wire tier');
 });
 
 test('mavlink-move goto requires the global position at deploy, steer requires nothing', () => {
@@ -242,12 +262,12 @@ test('mavlink-move steer fields default blank and an all-blank steer stays clean
   }
 });
 
-test('mavlink-move: a Steer position triplet is all-or-nothing (the runtime no longer checks)', () => {
-  // Filling any axis makes this a position setpoint and the blanks encode 0 —
-  // the EKF origin on an absolute frame. The runtime coerces without looking
-  // (AGENTS.md, input trust), so this validator is the only layer that sees a
-  // half-typed triplet. Velocity and acceleration are exempt by design: a
-  // blank rate is a zero rate, which is inert.
+test('mavlink-move: a Steer group is all-or-nothing, in the dialog and on the wire', () => {
+  // Filling any axis names the group, and under the derived type_mask the
+  // blanks are commanded zeros — the EKF origin for a position on an absolute
+  // frame, a commanded zero rate for a velocity. The runtime refuses these too
+  // now (owner ruling, 2026-08-14), so the dialog is where an operator finds
+  // out rather than the only layer that looks.
   const defaults = loadNodeDefaults('mavlink-move');
   const AXES = ['north', 'east', 'up'];
   const verdicts = (north, east, up, action = 'steer') => {
@@ -264,7 +284,23 @@ test('mavlink-move: a Steer position triplet is all-or-nothing (the runtime no l
   // Whitespace is blank (#174), so it reds rather than passing as Number(' ') = 0.
   assert.deepEqual(verdicts('5', ' ', '3'), [true, false, true], 'a whitespace axis is blank');
   assert.match(String(defaults.east.validate.call({ id: 'm1', action: 'steer', north: '5' }, '', {})),
-    /commands the origin/, 'the reason names the hazard');
+    /commanded 0 under the type_mask/, 'the reason names the hazard');
+
+  // Velocity and acceleration are held to the same rule now. They used to be
+  // exempt on the reasoning that a blank rate is a zero rate and so inert —
+  // but under the mask a zero rate is *commanded* zero, which is how a
+  // velocity north with the other two left empty became "and hold 0 sideways".
+  const groupVerdicts = (cfg, axes) => axes.map((a) => defaults[a].validate.call(cfg, cfg[a], {}) === true);
+  assert.deepEqual(
+    groupVerdicts({ id: 'm1', action: 'steer', vNorth: '1', vEast: '', vUp: '' }, ['vNorth', 'vEast', 'vUp']),
+    [true, false, false],
+    'one velocity axis reds the other two'
+  );
+  assert.deepEqual(
+    groupVerdicts({ id: 'm1', action: 'steer', aNorth: '1', aEast: '0', aUp: '0' }, ['aNorth', 'aEast', 'aUp']),
+    [true, true, true],
+    'a full acceleration triplet passes'
+  );
 
   // Go to does not show the triplet, so a stale value there must never red a
   // node that will not read it — the same gating every Steer-only field uses.
@@ -348,9 +384,6 @@ test('mavlink-move Advanced section: toggle link, hidden div, the right rows ins
     'row-move-changeMode',
     'row-move-ackTimeout',
     'row-move-radius',
-    'row-move-aNorth',
-    'row-move-aEast',
-    'row-move-aUp',
     'row-move-targetComponent',
   ]) {
     const at = html.indexOf(`id="${id}"`);
@@ -526,7 +559,7 @@ test('mavlink-move build tier shows vehicle, hides connection/identity (§6)', (
   assert.match(html, /dialectRow:\s*'#row-move-dialect'/, 'dialect row selector passed');
   assert.match(html, /vehicleRow:\s*'#row-move-vehicle'/, 'vehicle row selector passed');
   assert.match(html, /connectionRow:\s*'#row-move-connection'/, 'connection row selector passed');
-  assert.match(html, /identity:\s*isWire/, 'identity row shown only for wire tiers (local)');
+  assert.match(html, /identity:\s*state\.isWire/, 'identity row shown only for wire tiers (local)');
   assert.doesNotMatch(
     html,
     /\$\('#row-move-dialect'\)\.toggle/,
@@ -722,11 +755,737 @@ test('mavlink-move: Steer cannot be set to the confirm tier', () => {
   );
 
   assert.equal(delivery.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
-  assert.match(String(verdict({ action: 'steer', delivery: 'confirm' })), /Steer cannot confirm/);
+  assert.match(String(verdict({ action: 'steer', delivery: 'confirm' })), /cannot confirm/);
   assert.equal(verdict({ action: 'goto', delivery: 'confirm' }), true, 'Go to has an ack to wait for');
   for (const tier of ['build', 'send', 'stream']) {
     assert.equal(verdict({ action: 'steer', delivery: tier }), true, `steer + ${tier} is offered`);
   }
   // A config with no action parses as steer (resolveMoveAction), so it reds too.
-  assert.match(String(verdict({ delivery: 'confirm' })), /Steer cannot confirm/);
+  assert.match(String(verdict({ delivery: 'confirm' })), /cannot confirm/);
+});
+
+// ── Offset from here: LOCAL_OFFSET_NED as Steer's third reference ────────────
+
+test('mavlink-move: Offset is offered as a Steer reference and the markup carries it', () => {
+  assert.match(
+    html,
+    /<option value="offset">Offset from here \(relative\)<\/option>/,
+    'the static template offers Offset'
+  );
+  assert.match(html, /var REFERENCE_OPTIONS = \[/, 'the reference list is rebuildable, like delivery');
+  assert.match(html, /function refreshReferenceOptions/, 'the list is rebuilt per firmware');
+  // The rebuild has to run before anything reads the reference back, because
+  // the delivery list depends on it.
+  // The rebuild returns the value now selected rather than being read back
+  // out of the DOM, so "rebuilt before it is read" is structural instead of
+  // ordering-by-convention: there is no second read to get wrong.
+  assert.match(
+    html,
+    /var reference = refreshReferenceOptions\(gate\) \|\| 'world'/,
+    'the reference in force is the rebuild\'s own answer'
+  );
+  const rebuilt = html.indexOf('var reference = refreshReferenceOptions(gate)');
+  // The trailing `;` picks the call site — the declaration a few lines above
+  // carries the same argument list and would otherwise match first.
+  const used = html.indexOf('refreshDeliveryOptions(action, reference, gate);');
+  assert.ok(rebuilt > 0 && used > rebuilt, 'delivery is rebuilt from the settled reference');
+});
+
+test('mavlink-move: Stream is withdrawn for Offset — a repeating offset walks the vehicle', () => {
+  // Every tick is resolved against the vehicle's position at that moment, so
+  // the tier has no meaning here (source-read 2026-08-13).
+  assert.match(
+    html,
+    /if \(action === 'steer' && reference === 'offset'\) return true;/,
+    'refreshDeliveryOptions withholds the stream tier for offset'
+  );
+  assert.match(
+    html,
+    /function refreshDeliveryOptions\(action, reference, gate\)/,
+    'the delivery list keys on the reference and the vehicle, not the action alone'
+  );
+});
+
+test('mavlink-move: a blank position axis is legal on Offset — a zero offset is not a place', () => {
+  // The all-or-nothing triplet exists because a blank encodes 0, and 0 on an
+  // absolute local frame is the EKF origin. On frame 7 it is a zero *offset*
+  // — no movement — so filling one axis is the normal use, not a half-typed
+  // form. QGC fills only the vertical; ArduPlane reads only the vertical.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const AXES = ['north', 'east', 'up'];
+  const verdict = (cfg) => AXES.map((axis) => defaults[axis].validate.call(cfg, cfg[axis], {}));
+
+  const offsetUpOnly = { id: 'm1', action: 'steer', reference: 'offset', north: '', east: '', up: '10' };
+  assert.deepEqual(verdict(offsetUpOnly), [true, true, true], 'up alone is legal on offset');
+
+  // World is unchanged: the same half-filled triplet still reds its blanks.
+  const worldUpOnly = { id: 'm1', action: 'steer', reference: 'world', north: '', east: '', up: '10' };
+  const worldVerdict = verdict(worldUpOnly);
+  assert.equal(worldVerdict[2], true, 'the filled axis passes');
+  assert.match(String(worldVerdict[0]), /commanded 0 under the type_mask/, 'world still reds a blank north');
+  assert.match(String(worldVerdict[1]), /commanded 0 under the type_mask/, 'world still reds a blank east');
+
+  // There was an assertion here that offset "does not disable the numeric
+  // check". It could not fail: steerAxisValidator never returns undefined,
+  // and html-assert stubs RED.validators.number as `() => () => true`, so the
+  // numeric arm answers true in this harness whether or not it runs. Removed
+  // rather than reworded — the offset exemption is what this test owns, and the
+  // blank-axis cases above prove it (CodeRabbit).
+});
+
+test('mavlink-move: Offset reds on a PX4 profile rather than being silently rewritten', () => {
+  // PX4 accepts frame 7 and never acts on it (§14 2026-08-05). The dropdown
+  // stops offering it, but a node that already had it saved must not be
+  // quietly downgraded to World — that would change what the operator
+  // configured without telling them. So it stays selectable and reds here.
+  const lookup = {
+    connPx4: { vehicle: 'vehPx4' },
+    vehPx4: { firmware: 'px4', dialect: 'common' },
+    connAp: { vehicle: 'vehAp' },
+    vehAp: { firmware: 'ardupilot', dialect: 'ardupilotmega' },
+  };
+  const { reference } = loadNodeDefaults('mavlink-move', lookup);
+  const verdict = (over) => reference.validate.call(
+    Object.assign({ id: 'm1', action: 'steer' }, over), over.reference, {}
+  );
+
+  assert.equal(reference.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+  assert.match(
+    String(verdict({ reference: 'offset', delivery: 'send', connection: 'connPx4' })),
+    /does nothing on PX4/,
+    'offset on a PX4 profile reds with the reason'
+  );
+  assert.equal(
+    verdict({ reference: 'offset', delivery: 'send', connection: 'connAp' }),
+    true,
+    'offset on ArduPilot is the whole point'
+  );
+  // No profile to consult is not a refusal: frame 7 is one number everywhere,
+  // and the driver has an answer to give (unlike body, which does not).
+  assert.equal(
+    verdict({ reference: 'offset', delivery: 'build', dialect: 'common' }),
+    true,
+    'offset on Build with a concrete dialect is offered'
+  );
+  // Go to never reads the reference, so it cannot red on it.
+  assert.equal(
+    verdict({ action: 'goto', reference: 'offset', delivery: 'send', connection: 'connPx4' }),
+    true,
+    'the reference is a Steer field'
+  );
+  // The body rules are untouched by the new arm.
+  assert.match(
+    String(verdict({ reference: 'body', delivery: 'build', dialect: 'common' })),
+    /Body on Build needs a firmware/,
+    'body on Build with a concrete dialect still reds'
+  );
+});
+
+test('mavlink-move: Offset cannot be set to the stream tier', () => {
+  // The dialog never offers it — refreshDeliveryOptions withdraws Stream for
+  // Offset — but a hand-edited flow can hold it, and the runtime streams it
+  // happily, re-resolving against the vehicle's position every tick until the
+  // TTL. Same shape as the steer × confirm verdict, and known at deploy.
+  const { delivery } = loadNodeDefaults('mavlink-move');
+  const verdict = (over) => delivery.validate.call(
+    Object.assign({ id: 'm1' }, over), over.delivery, {}
+  );
+
+  assert.match(
+    String(verdict({ action: 'steer', reference: 'offset', delivery: 'stream' })),
+    /Offset cannot stream/
+  );
+  // Both escapes named in the message actually work.
+  assert.equal(verdict({ action: 'steer', reference: 'offset', delivery: 'send' }), true, 'Send');
+  assert.equal(verdict({ action: 'steer', reference: 'world', delivery: 'stream' }), true, 'World');
+  assert.equal(verdict({ action: 'steer', reference: 'offset', delivery: 'build' }), true, 'Build');
+  // Go to never reads the reference, so a stale saved 'offset' cannot red it.
+  assert.equal(
+    verdict({ action: 'goto', reference: 'offset', delivery: 'stream' }),
+    true,
+    'Go to streams global setpoints and does not read the reference'
+  );
+  // The pre-existing confirm verdict is untouched by the new arm.
+  assert.match(String(verdict({ action: 'steer', delivery: 'confirm' })), /cannot confirm/);
+  assert.equal(verdict({ action: 'goto', delivery: 'confirm' }), true);
+});
+
+// ── Turn and Speed: the acked motion commands ───────────────────────────────
+
+test('mavlink-move: Turn and Speed are offered, with the command tiers only', () => {
+  assert.match(html, /option value="turn"/, 'turn action offered');
+  assert.match(html, /option value="speed"/, 'speed action offered');
+  const map = /var DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
+  assert.ok(map, 'DELIVERY_OPTIONS map must be extractable');
+  for (const action of ['turn', 'speed']) {
+    const list = new RegExp(`${action}:\\s*\\[[\\s\\S]*?\\n {8}\\]`).exec(map[0]);
+    assert.ok(list, `${action} option list must be extractable`);
+    // A MAV_CMD has no streaming semantics; it does have an ack.
+    assert.doesNotMatch(list[0], /stream/, `${action} never offers Stream`);
+    for (const tier of ['build', 'send', 'confirm']) {
+      assert.match(list[0], new RegExp(`'${tier}'`), `${action} offers ${tier}`);
+    }
+  }
+  for (const id of ['row-move-heading', 'row-move-turnRate', 'row-move-direction',
+    'row-move-relative', 'row-move-throttle', 'row-move-speedType']) {
+    assert.match(html, new RegExp(`id="${id}"`), `${id} row must exist`);
+  }
+});
+
+test('mavlink-move: Turn heading is required and bounded 0-360, because the vehicle FAILS outside it', () => {
+  // ArduCopter answers MAV_RESULT_FAILED for a heading outside 0-360
+  // (source-read 2026-08-13). The runtime sends it anyway — it is a legal
+  // message and the ack is the feedback — so the editor is the only place an
+  // operator learns before flying.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const verdict = (over) => defaults.heading.validate.call(
+    Object.assign({ id: 'm1', action: 'turn' }, over), over.heading, {}
+  );
+
+  assert.equal(defaults.heading.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+  assert.match(String(verdict({ heading: '' })), /required for Turn/);
+  assert.match(String(verdict({ heading: 400 })), /\[0, 360\]/);
+  assert.match(String(verdict({ heading: -1 })), /\[0, 360\]/);
+  assert.match(String(verdict({ heading: 'north' })), /\[0, 360\]/);
+  assert.equal(verdict({ heading: 0 }), true, '0 is north, a real heading');
+  assert.equal(verdict({ heading: 360 }), true, 'the upper bound is inclusive');
+  assert.equal(verdict({ heading: 90 }), true);
+  // Every other action ignores the field, so a stale blank cannot red them.
+  for (const action of ['goto', 'steer', 'speed']) {
+    assert.equal(
+      defaults.heading.validate.call({ id: 'm1', action }, '', {}),
+      true,
+      `${action} does not read the heading`
+    );
+  }
+});
+
+test('mavlink-move: Turn reds on a non-ArduPilot profile and names the escape', () => {
+  // CONDITION_YAW is an ArduPilot command; PX4 has no handler (§14). The
+  // editor knows the profile at deploy, so it says so rather than letting the
+  // node deploy clean and refuse every input.
+  const lookup = {
+    connPx4: { vehicle: 'vehPx4' },
+    vehPx4: { firmware: 'px4', dialect: 'common' },
+    connAp: { vehicle: 'vehAp' },
+    vehAp: { firmware: 'ardupilot', dialect: 'ardupilotmega' },
+  };
+  const { action } = loadNodeDefaults('mavlink-move', lookup);
+  const verdict = (over) => action.validate.call(
+    Object.assign({ id: 'm1' }, over), over.action, {}
+  );
+
+  const denied = String(verdict({ action: 'turn', delivery: 'send', connection: 'connPx4' }));
+  assert.match(denied, /ArduPilot command/);
+  assert.match(denied, /Steer setpoint/, 'the reason names the path that works on PX4');
+  assert.equal(
+    verdict({ action: 'turn', delivery: 'send', connection: 'connAp' }),
+    true,
+    'ArduPilot is what the command is for'
+  );
+  // No profile to consult is not a refusal in the editor: Build with a
+  // concrete dialect has no firmware source, and the runtime fails closed on
+  // it with the same reason.
+  assert.equal(verdict({ action: 'turn', delivery: 'build', dialect: 'common' }), true);
+  // Speed asks no firmware question at all.
+  assert.equal(verdict({ action: 'speed', delivery: 'send', connection: 'connPx4' }), true);
+});
+
+test('mavlink-move: a command action cannot be set to the stream tier', () => {
+  // Third instance of the same finding (steer × confirm, offset × stream, and
+  // now command × stream): the dialog cannot produce it, a text editor can, and
+  // the runtime would report `sent` — true of the wire, a lie about the tier.
+  const { delivery } = loadNodeDefaults('mavlink-move');
+  const verdict = (over) => delivery.validate.call(
+    Object.assign({ id: 'm1' }, over), over.delivery, {}
+  );
+
+  for (const action of ['turn', 'speed']) {
+    assert.match(String(verdict({ action, delivery: 'stream' })), /a command cannot stream/);
+    // The escapes named in the message work.
+    assert.equal(verdict({ action, delivery: 'send' }), true, `${action} + send`);
+    assert.equal(verdict({ action, delivery: 'confirm' }), true, `${action} + confirm`);
+    assert.equal(verdict({ action, delivery: 'build' }), true, `${action} + build`);
+  }
+  // The setpoint actions still stream.
+  assert.equal(verdict({ action: 'steer', reference: 'world', delivery: 'stream' }), true);
+  assert.equal(verdict({ action: 'goto', delivery: 'stream' }), true);
+});
+
+// ── Attitude and Manual: the setpoint-shaped roster rows ────────────────────
+
+test('mavlink-move: Attitude and Manual are offered with the setpoint tiers', () => {
+  assert.match(html, /option value="attitude"/, 'attitude offered');
+  assert.match(html, /option value="manual"/, 'manual offered');
+  const map = /var DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
+  for (const action of ['attitude', 'manual']) {
+    const list = new RegExp(`${action}:\\s*\\[[\\s\\S]*?\\n {8}\\]`).exec(map[0]);
+    assert.ok(list, `${action} option list must be extractable`);
+    assert.doesNotMatch(list[0], /confirm/, `${action} carries no ack, so never offers confirm`);
+    for (const tier of ['build', 'send', 'stream']) {
+      assert.match(list[0], new RegExp(`'${tier}'`), `${action} offers ${tier}`);
+    }
+  }
+});
+
+test('mavlink-move: only the acked actions can confirm — stated once, not per action', () => {
+  // Fourth instance of the same hand-edit family (steer × confirm, offset ×
+  // stream, command × stream). Generalised rather than special-cased again.
+  const { delivery } = loadNodeDefaults('mavlink-move');
+  const verdict = (over) => delivery.validate.call(
+    Object.assign({ id: 'm1' }, over), over.delivery, {}
+  );
+
+  for (const action of ['steer', 'attitude', 'manual']) {
+    assert.match(
+      String(verdict({ action, reference: 'world', delivery: 'confirm' })),
+      /cannot confirm/,
+      `${action} has no ack to wait for`
+    );
+  }
+  for (const action of ['goto', 'turn', 'speed']) {
+    assert.equal(verdict({ action, delivery: 'confirm' }), true, `${action} answers a COMMAND_ACK`);
+  }
+});
+
+test('mavlink-move: Manual hides the target compid — the message has no such field', () => {
+  // MANUAL_CONTROL's addressing field is `target`, a system id. Showing a
+  // compid row would offer a control the wire has no room for.
+  assert.match(html, /if \(isManual\) \$\('#row-move-targetComponent'\)\.hide\(\);/,
+    'the compid row is hidden directly — applyCompanionTargetVisibility owns it, so a '
+    + '`show` assignment would be a no-op (Gitar, #303)');
+  for (const id of ['row-move-stickX', 'row-move-stickY', 'row-move-stickZ',
+    'row-move-stickR', 'row-move-buttons', 'row-move-roll', 'row-move-pitch',
+    'row-move-thrust', 'row-move-rollRate', 'row-move-pitchRate']) {
+    assert.match(html, new RegExp(`id="${id}"`), `${id} row must exist`);
+  }
+});
+
+test('mavlink-move: sticks are required and bounded -1..1, thrust 0..1, in the editor', () => {
+  // The wire is ±1000 and the surface is ±1, so a wire-unit value typed into a
+  // stick is the mistake worth catching — the runtime scales whatever it gets.
+  // Blank is a mistake too now: the runtime refuses an unfilled axis since the
+  // INT16_MAX sentinel was dropped, so a blank box here would deploy a node
+  // that fails every input.
+  const defaults = loadNodeDefaults('mavlink-move');
+  const manual = { id: 'm1', action: 'manual' };
+  for (const stick of ['stickX', 'stickY', 'stickZ', 'stickR']) {
+    assert.match(String(defaults[stick].validate.call(manual, '', {})), /is required for Manual/);
+    assert.equal(defaults[stick].validate.call(manual, 0.5, {}), true);
+    assert.equal(defaults[stick].validate.call(manual, -1, {}), true);
+    assert.match(String(defaults[stick].validate.call(manual, 500, {})), /not wire units/);
+    assert.match(String(defaults[stick].validate.call(manual, -1.5, {})), /-1\.\.1/);
+    // Another action does not show the sticks, so a stale blank must not red a
+    // node that will never read it — the gate every action-scoped field uses.
+    assert.equal(defaults[stick].validate.call({ id: 'm1', action: 'steer' }, '', {}), true,
+      'a non-Manual action ignores the sticks entirely');
+  }
+  assert.equal(defaults.thrust.validate.call({ id: 'm1' }, 0, {}), true, '0 is a commanded zero');
+  assert.equal(defaults.thrust.validate.call({ id: 'm1' }, 1, {}), true);
+  assert.match(String(defaults.thrust.validate.call({ id: 'm1' }, 60, {})), /not a percentage/);
+  assert.match(String(defaults.buttons.validate.call({ id: 'm1' }, 70000, {})), /16-bit/);
+});
+
+test('mavlink-move: every `show` key actually reaches a toggle', () => {
+  // The structural lint for the bug Gitar found: `show.targetComponent = false`
+  // was dead, because the two target rows are the ones refreshVisibility does
+  // NOT drive from `show` — applyCompanionTargetVisibility owns them. A source
+  // grep for the assignment passed happily on code that did nothing.
+  //
+  // So the invariant is asserted directly: every key assigned into `show` is
+  // either toggled from it, or named in the helper-managed allowlist below.
+  // Adding a key without a toggle now fails here instead of silently leaving a
+  // row on screen.
+  const HELPER_MANAGED = new Set(['targetSystem', 'targetComponent']);
+
+  const block = /function moveRowVisibility\(state\) \{\n {8}return \{([\s\S]*?)\n {8}\};/.exec(html);
+  assert.ok(block, 'the row-visibility map must be extractable');
+  const keys = [...block[1].matchAll(/^\s*([a-zA-Z]+):/gm)].map((m) => m[1]);
+  assert.ok(keys.length > 20, `expected the full show map, got ${keys.length} keys`);
+
+  // The toggles are now a loop over the map's own keys, so "a key with no
+  // toggle" is unrepresentable rather than merely tested for. What can still
+  // go wrong is the other end: a key whose row id does not exist in the
+  // markup toggles nothing at all, silently — so that is what is asserted.
+  assert.match(
+    html,
+    /Object\.keys\(show\)\.forEach\(function \(key\) \{[\s\S]{0,220}?\$\('#row-move-' \+ key\)\.toggle\(!!show\[key\]\);/,
+    'every key of the map is toggled by construction'
+  );
+  assert.match(
+    html,
+    /if \(HELPER_ROWS\.indexOf\(key\) !== -1\) return;/,
+    'and the helper-owned rows are the only ones the loop skips'
+  );
+  for (const key of keys) {
+    if (HELPER_MANAGED.has(key)) continue;
+    assert.match(
+      html,
+      new RegExp(`id="row-move-${key}"`),
+      `show.${key} must name a row that exists, or the loop toggles nothing`
+    );
+  }
+  // The allowlist in the source must agree with the one asserted here.
+  assert.match(
+    html,
+    /var HELPER_ROWS = \['targetSystem', 'targetComponent'\];/,
+    'the skip list is exactly the rows the companion helper owns'
+  );
+
+  // And the allowlist is not a place to hide things: both members must be
+  // handed to the helper that does own them.
+  for (const managed of HELPER_MANAGED) {
+    assert.match(
+      html,
+      new RegExp(`${managed}Row: '#row-move-${managed}'`),
+      `${managed} is allowlisted, so it must be passed to applyCompanionTargetVisibility`
+    );
+  }
+});
+
+
+// ── Family-aware Action list (#304 §4, §14 2026-08-14) ───────────────────────
+
+/** Profiles for every ArduPilot family, plus a PX4 one to prove the gate's edge. */
+const FAMILY_LOOKUP = {};
+for (const family of ['copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker', 'unknown']) {
+  FAMILY_LOOKUP[`conn-${family}`] = { vehicle: `veh-${family}` };
+  FAMILY_LOOKUP[`veh-${family}`] = {
+    firmware: 'ardupilot', dialect: 'ardupilotmega', vehicleFamily: family,
+  };
+}
+FAMILY_LOOKUP['conn-px4-blimp'] = { vehicle: 'veh-px4-blimp' };
+FAMILY_LOOKUP['veh-px4-blimp'] = { firmware: 'px4', dialect: 'common', vehicleFamily: 'blimp' };
+
+/**
+ * `action.validate` run for real against a bound profile — the family gate is
+ * a claim about behaviour, and the last version of this file string-matched a
+ * source line that did nothing (Gitar, #303).
+ *
+ * @param {string} family
+ * @param {string} action
+ * @param {string} [connection]
+ * @returns {true|string}
+ */
+function actionVerdict(family, action, connection) {
+  const defaults = loadNodeDefaults('mavlink-move', FAMILY_LOOKUP);
+  return defaults.action.validate.call(
+    { id: 'm1', action, delivery: 'send', connection: connection || `conn-${family}` },
+    action,
+    {}
+  );
+}
+
+test('mavlink-move: Go to × Stream reds on a saved Blimp binding — withheld options red on saved (§9 ruling 6)', () => {
+  // The convergent finding from the #303 review: the dropdown withheld Stream
+  // for goto on a Blimp (no SET_POSITION_TARGET handler — streamed setpoints
+  // are discarded in silence, §14), but nothing red on a node that already
+  // held the pair or was rebound to a blimp profile. It deployed clean,
+  // reported `streaming`, and the vehicle heard nothing. Every other withheld
+  // option in this dialog gets the deploy-time verdict; this pins the one
+  // that was missing on both arms.
+  const defaults = loadNodeDefaults('mavlink-move', FAMILY_LOOKUP);
+  const verdict = (family, action, delivery) => defaults.delivery.validate.call(
+    { id: 'm1', action, delivery, connection: `conn-${family}` },
+    delivery,
+    {}
+  );
+
+  assert.match(String(verdict('blimp', 'goto', 'stream')), /Blimp cannot stream Go to/);
+  // The commands a Blimp does implement stay green — and so does streaming
+  // everywhere the handler exists.
+  assert.equal(verdict('blimp', 'goto', 'send'), true, 'DO_REPOSITION on Send is the Blimp path');
+  assert.equal(verdict('blimp', 'goto', 'confirm'), true);
+  assert.equal(verdict('copter', 'goto', 'stream'), true, 'a copter streams Go to fine');
+  // No profile, or a PX4 one, gates nothing: hiding requires knowledge.
+  assert.equal(verdict('px4-blimp', 'goto', 'stream'), true, 'PX4 families are not gated');
+});
+
+test('mavlink-move: the family matrix reds an action the vehicle has no handler for (§14)', () => {
+  // Each row was read at source across all six ArduPilot vehicles' GCS
+  // dispatch tables. The three that matter are the ones that surprised us:
+  // Blimp ignores the joystick, a Tracker DOES move, and Turn is Copter+Sub
+  // rather than ArduPilot-wide.
+  const ALLOWED = {
+    copter: ['goto', 'steer', 'turn', 'speed', 'attitude', 'manual'],
+    plane: ['goto', 'steer', 'speed', 'attitude', 'manual'],
+    rover: ['goto', 'steer', 'speed', 'attitude', 'manual'],
+    boat: ['goto', 'steer', 'speed', 'attitude', 'manual'],
+    sub: ['goto', 'steer', 'turn', 'speed', 'attitude', 'manual'],
+    blimp: ['goto'],
+    'antenna-tracker': ['attitude', 'manual'],
+  };
+  const EVERY = ['goto', 'steer', 'turn', 'speed', 'attitude', 'manual'];
+
+  for (const [family, allowed] of Object.entries(ALLOWED)) {
+    for (const action of EVERY) {
+      const verdict = actionVerdict(family, action);
+      if (allowed.includes(action)) {
+        // Steer is the one action with a second validator arm (it wants a
+        // field filled), so an allowed steer legitimately reds for that
+        // reason — what must not appear is the family refusal.
+        assert.doesNotMatch(
+          String(verdict), /has no handler on ArduPilot/,
+          `${family} must be offered ${action}`
+        );
+      } else {
+        assert.match(
+          String(verdict), /has no handler on ArduPilot/,
+          `${family} must refuse ${action}`
+        );
+      }
+    }
+  }
+});
+
+test('mavlink-move: the family refusal names the wire and what to use instead', () => {
+  // A refusal an operator cannot act on is a dead end. Each one says which
+  // message the vehicle drops and which action does work there.
+  assert.match(
+    String(actionVerdict('blimp', 'manual')),
+    /MANUAL_CONTROL[\s\S]*DO_REPOSITION is the one motion message a Blimp implements/,
+    'Blimp discards the sticks — the escape is Go to'
+  );
+  assert.match(
+    String(actionVerdict('antenna-tracker', 'goto')),
+    /DO_REPOSITION[\s\S]*point it with Attitude or Manual/,
+    'a tracker does not travel, but it does move'
+  );
+  assert.match(
+    String(actionVerdict('plane', 'turn')),
+    /CONDITION_YAW[\s\S]*no guided yaw command at all/,
+    'ArduPlane has no yaw command — GUIDED_CHANGE_HEADING is the unbuilt forward entry'
+  );
+  assert.match(
+    String(actionVerdict('rover', 'turn')),
+    /CONDITION_YAW[\s\S]*give it a destination instead/,
+    'Rover has no CONDITION_YAW handler either'
+  );
+});
+
+test('mavlink-move: an unknown family gates nothing — hiding requires knowledge', () => {
+  for (const action of ['goto', 'turn', 'speed', 'attitude', 'manual']) {
+    assert.doesNotMatch(
+      String(actionVerdict('unknown', action)), /has no handler on ArduPilot/,
+      `unknown family must still offer ${action}`
+    );
+  }
+  // No profile at all is the same answer for the same reason.
+  const defaults = loadNodeDefaults('mavlink-move', FAMILY_LOOKUP);
+  assert.equal(
+    defaults.action.validate.call({ id: 'm1', action: 'manual', delivery: 'send' }, 'manual', {}),
+    true,
+    'no bound vehicle gates nothing'
+  );
+});
+
+test('mavlink-move: family gating is ArduPilot-only — PX4 has no vehicle branch to gate on', () => {
+  // The matrix is ArduPilot's per-vehicle dispatch. PX4 runs one receiver with
+  // no vehicle branch in it and nothing here was measured against it, so a PX4
+  // profile keeps the firmware-only gate it had before.
+  assert.equal(
+    actionVerdict('blimp', 'manual', 'conn-px4-blimp'), true,
+    'a PX4 airship is not judged by ArduPilot Blimp'
+  );
+  assert.match(
+    String(actionVerdict('blimp', 'turn', 'conn-px4-blimp')),
+    /ArduPilot command \(CONDITION_YAW\)/,
+    'the firmware gate still answers on PX4'
+  );
+});
+
+test('mavlink-move: a fixed wing collapses Steer to the one frame it reads', () => {
+  // ArduPlane's handler opens with an early return on any frame that is not
+  // LOCAL_OFFSET_NED, then uses `z` alone (§14). World and Body are silent
+  // no-ops there, so they are withheld and — per §9 ruling 6 — red on a node
+  // that already holds one.
+  const { reference } = loadNodeDefaults('mavlink-move', FAMILY_LOOKUP);
+  const verdict = (family, ref, connection) => reference.validate.call(
+    { id: 'm1', action: 'steer', delivery: 'send', reference: ref,
+      connection: connection || `conn-${family}` },
+    ref, {}
+  );
+
+  for (const ref of ['world', 'body']) {
+    assert.match(
+      String(verdict('plane', ref)), /accepts only MAV_FRAME_LOCAL_OFFSET_NED/,
+      `${ref} reds on a plane`
+    );
+  }
+  assert.equal(verdict('plane', 'offset'), true, 'offset is the frame a plane flies');
+
+  // The field collapse follows the Reference actually in force, not the family.
+  // A saved World survives the withholding (ruling 6), and a form that showed
+  // one field while the Reference read World would describe a message it is not
+  // sending.
+  assert.match(
+    html,
+    /var planeSteer = isSteer && gate\.gated && gate\.family === 'plane'\s*\n\s*&& reference === 'offset';/,
+    'the collapse keys on the frame in force'
+  );
+  // And it forces the Position group open rather than only showing it: an
+  // altitude typed here must not vanish underneath the operator when the node
+  // is rebound to a copter and the seeded disclosure takes over again.
+  assert.match(
+    html,
+    /if \(planeSteer\) disclosed\.position = true;/,
+    'the collapse writes the disclosure state, not just this paint'
+  );
+  assert.equal(verdict('copter', 'world'), true, 'a copter reads 1/7/8/9 — nothing collapses');
+  assert.equal(
+    verdict('plane', 'world', 'conn-px4-blimp'), true,
+    'the collapse is ArduPlane\'s handler, not a property of fixed wings'
+  );
+});
+
+test('mavlink-move: the rebuilt Action list and the static markup cannot drift', () => {
+  // Two copies of the action list now exist — the <option> markup a browser
+  // renders before oneditprepare runs, and ACTION_OPTIONS which replaces it.
+  // A value in one and not the other is a silently unreachable action.
+  const table = /var ACTION_OPTIONS = \[[\s\S]*?\n {6}\];/.exec(html);
+  assert.ok(table, 'ACTION_OPTIONS must be extractable');
+  const rebuilt = [...table[0].matchAll(/\['([a-z]+)',/g)].map((m) => m[1]);
+  const markup = [...html.matchAll(/<option value="([a-z]+)">[^<]*\(/g)].map((m) => m[1]);
+  for (const action of rebuilt) {
+    assert.ok(markup.includes(action), `${action} is rebuilt but not in the static markup`);
+  }
+  assert.deepEqual(
+    rebuilt, ['goto', 'steer', 'turn', 'speed', 'attitude', 'manual'],
+    'the roster is the six built primitives'
+  );
+});
+
+
+// ── Steer group disclosure (#304 §4, owner request) ──────────────────────────
+
+test('mavlink-move: the Steer group checkboxes save nothing to config', () => {
+  // The whole point of disclosure over a preset vocabulary: the type_mask
+  // still derives from which fields carry values, so these boxes are a view
+  // and never a stored setting. Node-RED persists `node-input-*` ids, so the
+  // proof is that none of them carries that prefix.
+  const defaults = loadNodeDefaults('mavlink-move');
+  for (const group of ['position', 'velocity', 'accel', 'yaw']) {
+    assert.match(html, new RegExp(`id="move-group-${group}"`), `${group} box exists`);
+    assert.doesNotMatch(
+      html, new RegExp(`node-input-move-group-${group}|node-input-${group}Group`),
+      `${group} box must not be a persisted field`
+    );
+  }
+  // `yaw` is a real config property and must stay one — it is the Steer/Go to
+  // yaw *value*, not the group box.
+  assert.ok(defaults.yaw, 'the yaw field itself is still config');
+  for (const key of ['groups', 'disclosed', 'moveGroups', 'positionGroup']) {
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(defaults, key), false,
+      `${key} must not become a saved property`
+    );
+  }
+});
+
+test('mavlink-move: clearing a group clears its fields, so the form and the mask agree', () => {
+  // A hidden field that still holds a value still clears its ignore bit, so a
+  // group hidden with values in it would keep commanding with nothing on
+  // screen to explain it.
+  assertChangeHandlerContains(
+    html,
+    "$('#move-group-' + entry[0])",
+    "$('#node-input-' + name).val('')",
+    'clearing a box clears the group it discloses'
+  );
+  assertChangeHandlerContains(
+    html,
+    "$('#move-group-' + entry[0])",
+    'refreshVisibility()',
+    'and repaints, so the rows follow'
+  );
+});
+
+test('mavlink-move: the disclosure is seeded from the fields, not from a saved flag', () => {
+  // Nothing to migrate, and a hand-edited flow discloses correctly without
+  // knowing the feature exists.
+  assert.match(html, /function seedDisclosure/, 'the seed exists');
+  assert.match(
+    html,
+    /return !RED\.mavlink\.isBlank\(node\[name\]\)/,
+    'a group is open iff one of its fields carries a value'
+  );
+  assert.match(html, /if \(!any\) seeded\.position = true;/, 'an empty Steer node opens on Position');
+});
+
+test('mavlink-move: the acceleration rows left Advanced for their own checkbox', () => {
+  // They were in Advanced because they are rarely touched; the checkbox does
+  // that job now, and keeping both meant a box that revealed rows inside a
+  // collapsed section.
+  const advancedAt = html.indexOf('id="move-advanced"');
+  for (const id of ['row-move-aNorth', 'row-move-aEast', 'row-move-aUp']) {
+    assert.ok(html.indexOf(`id="${id}"`) < advancedAt, `${id} sits with the other Steer groups`);
+  }
+  assert.doesNotMatch(
+    html,
+    /isBlank\(node\.aNorth\)/,
+    'and the Advanced auto-open no longer needs to check them'
+  );
+});
+
+
+// ── Codex round, first ready-for-review pass ─────────────────────────────────
+
+test('mavlink-move: an all-blank Attitude reds — every ignore bit set commands nothing', () => {
+  // Attitude has Steer's shape and needed Steer's rule. Blank everything and
+  // ATTITUDE_TARGET_TYPEMASK comes out 199 — all five ignore bits — while the
+  // node still reports `sent` or `streaming`. A setpoint carries no ack, so
+  // that is the failure mode with no symptom (Codex, #303).
+  const { action } = loadNodeDefaults('mavlink-move');
+  const verdict = (over) => action.validate.call(
+    Object.assign({ id: 'm1', action: 'attitude' }, over), 'attitude', {}
+  );
+
+  assert.match(String(verdict({})), /Attitude needs at least one field filled/);
+  for (const field of ['roll', 'pitch', 'yaw', 'rollRate', 'pitchRate', 'yawRate', 'thrust']) {
+    assert.equal(verdict({ [field]: '1' }), true, `${field} alone is a mode`);
+  }
+  // An explicit 0 is a commanded zero, not a blank — the whole point of the
+  // three-state rule (§5).
+  assert.equal(verdict({ thrust: '0' }), true, 'an explicit zero thrust is commanded');
+
+  // Manual is deliberately exempt: all-blank sends INT16_MAX on every axis,
+  // which is a real message. ArduSub's failsafe disarms when MANUAL_CONTROL
+  // stops arriving, so no-axis frames are a legitimate deadman keepalive.
+  assert.equal(
+    action.validate.call({ id: 'm1', action: 'manual' }, 'manual', {}), true,
+    'an all-blank Manual is a keepalive, not an empty command'
+  );
+});
+
+test('mavlink-move: the thrust stick warns on ArduSub, where the -1..1 surface lies', () => {
+  // ArduSub reads z as 0..1000 with neutral 500, not -1000..1000 neutral 0
+  // (§14, source-read). The runtime keeps the dialect's uniform scaling — a
+  // per-family map is the unmeasured guess doctrine keeps off the wire — so
+  // the editor is where an operator finds out. With the blank-axis INT16_MAX
+  // sentinel gone there is no unset escape either, so this check is all that
+  // stands between an operator's "neutral" and a dive (Codex, #303).
+  const { stickZ, stickX } = loadNodeDefaults('mavlink-move', FAMILY_LOOKUP);
+  const onSub = (v) => stickZ.validate.call(
+    { id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-sub' }, v, {}
+  );
+  const onCopter = (v) => stickZ.validate.call(
+    { id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-copter' }, v, {}
+  );
+
+  assert.match(String(onSub('-0.5')), /neutral 0\.5/, 'a negative thrust reds on a Sub');
+  assert.match(String(onSub('0')), /full reverse thrust/, 'and so does the 0 an operator means as neutral');
+  assert.equal(onSub('0.5'), true, 'the neutral a Sub actually reads passes');
+  assert.equal(onSub('1'), true, 'full up passes');
+  assert.match(String(onSub('')), /is required for Manual/, 'and blank is refused outright now');
+
+  // Only the thrust axis, and only on a Sub — the other three match the
+  // dialect's declared range everywhere.
+  assert.equal(onCopter('-0.5'), true, 'a copter reads the declared -1..1 range');
+  assert.equal(
+    stickX.validate.call({ id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-sub' }, '-0.5', {}),
+    true,
+    'pitch is unaffected on a Sub'
+  );
+  // The generic range check still applies on top.
+  assert.match(String(onSub('5')), /must be -1\.\.1/, 'out of range still reds first');
 });

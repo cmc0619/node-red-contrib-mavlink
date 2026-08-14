@@ -1552,4 +1552,65 @@
       targetComponent: targetComponent,
     };
   };
+
+  /**
+   * Rebuild a `<select>` from an option list, **hiding from new and keeping on
+   * saved** (DESIGN §9 ruling 6).
+   *
+   * The ruling is what this helper exists to make hard to get wrong. The editor
+   * is the protector and may withhold an option it knows the vehicle cannot
+   * act on — but a node already holding that option must keep it and get a
+   * deploy-time reason from its `validate`, because silently rewriting a saved
+   * config changes what the operator built without telling them. Written
+   * inline, the two halves drift: the withholding is the eye-catching part and
+   * the keep-on-saved arm is the one that gets forgotten.
+   *
+   * Two distinct reasons an option can be absent, and they behave differently:
+   *
+   * - **Not in `options` at all** — structurally impossible for this selection,
+   *   like a Stream tier on a carrier that is a one-shot `MAV_CMD`. There is no
+   *   operator intent to preserve, so a saved value that is not in the list
+   *   falls back.
+   * - **In `options` but `withhold`-ed** — knowledge about *this vehicle*:
+   *   firmware, family, a §14 measurement. That is the ruling's case, so a
+   *   live-or-saved match survives the withholding and stays selectable.
+   *
+   * @param {object} opts
+   * @param {string} opts.select            jQuery selector for the `<select>`
+   * @param {Array<Array<string>>} opts.options  `[[value, label], …]`
+   * @param {*} [opts.saved]                the node's saved value
+   * @param {function(string): boolean} [opts.withhold]  true = hide from new
+   * @param {string} [opts.fallback]        preferred when neither live nor saved survives
+   * @returns {string} the value now selected
+   */
+  RED.mavlink.refreshOptionSelect = function (opts) {
+    var $select = $(opts.select);
+    var withhold = opts.withhold || function () { return false; };
+    // Read the live value BEFORE emptying: a rebuild triggered by some other
+    // field changing must not lose an in-progress choice the operator made and
+    // has not saved yet.
+    var live = $select.val();
+    var saved = opts.saved;
+
+    var options = opts.options.filter(function (opt) {
+      return !withhold(opt[0]) || opt[0] === live || opt[0] === saved;
+    });
+
+    $select.empty();
+    options.forEach(function (opt) {
+      $('<option></option>').val(opt[0]).text(opt[1]).appendTo($select);
+    });
+
+    // The fallback is a *preference*, not an escape from the list: a caller's
+    // sensible default can itself be withheld — 'goto' on an Antenna Tracker —
+    // and setting a select to a value it does not offer leaves it showing one
+    // thing while the code reads another. So every candidate, the fallback
+    // included, has to be in the rebuilt list; the first option is the floor.
+    var value = [live, saved, opts.fallback].filter(function (candidate) {
+      return options.some(function (opt) { return opt[0] === candidate; });
+    })[0];
+    if (value === undefined && options.length) value = options[0][0];
+    $select.val(value);
+    return value;
+  };
 })();

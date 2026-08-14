@@ -4,6 +4,166 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [Unreleased]
+
+### Added
+
+- **Move's primitive roster: Turn, Speed, and Offset-from-here.** The node's
+  charter moved from "`SET_POSITION_TARGET_*`" to *where the vehicle goes and
+  how it moves* (`DESIGN.md` §3, §9 "Move primitive roster"), and the roster is
+  curated by one rule: a primitive earns its place by being emitted in the wild
+  — QGC, MAVSDK, pymavlink — or by being the only way a supported vehicle family
+  can do the thing.
+
+  - **Turn** (`MAV_CMD_CONDITION_YAW`) exists because ArduPilot has no other
+    working yaw. Both yaw fields Move already carried are measured inert on
+    ArduCopter: `DO_REPOSITION`'s heading param is ignored outright, and a
+    yaw-only setpoint stream *holds* heading rather than turning (§14 / #179).
+    ArduPilot's own test suite yaws in guided through this command. Heading is
+    editor-bounded to 0–360 because the vehicle answers `FAILED` outside it;
+    direction defaults to the dialect's own "shortest direction"; `relative` is
+    a strict boolean opt-in like `changeMode`. PX4 has no handler, so the action
+    fails closed there and names the escape that works — Steer's yaw field.
+  - **Speed** (`MAV_CMD_DO_CHANGE_SPEED`) is the guided speed change QGC offers
+    beside goto. Airspeed / groundspeed / climb / descent from the dialect enum;
+    blank speed and throttle send the spec's −1 "no change".
+  - **Offset from here** — `MAV_FRAME_LOCAL_OFFSET_NED` (7) returns as Steer's
+    third reference. It was swept out by #278 with the deprecated aliases and
+    never weighed on its own: common.xml carries no successor for it, while the
+    body frames we kept *are* superseded. It is what QGC sends for a guided
+    altitude change on ArduPilot, and the **only** local frame ArduPlane accepts
+    at all — World and Body do nothing on a fixed wing, silently. A blank axis is
+    legal here and nowhere else, because a zero *offset* is no movement.
+
+  Both new actions ride the existing `AckWaiter` and result vocabulary — one
+  confirm path for every acked Move command, not one per action.
+
+  - **Attitude** (`SET_ATTITUDE_TARGET`) is MAVSDK's offboard attitude path.
+    Roll/pitch/yaw are entered in degrees and the node builds the quaternion —
+    the same convert-once-at-encode rule as degE7 and radians. Presence drives
+    `ATTITUDE_TARGET_TYPEMASK` exactly as it does on Steer. Its stream ends by
+    going quiet, with no braking packet: zero thrust is a descent, not a stop,
+    and both stacks watch for setpoint silence themselves (§9 ruling 1).
+  - **Manual** (`MANUAL_CONTROL`) is QGroundControl's joystick path, the way
+    ArduSub is flown, and one of the two ways an Antenna Tracker can be
+    pointed. It is *not* how a Blimp moves, though this entry said so until the
+    family read below. Sticks are
+    −1..1 and scale to the wire's ±1000 once. Two things differ from every
+    other action: it addresses a **system only** (the message has no target
+    component, so that row is hidden), and **all four sticks are required** —
+    blank is refused rather than centred or sent as the dialect's `INT16_MAX`
+    "axis is invalid". Centring was never an option: ArduSub reads the thrust
+    axis as 0..1000 with neutral *500*, so an axis helpfully centred at 0 would
+    command full reverse thrust. The dialog says so on that axis specifically.
+
+- **The Move dialog follows the vehicle, not just the firmware.** When the bound
+  Vehicle Profile names an ArduPilot family, the Action list drops the actions
+  that family has no handler for: an Antenna Tracker offers Attitude and Manual,
+  a Blimp offers Go to, and **Turn appears only on Copter and Sub** — neither
+  ArduPlane nor Rover implements `CONDITION_YAW` anywhere. These are all
+  messages a vehicle *accepts* and then ignores, mostly without a NAK, so the
+  dialog was the only place the difference could be shown. An `unknown` family,
+  no profile, or a PX4 profile gates nothing: hiding requires knowledge, and the
+  matrix is ArduPilot's per-vehicle dispatch rather than a fact about airframes.
+  Withheld options are **hidden from new nodes and kept on saved ones** (§9
+  ruling 6) — a node already holding one keeps it and reds at deploy with the
+  reason, instead of being silently rewritten.
+
+- **Steer collapses to one field on a Plane.** ArduPlane's local-setpoint
+  handler returns immediately on any frame that is not `LOCAL_OFFSET_NED` and
+  then reads only the vertical component, so World and Body are withheld from
+  the Reference list and, on *Offset from here*, **Metres up** is the whole
+  form — a guided altitude change, which is what QGroundControl offers a fixed
+  wing beside goto. The collapse follows the Reference in force rather than the
+  family, so a node that kept a saved World (ruling 6) still shows the fields
+  that Reference would actually send.
+
+- **Steer's field groups are disclosed by checkboxes** — Position, Velocity,
+  Acceleration, Yaw. They reveal rows and **save nothing**: the type_mask still
+  derives from which fields carry values, so this is the curated-easy path a
+  preset dropdown would serve without re-growing a preset vocabulary. Clearing
+  a box clears that group's fields, deliberately — a hidden field that still
+  held a value would still be commanded, with nothing on screen to explain it.
+  The boxes seed themselves from whichever groups already carry values, so an
+  imported flow shows what it sends, and the acceleration triplet left the
+  Advanced section to sit with the groups it belongs to.
+
+### Fixed
+
+- **Move never fills in a value you did not give it.** Blank fields used to
+  resolve to a default: a blank altitude reference became above-home, a blank
+  reference became World, a blank frame became `LOCAL_NED`, and a blank number
+  took whatever fallback its call site named. Some of those were harmless and
+  one was not — `msg.payload.altRef` overrides the editor, the operator's word
+  is translated to a `MAV_FRAME` integer before the wire, and a typo'd `'MSL'`
+  fell out the *otherwise* side into frame 3. At a site with home 400 m above
+  sea level, a commanded 500 m MSL flew at 900 m MSL, with a clean `ACCEPTED`
+  ack and nothing in any log to say the datum had been swapped.
+
+  So Move refuses instead. A missing required input or a token outside its enum
+  **throws**, naming the field and what was expected. The exception is a field
+  whose *dialect* defines an encoding for "no change" — `DO_CHANGE_SPEED`'s −1,
+  `CONDITION_YAW`'s 0 rate and shortest-direction, `DO_REPOSITION`'s default
+  speed and ignored loiter radius, an empty button mask. Those are the wire's
+  own word for "the operator left this alone", so a blank box is transmitted
+  rather than filled in, and each is a named constant at its call site instead
+  of an argument you have to trace. `time_boot_ms` is unaffected either way: it
+  is the sender's own stamp, never operator intent.
+
+  Every field the runtime now requires is required in the dialog too, so this
+  is a red box while you configure rather than a failure after you deploy: all
+  four Manual sticks, all three Attitude angles when any is filled (they share
+  one ignore bit, so there is no encoding for "roll 10, yaw unsaid"), and every
+  axis of a Steer group once one of them is filled — velocity and acceleration
+  as well as position now, because under the derived type_mask a blank axis is
+  a *commanded* zero rather than an absent one.
+
+  One exemption survives, on measurement: on `LOCAL_OFFSET_NED` a blank
+  position axis is a zero *offset*, which is no movement, so filling one axis
+  stays legal there. That is the shape QGroundControl's guided altitude change
+  sends and the only one ArduPlane reads.
+
+- **Two recorded claims about ArduPilot's smaller vehicles were wrong**, and the
+  Move roster was phased around one of them. Reading all six vehicles' GCS
+  dispatch tables at source before building the family gate settled it (§14
+  2026-08-14): `handle_manual_control_axes` is a virtual with an **empty body**
+  and Blimp never overrides it, so sticks sent to a Blimp are decoded, counted
+  as a ground-station heartbeat, and discarded — what Blimp actually implements
+  is `DO_REPOSITION`. And "Blimp and Tracker implement neither setpoint message"
+  held only for the two *position* setpoints: an Antenna Tracker handles
+  `MANUAL_CONTROL` and `SET_ATTITUDE_TARGET`, so the empty surface planned for
+  it would have been wrong. Blimp also advertises three setpoint messages in its
+  `capabilities()` bitmask that it does not implement — a standing reason not to
+  gate any future feature on an autopilot's self-reported capabilities.
+
+- **The ack-timeout re-send is gated on per-command idempotency.** `AckWaiter`'s
+  contract is explicit — pass `DEFAULT_MAX_RESENDS` *"only for a command
+  affirmatively known to tolerate re-issue"* — because re-sending is premised on
+  a lost command and a lost ack being indistinguishable. That premise is per
+  *command*, and generalising Move's reposition confirm path to serve every
+  acked action carried it somewhere it does not hold: a **relative**
+  `CONDITION_YAW` is a delta, so a re-send after a lost ack turns the aircraft a
+  second time. Relative turns now settle `unconfirmed` instead, which §9 already
+  treats as a report rather than a failure. Absolute turns, speed changes and
+  repositions are unchanged — re-issuing each lands the vehicle in the state it
+  was already asked for. (Gitar, #303)
+
+- Four hand-editable states that reported success while doing nothing useful,
+  all found by the same editor-round-trip lens: `steer` × `stream` × `offset`
+  (a repeating offset walks the vehicle instead of holding a target),
+  `turn` / `speed` × `stream` (a MAV_CMD sent once and reported as a stream),
+  and `attitude` / `manual` × `confirm` (waiting for an acknowledgement that no
+  setpoint ever sends). Each now gets a deploy-time verdict naming the working
+  alternative — the confirm rule is stated once for every unacked action rather
+  than a fourth special case.
+
+- **`mavlink-in` changed-only compared timestamps**, so any message carrying
+  `time_boot_ms` differed on every frame and the filter silently delivered the
+  whole stream (#300). The messages it broke were exactly the ones the feature
+  exists for — `ATTITUDE`, `GLOBAL_POSITION_INT`, `GPS_RAW_INT`. Blank now
+  compares every field *except* the four timestamp spellings; naming one in
+  **Compare fields** still compares it verbatim.
+
 ## [0.4.0] - 2026-08-12
 
 ### Removed

@@ -779,18 +779,38 @@ test('mavlink-in: changed-only does not crash on 64-bit BigInt fields (SYSTEM_TI
   });
   assert.equal(node._sends.length, 1, 'identical BigInt fields must be treated as unchanged');
 
-  // A changed BigInt field must still be recognised as changed.
+  // The changed-BigInt half moved off SYSTEM_TIME, because every field it has
+  // is now excluded from the comparison (#300) — a marching clock is not a
+  // change, which is the whole point of the fix and is pinned separately.
+  // AUTOPILOT_VERSION.uid is a real uint64 that is *not* a timestamp, so it
+  // still exercises the BigInt path through the comparison.
   stub._deliver({
-    name: 'SYSTEM_TIME',
+    name: 'AUTOPILOT_VERSION',
     sysid: 1,
     compid: 1,
-    fields: { time_unix_usec: 1700000000001000n, time_boot_ms: 12346 },
+    fields: { uid: 0x0102030405060708n, flight_sw_version: 1 },
     trusted: true,
   });
-  assert.equal(node._sends.length, 2, 'a changed BigInt field must pass through');
+  assert.equal(node._sends.length, 2, 'first AUTOPILOT_VERSION delivers');
+  stub._deliver({
+    name: 'AUTOPILOT_VERSION',
+    sysid: 1,
+    compid: 1,
+    fields: { uid: 0x0102030405060708n, flight_sw_version: 1 },
+    trusted: true,
+  });
+  assert.equal(node._sends.length, 2, 'identical BigInt uid is unchanged');
+  stub._deliver({
+    name: 'AUTOPILOT_VERSION',
+    sysid: 1,
+    compid: 1,
+    fields: { uid: 0x0102030405060709n, flight_sw_version: 1 },
+    trusted: true,
+  });
+  assert.equal(node._sends.length, 3, 'a changed BigInt field must pass through');
   // Assert the forwarded frame is the CHANGED one — a count alone would let a
   // regression that forwards the duplicate and suppresses the change pass.
-  assert.equal(node._sends[1].payload.time_unix_usec, 1700000000001000n);
+  assert.equal(node._sends[2].payload.uid, 0x0102030405060709n);
 });
 
 test('mavlink-in: changed-only tracks independently per (message, sysid, compid)', () => {
@@ -1480,4 +1500,87 @@ test('shouldSuppress: true only for payload === false, not falsy', () => {
   assert.equal(shouldSuppress({ payload: 0 }), false);
   assert.equal(shouldSuppress({ payload: '' }), false);
   assert.equal(shouldSuppress({ payload: undefined }), false);
+});
+
+test('mavlink-in: changed-only ignores timestamps by default — the whole point of the feature (#300)', () => {
+  // The defect this pins: the comparison used decoded.fields wholesale, so any
+  // message carrying time_boot_ms differed on every frame and changed-only
+  // silently delivered the entire stream. ATTITUDE, GLOBAL_POSITION_INT and
+  // GPS_RAW_INT — the high-rate messages an operator actually reaches for this
+  // feature with — were exactly the broken ones.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+
+  // Same attitude, marching clock: one delivery, not three.
+  for (const time_boot_ms of [1000, 1200, 1400]) {
+    stub._deliver({
+      name: 'ATTITUDE', sysid: 1, compid: 1, trusted: true,
+      fields: { time_boot_ms, roll: 0.1, pitch: 0, yaw: 1.5 },
+    });
+  }
+  assert.equal(node._sends.length, 1, 'a marching clock alone is not a change');
+
+  // A real change still gets through, clock or no clock.
+  stub._deliver({
+    name: 'ATTITUDE', sysid: 1, compid: 1, trusted: true,
+    fields: { time_boot_ms: 1600, roll: 0.9, pitch: 0, yaw: 1.5 },
+  });
+  assert.equal(node._sends.length, 2, 'a changed field still delivers');
+});
+
+test('mavlink-in: every MAVLink timestamp spelling is excluded, and naming one opts back in', () => {
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+
+  // time_boot_us (AUTOPILOT_STATE_FOR_GIMBAL_DEVICE) and uptime
+  // (ONBOARD_COMPUTER_STATUS) joined the set after the #303 review reproduced
+  // the #300 defect through each of them — the original four were called
+  // "MAVLink's own timestamp spellings" and were not.
+  for (const stamp of ['time_boot_ms', 'time_boot_us', 'time_usec', 'time_unix_usec', 'timestamp', 'uptime']) {
+    const node = makeNodeInstance({ connection: 'conn-1' });
+    Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+    stub._deliver({ name: 'X', sysid: 1, compid: 1, trusted: true, fields: { [stamp]: 1, v: 7 } });
+    stub._deliver({ name: 'X', sysid: 1, compid: 1, trusted: true, fields: { [stamp]: 2, v: 7 } });
+    assert.equal(node._sends.length, 1, `${stamp} must not count as a change`);
+  }
+
+  // The escape: an operator who genuinely wants the clock names it, and it is
+  // compared verbatim — Compare fields is a literal list, not a filtered one.
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, {
+    connection: 'conn-1', changedOnly: true, changedFields: 'time_boot_ms',
+  });
+  stub._deliver({ name: 'X', sysid: 1, compid: 1, trusted: true, fields: { time_boot_ms: 1, v: 7 } });
+  stub._deliver({ name: 'X', sysid: 1, compid: 1, trusted: true, fields: { time_boot_ms: 2, v: 7 } });
+  assert.equal(node._sends.length, 2, 'an explicitly named timestamp is compared');
+});
+
+test('mavlink-in: a message that is nothing but timestamps delivers once', () => {
+  // SYSTEM_TIME's every field is excluded, so the subject is empty and every
+  // frame compares identical. Correct rather than a corner: nothing but the
+  // clock moved, and changed-only is exactly the request to be told when
+  // something else does.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+
+  for (const t of [1, 2, 3]) {
+    stub._deliver({
+      name: 'SYSTEM_TIME', sysid: 1, compid: 1, trusted: true,
+      fields: { time_unix_usec: BigInt(t * 1000), time_boot_ms: t },
+    });
+  }
+  assert.equal(node._sends.length, 1);
 });

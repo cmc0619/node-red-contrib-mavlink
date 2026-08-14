@@ -9,7 +9,12 @@ const {
   velocityFrom,
   accelFrom,
   valueFrom,
+  COMMAND_ACTIONS,
   resolveMoveAction,
+  buildTurnMessage,
+  buildSpeedMessage,
+  buildAttitudeMessage,
+  buildManualMessage,
   frameForAltRef,
   frameForReference,
   deriveSteerMode,
@@ -71,16 +76,26 @@ module.exports = function registerMavlinkMove(RED) {
     // COMMAND_INT_ONLY (8) and UNSUPPORTED_MAV_FRAME (9) included — is a
     // failure with its MAV_RESULT name, never silence; Move does no carrier
     // swap, because DO_REPOSITION is COMMAND_INT-only by spec and ArduPilot.
-    async function confirmReposition(message, target, identityId, connectionNode, send, done) {
+    async function confirmCommand(label, message, target, identityId, connectionNode, send, done, idempotent) {
       if (activeWaiter) {
         activeWaiter.cancel();
         activeWaiter = null;
       }
-      applyActionStatus(node, 'sending', 'reposition…');
+      applyActionStatus(node, 'sending', `${label}…`);
       const waiter = new AckWaiter({
         subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
-        // COMMAND_INT has no confirmation byte, so the retry counter is unused.
-        sendFn: () => connectionNode.send(message, { band: BAND.CONTROL, target, identityId }),
+        // The LONG carrier (Turn, Speed) stamps AckWaiter's retry counter into
+        // the confirmation byte on every re-send, per the encoder's own
+        // contract (lib/command/ack.js) and matching mavlink-command. This
+        // closed over the pre-built message and re-sent confirmation 0 while
+        // the path served only reposition — COMMAND_INT has no such byte, so
+        // the INT carrier still sends the message as built.
+        sendFn: (confirmation) => connectionNode.send(
+          message.name === 'COMMAND_LONG'
+            ? { ...message, fields: { ...message.fields, confirmation } }
+            : message,
+          { band: BAND.CONTROL, target, identityId }
+        ),
         commandId: message.fields.command,
         targetSystem: target.sysid,
         targetComponent: target.compid,
@@ -89,13 +104,25 @@ module.exports = function registerMavlinkMove(RED) {
         sourceIds: connectionNode.resolveSourceIds(identityId),
         // Blank inherits the AckWaiter default, like the Command node's field.
         timeoutMs: isBlank(config.ackTimeout) ? undefined : Number(config.ackTimeout),
-        // A re-sent goto is the same goto, so this carrier opts into the
-        // timeout re-send the library leaves off by default (#249).
-        maxResends: DEFAULT_MAX_RESENDS,
+        // The timeout re-send is opt-in and the library's contract is explicit
+        // (lib/command/ack.js): pass DEFAULT_MAX_RESENDS "only for a command
+        // affirmatively known to tolerate re-issue", because re-sending is
+        // premised on a lost command and a lost ack being indistinguishable.
+        //
+        // That premise is per command, not per carrier — a distinction this
+        // node lost when confirmReposition was generalised to serve every acked
+        // action (Gitar, #303). It holds for a reposition (the same absolute
+        // place), an absolute turn (the same heading) and a speed change (the
+        // same speed): re-issuing lands the vehicle in the state it was already
+        // asked for. It does NOT hold for a *relative* CONDITION_YAW — if the
+        // vehicle turned and only the ack was lost, a re-send turns it again.
+        // Caller decides; a non-idempotent command settles 'unconfirmed'
+        // instead, which §9 already treats as a report rather than a failure.
+        maxResends: idempotent ? DEFAULT_MAX_RESENDS : 0,
         // A long reposition answers IN_PROGRESS repeatedly (§9); the badge
         // follows the vehicle's own progress instead of standing still.
         onInProgress: (progress) => {
-          applyActionStatus(node, 'sending', progress === null ? 'reposition…' : `reposition ${progress}%…`);
+          applyActionStatus(node, 'sending', progress === null ? `${label}…` : `${label} ${progress}%…`);
         },
       });
       activeWaiter = waiter;
@@ -128,18 +155,61 @@ module.exports = function registerMavlinkMove(RED) {
         // completion condition exists for a goto in this node, so a lost ack
         // reports exactly what the Command node reports: unconfirmed, with
         // nothing having confirmed it. Same word, same meaning, same machinery.
-        applyActionStatus(node, 'error', 'reposition unconfirmed');
+        applyActionStatus(node, 'error', `${label} unconfirmed`);
         send([null, statusRecord('unconfirmed', outcome.detail, { ...shared, confirmedBy: 'none' })]);
-        done(new Error('Move reposition timed out waiting for COMMAND_ACK'));
+        done(new Error(`Move ${label} timed out waiting for COMMAND_ACK`));
         return;
       }
       // Terminal ack — the MAV_RESULT name IS the result ('denied',
       // 'command_int_only', 'command_unsupported_mav_frame', …), passed
       // through verbatim like mavlink-command's, because it is the same
       // AckWaiter outcome. One vocabulary, no translation layer to drift.
-      applyActionStatus(node, 'error', `reposition ${outcome.result}`);
+      applyActionStatus(node, 'error', `${label} ${outcome.result}`);
       send([null, statusRecord(outcome.result, outcome.detail, { ...shared, confirmedBy: 'ack' })]);
-      done(new Error(`Move reposition ${outcome.result}`));
+      done(new Error(`Move ${label} ${outcome.result}`));
+    }
+
+    /**
+     * Deliver an acked MAV_CMD on the Build / Send / Send & confirm tiers.
+     * Shared by every Move action that rides a command rather than a setpoint —
+     * reposition, turn, speed — so there is one AckWaiter and one result
+     * vocabulary across all of them (#276), not one per action.
+     *
+     * @param {string} label  the action word, used in status and error text
+     * @param {boolean} idempotent  whether re-issuing this exact message leaves
+     *   the vehicle in the state it was already asked for. Gates the ack-timeout
+     *   re-send, per the AckWaiter contract — see confirmCommand.
+     * @returns {boolean} true when the async confirm flow has taken ownership
+     *   of `done`; the caller must return without calling it
+     */
+    function deliverCommand(label, message, target, identityId, connectionNode, send, done, idempotent) {
+      if (delivery === 'build') {
+        completeBuild(node, send, message);
+        return false;
+      }
+      if (!connectionNode) {
+        throw new Error('mavlink-move requires a Connection for send/confirm delivery');
+      }
+      if (delivery === 'confirm') {
+        // Broadcast + confirm: the ack matcher accepts any source at sysid 0,
+        // so the first vehicle to answer would settle for the fleet (#260, §9).
+        // Send stays broadcast-legal; the expected-set aggregator is fan-out
+        // broadcast (§10).
+        if (target.sysid === 0) {
+          throw new Error(
+            `Move ${label} confirm cannot target broadcast (sysid 0) — the first ` +
+            'vehicle to ack would answer for the whole fleet; use Send or ' +
+            'mavlink-fanout broadcast (per-vehicle acks)'
+          );
+        }
+        confirmCommand(label, message, target, identityId, connectionNode, send, done, idempotent)
+          .catch((err) => failInput(node, send, err, done));
+        return true;
+      }
+      // Send tier: commands ride the Control band, not Streaming.
+      connectionNode.send(message, { band: BAND.CONTROL, target, identityId });
+      completeResult(node, send, 'sent', null, { message });
+      return false;
     }
 
     node.on('input', (msg, send, done) => {
@@ -193,6 +263,40 @@ module.exports = function registerMavlinkMove(RED) {
         // code.
         const action = resolveMoveAction(config.action);
 
+        // Turn and Speed are acked MAV_CMDs, not setpoints (§9 roster): the
+        // command tiers only, no Stream — a command has no streaming semantics,
+        // and the editor does not offer the tier. Neither asks a firmware
+        // question: CONDITION_YAW is an ArduPilot command that PX4 ignores, but
+        // ignoring is the vehicle's business (§9) — the dialog reds it, the
+        // driver sends it. Speed is standard on both stacks.
+        if (COMMAND_ACTIONS.has(action)) {
+          const relative = firstDefined(payload.relative, config.relative);
+          // Re-issue safety is per command (see confirmCommand). A speed change
+          // and an absolute heading are both "the state you already asked for";
+          // a relative turn is a *delta*, so a re-send after a lost ack turns
+          // the aircraft a second time.
+          const idempotent = !(action === 'turn' && relative === true);
+          const message = action === 'turn'
+            ? buildTurnMessage({
+              heading: valueFrom(payload, config, 'heading'),
+              rate: valueFrom(payload, config, 'turnRate'),
+              direction: valueFrom(payload, config, 'direction'),
+              // Relative changes what the heading number means, so it is a
+              // strict boolean opt-in like changeMode — never a truthy token.
+              relative,
+              target,
+            })
+            : buildSpeedMessage({
+              speed: valueFrom(payload, config, 'speed'),
+              throttle: valueFrom(payload, config, 'throttle'),
+              speedType: firstDefined(payload.speedType, config.speedType),
+              target,
+            });
+          if (deliverCommand(action, message, target, identityId, connectionNode, send, done, idempotent)) return;
+          done();
+          return;
+        }
+
         if (action === 'goto' && delivery !== 'stream') {
           // One-shot guided goto: DO_REPOSITION as COMMAND_INT, the acked
           // path. The altitude reference is the one frame choice that exists.
@@ -212,79 +316,16 @@ module.exports = function registerMavlinkMove(RED) {
             // DENIED (2).
             changeMode: firstDefined(payload.changeMode, config.changeMode),
           });
-          if (delivery === 'build') {
-            completeBuild(node, send, message);
-          } else {
-            if (!connectionNode) {
-              throw new Error('mavlink-move requires a Connection for send/confirm delivery');
-            }
-            if (delivery === 'confirm') {
-              // Broadcast + confirm: the ack matcher accepts any source at
-              // sysid 0, so the first vehicle to answer would settle for the
-              // fleet (#260, §9). Send stays broadcast-legal; the expected-set
-              // aggregator is fan-out broadcast (§10).
-              if (target.sysid === 0) {
-                throw new Error(
-                  'Move reposition confirm cannot target broadcast (sysid 0) — the first ' +
-                  'vehicle to ack would answer for the whole fleet; use Send or ' +
-                  'mavlink-fanout broadcast (per-vehicle acks)'
-                );
-              }
-              // Async: the ack arrives later. done() is owned by the confirm
-              // flow; a throw anywhere in it fails this input like any other.
-              confirmReposition(message, target, identityId, connectionNode, send, done)
-                .catch((err) => failInput(node, send, err, done));
-              return;
-            }
-            // Send tier: commands ride the Control band, not Streaming.
-            connectionNode.send(message, { band: BAND.CONTROL, target, identityId });
-            completeResult(node, send, 'sent', null, { message });
-          }
+          // Async on the confirm tier: the ack arrives later and the confirm
+          // flow owns done() from here.
+          // Idempotent: a re-sent goto is the same goto — the same absolute
+          // lat/lon/alt, so re-issuing lands where it was already going.
+          if (deliverCommand('reposition', message, target, identityId, connectionNode, send, done, true)) return;
           done();
           return;
         }
 
-        let moveInput;
-        if (action === 'goto') {
-          // goto + Stream: the same intent, streamed — position setpoints on
-          // the global frame the altitude reference names. `speed`, `radius`,
-          // `changeMode` and `yawRate` belong to the command path; a setpoint
-          // has no field to carry them, so they are not read here. Ignoring a
-          // key the wire has no room for is what the driver does with msg
-          // (AGENTS.md, input trust) — it does not refuse over one.
-          moveInput = {
-            mode: 'position',
-            frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),
-            target,
-            position: payload.position || positionFrom(config),
-            yaw: valueFrom(payload, config, 'yaw'),
-            timeBootMs: payload.timeBootMs,
-          };
-        } else {
-          // steer: the reference picks the axes (body is firmware-derived and
-          // fails closed on an unknown stack, §14); the mode derives from
-          // which groups carry values — filling fields IS the mode.
-          const position = payload.position || positionFrom(config);
-          const velocity = payload.velocity || velocityFrom(config);
-          const accel = payload.accel || accelFrom(config);
-          const yaw = valueFrom(payload, config, 'yaw');
-          const yawRate = valueFrom(payload, config, 'yawRate');
-          moveInput = {
-            mode: deriveSteerMode({ position, velocity, accel, yaw, yawRate }),
-            frame: frameForReference(
-              firstDefined(payload.reference, config.reference),
-              firmwareFor(vehicleAtDeploy, connectionNode)
-            ),
-            target,
-            position,
-            velocity,
-            accel,
-            yaw,
-            yawRate,
-            timeBootMs: payload.timeBootMs,
-          };
-        }
-        const message = buildMoveMessage(moveInput);
+        const message = setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode);
 
         if (delivery === 'build') {
           completeBuild(node, send, message);
@@ -330,6 +371,11 @@ module.exports = function registerMavlinkMove(RED) {
               identityId,
               rateHz,
               ttlMs,
+              // Attitude and manual end by going quiet (§9 ruling 1): zero
+              // thrust is a descent and a centred stick is a command, so
+              // neither has a brake packet to synthesize. Position setpoints
+              // keep their measured zero-velocity brake.
+              braking: action !== 'attitude' && action !== 'manual',
               // TTL expiry is the only stop the flow did not cause, so it is
               // the only one it cannot observe: without this the node would
               // halt the vehicle and keep reporting "streaming" forever.
@@ -432,6 +478,94 @@ module.exports = function registerMavlinkMove(RED) {
 
   RED.nodes.registerType('mavlink-move', MavlinkMoveNode);
 };
+
+/**
+ * The setpoint message for a non-command action — everything Move sends that is
+ * not an acked MAV_CMD.
+ *
+ * Extracted from the input handler rather than inlined: with six actions the
+ * handler was measured at cyclomatic complexity 36 (DeepSource, #303), and five
+ * of those branches were only ever choosing which builder to call. The handler
+ * keeps the parts that are genuinely about *this* input — suppression, target
+ * resolution, delivery, the stream lock — and this owns the wire shape.
+ *
+ * Attitude and manual are setpoints in every way that matters to delivery
+ * (Build/Send/Stream, no ack) so they land here rather than growing a parallel
+ * path. Neither speaks a frame or a mode: their mask, or manual's axis-invalid
+ * sentinel, derives from which fields carry values — the same presence rule
+ * Steer uses.
+ *
+ * @param {string} action  a MOVE_ACTIONS member that is not a command action
+ * @param {object} payload  msg.payload (trusted — AGENTS.md input trust)
+ * @param {object} config  the node's saved configuration
+ * @param {{sysid: number, compid: number}} target
+ * @param {object|null} vehicleAtDeploy  the node's own Vehicle Profile, if any
+ * @param {object|null} connectionNode
+ * @returns {{name: string, fields: object}}
+ */
+function setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode) {
+  if (action === 'attitude') {
+    return buildAttitudeMessage({
+      roll: valueFrom(payload, config, 'roll'),
+      pitch: valueFrom(payload, config, 'pitch'),
+      yaw: valueFrom(payload, config, 'yaw'),
+      rollRate: valueFrom(payload, config, 'rollRate'),
+      pitchRate: valueFrom(payload, config, 'pitchRate'),
+      yawRate: valueFrom(payload, config, 'yawRate'),
+      thrust: valueFrom(payload, config, 'thrust'),
+      timeBootMs: payload.timeBootMs,
+      target,
+    });
+  }
+  if (action === 'manual') {
+    return buildManualMessage({
+      x: valueFrom(payload, config, 'stickX'),
+      y: valueFrom(payload, config, 'stickY'),
+      z: valueFrom(payload, config, 'stickZ'),
+      r: valueFrom(payload, config, 'stickR'),
+      buttons: valueFrom(payload, config, 'buttons'),
+      target,
+    });
+  }
+  if (action === 'goto') {
+    // goto + Stream: the same intent, streamed — position setpoints on the
+    // global frame the altitude reference names. `speed`, `radius`,
+    // `changeMode` and `yawRate` belong to the command path; a setpoint has no
+    // field to carry them, so they are not read here. Ignoring a key the wire
+    // has no room for is what the driver does with msg (AGENTS.md, input
+    // trust) — it does not refuse over one.
+    return buildMoveMessage({
+      mode: 'position',
+      frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),
+      target,
+      position: payload.position || positionFrom(config),
+      yaw: valueFrom(payload, config, 'yaw'),
+      timeBootMs: payload.timeBootMs,
+    });
+  }
+  // steer: the reference picks the axes (body is firmware-derived and fails
+  // closed on an unknown stack, §14); the mode derives from which groups carry
+  // values — filling fields IS the mode.
+  const position = payload.position || positionFrom(config);
+  const velocity = payload.velocity || velocityFrom(config);
+  const accel = payload.accel || accelFrom(config);
+  const yaw = valueFrom(payload, config, 'yaw');
+  const yawRate = valueFrom(payload, config, 'yawRate');
+  return buildMoveMessage({
+    mode: deriveSteerMode({ position, velocity, accel, yaw, yawRate }),
+    frame: frameForReference(
+      firstDefined(payload.reference, config.reference),
+      firmwareFor(vehicleAtDeploy, connectionNode)
+    ),
+    target,
+    position,
+    velocity,
+    accel,
+    yaw,
+    yawRate,
+    timeBootMs: payload.timeBootMs,
+  });
+}
 
 function completeBuild(node, send, message) {
   applyActionStatus(node, 'ok', 'built move');

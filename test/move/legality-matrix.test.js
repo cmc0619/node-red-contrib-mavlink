@@ -20,8 +20,32 @@ const assert = require('node:assert/strict');
 /** The offered surface, verbatim from the editor (nodes/mavlink-move.html). */
 const OFFERED = {
   goto: { deliveries: ['build', 'send', 'confirm', 'stream'], variants: ['home', 'msl'] },
-  steer: { deliveries: ['build', 'send', 'stream'], variants: ['world', 'body'] },
+  steer: { deliveries: ['build', 'send', 'stream'], variants: ['world', 'body', 'offset'] },
+  // The acked motion commands (§9 roster). No Stream — a MAV_CMD has no
+  // streaming semantics — and no frame variant, so the variant axis carries
+  // the one operator choice that changes the wire.
+  turn: { deliveries: ['build', 'send', 'confirm'], variants: ['absolute', 'relative'] },
+  speed: { deliveries: ['build', 'send', 'confirm'], variants: ['groundspeed', 'airspeed'] },
+  // Setpoint-shaped: no ack, streaming is the normal use. Attitude's variants
+  // are its two presence modes (angles vs body rates); manual has one shape.
+  attitude: { deliveries: ['build', 'send', 'stream'], variants: ['angles', 'rates'] },
+  manual: { deliveries: ['build', 'send', 'stream'], variants: ['sticks'] },
 };
+
+/**
+ * Cells the dropdowns cannot produce even though both axes are offered on
+ * their own — `refreshDeliveryOptions` withdraws the tier for the reference.
+ * Kept as an explicit set rather than a ragged OFFERED table so the hole is
+ * visible: a combo silently dropped from a cross-product reads as covered.
+ *
+ * Offset × Stream: every setpoint on LOCAL_OFFSET_NED is resolved against the
+ * vehicle's position at that moment, so repeating one walks the vehicle away
+ * rather than holding a target (ArduCopter/Rover/Sub add
+ * `get_relative_position_NED_origin()` per message; ArduPlane's handler is
+ * `next_WP_loc.alt +=`, which accumulates outright). Source-read 2026-08-13,
+ * not yet SITL-measured.
+ */
+const NOT_OFFERED = new Set(['steer/stream/offset']);
 
 function redStub(nodesById) {
   return {
@@ -69,7 +93,34 @@ function makeConn(vehicle) {
  */
 function configFor(action, delivery, variant) {
   const config = { action, delivery, targetSystem: 1, targetComponent: 1 };
-  if (action === 'goto') {
+  if (action === 'attitude') {
+    if (variant === 'rates') {
+      // Each body rate has its own ignore bit, so one rate alone is a complete
+      // command — the other two are genuinely not commanded.
+      config.rollRate = 5;
+    } else {
+      // All three angles, because ATTITUDE_IGNORE is one bit over the whole
+      // quaternion: there is no encoding for "roll 10, yaw unsaid", so the
+      // minimal *valid* attitude names every angle (owner ruling, 2026-08-14).
+      config.roll = 10;
+      config.pitch = 0;
+      config.yaw = 0;
+      config.thrust = 0.5;
+    }
+  } else if (action === 'manual') {
+    // All four sticks: MANUAL_CONTROL's per-axis "invalid" sentinel is not sent
+    // any more, so a blank axis refuses rather than going out uncommanded.
+    config.stickX = 0;
+    config.stickY = 0;
+    config.stickZ = 0.5;
+    config.stickR = 0.5;
+  } else if (action === 'turn') {
+    config.heading = 90;
+    config.relative = variant === 'relative';
+  } else if (action === 'speed') {
+    config.speed = 5;
+    config.speedType = variant;
+  } else if (action === 'goto') {
     config.altRef = variant;
     config.lat = 47;
     config.lon = 8;
@@ -86,6 +137,10 @@ function configFor(action, delivery, variant) {
     // concrete dialect gives Build no firmware source and the node would
     // deploy clean and refuse every input. The matrix drives the offered
     // shape, not the hidden-field shortcut it originally used.
+    //
+    // Body is now the ONLY variant that needs this. Turn briefly did, when it
+    // refused off ArduPilot; that refusal was a guardrail (§9: a legal message
+    // the vehicle ignores still sends) and is gone.
     if (variant === 'body') {
       config.dialect = '__vehicle';
       config.vehicle = 'veh';
@@ -101,6 +156,13 @@ function configFor(action, delivery, variant) {
   }
   return config;
 }
+
+/**
+ * The MAV_CMD each acked action rides, so the confirm tier's stub ack matches
+ * the AckWaiter's command filter. A wrong id here does not fail the assertion —
+ * it hangs the test, because the waiter ignores an ack for another command.
+ */
+const ACK_COMMAND = { goto: 192, turn: 115, speed: 178 };
 
 /** Drive one input on a fresh real node; resolve on done(). */
 function drive(config, { firmware } = {}) {
@@ -125,7 +187,8 @@ function drive(config, { firmware } = {}) {
     // instead of failing with a name.
     if (config.delivery === 'confirm') {
       assert.ok(conn.subs.length, 'the confirm tier subscribes before the handler returns');
-      conn.subs[0].handler({ sysid: 1, compid: 1, fields: { command: 192, result: 0 } });
+      const command = ACK_COMMAND[config.action] || ACK_COMMAND.goto;
+      conn.subs[0].handler({ sysid: 1, compid: 1, fields: { command, result: 0 } });
     }
   });
 }
@@ -137,7 +200,9 @@ const COMPLETES = { build: 'built', send: 'sent', confirm: 'accepted', stream: '
 for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
   for (const delivery of deliveries) {
     for (const variant of variants) {
+      if (NOT_OFFERED.has(`${action}/${delivery}/${variant}`)) continue;
       test(`offered: ${action} × ${delivery} × ${variant} completes on the real node`, async () => {
+        // Body is the one variant that derives per stack and so needs a profile.
         const firmware = variant === 'body' ? 'ardupilot' : undefined;
         const { out, err, node } = await drive(configFor(action, delivery, variant), { firmware });
         // Streams and waiters must not leak into the next combo: the stream
@@ -169,11 +234,24 @@ for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
 // the honest all-ignore packet.
 
 const REFUSED = [
-  // The action vocabulary is closed: goto and steer, nothing else.
+  // Turn on PX4 is NOT here: CONDITION_YAW is a legal message PX4 ignores, and
+  // §9 rules that known-unsupported combos send with the runtime silent. The
+  // editor reds it (mavlink-move.html `action`), which is the protector's half.
+  // Relative changes what the heading number means, so it is a strict boolean
+  // opt-in like changeMode — a truthy token must refuse, not silently pick.
+  {
+    name: 'turn relative as a truthy token',
+    config: { ...configFor('turn', 'send', 'absolute'), connection: 'conn', relative: 'yes' },
+    firmware: 'ardupilot',
+    error: /relative must be boolean/,
+  },
+  // The action vocabulary is closed: the six roster actions, nothing else.
   {
     name: 'unknown action',
     config: { ...configFor('goto', 'send', 'home'), action: 'orbit' },
-    error: /unknown Move action "orbit" — expected goto or steer/,
+    // 'orbit' is deliberately still unknown: DO_ORBIT is on the §9 roster as a
+    // forward entry, PX4-only and unmeasured, so it is not on the surface yet.
+    error: /unknown Move action "orbit" — expected one of goto, steer, turn, speed, attitude, manual/,
   },
   // Body without a firmware fails closed — the stacks read different body
   // frames, and an unadapted guess is silently dropped by the vehicle (§14).
@@ -205,3 +283,6 @@ for (const { name, config, firmware, error } of REFUSED) {
     assert.equal(conn.sends.length, 0, 'nothing reached the wire');
   });
 }
+
+// ── Re-issue safety is per command, not per carrier ──────────────────────────
+

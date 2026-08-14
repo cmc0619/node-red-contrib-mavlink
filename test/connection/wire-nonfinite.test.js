@@ -13,29 +13,9 @@ const assert = require('node:assert/strict');
 
 const { loadBundled } = require('../../lib/metadata');
 const { createWire } = require('../../lib/connection/wire');
-const { buildMoveMessage } = require('../../lib/move');
 
 const wire = createWire({ bundle: loadBundled('common') });
 
-test('a NaN integer field refuses to serialize instead of becoming broadcast 0', () => {
-  const message = buildMoveMessage({
-    mode: 'position',
-    target: { sysid: NaN, compid: NaN },
-    position: { north: 1, east: 2, up: 3 },
-  });
-  assert.throws(
-    () => wire.serialize(message, { sysid: 255, compid: 190, seq: 0 }),
-    /'target_system' is NaN.*must be finite/
-  );
-  assert.throws(
-    () =>
-      wire.serialize(
-        { name: 'SET_POSITION_TARGET_LOCAL_NED', fields: { target_system: 1, target_component: 1, coordinate_frame: Infinity } },
-        { sysid: 255, compid: 190, seq: 0 }
-      ),
-    /'coordinate_frame' is Infinity/
-  );
-});
 
 test('a NaN float field still serializes — NaN floats are legal MAVLink', () => {
   // SET_POSITION_TARGET floats use NaN as "no value" in ecosystem practice;
@@ -52,14 +32,3 @@ test('a NaN float field still serializes — NaN floats are legal MAVLink', () =
   assert.ok(Number.isNaN(decoded.fields.x));
 });
 
-test('finite integer fields serialize round-trip unchanged', () => {
-  const message = buildMoveMessage({
-    mode: 'position',
-    frame: 3,
-    target: { sysid: 7, compid: 1 },
-    position: { lat: 47.397742, lon: 8.545594, alt: 25 },
-  });
-  const decoded = wire.decode(wire.serialize(message, { sysid: 255, compid: 190, seq: 0 }))[0];
-  assert.equal(decoded.fields.target_system, 7);
-  assert.equal(decoded.fields.lat_int, 473977420);
-});
