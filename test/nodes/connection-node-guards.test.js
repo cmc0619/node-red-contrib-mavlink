@@ -100,6 +100,55 @@ test('a disabled Connection still exposes an empty peer table', () => {
   assert.equal(node.resolveSourceIds(), null, 'a disabled connection resolves no source ids — the gate stays off');
 });
 
+test('a hand-edited garbage staleMs/expireMs refuses at construction instead of leaving peers never-stale (owner ruling, 2026-08-14)', () => {
+  const { loadBundled } = require('../../lib/metadata');
+  const bundle = loadBundled('common');
+  const vehicleNode = {
+    getDialect: () => bundle,
+    getDefaults: () => ({
+      defaultTargetSystem: 1,
+      defaultTargetComponent: 1,
+      firmware: 'ardupilot',
+      dialect: 'common',
+    }),
+  };
+
+  // A real Local Identity node, not a hand-rolled stub — it is the thing
+  // that actually produces the type/autopilot/system_status names
+  // identitySnapshot resolves against the bundle.
+  const registerLocalIdentity = require('../../nodes/mavlink-local-identity');
+  let IdentityCtor;
+  const identityRED = {
+    nodes: {
+      createNode(node) {
+        Object.setPrototypeOf(node, EventEmitter.prototype);
+        EventEmitter.call(node);
+        node.status = () => {};
+      },
+      registerType(_name, fn) { IdentityCtor = fn; },
+    },
+  };
+  registerLocalIdentity(identityRED);
+  const identityNode = Object.create(null);
+  IdentityCtor.call(identityNode, { role: 'gcs' });
+
+  const { ctor } = makeRED({ 'veh-1': vehicleNode, 'id-1': identityNode });
+
+  assert.throws(
+    () => ctor.call({}, { ...BASE_CONFIG, staleMs: 'abc' }),
+    /Connection stale threshold \(staleMs\) must be a finite number \(got "abc"\)/
+  );
+  assert.throws(
+    () => ctor.call({}, { ...BASE_CONFIG, expireMs: 'nope' }),
+    /Connection expire threshold \(expireMs\) must be a finite number \(got "nope"\)/
+  );
+  // Blank staying `undefined` (PeerTable's own default applies) is pinned at
+  // the unit level (`test/addressing/resolve.test.js`, `test/connection/
+  // peer-table.test.js`'s explicit-`undefined` case) — not repeated here,
+  // since a fully-constructed live Connection opens a real UDP socket and
+  // heartbeat timer this guard-test file never tears down.
+});
+
 test('the live Connection wrapper forwards resolveSourceIds to the runtime (Codex #161)', () => {
   // The runtime method alone is not enough: palette nodes reach the runtime
   // only through the wrapper (node.subscribe/send/peerTable), so an

@@ -182,6 +182,42 @@ test('an unknown payload.missionType string fails loud through missionTypeValue'
   assert.equal(outputs[0][1].result, 'failed');
 });
 
+test('a garbage step timeout refuses instead of arming a ~1 ms retry storm (owner ruling, 2026-08-14)', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+    timeout: 'abc',
+  });
+  const { outputs, err } = await runInput(node, { payload: {} });
+  assert.ok(err, 'a non-finite step timeout must fail loud');
+  assert.match(String(err), /Mission step timeout must be a finite number \(got "abc"\)/);
+  assert.equal(conn.sent.length, 0, 'nothing was sent under a ~1 ms window');
+  assert.equal(outputs[0][0], null);
+  assert.equal(outputs[0][1].result, 'failed');
+});
+
+test('a garbage maxRetries refuses the same way', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+    maxRetries: 'nope',
+  });
+  const { err } = await runInput(node, { payload: {} });
+  assert.ok(err);
+  assert.match(String(err), /Mission max retries must be a finite number \(got "nope"\)/);
+  assert.equal(conn.sent.length, 0);
+});
+
 test('clear runs on any input — selecting the operation is the confirmation', async () => {
   // The confirm gate (config checkbox / msg.confirmed) was removed by owner
   // ruling (2026-08-13): an operator who selected the Clear operation has

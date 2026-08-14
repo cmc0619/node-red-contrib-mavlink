@@ -100,6 +100,26 @@ test('stale then expired transitions emit events', () => {
   assert.equal(table.size(), 0);
 });
 
+test('an explicit heartbeatStaleMs/ExpireMs of undefined still gets the built-in default (owner ruling, 2026-08-14)', () => {
+  // The Connection's blank-config path passes `heartbeatStaleMs: undefined`
+  // as an OWN property, not an omitted key — `{...DEFAULT_OPTIONS, ...options}`
+  // would copy that `undefined` straight over the 5000/15000 default,
+  // silently disabling staleness for every blank Stale/Expire field (the
+  // most common deploy). This pins the `??` fix, not the truthy-key path
+  // the two tests above already cover.
+  const clock = fakeClock(0);
+  const table = new PeerTable({ now: clock.now, heartbeatStaleMs: undefined, heartbeatExpireMs: undefined });
+  const events = [];
+  table.on('stale', (e) => events.push(['stale', e.sysid]));
+  table.on('expired', (e) => events.push(['expired', e.sysid]));
+
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP1, 0);
+  table.sweep(6000);
+  assert.deepEqual(events, [['stale', 1]], 'the 5000 ms default still applies');
+  table.sweep(16000);
+  assert.deepEqual(events, [['stale', 1], ['expired', 1]], 'the 15000 ms default still applies');
+});
+
 test('a fresh heartbeat clears a stale mark', () => {
   const table = new PeerTable({ now: () => 0, heartbeatStaleMs: 5000, heartbeatExpireMs: 15000 });
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP1, 0);

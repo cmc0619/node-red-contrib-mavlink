@@ -26,7 +26,7 @@ const {
   bindVehicleSysid,
   releaseVehicleSysid,
 } = require('../lib/identity');
-const { isBlank } = require('../lib/addressing');
+const { finiteNumberOr } = require('../lib/addressing');
 
 module.exports = function registerMavlinkLocalIdentity(RED) {
   /**
@@ -141,10 +141,18 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
 };
 
 /**
+ * Blank defaults to 1 Hz. A present value the editor's own `validate`
+ * (`positiveNumberValidator`, `mavlink-local-identity.html`) already bounds
+ * finite-and-positive for a normal deploy — but the crater here is the same
+ * one the selection-typo cluster fixed for `band`/`sendAs`/`delivery`: a
+ * hand-edited flow bypasses the editor entirely, and a non-finite interval
+ * arms the heartbeat scheduler's `setInterval` with NaN, which Node
+ * substitutes ~1 ms for instead of refusing — a silent ~1 kHz HEARTBEAT
+ * flood, not a coerced-and-sent value (owner ruling, 2026-08-14, measured).
+ *
  * @param {*} value
  * @returns {number} interval in milliseconds; defaults to 1 Hz
  */
 function parseHeartbeatIntervalMs(value) {
-  if (isBlank(value)) return 1000;
-  return Number(value);
+  return finiteNumberOr(value, 1000, 'Local Identity heartbeat interval');
 }

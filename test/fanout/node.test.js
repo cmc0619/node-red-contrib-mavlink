@@ -26,6 +26,50 @@ test('mavlink-fanout node emits continue only for all-success aggregate', async 
   assert.equal(connection.sends.length, 2);
 });
 
+test('a hand-edited executionMode typo fails loud through the node, not silently sequential (§10)', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({
+    connection: 'conn',
+    executionMode: 'broadcasts',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  let sent;
+  const err = await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; }).then(
+    () => null,
+    (e) => e
+  );
+  assert.ok(err, 'an unknown execution mode is passed to done(err)');
+  assert.match(err.message, /unknown Fan-out execution mode "broadcasts"/);
+  assert.equal(sent[0], null);
+  assert.equal(connection.sends.length, 0, 'nothing left the wire under the mis-resolved mode');
+});
+
+test('a hand-edited delivery typo fails loud through the node instead of silently sending (lib/fanout delivery)', async () => {
+  const connection = connectionStub([peer(1)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({
+    connection: 'conn',
+    executionMode: 'sequential',
+    delivery: 'cofnirm',
+    intervalMs: 0,
+  });
+  let sent;
+  const err = await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; }).then(
+    () => null,
+    (e) => e
+  );
+  assert.ok(err, 'an unknown delivery tier is passed to done(err)');
+  assert.match(err.message, /unknown Fan-out delivery "cofnirm"/);
+  assert.equal(sent[0], null);
+  assert.equal(connection.sends.length, 0, 'nothing left the wire under the mis-resolved tier');
+});
+
 test('build+list with no connection emits one retargeted message per member on output 0 (§6/§9)', async () => {
   const RED = redStub({});  // no connection registered
   require('../../nodes/mavlink-fanout')(RED);
