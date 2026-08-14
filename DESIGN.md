@@ -4341,6 +4341,43 @@ survives every audit because deleting it converts garbage into a commanded posit
 *Check:* `lib/formation/index.js` `formationTargets` (refusals) and `lib/payload/index.js`
 `valueOr` (coercion) — both halves are test-pinned.
 
+**A token outside its enum has no safe default, so Move's enums refuse it (owner ruling,
+2026-08-14: *"if a flow sends nonsense then it deserves to fail"*).**
+*Wrong belief:* an unrecognised enum token is trusted input like any other, so the coerce arm
+applies and the resolver picks a sensible member. Three of Move's did: `speedType` → ground
+speed, `frameForAltRef` → above-home, `frameForReference` → world.
+*Fact:* it is the *refuse* arm, and the entry above already implies it — the test is whether a
+defined safe value exists to coerce **to**, and for a token that is not in the enum there is
+none, because nothing about `'MSL'` says which member was meant. A number off `msg` is taken as
+given since every number is a legal value; a token is not a value until it is a member.
+`resolveMoveAction` has always thrown on an unknown action, so this makes the other three
+agree with it rather than inventing a rule.
+
+The altitude reference is why it matters, and it is not the one that was reported.
+`msg.payload.altRef` overrides the editor-validated config, the old line was
+`value === 'msl' ? GLOBAL : GLOBAL_RELATIVE_ALT`, and the operator's word never reaches the
+wire — it is translated to a `MAV_FRAME` integer first. So `'MSL'` fell out the *otherwise*
+side and became frame 3: a legal, universally supported frame the vehicle executes correctly.
+At a site with home 400 m above sea level, a commanded 500 m MSL flies at 900 m MSL, with a
+clean `ACCEPTED` ack and nothing in any log to say the datum was swapped.
+
+*Why not leave the resolver returning `undefined` and let it crash?* Measured, because it
+sounds right and is only half true. On the command tiers it does fail loudly — `undefined`
+reaches `resolveModeAndFrame`, becomes `LOCAL_NED`, and `buildRepositionMessage` refuses that
+carrier. On **Stream** it does not: the same `undefined` produces a
+`SET_POSITION_TARGET_LOCAL_NED` instead of a `SET_POSITION_TARGET_GLOBAL_INT`, the lat/lon are
+dropped because the local builder reads north/east/up, and `x,y,z` encode `0, 0, -0` — *fly to
+the EKF origin at origin altitude*. `LOCAL_NED` is a legitimate frame, just not for a global
+goto, so nothing downstream can tell a lost datum from an ordinary local setpoint. The
+information is gone by then; the throw keeps it, and keeps the two delivery tiers agreeing.
+*Scope, deliberately narrow:* Move's enum resolvers only. `lib/command`'s carrier coercion —
+an unknown `sendAs` token building `COMMAND_LONG`, cited as coercion in the entry above — is
+the same shape and is **not** changed. That is not an oversight; it was not ruled on, and
+`COMMAND_LONG` is a defensible default in a way that "above home" never was.
+*Check:* `enumOr` in `lib/move/frames.js` is the one implementation; `test/move/move.test.js`
+and `test/move/speed.test.js` pin the throws, blank-still-defaults, and the `'constructor'`
+prototype-key case.
+
 **Mission Clear needs no confirmation gate (owner ruling, 2026-08-13).**
 *Wrong belief:* destructive operations need a second yes — a `confirmClear` checkbox or
 `msg.confirmed === true` — before a MISSION_CLEAR_ALL may be built or sent.
