@@ -4341,6 +4341,93 @@ survives every audit because deleting it converts garbage into a commanded posit
 *Check:* `lib/formation/index.js` `formationTargets` (refusals) and `lib/payload/index.js`
 `valueOr` (coercion) — both halves are test-pinned.
 
+**A token outside its enum has no safe default, so Move's enums refuse it (owner ruling,
+2026-08-14: *"if a flow sends nonsense then it deserves to fail"*).**
+*Wrong belief:* an unrecognised enum token is trusted input like any other, so the coerce arm
+applies and the resolver picks a sensible member. Three of Move's did: `speedType` → ground
+speed, `frameForAltRef` → above-home, `frameForReference` → world.
+*Fact:* it is the *refuse* arm, and the entry above already implies it — the test is whether a
+defined safe value exists to coerce **to**, and for a token that is not in the enum there is
+none, because nothing about `'MSL'` says which member was meant. A number off `msg` is taken as
+given since every number is a legal value; a token is not a value until it is a member.
+`resolveMoveAction` has always thrown on an unknown action, so this makes the other three
+agree with it rather than inventing a rule.
+
+The altitude reference is why it matters, and it is not the one that was reported.
+`msg.payload.altRef` overrides the editor-validated config, the old line was
+`value === 'msl' ? GLOBAL : GLOBAL_RELATIVE_ALT`, and the operator's word never reaches the
+wire — it is translated to a `MAV_FRAME` integer first. So `'MSL'` fell out the *otherwise*
+side and became frame 3: a legal, universally supported frame the vehicle executes correctly.
+At a site with home 400 m above sea level, a commanded 500 m MSL flies at 900 m MSL, with a
+clean `ACCEPTED` ack and nothing in any log to say the datum was swapped.
+
+*Why not leave the resolver returning `undefined` and let it crash?* Measured, because it
+sounds right and is only half true. On the command tiers it does fail loudly — `undefined`
+reaches `resolveModeAndFrame`, becomes `LOCAL_NED`, and `buildRepositionMessage` refuses that
+carrier. On **Stream** it does not: the same `undefined` produces a
+`SET_POSITION_TARGET_LOCAL_NED` instead of a `SET_POSITION_TARGET_GLOBAL_INT`, the lat/lon are
+dropped because the local builder reads north/east/up, and `x,y,z` encode `0, 0, -0` — *fly to
+the EKF origin at origin altitude*. `LOCAL_NED` is a legitimate frame, just not for a global
+goto, so nothing downstream can tell a lost datum from an ordinary local setpoint. The
+information is gone by then; the throw keeps it, and keeps the two delivery tiers agreeing.
+*Scope, deliberately narrow:* Move's enum resolvers only. `lib/command`'s carrier coercion —
+an unknown `sendAs` token building `COMMAND_LONG`, cited as coercion in the entry above — is
+the same shape and is **not** changed. That is not an oversight; it was not ruled on, and
+`COMMAND_LONG` is a defensible default in a way that "above home" never was.
+*Check:* `enumValue` in `lib/move/frames.js` is the one implementation, called by
+`frameForAltRef`, `frameForReference` and `buildSpeedMessage`. Blank does **not** still default
+in two of the three — see the entry below, which was ruled the same day and went further than
+this one.
+
+**A blank required field throws; a blank field with a dialect sentinel sends the sentinel
+(owner ruling, 2026-08-14: *"if I don't correctly set a variable don't default it to
+something"*, *"we want a nice big crater sized hole if we don't put the right data in"*).**
+*Wrong belief:* one helper can answer for every blank. `numberOr(value, fallback)` took a
+fallback at each call site and returned it for a blank, so thirty call sites across Move looked
+identical whether the fallback was the wire's own word for "unset" or a number we picked.
+*Fact:* they are two different things and only the operator can tell them apart from the
+outside, which is the problem. `DO_CHANGE_SPEED` param2 = −1 is *common.xml's* encoding of "no
+change" — transmitting it for a blank box says exactly what the operator did, and there is no
+other way to say it on that message. `CONDITION_YAW` param1 = 0 is not: it is a heading of
+north, a legal command the vehicle turns to, and a blank one reaching the wire as 0 is the
+altRef failure one command over — a clean `ACCEPTED` for something nobody asked for.
+
+So the helper lost its fallback arm and became `requireNumber(value, label)`, which throws on a
+blank naming the field. Callers whose field has a dialect-defined no-change encoding spell that
+sentinel on their own line, next to the constant that names it: `SPEED_UNCHANGED`,
+`THROTTLE_UNCHANGED`, `RATE_DEFAULT`, `DIRECTION_SHORTEST`, `SPEED_DEFAULT`, `RADIUS_IGNORED`,
+`BUTTONS_NONE`. Everything else refuses. The split is visible at the call site rather than
+buried in an argument, which is the whole point: a reader can see which blanks are transmitted
+and which are holes.
+
+*Three cases worth naming, because each nearly went the wrong way:*
+
+- **`time_boot_ms` is not operator intent.** It is the sender's own stamp, so `bootNow()` on a
+  blank is not a substitution — there is no value the caller failed to give. It moved to
+  `frames.js` so the setpoint and attitude builders share one clock; attitude was stamping 0.
+- **`MANUAL_CONTROL`'s per-axis INT16_MAX sentinel is gone, and the constant with it.** The
+  dialect does define "this axis is invalid", and this is the one place the ruling overrides a
+  real sentinel: a pilot's hand resting off a stick is a live joystick reporting every frame,
+  while a blank box in a *saved flow* is nobody having filled it in. The two are not the same
+  input and only one of them exists in Node-RED. All four sticks are required in the dialog and
+  refused blank in the runtime. Centring at 0 was never on the table — ArduSub reads `z` as
+  0..1000 neutral **500**, so 0 is full reverse thrust (§14).
+- **`LOCAL_OFFSET_NED` position axes stay exempt, and this one is measurement, not taste.** On
+  an absolute local frame a blank axis encoding 0 is the EKF origin, a real place; on frame 7 it
+  is a zero *offset*, which is no movement on that axis (§14 2026-08-05, the frame-7 probe).
+  Filling one axis is the whole point of that reference — QGC's guided altitude change fills
+  only the vertical and ArduPlane's handler reads only the vertical — so requiring the triplet
+  there would refuse the one shape a fixed wing has. Velocity and acceleration get no such
+  exemption on any frame: a zero rate is a rate, whatever the origin is measured from.
+
+*What this cost:* 85 tests deleted, because their subject was a default (owner: *"they pin bad
+behavior and they're hard to change when you finally get the picture"*). A test whose subject is
+a default dies with the default; what replaced them pins the refusals and the sentinels.
+*Check:* `requireNumber` in `lib/move/frames.js` has no second arm to fall through. The editor
+half is `steerAxisValidator`, `attitudeAngleValidator` and `stickValidator` in
+`nodes/mavlink-move.html` — every field the runtime now requires is required in the dialog too,
+or the node deploys clean and fails every input.
+
 **Mission Clear needs no confirmation gate (owner ruling, 2026-08-13).**
 *Wrong belief:* destructive operations need a second yes — a `confirmClear` checkbox or
 `msg.confirmed === true` — before a MISSION_CLEAR_ALL may be built or sent.
