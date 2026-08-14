@@ -65,6 +65,25 @@
     };
   }
 
+  /**
+   * A manual-control stick: blank (axis disabled) or -1..1.
+   *
+   * The range is enforced here because the wire is ±1000 and the operator
+   * surface is ±1 — a 500 typed into a stick box is someone thinking in wire
+   * units, which would scale to 500000 and clip. The runtime scales whatever it
+   * is handed (§2), so this is the only layer that notices.
+   *
+   * @returns {function(*, object): (boolean|string)} arity 2 so a reason renders (§14)
+   */
+  function stickValidator() {
+    return function (v, _opt) {
+      if (RED.mavlink.isBlank(v)) return true;
+      var n = Number(v);
+      return (Number.isFinite(n) && n >= -1 && n <= 1)
+        || 'must be -1..1 (stick deflection, not wire units)';
+    };
+  }
+
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
   // Move's mode field is `delivery` and it has no firmware selector.
   var moveDefaults = Object.assign(
@@ -105,10 +124,16 @@
               + 'which is sent once and answered. Use Send, or Send & confirm to wait for '
               + 'the acknowledgement';
           }
+          // Fourth instance of the family, so it is stated generally rather than
+          // per action: only the acked actions have anything to wait for. Go
+          // to rides DO_REPOSITION, Turn CONDITION_YAW, Speed DO_CHANGE_SPEED
+          // — every one answers a COMMAND_ACK. Steer, Attitude and Manual are
+          // setpoints and sticks, which no vehicle acknowledges, so a confirm
+          // tier there would wait forever and the runtime reports `sent`.
           if (v !== 'confirm') return true;
-          if (action !== 'steer') return true;
-          return 'Steer cannot confirm — a setpoint carries no COMMAND_ACK, so there is '
-            + 'nothing to wait for. Use Send, or switch the action to Go to';
+          if (action === 'goto' || action === 'turn' || action === 'speed') return true;
+          return 'this action cannot confirm — setpoints and sticks carry no COMMAND_ACK, so '
+            + 'there is nothing to wait for. Use Send, or switch to Go to, Turn or Speed';
         },
       },
       // Action × Delivery derives the wire (§6 redesign, 2026-08-12): the
@@ -233,6 +258,49 @@
       // changeMode. ArduCopter also answers FAILED for a param4 that is not
       // exactly 0 or 1.
       relative: { value: false },
+
+      // ── Attitude (SET_ATTITUDE_TARGET) ────────────────────────────────────
+      // Degrees in, quaternion out — the operator never sees q[4]. Presence
+      // drives ATTITUDE_TARGET_TYPEMASK exactly like Steer's groups, so no
+      // individual field can be required. `yaw` and `yawRate` are the fields
+      // Steer and Go to already use: one spelling per operator concept (§14).
+      roll: { value: '', validate: RED.validators.number(true) },
+      pitch: { value: '', validate: RED.validators.number(true) },
+      rollRate: { value: '', validate: RED.validators.number(true) },
+      pitchRate: { value: '', validate: RED.validators.number(true) },
+      // Normalised 0..1. Out of range is the vehicle's to judge, but a value
+      // outside it is almost certainly a percent typed by mistake, and the
+      // editor is where that gets caught rather than flown.
+      thrust: {
+        value: '',
+        validate: function (v, _opt) {
+          if (RED.mavlink.isBlank(v)) return true;
+          var n = Number(v);
+          return (Number.isFinite(n) && n >= 0 && n <= 1)
+            || 'must be 0..1 (normalised thrust, not a percentage)';
+        },
+      },
+
+      // ── Manual (MANUAL_CONTROL) ───────────────────────────────────────────
+      // Sticks are -1..1, the joystick convention, scaled to the wire's ±1000
+      // at encode. A blank axis is not centred — it encodes the dialect's
+      // INT16_MAX "axis is invalid", so an axis the operator did not touch is
+      // not commanded at all. That matters most on ArduSub, which reads z as
+      // 0..1000 neutral 500, where a helpfully-centred 0 would be full reverse
+      // thrust (§14).
+      stickX: { value: '', validate: stickValidator() },
+      stickY: { value: '', validate: stickValidator() },
+      stickZ: { value: '', validate: stickValidator() },
+      stickR: { value: '', validate: stickValidator() },
+      buttons: {
+        value: '',
+        validate: function (v, _opt) {
+          if (RED.mavlink.isBlank(v)) return true;
+          var n = Number(v);
+          return (Number.isInteger(n) && n >= 0 && n <= 65535)
+            || 'must be a 16-bit button bitmask (0-65535)';
+        },
+      },
 
       // ── Speed (DO_CHANGE_SPEED) ───────────────────────────────────────────
       // Blank speed and throttle encode the dialect's -1 "no change" sentinel,
@@ -419,6 +487,17 @@
           ['build', 'Build'],
           ['send', 'Send'],
           ['confirm', 'Send & confirm']
+        ],
+        // Setpoint-shaped: no ack to confirm, and streaming is the normal use.
+        attitude: [
+          ['build', 'Build'],
+          ['send', 'Send'],
+          ['stream', 'Stream']
+        ],
+        manual: [
+          ['build', 'Build'],
+          ['send', 'Send'],
+          ['stream', 'Stream']
         ]
       };
       // Steer's reference list, rebuilt per firmware the same way delivery is
@@ -504,6 +583,8 @@
         var isGoto = action === 'goto';
         var isTurn = action === 'turn';
         var isSpeed = action === 'speed';
+        var isAttitude = action === 'attitude';
+        var isManual = action === 'manual';
         // Steer and Go to own the position surface; Turn and Speed own none of
         // it. Everything positional keys off this rather than !isGoto, so a
         // command action shows neither family's fields.
@@ -562,8 +643,18 @@
           aUp: isSteer,
           // Yaw rides Go to's command path and every Steer setpoint by
           // presence; Turn has its own heading field, and Speed has no heading.
-          yaw: isGoto || isSteer,
-          yawRate: isSteer,
+          yaw: isGoto || isSteer || isAttitude,
+          yawRate: isSteer || isAttitude,
+          roll: isAttitude,
+          pitch: isAttitude,
+          rollRate: isAttitude,
+          pitchRate: isAttitude,
+          thrust: isAttitude,
+          stickX: isManual,
+          stickY: isManual,
+          stickZ: isManual,
+          stickR: isManual,
+          buttons: isManual,
           // Ground speed is shared: DO_REPOSITION's speed param on Go to, and
           // DO_CHANGE_SPEED's own speed on the Speed action. One spelling for
           // one operator concept (§14).
@@ -581,6 +672,12 @@
           ttl: isStream
         };
 
+        // MANUAL_CONTROL's addressing field is `target` — a system id, with no
+        // target_component on the wire at all. So the compid row is withdrawn
+        // for this action regardless of what the identity role would allow: an
+        // operator must not be shown a control the message has no room for.
+        if (isManual) show.targetComponent = false;
+
         $('#row-move-identity').toggle(!!show.identity);
         $('#row-move-altRef').toggle(!!show.altRef);
         $('#row-move-reference').toggle(!!show.reference);
@@ -593,6 +690,16 @@
         $('#row-move-relative').toggle(!!show.relative);
         $('#row-move-throttle').toggle(!!show.throttle);
         $('#row-move-speedType').toggle(!!show.speedType);
+        $('#row-move-roll').toggle(!!show.roll);
+        $('#row-move-pitch').toggle(!!show.pitch);
+        $('#row-move-rollRate').toggle(!!show.rollRate);
+        $('#row-move-pitchRate').toggle(!!show.pitchRate);
+        $('#row-move-thrust').toggle(!!show.thrust);
+        $('#row-move-stickX').toggle(!!show.stickX);
+        $('#row-move-stickY').toggle(!!show.stickY);
+        $('#row-move-stickZ').toggle(!!show.stickZ);
+        $('#row-move-stickR').toggle(!!show.stickR);
+        $('#row-move-buttons').toggle(!!show.buttons);
         $('#row-move-ackTimeout').toggle(!!show.ackTimeout);
         $('#row-move-north').toggle(!!show.north);
         $('#row-move-east').toggle(!!show.east);
@@ -674,6 +781,8 @@
     <option value="steer">Steer (setpoints, fire-and-forget)</option>
     <option value="turn">Turn (heading, acknowledged)</option>
     <option value="speed">Speed (change speed, acknowledged)</option>
+    <option value="attitude">Attitude (setpoints, fire-and-forget)</option>
+    <option value="manual">Manual (joystick sticks)</option>
   </select></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option><option value="stream">Stream</option></select></div>
   <div class="form-row" id="row-move-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
@@ -697,6 +806,13 @@
   <div class="form-row" id="row-move-vUp"><label for="node-input-vUp">Up m/s</label><input type="text" id="node-input-vUp" step="any" style="width:120px"> m/s</div>
   <div class="form-row" id="row-move-yaw"><label for="node-input-yaw">Yaw</label><input type="text" id="node-input-yaw" step="any" style="width:120px" placeholder="(keep heading)"> deg</div>
   <div class="form-row" id="row-move-yawRate"><label for="node-input-yawRate">Yaw rate</label><input type="text" id="node-input-yawRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>
+  <div class="form-row" id="row-move-roll"><label for="node-input-roll">Roll</label><input type="text" id="node-input-roll" step="any" style="width:120px" placeholder="(ignored)"> deg</div>
+  <div class="form-row" id="row-move-pitch"><label for="node-input-pitch">Pitch</label><input type="text" id="node-input-pitch" step="any" style="width:120px" placeholder="(ignored)"> deg</div>
+  <div class="form-row" id="row-move-thrust"><label for="node-input-thrust">Thrust</label><input type="text" id="node-input-thrust" step="any" style="width:120px" placeholder="(ignored)"> 0..1</div>
+  <div class="form-row" id="row-move-stickX"><label for="node-input-stickX">Pitch stick</label><input type="text" id="node-input-stickX" step="any" style="width:120px" placeholder="(axis off)"> -1..1</div>
+  <div class="form-row" id="row-move-stickY"><label for="node-input-stickY">Roll stick</label><input type="text" id="node-input-stickY" step="any" style="width:120px" placeholder="(axis off)"> -1..1</div>
+  <div class="form-row" id="row-move-stickZ"><label for="node-input-stickZ">Thrust stick</label><input type="text" id="node-input-stickZ" step="any" style="width:120px" placeholder="(axis off)"> -1..1</div>
+  <div class="form-row" id="row-move-stickR"><label for="node-input-stickR">Yaw stick</label><input type="text" id="node-input-stickR" step="any" style="width:120px" placeholder="(axis off)"> -1..1</div>
   <div class="form-row" id="row-move-heading"><label for="node-input-heading">Heading</label><input type="text" id="node-input-heading" step="any" style="width:120px"> deg</div>
   <div class="form-row" id="row-move-direction"><label for="node-input-direction">Direction</label><select id="node-input-direction" style="width:70%">
     <option value="0">Shortest way round</option>
@@ -716,6 +832,9 @@
   <div id="move-advanced" style="display:none">
     <div class="form-row" id="row-move-changeMode"><label for="node-input-changeMode">Change mode</label><input type="checkbox" id="node-input-changeMode" style="display:inline-block;width:auto;"> <span class="form-tips">off: the vehicle must already be in GUIDED (ArduPilot) / Hold (PX4) or it answers DENIED; on: the vehicle flies itself into guided mode (§14)</span></div>
     <div class="form-row" id="row-move-ackTimeout"><label for="node-input-ackTimeout">ACK timeout</label><input type="number" id="node-input-ackTimeout" style="width:80px" placeholder="10000"> ms</div>
+    <div class="form-row" id="row-move-rollRate"><label for="node-input-rollRate">Roll rate</label><input type="text" id="node-input-rollRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>
+    <div class="form-row" id="row-move-pitchRate"><label for="node-input-pitchRate">Pitch rate</label><input type="text" id="node-input-pitchRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>
+    <div class="form-row" id="row-move-buttons"><label for="node-input-buttons">Buttons</label><input type="text" id="node-input-buttons" style="width:120px" placeholder="0"> bitmask</div>
     <div class="form-row" id="row-move-turnRate"><label for="node-input-turnRate">Turn rate</label><input type="text" id="node-input-turnRate" step="any" style="width:120px" placeholder="(vehicle default)"> deg/s</div>
     <div class="form-row" id="row-move-relative"><label for="node-input-relative">Relative</label><input type="checkbox" id="node-input-relative" style="display:inline-block;width:auto;"> <span class="form-tips">off: the heading is absolute, 0 = north; on: it is an offset from the current heading</span></div>
     <div class="form-row" id="row-move-throttle"><label for="node-input-throttle">Throttle</label><input type="text" id="node-input-throttle" step="any" style="width:120px" placeholder="(no change)"> %</div>
@@ -737,6 +856,8 @@
   <p>Every Steer field is optional, because filling fields IS the mode: the type_mask derives from which groups carry values — position, velocity, acceleration, any combination of them (feed-forward), or yaw / yaw rate alone. Blank means mask-ignored; a value (including 0) means commanded. The editor requires at least one field, because an all-blank steer is the all-ignore packet PX4 logs as invalid.</p>
   <p><b>Turn</b> sends <code>MAV_CMD_CONDITION_YAW</code> — and on ArduPilot it is the <i>only</i> working yaw. Both of the yaw fields the position carriers already carry are measured inert on ArduCopter (§14): <code>DO_REPOSITION</code>'s heading param is ignored outright, and a yaw-only setpoint stream holds heading instead of turning. ArduPilot's own test suite yaws in guided through this command. <b>Heading</b> is 0-360 degrees, absolute (0 = north) unless <b>Relative</b> (Advanced) is ticked, which makes it an offset from the current heading; the range is enforced here because the vehicle answers <code>FAILED</code> outside it. <b>Direction</b> defaults to the shortest way round, which is the dialect's own meaning for 0. Blank <b>Turn rate</b> (Advanced) leaves the vehicle's default. PX4 has no handler for this command, so the action refuses on a PX4 profile and points you at Steer's yaw field, which PX4 does honour.</p>
   <p><b>Speed</b> sends <code>MAV_CMD_DO_CHANGE_SPEED</code>, the guided speed change QGroundControl offers beside goto. <b>Speed type</b> picks which speed is being set — ground speed means something on every vehicle, airspeed is a fixed-wing concept, and climb/descent set the vertical rates. Blank <b>Speed</b> or <b>Throttle</b> (Advanced) sends the spec's -1 &ldquo;no change&rdquo;; -2 is the spec's &ldquo;return to default&rdquo; and you reach it by typing it. Both stacks and every moving vehicle family accept this command, so it asks no firmware question.</p>
+  <p><b>Attitude</b> sends <code>SET_ATTITUDE_TARGET</code> — MAVSDK's offboard attitude path. You enter <b>Roll</b>, <b>Pitch</b> and <b>Yaw</b> in degrees and the node builds the quaternion the wire wants; you never type <code>q[4]</code>. Presence drives the mask exactly as it does on Steer: any angle commands the whole attitude (the wire has one ignore bit for all three), each body rate clears only its own bit, and <b>Thrust</b> is normalised 0..1 where an explicit 0 is a commanded zero rather than a blank. On <b>Stream</b> delivery the stream ends by <i>going quiet</i> — there is no braking packet, because zero thrust is a descent rather than a stop, and both stacks watch for setpoint silence themselves.</p>
+  <p><b>Manual</b> sends <code>MANUAL_CONTROL</code>, the joystick message: QGroundControl's stick path, how ArduSub is flown, and the only motion primitive a Blimp has. Sticks are entered <b>-1..1</b> and scale to the wire's ±1000 once, at encode. Two things differ from every other action. It addresses a <b>system only</b> — the message has no target component, so that row is hidden. And <b>a blank stick is a disabled axis, not a centred one</b>: it sends the dialect's <code>INT16_MAX</code> "axis is invalid" rather than 0. That matters — ArduSub reads the thrust axis as 0..1000 with neutral <i>500</i>, so an axis helpfully centred at 0 would command full reverse thrust. Leaving an axis blank means the vehicle is not driven on it at all, on any firmware. Ceasing to transmit is a real stop here: ArduSub's GCS failsafe disarms when stick messages stop arriving.</p>
   <p>Action and delivery reshape the form (§6): only the parameters for the selection are shown, and the Delivery options themselves follow the action — steer setpoints cannot confirm, so Send &amp; confirm is offered on Go to only. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
   <p>Output 0 continues only on success, once per input, and the result word IS the outcome, one meaning per word: <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — Go to confirm only). Output 1 carries the status record for every outcome.</p>
   <p>On <b>Stream</b> delivery a running stream ends three ways. When the <b>TTL</b> elapses the node sends the zero-velocity brake and reports on output 1 with <code>result: "expired"</code> and <code>sent</code> (setpoints handed to the connection — the streaming link may coalesce under backpressure, so this counts sends, not wire deliveries) — switch on <code>result === "expired"</code> to run whatever follows a timed move; deliberately not on output 0, since that port is a trigger and the stream's start already fired it. If the expiry brake send itself fails, <code>result</code> stays <code>"expired"</code> and the failure rides a <code>brakeError</code> field. An input of <code>{action: "stop"}</code> halts the stream, sends the brake, and completes like any input — output 0 fires once, and the status record carries <code>result: "stopped"</code> with <code>sent</code>; a stop with nothing streaming completes with <code>detail: "no stream"</code>, and the action is refused on Build and Send delivery. A <b>new input</b> replaces the stream as a direct handover — no brake between consecutive targets, matching GCS practice; retargeting a different vehicle brakes the abandoned target once the new stream is live. A redeploy closes the node and brakes. A stream that keeps running through send failures reports once per failure streak on output 1 and never quits on its own — the firmware's setpoint watchdog is the failsafe on a dead link.</p>

@@ -734,13 +734,13 @@ test('mavlink-move: Steer cannot be set to the confirm tier', () => {
   );
 
   assert.equal(delivery.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
-  assert.match(String(verdict({ action: 'steer', delivery: 'confirm' })), /Steer cannot confirm/);
+  assert.match(String(verdict({ action: 'steer', delivery: 'confirm' })), /cannot confirm/);
   assert.equal(verdict({ action: 'goto', delivery: 'confirm' }), true, 'Go to has an ack to wait for');
   for (const tier of ['build', 'send', 'stream']) {
     assert.equal(verdict({ action: 'steer', delivery: tier }), true, `steer + ${tier} is offered`);
   }
   // A config with no action parses as steer (resolveMoveAction), so it reds too.
-  assert.match(String(verdict({ delivery: 'confirm' })), /Steer cannot confirm/);
+  assert.match(String(verdict({ delivery: 'confirm' })), /cannot confirm/);
 });
 
 // ── Offset from here: LOCAL_OFFSET_NED as Steer's third reference ────────────
@@ -875,7 +875,7 @@ test('mavlink-move: Offset cannot be set to the stream tier', () => {
     'Go to streams global setpoints and does not read the reference'
   );
   // The pre-existing confirm verdict is untouched by the new arm.
-  assert.match(String(verdict({ action: 'steer', delivery: 'confirm' })), /Steer cannot confirm/);
+  assert.match(String(verdict({ action: 'steer', delivery: 'confirm' })), /cannot confirm/);
   assert.equal(verdict({ action: 'goto', delivery: 'confirm' }), true);
 });
 
@@ -979,4 +979,69 @@ test('mavlink-move: a command action cannot be set to the stream tier', () => {
   // The setpoint actions still stream.
   assert.equal(verdict({ action: 'steer', reference: 'world', delivery: 'stream' }), true);
   assert.equal(verdict({ action: 'goto', delivery: 'stream' }), true);
+});
+
+// ── Attitude and Manual: the setpoint-shaped roster rows ────────────────────
+
+test('mavlink-move: Attitude and Manual are offered with the setpoint tiers', () => {
+  assert.match(html, /option value="attitude"/, 'attitude offered');
+  assert.match(html, /option value="manual"/, 'manual offered');
+  const map = /var DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
+  for (const action of ['attitude', 'manual']) {
+    const list = new RegExp(`${action}:\\s*\\[[\\s\\S]*?\\n {8}\\]`).exec(map[0]);
+    assert.ok(list, `${action} option list must be extractable`);
+    assert.doesNotMatch(list[0], /confirm/, `${action} carries no ack, so never offers confirm`);
+    for (const tier of ['build', 'send', 'stream']) {
+      assert.match(list[0], new RegExp(`'${tier}'`), `${action} offers ${tier}`);
+    }
+  }
+});
+
+test('mavlink-move: only the acked actions can confirm — stated once, not per action', () => {
+  // Fourth instance of the same hand-edit family (steer × confirm, offset ×
+  // stream, command × stream). Generalised rather than special-cased again.
+  const { delivery } = loadNodeDefaults('mavlink-move');
+  const verdict = (over) => delivery.validate.call(
+    Object.assign({ id: 'm1' }, over), over.delivery, {}
+  );
+
+  for (const action of ['steer', 'attitude', 'manual']) {
+    assert.match(
+      String(verdict({ action, reference: 'world', delivery: 'confirm' })),
+      /cannot confirm/,
+      `${action} has no ack to wait for`
+    );
+  }
+  for (const action of ['goto', 'turn', 'speed']) {
+    assert.equal(verdict({ action, delivery: 'confirm' }), true, `${action} answers a COMMAND_ACK`);
+  }
+});
+
+test('mavlink-move: Manual hides the target compid — the message has no such field', () => {
+  // MANUAL_CONTROL's addressing field is `target`, a system id. Showing a
+  // compid row would offer a control the wire has no room for.
+  assert.match(html, /if \(isManual\) show\.targetComponent = false;/,
+    'the compid row is withdrawn for manual regardless of identity role');
+  for (const id of ['row-move-stickX', 'row-move-stickY', 'row-move-stickZ',
+    'row-move-stickR', 'row-move-buttons', 'row-move-roll', 'row-move-pitch',
+    'row-move-thrust', 'row-move-rollRate', 'row-move-pitchRate']) {
+    assert.match(html, new RegExp(`id="${id}"`), `${id} row must exist`);
+  }
+});
+
+test('mavlink-move: sticks are bounded -1..1 and thrust 0..1 in the editor', () => {
+  // The wire is ±1000 and the surface is ±1, so a wire-unit value typed into a
+  // stick is the mistake worth catching — the runtime scales whatever it gets.
+  const defaults = loadNodeDefaults('mavlink-move');
+  for (const stick of ['stickX', 'stickY', 'stickZ', 'stickR']) {
+    assert.equal(defaults[stick].validate.call({ id: 'm1' }, '', {}), true, 'blank disables the axis');
+    assert.equal(defaults[stick].validate.call({ id: 'm1' }, 0.5, {}), true);
+    assert.equal(defaults[stick].validate.call({ id: 'm1' }, -1, {}), true);
+    assert.match(String(defaults[stick].validate.call({ id: 'm1' }, 500, {})), /not wire units/);
+    assert.match(String(defaults[stick].validate.call({ id: 'm1' }, -1.5, {})), /-1\.\.1/);
+  }
+  assert.equal(defaults.thrust.validate.call({ id: 'm1' }, 0, {}), true, '0 is a commanded zero');
+  assert.equal(defaults.thrust.validate.call({ id: 'm1' }, 1, {}), true);
+  assert.match(String(defaults.thrust.validate.call({ id: 'm1' }, 60, {})), /not a percentage/);
+  assert.match(String(defaults.buttons.validate.call({ id: 'm1' }, 70000, {})), /16-bit/);
 });

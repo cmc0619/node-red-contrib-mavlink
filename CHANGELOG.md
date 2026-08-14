@@ -38,6 +38,22 @@ config-node shapes and message contracts may still change without a major bump.
   Both new actions ride the existing `AckWaiter` and result vocabulary — one
   confirm path for every acked Move command, not one per action.
 
+  - **Attitude** (`SET_ATTITUDE_TARGET`) is MAVSDK's offboard attitude path.
+    Roll/pitch/yaw are entered in degrees and the node builds the quaternion —
+    the same convert-once-at-encode rule as degE7 and radians. Presence drives
+    `ATTITUDE_TARGET_TYPEMASK` exactly as it does on Steer. Its stream ends by
+    going quiet, with no braking packet: zero thrust is a descent, not a stop,
+    and both stacks watch for setpoint silence themselves (§9 ruling 1).
+  - **Manual** (`MANUAL_CONTROL`) is QGroundControl's joystick path, the way
+    ArduSub is flown, and the only motion primitive a Blimp has. Sticks are
+    −1..1 and scale to the wire's ±1000 once. Two things differ from every
+    other action: it addresses a **system only** (the message has no target
+    component, so that row is hidden), and **a blank stick disables its axis**
+    rather than centring it — it sends the dialect's `INT16_MAX` "axis is
+    invalid". That last one is load-bearing: ArduSub reads the thrust axis as
+    0..1000 with neutral *500*, so an axis helpfully centred at 0 would command
+    full reverse thrust.
+
 ### Fixed
 
 - **The ack-timeout re-send is gated on per-command idempotency.** `AckWaiter`'s
@@ -52,11 +68,21 @@ config-node shapes and message contracts may still change without a major bump.
   repositions are unchanged — re-issuing each lands the vehicle in the state it
   was already asked for. (Gitar, #303)
 
-- Three hand-editable states that reported success while doing nothing useful,
+- Four hand-editable states that reported success while doing nothing useful,
   all found by the same editor-round-trip lens: `steer` × `stream` × `offset`
-  (a repeating offset walks the vehicle instead of holding a target), and
-  `turn` / `speed` × `stream` (a MAV_CMD sent once and reported as a stream).
-  Each now gets a deploy-time verdict naming the working alternative.
+  (a repeating offset walks the vehicle instead of holding a target),
+  `turn` / `speed` × `stream` (a MAV_CMD sent once and reported as a stream),
+  and `attitude` / `manual` × `confirm` (waiting for an acknowledgement that no
+  setpoint ever sends). Each now gets a deploy-time verdict naming the working
+  alternative — the confirm rule is stated once for every unacked action rather
+  than a fourth special case.
+
+- **`mavlink-in` changed-only compared timestamps**, so any message carrying
+  `time_boot_ms` differed on every frame and the filter silently delivered the
+  whole stream (#300). The messages it broke were exactly the ones the feature
+  exists for — `ATTITUDE`, `GLOBAL_POSITION_INT`, `GPS_RAW_INT`. Blank now
+  compares every field *except* the four timestamp spellings; naming one in
+  **Compare fields** still compares it verbatim.
 
 ## [0.4.0] - 2026-08-12
 

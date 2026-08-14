@@ -26,6 +26,10 @@ const OFFERED = {
   // the one operator choice that changes the wire.
   turn: { deliveries: ['build', 'send', 'confirm'], variants: ['absolute', 'relative'] },
   speed: { deliveries: ['build', 'send', 'confirm'], variants: ['groundspeed', 'airspeed'] },
+  // Setpoint-shaped: no ack, streaming is the normal use. Attitude's variants
+  // are its two presence modes (angles vs body rates); manual has one shape.
+  attitude: { deliveries: ['build', 'send', 'stream'], variants: ['angles', 'rates'] },
+  manual: { deliveries: ['build', 'send', 'stream'], variants: ['sticks'] },
 };
 
 /**
@@ -89,7 +93,16 @@ function makeConn(vehicle) {
  */
 function configFor(action, delivery, variant) {
   const config = { action, delivery, targetSystem: 1, targetComponent: 1 };
-  if (action === 'turn') {
+  if (action === 'attitude') {
+    if (variant === 'rates') {
+      config.rollRate = 5;
+    } else {
+      config.roll = 10;
+      config.thrust = 0.5;
+    }
+  } else if (action === 'manual') {
+    config.stickR = 0.5;
+  } else if (action === 'turn') {
     config.heading = 90;
     config.relative = variant === 'relative';
   } else if (action === 'speed') {

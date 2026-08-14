@@ -13,6 +13,8 @@ const {
   resolveMoveAction,
   buildTurnMessage,
   buildSpeedMessage,
+  buildAttitudeMessage,
+  buildManualMessage,
   frameForAltRef,
   frameForReference,
   deriveSteerMode,
@@ -313,6 +315,35 @@ module.exports = function registerMavlinkMove(RED) {
           return;
         }
 
+        // Attitude and manual sticks are setpoints in every way that matters
+        // to delivery — Build/Send/Stream, no ack — so they build their own
+        // message and fall into the shared block below rather than growing a
+        // parallel one. Neither speaks a frame or a mode: their type_mask (or
+        // axis-invalid sentinel) derives from which fields carry values, the
+        // same presence rule Steer uses.
+        let message;
+        if (action === 'attitude') {
+          message = buildAttitudeMessage({
+            roll: valueFrom(payload, config, 'roll'),
+            pitch: valueFrom(payload, config, 'pitch'),
+            yaw: valueFrom(payload, config, 'yaw'),
+            rollRate: valueFrom(payload, config, 'rollRate'),
+            pitchRate: valueFrom(payload, config, 'pitchRate'),
+            yawRate: valueFrom(payload, config, 'yawRate'),
+            thrust: valueFrom(payload, config, 'thrust'),
+            timeBootMs: payload.timeBootMs,
+            target,
+          });
+        } else if (action === 'manual') {
+          message = buildManualMessage({
+            x: valueFrom(payload, config, 'stickX'),
+            y: valueFrom(payload, config, 'stickY'),
+            z: valueFrom(payload, config, 'stickZ'),
+            r: valueFrom(payload, config, 'stickR'),
+            buttons: valueFrom(payload, config, 'buttons'),
+            target,
+          });
+        } else {
         let moveInput;
         if (action === 'goto') {
           // goto + Stream: the same intent, streamed — position setpoints on
@@ -353,7 +384,8 @@ module.exports = function registerMavlinkMove(RED) {
             timeBootMs: payload.timeBootMs,
           };
         }
-        const message = buildMoveMessage(moveInput);
+        message = buildMoveMessage(moveInput);
+        }
 
         if (delivery === 'build') {
           completeBuild(node, send, message);
@@ -399,6 +431,11 @@ module.exports = function registerMavlinkMove(RED) {
               identityId,
               rateHz,
               ttlMs,
+              // Attitude and manual end by going quiet (§9 ruling 1): zero
+              // thrust is a descent and a centred stick is a command, so
+              // neither has a brake packet to synthesize. Position setpoints
+              // keep their measured zero-velocity brake.
+              braking: action !== 'attitude' && action !== 'manual',
               // TTL expiry is the only stop the flow did not cause, so it is
               // the only one it cannot observe: without this the node would
               // halt the vehicle and keep reporting "streaming" forever.
