@@ -1189,9 +1189,10 @@ test('mavlink-move: button checkboxes compose the bitmask the operator used to h
 
   const decompose = /function decomposeButtons\(value\) \{[\s\S]*?\n {2}\}/.exec(html);
   const compose = /function composeButtons\(pressed\) \{[\s\S]*?\n {2}\}/.exec(html);
-  assert.ok(decompose && compose, 'both helpers must be extractable');
+  const maskPred = /function isValidButtonsMask\(n\) \{[\s\S]*?\n {2}\}/.exec(html);
+  assert.ok(decompose && compose && maskPred, 'all three helpers must be extractable');
   const RED = { mavlink: { isBlank: (v) => v === undefined || v === null || String(v).trim() === '' } };
-  const helpers = new Function('RED', `var BUTTON_COUNT = 16;\n${decompose[0]}\n${compose[0]}\nreturn { decomposeButtons, composeButtons };`)(RED);
+  const helpers = new Function('RED', `var BUTTON_COUNT = 16;\n${maskPred[0]}\n${decompose[0]}\n${compose[0]}\nreturn { decomposeButtons, composeButtons };`)(RED);
 
   // The off-by-one pin: Button 3 is bit 2 is the value 4.
   const b3 = helpers.decomposeButtons('4');
