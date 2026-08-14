@@ -2096,8 +2096,10 @@ Vehicle Profile carries the firmware field: PX4, ArduPilot, or custom. It affect
 - **Parameter encoding** — `PARAM_SET` / `PARAM_VALUE` carry typed values in a float slot.
   Encoding is resolved as: explicit `msg.payload.paramEncoding` (`bytewise` | `c-cast`) →
   peer `AUTOPILOT_VERSION.capabilities` (`PARAM_ENCODE_BYTEWISE` / `PARAM_ENCODE_C_CAST`) →
-  known firmware (PX4 → bytewise bit-cast; any other named firmware → C-cast). Missing
-  firmware after those steps fails loud — do not invent ArduPilot/C-cast. A present override
+  known firmware (px4 → bytewise bit-cast; ardupilot → C-cast; anything else — a typo,
+  a wrong-case token, or `custom`, which the Vehicle Profile documents as disabling
+  firmware-specific behaviour — fails loud naming both escapes; ruled 2026-08-14, see §14).
+  Missing firmware after those steps fails loud — do not invent ArduPilot/C-cast. A present override
   outside the two legal values is rejected (dynamic `msg` input); only an absent override
   falls through. Do not invent encoding from firmware alone when the peer has advertised a
   capability bit.
@@ -4370,10 +4372,11 @@ dropped because the local builder reads north/east/up, and `x,y,z` encode `0, 0,
 the EKF origin at origin altitude*. `LOCAL_NED` is a legitimate frame, just not for a global
 goto, so nothing downstream can tell a lost datum from an ordinary local setpoint. The
 information is gone by then; the throw keeps it, and keeps the two delivery tiers agreeing.
-*Scope, deliberately narrow:* Move's enum resolvers only. `lib/command`'s carrier coercion —
-an unknown `sendAs` token building `COMMAND_LONG`, cited as coercion in the entry above — is
-the same shape and is **not** changed. That is not an oversight; it was not ruled on, and
-`COMMAND_LONG` is a defensible default in a way that "above home" never was.
+*Scope, deliberately narrow at the time:* Move's enum resolvers only. `lib/command`'s carrier
+coercion — an unknown `sendAs` token building `COMMAND_LONG` — was left un-ruled here on the
+grounds that `COMMAND_LONG` is a defensible default in a way that "above home" never was.
+**Superseded the same day**: the owner extended the ruling repo-wide (see the selection-typo
+entry below), and `sendAs` now refuses unknown tokens like everything else.
 *Check:* `enumValue` in `lib/move/frames.js` is the one implementation, called by
 `frameForAltRef`, `frameForReference` and `buildSpeedMessage`. Blank does **not** still default
 in two of the three — see the entry below, which was ruled the same day and went further than
@@ -4464,6 +4467,64 @@ refusal, not a new one.
 matters lives in `wire.js` and is pinned by `test/connection/wire-nonfinite.test.js`, which is
 where it belongs: that test pins an external fact about the protocol and the encoder, not a
 decision of ours.
+
+**The selection-typo cluster: every dropdown-shaped runtime input refuses an unknown token
+(owner ruling, 2026-08-14, extending the Move no-defaults ruling repo-wide: *"do the
+confirmed"*).** An external LLM audit of guardrails was validated by execution against HEAD —
+roughly a third of it survived. What did: the driver's multiple-choice inputs each answered a
+misspelled choice by silently picking *some* option. Each confirmed site now throws at
+resolution, naming the token, the vocabulary, and any escape; each has editor cover already,
+so the crater is for payload overrides and hand-edits:
+
+- **Param encoding by firmware** (`lib/param/index.js`): was `=== 'px4' ? BYTEWISE : C_CAST`,
+  so `'PX4'`, `'apm'` — and `custom` — silently got C-cast. Bytewise and C-cast disagree on
+  how an integer rides the PARAM_VALUE float slot, so the wrong pick scrambles integer
+  parameters with a clean success report. `custom` is the sharpest case: a real, deployable
+  Vehicle Profile value whose own doc always said it disables parameter encoding while the
+  code handed it C-cast anyway — a live doc/code contradiction, settled in the doc's favour.
+  The explicit `paramEncoding` override and the capabilities arm are untouched and still win,
+  which is also why there is deliberately **no editor red-ring** for `custom`: a custom
+  profile can be correct at message time through either escape, so a static validator would
+  false-positive on working flows (the symmetric blank-firmware case has always been treated
+  the same way).
+- **`sendAs`** (`nodes/mavlink-command.js`): unknown non-blank throws naming `int, long`;
+  blank keeps falling to LONG because the editor's select has no blank option, so blank is
+  not a reachable operator choice. Resolution moved from node construction into the input
+  handler so a bad token is a `failed` record + `done(err)`, not a construction crash.
+- **Unknown preset**: was the worst report of the lot — `preset: 'arrrm'` built
+  `MAV_CMD(null)` and said `built`. Now `done(err)` naming the known preset ids.
+- **Move `delivery`** (`nodes/mavlink-move.js`): an unknown tier fell through both dispatch
+  points' final `else` into Send — a real message left the wire reporting `sent`. One
+  membership check at the top of the input handler; blank throws too, since the editor always
+  saves a tier. Pinned in the legality matrix's REFUSED table, which is that surface's home.
+- **Band** (`nodes/mavlink-out.js`): the nastiest direction — `Number('') === 0 ===
+  BAND.EMERGENCY`, so a *blank* band silently got the **highest** priority. Membership now
+  comes from `lib/connection/bands.js` (one vocabulary, not a copy); the presence fallback
+  (absent `msg.band` → config) is preserved, and numeric members (`'2'`) still work. The
+  identical `Number()` coercion exists in `nodes/mavlink-build.js:211-212` and is **not yet
+  fixed** — flagged for the next pass, not silently absorbed.
+
+*Two audit claims were declined, for cause:*
+- **Garbage `mavFrame`** needed no new check: on COMMAND_INT the NaN frame refuses at the
+  wire's finite-integer choke point (whose `typeof` hole — string garbage bypassing it into
+  broadcast-0 — was the audit's one fully-correct headline, fixed and pinned the same day);
+  on COMMAND_LONG there is no frame field and the builder never reads `frame`, so the audit's
+  "silently unscaled" path is not live. One guard at the choke point, already ruled.
+- **Unknown field keys on `mavlink-out`** stay accepted: `examples/26-connection-bridge.json`
+  ships a documented in→out forwarding pattern across independently-configured connections,
+  and this is the dialect-lag shape already ruled warn-not-refuse on `mavlink-build` (#262).
+  Refusing unknown keys would break a supported flow to catch a typo the field projection
+  already ignores harmlessly.
+
+*The audit's removal request was refuted:* it flagged `lib/mission/validate.js` as a class-A
+guardrail. Every check there is the cited outcome of §9 "Item validation is per type" and the
+issue-#90 family-reservation ruling, and the uint16 gate is structural, verified by
+measurement: `Buffer.writeUInt16LE(5001.9)` silently truncates to 5001 — a reserved fence
+id — so without the gate a fractional command defeats the one separation the validator holds.
+*Check:* every throw above is test-pinned beside the behaviour it replaced; the still-open
+remainder of the audit (editor red-rings for mission items, `mavlink-in` field names,
+`bindPort` 0, command advanced params, payload values, formation anchors — and
+`mavlink-build`'s band twin) is protector-side work, not driver holes.
 
 **Mission Clear needs no confirmation gate (owner ruling, 2026-08-13).**
 *Wrong belief:* destructive operations need a second yes — a `confirmClear` checkbox or
