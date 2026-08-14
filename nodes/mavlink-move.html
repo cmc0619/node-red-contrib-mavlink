@@ -230,6 +230,20 @@
   var BUTTON_COUNT = 16;
 
   /**
+   * The one spelling of "a legal buttons mask": integer, 0..65535. Three
+   * places need this answer — decompose's zero-arm, the deploy validator, and
+   * the grid's invalid-saved warning — and when they were three inline
+   * spellings they drifted (Gitar, #305: decompose lacked the range arm the
+   * other two had, so 70000 warned while ticking its low bits).
+   *
+   * @param {number} n  the already-Number()ed candidate
+   * @returns {boolean}
+   */
+  function isValidButtonsMask(n) {
+    return Number.isInteger(n) && n >= 0 && n <= 65535;
+  }
+
+  /**
    * Saved bitmask → per-button booleans, positional per the dialect's rule
    * (bit 0 = Button 1). Exists because the raw field has a built-in
    * off-by-one trap: "button 3" is the value 4, and an operator typing 3
@@ -240,7 +254,7 @@
    */
   function decomposeButtons(value) {
     var n = RED.mavlink.isBlank(value) ? 0 : Number(value);
-    if (!Number.isInteger(n) || n < 0 || n > 65535) n = 0;
+    if (!isValidButtonsMask(n)) n = 0;
     var pressed = [];
     for (var i = 0; i < BUTTON_COUNT; i++) pressed.push((n & (1 << i)) !== 0);
     return pressed;
@@ -602,8 +616,7 @@
         value: '',
         validate: function (v, _opt) {
           if (RED.mavlink.isBlank(v)) return true;
-          var n = Number(v);
-          return (Number.isInteger(n) && n >= 0 && n <= 65535)
+          return isValidButtonsMask(Number(v))
             || 'must be a 16-bit button bitmask (0-65535)';
         },
       },
@@ -766,8 +779,7 @@
         // 6: red on saved, never silently rewritten without a word). The saved
         // value itself is left untouched until the operator actually ticks.
         var savedRaw = node.buttons;
-        var savedInvalid = !RED.mavlink.isBlank(savedRaw)
-          && !(Number.isInteger(Number(savedRaw)) && Number(savedRaw) >= 0 && Number(savedRaw) <= 65535);
+        var savedInvalid = !RED.mavlink.isBlank(savedRaw) && !isValidButtonsMask(Number(savedRaw));
         if (savedInvalid) {
           $('<div>', {
             class: 'form-tips',
