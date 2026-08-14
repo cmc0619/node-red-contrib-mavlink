@@ -84,6 +84,33 @@ test('mavlink-move stream: a garbage payload.rateHz refuses instead of flooding 
   node.emit('close', () => {});
 });
 
+test('mavlink-move stream: a garbage hand-edited config.rateHz refuses too — a silent payload is the common path to the same ~1 kHz flood', () => {
+  const conn = { id: 'conn', vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    action: 'steer',
+    reference: 'world',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 'fast',
+    ttlMs: 1000,
+  });
+
+  let sent;
+  let doneError;
+  node.emit('input', { payload: {} }, (m) => { sent = m; }, (err) => { doneError = err; });
+  assert.equal(sent[0], null, 'a refused stream start must not fire the continue port');
+  assert.equal(sent[1].result, 'failed');
+  assert.match(doneError.message, /Move stream rate \(rateHz\) must be a finite number \(got "fast"\)/);
+});
+
 test('mavlink-move stream: a garbage payload.ttlMs refuses the same way', () => {
   const conn = { id: 'conn', vehicle: {}, send() {} };
   const RED = redStub({ conn });

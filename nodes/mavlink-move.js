@@ -387,8 +387,21 @@ module.exports = function registerMavlinkMove(RED) {
             // one instead of refusing: `payload.rateHz: 'fast'` is a silent
             // ~1 kHz setpoint flood, not a coerced-and-sent value (owner
             // ruling, 2026-08-14, measured). `finiteNumberOr` throws instead.
-            const rateHz = finiteNumberOr(payload.rateHz, Number(config.rateHz), 'Move stream rate (rateHz)');
-            const ttlMs = finiteNumberOr(payload.ttlMs, Number(config.ttlMs), 'Move stream TTL (ttlMs)');
+            // The config value crosses the same guard — a hand-edited
+            // `config.rateHz` arms the identical timer, so it is the same
+            // resource-exhaustion boundary the sibling sites (Identity
+            // heartbeat, Mission timeout, Connection stale/expire) already
+            // refuse at; the editor defaults (5 Hz / 1000 ms) back a blank.
+            const rateHz = finiteNumberOr(
+              payload.rateHz,
+              finiteNumberOr(config.rateHz, 5, 'Move stream rate (rateHz)'),
+              'Move stream rate (rateHz)'
+            );
+            const ttlMs = finiteNumberOr(
+              payload.ttlMs,
+              finiteNumberOr(config.ttlMs, 1000, 'Move stream TTL (ttlMs)'),
+              'Move stream TTL (ttlMs)'
+            );
             // One stream per (connection, target) (#176): a second node
             // streaming to the same vehicle would alternate contradictory
             // setpoints — the vehicle oscillates while both nodes report
