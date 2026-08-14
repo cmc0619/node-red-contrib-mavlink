@@ -1638,8 +1638,8 @@ has only `MANUAL_CONTROL`; ArduPlane has only frame 7) is not served by elegance
 | **Go to** | `DO_REPOSITION` (192) / `COMMAND_INT`; `SET_POSITION_TARGET_GLOBAL_INT` on Stream | QGC's guided goto on both stacks; the Stream form is byte-identical to MAVSDK `send_position_global` (frame 6, mask 2552) |
 | **Steer** | `SET_POSITION_TARGET_LOCAL_NED` | MAVSDK offboard. World (1) / Body (9 AP, 8 PX4) / Offset (7) |
 | **Attitude** | `SET_ATTITUDE_TARGET` (82) | MAVSDK Offboard attitude + attitude-rate |
-| **Manual** | `MANUAL_CONTROL` (69) | QGC joystick; **the** ArduSub control path, and the only motion primitive Blimp has |
-| **Turn** | `CONDITION_YAW` (115) on ArduPilot | The *only* working yaw on AP — see the §14 entry; ArduPilot's own autotest yaws in guided this way |
+| **Manual** | `MANUAL_CONTROL` (69) | QGC joystick; **the** ArduSub control path, and the only thing an Antenna Tracker can be driven with besides an attitude target |
+| **Turn** | `CONDITION_YAW` (115) on ArduPilot **Copter and Sub** | The *only* working yaw where it works at all — see the §14 entry; ArduPilot's own autotest yaws in guided this way. Plane and Rover have no handler, and Plane's substitute is the ⏩ `GUIDED_CHANGE_HEADING` |
 | **Speed** | `DO_CHANGE_SPEED` (178) | QGC's guided speed change |
 | **Orbit** ⏩ | `DO_ORBIT` (34) | QGC orbit UI + MAVSDK orbit plugin, **PX4 only** — no ArduPilot handler found. Off the surface until measured |
 
@@ -4492,7 +4492,9 @@ MAV_FRAME_LOCAL_OFFSET_NED) { return; }` and then uses only `z`
 accepts at all**, and every other frame returns silently — no log, no NAK, no STATUSTEXT. A
 Steer node set to World or Body, pointed at a plane, does nothing forever with no symptom.
 Copter and Rover accept 1/7/8/9; Sub accepts those plus `BODY_FRD` (12); Blimp and Tracker
-implement neither setpoint message. Acceleration is honoured on Copter only — Rover and Sub
+implement neither *position* setpoint message — but see the per-vehicle matrix below, because
+Tracker does implement `SET_ATTITUDE_TARGET` and Blimp implements `DO_REPOSITION`, so neither
+is the motionless surface this sentence used to imply. Acceleration is honoured on Copter only — Rover and Sub
 ignore it (Rover complains).
 
 ArduCopter's handler adds the vehicle's current position for frames 7, **8** and 9 — the
@@ -4513,6 +4515,71 @@ vehicle instead of holding a target (source-read; **not yet SITL-measured** — 
 claim in the change).
 *Check:* `grep -c 'LOCAL_OFFSET_NED' ArduPlane/GCS_MAVLink_Plane.cpp` upstream, and the frame-7
 row of the 2026-08-05 local-frame matrix.
+
+---
+
+**Which motion message an ArduPilot vehicle honours is a property of the *vehicle*, not of the
+firmware — and two of the claims recorded here were wrong (2026-08-14).**
+*Wrong belief:* two of them, both landed in d631a73 and both plausible. (a) `MANUAL_CONTROL` is
+*"the only motion primitive Blimp has"* — the §9 roster row says so, and it is the reason Manual
+was ranked first in the roster phasing. (b) Blimp and Tracker *"implement neither setpoint
+message"*, which reads as *no motion messages at all* and would make Antenna Tracker an empty
+surface. Both came from vehicle-shaped reasoning — an airship is joystick-flown, a tracker does
+not travel — rather than from the dispatch tables.
+*Fact:* read at source across all six ArduPilot vehicles (`*/GCS_MAVLink_*.cpp` +
+`libraries/GCS_MAVLink/GCS_Common.cpp`, upstream `master`, 2026-08-14):
+
+| Move action | Wire | Copter | Plane | Rover / Boat | Sub | Blimp | Tracker |
+|---|---|---|---|---|---|---|---|
+| Go to (command tiers) | `DO_REPOSITION` | ✓ | ✓ | ✓ | ✓ | **✓** | ✗ |
+| Go to (Stream) | `SET_POSITION_TARGET_GLOBAL_INT` | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ |
+| Steer | `SET_POSITION_TARGET_LOCAL_NED` | ✓ | ✓ frame 7, `z` only | ✓ | ✓ | ✗ | ✗ |
+| Turn | `CONDITION_YAW` | ✓ | ✗ | **✗** | ✓ | ✗ | ✗ |
+| Speed | `DO_CHANGE_SPEED` | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ |
+| Attitude | `SET_ATTITUDE_TARGET` | ✓ | ✓ | ✓ | ✓ | ✗ | **✓** |
+| Manual | `MANUAL_CONTROL` | ✓ | ✓ | ✓ | ✓ | **✗** | ✓ |
+
+Three corrections fall out, and the mechanism matters in each:
+
+**Blimp ignores `MANUAL_CONTROL` outright.** The dispatch is base-class:
+`GCS_MAVLINK::handle_manual_control` decodes the packet and calls `handle_manual_control_axes`,
+which `GCS.h:1023` declares `virtual … {}` — **an empty body**. Copter, Plane, Rover and Sub
+override it; `GCS_MAVLINK_Blimp` does not, and `GCS_MAVLINK_Blimp::handle_message` is a bare
+`switch` with nothing but `default:`. So a stick message to a Blimp is decoded, counted as a GCS
+heartbeat for failsafe purposes, and then *discarded* — accepted, no NAK, no motion. The
+failure mode is the worst one this codebase has a name for: legal on the wire, silent on the
+vehicle. Blimp's actual motion primitive is `DO_REPOSITION`, which it implements properly
+(`handle_command_int_do_reposition`, with the same guided-mode gate every other vehicle uses).
+
+**Blimp's `capabilities()` advertises three messages it does not implement.** It returns
+`SET_POSITION_TARGET_LOCAL_NED | SET_POSITION_TARGET_GLOBAL_INT | SET_ATTITUDE_TARGET` while
+`handle_message` handles none of them. This is worth writing down beyond Blimp: **an autopilot's
+own capability bitmask is not evidence that a handler exists.** Any future feature tempted to
+gate on `AUTOPILOT_VERSION.capabilities` has one confirmed liar in the fleet.
+
+**Antenna Tracker moves, just not through the position carriers.** It handles `MANUAL_CONTROL`
+with its own `handle_message` case (`handle_message_manual_control` → `tracker.tracking_manual_control`,
+driving `nav_status.bearing`/`pitch`) and `SET_ATTITUDE_TARGET` in guided. So "neither setpoint
+message" is true only of the two *position* setpoints; an empty Move surface for Tracker would
+have been wrong.
+
+**Neither Plane nor Rover handles `CONDITION_YAW`.** Zero occurrences in
+`ArduPlane/GCS_MAVLink_Plane.cpp`, `Rover/GCS_MAVLink_Rover.cpp`, `Rover/commands_logic.cpp`,
+`Rover/mode_guided.cpp` — or in `GCS_Common.cpp`, so the `default:` fall-through reaches no base
+handler either. Copter and Sub have it (3 hits each). Turn is therefore an ArduPilot **Copter
+and Sub** action, not an ArduPilot action; `lib/move/turn.js`'s own docstring said "Copter and
+Sub both carry handlers" and was right, while the editor's `firmware !== 'ardupilot'` gate was
+too coarse — it passes a plane and a rover through to a command that answers nothing.
+ArduPlane's substitute is `GUIDED_CHANGE_HEADING` (43002), the ⏩ forward entry, which is
+independent corroboration: the trio would not exist if `CONDITION_YAW` already worked there.
+*Consequence:* the family gate is per (firmware, family) and lives in the editor only — §9
+ruling 6, hide from new and red on saved. The runtime keeps sending whatever it is handed (§9,
+known-unsupported combos). PX4 is deliberately **not** gated by family: this matrix is
+ArduPilot's dispatch, PX4's is one receiver with no vehicle branch, and nothing here was
+measured against it.
+*Check:* `for v in ArduCopter ArduPlane Rover ArduSub Blimp AntennaTracker; do grep -c
+CONDITION_YAW $v/GCS_MAVLink_*.cpp; done` upstream, and `grep -n 'handle_manual_control_axes'
+libraries/GCS_MAVLink/GCS.h` for the empty virtual.
 
 ---
 
