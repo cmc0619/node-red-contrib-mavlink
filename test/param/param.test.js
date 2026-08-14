@@ -219,6 +219,44 @@ test('resolveParamEncoding: known firmware when capabilities absent; missing fai
   assert.throws(() => resolveParamEncoding({}), /param encoding unresolved/);
 });
 
+test('resolveParamEncoding: unrecognized firmware token throws instead of falling to c-cast', () => {
+  // Wrong case is not the same string as 'px4' — no normalization, matching the
+  // Move no-defaults precedent (frameForReference refuses 'MSL' rather than
+  // lowercasing it).
+  assert.throws(
+    () => resolveParamEncoding({ firmware: 'PX4' }),
+    /param encoding unresolved: firmware "PX4" is not ardupilot or px4/
+  );
+  assert.throws(
+    () => resolveParamEncoding({ firmware: 'apm' }),
+    /param encoding unresolved: firmware "apm" is not ardupilot or px4/
+  );
+});
+
+test('resolveParamEncoding: custom firmware has no default encoding either', () => {
+  // 'custom' is a real, deployable Vehicle Profile value (FIRMWARE_TYPES), not a
+  // typo — but it explicitly disables firmware-specific behaviour, encoding
+  // included, so it gets the same refusal as an unrecognized token rather than
+  // silently inheriting the ardupilot/c-cast branch it used to fall into.
+  assert.throws(
+    () => resolveParamEncoding({ firmware: 'custom' }),
+    /param encoding unresolved: firmware "custom" is not ardupilot or px4 \(custom has no default encoding either\)/
+  );
+});
+
+test('resolveParamEncoding: explicit override still wins over a garbage firmware token', () => {
+  // The ladder short-circuits on the explicit override before the firmware arm
+  // is ever reached, so a bogus firmware string must not block it.
+  assert.equal(
+    resolveParamEncoding({ encoding: 'bytewise', firmware: 'PX4' }),
+    PARAM_ENCODING.BYTEWISE
+  );
+  assert.equal(
+    resolveParamEncoding({ encoding: 'c-cast', firmware: 'custom' }),
+    PARAM_ENCODING.C_CAST
+  );
+});
+
 test('resolveParamEncoding: present-but-invalid override rejects (no silent fallthrough)', () => {
   assert.throws(
     () => resolveParamEncoding({
