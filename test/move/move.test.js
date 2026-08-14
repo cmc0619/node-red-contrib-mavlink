@@ -289,17 +289,25 @@ test('frameForAltRef is total: msl → 0, everything else → home (§14)', () =
   for (const blank of [undefined, null, '']) {
     assert.equal(frameForAltRef(blank), 3, `blank ${JSON.stringify(blank)} is home, the GCS default`);
   }
-  // Unknown values used to throw. The config is a two-option select and a
-  // payload override is trusted (AGENTS.md, input trust), so there was nothing
-  // to protect against — this is a coercion now, not a check, and it is total
-  // so that no input can leave the frame undefined.
+  // An unrecognised token throws (owner ruling, 2026-08-14: "if a flow sends
+  // nonsense then it deserves to fail"). This coerced everything that was not
+  // `msl` to home, which meant a payload override of 'MSL' or 'amsl' flew the
+  // goto at the wrong altitude datum with nothing to say so — and home vs MSL
+  // is hundreds of metres.
   //
-  // Undefined is the outcome that matters: resolveModeAndFrame reads a blank
-  // frame as LOCAL_NED, so returning undefined would turn a goto into a local
-  // setpoint with lat/lon read as metres. A defined answer beats that.
+  // Throwing is NOT the same as returning undefined, which is what the old
+  // comment here defended against: resolveModeAndFrame reads a blank frame as
+  // LOCAL_NED, so an undefined return would turn a goto into a local setpoint
+  // with lat/lon read as metres. That hazard is still closed.
   for (const unknown of ['terrain', 'agl', 'TERRAIN', 42, {}]) {
-    assert.equal(frameForAltRef(unknown), 3, `${JSON.stringify(unknown)} resolves to home, never undefined`);
+    assert.throws(
+      () => frameForAltRef(unknown),
+      /unknown Move altitude reference/,
+      `${JSON.stringify(unknown)} fails loudly rather than flying at the wrong datum`
+    );
   }
+  // Prototype keys are not members either.
+  assert.throws(() => frameForAltRef('constructor'), /unknown Move altitude reference/);
 });
 
 test('frameForReference: world is LOCAL_NED and never needs firmware; body derives per stack and fails closed (§14)', () => {
@@ -317,10 +325,17 @@ test('frameForReference: world is LOCAL_NED and never needs firmware; body deriv
   // by the vehicle, exactly the wrong the derivation exists to prevent.
   assert.throws(() => frameForReference('body', undefined), /Vehicle Profile with firmware ardupilot or px4/);
   assert.throws(() => frameForReference('body', 'custom'), /Vehicle Profile with firmware ardupilot or px4/);
-  // Anything that is not 'body' is world, coerced rather than checked — same
-  // ruling as frameForAltRef, and never undefined.
+  // An unrecognised reference throws rather than coercing to world — same
+  // ruling as frameForAltRef and the speed type (owner, 2026-08-14). Note
+  // 'BODY': the old coercion sent it to world/LOCAL_NED, so a payload override
+  // that merely got the case wrong silently flew a world-frame setpoint where
+  // a body-frame one was asked for.
   for (const unknown of ['sideways', 'BODY', 7, {}]) {
-    assert.equal(frameForReference(unknown, undefined), 1, `${JSON.stringify(unknown)} resolves to world`);
+    assert.throws(
+      () => frameForReference(unknown, undefined),
+      /unknown Move reference/,
+      `${JSON.stringify(unknown)} fails loudly rather than becoming world`
+    );
   }
 });
 

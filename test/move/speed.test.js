@@ -42,21 +42,31 @@ test('speed blank sentinels: speed and throttle both −1 (no change)', () => {
   assert.equal(buildSpeedMessage(input({ speed: 0 })).fields.param2, 0);
 });
 
-test('speed type is total by construction — a blank or unknown token is groundspeed', () => {
+test('speed type: blank is groundspeed, an unknown token fails loudly', () => {
   // Groundspeed is the reading that means something on every family; airspeed
-  // is a fixed-wing concept. Coerced rather than checked, like frameForAltRef:
-  // there is a defined answer to give, so nothing throws.
-  for (const unknown of [undefined, null, '', 'sideways', 'AIRSPEED', 7, {}]) {
+  // is a fixed-wing concept. So a *blank* has a defined answer and coerces.
+  for (const blank of [undefined, null, '']) {
     assert.equal(
-      buildSpeedMessage(input({ speedType: unknown })).fields.param1,
+      buildSpeedMessage(input({ speedType: blank })).fields.param1,
       1,
-      `${JSON.stringify(unknown)} resolves to groundspeed`
+      `${JSON.stringify(blank)} resolves to groundspeed`
     );
   }
-  // Prototype keys must not resolve either — a plain object inherits
-  // 'constructor', and hasOwnProperty is why that lands on groundspeed rather
-  // than becoming a function.
-  assert.equal(buildSpeedMessage(input({ speedType: 'constructor' })).fields.param1, 1);
+  // An unrecognised token does not (owner ruling, 2026-08-14). It used to land
+  // on groundspeed, which answered a question nobody asked: payload.speedType
+  // overrides the editor-validated config, so a typo'd 'airsped' became a
+  // groundspeed command silently. A token that is not in the enum has no
+  // meaning, so there is nothing safe to coerce *to*.
+  for (const unknown of ['sideways', 'AIRSPEED', 7, {}]) {
+    assert.throws(
+      () => buildSpeedMessage(input({ speedType: unknown })),
+      /unknown Move speed type/,
+      `${JSON.stringify(unknown)} fails loudly`
+    );
+  }
+  // Prototype keys are not members — hasOwnProperty is why 'constructor' is
+  // rejected rather than resolving to a function.
+  assert.throws(() => buildSpeedMessage(input({ speedType: 'constructor' })), /unknown Move speed type/);
 });
 
 test('speed asks no firmware question, and refuses only what would serialize as garbage', () => {
