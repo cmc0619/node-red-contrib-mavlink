@@ -255,9 +255,10 @@ module.exports = function registerMavlinkMove(RED) {
 
         // Turn and Speed are acked MAV_CMDs, not setpoints (§9 roster): the
         // command tiers only, no Stream — a command has no streaming semantics,
-        // and the editor does not offer the tier. Turn is firmware-derived and
-        // fails closed off ArduPilot, because CONDITION_YAW is an ArduPilot
-        // command; Speed is standard on both stacks and asks nothing.
+        // and the editor does not offer the tier. Neither asks a firmware
+        // question: CONDITION_YAW is an ArduPilot command that PX4 ignores, but
+        // ignoring is the vehicle's business (§9) — the dialog reds it, the
+        // driver sends it. Speed is standard on both stacks.
         if (COMMAND_ACTIONS.has(action)) {
           const relative = firstDefined(payload.relative, config.relative);
           // Re-issue safety is per command (see confirmCommand). A speed change
@@ -273,7 +274,6 @@ module.exports = function registerMavlinkMove(RED) {
               // Relative changes what the heading number means, so it is a
               // strict boolean opt-in like changeMode — never a truthy token.
               relative,
-              firmware: firmwareFor(vehicleAtDeploy, connectionNode),
               target,
             })
             : buildSpeedMessage({
