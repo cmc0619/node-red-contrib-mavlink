@@ -7,11 +7,12 @@ be lost that way are repeated here, in context, where they cannot be missed.
 
 ## Rules that get broken
 
-**Every report of a diff includes the runtime-logic line count** (owner standing order,
-2026-08-10): additions/deletions across `lib/**/*.js` + `nodes/*.js`, with tests and editor
-`.html` broken out separately — `git diff --numstat <base> -- 'lib/*' 'nodes/*.js'`. Total
-diff size buries the number that matters; the runtime delta is what the net-code-budget
-rule (`AGENTS.md`) governs.
+**Every report of a diff includes the runtime-logic line count, counted as code, not prose**
+(owner standing orders, 2026-08-10 and 2026-08-14): additions/deletions across `lib/**/*.js`
++ `nodes/*.js`, tests and editor `.html` broken out separately, **with comment and blank
+lines stripped from both sides before netting** — this codebase carries more comment than
+code on new work, so raw `git diff --numstat` roughly doubles every number and buries the
+delta the net-code-budget rule (`AGENTS.md`) governs. Numstat may ride alongside, labeled.
 
 **Run the bot gauntlet locally before you push.** (`AGENTS.md:66`, owner standing order,
 2026-08-13) Every push to a reviewed branch re-runs six review bots against a metered org cap. The

@@ -31,6 +31,16 @@ truth — they disagree with each other, and with the spec, often enough that co
 wholesale imports its bugs. Final authority stays with `DESIGN.md` and §14 — the dialect XML
 and measured reality.
 
+**Every report of a diff includes the runtime-logic line count, and the count is code, not
+prose** (owner standing orders, 2026-08-10 and 2026-08-14). Additions/deletions across
+`lib/**/*.js` + `nodes/*.js`, with tests and editor `.html` broken out separately. Raw
+`git diff --numstat` is the wrong instrument on its own: this codebase carries more comment
+than code on new work (measured on #303: +410 code against +552 comment in one runtime diff),
+so numstat roughly doubles every number and buries the delta the net-code-budget rule
+governs. Report the **comment-and-blank-stripped** count as the headline; numstat may ride
+alongside, labeled. A diff line whose content starts with `//`, `*`, `/*`, `*/` or is blank
+is prose, not code — strip both added and removed sides before netting.
+
 **PR size cap: 50 files.** Do not push a pull request whose diff touches more than 50 files.
 Split by module boundary (`lib/<module>`, `nodes/<node>`, matching tests) into sequential PRs
 when a layer would exceed the cap. Count is `git diff --name-only <base>...HEAD | wc -l`.
