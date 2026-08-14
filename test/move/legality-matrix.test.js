@@ -270,6 +270,16 @@ const REFUSED = [
     config: { ...configFor('steer', 'send', 'world'), vNorth: '', vEast: '', vUp: '', north: 5, aUp: 0.5 },
     error: /position \+ acceleration needs a velocity too/,
   },
+  // Delivery is closed too: the four tiers DELIVERY_OPTIONS can ever save,
+  // nothing else. A hand-edited token used to fall through both dispatch
+  // points' final `else` into Send — a real message left the wire and
+  // reported `sent` for a tier nobody asked for (owner ruling, 2026-08-14,
+  // extending the Action×Delivery no-defaults ruling to Delivery itself).
+  {
+    name: 'unknown delivery',
+    config: { ...configFor('steer', 'send', 'world'), delivery: 'sned' },
+    error: /unknown Move delivery "sned" — expected one of build, send, confirm, stream/,
+  },
 ];
 
 for (const { name, config, firmware, error } of REFUSED) {

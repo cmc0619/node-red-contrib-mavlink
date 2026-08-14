@@ -743,6 +743,84 @@ test('Advanced mode sends once on a silent window — a raw MAV_CMD id never opt
   node.emit('close', () => {});
 });
 
+// ── No-defaults ruling extended to Command (owner, 2026-08-14) ──────────────
+// DESIGN.md §14 had left both sites explicitly un-ruled ("COMMAND_LONG is a
+// defensible default"); the owner has now ruled the Move precedent applies.
+
+test('unknown "Send as" token refuses loud instead of silently building COMMAND_LONG', async () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({ sendAs: 'lng', mode: 'preset', preset: 'arm', delivery: 'build' });
+
+  let output;
+  let doneErr;
+  node.emit('input', { payload: null }, (m) => { output = m; }, (err) => { doneErr = err; });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(output[0], null, 'output 0 must not fire');
+  assert.equal(output[1].result, 'failed');
+  assert.match(output[1].detail, /unknown Command "Send as" "lng" — expected one of long, int/);
+  assert.ok(doneErr instanceof Error, 'the input fails through Catch');
+});
+
+test('blank "Send as" is unchanged — still resolves to COMMAND_LONG', async () => {
+  // The editor's select never saves blank (no blank prompt, no conditional
+  // validator — DESIGN.md §6 "Command node COMMAND_INT"), so this is not a
+  // choice the operator can make; it is here to pin that the ruling narrowed
+  // to the non-blank token and did not touch the existing fallthrough.
+  const RED = redStub({});
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({ sendAs: '', mode: 'preset', preset: 'arm', delivery: 'build' });
+
+  let output;
+  node.emit('input', { payload: null }, (m) => { output = m; }, () => {});
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(output[0].payload.name, 'COMMAND_LONG');
+  assert.equal(output[1].result, 'built');
+});
+
+test('unknown preset fails the input instead of building MAV_CMD(null) and reporting success', async () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({ sendAs: 'long', mode: 'preset', preset: 'arrrm', delivery: 'build' });
+
+  let output;
+  let doneErr;
+  node.emit('input', { payload: null }, (m) => { output = m; }, (err) => { doneErr = err; });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(output[0], null, 'output 0 must not fire');
+  assert.equal(output[1].result, 'failed');
+  assert.match(output[1].detail, /unknown Command preset "arrrm" — expected one of/);
+  assert.ok(doneErr instanceof Error, 'the input fails through Catch');
+});
+
+test('Advanced mode never reads preset — an unset preset field does not refuse', async () => {
+  // The editor default is 'arm', never blank, but Advanced mode ignores the
+  // field entirely (resolveCommandId reads advancedCommand instead); the
+  // preset guard must not fire there.
+  const RED = redStub({});
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    sendAs: 'long',
+    mode: 'advanced',
+    advancedCommand: '400', // MAV_CMD_COMPONENT_ARM_DISARM
+    preset: 'not-a-real-preset',
+    delivery: 'build',
+  });
+
+  let output;
+  node.emit('input', { payload: { 1: 1 } }, (m) => { output = m; }, () => {});
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(output[1].result, 'built');
+});
+
 function installAckTimerHarness(t) {
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;

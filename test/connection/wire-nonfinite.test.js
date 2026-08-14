@@ -13,6 +13,7 @@ const assert = require('node:assert/strict');
 
 const { loadBundled } = require('../../lib/metadata');
 const { createWire } = require('../../lib/connection/wire');
+const { buildCommandInt, buildCommandLong } = require('../../lib/command/carrier');
 
 const wire = createWire({ bundle: loadBundled('common') });
 
@@ -57,5 +58,36 @@ test('a NaN float field still serializes — NaN floats are legal MAVLink', () =
   const decoded = wire.decode(frame)[0];
   assert.equal(decoded.fields.target_system, 1);
   assert.ok(Number.isNaN(decoded.fields.x));
+});
+
+// ── A garbage MAV_CMD carrier frame (owner ruling, 2026-08-14 site probe) ───
+// `resolveFrame`/`longToIntFields` coerce a non-member frame token to NaN
+// (there is no member to fall back to); this pins that the *existing* guard
+// above — not a new one — is what stops it reaching the wire.
+
+test('COMMAND_INT: a garbage MAV_FRAME token becomes a NaN frame field and refuses here, at the wire boundary', () => {
+  // buildCommandInt/longToIntFields do not validate `frame` against the
+  // MAV_FRAME set (§14, DEFAULT_FRAME's own doc: "not a safety net"); an
+  // unrecognised token coerces to NaN via Number(), same as any other
+  // unresolved integer field, and this guard is the one choke point that
+  // catches it — no second check belongs in lib/command/carrier.js.
+  const message = buildCommandInt(192, 1, 1, [0, 0, 0, 0, 47.398, 8.545, 10], { frame: 'garbage' });
+  assert.ok(Number.isNaN(message.fields.frame), 'the unresolved frame token coerces to NaN, not a guessed member');
+  assert.throws(
+    () => wire.serialize(message, { sysid: 255, compid: 190, seq: 0 }),
+    /field 'frame' is NaN; an integer field must be finite/
+  );
+});
+
+test('COMMAND_LONG: frame carries no wire field, so it never gates scaling — param5/6 stay raw decimal degrees regardless', () => {
+  // COMMAND_LONG has no int32 x/y to scale in the first place (§9: params are
+  // always decimal degrees on this carrier) — there is no live "skip
+  // scaling" path for a garbage frame to hide behind here, unlike COMMAND_INT
+  // above. Confirms the site probe found nothing to refuse on this half.
+  const message = buildCommandLong(192, 1, 1, [0, 0, 0, 0, 47.398, 8.545, 10], 0);
+  assert.equal('frame' in message.fields, false);
+  assert.equal(message.fields.param5, 47.398);
+  assert.equal(message.fields.param6, 8.545);
+  assert.doesNotThrow(() => wire.serialize(message, { sysid: 255, compid: 190, seq: 0 }));
 });
 
