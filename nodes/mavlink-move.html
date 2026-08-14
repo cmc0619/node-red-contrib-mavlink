@@ -240,7 +240,7 @@
    */
   function decomposeButtons(value) {
     var n = RED.mavlink.isBlank(value) ? 0 : Number(value);
-    if (!Number.isInteger(n) || n < 0) n = 0;
+    if (!Number.isInteger(n) || n < 0 || n > 65535) n = 0;
     var pressed = [];
     for (var i = 0; i < BUTTON_COUNT; i++) pressed.push((n & (1 << i)) !== 0);
     return pressed;
@@ -757,7 +757,10 @@
       (function () {
         var $grid = $('#move-buttons-grid');
         var pressed = decomposeButtons(node.buttons);
-        // An invalid saved mask (hand-edited flow) decomposes all-off, and the
+        // An invalid saved mask (hand-edited flow) decomposes all-off — the
+        // over-65535 arm included, so the warning below and the box state
+        // never contradict (Gitar, #305: 70000 used to warn while ticking its
+        // low 16 bits) — and the
         // 0-65535 validator's red ring now sits on a hidden input where nobody
         // sees it — so the invalidity gets said in the grid instead (§9 ruling
         // 6: red on saved, never silently rewritten without a word). The saved

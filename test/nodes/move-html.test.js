@@ -1207,6 +1207,9 @@ test('mavlink-move: button checkboxes compose the bitmask the operator used to h
   // reads as BUTTONS_NONE.
   assert.equal(helpers.composeButtons(helpers.decomposeButtons('')), '', 'blank stays blank');
   assert.deepEqual(helpers.decomposeButtons('garbage'), new Array(16).fill(false), 'a hand-edited non-number decomposes all-off');
+  // Over-range too (Gitar, #305): 70000's low 16 bits used to tick while the
+  // grid's warning called the mask invalid — the two must agree.
+  assert.deepEqual(helpers.decomposeButtons('70000'), new Array(16).fill(false), 'an over-65535 mask decomposes all-off, matching its warning');
 
   // The canonical field survives as the save path and the deploy-time check.
   assert.match(html, /<input type="hidden" id="node-input-buttons">/, 'the hidden canonical field exists');
