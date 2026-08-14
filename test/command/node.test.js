@@ -668,8 +668,10 @@ test('a garbage Command completion timeout refuses before the send — not after
   node.emit('input', { payload: null }, (m) => { sent = m; }, (err) => { doneError = err; });
   await Promise.resolve();
 
+  assert.ok(sent, 'a garbage completion timeout must emit a terminal result');
   assert.equal(sent[0], null, 'a refused command must not fire the continue port');
   assert.equal(sent[1].result, 'failed');
+  assert.ok(doneError instanceof Error, 'a garbage completion timeout must call done(err)');
   assert.match(doneError.message, /Command completion timeout must be a finite number \(got "abc"\)/);
   assert.equal(conn.sent.length, 0, 'the command must not reach the vehicle before its poll window is judged');
 });
