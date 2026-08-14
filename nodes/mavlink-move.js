@@ -315,77 +315,7 @@ module.exports = function registerMavlinkMove(RED) {
           return;
         }
 
-        // Attitude and manual sticks are setpoints in every way that matters
-        // to delivery — Build/Send/Stream, no ack — so they build their own
-        // message and fall into the shared block below rather than growing a
-        // parallel one. Neither speaks a frame or a mode: their type_mask (or
-        // axis-invalid sentinel) derives from which fields carry values, the
-        // same presence rule Steer uses.
-        let message;
-        if (action === 'attitude') {
-          message = buildAttitudeMessage({
-            roll: valueFrom(payload, config, 'roll'),
-            pitch: valueFrom(payload, config, 'pitch'),
-            yaw: valueFrom(payload, config, 'yaw'),
-            rollRate: valueFrom(payload, config, 'rollRate'),
-            pitchRate: valueFrom(payload, config, 'pitchRate'),
-            yawRate: valueFrom(payload, config, 'yawRate'),
-            thrust: valueFrom(payload, config, 'thrust'),
-            timeBootMs: payload.timeBootMs,
-            target,
-          });
-        } else if (action === 'manual') {
-          message = buildManualMessage({
-            x: valueFrom(payload, config, 'stickX'),
-            y: valueFrom(payload, config, 'stickY'),
-            z: valueFrom(payload, config, 'stickZ'),
-            r: valueFrom(payload, config, 'stickR'),
-            buttons: valueFrom(payload, config, 'buttons'),
-            target,
-          });
-        } else {
-        let moveInput;
-        if (action === 'goto') {
-          // goto + Stream: the same intent, streamed — position setpoints on
-          // the global frame the altitude reference names. `speed`, `radius`,
-          // `changeMode` and `yawRate` belong to the command path; a setpoint
-          // has no field to carry them, so they are not read here. Ignoring a
-          // key the wire has no room for is what the driver does with msg
-          // (AGENTS.md, input trust) — it does not refuse over one.
-          moveInput = {
-            mode: 'position',
-            frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),
-            target,
-            position: payload.position || positionFrom(config),
-            yaw: valueFrom(payload, config, 'yaw'),
-            timeBootMs: payload.timeBootMs,
-          };
-        } else {
-          // steer: the reference picks the axes (body is firmware-derived and
-          // fails closed on an unknown stack, §14); the mode derives from
-          // which groups carry values — filling fields IS the mode.
-          const position = payload.position || positionFrom(config);
-          const velocity = payload.velocity || velocityFrom(config);
-          const accel = payload.accel || accelFrom(config);
-          const yaw = valueFrom(payload, config, 'yaw');
-          const yawRate = valueFrom(payload, config, 'yawRate');
-          moveInput = {
-            mode: deriveSteerMode({ position, velocity, accel, yaw, yawRate }),
-            frame: frameForReference(
-              firstDefined(payload.reference, config.reference),
-              firmwareFor(vehicleAtDeploy, connectionNode)
-            ),
-            target,
-            position,
-            velocity,
-            accel,
-            yaw,
-            yawRate,
-            timeBootMs: payload.timeBootMs,
-          };
-        }
-        message = buildMoveMessage(moveInput);
-        }
+        const message = setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode);
 
         if (delivery === 'build') {
           completeBuild(node, send, message);
@@ -538,6 +468,94 @@ module.exports = function registerMavlinkMove(RED) {
 
   RED.nodes.registerType('mavlink-move', MavlinkMoveNode);
 };
+
+/**
+ * The setpoint message for a non-command action — everything Move sends that is
+ * not an acked MAV_CMD.
+ *
+ * Extracted from the input handler rather than inlined: with six actions the
+ * handler was measured at cyclomatic complexity 36 (DeepSource, #303), and five
+ * of those branches were only ever choosing which builder to call. The handler
+ * keeps the parts that are genuinely about *this* input — suppression, target
+ * resolution, delivery, the stream lock — and this owns the wire shape.
+ *
+ * Attitude and manual are setpoints in every way that matters to delivery
+ * (Build/Send/Stream, no ack) so they land here rather than growing a parallel
+ * path. Neither speaks a frame or a mode: their mask, or manual's axis-invalid
+ * sentinel, derives from which fields carry values — the same presence rule
+ * Steer uses.
+ *
+ * @param {string} action  a MOVE_ACTIONS member that is not a command action
+ * @param {object} payload  msg.payload (trusted — AGENTS.md input trust)
+ * @param {object} config  the node's saved configuration
+ * @param {{sysid: number, compid: number}} target
+ * @param {object|null} vehicleAtDeploy  the node's own Vehicle Profile, if any
+ * @param {object|null} connectionNode
+ * @returns {{name: string, fields: object}}
+ */
+function setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode) {
+  if (action === 'attitude') {
+    return buildAttitudeMessage({
+      roll: valueFrom(payload, config, 'roll'),
+      pitch: valueFrom(payload, config, 'pitch'),
+      yaw: valueFrom(payload, config, 'yaw'),
+      rollRate: valueFrom(payload, config, 'rollRate'),
+      pitchRate: valueFrom(payload, config, 'pitchRate'),
+      yawRate: valueFrom(payload, config, 'yawRate'),
+      thrust: valueFrom(payload, config, 'thrust'),
+      timeBootMs: payload.timeBootMs,
+      target,
+    });
+  }
+  if (action === 'manual') {
+    return buildManualMessage({
+      x: valueFrom(payload, config, 'stickX'),
+      y: valueFrom(payload, config, 'stickY'),
+      z: valueFrom(payload, config, 'stickZ'),
+      r: valueFrom(payload, config, 'stickR'),
+      buttons: valueFrom(payload, config, 'buttons'),
+      target,
+    });
+  }
+  if (action === 'goto') {
+    // goto + Stream: the same intent, streamed — position setpoints on the
+    // global frame the altitude reference names. `speed`, `radius`,
+    // `changeMode` and `yawRate` belong to the command path; a setpoint has no
+    // field to carry them, so they are not read here. Ignoring a key the wire
+    // has no room for is what the driver does with msg (AGENTS.md, input
+    // trust) — it does not refuse over one.
+    return buildMoveMessage({
+      mode: 'position',
+      frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),
+      target,
+      position: payload.position || positionFrom(config),
+      yaw: valueFrom(payload, config, 'yaw'),
+      timeBootMs: payload.timeBootMs,
+    });
+  }
+  // steer: the reference picks the axes (body is firmware-derived and fails
+  // closed on an unknown stack, §14); the mode derives from which groups carry
+  // values — filling fields IS the mode.
+  const position = payload.position || positionFrom(config);
+  const velocity = payload.velocity || velocityFrom(config);
+  const accel = payload.accel || accelFrom(config);
+  const yaw = valueFrom(payload, config, 'yaw');
+  const yawRate = valueFrom(payload, config, 'yawRate');
+  return buildMoveMessage({
+    mode: deriveSteerMode({ position, velocity, accel, yaw, yawRate }),
+    frame: frameForReference(
+      firstDefined(payload.reference, config.reference),
+      firmwareFor(vehicleAtDeploy, connectionNode)
+    ),
+    target,
+    position,
+    velocity,
+    accel,
+    yaw,
+    yawRate,
+    timeBootMs: payload.timeBootMs,
+  });
+}
 
 function completeBuild(node, send, message) {
   applyActionStatus(node, 'ok', 'built move');
