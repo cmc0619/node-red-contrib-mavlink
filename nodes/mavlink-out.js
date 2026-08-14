@@ -37,7 +37,8 @@ const {
   applyActionStatus,
   failInput,
 } = require('../lib/delivery');
-const { applyConnectionStatus } = require('../lib/addressing');
+const { applyConnectionStatus, isBlank } = require('../lib/addressing');
+const { BAND_NAME, isBand } = require('../lib/connection/bands');
 
 module.exports = function registerMavlinkOut(RED) {
   /**
@@ -72,7 +73,7 @@ module.exports = function registerMavlinkOut(RED) {
         if (!message) {
           throw new Error('unrecognised payload shape — expected { name, fields } or Build-tier envelope');
         }
-        const band = msg.band !== undefined ? Number(msg.band) : defaultBand;
+        const band = resolveBand(msg.band, defaultBand);
         connectionNode.send(message, {
           band,
           target: msg.target || null,
@@ -94,6 +95,42 @@ module.exports = function registerMavlinkOut(RED) {
 
   RED.nodes.registerType('mavlink-out', MavlinkOutNode);
 };
+
+/** `${number} (${name})` per band, for naming the vocabulary in a refusal. */
+const BAND_LIST = BAND_NAME.map((name, i) => `${i} (${name})`).join(', ');
+
+/**
+ * Resolve the queue band for one send (owner ruling, 2026-08-14, extending
+ * the no-defaults ruling to this site). `msg.band` absent is a presence
+ * fallback to the config default — not a default the driver invents, the
+ * config value the operator already chose — and stays exactly as it was.
+ *
+ * A *present* `msg.band` that is blank or not a BAND member must throw rather
+ * than coerce: `Number('')` is `0`, `BAND.EMERGENCY`, so an unset band used to
+ * silently outrank every other message on the link — the specific bug this
+ * closes. `isBand` (`lib/connection/bands.js`) owns membership; a numeric
+ * string that names a real band (`'2'`) keeps working, same as today.
+ *
+ * @param {*} msgBand  msg.band, as received
+ * @param {number} defaultBand  the node's editor-configured default
+ * @returns {number}
+ */
+function resolveBand(msgBand, defaultBand) {
+  // null falls back like undefined (Codacy, #305): msg.band is an optional
+  // per-message override, and null is JSON's only spelling of "not set" — a
+  // Function node writing msg.band = null means the config band, not a band
+  // named nothing. This is the opposite call from the wire guard, on purpose:
+  // a wire integer field is required content with no default to fall to, so
+  // null there refuses; an override has the config to fall to, so null here
+  // is absence.
+  if (msgBand === undefined || msgBand === null) return defaultBand;
+  if (isBlank(msgBand)) {
+    throw new Error(`msg.band is blank — expected one of ${BAND_LIST}`);
+  }
+  const band = Number(msgBand);
+  if (isBand(band)) return band;
+  throw new Error(`unknown msg.band ${JSON.stringify(msgBand)} — expected one of ${BAND_LIST}`);
+}
 
 /**
  * Extract the `{ name, fields }` message from the various accepted message

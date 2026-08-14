@@ -30,6 +30,35 @@ const {
   failInput,
 } = require('../lib/delivery');
 
+/** Delivery tiers the editor's DELIVERY_OPTIONS vocabulary can save (§6). */
+const DELIVERY_TIERS = ['build', 'send', 'confirm', 'stream'];
+
+/**
+ * Delivery tier membership check (owner ruling, 2026-08-14, extending the
+ * Action×Delivery no-defaults ruling to Delivery itself). The dialog only
+ * ever offers the tiers `DELIVERY_OPTIONS` lists for the selected action, so
+ * a Steer node cannot be *set* to `confirm` through the UI — but a
+ * hand-edited flow can hold an unrecognised token, and it used to fall
+ * through both dispatch points' (`deliverCommand`, the setpoint branch)
+ * final `else` into Send: a real message left the wire and reported `sent`
+ * for a tier nobody asked for (confirmed: `delivery: 'sned'`).
+ *
+ * No blank arm, unlike `frameForAltRef`'s "blank is the GCS default": the
+ * select always saves a tier (mavlink-move.html `delivery`, default
+ * `'build'`), so a blank here is the same unclaimed state as a blank Move
+ * action, not a value the operator chose to leave out — same treatment as
+ * `resolveMoveAction`.
+ *
+ * @param {*} value  config.delivery
+ * @returns {'build'|'send'|'confirm'|'stream'}
+ */
+function resolveDelivery(value) {
+  if (DELIVERY_TIERS.includes(value)) return value;
+  throw new Error(
+    `unknown Move delivery ${JSON.stringify(value)} — expected one of ${DELIVERY_TIERS.join(', ')}`
+  );
+}
+
 module.exports = function registerMavlinkMove(RED) {
   function MavlinkMoveNode(config) {
     RED.nodes.createNode(this, config);
@@ -218,6 +247,12 @@ module.exports = function registerMavlinkMove(RED) {
           done();
           return;
         }
+
+        // Delivery membership, before anything reads `delivery` below
+        // (including the stop handler's stream-tier check): a hand-edited
+        // token must not silently reach either dispatch point's Send
+        // fallthrough.
+        resolveDelivery(delivery);
 
         const payload = msg.payload ?? {};
         // Actions are handled before target resolution: a stop names no

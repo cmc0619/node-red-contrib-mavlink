@@ -980,6 +980,82 @@ test('mavlink-out: uses default band from config when msg.band is absent', () =>
   assert.equal(sent[0].opts.band, 3);
 });
 
+// ── No-defaults ruling extended to mavlink-out's band (owner, 2026-08-14) ───
+// `Number('') === 0 === BAND.EMERGENCY`, so a present-but-blank msg.band used
+// to silently outrank every other message on the link. Absent stays a
+// presence fallback to the config default (not a value the driver invents);
+// present-and-invalid must refuse instead of coercing.
+
+test('mavlink-out: a present but blank msg.band refuses instead of becoming Emergency', () => {
+  const RED = makeRED();
+  const { stub, sent } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-out')(RED);
+  const Constructor = RED._nodeTypes['mavlink-out'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', band: '3' });
+
+  node._input({ payload: { name: 'HEARTBEAT', fields: {} }, band: '' });
+
+  assert.equal(sent.length, 0, 'nothing should be sent to the connection');
+  assert.equal(node._sends.length, 1);
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null);
+  assert.equal(out1.result, 'failed');
+  assert.match(out1.detail, /msg\.band is blank/);
+});
+
+test('mavlink-out: an unknown msg.band token refuses, naming the bands', () => {
+  const RED = makeRED();
+  const { stub, sent } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-out')(RED);
+  const Constructor = RED._nodeTypes['mavlink-out'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', band: '2' });
+
+  node._input({ payload: { name: 'HEARTBEAT', fields: {} }, band: 'urgent' });
+
+  assert.equal(sent.length, 0, 'nothing should be sent to the connection');
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null);
+  assert.equal(out1.result, 'failed');
+  assert.match(out1.detail, /unknown msg\.band "urgent" — expected one of 0 \(emergency\)/);
+});
+
+
+test('mavlink-out: a numeric but out-of-range msg.band refuses the same way (Sourcery, #305)', () => {
+  const RED = makeRED();
+  const { stub, sent } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-out')(RED);
+  const Constructor = RED._nodeTypes['mavlink-out'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', band: '2' });
+
+  node._input({ payload: { name: 'HEARTBEAT', fields: {} }, band: 99 });
+
+  assert.equal(sent.length, 0, 'nothing should be sent to the connection');
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null);
+  assert.equal(out1.result, 'failed');
+  assert.match(out1.detail, /unknown msg\.band 99 — expected one of 0 \(emergency\)/);
+});
+
+test('mavlink-out: a numeric-string msg.band that names a real band still works', () => {
+  const RED = makeRED();
+  const { stub, sent } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-out')(RED);
+  const Constructor = RED._nodeTypes['mavlink-out'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', band: '2' });
+
+  node._input({ payload: { name: 'HEARTBEAT', fields: {} }, band: '4' });
+
+  assert.equal(sent[0].opts.band, 4);
+});
+
 test('mavlink-out: forwards target from msg to the connection send', () => {
   const RED = makeRED();
   const { stub, sent } = makeConnectionStub();

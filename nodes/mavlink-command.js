@@ -38,6 +38,7 @@ const {
   MAV_RESULT,
   RESULT_NAME,
   getPreset,
+  PRESET_BY_ID,
   buildParamArray,
   mergeParams,
   AckWaiter,
@@ -60,6 +61,7 @@ const {
   applyConnectionStatus,
   dialectFromVehicleId,
   dialectFromConnection,
+  isBlank,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -92,17 +94,27 @@ function resolveCommandId(config) {
 }
 
 /**
- * Resolve the configured carrier choice, or null when it is missing/invalid
- * (§9). The editor supplies the default; runtime does not repair malformed or
- * hand-edited flow data.
+ * Resolve the configured carrier choice (owner ruling, 2026-08-14, extending
+ * the Move no-defaults ruling to this site — DESIGN.md §14 had left it
+ * un-ruled: "COMMAND_LONG is a defensible default"). The editor's `sendAs`
+ * select only ever saves `'int'` or `'long'` — no blank prompt, no
+ * conditional validator (DESIGN.md §6 "Command node COMMAND_INT") — so a
+ * hand-edited token outside that pair is not a choice the operator made.
+ * `resolveCarrier(config)` returning `null` for a blank/missing value is
+ * unchanged: `buildCarrierMessage` already treats "not INT" as LONG, and that
+ * fallthrough is not this ruling's target — a typo'd token silently building
+ * COMMAND_LONG is (confirmed: `sendAs: 'lng'`).
  *
  * @param {object} config  node config from editor
  * @returns {'long'|'int'|null}
  */
 function resolveCarrier(config) {
+  if (isBlank(config.sendAs)) return null;
   if (config.sendAs === CARRIER.INT) return CARRIER.INT;
   if (config.sendAs === CARRIER.LONG) return CARRIER.LONG;
-  return null;
+  throw new Error(
+    `unknown Command "Send as" ${JSON.stringify(config.sendAs)} — expected one of ${Object.values(CARRIER).join(', ')}`
+  );
 }
 
 
@@ -123,7 +135,6 @@ module.exports = function registerMavlinkCommand(RED) {
     // command or its wire message wears Node-RED's red triangle, and there is
     // no deploy-time badge or refusing input handler restating it here.
     const commandId = resolveCommandId(config);
-    const configuredCarrier = resolveCarrier(config);
 
     const preset =
       config.mode !== 'advanced' ? getPreset(config.preset) : null;
@@ -217,6 +228,25 @@ module.exports = function registerMavlinkCommand(RED) {
         done();
         return;
       }
+
+      // Preset mode's dropdown cannot produce an id outside PRESET_PARAMS; a
+      // hand-edited flow can (confirmed: preset 'arrrm'). Advanced mode never
+      // reads `preset`, so it is untouched (getPreset/resolveCommandId already
+      // ignore the field there). Unrecognised → the input fails rather than
+      // silently building MAV_CMD(null) and reporting a phantom 'built'
+      // (owner ruling, 2026-08-14 — a false success is a different animal
+      // from garbage-out, and this is the layer that can tell them apart).
+      if (config.mode !== 'advanced' && !PRESET_BY_ID.has(config.preset)) {
+        throw new Error(
+          `unknown Command preset ${JSON.stringify(config.preset)} — expected one of ${[...PRESET_BY_ID.keys()].join(', ')}`
+        );
+      }
+
+      // Carrier resolution (owner ruling, 2026-08-14, extending the Move
+      // no-defaults ruling — DESIGN.md §14 had left this un-ruled). Resolved
+      // per-input, like Move's action/frame resolvers, so an unknown token
+      // reports a real 'failed' status record instead of crashing the deploy.
+      const configuredCarrier = resolveCarrier(config);
 
       const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
       const { target, identityId } = resolveDeliveryContext(RED, {
