@@ -82,9 +82,16 @@ test('reposition refusal matrix: local frames refuse naming the frame; retired f
       `frame ${frame} must refuse`
     );
   }
-  // A blank frame resolves the Move default LOCAL_NED and refuses the same way
-  // — fail closed, never a silent global guess.
-  assert.throws(() => buildRepositionMessage(input({ frame: undefined })), /LOCAL_NED/);
+  // A blank frame craters before the carrier ever sees it. It used to resolve
+  // to LOCAL_NED and refuse *that* — which read as fail-closed but was the
+  // swallow in disguise: on the Stream carrier the same blank produced a
+  // perfectly legal SET_POSITION_TARGET_LOCAL_NED at the EKF origin instead of
+  // an error. One error for one cause, at the point the frame went missing.
+  assert.throws(
+    () => buildRepositionMessage(input({ frame: undefined })),
+    /Move needs a frame/,
+    'a blank frame names the omission, not a frame nobody chose'
+  );
   assert.throws(() => buildRepositionMessage(input({ frame: 'WARP' })), /not a SET_POSITION_TARGET frame/);
 });
 

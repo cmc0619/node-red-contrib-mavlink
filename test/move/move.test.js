@@ -7,7 +7,7 @@ const { BAND } = require('../../lib/connection/bands');
 const { buildMoveMessage, createMoveStream } = require('../../lib/move');
 
 test('position Move flips operator up-positive altitude to NED down-positive exactly once', () => {
-  const message = buildMoveMessage({
+  const message = buildMoveMessage({ frame: 1,
     mode: 'position',
     target: { sysid: 2, compid: 1 },
     position: { north: 4, east: -3, up: 12 },
@@ -57,7 +57,7 @@ test('global position Move encodes whole-number degrees as degE7, not as raw wir
 });
 
 test('position-velocity Move uses both vectors and ignores only acceleration', () => {
-  const message = buildMoveMessage({
+  const message = buildMoveMessage({ frame: 1,
     mode: 'position-velocity',
     target: { sysid: 2, compid: 1 },
     position: { north: 10, east: 0, up: 5 },
@@ -74,7 +74,7 @@ test('position-velocity Move uses both vectors and ignores only acceleration', (
 });
 
 test('acceleration Move drives af* with the up-positive sign flipped once', () => {
-  const message = buildMoveMessage({
+  const message = buildMoveMessage({ frame: 1,
     mode: 'acceleration',
     target: { sysid: 2, compid: 1 },
     accel: { north: 0.5, east: -0.25, up: 1 },
@@ -91,7 +91,7 @@ test('force is not a Move mode — no firmware actuated the force bit (§14)', (
   // Removed, not aliased (pre-1.0, no migrations): the mode throws naming the
   // valid set rather than quietly building an acceleration setpoint.
   assert.throws(
-    () => buildMoveMessage({
+    () => buildMoveMessage({ frame: 1,
       mode: 'force',
       target: { sysid: 2, compid: 1 },
       accel: { north: 2, east: 0, up: 3 },
@@ -101,7 +101,7 @@ test('force is not a Move mode — no firmware actuated the force bit (§14)', (
 });
 
 test('yaw-only Move ignores every translation vector and requires yaw or yaw rate', () => {
-  const message = buildMoveMessage({
+  const message = buildMoveMessage({ frame: 1,
     mode: 'yaw-only',
     target: { sysid: 2, compid: 1 },
     yaw: 180,
@@ -117,7 +117,7 @@ test('yaw-only Move ignores every translation vector and requires yaw or yaw rat
   // Steer field — so what reaches it is a payload that blanked every group, or
   // somebody using lib/move directly, and the driver does not refuse its own
   // SDK or its own trusted msg (AGENTS.md, driver and protector).
-  const allIgnore = buildMoveMessage({ mode: 'yaw-only', target: { sysid: 2, compid: 1 } });
+  const allIgnore = buildMoveMessage({ frame: 1, mode: 'yaw-only', target: { sysid: 2, compid: 1 } });
   assert.equal(allIgnore.fields.type_mask, 7 + 56 + 448 + 1024 + 2048, 'every group ignored');
 });
 
@@ -147,7 +147,7 @@ test('numeric frames select the carrier message and coordinate_frame value', () 
   );
 });
 
-test('`frame` is numeric-only: a derived number resolves, blank defaults to LOCAL_NED', () => {
+test('`frame` is numeric-only: a derived number resolves, blank craters', () => {
   const global = {
     mode: 'position',
     target: { sysid: 2, compid: 1 },
@@ -160,16 +160,23 @@ test('`frame` is numeric-only: a derived number resolves, blank defaults to LOCA
     assert.equal(message.fields.coordinate_frame, 6, `frame ${JSON.stringify(frame)} resolves (wire twin 6)`);
   }
 
-  // Blank defaults, and whitespace is blank (#174): a builder-level safety,
-  // still exercised — "nothing supplied" is the frame that works everywhere.
+  // Blank craters, and whitespace is blank (#174). This used to default to
+  // LOCAL_NED — "the frame that works everywhere" — and that is exactly the
+  // swallow that turned a lost altitude reference into a local setpoint at
+  // x,y,z = 0,0,-0, the EKF origin. LOCAL_NED is a legitimate frame, so
+  // nothing downstream could tell the two apart (AGENTS.md: the driver never
+  // invents a value you did not give it).
   for (const blank of [undefined, null, '', ' ']) {
-    const message = buildMoveMessage({
-      mode: 'position',
-      frame: blank,
-      target: { sysid: 2, compid: 1 },
-      position: { north: 1, east: 2, up: 3 },
-    });
-    assert.equal(message.fields.coordinate_frame, 1, `blank ${JSON.stringify(blank)} defaults`);
+    assert.throws(
+      () => buildMoveMessage({
+        mode: 'position',
+        frame: blank,
+        target: { sysid: 2, compid: 1 },
+        position: { north: 1, east: 2, up: 3 },
+      }),
+      /Move needs a frame/,
+      `blank ${JSON.stringify(blank)} craters`
+    );
   }
 });
 
@@ -430,7 +437,7 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the
 });
 
 test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw', () => {
-  const defaulted = buildMoveMessage({
+  const defaulted = buildMoveMessage({ mode: 'position', frame: 1,
     target: { sysid: 2, compid: 1 },
     position: { north: 1, east: 2, up: 3 },
   });
@@ -440,7 +447,7 @@ test('one canonical vocabulary: defaults are position/LOCAL_NED, old names throw
   // Pre-1.0, no aliases: the pre-frame mode names are gone, not mapped.
   for (const legacy of ['local-position', 'local-velocity', 'global-position', 'sideways']) {
     assert.throws(
-      () => buildMoveMessage({ mode: legacy, target: { sysid: 2, compid: 1 } }),
+      () => buildMoveMessage({ frame: 1, mode: legacy, target: { sysid: 2, compid: 1 } }),
       /unknown Move mode/
     );
   }
@@ -466,7 +473,7 @@ test('a blank local coordinate encodes 0, on every frame — deliberate, ruled (
 
   // Velocity and acceleration blanks were never the question — a zero rate is
   // inert, not a place — and they still encode 0.
-  const velocityBlanks = buildMoveMessage({
+  const velocityBlanks = buildMoveMessage({ frame: 1,
     mode: 'velocity',
     target,
     velocity: { north: 1 },
@@ -479,7 +486,7 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
   // coordinate guards: ' ' is not '', so without trimming it reaches Number()
   // and comes back a finite 0. Where that decides an *ignore bit* it changes
   // the command; where it decides a coordinate it just encodes 0.
-  const whitespaceAxis = buildMoveMessage({
+  const whitespaceAxis = buildMoveMessage({ frame: 1,
     mode: 'position',
     target: { sysid: 2, compid: 1 },
     position: { north: ' ', east: 2, up: 3 },
@@ -488,7 +495,7 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
 
   // Yaw follows the presence rule: whitespace is absent, so the ignore bit
   // stays set rather than commanding a yaw of 0 (north) nobody asked for.
-  const yawBlank = buildMoveMessage({
+  const yawBlank = buildMoveMessage({ frame: 1,
     mode: 'position',
     target: { sysid: 2, compid: 1 },
     position: { north: 1, east: 2, up: 3 },
@@ -498,7 +505,7 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
   assert.equal(yawBlank.fields.yaw, 0);
 
   // A real value is still a value, whitespace-padded or not.
-  const padded = buildMoveMessage({
+  const padded = buildMoveMessage({ frame: 1,
     mode: 'position',
     target: { sysid: 2, compid: 1 },
     position: { north: ' 4 ', east: 2, up: 3 },
@@ -522,6 +529,7 @@ test('time_boot_ms stamps from the shared boot clock, explicit value wins', () =
   const { buildMoveMessage, buildStopMessage } = require('../../lib/move');
   const input = (extra = {}) => ({
     mode: 'velocity',
+    frame: 1,
     target: { sysid: 1, compid: 1 },
     velocity: { north: 1, east: 0, up: 0 },
     ...extra,
@@ -579,7 +587,7 @@ test('buildStopMessage is zero-velocity (mask 3527), not all-ignore (3583)', () 
   const stop = buildStopMessage({
     fields: { time_boot_ms: 0, target_system: 1, target_component: 1 },
   });
-  const vel = buildMoveMessage({
+  const vel = buildMoveMessage({ frame: 1,
     mode: 'velocity',
     target: { sysid: 1, compid: 1 },
     velocity: { north: 1, east: 0, up: 0 },
@@ -603,7 +611,7 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
         sends.push({ message, options });
       },
     },
-    message: buildMoveMessage({
+    message: buildMoveMessage({ frame: 1,
       mode: 'velocity',
       target: { sysid: 4, compid: 1 },
       velocity: { north: 1, east: 2, up: 3 },
@@ -648,7 +656,7 @@ test('onExpire fires on TTL with the stop message, and never on a caller stop', 
   let now = 0;
   const options = {
     connection: { send() {} },
-    message: buildMoveMessage({
+    message: buildMoveMessage({ frame: 1,
       mode: 'velocity',
       target: { sysid: 4, compid: 1 },
       velocity: { north: 1, east: 0, up: 0 },
@@ -693,7 +701,7 @@ test('stop({brake:false}) hands over without a brake; a default stop brakes', ()
   const make = () =>
     createMoveStream({
       connection: { send(message) { sends.push(message); } },
-      message: buildMoveMessage({
+      message: buildMoveMessage({ frame: 1,
         mode: 'velocity',
         target: { sysid: 4, compid: 1 },
         velocity: { north: 1, east: 0, up: 0 },
@@ -740,7 +748,7 @@ test('a tick send that throws is contained: keep cadence, one report per streak,
         if (fail) throw new Error('identity unresolved');
       },
     },
-    message: buildMoveMessage({
+    message: buildMoveMessage({ frame: 1,
       mode: 'velocity',
       target: { sysid: 4, compid: 1 },
       velocity: { north: 1, east: 0, up: 0 },
@@ -788,7 +796,7 @@ test('a throwing expiry brake still completes expiry bookkeeping', () => {
         if (brakeFail) throw new Error('link down');
       },
     },
-    message: buildMoveMessage({
+    message: buildMoveMessage({ frame: 1,
       mode: 'velocity',
       target: { sysid: 4, compid: 1 },
       velocity: { north: 1, east: 0, up: 0 },

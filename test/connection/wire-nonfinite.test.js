@@ -18,7 +18,7 @@ const { buildMoveMessage } = require('../../lib/move');
 const wire = createWire({ bundle: loadBundled('common') });
 
 test('a NaN integer field refuses to serialize instead of becoming broadcast 0', () => {
-  const message = buildMoveMessage({
+  const message = buildMoveMessage({ frame: 1,
     mode: 'position',
     target: { sysid: NaN, compid: NaN },
     position: { north: 1, east: 2, up: 3 },
