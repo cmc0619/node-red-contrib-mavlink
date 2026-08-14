@@ -48,7 +48,30 @@ const {
 const {
   resolveDeliveryContext,
   applyConnectionStatus,
+  finiteNumberOr,
 } = require('../lib/addressing');
+
+/** Delivery tiers the editor's `delivery` select can save (§9). */
+const DELIVERY_TIERS = ['build', 'confirm'];
+
+/**
+ * Delivery-tier membership (owner ruling, 2026-08-14, selection-typo cluster
+ * §14 — the Mission site the audit missed; surfaced by #309's review round).
+ * `delivery === 'build'` is the only gate below, so an unknown token fell
+ * through to the wire tier: a typo'd hand-edit of 'build' ran a real
+ * transfer against the vehicle the operator asked only to preview. Blank
+ * throws too — the editor's select has no blank option, so blank is not a
+ * reachable operator choice (same shape as Move's resolveDelivery).
+ *
+ * @param {*} value  config.delivery
+ * @returns {'build'|'confirm'}
+ */
+function resolveDeliveryTier(value) {
+  if (DELIVERY_TIERS.includes(value)) return value;
+  throw new Error(
+    `unknown Mission delivery ${JSON.stringify(value)} — expected one of ${DELIVERY_TIERS.join(', ')}`
+  );
+}
 
 module.exports = function registerMavlinkMission(RED) {
   function MavlinkMissionNode(config) {
@@ -63,10 +86,6 @@ module.exports = function registerMavlinkMission(RED) {
     const connNode = RED.nodes.getNode(config.connection);
     const delivery = config.delivery;
     applyConnectionStatus(node, delivery !== 'build', connNode);
-    const timeoutMs = config.timeout ? Number(config.timeout) : undefined;
-    const maxRetries = config.maxRetries !== undefined && config.maxRetries !== ''
-      ? Number(config.maxRetries)
-      : undefined;
 
     /**
      * In-flight machines keyed by the same lock key as {@link locks}
@@ -97,6 +116,10 @@ module.exports = function registerMavlinkMission(RED) {
         return;
       }
 
+      // Before anything reads `delivery` below: the build/wire fork is the
+      // only dispatch on it, and its else side sends.
+      resolveDeliveryTier(delivery);
+
       const payload = msg.payload ?? {};
       const missionTypeKey = payload.missionType || config.missionType || 'mission';
 
@@ -114,6 +137,17 @@ module.exports = function registerMavlinkMission(RED) {
       // Type dropdown is the firmware protector (§11). An unknown string key
       // still throws here, routed through failInput.
       const missionType = missionTypeValue(missionTypeKey);
+
+      // Per-step timeout / retry count (owner ruling, 2026-08-14, the
+      // timer half of the selection-typo audit). Blank keeps the library
+      // default; a present non-finite value used to coerce silently —
+      // `setTimeout(fn, NaN)` (`lib/mission/transfer.js`) substitutes ~1 ms
+      // instead of refusing, turning a hand-edited 'abc' step timeout into a
+      // retry storm rather than the configured cadence. Neither value
+      // reaches the wire, so nothing downstream catches it the way wire.js
+      // catches an integer field.
+      const timeoutMs = finiteNumberOr(config.timeout, undefined, 'Mission step timeout');
+      const maxRetries = finiteNumberOr(config.maxRetries, undefined, 'Mission max retries');
 
       // A download or upload is a two-way conversation with one vehicle: the
       // machine subscribes exact-match on the target sysid, and no vehicle

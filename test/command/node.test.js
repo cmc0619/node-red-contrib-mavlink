@@ -619,6 +619,112 @@ test('blank Command maxRetries keeps three temporary-rejection retries', async (
   node.emit('close', () => {});
 });
 
+test('a garbage Command ACK timeout refuses instead of arming a ~1 ms window (owner ruling, 2026-08-14)', async () => {
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: 'abc',
+    maxRetries: '3',
+  });
+
+  let sent;
+  let doneError;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, (err) => { doneError = err; });
+  await Promise.resolve();
+
+  assert.equal(sent[0], null, 'a refused command must not fire the continue port');
+  assert.equal(sent[1].result, 'failed');
+  assert.match(doneError.message, /Command ACK timeout must be a finite number \(got "abc"\)/);
+  assert.equal(conn.sent.length, 0, 'nothing left the wire under the ~1 ms window');
+});
+
+test('a garbage Command completion timeout refuses before the send — not after the vehicle already accepted', async () => {
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'complete',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    completionTimeout: 'abc',
+  });
+
+  let sent;
+  let doneError;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, (err) => { doneError = err; });
+  await Promise.resolve();
+
+  assert.ok(sent, 'a garbage completion timeout must emit a terminal result');
+  assert.equal(sent[0], null, 'a refused command must not fire the continue port');
+  assert.equal(sent[1].result, 'failed');
+  assert.ok(doneError instanceof Error, 'a garbage completion timeout must call done(err)');
+  assert.match(doneError.message, /Command completion timeout must be a finite number \(got "abc"\)/);
+  assert.equal(conn.sent.length, 0, 'the command must not reach the vehicle before its poll window is judged');
+});
+
+test('a garbage Command maxRetries refuses the same way', async () => {
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '10000',
+    maxRetries: 'nope',
+  });
+
+  let doneError;
+  node.emit('input', { payload: null }, () => {}, (err) => { doneError = err; });
+  await Promise.resolve();
+
+  assert.match(doneError.message, /Command max retries must be a finite number \(got "nope"\)/);
+});
+
+test('a hand-edited garbage Command delivery tier fails loud instead of silently running Confirm', async () => {
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'cofnirm',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+  });
+
+  let sent;
+  let doneError;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, (err) => { doneError = err; });
+  await Promise.resolve();
+
+  assert.equal(sent[0], null);
+  assert.match(doneError.message, /unknown Command delivery "cofnirm" — expected one of build, send, confirm, complete/);
+  assert.equal(conn.sent.length, 0, 'the mis-resolved tier never reached the wire');
+});
+
 test('silent ACK windows re-send a LONG with incremented confirmation, badge telemetry, then the unchanged unconfirmed record (#248)', async (t) => {
   // The harness fires the 1000 ms window timers via microtask, so the whole
   // resend cascade — 3 re-sends, then the final window — drains before the

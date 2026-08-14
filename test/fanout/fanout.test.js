@@ -7,6 +7,7 @@ const {
   executeFanout,
   classifyMessage,
   selectFanoutMembers,
+  resolveExecutionMode,
 } = require('../../lib/fanout');
 const { BAND } = require('../../lib/connection/bands');
 const { streamLocks } = require('../../lib/delivery/lock');
@@ -77,6 +78,58 @@ test('an empty resolution records which selection produced it (#226)', async () 
   });
   assert.equal(emptyList.result, 'empty');
   assert.equal(emptyList.selection, 'list');
+});
+
+// ── Execution mode / delivery tier membership (owner ruling, 2026-08-14) ──────
+
+test('resolveExecutionMode: absent/blank is sequential, a typo throws naming the vocabulary', () => {
+  assert.equal(resolveExecutionMode(undefined), 'sequential');
+  assert.equal(resolveExecutionMode(''), 'sequential');
+  assert.equal(resolveExecutionMode('sequential'), 'sequential');
+  assert.equal(resolveExecutionMode('broadcast'), 'broadcast');
+  assert.throws(
+    () => resolveExecutionMode('broadcasts'),
+    /unknown Fan-out execution mode "broadcasts" — expected one of sequential, broadcast/
+  );
+});
+
+test('a typo\'d executionMode no longer silently runs the sequential machine (\\#231\'s twin, confirmed)', async () => {
+  // Before the fix: `options.mode || 'sequential'` stayed truthy for
+  // 'broadcasts', missed every `mode === 'broadcast'` gate, and ran
+  // executeSequential — the broadcast confirm gates never fired and a real
+  // message left the wire under the wrong machine. Now it throws, like every
+  // other selection-typo resolver, caught by the node the same way
+  // `resolveMoveAction`'s throw is (\#222 pattern) rather than a soft
+  // `refused` record — `classifyMessage`'s refusals are a message-shape
+  // check, not a selection one.
+  const connection = connectionStub([peer(1, { firmware: 'ardupilot' })]);
+  await assert.rejects(
+    () => executeFanout({
+      connection,
+      message: builtCommand(),
+      mode: 'broadcasts',
+      delivery: 'send',
+      selection: { mode: 'all' },
+    }),
+    /unknown Fan-out execution mode "broadcasts" — expected one of sequential, broadcast/
+  );
+  assert.equal(connection.sends.length, 0);
+});
+
+test('a typo\'d delivery tier throws instead of silently running Send (lib/fanout delivery)', async () => {
+  const connection = connectionStub([peer(1, { firmware: 'ardupilot' })]);
+  await assert.rejects(
+    () => executeFanout({
+      connection,
+      message: builtCommand(),
+      mode: 'sequential',
+      delivery: 'cofnirm',
+      selection: { mode: 'all' },
+    }),
+    /unknown Fan-out delivery "cofnirm" — expected one of build, send, confirm/
+  );
+  // Nothing left the wire under the mis-resolved tier.
+  assert.equal(connection.sends.length, 0);
 });
 
 // ── The replicator contract: message in, kind inferred from its name ──────────

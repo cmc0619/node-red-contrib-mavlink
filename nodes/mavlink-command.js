@@ -62,6 +62,7 @@ const {
   dialectFromVehicleId,
   dialectFromConnection,
   isBlank,
+  finiteNumberOr,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -114,6 +115,29 @@ function resolveCarrier(config) {
   if (config.sendAs === CARRIER.LONG) return CARRIER.LONG;
   throw new Error(
     `unknown Command "Send as" ${JSON.stringify(config.sendAs)} — expected one of ${Object.values(CARRIER).join(', ')}`
+  );
+}
+
+/** Delivery tiers the editor's `delivery` select can save (§9 "Delivery tiers"). */
+const DELIVERY_TIERS = ['build', 'send', 'confirm', 'complete'];
+
+/**
+ * Delivery-tier membership (owner ruling, 2026-08-14, selection-typo cluster
+ * — extending Move's `resolveDelivery` to Command). The `delivery` select
+ * has no blank option (default `'confirm'`), so a hand-edited token outside
+ * the four tiers is not a choice the operator made. Every tier past Build
+ * and Send falls into the same Confirm/Complete ack-waiter below — only
+ * `delivery === 'complete'` gates the extra completion poll — so a typo used
+ * to silently run Confirm's machinery (or silently downgrade Complete to
+ * Confirm) instead of failing loud.
+ *
+ * @param {*} value  config.delivery
+ * @returns {'build'|'send'|'confirm'|'complete'}
+ */
+function resolveDeliveryTier(value) {
+  if (DELIVERY_TIERS.includes(value)) return value;
+  throw new Error(
+    `unknown Command delivery ${JSON.stringify(value)} — expected one of ${DELIVERY_TIERS.join(', ')}`
   );
 }
 
@@ -178,8 +202,9 @@ module.exports = function registerMavlinkCommand(RED) {
       return _coordKinds;
     }
 
-    const timeoutMs = config.timeout === '' ? DEFAULT_TIMEOUT_MS : Number(config.timeout);
-    const maxRetries = config.maxRetries === '' ? DEFAULT_MAX_RETRIES : Number(config.maxRetries);
+    // Resolved per-input (below, like `resolveCarrier`) rather than here: a
+    // throw at construction crashes the whole node's deploy, and a
+    // hand-edited config is a per-message failure like any other resolver.
     const unconfirmedContinue = !!config.unconfirmedContinue;
 
     /**
@@ -242,11 +267,39 @@ module.exports = function registerMavlinkCommand(RED) {
         );
       }
 
+      // Delivery-tier membership (owner ruling, 2026-08-14, selection-typo
+      // cluster — extending Move's `resolveDelivery` to Command). The
+      // dialog's `delivery` select always saves one of the four tiers, so a
+      // hand-edited token is not a choice the operator made; unrecognised
+      // used to fall through Build's and Send's early returns straight into
+      // the Confirm/Complete ack-waiter below, silently running a tier
+      // nobody asked for.
+      resolveDeliveryTier(delivery);
+
       // Carrier resolution (owner ruling, 2026-08-14, extending the Move
       // no-defaults ruling — DESIGN.md §14 had left this un-ruled). Resolved
       // per-input, like Move's action/frame resolvers, so an unknown token
       // reports a real 'failed' status record instead of crashing the deploy.
       const configuredCarrier = resolveCarrier(config);
+
+      // ACK timeout / retry count (owner ruling, 2026-08-14): blank keeps the
+      // library default; a present non-finite value used to coerce silently
+      // — `setTimeout(fn, NaN)` substitutes ~1 ms instead of refusing, so a
+      // hand-edited 'abc' ACK timeout meant a command's ack window closed
+      // before the send even left the queue (measured ~4 ms). Neither value
+      // reaches the wire, so nothing downstream catches it the way wire.js
+      // catches an integer field.
+      const timeoutMs = finiteNumberOr(config.timeout, DEFAULT_TIMEOUT_MS, 'Command ACK timeout');
+      const maxRetries = finiteNumberOr(config.maxRetries, DEFAULT_MAX_RETRIES, 'Command max retries');
+      // Complete's poll timeout resolves here too — before the send, not in
+      // the post-ack continuation where it used to sit: by then the vehicle
+      // has already accepted and begun executing the command, so a garbage
+      // value refused after the fact (#309 review round). Gated on the tier
+      // so a cleared value cannot red a Build/Send/Confirm node that never
+      // reads it (the same liveOr rule the editors follow).
+      const completionTimeoutMs = delivery === 'complete'
+        ? finiteNumberOr(config.completionTimeout, 60000, 'Command completion timeout')
+        : null;
 
       const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
       const { target, identityId } = resolveDeliveryContext(RED, {
@@ -570,7 +623,7 @@ module.exports = function registerMavlinkCommand(RED) {
             sysid: target.sysid,
             compid: target.compid,
             frame: completionFrame,
-            timeoutMs: config.completionTimeout ? Number(config.completionTimeout) : 60000,
+            timeoutMs: completionTimeoutMs,
           });
           if (myGen === _generation) {
             _activeCompletion = completionWait;

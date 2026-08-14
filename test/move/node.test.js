@@ -51,6 +51,93 @@ test('mavlink-move stream: a replaced or closed stream expires silently', async 
   assert.equal(emitted.length, 0, 'replacement and close emit nothing');
 });
 
+test('mavlink-move stream: a garbage payload.rateHz refuses instead of flooding at ~1 kHz (owner ruling, 2026-08-14)', () => {
+  const conn = { id: 'conn', vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    action: 'steer',
+    reference: 'world',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 5,
+    ttlMs: 1000,
+  });
+
+  let sent;
+  let doneError;
+  node.emit('input', { payload: { rateHz: 'fast' } }, (m) => { sent = m; }, (err) => { doneError = err; });
+  assert.equal(sent[0], null, 'a refused stream start must not fire the continue port');
+  assert.equal(sent[1].result, 'failed');
+  assert.match(doneError.message, /Move stream rate \(rateHz\) must be a finite number \(got "fast"\)/);
+
+  // Blank still inherits the editor-validated config, unaffected.
+  let inherited;
+  node.emit('input', { payload: {} }, (m) => { inherited = m; }, () => {});
+  assert.equal(inherited[1].result, 'streaming');
+  node.emit('close', () => {});
+});
+
+test('mavlink-move stream: a garbage hand-edited config.rateHz refuses too — a silent payload is the common path to the same ~1 kHz flood', () => {
+  const conn = { id: 'conn', vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    action: 'steer',
+    reference: 'world',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 'fast',
+    ttlMs: 1000,
+  });
+
+  let sent;
+  let doneError;
+  node.emit('input', { payload: {} }, (m) => { sent = m; }, (err) => { doneError = err; });
+  assert.equal(sent[0], null, 'a refused stream start must not fire the continue port');
+  assert.equal(sent[1].result, 'failed');
+  assert.match(doneError.message, /Move stream rate \(rateHz\) must be a finite number \(got "fast"\)/);
+});
+
+test('mavlink-move stream: a garbage payload.ttlMs refuses the same way', () => {
+  const conn = { id: 'conn', vehicle: {}, send() {} };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({
+    delivery: 'stream',
+    action: 'steer',
+    reference: 'world',
+    vNorth: 1,
+    vEast: 0,
+    vUp: 0,
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    rateHz: 5,
+    ttlMs: 1000,
+  });
+
+  let sent;
+  let doneError;
+  node.emit('input', { payload: { ttlMs: 'abc' } }, (m) => { sent = m; }, (err) => { doneError = err; });
+  assert.equal(sent[0], null);
+  assert.equal(sent[1].result, 'failed');
+  assert.match(doneError.message, /Move stream TTL \(ttlMs\) must be a finite number \(got "abc"\)/);
+});
+
 test('mavlink-move stream: one owner per (connection, target) — a second node is refused, the owner may replace itself (#176)', () => {
   const conn = { id: 'conn', vehicle: {}, send() {} };
   const RED = redStub({ conn });
@@ -517,6 +604,25 @@ test('mavlink-move goto + Send refuses a yaw rate through the reposition builder
 
 
 
+
+test('mavlink-move reposition confirm: a garbage ackTimeout refuses instead of arming a ~1 ms window (owner ruling, 2026-08-14)', async () => {
+  const conn = repositionConn();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-move')(RED);
+  const Node = RED.nodes.types['mavlink-move'];
+  const node = new Node({ ...repositionCfg, delivery: 'confirm', connection: 'conn', ackTimeout: 'abc' });
+
+  let out;
+  let doneError;
+  node.emit('input', { payload: {} }, (m) => { out = m; }, (err) => { doneError = err; });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(conn.sends.length, 0, 'nothing reached the wire under a ~1 ms window');
+  assert.equal(conn.subs.length, 0, 'no COMMAND_ACK subscription opened');
+  assert.equal(out[0], null);
+  assert.equal(out[1].result, 'failed');
+  assert.match(doneError.message, /Move ACK timeout must be a finite number \(got "abc"\)/);
+});
 
 test('mavlink-move reposition confirm refuses a broadcast target (sysid 0): nothing sent, failed record, done(err) (#260)', () => {
   // The ack matcher accepts any source at sysid 0 — the first vehicle to
