@@ -71,9 +71,12 @@ config-node shapes and message contracts may still change without a major bump.
 
 - **Steer collapses to one field on a Plane.** ArduPlane's local-setpoint
   handler returns immediately on any frame that is not `LOCAL_OFFSET_NED` and
-  then reads only the vertical component, so the Reference locks to *Offset from
-  here* and **Metres up** is the whole form — a guided altitude change, which is
-  what QGroundControl offers a fixed wing beside goto.
+  then reads only the vertical component, so World and Body are withheld from
+  the Reference list and, on *Offset from here*, **Metres up** is the whole
+  form — a guided altitude change, which is what QGroundControl offers a fixed
+  wing beside goto. The collapse follows the Reference in force rather than the
+  family, so a node that kept a saved World (ruling 6) still shows the fields
+  that Reference would actually send.
 
 - **Steer's field groups are disclosed by checkboxes** — Position, Velocity,
   Acceleration, Yaw. They reveal rows and **save nothing**: the type_mask still

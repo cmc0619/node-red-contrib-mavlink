@@ -1576,43 +1576,30 @@
    *   live-or-saved match survives the withholding and stays selectable.
    *
    * @param {object} opts
-   * @param {string|object} opts.select     selector or jQuery object
+   * @param {string} opts.select            jQuery selector for the `<select>`
    * @param {Array<Array<string>>} opts.options  `[[value, label], …]`
    * @param {*} [opts.saved]                the node's saved value
    * @param {function(string): boolean} [opts.withhold]  true = hide from new
-   * @param {string} [opts.fallback]        chosen when nothing else survives
-   * @returns {{value: string, withheld: string[]}} the value now selected, and
-   *   the option values this call withheld — a caller reshaping other rows off
-   *   the same knowledge does not have to recompute it.
+   * @param {string} [opts.fallback]        preferred when neither live nor saved survives
+   * @returns {string} the value now selected
    */
   RED.mavlink.refreshOptionSelect = function (opts) {
-    opts = opts || {};
-    var $select = typeof opts.select === 'string' ? $(opts.select) : opts.select;
-    var all = opts.options || [];
-    var withhold = typeof opts.withhold === 'function' ? opts.withhold : null;
+    var $select = $(opts.select);
+    var withhold = opts.withhold || function () { return false; };
     // Read the live value BEFORE emptying: a rebuild triggered by some other
     // field changing must not lose an in-progress choice the operator made and
     // has not saved yet.
-    var live = $select && $select.length ? $select.val() : undefined;
+    var live = $select.val();
     var saved = opts.saved;
-    var kept = function (value) {
-      return value === live || value === saved;
-    };
 
-    var withheld = [];
-    var options = all.filter(function (opt) {
-      if (!withhold || !withhold(opt[0])) return true;
-      if (kept(opt[0])) return true;
-      withheld.push(opt[0]);
-      return false;
+    var options = opts.options.filter(function (opt) {
+      return !withhold(opt[0]) || opt[0] === live || opt[0] === saved;
     });
 
-    if ($select && $select.length) {
-      $select.empty();
-      options.forEach(function (opt) {
-        $('<option></option>').val(opt[0]).text(opt[1]).appendTo($select);
-      });
-    }
+    $select.empty();
+    options.forEach(function (opt) {
+      $('<option></option>').val(opt[0]).text(opt[1]).appendTo($select);
+    });
 
     // The fallback is a *preference*, not an escape from the list: a caller's
     // sensible default can itself be withheld — 'goto' on an Antenna Tracker —
@@ -1623,7 +1610,7 @@
       return options.some(function (opt) { return opt[0] === candidate; });
     })[0];
     if (value === undefined && options.length) value = options[0][0];
-    if ($select && $select.length) $select.val(value);
-    return { value: value, withheld: withheld };
+    $select.val(value);
+    return value;
   };
 })();

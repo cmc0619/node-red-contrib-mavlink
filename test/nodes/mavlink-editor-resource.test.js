@@ -1227,7 +1227,9 @@ function selectHarness(live) {
     }
     if (selector === '#sel') return select;
     if (selector && typeof selector === 'object') return selector;
-    return { length: 0, val() {}, toggle() { return this; }, empty() { return this; } };
+    // Any selector the test did not seed: an empty jQuery set, whose methods
+    // are all no-ops returning undefined — which is what real jQuery does.
+    return { length: 0, val() { return undefined; }, toggle() { return this; }, empty() { return this; } };
   }
   $.getJSON = () => ({ fail() { return this; } });
   const context = {
@@ -1245,25 +1247,23 @@ const TIERS = [['build', 'Build'], ['send', 'Send'], ['stream', 'Stream']];
 
 test('refreshOptionSelect rebuilds a select from its option list', () => {
   const { RED, select } = selectHarness('send');
-  const result = RED.mavlink.refreshOptionSelect({ select: '#sel', options: TIERS });
+  const value = RED.mavlink.refreshOptionSelect({ select: '#sel', options: TIERS });
   assert.deepEqual(plain(select.options), TIERS, 'every option is rebuilt, value and label');
-  assert.equal(result.value, 'send', 'the live value survives when still offered');
-  assert.deepEqual(plain(result.withheld), []);
+  assert.equal(value, 'send', 'the live value survives when still offered');
 });
 
 test('refreshOptionSelect hides a withheld option from a node that never had it', () => {
   // Half one of DESIGN §9 ruling 6: the editor is the protector and may
   // withhold an option it knows the vehicle cannot act on.
-  const { RED, select } = selectHarness(undefined);
-  const result = RED.mavlink.refreshOptionSelect({
+  const { RED, select } = selectHarness();
+  const value = RED.mavlink.refreshOptionSelect({
     select: '#sel',
     options: TIERS,
     withhold: (v) => v === 'stream',
     fallback: 'send',
   });
   assert.deepEqual(plain(select.options).map((o) => o[0]), ['build', 'send'], 'stream is not offered');
-  assert.equal(result.value, 'send');
-  assert.deepEqual(plain(result.withheld), ['stream'], 'the caller is told what was withheld');
+  assert.equal(value, 'send');
 });
 
 test('refreshOptionSelect keeps a withheld option that is already saved (§9 ruling 6)', () => {
@@ -1271,8 +1271,8 @@ test('refreshOptionSelect keeps a withheld option that is already saved (§9 rul
   // silently rewriting a saved config changes what the operator built without
   // telling them, so the option stays selectable and `validate` supplies the
   // reason instead.
-  const { RED, select } = selectHarness(undefined);
-  const result = RED.mavlink.refreshOptionSelect({
+  const { RED, select } = selectHarness();
+  const value = RED.mavlink.refreshOptionSelect({
     select: '#sel',
     options: TIERS,
     saved: 'stream',
@@ -1280,21 +1280,20 @@ test('refreshOptionSelect keeps a withheld option that is already saved (§9 rul
     fallback: 'send',
   });
   assert.deepEqual(plain(select.options).map((o) => o[0]), ['build', 'send', 'stream']);
-  assert.equal(result.value, 'stream', 'the saved value is not downgraded');
-  assert.deepEqual(plain(result.withheld), [], 'nothing was withheld — it was kept');
+  assert.equal(value, 'stream', 'the saved value is not downgraded');
 });
 
 test('refreshOptionSelect keeps a withheld option the operator just picked', () => {
   // The same protection for a choice made in this dialog and not yet saved: a
   // rebuild triggered by some *other* field changing must not silently undo it.
   const { RED } = selectHarness('stream');
-  const result = RED.mavlink.refreshOptionSelect({
+  const value = RED.mavlink.refreshOptionSelect({
     select: '#sel',
     options: TIERS,
     withhold: (v) => v === 'stream',
     fallback: 'send',
   });
-  assert.equal(result.value, 'stream');
+  assert.equal(value, 'stream');
 });
 
 test('refreshOptionSelect falls back when the option is structurally absent', () => {
@@ -1302,32 +1301,32 @@ test('refreshOptionSelect falls back when the option is structurally absent', ()
   // way: not withheld-by-knowledge but absent from the list entirely, because
   // this carrier has no such tier. There is no operator intent to preserve, so
   // even a saved value falls back rather than being re-offered.
-  const { RED, select } = selectHarness(undefined);
-  const result = RED.mavlink.refreshOptionSelect({
+  const { RED, select } = selectHarness();
+  const value = RED.mavlink.refreshOptionSelect({
     select: '#sel',
     options: [['build', 'Build'], ['send', 'Send']],
     saved: 'stream',
     fallback: 'send',
   });
   assert.deepEqual(plain(select.options).map((o) => o[0]), ['build', 'send']);
-  assert.equal(result.value, 'send');
+  assert.equal(value, 'send');
 });
 
 test('refreshOptionSelect prefers the live value over the saved one', () => {
   const { RED } = selectHarness('build');
-  const result = RED.mavlink.refreshOptionSelect({
+  const value = RED.mavlink.refreshOptionSelect({
     select: '#sel',
     options: TIERS,
     saved: 'send',
     fallback: 'send',
   });
-  assert.equal(result.value, 'build', 'an in-progress choice outranks the saved one');
+  assert.equal(value, 'build', 'an in-progress choice outranks the saved one');
 });
 
 test('refreshOptionSelect falls back to the first option when nothing else survives', () => {
-  const { RED } = selectHarness(undefined);
-  const result = RED.mavlink.refreshOptionSelect({ select: '#sel', options: TIERS });
-  assert.equal(result.value, 'build', 'a select is never left showing a value it does not offer');
+  const { RED } = selectHarness();
+  const value = RED.mavlink.refreshOptionSelect({ select: '#sel', options: TIERS });
+  assert.equal(value, 'build', 'a select is never left showing a value it does not offer');
 });
 
 test('refreshOptionSelect never selects a fallback that is itself withheld', () => {
@@ -1336,13 +1335,13 @@ test('refreshOptionSelect never selects a fallback that is itself withheld', () 
   // fallback blindly would leave the select displaying its first real option
   // while every reader saw 'goto' — a form that shows one thing and sends
   // another.
-  const { RED, select } = selectHarness(undefined);
-  const result = RED.mavlink.refreshOptionSelect({
+  const { RED, select } = selectHarness();
+  const value = RED.mavlink.refreshOptionSelect({
     select: '#sel',
     options: TIERS,
     withhold: (v) => v === 'build' || v === 'send',
     fallback: 'send',
   });
   assert.deepEqual(plain(select.options).map((o) => o[0]), ['stream']);
-  assert.equal(result.value, 'stream', 'the fallback loses to the only option actually offered');
+  assert.equal(value, 'stream', 'the fallback loses to the only option actually offered');
 });

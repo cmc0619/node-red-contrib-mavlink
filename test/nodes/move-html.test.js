@@ -1125,8 +1125,8 @@ test('mavlink-move: every `show` key actually reaches a toggle', () => {
 /** Profiles for every ArduPilot family, plus a PX4 one to prove the gate's edge. */
 const FAMILY_LOOKUP = {};
 for (const family of ['copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker', 'unknown']) {
-  FAMILY_LOOKUP['conn-' + family] = { vehicle: 'veh-' + family };
-  FAMILY_LOOKUP['veh-' + family] = {
+  FAMILY_LOOKUP[`conn-${family}`] = { vehicle: `veh-${family}` };
+  FAMILY_LOOKUP[`veh-${family}`] = {
     firmware: 'ardupilot', dialect: 'ardupilotmega', vehicleFamily: family,
   };
 }
@@ -1146,7 +1146,7 @@ FAMILY_LOOKUP['veh-px4-blimp'] = { firmware: 'px4', dialect: 'common', vehicleFa
 function actionVerdict(family, action, connection) {
   const defaults = loadNodeDefaults('mavlink-move', FAMILY_LOOKUP);
   return defaults.action.validate.call(
-    { id: 'm1', action: action, delivery: 'send', connection: connection || 'conn-' + family },
+    { id: 'm1', action, delivery: 'send', connection: connection || `conn-${family}` },
     action,
     {}
   );
@@ -1253,7 +1253,7 @@ test('mavlink-move: a fixed wing collapses Steer to the one frame it reads', () 
   const { reference } = loadNodeDefaults('mavlink-move', FAMILY_LOOKUP);
   const verdict = (family, ref, connection) => reference.validate.call(
     { id: 'm1', action: 'steer', delivery: 'send', reference: ref,
-      connection: connection || 'conn-' + family },
+      connection: connection || `conn-${family}` },
     ref, {}
   );
 
@@ -1264,6 +1264,24 @@ test('mavlink-move: a fixed wing collapses Steer to the one frame it reads', () 
     );
   }
   assert.equal(verdict('plane', 'offset'), true, 'offset is the frame a plane flies');
+
+  // The field collapse follows the Reference actually in force, not the family.
+  // A saved World survives the withholding (ruling 6), and a form that showed
+  // one field while the Reference read World would describe a message it is not
+  // sending.
+  assert.match(
+    html,
+    /var planeSteer = isSteer && gate\.gated && gate\.family === 'plane'\s*\n\s*&& reference === 'offset';/,
+    'the collapse keys on the frame in force'
+  );
+  // And it forces the Position group open rather than only showing it: an
+  // altitude typed here must not vanish underneath the operator when the node
+  // is rebound to a copter and the seeded disclosure takes over again.
+  assert.match(
+    html,
+    /if \(planeSteer\) disclosed\.position = true;/,
+    'the collapse writes the disclosure state, not just this paint'
+  );
   assert.equal(verdict('copter', 'world'), true, 'a copter reads 1/7/8/9 — nothing collapses');
   assert.equal(
     verdict('plane', 'world', 'conn-px4-blimp'), true,
