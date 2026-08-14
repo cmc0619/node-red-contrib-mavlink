@@ -51,6 +51,28 @@ const {
   finiteNumberOr,
 } = require('../lib/addressing');
 
+/** Delivery tiers the editor's `delivery` select can save (§9). */
+const DELIVERY_TIERS = ['build', 'confirm'];
+
+/**
+ * Delivery-tier membership (owner ruling, 2026-08-14, selection-typo cluster
+ * §14 — the Mission site the audit missed; surfaced by #309's review round).
+ * `delivery === 'build'` is the only gate below, so an unknown token fell
+ * through to the wire tier: a typo'd hand-edit of 'build' ran a real
+ * transfer against the vehicle the operator asked only to preview. Blank
+ * throws too — the editor's select has no blank option, so blank is not a
+ * reachable operator choice (same shape as Move's resolveDelivery).
+ *
+ * @param {*} value  config.delivery
+ * @returns {'build'|'confirm'}
+ */
+function resolveDeliveryTier(value) {
+  if (DELIVERY_TIERS.includes(value)) return value;
+  throw new Error(
+    `unknown Mission delivery ${JSON.stringify(value)} — expected one of ${DELIVERY_TIERS.join(', ')}`
+  );
+}
+
 module.exports = function registerMavlinkMission(RED) {
   function MavlinkMissionNode(config) {
     RED.nodes.createNode(this, config);
@@ -93,6 +115,10 @@ module.exports = function registerMavlinkMission(RED) {
         done();
         return;
       }
+
+      // Before anything reads `delivery` below: the build/wire fork is the
+      // only dispatch on it, and its else side sends.
+      resolveDeliveryTier(delivery);
 
       const payload = msg.payload ?? {};
       const missionTypeKey = payload.missionType || config.missionType || 'mission';

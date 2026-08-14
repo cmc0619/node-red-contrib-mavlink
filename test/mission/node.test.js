@@ -218,6 +218,24 @@ test('a garbage maxRetries refuses the same way', async () => {
   assert.equal(conn.sent.length, 0);
 });
 
+test('a typo\'d Mission delivery refuses instead of falling through to the wire tier', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'biuld',
+    missionType: 'mission',
+  });
+  const { outputs, err } = await runInput(node, { payload: {} });
+  assert.ok(err, 'an unknown delivery tier must fail loud');
+  assert.match(String(err), /unknown Mission delivery "biuld" — expected one of build, confirm/);
+  assert.equal(conn.sent.length, 0, 'a typo of build must not start a real transfer');
+  assert.equal(outputs[0][0], null);
+  assert.equal(outputs[0][1].result, 'failed');
+});
+
 test('clear runs on any input — selecting the operation is the confirmation', async () => {
   // The confirm gate (config checkbox / msg.confirmed) was removed by owner
   // ruling (2026-08-13): an operator who selected the Clear operation has

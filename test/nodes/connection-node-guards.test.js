@@ -130,7 +130,7 @@ test('a hand-edited garbage staleMs/expireMs refuses at construction instead of 
   };
   registerLocalIdentity(identityRED);
   const identityNode = Object.create(null);
-  IdentityCtor.call(identityNode, { role: 'gcs' });
+  IdentityCtor.call(identityNode, { role: 'gcs', sourceSystemId: 255, sourceComponentId: 190 });
 
   const { ctor } = makeRED({ 'veh-1': vehicleNode, 'id-1': identityNode });
 

@@ -27,7 +27,13 @@ test('mavlink-local-identity: a non-finite heartbeatIntervalMs refuses instead o
   const Node = RED.nodes.types['mavlink-local-identity'];
 
   assert.throws(
-    () => new Node({ id: 'garbage', role: 'gcs', heartbeatIntervalMs: 'abc' }),
+    () => new Node({
+      id: 'garbage',
+      role: 'gcs',
+      sourceSystemId: 255,
+      sourceComponentId: 190,
+      heartbeatIntervalMs: 'abc',
+    }),
     /Local Identity heartbeat interval must be a finite number \(got "abc"\)/
   );
 });

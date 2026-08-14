@@ -291,6 +291,15 @@ module.exports = function registerMavlinkCommand(RED) {
       // catches an integer field.
       const timeoutMs = finiteNumberOr(config.timeout, DEFAULT_TIMEOUT_MS, 'Command ACK timeout');
       const maxRetries = finiteNumberOr(config.maxRetries, DEFAULT_MAX_RETRIES, 'Command max retries');
+      // Complete's poll timeout resolves here too — before the send, not in
+      // the post-ack continuation where it used to sit: by then the vehicle
+      // has already accepted and begun executing the command, so a garbage
+      // value refused after the fact (#309 review round). Gated on the tier
+      // so a cleared value cannot red a Build/Send/Confirm node that never
+      // reads it (the same liveOr rule the editors follow).
+      const completionTimeoutMs = delivery === 'complete'
+        ? finiteNumberOr(config.completionTimeout, 60000, 'Command completion timeout')
+        : null;
 
       const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
       const { target, identityId } = resolveDeliveryContext(RED, {
@@ -614,10 +623,7 @@ module.exports = function registerMavlinkCommand(RED) {
             sysid: target.sysid,
             compid: target.compid,
             frame: completionFrame,
-            // Same finiteness crater as the ACK timeout above — a poll timer,
-            // not a wire field, so a hand-edited non-finite value has nothing
-            // downstream to catch it (owner ruling, 2026-08-14).
-            timeoutMs: finiteNumberOr(config.completionTimeout, 60000, 'Command completion timeout'),
+            timeoutMs: completionTimeoutMs,
           });
           if (myGen === _generation) {
             _activeCompletion = completionWait;

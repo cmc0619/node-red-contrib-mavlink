@@ -647,6 +647,33 @@ test('a garbage Command ACK timeout refuses instead of arming a ~1 ms window (ow
   assert.equal(conn.sent.length, 0, 'nothing left the wire under the ~1 ms window');
 });
 
+test('a garbage Command completion timeout refuses before the send — not after the vehicle already accepted', async () => {
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery: 'complete',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+    completionTimeout: 'abc',
+  });
+
+  let sent;
+  let doneError;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, (err) => { doneError = err; });
+  await Promise.resolve();
+
+  assert.equal(sent[0], null, 'a refused command must not fire the continue port');
+  assert.equal(sent[1].result, 'failed');
+  assert.match(doneError.message, /Command completion timeout must be a finite number \(got "abc"\)/);
+  assert.equal(conn.sent.length, 0, 'the command must not reach the vehicle before its poll window is judged');
+});
+
 test('a garbage Command maxRetries refuses the same way', async () => {
   const conn = connStubWithInject();
   const RED = redStub({ conn });
