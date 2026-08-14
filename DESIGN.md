@@ -4428,6 +4428,43 @@ half is `steerAxisValidator`, `attitudeAngleValidator` and `stickValidator` in
 `nodes/mavlink-move.html` — every field the runtime now requires is required in the dialog too,
 or the node deploys clean and fails every input.
 
+**A finite-number check on operator input is a guardrail, not a refusal to invent (owner
+ruling, 2026-08-14, asked as *"is requireNumber a guardrail?"*).**
+*Wrong belief:* the no-defaults ruling and the driver/protector split point the same way, so a
+helper that throws on a blank may as well throw on garbage too. `requireNumber` did both.
+*Fact:* the two arms answer to different rules and only one of them was asked for. Refusing a
+**blank** is refusing to invent a value nobody gave — the ruling above. Refusing a **non-finite**
+is refusing a value the caller *did* give, which is the guardrail §2 assigns to the dialog.
+
+The check was also never useful, whichever field it landed on. On a **float** NaN is legal
+MAVLink and the wire carries it — measured, `param1: NaN` serializes and decodes back NaN — so
+refusing here refused something the vehicle would have received and judged for itself. On an
+**integer** `lib/connection/wire.js` already refuses non-finite at the one choke point every
+outbound message crosses, and says more than Move could: it names the field and the broadcast
+hazard behind it. Forbidden or redundant, never both useful. **Zero tests pinned it**, which is
+its own evidence: it was inherited from `numberOr` and carried forward, not decided.
+
+*The tell to reuse:* ask what the arm refuses. A refusal because *nothing was supplied* keeps
+information the flow already lost. A refusal because *what was supplied looks wrong* is the
+driver editorialising, and the dialog owns that. Both throw, so they read alike in a diff.
+
+*The same cut one level down.* `degreesToRadians` answered 0 for `undefined`, serving the
+mask-ignored fields whose bytes still have to hold something. That 0 is legitimate **only**
+because a `type_mask` ignore bit says nobody reads it — and the function cannot see the bit. So
+the coupling was convention: a call site passing a blank without setting the bit would have got a
+commanded yaw of 0, which is north, silently, with no ack to argue with. The filler is spelled at
+the five mask-ignored call sites now, next to the bit that makes it legal. `attitude.js` had
+already been writing `thrust: thrust === undefined ? 0 : thrust` two lines below three body rates
+doing the identical thing the hidden way.
+
+*What this costs:* a garbage float now rides out as NaN. That is the driver coercing and sending,
+with the dialog validating and the vehicle judging — the same trade that removed Turn's firmware
+refusal, not a new one.
+*Check:* `requireNumber` in `lib/move/frames.js` asks one question. The non-finite refusal that
+matters lives in `wire.js` and is pinned by `test/connection/wire-nonfinite.test.js`, which is
+where it belongs: that test pins an external fact about the protocol and the encoder, not a
+decision of ours.
+
 **Mission Clear needs no confirmation gate (owner ruling, 2026-08-13).**
 *Wrong belief:* destructive operations need a second yes — a `confirmClear` checkbox or
 `msg.confirmed === true` — before a MISSION_CLEAR_ALL may be built or sent.
