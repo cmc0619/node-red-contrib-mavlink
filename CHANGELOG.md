@@ -45,7 +45,9 @@ config-node shapes and message contracts may still change without a major bump.
     going quiet, with no braking packet: zero thrust is a descent, not a stop,
     and both stacks watch for setpoint silence themselves (§9 ruling 1).
   - **Manual** (`MANUAL_CONTROL`) is QGroundControl's joystick path, the way
-    ArduSub is flown, and the only motion primitive a Blimp has. Sticks are
+    ArduSub is flown, and one of the two ways an Antenna Tracker can be
+    pointed. It is *not* how a Blimp moves, though this entry said so until the
+    family read below. Sticks are
     −1..1 and scale to the wire's ±1000 once. Two things differ from every
     other action: it addresses a **system only** (the message has no target
     component, so that row is hidden), and **a blank stick disables its axis**
@@ -54,7 +56,49 @@ config-node shapes and message contracts may still change without a major bump.
     0..1000 with neutral *500*, so an axis helpfully centred at 0 would command
     full reverse thrust.
 
+- **The Move dialog follows the vehicle, not just the firmware.** When the bound
+  Vehicle Profile names an ArduPilot family, the Action list drops the actions
+  that family has no handler for: an Antenna Tracker offers Attitude and Manual,
+  a Blimp offers Go to, and **Turn appears only on Copter and Sub** — neither
+  ArduPlane nor Rover implements `CONDITION_YAW` anywhere. These are all
+  messages a vehicle *accepts* and then ignores, mostly without a NAK, so the
+  dialog was the only place the difference could be shown. An `unknown` family,
+  no profile, or a PX4 profile gates nothing: hiding requires knowledge, and the
+  matrix is ArduPilot's per-vehicle dispatch rather than a fact about airframes.
+  Withheld options are **hidden from new nodes and kept on saved ones** (§9
+  ruling 6) — a node already holding one keeps it and reds at deploy with the
+  reason, instead of being silently rewritten.
+
+- **Steer collapses to one field on a Plane.** ArduPlane's local-setpoint
+  handler returns immediately on any frame that is not `LOCAL_OFFSET_NED` and
+  then reads only the vertical component, so the Reference locks to *Offset from
+  here* and **Metres up** is the whole form — a guided altitude change, which is
+  what QGroundControl offers a fixed wing beside goto.
+
+- **Steer's field groups are disclosed by checkboxes** — Position, Velocity,
+  Acceleration, Yaw. They reveal rows and **save nothing**: the type_mask still
+  derives from which fields carry values, so this is the curated-easy path a
+  preset dropdown would serve without re-growing a preset vocabulary. Clearing
+  a box clears that group's fields, deliberately — a hidden field that still
+  held a value would still be commanded, with nothing on screen to explain it.
+  The boxes seed themselves from whichever groups already carry values, so an
+  imported flow shows what it sends, and the acceleration triplet left the
+  Advanced section to sit with the groups it belongs to.
+
 ### Fixed
+
+- **Two recorded claims about ArduPilot's smaller vehicles were wrong**, and the
+  Move roster was phased around one of them. Reading all six vehicles' GCS
+  dispatch tables at source before building the family gate settled it (§14
+  2026-08-14): `handle_manual_control_axes` is a virtual with an **empty body**
+  and Blimp never overrides it, so sticks sent to a Blimp are decoded, counted
+  as a ground-station heartbeat, and discarded — what Blimp actually implements
+  is `DO_REPOSITION`. And "Blimp and Tracker implement neither setpoint message"
+  held only for the two *position* setpoints: an Antenna Tracker handles
+  `MANUAL_CONTROL` and `SET_ATTITUDE_TARGET`, so the empty surface planned for
+  it would have been wrong. Blimp also advertises three setpoint messages in its
+  `capabilities()` bitmask that it does not implement — a standing reason not to
+  gate any future feature on an autopilot's self-reported capabilities.
 
 - **The ack-timeout re-send is gated on per-command idempotency.** `AckWaiter`'s
   contract is explicit — pass `DEFAULT_MAX_RESENDS` *"only for a command

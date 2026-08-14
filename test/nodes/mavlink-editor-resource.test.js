@@ -1191,3 +1191,158 @@ test('buildTierDialectDefaults vehicle carries no required key (it would skip va
   assert.equal(Object.prototype.hasOwnProperty.call(vehicle, 'required'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(connection, 'required'), false);
 });
+
+/**
+ * A `<select>` the helper can actually rebuild. The stub has to model options
+ * for real — `empty()` really drops them, `$('<option></option>')` really mints
+ * one, `.val(x)` reads AND writes — because the ruling under test is about
+ * which options *survive* a rebuild. A stub whose `empty()` was a no-op would
+ * pass against a helper that filtered nothing, which is exactly the false
+ * confidence a source-grep gave last time (#303).
+ *
+ * @param {*} [live]  the value the select is showing before the rebuild
+ * @returns {{RED: object, select: object}}
+ */
+function selectHarness(live) {
+  const select = {
+    length: 1,
+    options: [],
+    value: live,
+    empty() { this.options = []; return this; },
+    val(v) {
+      if (arguments.length === 0) return this.value;
+      this.value = v;
+      return this;
+    },
+  };
+  function $(selector) {
+    if (selector === '<option></option>') {
+      return {
+        value: undefined,
+        label: '',
+        val(v) { this.value = v; return this; },
+        text(t) { this.label = t; return this; },
+        appendTo(target) { target.options.push([this.value, this.label]); return this; },
+      };
+    }
+    if (selector === '#sel') return select;
+    if (selector && typeof selector === 'object') return selector;
+    return { length: 0, val() {}, toggle() { return this; }, empty() { return this; } };
+  }
+  $.getJSON = () => ({ fail() { return this; } });
+  const context = {
+    RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node: () => null } },
+    $,
+    console,
+    setTimeout,
+  };
+  context.window = context;
+  vm.runInNewContext(resourceScript, context);
+  return { RED: context.RED, select };
+}
+
+const TIERS = [['build', 'Build'], ['send', 'Send'], ['stream', 'Stream']];
+
+test('refreshOptionSelect rebuilds a select from its option list', () => {
+  const { RED, select } = selectHarness('send');
+  const result = RED.mavlink.refreshOptionSelect({ select: '#sel', options: TIERS });
+  assert.deepEqual(plain(select.options), TIERS, 'every option is rebuilt, value and label');
+  assert.equal(result.value, 'send', 'the live value survives when still offered');
+  assert.deepEqual(plain(result.withheld), []);
+});
+
+test('refreshOptionSelect hides a withheld option from a node that never had it', () => {
+  // Half one of DESIGN §9 ruling 6: the editor is the protector and may
+  // withhold an option it knows the vehicle cannot act on.
+  const { RED, select } = selectHarness(undefined);
+  const result = RED.mavlink.refreshOptionSelect({
+    select: '#sel',
+    options: TIERS,
+    withhold: (v) => v === 'stream',
+    fallback: 'send',
+  });
+  assert.deepEqual(plain(select.options).map((o) => o[0]), ['build', 'send'], 'stream is not offered');
+  assert.equal(result.value, 'send');
+  assert.deepEqual(plain(result.withheld), ['stream'], 'the caller is told what was withheld');
+});
+
+test('refreshOptionSelect keeps a withheld option that is already saved (§9 ruling 6)', () => {
+  // Half two, and the half that gets forgotten when this is written inline:
+  // silently rewriting a saved config changes what the operator built without
+  // telling them, so the option stays selectable and `validate` supplies the
+  // reason instead.
+  const { RED, select } = selectHarness(undefined);
+  const result = RED.mavlink.refreshOptionSelect({
+    select: '#sel',
+    options: TIERS,
+    saved: 'stream',
+    withhold: (v) => v === 'stream',
+    fallback: 'send',
+  });
+  assert.deepEqual(plain(select.options).map((o) => o[0]), ['build', 'send', 'stream']);
+  assert.equal(result.value, 'stream', 'the saved value is not downgraded');
+  assert.deepEqual(plain(result.withheld), [], 'nothing was withheld — it was kept');
+});
+
+test('refreshOptionSelect keeps a withheld option the operator just picked', () => {
+  // The same protection for a choice made in this dialog and not yet saved: a
+  // rebuild triggered by some *other* field changing must not silently undo it.
+  const { RED } = selectHarness('stream');
+  const result = RED.mavlink.refreshOptionSelect({
+    select: '#sel',
+    options: TIERS,
+    withhold: (v) => v === 'stream',
+    fallback: 'send',
+  });
+  assert.equal(result.value, 'stream');
+});
+
+test('refreshOptionSelect falls back when the option is structurally absent', () => {
+  // The other reason an option can be missing, and it behaves the opposite
+  // way: not withheld-by-knowledge but absent from the list entirely, because
+  // this carrier has no such tier. There is no operator intent to preserve, so
+  // even a saved value falls back rather than being re-offered.
+  const { RED, select } = selectHarness(undefined);
+  const result = RED.mavlink.refreshOptionSelect({
+    select: '#sel',
+    options: [['build', 'Build'], ['send', 'Send']],
+    saved: 'stream',
+    fallback: 'send',
+  });
+  assert.deepEqual(plain(select.options).map((o) => o[0]), ['build', 'send']);
+  assert.equal(result.value, 'send');
+});
+
+test('refreshOptionSelect prefers the live value over the saved one', () => {
+  const { RED } = selectHarness('build');
+  const result = RED.mavlink.refreshOptionSelect({
+    select: '#sel',
+    options: TIERS,
+    saved: 'send',
+    fallback: 'send',
+  });
+  assert.equal(result.value, 'build', 'an in-progress choice outranks the saved one');
+});
+
+test('refreshOptionSelect falls back to the first option when nothing else survives', () => {
+  const { RED } = selectHarness(undefined);
+  const result = RED.mavlink.refreshOptionSelect({ select: '#sel', options: TIERS });
+  assert.equal(result.value, 'build', 'a select is never left showing a value it does not offer');
+});
+
+test('refreshOptionSelect never selects a fallback that is itself withheld', () => {
+  // The Antenna Tracker case: Move's sensible default action is 'goto', and a
+  // tracker is the one vehicle that has no goto handler. Honouring the
+  // fallback blindly would leave the select displaying its first real option
+  // while every reader saw 'goto' — a form that shows one thing and sends
+  // another.
+  const { RED, select } = selectHarness(undefined);
+  const result = RED.mavlink.refreshOptionSelect({
+    select: '#sel',
+    options: TIERS,
+    withhold: (v) => v === 'build' || v === 'send',
+    fallback: 'send',
+  });
+  assert.deepEqual(plain(select.options).map((o) => o[0]), ['stream']);
+  assert.equal(result.value, 'stream', 'the fallback loses to the only option actually offered');
+});
