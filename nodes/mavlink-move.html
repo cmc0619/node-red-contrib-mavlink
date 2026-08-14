@@ -163,7 +163,7 @@
 
   function steerAxisValidator(axes, name, label) {
     return function (v, opt) {
-      if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'steer') return true;
+      if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'steer') return true;
       if (!RED.mavlink.isBlank(v)) return RED.validators.number(true).call(this, v, opt);
       if (label === 'position'
         && RED.mavlink.liveOr(this, '#node-input-reference', this.reference, 'world') === 'offset') {
@@ -325,6 +325,21 @@
               + 'which is sent once and answered. Use Send, or Send & confirm to wait for '
               + 'the acknowledgement';
           }
+          // Same family as Offset above and found by its absence: the dropdown
+          // withholds Stream for Go to on a Blimp (no SET_POSITION_TARGET
+          // handler — streamed setpoints are discarded in silence, §14), but a
+          // node saved with the pair, or rebound to a blimp profile, deployed
+          // clean and reported `streaming` at a vehicle hearing nothing. Every
+          // other withheld option in this dialog reds on saved; this one now
+          // does too.
+          if (v === 'stream' && action === 'goto') {
+            var gate = moveFamilyGate(this);
+            if (gate.gated && gate.family === 'blimp') {
+              return 'a Blimp cannot stream Go to — it implements DO_REPOSITION but has no '
+                + 'SET_POSITION_TARGET handler (§14), so streamed setpoints are silently '
+                + 'discarded. Use Send or Send & confirm';
+            }
+          }
           // Fourth instance of the family, so it is stated generally rather than
           // per action: only the acked actions have anything to wait for. Go
           // to rides DO_REPOSITION, Turn CONDITION_YAW, Speed DO_CHANGE_SPEED
@@ -436,7 +451,10 @@
         value: 'world',
         validate: function (v, _opt) {
           var ref = RED.mavlink.liveOr(this, '#node-input-reference', v, 'world');
-          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'steer') return true;
+          // 'steer' fallback like every other action gate in this file — two of
+          // these read blank as 'goto' until 2026-08-14, so a hand-edited flow
+          // with no action key skipped exactly the Steer checks it needed.
+          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'steer') return true;
           // Offset on PX4 is measured inert — accepted and no motion at all,
           // burst and stream (§14 2026-08-05). The dropdown stops offering it
           // when the profile says PX4, but a node that already had it saved
@@ -565,7 +583,8 @@
         },
       },
       // Broadcast (0) is refused only where an ack is actually awaited: the
-      // Send & confirm tier — which the delivery rebuild offers on Go to only
+      // Send & confirm tier — which the delivery rebuild offers on the acked
+      // actions (Go to, Turn, Speed)
       // (#260). Send/Stream/Build stay broadcast-legal, so this reds nothing
       // they configure. The runtime guard stays for profile defaults and
       // payload overrides.
@@ -584,7 +603,10 @@
       targetComponent: { value: '', validate: RED.validators.number(true) },
       // Steer groups are optional and default blank: filling fields IS the
       // mode — the runtime derives the type_mask from the non-blank groups and
-      // refuses an all-blank steer at input time. That is a per-*group* rule;
+      // builds the honest all-ignore packet for an all-blank steer (the editor
+      // requires one filled field, so the configured path never sends it) —
+      // this used to say the runtime refuses it, which stopped being true when
+      // deriveSteerMode grew its yaw-only arm. That is a per-*group* rule;
       // a half-filled triplet is a different thing, and steerAxisValidator is
       // where the dialog catches it before the runtime does.
       north: { value: '', validate: steerAxisValidator(POSITION_AXES, 'north', 'position') },
@@ -707,8 +729,8 @@
       }
 
       // Delivery tiers follow the action (§9: tiers are computed, not fixed):
-      // goto's command path confirms via COMMAND_ACK; steer setpoints carry
-      // no ack, so Send & confirm exists on Go to only. The options are
+      // the acked MAV_CMD actions (Go to, Turn, Speed) confirm via
+      // COMMAND_ACK; setpoints carry no ack and cannot. The options are
       // rebuilt per action so the select never offers a tier the action makes
       // illegal; the in-progress (then saved) value survives when still
       // legal, and an illegal one falls back to Send — still a wire tier.
@@ -1260,7 +1282,7 @@
   <p>Builds or sends vehicle movement commands. The operator picks an intent — <b>Action</b> × <b>Delivery</b> — and the wire message, frame number, and type_mask follow as code; you never enter a bitmask. Vertical inputs — altitude, climb, vertical acceleration — are entered up-positive everywhere; the node flips them once to MAVLink NED down-positive values. Yaw and yaw rate are entered in degrees (deg, deg/s) and converted exactly once to the radians on the wire.</p>
   <p><b>Go to</b> is the one-shot GCS-style guided goto. On Build, Send, and Send &amp; confirm it rides <code>MAV_CMD_DO_REPOSITION</code> as <code>COMMAND_INT</code> — the acked command path; on Stream it rides <code>SET_POSITION_TARGET_GLOBAL_INT</code> at rate, the same intent streamed. The <b>Altitude reference</b> is the only frame choice: <i>Above home</i> (frame 3) or <i>Absolute (MSL)</i> (frame 0). Latitude/longitude are entered in degrees; yaw is entered in degrees and converted once to the radians the dialect declares for DO_REPOSITION. Blank optional params send the spec's no-change sentinels, matching what QGC and MAVSDK transmit: blank <b>Ground speed</b> → −1 (vehicle default), blank <b>Loiter radius</b> → 0 (ignored, planes), blank <b>Yaw</b> → NaN (keep the current heading mode; an explicit 0 commands north). Ground speed, Loiter radius, and Change mode are command-path params — they hide on Stream delivery, and the runtime refuses their payload overrides on a streamed setpoint.</p>
   <p><b>Change mode</b> (Advanced) sets MAV_DO_REPOSITION_FLAGS_CHANGE_MODE, and the flag is the gate on both stacks (measured, §14 2026-08-12): the goto is accepted iff the flag is set or the vehicle is already in GUIDED (ArduPilot) / Hold (PX4), else it answers denied (2). It flies the vehicle into guided mode — a mode change, and therefore an explicit opt-in (checkbox, or boolean <code>msg.payload.changeMode</code>).</p>
-  <p>On <b>Send &amp; confirm</b> delivery (Go to only — setpoints carry no acknowledgement) the node waits for the terminal COMMAND_ACK and reports it in the same vocabulary as <b>mavlink-command</b>: output 0 fires on <code>ACCEPTED</code> with an <code>accepted</code> record carrying <code>resultCode</code> 0; every other terminal result fails on output 1 with its MAV_RESULT name as the result — <code>denied</code>, <code>command_int_only</code>, <code>command_unsupported_mav_frame</code>, … — and its code, and a missing ack reports <code>unconfirmed</code> (§9: a missing ack is not a failure). The result IS the discriminator — branch on it with a switch. <code>TEMPORARILY_REJECTED</code> retries with back-off before failing. <b>ACK timeout</b> (blank = 10 s) bounds the wait. Every ack-confirmed record also carries the ack's <code>resultParam2</code> (command-specific detail, often the reason for a denial), and while the vehicle answers <code>IN_PROGRESS</code> the status badge shows the progress it reports. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use Send or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
+  <p>On <b>Send &amp; confirm</b> delivery (Go to, Turn and Speed — setpoints carry no acknowledgement) the node waits for the terminal COMMAND_ACK and reports it in the same vocabulary as <b>mavlink-command</b>: output 0 fires on <code>ACCEPTED</code> with an <code>accepted</code> record carrying <code>resultCode</code> 0; every other terminal result fails on output 1 with its MAV_RESULT name as the result — <code>denied</code>, <code>command_int_only</code>, <code>command_unsupported_mav_frame</code>, … — and its code, and a missing ack reports <code>unconfirmed</code> (§9: a missing ack is not a failure). The result IS the discriminator — branch on it with a switch. <code>TEMPORARILY_REJECTED</code> retries with back-off before failing. <b>ACK timeout</b> (blank = 10 s) bounds the wait. Every ack-confirmed record also carries the ack's <code>resultParam2</code> (command-specific detail, often the reason for a denial), and while the vehicle answers <code>IN_PROGRESS</code> the status badge shows the progress it reports. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use Send or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
   <p><b>Steer</b> sends <code>SET_POSITION_TARGET_LOCAL_NED</code> setpoints — the streaming/offboard path, fire-and-forget. The <b>Reference</b> picks the axes: <i>World (Local NED)</i> works on every firmware; <i>Body</i> adapts to the bound Vehicle Profile's firmware, because the two stacks read different body frames (measured, §14): ArduPilot reads BODY_OFFSET_NED (9) as the body-axis offset, while PX4 ignores 9 and reads BODY_NED (8) — and PX4 discards position in body frames, so body setpoints on PX4 carry velocity only. Without a firmware the body reference refuses rather than guess — a wrong frame number is silently dropped by the vehicle. Body labels read forward/right.</p>
   <p><i>Offset from here</i> is <code>MAV_FRAME_LOCAL_OFFSET_NED</code> (7): the position triplet is a world-axis offset added to wherever the vehicle currently is, so <b>Metres up</b> 10 with the other two blank climbs 10 m from here. Unlike World, a blank axis is legal and means a zero offset — no movement — rather than a coordinate, so single-axis moves are the normal use. This is the frame QGroundControl itself sends for a guided altitude change on ArduPilot, and the <b>only</b> local frame <b>ArduPlane</b> accepts at all (it reads the vertical component and ignores the rest) — World and Body do nothing on a fixed wing. ArduCopter, Rover and Sub apply all three axes. Velocity and acceleration are unaffected by the offset: on this frame they are plain NED rates, identical to World. <b>PX4 accepts frame 7 and never acts on it</b> (measured, §14), so the option is not offered when the Vehicle Profile says PX4. <b>Stream</b> delivery is not offered either — each setpoint is resolved against the vehicle's position at that moment, so a repeating offset walks the vehicle away instead of holding a target.</p>
   <p>Every Steer field is optional, because filling fields IS the mode: the type_mask derives from which groups carry values — position, velocity, acceleration, any combination of them (feed-forward), or yaw / yaw rate alone. Blank means mask-ignored; a value (including 0) means commanded. The editor requires at least one field, because an all-blank steer is the all-ignore packet PX4 logs as invalid.</p>
@@ -1271,8 +1293,8 @@
   <p><b>Speed</b> sends <code>MAV_CMD_DO_CHANGE_SPEED</code>, the guided speed change QGroundControl offers beside goto. <b>Speed type</b> picks which speed is being set — ground speed means something on every vehicle, airspeed is a fixed-wing concept, and climb/descent set the vertical rates. Blank <b>Speed</b> or <b>Throttle</b> (Advanced) sends the spec's -1 &ldquo;no change&rdquo;; -2 is the spec's &ldquo;return to default&rdquo; and you reach it by typing it. Both stacks and every moving vehicle family accept this command, so it asks no firmware question.</p>
   <p><b>Attitude</b> sends <code>SET_ATTITUDE_TARGET</code> — MAVSDK's offboard attitude path. You enter <b>Roll</b>, <b>Pitch</b> and <b>Yaw</b> in degrees and the node builds the quaternion the wire wants; you never type <code>q[4]</code>. Presence drives the mask exactly as it does on Steer: any angle commands the whole attitude (the wire has one ignore bit for all three), each body rate clears only its own bit, and <b>Thrust</b> is normalised 0..1 where an explicit 0 is a commanded zero rather than a blank. On <b>Stream</b> delivery the stream ends by <i>going quiet</i> — there is no braking packet, because zero thrust is a descent rather than a stop, and both stacks watch for setpoint silence themselves.</p>
   <p><b>Manual</b> sends <code>MANUAL_CONTROL</code>, the joystick message: QGroundControl's stick path, how ArduSub is flown, and one of the two ways an Antenna Tracker can be pointed. It is <i>not</i> how a Blimp moves — ArduPilot's Blimp never overrides the stick handler, whose base implementation is empty, so it decodes the message, counts it as a ground-station heartbeat, and discards it (§14). Sticks are entered <b>-1..1</b> and scale to the wire's ±1000 once, at encode. Two things differ from every other action. It addresses a <b>system only</b> — the message has no target component, so that row is hidden. And <b>a blank stick is a disabled axis, not a centred one</b>: it sends the dialect's <code>INT16_MAX</code> "axis is invalid" rather than 0. That matters — ArduSub reads the thrust axis as 0..1000 with neutral <i>500</i>, so an axis helpfully centred at 0 would command full reverse thrust. Leaving an axis blank means the vehicle is not driven on it at all, on any firmware. Ceasing to transmit is a real stop here: ArduSub's GCS failsafe disarms when stick messages stop arriving.</p>
-  <p>Action and delivery reshape the form (§6): only the parameters for the selection are shown, and the Delivery options themselves follow the action — steer setpoints cannot confirm, so Send &amp; confirm is offered on Go to only. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
-  <p>Output 0 continues only on success, once per input, and the result word IS the outcome, one meaning per word: <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — Go to confirm only). Output 1 carries the status record for every outcome.</p>
+  <p>Action and delivery reshape the form (§6): only the parameters for the selection are shown, and the Delivery options themselves follow the action — setpoints cannot confirm, so Send &amp; confirm is offered on the acked actions — Go to, Turn and Speed — only. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
+  <p>Output 0 continues only on success, once per input, and the result word IS the outcome, one meaning per word: <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — confirm tier only). Output 1 carries the status record for every outcome.</p>
   <p>On <b>Stream</b> delivery a running stream ends three ways. When the <b>TTL</b> elapses the node sends the zero-velocity brake and reports on output 1 with <code>result: "expired"</code> and <code>sent</code> (setpoints handed to the connection — the streaming link may coalesce under backpressure, so this counts sends, not wire deliveries) — switch on <code>result === "expired"</code> to run whatever follows a timed move; deliberately not on output 0, since that port is a trigger and the stream's start already fired it. If the expiry brake send itself fails, <code>result</code> stays <code>"expired"</code> and the failure rides a <code>brakeError</code> field. An input of <code>{action: "stop"}</code> halts the stream, sends the brake, and completes like any input — output 0 fires once, and the status record carries <code>result: "stopped"</code> with <code>sent</code>; a stop with nothing streaming completes with <code>detail: "no stream"</code>, and the action is refused on Build and Send delivery. A <b>new input</b> replaces the stream as a direct handover — no brake between consecutive targets, matching GCS practice; retargeting a different vehicle brakes the abandoned target once the new stream is live. A redeploy closes the node and brakes. A stream that keeps running through send failures reports once per failure streak on output 1 and never quits on its own — the firmware's setpoint watchdog is the failsafe on a dead link.</p>
   <p><code>msg.payload</code> overrides speak the action-shaped vocabulary: <code>altRef</code> (<code>"home"</code>/<code>"msl"</code>, Go to), <code>reference</code> (<code>"world"</code>/<code>"body"</code>, Steer), <code>position</code> (<code>{lat, lon, alt}</code> on Go to, <code>{north, east, up}</code> on Steer), <code>velocity</code> and <code>accel</code> (<code>{north, east, up}</code>, Steer), <code>yaw</code>, <code>yawRate</code>, <code>speed</code>, <code>radius</code>, <code>changeMode</code> (boolean, Go to command path), <code>target</code> (<code>{sysid, compid}</code>), <code>rateHz</code> and <code>ttlMs</code> (Stream), <code>timeBootMs</code>, and <code>action: "stop"</code>. <code>msg.payload === false</code> suppresses the input silently (§9).</p>
   <p>On <b>Build</b> delivery the Dialect dropdown selects the bundled dialect used for catalogs; choose <i>from Vehicle Profile…</i> to inherit dialect and target defaults from a Vehicle Profile. On <b>Send</b>, <b>Send &amp; confirm</b>, or <b>Stream</b> delivery a Connection is required and the Identity determines addressing: a companion identity derives the target sysid from its airframe and pins compid to 1 (the autopilot).</p>

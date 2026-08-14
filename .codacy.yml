@@ -25,10 +25,14 @@
 # `integration/**` are still fully analysed, and they are where a real
 # security finding would matter.
 exclude_paths:
-  # `**/test/**`, not `test/**`: the glob is root-anchored, so the original
-  # pattern reached the top-level tree and missed `lib/codec/test/`, which was
-  # analysed for months against the intent of the ruling above (found 2026-08-14
-  # while tracing a Codacy finding — 21 of the 31 hits for one broken PMD
-  # pattern were in that directory alone).
+  # Both spellings, measured, because Codacy's glob engine anchors them
+  # differently and each alone leaves a test tree analysed. `test/**` is
+  # root-anchored and missed `lib/codec/test/` for months (found 2026-08-14 —
+  # 21 of 31 hits for one broken PMD pattern were in that directory alone).
+  # The obvious fix, `**/test/**` alone, then *un*-excluded the root tree on
+  # the very next push — the leading `**/` requires at least one parent
+  # directory, and six critical-Security findings against `test/` came back
+  # within the hour. The pair covers both anchorings.
+  - 'test/**'
   - '**/test/**'
   - 'examples/**'

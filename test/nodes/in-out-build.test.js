@@ -1540,7 +1540,11 @@ test('mavlink-in: every MAVLink timestamp spelling is excluded, and naming one o
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
 
-  for (const stamp of ['time_boot_ms', 'time_usec', 'time_unix_usec', 'timestamp']) {
+  // time_boot_us (AUTOPILOT_STATE_FOR_GIMBAL_DEVICE) and uptime
+  // (ONBOARD_COMPUTER_STATUS) joined the set after the #303 review reproduced
+  // the #300 defect through each of them — the original four were called
+  // "MAVLink's own timestamp spellings" and were not.
+  for (const stamp of ['time_boot_ms', 'time_boot_us', 'time_usec', 'time_unix_usec', 'timestamp', 'uptime']) {
     const node = makeNodeInstance({ connection: 'conn-1' });
     Constructor.call(node, { connection: 'conn-1', changedOnly: true });
     stub._deliver({ name: 'X', sysid: 1, compid: 1, trusted: true, fields: { [stamp]: 1, v: 7 } });

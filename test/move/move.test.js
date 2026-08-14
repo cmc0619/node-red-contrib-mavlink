@@ -297,6 +297,82 @@ test('stream ticks re-stamp time_boot_ms without mutating the built message', ()
 });
 
 
+test('braking is opt-out, and attitude/manual streams end in silence (§9 ruling 1)', () => {
+  // The hazard this pins: a regression to always-brake would synthesize a
+  // zero-velocity POSITION brake at a vehicle being attitude- or stick-flown —
+  // exactly what the ruling forbids, and previously nothing failed on it. The
+  // node wires `braking: action !== 'attitude' && action !== 'manual'`
+  // (nodes/mavlink-move.js); this drives the library contract that wiring
+  // relies on.
+  const { createMoveStream } = require('../../lib/move');
+  const drive = (message, braking) => {
+    const sent = [];
+    let tick = null;
+    const stream = createMoveStream({
+      message,
+      braking,
+      connection: { send: (m) => sent.push(m) },
+      rateHz: 4,
+      ttlMs: 0,
+      setInterval: (fn) => { tick = fn; return { unref() { /* injected */ } }; },
+      clearInterval: () => { /* injected */ },
+    });
+    stream.start();
+    tick();
+    const stop = stream.stop();
+    return { sent, stop };
+  };
+
+  const manual = drive(
+    { name: 'MANUAL_CONTROL', fields: { target: 1, x: 0, y: 0, z: 500, r: 0, buttons: 0 } },
+    false
+  );
+  assert.equal(manual.stop, null, 'a manual stream returns no stop message');
+  assert.equal(manual.sent.length, 2, 'start + tick and nothing else — silence IS the stop');
+  // A MANUAL_CONTROL tick must never grow a time_boot_ms: the message does not
+  // declare the field, and the re-stamp is presence-gated on purpose.
+  for (const m of manual.sent) {
+    assert.deepEqual(
+      Object.keys(m.fields).sort(),
+      ['buttons', 'r', 'target', 'x', 'y', 'z'],
+      'exactly the declared fields, no invented stamp'
+    );
+  }
+
+  const attitude = drive(
+    { name: 'SET_ATTITUDE_TARGET', fields: { time_boot_ms: 0, target_system: 1, target_component: 1, type_mask: 199, q: [1, 0, 0, 0], body_roll_rate: 0, body_pitch_rate: 0, body_yaw_rate: 0, thrust: 0 } },
+    false
+  );
+  assert.equal(attitude.stop, null, 'an attitude stream returns no stop message');
+  assert.equal(attitude.sent.length, 2, 'zero thrust is a descent, so no brake is synthesized');
+
+  // The control: position keeps its measured zero-velocity brake.
+  const position = drive(
+    { name: 'SET_POSITION_TARGET_LOCAL_NED', fields: { time_boot_ms: 0, target_system: 1, target_component: 1, type_mask: 8, vx: 2, vy: 0, vz: 0 } },
+    true
+  );
+  assert.ok(position.stop, 'a position stream still brakes');
+  assert.equal(position.sent.length, 3, 'start + tick + the brake');
+  assert.equal(position.sent[2].fields.type_mask, 3527, 'and the brake is the zero-velocity packet');
+});
+
+
+test('quaternionFromEuler composes mixed angles in aerospace ZYX order, pinned to 9 decimals', () => {
+  // The single-axis tests and the unit-norm check both pass under a wrong
+  // rotation *sequence* — only a mixed-angle known vector catches one. The
+  // literals are the textbook aerospace (yaw-pitch-roll, ZYX) quaternion for
+  // roll 30°, pitch 40°, yaw 50°, computed independently of the
+  // implementation.
+  const { quaternionFromEuler } = require('../../lib/move');
+  const d = Math.PI / 180;
+  const q = quaternionFromEuler(30 * d, 40 * d, 50 * d);
+  const expected = [0.860042173698, 0.080804688691, 0.402198493534, 0.303371774471];
+  for (let i = 0; i < 4; i++) {
+    assert.ok(Math.abs(q[i] - expected[i]) < 1e-9, `q[${i}] = ${q[i]} vs ${expected[i]}`);
+  }
+});
+
+
 test('Move streams on the Streaming band until TTL and emits a zero-velocity stop', () => {
   const sends = [];
   let timer;

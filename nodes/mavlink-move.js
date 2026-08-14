@@ -84,8 +84,18 @@ module.exports = function registerMavlinkMove(RED) {
       applyActionStatus(node, 'sending', `${label}…`);
       const waiter = new AckWaiter({
         subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
-        // COMMAND_INT has no confirmation byte, so the retry counter is unused.
-        sendFn: () => connectionNode.send(message, { band: BAND.CONTROL, target, identityId }),
+        // The LONG carrier (Turn, Speed) stamps AckWaiter's retry counter into
+        // the confirmation byte on every re-send, per the encoder's own
+        // contract (lib/command/ack.js) and matching mavlink-command. This
+        // closed over the pre-built message and re-sent confirmation 0 while
+        // the path served only reposition — COMMAND_INT has no such byte, so
+        // the INT carrier still sends the message as built.
+        sendFn: (confirmation) => connectionNode.send(
+          message.name === 'COMMAND_LONG'
+            ? { ...message, fields: { ...message.fields, confirmation } }
+            : message,
+          { band: BAND.CONTROL, target, identityId }
+        ),
         commandId: message.fields.command,
         targetSystem: target.sysid,
         targetComponent: target.compid,

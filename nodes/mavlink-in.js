@@ -47,15 +47,27 @@ const STATUS_MIN_INTERVAL_MS = 250;
  * blank. Every one advances on every frame, so comparing them makes each
  * message look changed and the filter delivers the whole stream — the exact
  * opposite of what changed-only is for, and the defect this set fixes (#300).
- * The four names are MAVLink's own timestamp spellings, matching the reference
- * implementation's blank-means-all-except-timestamps rule.
+ * The names are the timestamp spellings actually used across the bundled
+ * dialects, found by enumerating every field of every message (2026-08-14) —
+ * an earlier version of this comment claimed four spellings and a reference
+ * implementation neither of which survived checking. `time_boot_us` is
+ * AUTOPILOT_STATE_FOR_GIMBAL_DEVICE's clock, streamed continuously by gimbal
+ * devices; `uptime` is ONBOARD_COMPUTER_STATUS's, advancing every frame —
+ * both reproduced the #300 defect under changed-only before joining the set.
+ *
+ * Deliberately NOT excluded: UTM_GLOBAL_POSITION's `time` (its position
+ * fields march with it, so the exclusion would buy nothing) and
+ * CAMERA_CAPTURE_STATUS's `recording_time_ms` (it stops when recording
+ * stops — that edge is a state change an operator may be listening for).
  *
  * A message whose *only* fields are timestamps (SYSTEM_TIME) therefore
  * compares as an empty subject and delivers once. That is correct rather than
  * a corner: nothing but the clock moved, and an operator who wants the clock
  * names it in `changedFields`, which is compared verbatim.
  */
-const TIMESTAMP_FIELDS = new Set(['time_boot_ms', 'time_usec', 'time_unix_usec', 'timestamp']);
+const TIMESTAMP_FIELDS = new Set([
+  'time_boot_ms', 'time_boot_us', 'time_usec', 'time_unix_usec', 'timestamp', 'uptime',
+]);
 
 /**
  * The decoded fields minus the timestamps — the default changed-only subject.
@@ -113,6 +125,9 @@ module.exports = function registerMavlinkIn(RED) {
 
     /** @type {Map<string, string>} key → last JSON of fields */
     const lastFieldJson = new Map();
+    // One warning per (message, absent-name) pair for the node's lifetime —
+    // at stream rates a per-frame warn would bury the flow it exists to help.
+    const warnedAbsentFields = new Set();
     /** @type {Map<string, number>} key → last delivery timestamp ms */
     const lastDeliveryMs = new Map();
 
@@ -186,6 +201,19 @@ module.exports = function registerMavlinkIn(RED) {
       // silently passed the entire stream (#300). The comment here used to
       // describe that exclusion while the code did not implement it.
       if (changedOnly) {
+        // A named field this message type does not carry is a config typo, and
+        // silently it is a vicious one: every frame's subject stringifies
+        // identically, so the stream delivers once and then never again, with
+        // nothing to say why. Warn once per absent name; the comparison still
+        // runs exactly as configured.
+        if (changedFields && decoded.fields) {
+          for (const name of changedFields) {
+            if (!(name in decoded.fields) && !warnedAbsentFields.has(`${key}:${name}`)) {
+              warnedAbsentFields.add(`${key}:${name}`);
+              node.warn(`changed-only: ${decoded.name} carries no field "${name}" — with every named field absent, the message delivers once and is then suppressed`);
+            }
+          }
+        }
         const subject = changedFields
           ? Object.fromEntries(changedFields.map((name) => [name, decoded.fields ? decoded.fields[name] : undefined]))
           : withoutTimestamps(decoded.fields || {});

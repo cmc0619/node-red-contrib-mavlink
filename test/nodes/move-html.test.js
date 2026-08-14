@@ -1176,6 +1176,31 @@ function actionVerdict(family, action, connection) {
   );
 }
 
+test('mavlink-move: Go to × Stream reds on a saved Blimp binding — withheld options red on saved (§9 ruling 6)', () => {
+  // The convergent finding from the #303 review: the dropdown withheld Stream
+  // for goto on a Blimp (no SET_POSITION_TARGET handler — streamed setpoints
+  // are discarded in silence, §14), but nothing red on a node that already
+  // held the pair or was rebound to a blimp profile. It deployed clean,
+  // reported `streaming`, and the vehicle heard nothing. Every other withheld
+  // option in this dialog gets the deploy-time verdict; this pins the one
+  // that was missing on both arms.
+  const defaults = loadNodeDefaults('mavlink-move', FAMILY_LOOKUP);
+  const verdict = (family, action, delivery) => defaults.delivery.validate.call(
+    { id: 'm1', action, delivery, connection: `conn-${family}` },
+    delivery,
+    {}
+  );
+
+  assert.match(String(verdict('blimp', 'goto', 'stream')), /Blimp cannot stream Go to/);
+  // The commands a Blimp does implement stay green — and so does streaming
+  // everywhere the handler exists.
+  assert.equal(verdict('blimp', 'goto', 'send'), true, 'DO_REPOSITION on Send is the Blimp path');
+  assert.equal(verdict('blimp', 'goto', 'confirm'), true);
+  assert.equal(verdict('copter', 'goto', 'stream'), true, 'a copter streams Go to fine');
+  // No profile, or a PX4 one, gates nothing: hiding requires knowledge.
+  assert.equal(verdict('px4-blimp', 'goto', 'stream'), true, 'PX4 families are not gated');
+});
+
 test('mavlink-move: the family matrix reds an action the vehicle has no handler for (§14)', () => {
   // Each row was read at source across all six ArduPilot vehicles' GCS
   // dispatch tables. The three that matter are the ones that surprised us:
