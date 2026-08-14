@@ -88,6 +88,18 @@ config-node shapes and message contracts may still change without a major bump.
   imported flow shows what it sends, and the acceleration triplet left the
   Advanced section to sit with the groups it belongs to.
 
+- **Manual's buttons are ticked, not typed.** The wire field is a bare uint16
+  bitmask the dialect never annotated — no enum to compile, only the positional
+  rule "the lowest bit corresponds to Button 1" — so the dialog now renders
+  sixteen numbered checkboxes over the same hidden config field. This removes
+  the raw field's built-in trap: "button 3" is the value 4, and typing 3
+  pressed buttons 1 and 2. Nothing else moves — the saved value, its
+  validator, and `msg.payload.buttons` are unchanged, all-unchecked still
+  saves blank, and the boxes carry numbers rather than names because what a
+  button *does* is the vehicle's own configuration (ArduSub's
+  `BTNn_FUNCTION`), not protocol. If upstream ever annotates the field, the
+  upgrade path is compiled enum names over these generic labels.
+
 ### Fixed
 
 - **Move never fills in a value you did not give it.** Blank fields used to

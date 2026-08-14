@@ -219,6 +219,51 @@
   }
 
   /**
+   * MANUAL_CONTROL's button count. The wire field is a bare uint16 — the
+   * shipped dialect carries `enum: null`, so unlike POSITION_TARGET_TYPEMASK
+   * there are no compiled names to enumerate, only the field's own positional
+   * rule: "the lowest bit corresponds to Button 1". Sixteen is the type
+   * width, not a guess; if upstream ever annotates the field with a bitmask
+   * enum, the honest upgrade is to prefer `field.enum` from the catalog over
+   * this constant and these generic labels.
+   */
+  var BUTTON_COUNT = 16;
+
+  /**
+   * Saved bitmask → per-button booleans, positional per the dialect's rule
+   * (bit 0 = Button 1). Exists because the raw field has a built-in
+   * off-by-one trap: "button 3" is the value 4, and an operator typing 3
+   * presses buttons 1 and 2.
+   *
+   * @param {*} value  the saved `buttons` config value
+   * @returns {boolean[]} BUTTON_COUNT entries
+   */
+  function decomposeButtons(value) {
+    var n = RED.mavlink.isBlank(value) ? 0 : Number(value);
+    if (!Number.isInteger(n) || n < 0) n = 0;
+    var pressed = [];
+    for (var i = 0; i < BUTTON_COUNT; i++) pressed.push((n & (1 << i)) !== 0);
+    return pressed;
+  }
+
+  /**
+   * Per-button booleans → the config value. All-unchecked composes blank, not
+   * '0': blank is what an untouched dialog always saved, so old and new
+   * configs stay byte-identical through a round-trip — and the runtime already
+   * reads blank as "no button pressed" (BUTTONS_NONE).
+   *
+   * @param {boolean[]} pressed
+   * @returns {string} the `buttons` config value
+   */
+  function composeButtons(pressed) {
+    var n = 0;
+    for (var i = 0; i < BUTTON_COUNT; i++) {
+      if (pressed[i]) n |= (1 << i);
+    }
+    return n === 0 ? '' : String(n);
+  }
+
+  /**
    * A manual-control stick: required, -1..1.
    *
    * Required because the runtime refuses a blank axis (owner ruling,
@@ -703,6 +748,36 @@
       RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
 
       RED.mavlink.refreshIdentitySelect(node);
+
+      // Button checkboxes: sixteen generated views over the one hidden
+      // canonical field (see the row markup). Generated rather than sixteen
+      // HTML literals so BUTTON_COUNT is the single width, decomposed from
+      // the saved value on open, composed back on every change — all-off
+      // composes blank, so an untouched dialog round-trips byte-identical.
+      (function () {
+        var $grid = $('#move-buttons-grid');
+        var pressed = decomposeButtons(node.buttons);
+        for (var i = 0; i < BUTTON_COUNT; i++) {
+          $('<label>', {
+            style: 'display:inline-block; width:70px; font-weight:normal; margin:0 4px 2px 0; white-space:nowrap',
+          })
+            .append($('<input>', {
+              type: 'checkbox', class: 'move-button-bit', 'data-bit': i,
+              checked: pressed[i],
+              style: 'width:auto; margin:0 3px 0 0; vertical-align:middle',
+            }))
+            .append(document.createTextNode(String(i + 1)))
+            .appendTo($grid);
+        }
+        $grid.on('change', '.move-button-bit', function () {
+          var next = [];
+          $grid.find('.move-button-bit').each(function () {
+            next[Number($(this).attr('data-bit'))] = this.checked;
+          });
+          $('#node-input-buttons').val(composeButtons(next));
+        });
+      })();
+      $('#node-input-buttons').val(RED.mavlink.isBlank(node.buttons) ? '' : node.buttons);
 
       // ▸ Advanced: the rarely-touched params live behind a plain show/hide
       // so the everyday dialog stays the intent and its coordinates.
@@ -1269,7 +1344,14 @@
     <div class="form-row" id="row-move-ackTimeout"><label for="node-input-ackTimeout">ACK timeout</label><input type="number" id="node-input-ackTimeout" style="width:80px" placeholder="10000"> ms</div>
     <div class="form-row" id="row-move-rollRate"><label for="node-input-rollRate">Roll rate</label><input type="text" id="node-input-rollRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>
     <div class="form-row" id="row-move-pitchRate"><label for="node-input-pitchRate">Pitch rate</label><input type="text" id="node-input-pitchRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>
-    <div class="form-row" id="row-move-buttons"><label for="node-input-buttons">Buttons</label><input type="text" id="node-input-buttons" style="width:120px" placeholder="0"> bitmask</div>
+    <div class="form-row" id="row-move-buttons"><label for="node-input-buttons">Buttons</label>
+      <!-- The canonical value stays this one field, hidden: Node-RED's stock
+           save path reads it, hand-edited flows still deploy through its
+           validator, and msg.payload.buttons is untouched by any of this.
+           The checkboxes are a view, composed/decomposed in oneditprepare. -->
+      <input type="hidden" id="node-input-buttons">
+      <span id="move-buttons-grid" style="display:inline-block; vertical-align:top"></span>
+    </div>
     <div class="form-row" id="row-move-turnRate"><label for="node-input-turnRate">Turn rate</label><input type="text" id="node-input-turnRate" step="any" style="width:120px" placeholder="(vehicle default)"> deg/s</div>
     <div class="form-row" id="row-move-relative"><label for="node-input-relative">Relative</label><input type="checkbox" id="node-input-relative" style="display:inline-block;width:auto;"> <span class="form-tips">off: the heading is absolute, 0 = north; on: it is an offset from the current heading</span></div>
     <div class="form-row" id="row-move-throttle"><label for="node-input-throttle">Throttle</label><input type="text" id="node-input-throttle" step="any" style="width:120px" placeholder="(no change)"> %</div>
@@ -1292,7 +1374,7 @@
   <p><b>Turn</b> sends <code>MAV_CMD_CONDITION_YAW</code> — and on ArduPilot it is the <i>only</i> working yaw. Both of the yaw fields the position carriers already carry are measured inert on ArduCopter (§14): <code>DO_REPOSITION</code>'s heading param is ignored outright, and a yaw-only setpoint stream holds heading instead of turning. ArduPilot's own test suite yaws in guided through this command. <b>Heading</b> is 0-360 degrees, absolute (0 = north) unless <b>Relative</b> (Advanced) is ticked, which makes it an offset from the current heading; the range is enforced here because the vehicle answers <code>FAILED</code> outside it. <b>Direction</b> defaults to the shortest way round, which is the dialect's own meaning for 0. Blank <b>Turn rate</b> (Advanced) leaves the vehicle's default. PX4 has no handler for this command, so the action refuses on a PX4 profile and points you at Steer's yaw field, which PX4 does honour.</p>
   <p><b>Speed</b> sends <code>MAV_CMD_DO_CHANGE_SPEED</code>, the guided speed change QGroundControl offers beside goto. <b>Speed type</b> picks which speed is being set — ground speed means something on every vehicle, airspeed is a fixed-wing concept, and climb/descent set the vertical rates. Blank <b>Speed</b> or <b>Throttle</b> (Advanced) sends the spec's -1 &ldquo;no change&rdquo;; -2 is the spec's &ldquo;return to default&rdquo; and you reach it by typing it. Both stacks and every moving vehicle family accept this command, so it asks no firmware question.</p>
   <p><b>Attitude</b> sends <code>SET_ATTITUDE_TARGET</code> — MAVSDK's offboard attitude path. You enter <b>Roll</b>, <b>Pitch</b> and <b>Yaw</b> in degrees and the node builds the quaternion the wire wants; you never type <code>q[4]</code>. Presence drives the mask exactly as it does on Steer: any angle commands the whole attitude (the wire has one ignore bit for all three), each body rate clears only its own bit, and <b>Thrust</b> is normalised 0..1 where an explicit 0 is a commanded zero rather than a blank. On <b>Stream</b> delivery the stream ends by <i>going quiet</i> — there is no braking packet, because zero thrust is a descent rather than a stop, and both stacks watch for setpoint silence themselves.</p>
-  <p><b>Manual</b> sends <code>MANUAL_CONTROL</code>, the joystick message: QGroundControl's stick path, how ArduSub is flown, and one of the two ways an Antenna Tracker can be pointed. It is <i>not</i> how a Blimp moves — ArduPilot's Blimp never overrides the stick handler, whose base implementation is empty, so it decodes the message, counts it as a ground-station heartbeat, and discards it (§14). Sticks are entered <b>-1..1</b> and scale to the wire's ±1000 once, at encode. Two things differ from every other action. It addresses a <b>system only</b> — the message has no target component, so that row is hidden. And <b>a blank stick is a disabled axis, not a centred one</b>: it sends the dialect's <code>INT16_MAX</code> "axis is invalid" rather than 0. That matters — ArduSub reads the thrust axis as 0..1000 with neutral <i>500</i>, so an axis helpfully centred at 0 would command full reverse thrust. Leaving an axis blank means the vehicle is not driven on it at all, on any firmware. Ceasing to transmit is a real stop here: ArduSub's GCS failsafe disarms when stick messages stop arriving.</p>
+  <p><b>Manual</b> sends <code>MANUAL_CONTROL</code>, the joystick message: QGroundControl's stick path, how ArduSub is flown, and one of the two ways an Antenna Tracker can be pointed. It is <i>not</i> how a Blimp moves — ArduPilot's Blimp never overrides the stick handler, whose base implementation is empty, so it decodes the message, counts it as a ground-station heartbeat, and discards it (§14). Sticks are entered <b>-1..1</b> and scale to the wire's ±1000 once, at encode. Two things differ from every other action. It addresses a <b>system only</b> — the message has no target component, so that row is hidden. And <b>all four sticks are required</b>: a blank is refused rather than centred or sent as "axis invalid", because a blank box in a saved flow is a field nobody filled, not a pilot's hand off the stick. Enter the value that means "not moving" on each axis — 0 for pitch, roll and yaw; on an ArduSub thrust axis that is <b>0.5</b>, since Sub reads it as 0..1000 with neutral <i>500</i> and a 0 there is full reverse thrust (the dialog reds exactly that). <b>Buttons</b> are ticked, not typed: the wire field is a bitmask with bit 1 as Button 1, composed for you — what each button <i>does</i> is the vehicle's own configuration (ArduSub's <code>BTNn_FUNCTION</code> parameters), which is why the boxes carry numbers and not names. Ceasing to transmit is a real stop here: ArduSub's GCS failsafe disarms when stick messages stop arriving.</p>
   <p>Action and delivery reshape the form (§6): only the parameters for the selection are shown, and the Delivery options themselves follow the action — setpoints cannot confirm, so Send &amp; confirm is offered on the acked actions — Go to, Turn and Speed — only. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
   <p>Output 0 continues only on success, once per input, and the result word IS the outcome, one meaning per word: <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — confirm tier only). Output 1 carries the status record for every outcome.</p>
   <p>On <b>Stream</b> delivery a running stream ends three ways. When the <b>TTL</b> elapses the node sends the zero-velocity brake and reports on output 1 with <code>result: "expired"</code> and <code>sent</code> (setpoints handed to the connection — the streaming link may coalesce under backpressure, so this counts sends, not wire deliveries) — switch on <code>result === "expired"</code> to run whatever follows a timed move; deliberately not on output 0, since that port is a trigger and the stream's start already fired it. If the expiry brake send itself fails, <code>result</code> stays <code>"expired"</code> and the failure rides a <code>brakeError</code> field. An input of <code>{action: "stop"}</code> halts the stream, sends the brake, and completes like any input — output 0 fires once, and the status record carries <code>result: "stopped"</code> with <code>sent</code>; a stop with nothing streaming completes with <code>detail: "no stream"</code>, and the action is refused on Build and Send delivery. A <b>new input</b> replaces the stream as a direct handover — no brake between consecutive targets, matching GCS practice; retargeting a different vehicle brakes the abandoned target once the new stream is live. A redeploy closes the node and brakes. A stream that keeps running through send failures reports once per failure streak on output 1 and never quits on its own — the firmware's setpoint watchdog is the failsafe on a dead link.</p>
