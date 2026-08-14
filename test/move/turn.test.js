@@ -9,7 +9,7 @@ const target = { sysid: 5, compid: 1 };
 
 /** A valid turn input; override per test. */
 function input(overrides = {}) {
-  return { heading: 90, firmware: 'ardupilot', target, ...overrides };
+  return { heading: 90, target, ...overrides };
 }
 
 test('turn builds COMMAND_LONG / CONDITION_YAW with the dialect param order', () => {
@@ -40,21 +40,22 @@ test('turn blank sentinels: rate 0 (vehicle default), direction 0 (shortest way 
   assert.equal(buildTurnMessage(input({ direction: -1 })).fields.param3, -1, 'counter-clockwise');
 });
 
-test('turn is ArduPilot-only and fails closed elsewhere — CONDITION_YAW has no PX4 handler', () => {
-  // Same refusal class as the body reference: not input-vetting, simply no
-  // right answer to give. The message names the escape that works on PX4.
+test('turn builds on every firmware — a legal message PX4 ignores still sends (§9)', () => {
+  // CONDITION_YAW has no PX4 handler, and the runtime says nothing about that.
+  // §9's known-unsupported-combos ruling is explicit: the driver does not
+  // editorialise about what a vehicle does with a well-formed message, and
+  // PX4's own NAK is better feedback than a refusal we invent. The dialog is
+  // the protector — mavlink-move.html's `action` validator reds Turn on a
+  // non-ArduPilot profile and names Steer's yaw field.
+  //
+  // Deliberately unlike frameForReference's body arm, which DOES throw: that
+  // one has no answer to give, because the stacks read different frame numbers
+  // so no message can be built. Here the message is fully determined.
   for (const firmware of ['px4', 'custom', undefined, '']) {
-    assert.throws(
-      () => buildTurnMessage(input({ firmware })),
-      /Move turn needs a Vehicle Profile with firmware ardupilot/,
-      `firmware ${JSON.stringify(firmware)} must refuse`
-    );
+    const message = buildTurnMessage(input({ firmware }));
+    assert.equal(message.fields.command, 115, `firmware ${JSON.stringify(firmware)} still builds`);
+    assert.equal(message.fields.param1, 90);
   }
-  assert.throws(
-    () => buildTurnMessage(input({ firmware: 'px4' })),
-    /Steer setpoint/,
-    'the refusal points at the yaw path PX4 does honour'
-  );
 });
 
 test('turn relative is a strict boolean opt-in, like changeMode', () => {

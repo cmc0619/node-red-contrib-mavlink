@@ -125,10 +125,11 @@ function configFor(action, delivery, variant) {
     // concrete dialect gives Build no firmware source and the node would
     // deploy clean and refuse every input. The matrix drives the offered
     // shape, not the hidden-field shortcut it originally used.
-    // Body and Turn both need a firmware, and Build has no Connection to get
-    // one from — the Vehicle Profile dialect escape is the only source, which
-    // is exactly the shape the editor offers (Codex, #277).
-    if (variant === 'body' || action === 'turn') {
+    //
+    // Body is now the ONLY variant that needs this. Turn briefly did, when it
+    // refused off ArduPilot; that refusal was a guardrail (§9: a legal message
+    // the vehicle ignores still sends) and is gone.
+    if (variant === 'body') {
       config.dialect = '__vehicle';
       config.vehicle = 'veh';
     } else {
@@ -189,8 +190,8 @@ for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
     for (const variant of variants) {
       if (NOT_OFFERED.has(`${action}/${delivery}/${variant}`)) continue;
       test(`offered: ${action} × ${delivery} × ${variant} completes on the real node`, async () => {
-        // Turn is CONDITION_YAW, an ArduPilot command; Body derives per stack.
-        const firmware = (variant === 'body' || action === 'turn') ? 'ardupilot' : undefined;
+        // Body is the one variant that derives per stack and so needs a profile.
+        const firmware = variant === 'body' ? 'ardupilot' : undefined;
         const { out, err, node } = await drive(configFor(action, delivery, variant), { firmware });
         // Streams and waiters must not leak into the next combo: the stream
         // lock is module-global, keyed on (connection, target).
@@ -221,20 +222,9 @@ for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
 // the honest all-ignore packet.
 
 const REFUSED = [
-  // Turn is CONDITION_YAW and PX4 has no handler for it (§14). Fails closed
-  // rather than sending a command the vehicle will never act on — the same
-  // class as body-without-firmware: no right answer to give.
-  {
-    name: 'turn on PX4',
-    config: { ...configFor('turn', 'send', 'absolute'), connection: 'conn' },
-    firmware: 'px4',
-    error: /Move turn needs a Vehicle Profile with firmware ardupilot/,
-  },
-  {
-    name: 'turn without a firmware at all',
-    config: { ...configFor('turn', 'send', 'absolute'), connection: 'conn' },
-    error: /Move turn needs a Vehicle Profile with firmware ardupilot/,
-  },
+  // Turn on PX4 is NOT here: CONDITION_YAW is a legal message PX4 ignores, and
+  // §9 rules that known-unsupported combos send with the runtime silent. The
+  // editor reds it (mavlink-move.html `action`), which is the protector's half.
   // Relative changes what the heading number means, so it is a strict boolean
   // opt-in like changeMode — a truthy token must refuse, not silently pick.
   {
