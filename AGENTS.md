@@ -68,7 +68,14 @@ the PR current, and stop. The repo owner reviews the code and merges when satisf
 resource; never spend them on work-in-progress. Open every PR as a draft and keep pushing to
 it while iterating. The boundary is absolute: an agent never flips a PR to ready-for-review —
 not when the work looks done, not when tests are green, not when told to "wrap up." The owner
-flips it when they're satisfied, and that flip is what triggers the reviewers (measured on #296,
+flips it when they're satisfied, and that flip is what triggers the reviewers. **The flip also
+reverses the push rule** (owner, 2026-08-14: *"you can push while the PR is in draft. Just use
+local after it undrafts. That's the actual rule"*): while the PR is a draft, push freely — drafts
+don't spend reviews (CodeRabbit answers a draft push with "Review skipped: Draft detected"), and
+unpushed commits live only in an ephemeral container. Once the PR is ready-for-review, commits
+stay **local** until the owner says push, because every post-flip push spends a metered bot round.
+A stop hook that nags about unpushed commits is not the owner and never overrides this.
+(Reviewer roster measured on #296,
 2026-08-13: **CodeRabbit**, **Codex** (`chatgpt-codex-connector`), **Sourcery**, **Gitar**,
 **Codacy** and **DeepSource** all review, and sometimes **GitHub Advanced Security** / CodeQL
 inline comments — Greptile is gone).
