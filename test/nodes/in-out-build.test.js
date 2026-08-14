@@ -1023,6 +1023,25 @@ test('mavlink-out: an unknown msg.band token refuses, naming the bands', () => {
   assert.match(out1.detail, /unknown msg\.band "urgent" — expected one of 0 \(emergency\)/);
 });
 
+
+test('mavlink-out: a numeric but out-of-range msg.band refuses the same way (Sourcery, #305)', () => {
+  const RED = makeRED();
+  const { stub, sent } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-out')(RED);
+  const Constructor = RED._nodeTypes['mavlink-out'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1', band: '2' });
+
+  node._input({ payload: { name: 'HEARTBEAT', fields: {} }, band: 99 });
+
+  assert.equal(sent.length, 0, 'nothing should be sent to the connection');
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null);
+  assert.equal(out1.result, 'failed');
+  assert.match(out1.detail, /unknown msg\.band 99 — expected one of 0 \(emergency\)/);
+});
+
 test('mavlink-out: a numeric-string msg.band that names a real band still works', () => {
   const RED = makeRED();
   const { stub, sent } = makeConnectionStub();

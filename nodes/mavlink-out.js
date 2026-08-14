@@ -116,7 +116,14 @@ const BAND_LIST = BAND_NAME.map((name, i) => `${i} (${name})`).join(', ');
  * @returns {number}
  */
 function resolveBand(msgBand, defaultBand) {
-  if (msgBand === undefined) return defaultBand;
+  // null falls back like undefined (Codacy, #305): msg.band is an optional
+  // per-message override, and null is JSON's only spelling of "not set" — a
+  // Function node writing msg.band = null means the config band, not a band
+  // named nothing. This is the opposite call from the wire guard, on purpose:
+  // a wire integer field is required content with no default to fall to, so
+  // null there refuses; an override has the config to fall to, so null here
+  // is absence.
+  if (msgBand === undefined || msgBand === null) return defaultBand;
   if (isBlank(msgBand)) {
     throw new Error(`msg.band is blank — expected one of ${BAND_LIST}`);
   }

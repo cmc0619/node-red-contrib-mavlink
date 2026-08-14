@@ -45,6 +45,56 @@ test('a numeric string target_system still serializes — Number("7") is finite'
   assert.equal(decoded.fields.target_system, 7);
 });
 
+test('integer ARRAY fields are exempt from the finite guard — Number([..]) is NaN by accident', () => {
+  // The #305 regression this pins: the guard applied Number() to array values,
+  // and Number([1,1]) is NaN, so GPS_STATUS's legitimate uint8[20]s refused.
+  // Arrays are skipped outright — the guard's subject is the single-value
+  // target-id class, not per-element vetting.
+  const arr = (v) => Array.from({ length: 20 }, () => v);
+  const frame = wire.serialize(
+    {
+      name: 'GPS_STATUS',
+      fields: {
+        satellites_visible: 5,
+        satellite_prn: arr(1),
+        satellite_used: arr(1),
+        satellite_elevation: arr(45),
+        satellite_azimuth: arr(90),
+        satellite_snr: arr(30),
+      },
+    },
+    { sysid: 255, compid: 190, seq: 0 }
+  );
+  assert.equal(wire.decode(frame)[0].fields.satellite_prn[0], 1);
+});
+
+test('a present-but-blank integer field refuses — Number("") and Number(null) are a finite 0', () => {
+  // Blank is speaking emptily, absent is not speaking: '' and null would ride
+  // the same silent path to broadcast-0 the NaN guard exists to block, while
+  // an absent field legitimately fills 0 by fixed-layout design.
+  for (const blank of ['', '   ', null]) {
+    assert.throws(
+      () => wire.serialize(
+        {
+          name: 'SET_POSITION_TARGET_LOCAL_NED',
+          fields: { target_system: blank, target_component: 1, coordinate_frame: 1, type_mask: 3527, x: 0, y: 0, z: 0 },
+        },
+        { sysid: 255, compid: 190, seq: 0 }
+      ),
+      /is blank; an integer field must be finite/,
+      `blank ${JSON.stringify(blank)} must refuse`
+    );
+  }
+});
+
+test('a char field with a non-numeric string is exempt from the finite guard', () => {
+  const frame = wire.serialize(
+    { name: 'STATUSTEXT', fields: { severity: 1, text: 'abc' } },
+    { sysid: 255, compid: 190, seq: 0 }
+  );
+  assert.equal(wire.decode(frame)[0].fields.text, 'abc');
+});
+
 test('a NaN float field still serializes — NaN floats are legal MAVLink', () => {
   // SET_POSITION_TARGET floats use NaN as "no value" in ecosystem practice;
   // only integer fields get the finite guard.
