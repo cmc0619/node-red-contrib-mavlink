@@ -50,11 +50,11 @@ config-node shapes and message contracts may still change without a major bump.
     family read below. Sticks are
     −1..1 and scale to the wire's ±1000 once. Two things differ from every
     other action: it addresses a **system only** (the message has no target
-    component, so that row is hidden), and **a blank stick disables its axis**
-    rather than centring it — it sends the dialect's `INT16_MAX` "axis is
-    invalid". That last one is load-bearing: ArduSub reads the thrust axis as
-    0..1000 with neutral *500*, so an axis helpfully centred at 0 would command
-    full reverse thrust.
+    component, so that row is hidden), and **all four sticks are required** —
+    blank is refused rather than centred or sent as the dialect's `INT16_MAX`
+    "axis is invalid". Centring was never an option: ArduSub reads the thrust
+    axis as 0..1000 with neutral *500*, so an axis helpfully centred at 0 would
+    command full reverse thrust. The dialog says so on that axis specifically.
 
 - **The Move dialog follows the vehicle, not just the firmware.** When the bound
   Vehicle Profile names an ArduPilot family, the Action list drops the actions
@@ -89,6 +89,39 @@ config-node shapes and message contracts may still change without a major bump.
   Advanced section to sit with the groups it belongs to.
 
 ### Fixed
+
+- **Move never fills in a value you did not give it.** Blank fields used to
+  resolve to a default: a blank altitude reference became above-home, a blank
+  reference became World, a blank frame became `LOCAL_NED`, and a blank number
+  took whatever fallback its call site named. Some of those were harmless and
+  one was not — `msg.payload.altRef` overrides the editor, the operator's word
+  is translated to a `MAV_FRAME` integer before the wire, and a typo'd `'MSL'`
+  fell out the *otherwise* side into frame 3. At a site with home 400 m above
+  sea level, a commanded 500 m MSL flew at 900 m MSL, with a clean `ACCEPTED`
+  ack and nothing in any log to say the datum had been swapped.
+
+  So Move refuses instead. A missing required input or a token outside its enum
+  **throws**, naming the field and what was expected. The exception is a field
+  whose *dialect* defines an encoding for "no change" — `DO_CHANGE_SPEED`'s −1,
+  `CONDITION_YAW`'s 0 rate and shortest-direction, `DO_REPOSITION`'s default
+  speed and ignored loiter radius, an empty button mask. Those are the wire's
+  own word for "the operator left this alone", so a blank box is transmitted
+  rather than filled in, and each is a named constant at its call site instead
+  of an argument you have to trace. `time_boot_ms` is unaffected either way: it
+  is the sender's own stamp, never operator intent.
+
+  Every field the runtime now requires is required in the dialog too, so this
+  is a red box while you configure rather than a failure after you deploy: all
+  four Manual sticks, all three Attitude angles when any is filled (they share
+  one ignore bit, so there is no encoding for "roll 10, yaw unsaid"), and every
+  axis of a Steer group once one of them is filled — velocity and acceleration
+  as well as position now, because under the derived type_mask a blank axis is
+  a *commanded* zero rather than an absent one.
+
+  One exemption survives, on measurement: on `LOCAL_OFFSET_NED` a blank
+  position axis is a zero *offset*, which is no movement, so filling one axis
+  stays legal there. That is the shape QGroundControl's guided altitude change
+  sends and the only one ArduPlane reads.
 
 - **Two recorded claims about ArduPilot's smaller vehicles were wrong**, and the
   Move roster was phased around one of them. Reading all six vehicles' GCS
