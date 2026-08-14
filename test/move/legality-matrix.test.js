@@ -233,13 +233,13 @@ const REFUSED = [
     firmware: 'ardupilot',
     error: /relative must be boolean/,
   },
-  // The action vocabulary is closed: goto and steer, nothing else.
+  // The action vocabulary is closed: the six roster actions, nothing else.
   {
     name: 'unknown action',
     config: { ...configFor('goto', 'send', 'home'), action: 'orbit' },
     // 'orbit' is deliberately still unknown: DO_ORBIT is on the §9 roster as a
     // forward entry, PX4-only and unmeasured, so it is not on the surface yet.
-    error: /unknown Move action "orbit" — expected one of goto, steer, turn, speed/,
+    error: /unknown Move action "orbit" — expected one of goto, steer, turn, speed, attitude, manual/,
   },
   // Body without a firmware fails closed — the stacks read different body
   // frames, and an unadapted guess is silently dropped by the vehicle (§14).

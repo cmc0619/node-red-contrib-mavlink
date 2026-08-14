@@ -272,10 +272,12 @@ test('resolveMoveAction: blank parses steer (the old setpoint default), unknown 
   assert.equal(resolveMoveAction('steer'), 'steer');
   assert.throws(
     () => resolveMoveAction('teleport'),
-    /unknown Move action "teleport" — expected one of goto, steer, turn, speed/
+    // Anchored on the full six-name list: a four-name prefix matched even after
+    // the roster grew, so a dropped or renamed entry went undetected (CodeRabbit).
+    /unknown Move action "teleport" — expected one of goto, steer, turn, speed, attitude, manual/
   );
   // The roster grew with the §9 curation; the vocabulary stays closed.
-  for (const action of ['turn', 'speed']) {
+  for (const action of ['turn', 'speed', 'attitude', 'manual']) {
     assert.equal(resolveMoveAction(action), action, `${action} is on the roster`);
   }
 });

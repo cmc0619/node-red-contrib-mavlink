@@ -179,13 +179,50 @@
    *
    * @returns {function(*, object): (boolean|string)} arity 2 so a reason renders (§14)
    */
-  function stickValidator() {
+  function stickValidator(axis) {
     return function (v, _opt) {
       if (RED.mavlink.isBlank(v)) return true;
       var n = Number(v);
-      return (Number.isFinite(n) && n >= -1 && n <= 1)
-        || 'must be -1..1 (stick deflection, not wire units)';
+      if (!Number.isFinite(n) || n < -1 || n > 1) {
+        return 'must be -1..1 (stick deflection, not wire units)';
+      }
+      // ArduSub reads the thrust axis as 0..1000 with neutral **500**, not
+      // −1000..1000 with neutral 0 like the other three (§14, source-read). The
+      // ±1000 scaling is the dialect's own declaration for all four axes, so
+      // the runtime keeps applying it uniformly — a per-family map is exactly
+      // the unmeasured guess doctrine keeps off the wire, and #304 §5 item 4
+      // is the rig run that would settle it.
+      //
+      // What that leaves is an operator surface that *lies* on a Sub: −1..1
+      // reads as "0 is neutral", while 0 scales to 0 and lands on full reverse
+      // vertical thrust (Codex, #303 — the blank-axis INT16_MAX sentinel covers
+      // an axis nobody touched, but not one deliberately set to 0). The editor
+      // is the layer that knows the family, so it says so here. Negative values
+      // have no representation at all on that axis; the rest of the range maps
+      // straight through, with 0.5 as the neutral an operator means by 0.
+      // `n <= 0`, not `n < 0`: 0 is the trap Codex named, because it is exactly
+      // what an operator types for "neutral" on a −1..1 surface and exactly
+      // what lands on full reverse. 0.5 is the neutral a Sub reads, so the
+      // usable range there is (0, 1] and everything at or below 0 is refused.
+      if (axis !== 'z' || n > 0) return true;
+      if (!isArduSubProfile(this)) return true;
+      return 'ArduSub reads the thrust axis as 0..1000 with neutral 0.5, not −1..1 with '
+        + 'neutral 0 (§14) — a negative value has no wire representation there, and 0 is '
+        + 'full reverse thrust rather than a stop. Use 0.5 for neutral, or leave it blank '
+        + 'to not drive the axis at all';
     };
+  }
+
+  /**
+   * Whether the bound profile is an ArduPilot Sub — the one family whose
+   * `MANUAL_CONTROL` z axis does not match the dialect's declared range.
+   *
+   * @param {object} owner  the node being validated
+   * @returns {boolean}
+   */
+  function isArduSubProfile(owner) {
+    var gate = moveFamilyGate(owner);
+    return gate.gated && gate.family === 'sub';
   }
 
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
@@ -276,11 +313,32 @@
             }
             return true;
           }
-          if (v !== 'steer') return true;
           var owner = this;
           var filled = function (names) {
             return names.some(function (n) { return !RED.mavlink.isBlank(fieldValue(owner, n)); });
           };
+          // Attitude has Steer's shape and needed Steer's rule: presence drives
+          // ATTITUDE_TARGET_TYPEMASK, so an all-blank Attitude sets *every*
+          // ignore bit — 199 — and commands nothing while the node still
+          // reports `sent` or `streaming`. A setpoint carries no ack, so that
+          // is the failure mode with no symptom, and the editor is the only
+          // layer that can see it (Codex, #303).
+          //
+          // Manual is deliberately NOT held to this. Its all-blank form sends
+          // INT16_MAX on all four axes — every axis explicitly *not* driven —
+          // which is a real message rather than an empty one: ArduSub's GCS
+          // failsafe disarms when MANUAL_CONTROL stops arriving, so a stream of
+          // no-axis frames is a legitimate deadman keepalive, and `buttons`
+          // alone is a legitimate press.
+          if (v === 'attitude') {
+            if (filled(['roll', 'pitch', 'yaw', 'rollRate', 'pitchRate', 'yawRate', 'thrust'])) {
+              return true;
+            }
+            return 'Attitude needs at least one field filled — an angle, a body rate, or '
+              + 'thrust. All-blank sets every ignore bit, so the vehicle is commanded nothing '
+              + 'and no ack comes back to tell you';
+          }
+          if (v !== 'steer') return true;
           var hasPos = filled(['north', 'east', 'up']);
           var hasVel = filled(['vNorth', 'vEast', 'vUp']);
           var hasAcc = filled(['aNorth', 'aEast', 'aUp']);
@@ -410,10 +468,10 @@
       // not commanded at all. That matters most on ArduSub, which reads z as
       // 0..1000 neutral 500, where a helpfully-centred 0 would be full reverse
       // thrust (§14).
-      stickX: { value: '', validate: stickValidator() },
-      stickY: { value: '', validate: stickValidator() },
-      stickZ: { value: '', validate: stickValidator() },
-      stickR: { value: '', validate: stickValidator() },
+      stickX: { value: '', validate: stickValidator('x') },
+      stickY: { value: '', validate: stickValidator('y') },
+      stickZ: { value: '', validate: stickValidator('z') },
+      stickR: { value: '', validate: stickValidator('r') },
       buttons: {
         value: '',
         validate: function (v, _opt) {
@@ -575,6 +633,8 @@
       // position and velocity.
       if (!RED.mavlink.isBlank(node.ackTimeout) || !RED.mavlink.isBlank(node.radius)
         || !RED.mavlink.isBlank(node.turnRate) || !RED.mavlink.isBlank(node.throttle)
+        || !RED.mavlink.isBlank(node.rollRate) || !RED.mavlink.isBlank(node.pitchRate)
+        || !RED.mavlink.isBlank(node.buttons)
         || node.relative || node.changeMode) {
         $('#move-advanced').show();
         $('#move-advanced-toggle').text('▾ Advanced');

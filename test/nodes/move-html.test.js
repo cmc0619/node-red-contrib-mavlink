@@ -809,12 +809,12 @@ test('mavlink-move: a blank position axis is legal on Offset — a zero offset i
   assert.match(String(worldVerdict[0]), /blank axis commands the origin/, 'world still reds a blank north');
   assert.match(String(worldVerdict[1]), /blank axis commands the origin/, 'world still reds a blank east');
 
-  // A non-numeric value is still a non-numeric value on offset.
-  assert.notEqual(
-    defaults.north.validate.call({ id: 'm1', action: 'steer', reference: 'offset' }, 'abc', {}),
-    undefined,
-    'offset does not disable the numeric check'
-  );
+  // There was an assertion here that offset "does not disable the numeric
+  // check". It could not fail: positionAxisValidator never returns undefined,
+  // and html-assert stubs RED.validators.number as `() => () => true`, so the
+  // numeric arm answers true in this harness whether or not it runs. Removed
+  // rather than reworded — the offset exemption is what this test owns, and the
+  // blank-axis cases above prove it (CodeRabbit).
 });
 
 test('mavlink-move: Offset reds on a PX4 profile rather than being silently rewritten', () => {
@@ -1376,4 +1376,67 @@ test('mavlink-move: the acceleration rows left Advanced for their own checkbox',
     /isBlank\(node\.aNorth\)/,
     'and the Advanced auto-open no longer needs to check them'
   );
+});
+
+
+// ── Codex round, first ready-for-review pass ─────────────────────────────────
+
+test('mavlink-move: an all-blank Attitude reds — every ignore bit set commands nothing', () => {
+  // Attitude has Steer's shape and needed Steer's rule. Blank everything and
+  // ATTITUDE_TARGET_TYPEMASK comes out 199 — all five ignore bits — while the
+  // node still reports `sent` or `streaming`. A setpoint carries no ack, so
+  // that is the failure mode with no symptom (Codex, #303).
+  const { action } = loadNodeDefaults('mavlink-move');
+  const verdict = (over) => action.validate.call(
+    Object.assign({ id: 'm1', action: 'attitude' }, over), 'attitude', {}
+  );
+
+  assert.match(String(verdict({})), /Attitude needs at least one field filled/);
+  for (const field of ['roll', 'pitch', 'yaw', 'rollRate', 'pitchRate', 'yawRate', 'thrust']) {
+    assert.equal(verdict({ [field]: '1' }), true, `${field} alone is a mode`);
+  }
+  // An explicit 0 is a commanded zero, not a blank — the whole point of the
+  // three-state rule (§5).
+  assert.equal(verdict({ thrust: '0' }), true, 'an explicit zero thrust is commanded');
+
+  // Manual is deliberately exempt: all-blank sends INT16_MAX on every axis,
+  // which is a real message. ArduSub's failsafe disarms when MANUAL_CONTROL
+  // stops arriving, so no-axis frames are a legitimate deadman keepalive.
+  assert.equal(
+    action.validate.call({ id: 'm1', action: 'manual' }, 'manual', {}), true,
+    'an all-blank Manual is a keepalive, not an empty command'
+  );
+});
+
+test('mavlink-move: the thrust stick warns on ArduSub, where the -1..1 surface lies', () => {
+  // ArduSub reads z as 0..1000 with neutral 500, not -1000..1000 neutral 0
+  // (§14, source-read). The runtime keeps the dialect's uniform scaling — a
+  // per-family map is the unmeasured guess doctrine keeps off the wire — so
+  // the editor is where an operator finds out. The blank-axis INT16_MAX
+  // sentinel covers an axis nobody touched; this covers one set to 0 or below
+  // (Codex, #303).
+  const { stickZ, stickX } = loadNodeDefaults('mavlink-move', FAMILY_LOOKUP);
+  const onSub = (v) => stickZ.validate.call(
+    { id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-sub' }, v, {}
+  );
+  const onCopter = (v) => stickZ.validate.call(
+    { id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-copter' }, v, {}
+  );
+
+  assert.match(String(onSub('-0.5')), /neutral 0\.5/, 'a negative thrust reds on a Sub');
+  assert.match(String(onSub('0')), /full reverse thrust/, 'and so does the 0 an operator means as neutral');
+  assert.equal(onSub('0.5'), true, 'the neutral a Sub actually reads passes');
+  assert.equal(onSub('1'), true, 'full up passes');
+  assert.equal(onSub(''), true, 'blank is still the untouched-axis sentinel');
+
+  // Only the thrust axis, and only on a Sub — the other three match the
+  // dialect's declared range everywhere.
+  assert.equal(onCopter('-0.5'), true, 'a copter reads the declared -1..1 range');
+  assert.equal(
+    stickX.validate.call({ id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-sub' }, '-0.5', {}),
+    true,
+    'pitch is unaffected on a Sub'
+  );
+  // The generic range check still applies on top.
+  assert.match(String(onSub('5')), /must be -1\.\.1/, 'out of range still reds first');
 });

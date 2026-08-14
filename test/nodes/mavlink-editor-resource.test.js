@@ -1281,6 +1281,11 @@ test('refreshOptionSelect keeps a withheld option that is already saved (§9 rul
   });
   assert.deepEqual(plain(select.options).map((o) => o[0]), ['build', 'send', 'stream']);
   assert.equal(value, 'stream', 'the saved value is not downgraded');
+  // The select itself has to carry it. refreshDeliveryOptions returns nothing
+  // and mavlink-move reads the tier back out of the DOM, so a helper that
+  // computed the right value and dropped `$select.val(value)` would still
+  // satisfy every return-value assertion in this file (CodeRabbit).
+  assert.equal(select.val(), 'stream', 'the selection is written to the select, not only returned');
 });
 
 test('refreshOptionSelect keeps a withheld option the operator just picked', () => {
