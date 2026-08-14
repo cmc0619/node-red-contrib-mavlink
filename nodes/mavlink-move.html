@@ -180,6 +180,9 @@
    * @returns {function(*, object): (boolean|string)} arity 2 so a reason renders (§14)
    */
   function stickValidator(axis) {
+    // `axis` is passed only by the one caller whose value is read — the thrust
+    // stick. Naming 'x'/'y'/'r' at the other three would be three arguments
+    // that never reach a branch.
     return function (v, _opt) {
       if (RED.mavlink.isBlank(v)) return true;
       var n = Number(v);
@@ -468,10 +471,10 @@
       // not commanded at all. That matters most on ArduSub, which reads z as
       // 0..1000 neutral 500, where a helpfully-centred 0 would be full reverse
       // thrust (§14).
-      stickX: { value: '', validate: stickValidator('x') },
-      stickY: { value: '', validate: stickValidator('y') },
+      stickX: { value: '', validate: stickValidator() },
+      stickY: { value: '', validate: stickValidator() },
       stickZ: { value: '', validate: stickValidator('z') },
-      stickR: { value: '', validate: stickValidator('r') },
+      stickR: { value: '', validate: stickValidator() },
       buttons: {
         value: '',
         validate: function (v, _opt) {
