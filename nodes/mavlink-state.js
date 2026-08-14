@@ -30,6 +30,14 @@ module.exports = function registerMavlinkState(RED) {
           done();
           return;
         }
+        if (config.mode === 'feed') {
+          // Feed mode's contract is "output 0 carries the event stream only"
+          // (help text). Answering a snapshot here would interleave an array
+          // payload on the same wire as the {kind, event, at} records — a
+          // silent shape-shift downstream functions cannot be expected to
+          // survive (Array.prototype.at defeats even an `r.at ||` fallback).
+          throw new Error('mavlink-state feed mode takes no input — use a snapshot-mode State node');
+        }
         if (!connectionNode) {
           throw new Error('mavlink-state requires a Connection');
         }
