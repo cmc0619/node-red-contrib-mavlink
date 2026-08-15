@@ -240,7 +240,12 @@ module.exports = function registerMavlinkPayload(RED) {
       (req, res) => {
         const topic = typeof req.query.topic === 'string' ? req.query.topic.trim() : '';
         const verb = typeof req.query.verb === 'string' ? req.query.verb.trim() : '';
-        const path = typeof req.query.path === 'string' ? req.query.path.trim() : '';
+        let path = typeof req.query.path === 'string' ? req.query.path.trim() : '';
+        // Editor preview only: a gimbal-aim tips request before a path member is
+        // picked still shows the legacy fields. The `|| 'legacy'` default moved
+        // out of recipeFor (so the runtime craters on a blank path) to here,
+        // where a preview default belongs — the editor is the validator layer.
+        if (topic === 'gimbal' && verb === 'aim' && !path) path = 'legacy';
         if (!topic || !verb) {
           return res.json({ fields: {}, dialect: '' });
         }
