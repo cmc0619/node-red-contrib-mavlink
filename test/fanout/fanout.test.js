@@ -8,6 +8,7 @@ const {
   classifyMessage,
   selectFanoutMembers,
   resolveExecutionMode,
+  resolveSelectionMode,
 } = require('../../lib/fanout');
 const { BAND } = require('../../lib/connection/bands');
 const { streamLocks } = require('../../lib/delivery/lock');
@@ -82,15 +83,15 @@ test('an empty resolution records which selection produced it (#226)', async () 
 
 // ── Execution mode / delivery tier membership (owner ruling, 2026-08-14) ──────
 
-test('resolveExecutionMode: absent/blank is sequential, a typo throws naming the vocabulary', () => {
-  assert.equal(resolveExecutionMode(undefined), 'sequential');
-  assert.equal(resolveExecutionMode(''), 'sequential');
+test('resolveExecutionMode: members dispatch; everything else — blank included — crashes the flow', () => {
   assert.equal(resolveExecutionMode('sequential'), 'sequential');
   assert.equal(resolveExecutionMode('broadcast'), 'broadcast');
-  assert.throws(
-    () => resolveExecutionMode('broadcasts'),
-    /unknown Fan-out execution mode "broadcasts" — expected one of sequential, broadcast/
-  );
+  for (const bad of ['broadcasts', '', undefined, null]) {
+    assert.throws(
+      () => resolveExecutionMode(bad),
+      /unknown Fan-out execution mode .* — expected one of sequential, broadcast/
+    );
+  }
 });
 
 test('a typo\'d executionMode no longer silently runs the sequential machine (\\#231\'s twin, confirmed)', async () => {
@@ -114,6 +115,38 @@ test('a typo\'d executionMode no longer silently runs the sequential machine (\\
     /unknown Fan-out execution mode "broadcasts" — expected one of sequential, broadcast/
   );
   assert.equal(connection.sends.length, 0);
+});
+
+test('resolveSelectionMode: members dispatch; everything else — blank included — crashes the flow (§14 reversal, 2026-08-14)', () => {
+  assert.equal(resolveSelectionMode('all'), 'all');
+  assert.equal(resolveSelectionMode('list'), 'list');
+  assert.equal(resolveSelectionMode('filter'), 'filter');
+  // No blank arm: the editor always saves a member, the runtime defaults
+  // nothing. "We want the flows to crash if they're wrong."
+  for (const bad of ['lits', '', undefined, null]) {
+    assert.throws(
+      () => resolveSelectionMode(bad),
+      /unknown Fan-out selection mode .* — expected one of all, list, filter/
+    );
+  }
+});
+
+test('the audit\'s repro: {mode: "lits", sysids: [1]} refuses instead of selecting the fleet', async () => {
+  // Before the reversal the mode acted only through two negative === gates:
+  // 'lits' matched neither, the sysid list was never read, and both vehicles
+  // were commanded under a clean success report carrying selection: 'lits'.
+  const connection = connectionStub([peer(1, { firmware: 'ardupilot' }), peer(2, { firmware: 'ardupilot' })]);
+  await assert.rejects(
+    () => executeFanout({
+      connection,
+      message: builtCommand(),
+      mode: 'sequential',
+      delivery: 'send',
+      selection: { mode: 'lits', sysids: [1] },
+    }),
+    /unknown Fan-out selection mode "lits" — expected one of all, list, filter/
+  );
+  assert.equal(connection.sends.length, 0, 'no vehicle nobody named may be commanded');
 });
 
 test('a typo\'d delivery tier throws instead of silently running Send (lib/fanout delivery)', async () => {
@@ -150,7 +183,7 @@ test('classifyMessage infers confirmation and band from the message name', () =>
 test('a payload that is not a built message is refused with a pointer at Build tiers', async () => {
   const connection = connectionStub([peer(1)]);
   for (const bad of [null, 42, 'arm', {}, { name: 'COMMAND_LONG' }, { fields: {} }]) {
-    const result = await executeFanout({ connection, message: bad, delivery: 'send' });
+    const result = await executeFanout({ mode: 'sequential', selection: { mode: 'all' }, connection, message: bad, delivery: 'send' });
     assert.equal(result.result, 'refused', `${JSON.stringify(bad)} must refuse`);
     assert.match(result.detail, /Build-tier|mavlink-build/);
   }
@@ -167,7 +200,7 @@ test('mission transfer steps and PARAM_REQUEST_LIST are refused — not single-m
     'MISSION_ACK',
     'MISSION_WRITE_PARTIAL_LIST',
   ]) {
-    const refused = await executeFanout({
+    const refused = await executeFanout({ mode: 'sequential', selection: { mode: 'all' },
       connection,
       message: { name, fields: { target_system: 1, target_component: 1, count: 4 } },
       delivery: 'send',
@@ -176,7 +209,7 @@ test('mission transfer steps and PARAM_REQUEST_LIST are refused — not single-m
     assert.match(refused.detail, /mission transfer/);
   }
 
-  const paramList = await executeFanout({
+  const paramList = await executeFanout({ mode: 'sequential', selection: { mode: 'all' },
     connection,
     message: { name: 'PARAM_REQUEST_LIST', fields: { target_system: 1, target_component: 1 } },
     delivery: 'send',
@@ -193,7 +226,7 @@ test('single-shot MISSION_* commands replicate — the family name is not the ru
   // does not. Neither carries a COMMAND_ACK, so both stay fire-and-forget.
   const connection = connectionStub([peer(1), peer(2)]);
 
-  const setCurrent = await executeFanout({
+  const setCurrent = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: { name: 'MISSION_SET_CURRENT', fields: { target_system: 0, target_component: 0, seq: 5 } },
     mode: 'sequential',
@@ -205,7 +238,7 @@ test('single-shot MISSION_* commands replicate — the family name is not the ru
   assert.deepEqual(connection.sends.map((s) => s.message.fields.target_system), [1, 2]);
   assert.equal(connection.sends[0].message.fields.seq, 5);
 
-  const clearAll = await executeFanout({
+  const clearAll = await executeFanout({ selection: { mode: 'all' },
     connection: connectionStub([peer(1)]),
     message: { name: 'MISSION_CLEAR_ALL', fields: { target_system: 0, target_component: 0, mission_type: 0 } },
     mode: 'sequential',
@@ -235,7 +268,7 @@ test('every offboard setpoint rides the streaming band, not just the position pa
 
 test('a message with no target_system field cannot be retargeted and is refused', async () => {
   const connection = connectionStub([peer(1)]);
-  const result = await executeFanout({
+  const result = await executeFanout({ mode: 'sequential', selection: { mode: 'all' },
     connection,
     message: { name: 'HEARTBEAT', fields: { type: 6, autopilot: 8 } },
     delivery: 'send',
@@ -250,7 +283,7 @@ test('sequential execution paces retargeted sends between members', async () => 
   const connection = connectionStub([peer(1), peer(2), peer(3)]);
   const waits = [];
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     mode: 'sequential',
@@ -269,7 +302,7 @@ test('sequential execution paces retargeted sends between members', async () => 
 test('retargeting does not invent target_component on a system-only message', async () => {
   const connection = connectionStub([peer(1)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: { name: 'SET_MODE', fields: { target_system: 9, base_mode: 1, custom_mode: 4 } },
     mode: 'sequential',
@@ -284,7 +317,7 @@ test('retargeting does not invent target_component on a system-only message', as
 test('broadcast sends one autopilot-pinned packet with target_system zero', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     mode: 'broadcast',
@@ -299,21 +332,21 @@ test('broadcast sends one autopilot-pinned packet with target_system zero', asyn
 
 test('bands follow the message kind: setpoints stream, commands ride control', async () => {
   const connection = connectionStub([peer(1)]);
-  await executeFanout({ connection, message: builtSetpoint(), delivery: 'send' });
-  await executeFanout({ connection, message: builtCommand(), delivery: 'send' });
+  await executeFanout({ mode: 'sequential', selection: { mode: 'all' }, connection, message: builtSetpoint(), delivery: 'send' });
+  await executeFanout({ mode: 'sequential', selection: { mode: 'all' }, connection, message: builtCommand(), delivery: 'send' });
   const [setpoint, command] = connection.sends;
   assert.notEqual(setpoint.options.band, command.options.band);
 });
 
 test('aggregation continues only when every selected member succeeds', async () => {
-  const allOk = await executeFanout({
+  const allOk = await executeFanout({ selection: { mode: 'all' },
     connection: connectionStub([peer(1), peer(2)]),
     message: builtCommand(),
     mode: 'sequential',
     delivery: 'send',
   });
 
-  const partial = await executeFanout({
+  const partial = await executeFanout({ selection: { mode: 'all' },
     connection: connectionStub([peer(1), peer(2)], { failSysids: new Set([2]) }),
     message: builtCommand(),
     mode: 'sequential',
@@ -330,7 +363,7 @@ test('aggregation continues only when every selected member succeeds', async () 
 test('dry run expands members and retargets messages without sending', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     mode: 'sequential',
@@ -354,7 +387,7 @@ test('member expiring mid-run is reported failed while later members continue', 
     },
   });
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     mode: 'sequential',
@@ -378,7 +411,7 @@ test('broadcast aggregate warns about mixed firmware for uniform commands', asyn
     peer(2, { firmware: 'px4', flightMode: 4 }),
   ]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand({ fields: { param1: 1 } }),
     mode: 'broadcast',
@@ -453,7 +486,7 @@ test('broadcast refuses when stale peers exist even under all-vehicles selection
 test('PARAM_SET is sequential-only — a broadcast set makes the echoes a storm (§10)', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtParamSet(),
     mode: 'broadcast',
@@ -470,7 +503,7 @@ test('PARAM_SET is sequential-only — a broadcast set makes the echoes a storm 
 test('DO_FLIGHTTERMINATION is refused without confirmation and runs with it (§10)', async () => {
   const message = builtCommand({ fields: { command: 185, param1: 1 } });
 
-  const refused = await executeFanout({
+  const refused = await executeFanout({ selection: { mode: 'all' },
     connection: connectionStub([peer(1)]),
     message,
     mode: 'sequential',
@@ -480,7 +513,7 @@ test('DO_FLIGHTTERMINATION is refused without confirmation and runs with it (§1
   assert.match(refused.detail, /confirm/i);
 
   const confirmedConnection = connectionStub([peer(1)]);
-  const confirmed = await executeFanout({
+  const confirmed = await executeFanout({ selection: { mode: 'all' },
     connection: confirmedConnection,
     message,
     mode: 'sequential',
@@ -492,7 +525,7 @@ test('DO_FLIGHTTERMINATION is refused without confirmation and runs with it (§1
 });
 
 test('the safety gate covers COMMAND_INT and broadcast too (§10)', async () => {
-  const refused = await executeFanout({
+  const refused = await executeFanout({ selection: { mode: 'all' },
     connection: connectionStub([peer(1)]),
     message: builtCommand({ name: 'COMMAND_INT', fields: { command: 185, param1: 1 } }),
     mode: 'broadcast',
@@ -507,7 +540,7 @@ test('a broadcast position setpoint requires explicit confirmation (§10, #245)'
   // velocity/accel/yaw — every vehicle on the link converges on one point.
   const positionMask = 3576;
   const refusedConnection = connectionStub([peer(1), peer(2)]);
-  const refused = await executeFanout({
+  const refused = await executeFanout({ selection: { mode: 'all' },
     connection: refusedConnection,
     message: builtSetpoint({ fields: { type_mask: positionMask, x: 10, y: 5, z: -20, vx: 0 } }),
     mode: 'broadcast',
@@ -519,7 +552,7 @@ test('a broadcast position setpoint requires explicit confirmation (§10, #245)'
   assert.equal(refusedConnection.sends.length, 0);
 
   const confirmedConnection = connectionStub([peer(1), peer(2)]);
-  const confirmed = await executeFanout({
+  const confirmed = await executeFanout({ selection: { mode: 'all' },
     connection: confirmedConnection,
     message: builtSetpoint({ fields: { type_mask: positionMask, x: 10, y: 5, z: -20, vx: 0 } }),
     mode: 'broadcast',
@@ -535,7 +568,7 @@ test('the broadcast position gate reads the wire mask: velocity exempt, both car
   // builtSetpoint's default mask (3527) ignores all three position bits —
   // fleet momentum, not convergence, so it broadcasts ungated.
   const velocityConnection = connectionStub([peer(1), peer(2)]);
-  const velocity = await executeFanout({
+  const velocity = await executeFanout({ selection: { mode: 'all' },
     connection: velocityConnection,
     message: builtSetpoint(),
     mode: 'broadcast',
@@ -545,7 +578,7 @@ test('the broadcast position gate reads the wire mask: velocity exempt, both car
   assert.equal(velocityConnection.sends.length, 1);
 
   // SET_POSITION_TARGET_GLOBAL_INT is the other position carrier.
-  const globalInt = await executeFanout({
+  const globalInt = await executeFanout({ selection: { mode: 'all' },
     connection: connectionStub([peer(1)]),
     message: builtSetpoint({ name: 'SET_POSITION_TARGET_GLOBAL_INT', fields: { type_mask: 3576 } }),
     mode: 'broadcast',
@@ -554,7 +587,7 @@ test('the broadcast position gate reads the wire mask: velocity exempt, both car
   assert.equal(globalInt.result, 'refused');
 
   // An unreadable mask cannot prove the position axes are ignored — gated.
-  const unreadable = await executeFanout({
+  const unreadable = await executeFanout({ selection: { mode: 'all' },
     connection: connectionStub([peer(1)]),
     message: builtSetpoint({ fields: { type_mask: undefined } }),
     mode: 'broadcast',
@@ -564,7 +597,7 @@ test('the broadcast position gate reads the wire mask: velocity exempt, both car
 
   // SET_ATTITUDE_TARGET's type_mask bits mean body rates, not position — no
   // coordinate to converge on, so it stays outside the gate.
-  const attitude = await executeFanout({
+  const attitude = await executeFanout({ selection: { mode: 'all' },
     connection: connectionStub([peer(1)]),
     message: {
       name: 'SET_ATTITUDE_TARGET',
@@ -578,7 +611,7 @@ test('the broadcast position gate reads the wire mask: velocity exempt, both car
 
 test('sequential position setpoints are not confirm-gated — the hazard is broadcast convergence (#245)', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtSetpoint({ fields: { type_mask: 3576, x: 10, y: 5, z: -20, vx: 0 } }),
     mode: 'sequential',
@@ -598,7 +631,7 @@ test('a setpoint fan-out refuses a lock-held member and continues with the rest 
   // exactly as nodes/mavlink-move.js does.
   const release = streamLocks.acquire('conn-A', { sysid: 1, compid: 1 });
   try {
-    const result = await executeFanout({
+    const result = await executeFanout({ selection: { mode: 'all' },
       connection,
       message: builtSetpoint(),
       mode: 'sequential',
@@ -616,7 +649,7 @@ test('a setpoint fan-out refuses a lock-held member and continues with the rest 
   }
 
   // Released, the same run succeeds — the refusal was the lock, nothing else.
-  const after = await executeFanout({
+  const after = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtSetpoint(),
     mode: 'sequential',
@@ -630,7 +663,7 @@ test('the lock key is (connection, target): another connection or a command is u
   const release = streamLocks.acquire('conn-A', { sysid: 1, compid: 1 });
   try {
     // Same sysid on a different connection is a different vehicle.
-    const crossConn = await executeFanout({
+    const crossConn = await executeFanout({ selection: { mode: 'all' },
       connection: connectionStub([peer(1)], { id: 'conn-B' }),
       message: builtSetpoint(),
       mode: 'sequential',
@@ -640,7 +673,7 @@ test('the lock key is (connection, target): another connection or a command is u
 
     // A command to the locked vehicle is not a stream conflict: the lock's
     // scope is setpoint streams, and a command has its own ack visibility.
-    const command = await executeFanout({
+    const command = await executeFanout({ selection: { mode: 'all' },
       connection: connectionStub([peer(1)], { id: 'conn-A' }),
       message: builtCommand(),
       mode: 'sequential',
@@ -657,7 +690,7 @@ test('a broadcast setpoint refuses entirely while any member is lock-held (#245)
   const connection = connectionStub([peer(1), peer(2)], { id: 'conn-A' });
   const release = streamLocks.acquire('conn-A', { sysid: 2, compid: 1 });
   try {
-    const result = await executeFanout({
+    const result = await executeFanout({ selection: { mode: 'all' },
       connection,
       message: builtSetpoint(),
       mode: 'broadcast',
@@ -678,7 +711,7 @@ test('one-shot setpoint runs hold nothing: a stream may start right after (#245)
   // like Move's own handover setpoint — so the run leaves the registry
   // untouched and a Move-style acquire succeeds immediately.
   const connection = connectionStub([peer(1)], { id: 'conn-A' });
-  await executeFanout({ connection, message: builtSetpoint(), mode: 'sequential', delivery: 'send' });
+  await executeFanout({ selection: { mode: 'all' }, connection, message: builtSetpoint(), mode: 'sequential', delivery: 'send' });
   assert.equal(streamLocks.isHeld('conn-A', { sysid: 1, compid: 1 }), false);
   const release = streamLocks.acquire('conn-A', { sysid: 1, compid: 1 });
   assert.notEqual(release, null, 'a Move-style acquire succeeds after the one-shot');
@@ -689,14 +722,14 @@ test('the lock guards the wire: build tier and dry run pass while it is held (#2
   const connection = connectionStub([peer(1)], { id: 'conn-A' });
   const release = streamLocks.acquire('conn-A', { sysid: 1, compid: 1 });
   try {
-    const built = await executeFanout({
+    const built = await executeFanout({ selection: { mode: 'all' },
       connection,
       message: builtSetpoint(),
       mode: 'sequential',
       delivery: 'build',
     });
     assert.equal(built.success, true);
-    const preview = await executeFanout({
+    const preview = await executeFanout({ selection: { mode: 'all' },
       connection,
       message: builtSetpoint(),
       mode: 'sequential',
@@ -715,7 +748,7 @@ test('the lock guards the wire: build tier and dry run pass while it is held (#2
 test('targets selects the listed sysids and patches wire fields per member', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(3)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand({ fields: { command: 192, param7: 30 } }),
     // Wire units — Fan-out is a raw surface; on COMMAND_LONG the reposition
@@ -744,7 +777,7 @@ test('targets selects the listed sysids and patches wire fields per member', asy
 test('bare-sysid targets replicate the shared message unpatched', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(3)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     targets: [1, 3],
@@ -760,7 +793,7 @@ test('bare-sysid targets replicate the shared message unpatched', async () => {
 test('a patch cannot cross-address another vehicle — target_system is forced back', async () => {
   const connection = connectionStub([peer(1)]);
 
-  await executeFanout({
+  await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     targets: [{ sysid: 1, target_system: 99 }],
@@ -774,7 +807,7 @@ test('a patch cannot cross-address another vehicle — target_system is forced b
 test('broadcast refuses targets — one packet carries one field set (§10)', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     targets: [{ sysid: 1, param5: -35 }],
@@ -792,7 +825,7 @@ test('duplicate sysids in targets refuse — last-wins merging would silently dr
   // and dropped the first patch — an operator error reported as success.
   const connection = connectionStub([peer(1), peer(2)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     targets: [{ sysid: 1, param5: 47.4 }, 2, { sysid: 1, param5: 47.6 }],
@@ -813,7 +846,7 @@ test('a targets patch may not rewrite `command` — the safety gate runs once, o
   // Termination on the wire with no confirmation.
   const connection = connectionStub([peer(1)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand({ fields: { command: 400, param1: 1 } }),
     targets: [{ sysid: 1, command: 185 }],
@@ -832,7 +865,7 @@ test('a targets patch may not rewrite `command` — the safety gate runs once, o
 test('member metre offsets patch degE7 fields on COMMAND_INT with lib/formation\'s math', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     // Reposition on the INT carrier: x/y are degE7, z metres (up-positive).
     message: {
@@ -867,7 +900,7 @@ test('an east offset scales through cos(lat), not the latitude divisor', async (
   // ~1.47x the degrees a metre of northing is.
   const connection = connectionStub([peer(1)]);
 
-  await executeFanout({
+  await executeFanout({ selection: { mode: 'all' },
     connection,
     message: {
       name: 'COMMAND_INT',
@@ -894,7 +927,7 @@ test('offsets refuse a non-global COMMAND_INT frame rather than scaling degE7', 
   // would turn a commanded 10 m into ~9 cm on the wire. Refuse instead.
   const connection = connectionStub([peer(1)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: {
       name: 'COMMAND_INT',
@@ -914,7 +947,7 @@ test('offsets refuse a non-global COMMAND_INT frame rather than scaling degE7', 
 test('offsets refuse a body-framed LOCAL_NED setpoint — north is not the x axis there', async () => {
   const connection = connectionStub([peer(1)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: {
       name: 'SET_POSITION_TARGET_LOCAL_NED',
@@ -935,7 +968,7 @@ test('offsets refuse a body-framed LOCAL_NED setpoint — north is not the x axi
 test('member metre offsets on SET_POSITION_TARGET_LOCAL_NED apply directly with up = -z', async () => {
   const connection = connectionStub([peer(1)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtSetpoint(),
     members: [{ sysid: 1, north: 3, east: 4, up: 5 }],
@@ -953,7 +986,7 @@ test('member metre offsets on SET_POSITION_TARGET_LOCAL_NED apply directly with 
 test('member offsets on a message with no position surface refuse, naming message and member', async () => {
   const connection = connectionStub([peer(1)]);
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: { name: 'SET_MODE', fields: { target_system: 1, base_mode: 1, custom_mode: 4 } },
     members: [{ sysid: 1, north: 10 }],
@@ -973,7 +1006,7 @@ test('a malformed targets shape is refused before any send', async () => {
   // A non-array, a broadcast sysid, an out-of-range sysid, and an entry with
   // no sysid at all: each would silently select or patch the wrong vehicles.
   for (const bad of ['1,2', [0], [256], [{ param5: -35 }]]) {
-    const result = await executeFanout({
+    const result = await executeFanout({ selection: { mode: 'all' },
       connection,
       message: builtCommand(),
       targets: bad,
@@ -1003,7 +1036,7 @@ test('concurrency overlaps confirm waits so a straggler does not serialize the f
   };
   const deliver = (decoded) => handlers.slice().forEach((h) => h(decoded));
 
-  const run = executeFanout({
+  const run = executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     mode: 'sequential',
@@ -1040,7 +1073,7 @@ test('at the default concurrency 1 the second member waits for the first ack', a
   };
   const deliver = (decoded) => handlers.slice().forEach((h) => h(decoded));
 
-  const run = executeFanout({
+  const run = executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     mode: 'sequential',
@@ -1064,7 +1097,7 @@ test('at the default concurrency 1 the second member waits for the first ack', a
 test('stop-on-error halts after the first failure and reports the rest skipped', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(3)], { failSysids: new Set([1]) });
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     mode: 'sequential',
@@ -1088,7 +1121,7 @@ test('stop-on-error re-checks after the inter-member pause (concurrency > 1)', a
   // the next member.
   const connection = connectionStub([peer(1), peer(2), peer(3)], { failSysids: new Set([1]) });
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     mode: 'sequential',
@@ -1113,7 +1146,7 @@ test('a targets patch cannot re-address the message away from the member autopil
   // neither agrees with — the autopilot ignores it and the ack wait times out.
   const connection = connectionStub([peer(1)]);
 
-  await executeFanout({
+  await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand({ fields: { command: 192, param7: 30 } }),
     targets: [{ sysid: 1, target_system: 99, target_component: 42, param5: 47.4 }],
@@ -1132,7 +1165,7 @@ test('a targets patch cannot re-address the message away from the member autopil
 test('pinning never invents target_component on a system-only message', async () => {
   const connection = connectionStub([peer(1)]);
 
-  await executeFanout({
+  await executeFanout({ selection: { mode: 'all' },
     connection,
     message: { name: 'SET_MODE', fields: { target_system: 9, base_mode: 1, custom_mode: 4 } },
     targets: [{ sysid: 1, target_component: 42 }],
@@ -1148,7 +1181,7 @@ test('pinning never invents target_component on a system-only message', async ()
 test('without stop-on-error every member is still attempted (the §10 default)', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(3)], { failSysids: new Set([1]) });
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     mode: 'sequential',
@@ -1251,7 +1284,7 @@ test('an ack explicitly addressed to another GCS never settles our wait (§9/§1
   };
   const deliver = (decoded) => handlers.slice().forEach((h) => h(decoded));
 
-  const run = executeFanout({
+  const run = executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     mode: 'sequential',
@@ -1287,7 +1320,7 @@ test('PARAM_SET echo confirm compares wire values — a clamped value does not c
 
   // The vehicle applies the set verbatim: identical wire float confirms.
   const okConnection = makeConnection();
-  const okRun = executeFanout({
+  const okRun = executeFanout({ selection: { mode: 'all' },
     connection: okConnection,
     message: builtParamSet({ fields: { param_value: 47.9 } }),
     mode: 'sequential',
@@ -1302,7 +1335,7 @@ test('PARAM_SET echo confirm compares wire values — a clamped value does not c
 
   // The vehicle clamped it: the echo mismatches and the member is unconfirmed.
   const clampedConnection = makeConnection();
-  const clampedRun = executeFanout({
+  const clampedRun = executeFanout({ selection: { mode: 'all' },
     connection: clampedConnection,
     message: builtParamSet({ fields: { param_value: 47.9 } }),
     mode: 'sequential',
@@ -1334,7 +1367,7 @@ test('PARAM_SET echo with a different param_type never confirms — byte-identic
     },
   };
 
-  const run = executeFanout({
+  const run = executeFanout({ selection: { mode: 'all' },
     connection,
     // Sent as REAL32 (9)…
     message: builtParamSet({ fields: { param_value: 5, param_type: 9 } }),
@@ -1369,7 +1402,7 @@ test('confirm-mode retry resends the member\'s patched message with the confirma
   };
   const deliver = (decoded) => subs.slice().forEach((h) => h(decoded));
 
-  const run = executeFanout({
+  const run = executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand({ fields: { command: 192, param7: 30 } }),
     targets: [{ sysid: 7, param5: 47.7, param6: 8.7 }],
@@ -1411,7 +1444,7 @@ test('cancelling a sequential run stops it between members (#54/#57)', async () 
   const connection = connectionStub([peer(1), peer(2), peer(3)]);
   const controller = new AbortController();
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     signal: controller.signal,
     message: builtCommand(),
@@ -1440,7 +1473,7 @@ test('an uncancelled run is untouched by the abort signal', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(3)]);
   const controller = new AbortController();
 
-  const result = await executeFanout({
+  const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     signal: controller.signal,
     message: builtCommand(),
@@ -1469,7 +1502,7 @@ test('cancel settles a param-echo wait instead of blocking on its timeout (CodeR
   const controller = new AbortController();
 
   const started = Date.now();
-  const run = executeFanout({
+  const run = executeFanout({ selection: { mode: 'all' },
     connection,
     signal: controller.signal,
     message: builtParamSet(),
@@ -1501,7 +1534,7 @@ test('cancel settles a broadcast confirm instead of blocking on its timeout (Cod
   const controller = new AbortController();
 
   const started = Date.now();
-  const run = executeFanout({
+  const run = executeFanout({ selection: { mode: 'all' },
     connection,
     signal: controller.signal,
     message: builtCommand(),

@@ -9,7 +9,7 @@ test('mavlink-fanout node emits continue only for all-success aggregate', async 
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({
+  const node = new Node({ selectionMode: 'all',
     connection: 'conn',
     executionMode: 'sequential',
     delivery: 'send',
@@ -31,7 +31,7 @@ test('a hand-edited executionMode typo fails loud through the node, not silently
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({
+  const node = new Node({ selectionMode: 'all',
     connection: 'conn',
     executionMode: 'broadcasts',
     delivery: 'send',
@@ -48,12 +48,35 @@ test('a hand-edited executionMode typo fails loud through the node, not silently
   assert.equal(connection.sends.length, 0, 'nothing left the wire under the mis-resolved mode');
 });
 
+test('a payload selection-mode typo fails loud through the node instead of widening to the fleet (§14 reversal)', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({ selectionMode: 'all',
+    connection: 'conn',
+    executionMode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  let sent;
+  const err = await emitInput(
+    node,
+    { payload: { message: builtCommand(), selection: { mode: 'lits', sysids: [1] } } },
+    (m) => { sent = m; }
+  ).then(() => null, (e) => e);
+  assert.ok(err, 'an unknown selection mode is passed to done(err)');
+  assert.match(err.message, /unknown Fan-out selection mode "lits" — expected one of all, list, filter/);
+  assert.equal(sent[0], null);
+  assert.equal(connection.sends.length, 0, 'the subset command must not reach the fleet');
+});
+
 test('a hand-edited delivery typo fails loud through the node instead of silently sending (lib/fanout delivery)', async () => {
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({
+  const node = new Node({ selectionMode: 'all',
     connection: 'conn',
     executionMode: 'sequential',
     delivery: 'cofnirm',
@@ -101,7 +124,7 @@ test('a payload that is not a built message fails loudly naming the contract', a
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({ connection: 'conn', delivery: 'send', intervalMs: 0 });
+  const node = new Node({ executionMode: 'sequential', selectionMode: 'all', connection: 'conn', delivery: 'send', intervalMs: 0 });
 
   let sent;
   const err = await emitInput(node, { payload: { commandId: 400 } }, (m) => { sent = m; }).then(
@@ -120,7 +143,7 @@ test('wrapper selection sysids outside 1..255 are refused at the runtime boundar
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
 
-  const fromWrapper = new Node({
+  const fromWrapper = new Node({ executionMode: 'sequential',
     connection: '',
     delivery: 'build',
     selectionMode: 'list',
@@ -145,7 +168,7 @@ test('build+all without connection fails loudly naming the rule (§6)', async ()
   const RED = redStub({});
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({
+  const node = new Node({ executionMode: 'sequential',
     connection: '',
     delivery: 'build',
     selectionMode: 'all',
@@ -170,7 +193,7 @@ test('wrapper identityId is passed through to connection.send options', async ()
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({
+  const node = new Node({ executionMode: 'sequential', selectionMode: 'all',
     connection: 'conn',
     delivery: 'send',
     intervalMs: 0,
@@ -187,7 +210,7 @@ test('config.identity is used as identityId when the wrapper does not override',
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({
+  const node = new Node({ executionMode: 'sequential', selectionMode: 'all',
     connection: 'conn',
     delivery: 'send',
     identity: 'cfg-identity-id',
@@ -206,7 +229,7 @@ test('mavlink-fanout node gates DO_FLIGHTTERMINATION on msg.confirmed / node con
   const Node = RED.nodes.types['mavlink-fanout'];
 
   // No confirmation anywhere → refused, nothing sent.
-  const gated = new Node({ connection: 'conn', delivery: 'send' });
+  const gated = new Node({ executionMode: 'sequential', selectionMode: 'all', connection: 'conn', delivery: 'send' });
   let sent;
   const err = await emitInput(
     gated,
@@ -227,8 +250,8 @@ test('mavlink-fanout node gates DO_FLIGHTTERMINATION on msg.confirmed / node con
   const conn2 = connectionStub([peer(1)]);
   const RED2 = redStub({ conn: conn2 });
   require('../../nodes/mavlink-fanout')(RED2);
-  const okNode = new (RED2.nodes.types['mavlink-fanout'])({
-    connection: 'conn', delivery: 'send',
+  const okNode = new (RED2.nodes.types['mavlink-fanout'])({ executionMode: 'sequential',
+    selectionMode: 'all', connection: 'conn', delivery: 'send',
   });
   await emitInput(okNode, {
     payload: builtCommand({ fields: { command: 185, param1: 1 } }),
@@ -245,7 +268,7 @@ test('a filter matching zero vehicles reports quietly — empty aggregate, no er
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({
+  const node = new Node({ executionMode: 'sequential',
     connection: 'conn',
     delivery: 'send',
     selectionMode: 'filter',
@@ -271,7 +294,7 @@ test('an empty list or empty fleet stays loud — someone was named and nobody a
   // list: the operator named sysid 9 and reached none.
   const RED = redStub({ conn: connectionStub([peer(1), peer(2)]) });
   require('../../nodes/mavlink-fanout')(RED);
-  const listNode = new (RED.nodes.types['mavlink-fanout'])({
+  const listNode = new (RED.nodes.types['mavlink-fanout'])({ executionMode: 'sequential',
     connection: 'conn',
     delivery: 'send',
     selectionMode: 'list',
@@ -290,7 +313,7 @@ test('an empty list or empty fleet stays loud — someone was named and nobody a
   // that reached nobody is the worse failure.
   const RED2 = redStub({ conn: connectionStub([]) });
   require('../../nodes/mavlink-fanout')(RED2);
-  const allNode = new (RED2.nodes.types['mavlink-fanout'])({
+  const allNode = new (RED2.nodes.types['mavlink-fanout'])({ executionMode: 'sequential',
     connection: 'conn',
     delivery: 'send',
     selectionMode: 'all',
@@ -308,7 +331,7 @@ test('wrapper targets reach the replicator with per-member patches', async () =>
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({
+  const node = new Node({ selectionMode: 'all',
     connection: 'conn',
     executionMode: 'sequential',
     delivery: 'send',
@@ -457,7 +480,7 @@ test('close cancels an in-flight fan-out and waits for it to unwind (#54/#57)', 
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({
+  const node = new Node({ selectionMode: 'all',
     connection: 'conn',
     executionMode: 'sequential',
     delivery: 'send',
@@ -497,7 +520,7 @@ test('close cancels every concurrent fan-out, not just the newest (Greptile #140
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({
+  const node = new Node({ selectionMode: 'all',
     connection: 'conn',
     executionMode: 'sequential',
     delivery: 'send',
@@ -532,7 +555,7 @@ test('a config with no numeric keys at all inherits the lib absence defaults (Gi
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
   // No intervalMs, timeoutMs, maxRetries, or concurrency keys anywhere.
-  const node = new Node({ connection: 'conn', executionMode: 'sequential', delivery: 'send' });
+  const node = new Node({ selectionMode: 'all', connection: 'conn', executionMode: 'sequential', delivery: 'send' });
   let sent;
 
   const started = Date.now();
@@ -558,7 +581,7 @@ test('a wrapper concurrency of 0 completes instead of hanging (Codex, #287)', as
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({ connection: 'conn', executionMode: 'sequential', delivery: 'send', intervalMs: 0 });
+  const node = new Node({ selectionMode: 'all', connection: 'conn', executionMode: 'sequential', delivery: 'send', intervalMs: 0 });
   let sent;
 
   await emitInput(
