@@ -162,13 +162,15 @@ test('catalogLabel names the definition set the operator is actually looking at'
     'ArduPilot Copter · 5719 definitions (shipped seed)'
   );
 
-  // An unnamed vehicle gets the union of names, so the label says "names" —
-  // it is why the Value field offers no bounds and no choice list, which
-  // otherwise reads as a second fault.
+  // No named vehicle just goes unnamed: a blank, unknown, or unrecognised family
+  // gets the union catalog and the label says nothing about a vehicle (the red
+  // ring, not this label, is where a bad config shows). Gated on the same
+  // ARDUPILOT_VEHICLE map defsFor serves from, so 'drone' reads the same as
+  // blank rather than mislabelling as a named vehicle.
   for (const family of ['unknown', '', undefined, 'drone']) {
     assert.equal(
       catalogLabel({ firmware: 'ardupilot', vehicleFamily: family, count: 6827 }),
-      'ArduPilot (no vehicle named) · 6827 names (shipped seed)',
+      'ArduPilot · 6827 definitions (shipped seed)',
       `family ${JSON.stringify(family)}`
     );
   }

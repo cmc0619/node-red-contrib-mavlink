@@ -38,25 +38,6 @@ test('mavlink-local-identity: a non-finite heartbeatIntervalMs refuses instead o
   );
 });
 
-test('mavlink-local-identity: a typo\'d role refuses instead of silently becoming the custom preset (§14 selection-typo cluster)', () => {
-  // 'custom' is the escape hatch an operator chooses, not where a typo lands:
-  // 'gsc' used to get a MAV_TYPE_GENERIC heartbeat in place of the GCS
-  // identity the flow meant, silently.
-  const RED = redStub();
-  require('../../nodes/mavlink-local-identity')(RED);
-  const Node = RED.nodes.types['mavlink-local-identity'];
-
-  assert.throws(
-    () => new Node({
-      id: 'garbage-role',
-      role: 'gsc',
-      sourceSystemId: 255,
-      sourceComponentId: 190,
-    }),
-    /unknown Local Identity role "gsc" — expected one of gcs, companion, custom/
-  );
-});
-
 function redStub() {
   return {
     nodes: {

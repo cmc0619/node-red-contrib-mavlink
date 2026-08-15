@@ -18,9 +18,6 @@ const path = require('node:path');
 const {
   FIRMWARE_TYPES,
   VEHICLE_FAMILIES,
-  requireFirmware,
-  requireFamily,
-  normalizeFamily,
   resolveDialect,
   knownDialects,
 } = require('../../lib/vehicle');
@@ -52,58 +49,6 @@ test('FIRMWARE_TYPES includes ardupilot, px4, custom', () => {
 test('VEHICLE_FAMILIES has one family per ArduPilot document, plus unknown', () => {
   for (const f of ['copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker', 'unknown']) {
     assert.ok(VEHICLE_FAMILIES.includes(f), `expected ${f} in VEHICLE_FAMILIES`);
-  }
-});
-
-/* ---------- requireFirmware ---------- */
-
-test('requireFirmware passes through known values', () => {
-  assert.equal(requireFirmware('ardupilot'), 'ardupilot');
-  assert.equal(requireFirmware('px4'), 'px4');
-  assert.equal(requireFirmware('custom'), 'custom');
-});
-
-test('requireFirmware throws on unknown or blank input (no silent custom)', () => {
-  // Affirmative dispatch: `custom` stays a real member, just not the sink a
-  // blank/typo falls into. Reaching a non-member means a hand-edited config.
-  for (const bad of ['unknown', '', undefined]) {
-    assert.throws(() => requireFirmware(bad), /unknown firmware/);
-  }
-});
-
-/* ---------- normalizeFamily ---------- */
-
-test('normalizeFamily passes through known values', () => {
-  for (const f of ['copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker', 'unknown']) {
-    assert.equal(normalizeFamily(f), f);
-  }
-});
-
-test('normalizeFamily returns unknown for anything not in the list', () => {
-  // One rule, no special cases — `generic` sits here because it is not a
-  // family, not because anything remembers that it used to be one. The
-  // editor's Vehicle field is a closed select, so reaching this at all means
-  // a config the editor did not write, and `unknown` is the least-claiming
-  // family there is: names, no bounds, no enumerations.
-  for (const family of ['drone', '', undefined, 'generic', 'GENERIC', 'copter ']) {
-    assert.equal(normalizeFamily(family), 'unknown');
-  }
-});
-
-/* ---------- requireFamily (the Vehicle config token) ---------- */
-
-test('requireFamily passes through known values', () => {
-  for (const f of ['copter', 'plane', 'rover', 'unknown']) {
-    assert.equal(requireFamily(f), f);
-  }
-});
-
-test('requireFamily throws on unknown or blank input (no silent unknown)', () => {
-  // `unknown` stays a real, selectable family — but a blank/typo craters rather
-  // than being sunk into it. normalizeFamily keeps coercing for seed catalog
-  // labels; the config token is required.
-  for (const bad of ['drone', '', undefined, 'generic']) {
-    assert.throws(() => requireFamily(bad), /unknown vehicle family/);
   }
 });
 

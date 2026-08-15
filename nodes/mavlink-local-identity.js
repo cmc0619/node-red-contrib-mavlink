@@ -20,7 +20,6 @@
  */
 
 const {
-  normalizeRole,
   rolePreset,
   heartbeatFields,
   bindVehicleSysid,
@@ -36,7 +35,11 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    node.role = normalizeRole(config.role);
+    // role is editor-guaranteed: a `required` select of the ROLE_PRESETS keys
+    // (mavlink-local-identity.html), so the red ring is the protector and the
+    // runtime trusts the saved member (§6). A hand-edited non-member craters at
+    // the preset read below, at construction.
+    node.role = config.role;
     const preset = rolePreset(node.role);
 
     /**
