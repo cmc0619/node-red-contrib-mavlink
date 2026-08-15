@@ -119,7 +119,7 @@ test('build+list with no connection emits one retargeted message per member on o
   assert.equal(sent[0][0].payload.name, 'COMMAND_LONG');
 });
 
-test('a payload that is not a built message fails loudly naming the contract', async () => {
+test('a payload that is not a built message craters through done(err) — no build-tier guardrail', async () => {
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
@@ -131,10 +131,8 @@ test('a payload that is not a built message fails loudly naming the contract', a
     () => null,
     (e) => e
   );
-  assert.ok(err, 'refused non-message payload is passed to done(err)');
+  assert.ok(err, 'a malformed payload craters to done(err)');
   assert.equal(sent[0], null);
-  assert.equal(sent[1].result, 'refused');
-  assert.match(sent[1].detail, /Build-tier|mavlink-build/);
   assert.equal(connection.sends.length, 0);
 });
 

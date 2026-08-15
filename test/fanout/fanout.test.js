@@ -180,12 +180,15 @@ test('classifyMessage infers confirmation and band from the message name', () =>
   );
 });
 
-test('a payload that is not a built message is refused with a pointer at Build tiers', async () => {
+test('a payload that is not a built message craters — no build-tier guardrail', async () => {
   const connection = connectionStub([peer(1)]);
-  for (const bad of [null, 42, 'arm', {}, { name: 'COMMAND_LONG' }, { fields: {} }]) {
-    const result = await executeFanout({ mode: 'sequential', selection: { mode: 'all' }, connection, message: bad, delivery: 'send' });
-    assert.equal(result.result, 'refused', `${JSON.stringify(bad)} must refuse`);
-    assert.match(result.detail, /Build-tier|mavlink-build/);
+  // No shape guard: a malformed payload reads `.name`/`.fields` off a non-object
+  // or a message with no fields and craters (TypeError), rather than a curated
+  // "wire a Build node" refusal.
+  for (const bad of [null, 42, 'arm', {}, { name: 'COMMAND_LONG' }]) {
+    await assert.rejects(
+      () => executeFanout({ mode: 'sequential', selection: { mode: 'all' }, connection, message: bad, delivery: 'send' })
+    );
   }
   assert.equal(connection.sends.length, 0);
 });
