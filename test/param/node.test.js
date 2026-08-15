@@ -82,6 +82,27 @@ test('a set with no paramType fails loud rather than guessing REAL32', () => {
   );
 });
 
+test("a typo'd delivery tier crashes instead of an unconfirmed 'sent' (protocol omega)", () => {
+  // 'confrim' used to fall through the confirm/collect gates into a
+  // fire-and-forget wire send reporting 'sent' — an unconfirmed real send.
+  // Affirmative dispatch craters before anything is sent (§14 selection-typo).
+  const conn = connStubFull();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'confrim',
+    action: 'read',
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+  });
+  let err;
+  node.emit('input', { payload: { paramId: 'ARMING_CHECK' } }, () => {}, (e) => { err = e; });
+  assert.match(err.message, /unknown Param delivery "confrim" — expected one of build, send, confirm, collect/);
+  assert.equal(conn.sent.length, 0, 'nothing left the wire under a mis-resolved tier');
+});
+
 test('mavlink-param refuses a set whose value is blank end to end: nothing sent, named refusal, done(err) (§9, #258)', () => {
   // Blank config value + no payload value used to transmit a silent 0
   // (Number('') === 0) and report success. The refusal happens before

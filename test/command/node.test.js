@@ -725,6 +725,33 @@ test('a hand-edited garbage Command delivery tier fails loud instead of silently
   assert.equal(conn.sent.length, 0, 'the mis-resolved tier never reached the wire');
 });
 
+test('a hand-edited garbage Command mode fails loud instead of silently building a preset', async () => {
+  // 'presett' used to fall through the `!== 'advanced'` gates into the preset
+  // branch silently. Affirmative dispatch craters in the input handler.
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    sendAs: 'long',
+    mode: 'presett',
+    preset: 'arm',
+    delivery: 'confirm',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+  });
+
+  let sent;
+  let doneError;
+  node.emit('input', { payload: null }, (m) => { sent = m; }, (err) => { doneError = err; });
+  await Promise.resolve();
+
+  assert.equal(sent[0], null);
+  assert.match(doneError.message, /unknown Command mode "presett" — expected one of preset, advanced/);
+  assert.equal(conn.sent.length, 0, 'the mis-resolved mode never reached the wire');
+});
+
 test('silent ACK windows re-send a LONG with incremented confirmation, badge telemetry, then the unchanged unconfirmed record (#248)', async (t) => {
   // The harness fires the 1000 ms window timers via microtask, so the whole
   // resend cascade — 3 re-sends, then the final window — drains before the
@@ -870,22 +897,23 @@ test('unknown "Send as" token refuses loud instead of silently building COMMAND_
   assert.ok(doneErr instanceof Error, 'the input fails through Catch');
 });
 
-test('blank "Send as" is unchanged — still resolves to COMMAND_LONG', async () => {
-  // The editor's select never saves blank (no blank prompt, no conditional
-  // validator — DESIGN.md §6 "Command node COMMAND_INT"), so this is not a
-  // choice the operator can make; it is here to pin that the ruling narrowed
-  // to the non-blank token and did not touch the existing fallthrough.
+test('blank "Send as" now craters instead of resolving to COMMAND_LONG (protocol omega, reversing §14:4505)', async () => {
+  // The editor's select never saves blank, so this is hand-edit drift. It used
+  // to fall through to COMMAND_LONG; now it throws like any non-member, matching
+  // formation's carrier resolver and the codebase-wide "blank crashes" line.
   const RED = redStub({});
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({ sendAs: '', mode: 'preset', preset: 'arm', delivery: 'build' });
 
   let output;
-  node.emit('input', { payload: null }, (m) => { output = m; }, () => {});
+  let doneErr;
+  node.emit('input', { payload: null }, (m) => { output = m; }, (err) => { doneErr = err; });
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(output[0].payload.name, 'COMMAND_LONG');
-  assert.equal(output[1].result, 'built');
+  assert.equal(output[0], null, 'output 0 must not fire');
+  assert.match(output[1].detail, /unknown Command "Send as" "" — expected one of long, int/);
+  assert.ok(doneErr instanceof Error);
 });
 
 test('unknown preset fails the input instead of building MAV_CMD(null) and reporting success', async () => {

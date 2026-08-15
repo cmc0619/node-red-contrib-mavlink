@@ -68,17 +68,20 @@ test('buildPayloadMessage rejects an unknown verb', () => {
   );
 });
 
-test('buildPayloadMessage unknown-verb error includes path when present', () => {
+test('buildPayloadMessage craters on an unknown gimbal aim path, naming the vocabulary', () => {
+  // Affirmative dispatch: the path routes three different wire messages, so an
+  // unknown one throws naming the path vocabulary rather than mis-reporting an
+  // "unknown verb" via a composite-key miss.
   assert.throws(
     () => buildPayloadMessage({
-    carrier: 'long',
+      carrier: 'long',
       topic: 'gimbal',
       verb: 'aim',
       path: 'not-a-real-path',
       target: { sysid: 1, compid: 1 },
       values: {},
     }),
-    /gimbal\/aim\/not-a-real-path/
+    /unknown gimbal aim path "not-a-real-path" — expected one of legacy, manager, manager-cmd/
   );
 });
 

@@ -47,7 +47,13 @@ if (typeof types['mavlink-vehicle'] !== 'function') {
   process.exit(2);
 }
 
-const node = new types['mavlink-vehicle']({ id: 'v1', dialect: 'ardupilotmega' });
+const node = new types['mavlink-vehicle']({
+  id: 'v1',
+  vehicleFamily: 'unknown',
+  firmware: 'ardupilot',
+  dialect: 'ardupilotmega',
+  dialectRevision: 'seed',
+});
 let bundle;
 try {
   bundle = node.getDialect();

@@ -61,7 +61,6 @@ const {
   applyConnectionStatus,
   dialectFromVehicleId,
   dialectFromConnection,
-  isBlank,
   finiteNumberOr,
 } = require('../lib/addressing');
 const {
@@ -95,22 +94,18 @@ function resolveCommandId(config) {
 }
 
 /**
- * Resolve the configured carrier choice (owner ruling, 2026-08-14, extending
- * the Move no-defaults ruling to this site — DESIGN.md §14 had left it
- * un-ruled: "COMMAND_LONG is a defensible default"). The editor's `sendAs`
- * select only ever saves `'int'` or `'long'` — no blank prompt, no
- * conditional validator (DESIGN.md §6 "Command node COMMAND_INT") — so a
- * hand-edited token outside that pair is not a choice the operator made.
- * `resolveCarrier(config)` returning `null` for a blank/missing value is
- * unchanged: `buildCarrierMessage` already treats "not INT" as LONG, and that
- * fallthrough is not this ruling's target — a typo'd token silently building
- * COMMAND_LONG is (confirmed: `sendAs: 'lng'`).
+ * Resolve the configured carrier choice. Affirmative dispatch (owner ruling,
+ * 2026-08-15, reversing the blank carve-out of §14:4505): the editor's `sendAs`
+ * select only ever saves `'int'` or `'long'` — no blank prompt — so a blank or
+ * typo'd token is hand-edit drift, not an operator choice, and craters. The
+ * former blank → `null` → LONG fallthrough is gone: it made this the one
+ * carrier resolver that defaulted a blank while formation's threw, and "blank
+ * crashes" holds across the codebase now.
  *
  * @param {object} config  node config from editor
- * @returns {'long'|'int'|null}
+ * @returns {'long'|'int'}
  */
 function resolveCarrier(config) {
-  if (isBlank(config.sendAs)) return null;
   if (config.sendAs === CARRIER.INT) return CARRIER.INT;
   if (config.sendAs === CARRIER.LONG) return CARRIER.LONG;
   throw new Error(
@@ -138,6 +133,27 @@ function resolveDeliveryTier(value) {
   if (DELIVERY_TIERS.includes(value)) return value;
   throw new Error(
     `unknown Command delivery ${JSON.stringify(value)} — expected one of ${DELIVERY_TIERS.join(', ')}`
+  );
+}
+
+/** Command form modes: a preset from the dropdown, or a raw advanced command. */
+const COMMAND_MODES = ['preset', 'advanced'];
+
+/**
+ * Affirmative dispatch for the mode token (selection-typo cluster). The
+ * `=== 'advanced'` / `!== 'advanced'` gates route non-match to the preset
+ * branch, so a typo'd or blank mode used to silently precompute a preset; the
+ * dialog's select has no blank option (default `'preset'`), so a non-member is
+ * hand-edit drift. Enforced at the top of the input handler, like preset and
+ * delivery, so a bad token is a failed record rather than a construction crash.
+ *
+ * @param {*} value  config.mode
+ * @returns {'preset'|'advanced'}
+ */
+function resolveCommandMode(value) {
+  if (COMMAND_MODES.includes(value)) return value;
+  throw new Error(
+    `unknown Command mode ${JSON.stringify(value)} — expected one of ${COMMAND_MODES.join(', ')}`
   );
 }
 
@@ -253,6 +269,11 @@ module.exports = function registerMavlinkCommand(RED) {
         done();
         return;
       }
+
+      // Affirmative dispatch for the mode token (preset | advanced) before the
+      // `!== 'advanced'` gate below reads it: a typo'd or blank mode used to
+      // route silently to the preset branch (§14 selection-typo).
+      resolveCommandMode(config.mode);
 
       // Preset mode's dropdown cannot produce an id outside PRESET_PARAMS; a
       // hand-edited flow can (confirmed: preset 'arrrm'). Advanced mode never
