@@ -141,7 +141,9 @@ function selectionFrom(config) {
   assignIfPresent(filter, 'type', config.vehicleType);
   assignIfPresent(filter, 'firmware', config.firmwareFilter);
   assignIfPresent(filter, 'armed', config.armedFilter);
-  const mode = config.selectionMode || 'all';
+  // No `|| 'all'`: the editor always saves a member, and the runtime maps
+  // nothing — a blank saved mode crashes at dispatch, like any non-member.
+  const mode = config.selectionMode;
   return {
     mode,
     // List selection reads its sysids from the members table rows (#163).
