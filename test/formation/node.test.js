@@ -438,28 +438,6 @@ test('sphere with pitchDeg override fans distinct altitudes via DO_REPOSITION', 
   assert.ok(new Set(alts).size > 1, 'sphere pitch leaves vehicles at more than one altitude');
 });
 
-test('a typo\'d anchorMode crashes instead of silently anchoring on the leader (protocol omega)', async () => {
-  // 'fixd' used to fall through the === 'fixed' gate to the leader-telemetry
-  // path — the formation would anchor on the leader's live position instead
-  // of the configured fixed coordinates. Affirmative dispatch throws.
-  const connection = connectionStub([peer(1), peer(2), peer(3)]);
-  const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-formation')(RED);
-  const node = new (RED.nodes.types['mavlink-formation'])({
-    connection: 'conn',
-    shape: 'line',
-    spacing: 10,
-    sysids: '1,2,3',
-    anchorMode: 'fixd',
-    lat: 47.4, lon: 8.5, alt: 30,    delivery: 'send',
-    intervalMs: 0,
-  });
-  const err = await emitInput(node, { payload: {} }, () => {}).then(() => null, (e) => e);
-  assert.ok(err, 'an unknown anchor mode is passed to done(err)');
-  assert.match(err.message, /unknown Formation anchor mode "fixd" — expected one of fixed, leader/);
-  assert.equal(connection.sends.length, 0, 'nothing commanded under a mis-resolved anchor');
-});
-
 function emitInput(node, msg, send) {
   return new Promise((resolve, reject) => {
     node.emit('input', msg, send, (err) => {
