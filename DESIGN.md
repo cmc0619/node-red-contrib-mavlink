@@ -3970,18 +3970,21 @@ holds); an empty explicit `list` or an empty `all` is someone named or expected 
 reached none (loud: red badge, Catch-routable). Loudness follows whether the operator asserted
 that vehicles exist, not whether the count is zero.
 
-**Re-affirmed a third time (owner ruling, 2026-08-14: *"We don't protect typos."*).** An
-external audit re-raised this as its P0 with a live repro — `{mode: "lits", sysids: [1]}`
-selects the fleet, reproduced against HEAD — and argued the 2026-08-14 selection-typo cluster's
-blank-vs-present split (shipped the same day on `msg.band`, another trusted-msg override) had
-dissolved the distinction this entry rests on. The owner considered exactly that framing, with
-the repro and the widened-audience direction on the table, and declined again. The line the
-cluster does not cross: its resolvers guard tokens that pick a *wire machine* behind a config
-surface with editor cover; fan-out selection is a payload surface where the flow author is
-trusted end to end, and a hand-built payload with a garbage selection remains the author's bug.
-This surface is likewise excluded from the protector-side editor pass. Audits citing the
-typo-to-default shape here are re-raising a question settled three times.
-*Check:* `node --test test/fanout/fanout.test.js test/fanout/node.test.js`.
+**The mode token arm was reversed (owner ruling, 2026-08-14: *"It has to equal x, y or z —
+if it comes through as b it shouldn't default to an action due to a `!==`"*).** The 2026-08-14
+external audit re-raised this entry as its P0 with a live repro — `{mode: "lits",
+sysids: [1]}` selects the fleet, confirmed against HEAD. The owner first re-affirmed
+trusted-author ("we don't protect typos"), then walked the mechanism — the mode acts only
+through two negative `===` gates, so an unrecognised token acts by *failing* both — and
+reversed the token arm the same day, the same way this entry's first revision flipped:
+selection dispatch must be affirmative. `selection.mode` now resolves through membership:
+blank/absent stays `all` (the documented default; no deployed flow changes), a present
+non-member throws naming `all, list, filter`. What this does **not** touch: the
+trusted-author contract for selection *content* — sysids lists (their uint8 strictness was
+ruled separately), filter values, and per-member patches ride as given — and the #226
+loud/quiet empty split stands unchanged.
+*Check:* `node --test test/fanout/fanout.test.js test/fanout/node.test.js` — the typo tests
+pin the refusal beside the behaviour it replaced.
 
 ---
 
