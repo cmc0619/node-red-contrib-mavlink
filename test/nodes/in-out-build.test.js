@@ -156,6 +156,12 @@ function makeConnectionStub() {
       };
     },
     send(message, opts) {
+      // Real send() serialize-validates before enqueue (lib/connection/runtime.js),
+      // throwing synchronously on a non-message; model that so a bad shape fails
+      // loud here instead of being recorded as a null "sent".
+      if (!message || typeof message.name !== 'string') {
+        throw new Error(`cannot serialize ${message === null ? 'null' : typeof message}`);
+      }
       sent.push({ message, opts });
     },
     /**
