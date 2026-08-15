@@ -250,7 +250,7 @@ test('clear runs on any input — selecting the operation is the confirmation', 
   });
 
   const Node = loadNode(conn);
-  const node = new Node({ operation: 'clear', connection: 'conn', delivery: 'confirm' });
+  const node = new Node({ operation: 'clear', connection: 'conn', delivery: 'confirm', missionType: 'mission' });
   const res = await runInput(node, { payload: {} });
   const last = res.outputs.at(-1);
   assert.equal(last[0].payload.result, 'succeeded', 'continue port fires on success');
@@ -261,7 +261,7 @@ test('clear runs on any input — selecting the operation is the confirmation', 
 test('clear Build tier emits the plan without any confirmation flag', async () => {
   const conn = new StubConnection();
   const Node = loadNode(conn);
-  const node = new Node({ operation: 'clear', connection: 'conn', delivery: 'build' });
+  const node = new Node({ operation: 'clear', connection: 'conn', delivery: 'build', missionType: 'mission' });
   const ok = await runInput(node, { payload: {} });
   assert.deepEqual(ok.outputs[0][0].payload.messages.map((m) => m.name), ['MISSION_CLEAR_ALL']);
 });

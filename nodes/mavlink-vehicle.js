@@ -100,8 +100,8 @@ module.exports = function registerMavlinkVehicle(RED) {
   }
 
   const {
-    normalizeFirmware,
-    normalizeFamily,
+    requireFirmware,
+    requireFamily,
     resolveDialect,
     knownDialects,
   } = vehicleApi;
@@ -259,11 +259,13 @@ module.exports = function registerMavlinkVehicle(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    node.vehicleFamily = normalizeFamily(config.vehicleFamily);
-    node.firmware = normalizeFirmware(config.firmware);
-    node.dialect = (config.dialect || 'ardupilotmega').toLowerCase();
-    // `seed` (the editor default) or a catalog snapshot id.
-    node.dialectRevision = config.dialectRevision || 'seed';
+    // Raw for the profile snapshot; the affirmative pick site (dialectPicks →
+    // requireDialectToken, inside resolveDialect below) is the single validator
+    // — no `|| 'ardupilotmega'` / `|| 'seed'` code-literal inherit, and no
+    // `|| ''` shim: both are required editor fields, so a blank stays blank and
+    // craters at the pick site, surfacing as the red badge.
+    node.dialect = config.dialect.toLowerCase();
+    node.dialectRevision = config.dialectRevision;
     // Component dialects, comma-joined `dialect@revision` from the editor.
     node.additionalDialects = config.additionalDialects || '';
     // Optional firmware/custom parameter-definition URL (PX4 / custom stacks).
@@ -279,6 +281,13 @@ module.exports = function registerMavlinkVehicle(RED) {
     node._bundle = null;
 
     try {
+      // Affirmative dispatch (protocol omega): family and firmware are the
+      // profile's required definition, not values to inherit from a code
+      // literal — a blank/typo is a broken profile that craters as the red
+      // badge below (the editor's selects always save a member), the same
+      // surface as a dialect that will not compile.
+      node.vehicleFamily = requireFamily(config.vehicleFamily);
+      node.firmware = requireFirmware(config.firmware);
       node._bundle = resolveDialect({
         name: config.name,
         dialect: node.dialect,

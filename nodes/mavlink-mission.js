@@ -121,7 +121,7 @@ module.exports = function registerMavlinkMission(RED) {
       resolveDeliveryTier(delivery);
 
       const payload = msg.payload ?? {};
-      const missionTypeKey = payload.missionType || config.missionType || 'mission';
+      const missionTypeKey = payload.missionType || config.missionType;
 
       const { target } = resolveDeliveryContext(RED, {
         delivery,
@@ -134,8 +134,9 @@ module.exports = function registerMavlinkMission(RED) {
       // answers the transfer with a MAV_MISSION_UNSUPPORTED ack (upload) or
       // stays silent until the transfer deadline (download) — operational
       // failures the existing paths already report loud (§9). The editor's
-      // Type dropdown is the firmware protector (§11). An unknown string key
-      // still throws here, routed through failInput.
+      // Type dropdown is the firmware protector (§11). No `|| 'mission'`
+      // default: a blank or unknown key throws here (missionTypeValue craters
+      // on both), routed through failInput — the editor always saves a member.
       const missionType = missionTypeValue(missionTypeKey);
 
       // Per-step timeout / retry count (owner ruling, 2026-08-14, the

@@ -69,10 +69,12 @@ module.exports = function registerMavlinkOut(RED) {
         if (!connectionNode) {
           throw new Error('requires a Connection');
         }
+        // No shape guardrail: an unrecognised payload resolves to null and
+        // craters in connectionNode.send, whose serialize-validate throws
+        // synchronously on a non-message before anything is enqueued
+        // (lib/connection/runtime.js send()) — the same crater as any shape the
+        // wire cannot carry, no curated "expected { name, fields }" hand-holding.
         const message = resolveMessage(msg);
-        if (!message) {
-          throw new Error('unrecognised payload shape — expected { name, fields } or Build-tier envelope');
-        }
         const band = resolveBand(msg.band, defaultBand);
         connectionNode.send(message, {
           band,

@@ -69,9 +69,12 @@ test('buildPayloadMessage rejects an unknown verb', () => {
 });
 
 test('buildPayloadMessage unknown-verb error includes path when present', () => {
+  // A blank or unknown gimbal path misses the recipe and craters through the
+  // shared `unknown payload verb` throw — no `|| 'legacy'` default, no bespoke
+  // path resolver. The label carries the path so the miss is legible.
   assert.throws(
     () => buildPayloadMessage({
-    carrier: 'long',
+      carrier: 'long',
       topic: 'gimbal',
       verb: 'aim',
       path: 'not-a-real-path',
@@ -80,10 +83,6 @@ test('buildPayloadMessage unknown-verb error includes path when present', () => 
     }),
     /gimbal\/aim\/not-a-real-path/
   );
-});
-
-test('recipeFor gimbal aim defaults to the legacy path', () => {
-  assert.deepEqual(recipeFor('gimbal', 'aim'), recipeFor('gimbal', 'aim', 'legacy'));
 });
 
 test('fieldTipsFromBundle omits Empty / Reserved param descriptions', () => {

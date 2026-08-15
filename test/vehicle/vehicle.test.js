@@ -18,7 +18,8 @@ const path = require('node:path');
 const {
   FIRMWARE_TYPES,
   VEHICLE_FAMILIES,
-  normalizeFirmware,
+  requireFirmware,
+  requireFamily,
   normalizeFamily,
   resolveDialect,
   knownDialects,
@@ -54,18 +55,20 @@ test('VEHICLE_FAMILIES has one family per ArduPilot document, plus unknown', () 
   }
 });
 
-/* ---------- normalizeFirmware ---------- */
+/* ---------- requireFirmware ---------- */
 
-test('normalizeFirmware passes through known values', () => {
-  assert.equal(normalizeFirmware('ardupilot'), 'ardupilot');
-  assert.equal(normalizeFirmware('px4'), 'px4');
-  assert.equal(normalizeFirmware('custom'), 'custom');
+test('requireFirmware passes through known values', () => {
+  assert.equal(requireFirmware('ardupilot'), 'ardupilot');
+  assert.equal(requireFirmware('px4'), 'px4');
+  assert.equal(requireFirmware('custom'), 'custom');
 });
 
-test('normalizeFirmware returns custom for unknown input', () => {
-  assert.equal(normalizeFirmware('unknown'), 'custom');
-  assert.equal(normalizeFirmware(''), 'custom');
-  assert.equal(normalizeFirmware(undefined), 'custom');
+test('requireFirmware throws on unknown or blank input (no silent custom)', () => {
+  // Affirmative dispatch: `custom` stays a real member, just not the sink a
+  // blank/typo falls into. Reaching a non-member means a hand-edited config.
+  for (const bad of ['unknown', '', undefined]) {
+    assert.throws(() => requireFirmware(bad), /unknown firmware/);
+  }
 });
 
 /* ---------- normalizeFamily ---------- */
@@ -87,6 +90,23 @@ test('normalizeFamily returns unknown for anything not in the list', () => {
   }
 });
 
+/* ---------- requireFamily (the Vehicle config token) ---------- */
+
+test('requireFamily passes through known values', () => {
+  for (const f of ['copter', 'plane', 'rover', 'unknown']) {
+    assert.equal(requireFamily(f), f);
+  }
+});
+
+test('requireFamily throws on unknown or blank input (no silent unknown)', () => {
+  // `unknown` stays a real, selectable family — but a blank/typo craters rather
+  // than being sunk into it. normalizeFamily keeps coercing for seed catalog
+  // labels; the config token is required.
+  for (const bad of ['drone', '', undefined, 'generic']) {
+    assert.throws(() => requireFamily(bad), /unknown vehicle family/);
+  }
+});
+
 /* ---------- resolveDialect — seed ---------- */
 
 test('resolveDialect seed + known name → returns DialectBundle', () => {
@@ -96,9 +116,10 @@ test('resolveDialect seed + known name → returns DialectBundle', () => {
   assert.ok(typeof bundle.messages === 'object');
 });
 
-test('resolveDialect defaults to ardupilotmega when dialect omitted', () => {
-  const bundle = resolveDialect({ dialectRevision: 'seed' });
-  assert.equal(bundle.dialect, 'ardupilotmega');
+test('resolveDialect without a dialect fails loud (no code-literal default)', () => {
+  // No `|| 'ardupilotmega'`: the profile is the source of truth for its own
+  // dialect, so a blank is a broken profile, not an inherit from a code literal.
+  assert.throws(() => resolveDialect({ dialectRevision: 'seed' }), /dialect is required/);
 });
 
 test('resolveDialect seed + unknown name → throws naming the dialect', () => {
@@ -108,9 +129,10 @@ test('resolveDialect seed + unknown name → throws naming the dialect', () => {
   );
 });
 
-test('resolveDialect omitted revision → seed, the editor default', () => {
-  const bundle = resolveDialect({ dialect: 'minimal' });
-  assert.equal(bundle.dialect, 'minimal');
+test('resolveDialect without a revision fails loud (no code-literal default)', () => {
+  // No `|| 'seed'`: absent revision is drift, not the seed default — the editor
+  // always saves a version.
+  assert.throws(() => resolveDialect({ dialect: 'minimal' }), /dialect version is required/);
 });
 
 test('resolveDialect seed bundles are memoized', () => {
@@ -171,7 +193,7 @@ test('a profile with component dialects compiles them into one bundle', () => {
 });
 
 test('component dialects are order-independent for a clean set', () => {
-  const a = resolveDialect({ dialect: 'common', additionalDialects: 'icarous@seed' });
+  const a = resolveDialect({ dialect: 'common', dialectRevision: 'seed', additionalDialects: 'icarous@seed' });
   assert.ok(a.messages.ICAROUS_HEARTBEAT);
   assert.ok(a.messages.HEARTBEAT);
 });
@@ -184,7 +206,7 @@ test('a blank additionalDialects field resolves exactly like no field at all', (
 
 test('a component dialect that collides on a msgid fails loud naming both', () => {
   assert.throws(
-    () => resolveDialect({ dialect: 'ardupilotmega', additionalDialects: 'paparazzi@seed' }),
+    () => resolveDialect({ dialect: 'ardupilotmega', dialectRevision: 'seed', additionalDialects: 'paparazzi@seed' }),
     /Message id 180 is claimed by both/
   );
 });

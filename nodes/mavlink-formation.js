@@ -7,11 +7,22 @@ const { formationTargets } = require('../lib/formation');
 const {
   getPreset,
   buildParamArray,
-  buildCommandLong,
   buildCommandInt,
-  CARRIER,
   intCoordKinds,
 } = require('../lib/command');
+
+/** Affirmative dispatch: a member returns, anything else — blank included — throws. */
+function resolveAnchorMode(value) {
+  switch (value) {
+    case 'fixed':
+    case 'leader':
+      return value;
+    default:
+      throw new Error(
+        `unknown Formation anchor mode ${JSON.stringify(value)} — expected one of fixed, leader`
+      );
+  }
+}
 
 /**
  * mavlink-formation — position a group of vehicles into a geometric formation.
@@ -88,28 +99,23 @@ module.exports = function registerMavlinkFormation(RED) {
         // on the LONG carrier's param5/6, degE7 on the INT carrier's x/y —
         // the same frame-aware scaling the carrier builders apply (§9),
         // performed here because Fan-out patches are the raw surface (§10).
+        // Formation always builds COMMAND_INT. DO_REPOSITION is a positional
+        // command, and the MAVLink spec, ArduPilot, QGC and MAVSDK all carry it
+        // as COMMAND_INT (degE7 x/y, explicit frame). ArduPilot lists it among
+        // the COMMAND_INT-only commands — COMMAND_LONG is not a valid carrier
+        // for it — so there is no carrier choice to make.
         const preset = getPreset(REPOSITION_PRESET);
         const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
-        const isInt = config.sendAs === CARRIER.INT;
-        const bundle = isInt ? dialectFromConnection(RED, connectionNode) : null;
-        const message = isInt
-          ? buildCommandInt(Number(preset.commandId), 0, 0, params, {
-              coordKinds: (bundle && intCoordKinds(bundle, Number(preset.commandId))) || undefined,
-            })
-          : buildCommandLong(Number(preset.commandId), 0, 0, params, 0);
-        const memberTargets = targets.map((target) => (isInt
-          ? {
-              sysid: target.sysid,
-              x: Math.round(target.lat * 1e7),
-              y: Math.round(target.lon * 1e7),
-              z: target.alt,
-            }
-          : {
-              sysid: target.sysid,
-              param5: target.lat,
-              param6: target.lon,
-              param7: target.alt,
-            }));
+        const bundle = dialectFromConnection(RED, connectionNode);
+        const message = buildCommandInt(Number(preset.commandId), 0, 0, params, {
+          coordKinds: (bundle && intCoordKinds(bundle, Number(preset.commandId))) || undefined,
+        });
+        const memberTargets = targets.map((target) => ({
+          sysid: target.sysid,
+          x: Math.round(target.lat * 1e7),
+          y: Math.round(target.lon * 1e7),
+          z: target.alt,
+        }));
 
         const aggregate = await inFlight.track((signal) => executeFanout({
           signal,
@@ -194,10 +200,16 @@ function resolveAnchor(config, payload, peerTable) {
     ? Number(payload.headingDeg)
     : isBlank(config.headingDeg) ? null : Number(config.headingDeg);
 
-  const explicit = payload.anchor
-    || (config.anchorMode === 'fixed'
-      ? { lat: config.lat, lon: config.lon, alt: config.alt }
-      : null);
+  // Affirmative dispatch (protocol omega): a payload anchor overrides
+  // outright, so config.anchorMode is only consulted — and only crashes on a
+  // typo — when no explicit anchor was supplied. 'fixed' reads the config
+  // coordinates; 'leader' falls through to the telemetry path below. A blank
+  // or unknown mode is a hand-edit the editor's no-blank select cannot
+  // produce, and throws rather than silently anchoring on the leader.
+  let explicit = payload.anchor || null;
+  if (!explicit && resolveAnchorMode(config.anchorMode) === 'fixed') {
+    explicit = { lat: config.lat, lon: config.lon, alt: config.alt };
+  }
   if (explicit) {
     return { anchor: explicit, headingDeg: heading ?? 0 };
   }

@@ -58,7 +58,6 @@
       alt: { value: '', validate: whenAnchorMode('fixed', finiteRequired) },
       headingDeg: { value: '', validate: RED.validators.number(true) },
       pitchDeg: { value: 0, validate: RED.validators.number() },
-      sendAs: { value: 'int' },
       delivery: { value: 'build' },
       intervalMs: { value: 100, validate: RED.validators.number() },
       timeoutMs: {
@@ -108,7 +107,6 @@
   <div class="form-row" id="row-formation-alt"><label for="node-input-alt">Altitude m</label><input type="number" id="node-input-alt"></div>
   <div class="form-row"><label for="node-input-headingDeg">Heading deg</label><input type="number" id="node-input-headingDeg" placeholder="leader heading / 0"></div>
   <div class="form-row"><label for="node-input-pitchDeg">Pitch deg</label><input type="number" id="node-input-pitchDeg" step="any"></div>
-  <div class="form-row"><label for="node-input-sendAs">Send as</label><select id="node-input-sendAs"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
   <div class="form-row"><label for="node-input-intervalMs">Interval ms</label><input type="number" id="node-input-intervalMs" min="0"></div>
   <div class="form-row"><label for="node-input-timeoutMs">Timeout ms</label><input type="number" id="node-input-timeoutMs" min="1"></div>

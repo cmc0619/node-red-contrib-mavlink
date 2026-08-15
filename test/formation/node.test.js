@@ -8,7 +8,10 @@ const { formationTargets } = require('../../lib/formation');
 
 const ANCHOR = { lat: 47.4, lon: 8.5, alt: 30 };
 
-test('line formation fans DO_REPOSITION out with each member\'s own lat/lon/alt in params 5/6/7', async () => {
+/** Formation always builds COMMAND_INT: lat/lon ride degE7 x/y, alt is metre z. */
+const e7 = (deg) => Math.round(deg * 1e7);
+
+test('line formation fans DO_REPOSITION out with each member\'s own lat/lon in degE7 x/y and metre z', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(3)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-formation')(RED);
@@ -23,9 +26,7 @@ test('line formation fans DO_REPOSITION out with each member\'s own lat/lon/alt 
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
     headingDeg: 0,
-    pitchDeg: 0,
-    sendAs: 'long',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
   });
   let sent;
@@ -45,9 +46,9 @@ test('line formation fans DO_REPOSITION out with each member\'s own lat/lon/alt 
     const fields = message.fields;
     assert.equal(fields.command, 192, 'Go To / Reposition preset (MAV_CMD_DO_REPOSITION)');
     const want = expected.get(fields.target_system);
-    assert.equal(fields.param5, want.lat, `sysid ${fields.target_system} lat rides param 5`);
-    assert.equal(fields.param6, want.lon, `sysid ${fields.target_system} lon rides param 6`);
-    assert.equal(fields.param7, want.alt, `sysid ${fields.target_system} alt rides param 7`);
+    assert.equal(fields.x, e7(want.lat), `sysid ${fields.target_system} lat rides degE7 x`);
+    assert.equal(fields.y, e7(want.lon), `sysid ${fields.target_system} lon rides degE7 y`);
+    assert.equal(fields.z, want.alt, `sysid ${fields.target_system} alt rides metre z`);
     assert.equal(fields.param1, -1, 'speed defaults to -1 (use default), never 0');
     assert.ok(Number.isNaN(fields.param4), 'yaw is NaN (hold current heading), never 0 (north)');
   }
@@ -55,13 +56,13 @@ test('line formation fans DO_REPOSITION out with each member\'s own lat/lon/alt 
   // Slot 0 (lowest sysid) sits exactly on the anchor; heading 0 puts the line
   // abreast east-west of it at the shared altitude.
   const bySysid = Object.fromEntries(connection.sends.map((s) => [s.message.fields.target_system, s.message.fields]));
-  assert.equal(bySysid[1].param5, ANCHOR.lat);
-  assert.equal(bySysid[1].param6, ANCHOR.lon);
-  assert.equal(bySysid[1].param7, ANCHOR.alt);
-  assert.ok(bySysid[2].param6 > ANCHOR.lon, 'slot 1 is east of the anchor');
-  assert.ok(bySysid[3].param6 < ANCHOR.lon, 'slot 2 is west of the anchor');
-  assert.equal(bySysid[2].param5, ANCHOR.lat, 'line at heading 0 stays on the anchor latitude');
-  assert.equal(bySysid[2].param7, ANCHOR.alt, 'every target inherits the anchor altitude');
+  assert.equal(bySysid[1].x, e7(ANCHOR.lat));
+  assert.equal(bySysid[1].y, e7(ANCHOR.lon));
+  assert.equal(bySysid[1].z, ANCHOR.alt);
+  assert.ok(bySysid[2].y > e7(ANCHOR.lon), 'slot 1 is east of the anchor');
+  assert.ok(bySysid[3].y < e7(ANCHOR.lon), 'slot 2 is west of the anchor');
+  assert.equal(bySysid[2].x, e7(ANCHOR.lat), 'line at heading 0 stays on the anchor latitude');
+  assert.equal(bySysid[2].z, ANCHOR.alt, 'every target inherits the anchor altitude');
 });
 
 test('leader anchor reads position, relative altitude and heading from the peer table', async () => {
@@ -76,9 +77,7 @@ test('leader anchor reads position, relative altitude and heading from the peer 
     sysids: '1,2',
     anchorMode: 'leader',
     leader: 7,
-    pitchDeg: 0,
-    sendAs: 'long',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
   });
   let sent;
@@ -87,12 +86,12 @@ test('leader anchor reads position, relative altitude and heading from the peer 
 
   assert.equal(sent[1].result, 'succeeded');
   const bySysid = Object.fromEntries(connection.sends.map((s) => [s.message.fields.target_system, s.message.fields]));
-  assert.equal(bySysid[1].param5, 47.4, 'slot 0 sits on the leader position');
-  assert.equal(bySysid[1].param6, 8.5);
-  assert.equal(bySysid[1].param7, 30, 'altitude is the leader relativeAlt (GLOBAL_RELATIVE_ALT), not AMSL alt');
+  assert.equal(bySysid[1].x, e7(47.4), 'slot 0 sits on the leader position');
+  assert.equal(bySysid[1].y, e7(8.5));
+  assert.equal(bySysid[1].z, 30, 'altitude is the leader relativeAlt (GLOBAL_RELATIVE_ALT), not AMSL alt');
   // Leader heading 90 rotates the line: "right of the leader" now points south.
-  assert.ok(bySysid[2].param5 < 47.4, 'slot 1 is south of the leader at heading 90');
-  assert.ok(Math.abs(bySysid[2].param6 - 8.5) < 1e-9, 'slot 1 stays on the leader longitude at heading 90');
+  assert.ok(bySysid[2].x < e7(47.4), 'slot 1 is south of the leader at heading 90');
+  assert.equal(bySysid[2].y, e7(8.5), 'slot 1 stays on the leader longitude at heading 90');
 });
 
 test('leader with no reported position is refused, not defaulted', async () => {
@@ -106,9 +105,7 @@ test('leader with no reported position is refused, not defaulted', async () => {
     sysids: '1,2',
     anchorMode: 'leader',
     leader: 7,
-    pitchDeg: 0,
-    sendAs: 'long',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
   });
   let sent;
@@ -135,9 +132,7 @@ test('leader without a finite relative altitude is refused (altitude must not de
     sysids: '1',
     anchorMode: 'leader',
     leader: 7,
-    pitchDeg: 0,
-    sendAs: 'long',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
   });
   const err = await emitInput(node, { payload: {} }, () => {}).then(() => null, (e) => e);
@@ -159,17 +154,15 @@ test('unknown leader heading defaults the pattern to north (0), documented safe 
     sysids: '1,2',
     anchorMode: 'leader',
     leader: 7,
-    pitchDeg: 0,
-    sendAs: 'long',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
   });
 
   await emitInput(node, { payload: {} }, () => {});
 
   const bySysid = Object.fromEntries(connection.sends.map((s) => [s.message.fields.target_system, s.message.fields]));
-  assert.equal(bySysid[2].param5, 47.4, 'heading 0: the line stays on the anchor latitude');
-  assert.ok(bySysid[2].param6 > 8.5, 'heading 0: slot 1 is due east');
+  assert.equal(bySysid[2].x, e7(47.4), 'heading 0: the line stays on the anchor latitude');
+  assert.ok(bySysid[2].y > e7(8.5), 'heading 0: slot 1 is due east');
 });
 
 test('geometry refusal propagates: fixed anchor with a blank altitude fails the input', async () => {
@@ -185,9 +178,7 @@ test('geometry refusal propagates: fixed anchor with a blank altitude fails the 
     lat: 47.4,
     lon: 8.5,
     alt: '',
-    pitchDeg: 0,
-    sendAs: 'long',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
   });
   let sent;
@@ -212,9 +203,7 @@ test('bad config sysid tokens fail loudly as node errors', async () => {
     lat: 47.4,
     lon: 8.5,
     alt: 30,
-    pitchDeg: 0,
-    sendAs: 'long',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
   });
   let sent;
@@ -239,9 +228,7 @@ test('msg.payload.anchor and headingDeg override the configured leader anchor', 
     sysids: '1,2',
     anchorMode: 'leader',
     leader: 7,
-    pitchDeg: 0,
-    sendAs: 'long',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
   });
 
@@ -250,10 +237,10 @@ test('msg.payload.anchor and headingDeg override the configured leader anchor', 
   }, () => {});
 
   const bySysid = Object.fromEntries(connection.sends.map((s) => [s.message.fields.target_system, s.message.fields]));
-  assert.equal(bySysid[1].param5, 47.0, 'payload anchor wins over the leader');
-  assert.equal(bySysid[1].param6, 8.0);
-  assert.equal(bySysid[1].param7, 25);
-  assert.ok(bySysid[2].param6 > 8.0, 'payload heading 0 (not leader 180) orients the line east');
+  assert.equal(bySysid[1].x, e7(47.0), 'payload anchor wins over the leader');
+  assert.equal(bySysid[1].y, e7(8.0));
+  assert.equal(bySysid[1].z, 25);
+  assert.ok(bySysid[2].y > e7(8.0), 'payload heading 0 (not leader 180) orients the line east');
 });
 
 test('msg.payload.headingDeg is trusted input: Number() coercion, never a refusal', async () => {
@@ -272,9 +259,7 @@ test('msg.payload.headingDeg is trusted input: Number() coercion, never a refusa
     lat: 47.397742,
     lon: 8.545594,
     alt: 30,
-    pitchDeg: 0,
-    sendAs: 'long',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
     timeoutMs: 10000,
   });
@@ -286,8 +271,8 @@ test('msg.payload.headingDeg is trusted input: Number() coercion, never a refusa
   const bySysid = Object.fromEntries(connection.sends.map((s) => [s.message.fields.target_system, s.message.fields]));
   // Column facing east (heading 90): the trailing slot is 10 m west — the
   // same hand-computed longitude delta as the lib tests.
-  assert.ok(Math.abs(bySysid[2].param6 - (8.545594 - 1.32709215145987e-4)) < 1e-12, 'slot 1 lon');
-  assert.ok(Math.abs(bySysid[2].param5 - 47.397742) < 1e-12, 'slot 1 lat');
+  assert.equal(bySysid[2].y, e7(8.545594 - 1.32709215145987e-4), 'slot 1 lon');
+  assert.equal(bySysid[2].x, e7(47.397742), 'slot 1 lat');
 
   // 'north' coerces to NaN: the run still executes, and the NaN geometry
   // rides the patches as-is (Fan-out is a raw surface).
@@ -295,10 +280,10 @@ test('msg.payload.headingDeg is trusted input: Number() coercion, never a refusa
   await emitInput(node, { payload: { headingDeg: 'north' } }, (m) => { sent = m; });
   assert.equal(sent[1].result, 'succeeded');
   assert.equal(connection.sends.length, 2);
-  assert.ok(connection.sends.every((s) => Number.isNaN(s.message.fields.param5)));
+  assert.ok(connection.sends.every((s) => Number.isNaN(s.message.fields.x)));
 });
 
-test('default carrier int builds COMMAND_INT with per-member degE7 coords (§9)', async () => {
+test('formation builds COMMAND_INT with per-member degE7 coords (§9)', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-formation')(RED);
@@ -312,9 +297,7 @@ test('default carrier int builds COMMAND_INT with per-member degE7 coords (§9)'
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
     headingDeg: 0,
-    pitchDeg: 0,
-    sendAs: 'int',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
   });
   let sent;
@@ -355,9 +338,7 @@ test('close aborts an in-flight formation run and waits for it to unwind', async
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
     headingDeg: 0,
-    pitchDeg: 0,
-    sendAs: 'long',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 60000,
   });
 
@@ -398,9 +379,7 @@ test('msg.payload.sysids overrides the configured member list', async () => {
     lat: 47.4,
     lon: 8.5,
     alt: 30,
-    pitchDeg: 0,
-    sendAs: 'long',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
   });
   let sent;
@@ -429,9 +408,7 @@ test('sphere with pitchDeg override fans distinct altitudes via DO_REPOSITION', 
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
     headingDeg: 0,
-    pitchDeg: 0,
-    sendAs: 'long',
-    delivery: 'send',
+    pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
   });
   let sent;
@@ -453,12 +430,34 @@ test('sphere with pitchDeg override fans distinct altitudes via DO_REPOSITION', 
   const alts = [];
   for (const { message } of connection.sends) {
     const want = expected.get(message.fields.target_system);
-    assert.equal(message.fields.param5, want.lat);
-    assert.equal(message.fields.param6, want.lon);
-    assert.equal(message.fields.param7, want.alt);
-    alts.push(message.fields.param7);
+    assert.equal(message.fields.x, e7(want.lat));
+    assert.equal(message.fields.y, e7(want.lon));
+    assert.equal(message.fields.z, want.alt);
+    alts.push(message.fields.z);
   }
   assert.ok(new Set(alts).size > 1, 'sphere pitch leaves vehicles at more than one altitude');
+});
+
+test('a typo\'d anchorMode crashes instead of silently anchoring on the leader (protocol omega)', async () => {
+  // 'fixd' used to fall through the === 'fixed' gate to the leader-telemetry
+  // path — the formation would anchor on the leader's live position instead
+  // of the configured fixed coordinates. Affirmative dispatch throws.
+  const connection = connectionStub([peer(1), peer(2), peer(3)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-formation')(RED);
+  const node = new (RED.nodes.types['mavlink-formation'])({
+    connection: 'conn',
+    shape: 'line',
+    spacing: 10,
+    sysids: '1,2,3',
+    anchorMode: 'fixd',
+    lat: 47.4, lon: 8.5, alt: 30,    delivery: 'send',
+    intervalMs: 0,
+  });
+  const err = await emitInput(node, { payload: {} }, () => {}).then(() => null, (e) => e);
+  assert.ok(err, 'an unknown anchor mode is passed to done(err)');
+  assert.match(err.message, /unknown Formation anchor mode "fixd" — expected one of fixed, leader/);
+  assert.equal(connection.sends.length, 0, 'nothing commanded under a mis-resolved anchor');
 });
 
 function emitInput(node, msg, send) {

@@ -83,6 +83,24 @@ const PARAM_LIST_REFILL_ROUNDS = 3;
  */
 const PARAM_LIST_REFILL_BATCH = 32;
 
+/**
+ * Delivery tiers. Affirmative dispatch (§14 selection-typo cluster): the only
+ * hard gate in the input handler is `delivery === 'build'`, so a typo'd or
+ * blank tier used to fall through the confirm/collect checks into a
+ * fire-and-forget wire send that reported `sent` — an unconfirmed real send the
+ * operator never asked for. The editor's select always saves a member, so a
+ * non-member is hand-edit drift and craters. Mission and Command already carry
+ * this guard; Param did not.
+ */
+const DELIVERY_TIERS = ['build', 'send', 'confirm', 'collect'];
+
+function resolveDeliveryTier(value) {
+  if (DELIVERY_TIERS.includes(value)) return value;
+  throw new Error(
+    `unknown Param delivery ${JSON.stringify(value)} — expected one of ${DELIVERY_TIERS.join(', ')}`
+  );
+}
+
 /** Admin route for the parameter definition catalog. */
 const PARAM_DEFS_ROUTE = '/mavlink/param/defs';
 const PARAM_DEFS_UPDATE_ROUTE = '/mavlink/param/defs/update';
@@ -255,6 +273,12 @@ module.exports = function registerMavlinkParam(RED) {
           done();
           return;
         }
+
+        // Before any dispatch reads `delivery`: a non-member tier craters here
+        // rather than falling through the confirm/collect gates below into an
+        // unconfirmed 'sent' (§14 selection-typo). Runs inside the try so a bad
+        // token is a failed record, not a construction crash (sendAs precedent).
+        resolveDeliveryTier(delivery);
 
         const payload = msg.payload ?? {};
 
@@ -504,7 +528,7 @@ function requestFrom(config, payload, { target, profile, connectionNode }) {
   const encoding = payload.paramEncoding;
   const capabilities = capabilitiesFromPeer(connectionNode, target);
   return {
-    action: payload.action || config.action || 'read',
+    action: payload.action || config.action,
     target,
     paramId: payload.paramId || config.paramId,
     // paramIndex 0 is a valid index; keep it rather than letting `||` drop it to
