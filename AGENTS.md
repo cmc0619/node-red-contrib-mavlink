@@ -355,6 +355,35 @@ wire message delivered with a clean success report, and most of these are payloa
 besides. `resolveMoveAction` is the shipped precedent; the 2026-08-14 sites extended it. A
 reviewer citing this section against one of those resolvers is re-raising a settled question.
 
+**Protocol omega — affirmative dispatch (owner ruling, 2026-08-15, hardening the boundary
+above).** A closed-vocabulary value (mode, tier, carrier, role, shape, anchor mode — any field
+whose legal values are a fixed set) is dispatched by matching it against the members: a
+`switch` with `default: throw`, or equivalent. A value equal to a member routes; everything
+else — an unknown token **and** a blank/absent value — throws. Blank is not a member; blank
+crashes. This supersedes the cluster's earlier "blank keeps the default" arm: there is no
+runtime default for a token, ever.
+
+- **Forbidden:** `x || 'default'`, `if (isBlank(x)) return '<default>'`, and any `===`/`!==`
+  gate that *acts* when a token fails to match (the fall-open: `mode === 'fixed' ? … : leader`
+  silently runs `leader` for a typo). Use affirmative dispatch instead.
+- **The editor is the validator.** A closed-vocab field is a `<select>` with no blank option
+  and a `value:` default, so a blank or unknown value reaching the runtime is a broken flow.
+  We want broken flows to crash, loudly, at dispatch — we don't protect typos.
+- **Before removing a runtime default, confirm the editor guarantees the field.** If it does
+  not (no `<select>`, or a blank option, or no `value:`), fix the editor first — the crash has
+  no net without it.
+- **Remove a defaulting token-arm on sight** — you do not need to be asked. Say "protocol
+  omega" and do it.
+- **NOT covered — a different, kept category; do not nuke these:** numeric fields via
+  `finiteNumberOr` (blank keeps the editor default, a present non-finite value throws — timers
+  and rates, not tokens), and `msg`-override→config fallbacks (payload absent means "use the
+  operator's configured value," not a runtime-invented default).
+
+*Operating lessons that cost real time (2026-08-15):* (1) do exactly what is asked — do not
+widen scope from a lean ("probably do X" is not "do X everywhere now"); (2) verify lint by its
+exit code — `npm run lint; echo $?` — never grep a sub-pattern (an unused-import lint error
+reached CI that way); (3) sweep examples recursively — `examples/**`, not `examples/*.json`.
+
 Forbidden runtime redundancy:
 
 ```js
