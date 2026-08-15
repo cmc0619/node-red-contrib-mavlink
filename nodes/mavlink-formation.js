@@ -7,9 +7,7 @@ const { formationTargets } = require('../lib/formation');
 const {
   getPreset,
   buildParamArray,
-  buildCommandLong,
   buildCommandInt,
-  CARRIER,
   intCoordKinds,
 } = require('../lib/command');
 
@@ -22,19 +20,6 @@ function resolveAnchorMode(value) {
     default:
       throw new Error(
         `unknown Formation anchor mode ${JSON.stringify(value)} — expected one of fixed, leader`
-      );
-  }
-}
-
-/** Affirmative dispatch: a member returns, anything else — blank included — throws. */
-function resolveCarrier(value) {
-  switch (value) {
-    case CARRIER.INT:
-    case CARRIER.LONG:
-      return value;
-    default:
-      throw new Error(
-        `unknown Formation send-as ${JSON.stringify(value)} — expected one of int, long`
       );
   }
 }
@@ -114,28 +99,23 @@ module.exports = function registerMavlinkFormation(RED) {
         // on the LONG carrier's param5/6, degE7 on the INT carrier's x/y —
         // the same frame-aware scaling the carrier builders apply (§9),
         // performed here because Fan-out patches are the raw surface (§10).
+        // Formation always builds COMMAND_INT. DO_REPOSITION is a positional
+        // command, and the MAVLink spec, ArduPilot, QGC and MAVSDK all carry it
+        // as COMMAND_INT (degE7 x/y, explicit frame). ArduPilot lists it among
+        // the COMMAND_INT-only commands — COMMAND_LONG is not a valid carrier
+        // for it — so there is no carrier choice to make.
         const preset = getPreset(REPOSITION_PRESET);
         const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
-        const isInt = resolveCarrier(config.sendAs) === CARRIER.INT;
-        const bundle = isInt ? dialectFromConnection(RED, connectionNode) : null;
-        const message = isInt
-          ? buildCommandInt(Number(preset.commandId), 0, 0, params, {
-              coordKinds: (bundle && intCoordKinds(bundle, Number(preset.commandId))) || undefined,
-            })
-          : buildCommandLong(Number(preset.commandId), 0, 0, params, 0);
-        const memberTargets = targets.map((target) => (isInt
-          ? {
-              sysid: target.sysid,
-              x: Math.round(target.lat * 1e7),
-              y: Math.round(target.lon * 1e7),
-              z: target.alt,
-            }
-          : {
-              sysid: target.sysid,
-              param5: target.lat,
-              param6: target.lon,
-              param7: target.alt,
-            }));
+        const bundle = dialectFromConnection(RED, connectionNode);
+        const message = buildCommandInt(Number(preset.commandId), 0, 0, params, {
+          coordKinds: (bundle && intCoordKinds(bundle, Number(preset.commandId))) || undefined,
+        });
+        const memberTargets = targets.map((target) => ({
+          sysid: target.sysid,
+          x: Math.round(target.lat * 1e7),
+          y: Math.round(target.lon * 1e7),
+          z: target.alt,
+        }));
 
         const aggregate = await inFlight.track((signal) => executeFanout({
           signal,
