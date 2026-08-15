@@ -11,19 +11,6 @@ const {
   intCoordKinds,
 } = require('../lib/command');
 
-/** Affirmative dispatch: a member returns, anything else — blank included — throws. */
-function resolveAnchorMode(value) {
-  switch (value) {
-    case 'fixed':
-    case 'leader':
-      return value;
-    default:
-      throw new Error(
-        `unknown Formation anchor mode ${JSON.stringify(value)} — expected one of fixed, leader`
-      );
-  }
-}
-
 /**
  * mavlink-formation — position a group of vehicles into a geometric formation.
  *
@@ -34,10 +21,10 @@ function resolveAnchorMode(value) {
  * (wire units — Fan-out is a raw surface, §10). All geometry lives in
  * lib/formation; all replication lives in lib/fanout.
  *
- * Altitude semantics: targets ride the carrier's default frame,
- * MAV_FRAME_GLOBAL_RELATIVE_ALT (metres above home) — the same frame PX4
- * assumes for a COMMAND_LONG reposition. A leader anchor therefore uses the
- * leader's `relativeAlt`, and an explicit anchor altitude is metres above home.
+ * Altitude semantics: targets ride MAV_FRAME_GLOBAL_RELATIVE_ALT (metres above
+ * home), the frame a guided reposition assumes. A leader anchor therefore uses
+ * the leader's `relativeAlt`, and an explicit anchor altitude is metres above
+ * home.
  */
 
 /**
@@ -75,9 +62,6 @@ module.exports = function registerMavlinkFormation(RED) {
           done();
           return;
         }
-        if (!connectionNode) {
-          throw new Error('mavlink-formation requires a Connection');
-        }
         const payload = msg.payload ?? {};
         const sysids = parseSysidList(
           payload.sysids !== undefined ? payload.sysids : config.sysids
@@ -93,17 +77,12 @@ module.exports = function registerMavlinkFormation(RED) {
           sysids,
         });
 
-        // Build the shared Reposition message once (the coordinates are
-        // per-member and always patched, so the base carries zeros there),
-        // then hand Fan-out one wire-unit patch per member: canonical degrees
-        // on the LONG carrier's param5/6, degE7 on the INT carrier's x/y —
-        // the same frame-aware scaling the carrier builders apply (§9),
-        // performed here because Fan-out patches are the raw surface (§10).
-        // Formation always builds COMMAND_INT. DO_REPOSITION is a positional
-        // command, and the MAVLink spec, ArduPilot, QGC and MAVSDK all carry it
-        // as COMMAND_INT (degE7 x/y, explicit frame). ArduPilot lists it among
-        // the COMMAND_INT-only commands — COMMAND_LONG is not a valid carrier
-        // for it — so there is no carrier choice to make.
+        // Build the shared Reposition message once with zeroed coordinates; the
+        // per-member lat/lon/alt are patched in as degE7 x/y below, since
+        // Fan-out patches are the raw wire surface (§10). Formation always
+        // builds COMMAND_INT: DO_REPOSITION is a positional command and the
+        // references carry it as COMMAND_INT only — COMMAND_LONG is not a valid
+        // carrier for it, so there is no carrier choice to make.
         const preset = getPreset(REPOSITION_PRESET);
         const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
         const bundle = dialectFromConnection(RED, connectionNode);
@@ -192,48 +171,45 @@ module.exports = function registerMavlinkFormation(RED) {
  * @returns {{anchor: {lat: *, lon: *, alt: *}, headingDeg: number}}
  */
 function resolveAnchor(config, payload, peerTable) {
-  // Payload and config headings are both trusted input (driver rule): the
-  // defined Number() coercion, never a refusal. Blank means "not set"; a
-  // leader's telemetry heading is projected to a finite number or null by the
-  // peer table.
+  // Payload heading wins over config; blank means "not set" (null). The peer
+  // table projects a leader's telemetry heading to a finite number or null.
   let heading = !isBlank(payload.headingDeg)
     ? Number(payload.headingDeg)
     : isBlank(config.headingDeg) ? null : Number(config.headingDeg);
 
-  // Affirmative dispatch (protocol omega): a payload anchor overrides
-  // outright, so config.anchorMode is only consulted — and only crashes on a
-  // typo — when no explicit anchor was supplied. 'fixed' reads the config
-  // coordinates; 'leader' falls through to the telemetry path below. A blank
-  // or unknown mode is a hand-edit the editor's no-blank select cannot
-  // produce, and throws rather than silently anchoring on the leader.
-  let explicit = payload.anchor || null;
-  if (!explicit && resolveAnchorMode(config.anchorMode) === 'fixed') {
-    explicit = { lat: config.lat, lon: config.lon, alt: config.alt };
-  }
-  if (explicit) {
-    return { anchor: explicit, headingDeg: heading ?? 0 };
+  // A payload anchor overrides the configured mode outright.
+  if (payload.anchor) {
+    return { anchor: payload.anchor, headingDeg: heading ?? 0 };
   }
 
-  const sysid = Number(config.leader);
-  const peer = peerTable.snapshot().find((p) => p.sysid === sysid);
-  const autopilot = peer && (peer.components || []).find((c) => c.compid === 1);
-  const position = autopilot && autopilot.position;
-  if (!position) {
-    throw new Error(`mavlink-formation: leader ${config.leader} has no reported position `
-      + '(no GLOBAL_POSITION_INT seen) — refusing to anchor the formation on unknown coordinates');
+  switch (config.anchorMode) {
+    case 'fixed':
+      return {
+        anchor: { lat: config.lat, lon: config.lon, alt: config.alt },
+        headingDeg: heading ?? 0,
+      };
+    case 'leader': {
+      const sysid = Number(config.leader);
+      const peer = peerTable.snapshot().find((p) => p.sysid === sysid);
+      const autopilot = peer && (peer.components || []).find((c) => c.compid === 1);
+      const position = autopilot && autopilot.position;
+      if (!position) {
+        throw new Error(`mavlink-formation: leader ${config.leader} has no reported position `
+          + '(no GLOBAL_POSITION_INT seen) — refusing to anchor the formation on unknown coordinates');
+      }
+      // Targets ride MAV_FRAME_GLOBAL_RELATIVE_ALT, where a defaulted 0 commands
+      // a descent to home level.
+      if (!Number.isFinite(position.relativeAlt)) {
+        throw new Error(`mavlink-formation: leader ${config.leader} reports no relative altitude — `
+          + 'refusing to default the formation altitude');
+      }
+      if (heading === null) heading = position.heading; // may still be null (wire sentinel)
+      return {
+        anchor: { lat: position.lat, lon: position.lon, alt: position.relativeAlt },
+        headingDeg: heading ?? 0,
+      };
+    }
   }
-  // Telemetry is boundary input (wire-derived): a missing relative altitude
-  // must refuse, not default — the targets ride MAV_FRAME_GLOBAL_RELATIVE_ALT,
-  // where a defaulted 0 commands a descent to home level.
-  if (!Number.isFinite(position.relativeAlt)) {
-    throw new Error(`mavlink-formation: leader ${config.leader} reports no relative altitude — `
-      + 'refusing to default the formation altitude');
-  }
-  if (heading === null) heading = position.heading; // may still be null (wire sentinel)
-  return {
-    anchor: { lat: position.lat, lon: position.lon, alt: position.relativeAlt },
-    headingDeg: heading ?? 0,
-  };
 }
 
 /**

@@ -97,7 +97,7 @@
 </script>
 
 <script type="text/html" data-help-name="mavlink-state">
-  <p>Reads the Connection-owned peer table. Snapshot mode emits the current peer-table view on input; feed mode emits selected transition and STATUSTEXT records as they arrive, and refuses input rather than interleave a differently-shaped snapshot into the event stream.</p>
+  <p>Reads the Connection-owned peer table. Snapshot mode emits the current peer-table view on input; feed mode emits selected transition and STATUSTEXT records as they arrive. Input to a feed node is a no-op — there is no snapshot to interleave into the event stream — so a stray input is dropped rather than raised as an error.</p>
   <h3>Outputs</h3>
   <ol class="node-ports">
     <li>Continue — snapshot peers (on input) or feed records as they arrive.</li>

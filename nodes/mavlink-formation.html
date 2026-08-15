@@ -56,7 +56,7 @@
       // alt is required whenever set as the fixed anchor: a blank altitude
       // must not become 0 — that commands a descent to home level.
       alt: { value: '', validate: whenAnchorMode('fixed', finiteRequired) },
-      headingDeg: { value: '', validate: RED.validators.number(true) },
+      headingDeg: { value: '', validate: RED.mavlink.validateRange(0, 360) },
       pitchDeg: { value: 0, validate: RED.validators.number() },
       delivery: { value: 'build' },
       intervalMs: { value: 100, validate: RED.validators.number() },

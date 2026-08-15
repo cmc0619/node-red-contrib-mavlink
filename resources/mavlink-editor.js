@@ -1367,6 +1367,26 @@
   };
 
   /**
+   * Float range check that allows blank — a value, when entered, must be a
+   * finite number in [min, max]. Blank passes (absence is the field's own
+   * business); a non-finite or out-of-range entry fails.
+   *
+   * @param {number} min
+   * @param {number} max
+   * @returns {function(*, object=): true|string}
+   */
+  RED.mavlink.validateRange = function (min, max) {
+    return function (v, _opt) {
+      if (RED.mavlink.isBlank(v)) return true;
+      var n = Number(v);
+      if (!Number.isFinite(n) || n < min || n > max) {
+        return 'must be a number between ' + min + ' and ' + max;
+      }
+      return true;
+    };
+  };
+
+  /**
    * uint8 range check — the common case, kept by name because every target /
    * source id field reads better for it.
    *

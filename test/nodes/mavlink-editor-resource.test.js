@@ -1007,6 +1007,21 @@ test('validateUint8 keeps its own name and bounds through the shared range check
   assert.match(String(id(256)), /between 1 and 255/);
 });
 
+test('validateRange accepts blank and any finite value in bounds, refuses outside', () => {
+  const { RED } = loadResource();
+  // A heading: 0–360, decimals allowed, blank is optional (inherit/north).
+  const heading = RED.mavlink.validateRange(0, 360);
+
+  assert.equal(heading(0), true, 'the floor, north');
+  assert.equal(heading(47.5), true, 'a fractional bearing');
+  assert.equal(heading(360), true, 'the ceiling, north again');
+  assert.equal(heading(''), true, 'blank is optional, as elsewhere');
+
+  assert.match(String(heading(-1)), /between 0 and 360/, 'below the floor');
+  assert.match(String(heading(361)), /between 0 and 360/, 'past the ceiling');
+  assert.match(String(heading('abc')), /between 0 and 360/, 'non-numeric');
+});
+
 // ── PARAM_TYPE_OPTIONS ───────────────────────────────────────────────────────
 
 test('PARAM_TYPE_OPTIONS mirrors the codec table it copies', () => {

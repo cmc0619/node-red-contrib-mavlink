@@ -682,8 +682,8 @@
       // 0,0 at ground level" is enforced here or nowhere. A coordinate
       // arriving on msg.payload.position is not checked at all — blank encodes
       // 0 and out-of-range scales and rides the wire, deliberately (§14). The
-      // blank-action fallback is 'steer', mirroring
-      // resolveMoveAction: a saved config without `action` parses as steer.
+      // blank-action fallback is 'steer' for the editor's field logic: a config
+      // with no action yet validates as a steer form.
       lat: {
         value: '',
         validate: function (v, _opt) {

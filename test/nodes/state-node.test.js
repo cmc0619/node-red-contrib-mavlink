@@ -1,13 +1,11 @@
 'use strict';
 
 /**
- * Feed mode refuses input — pinned at the node, because the refusal lives in
- * the input handler, not lib/state. Before this, ANY input to a feed-mode
- * node answered a peer-table snapshot on output 0 — an array interleaved on
- * the same wire as the {kind, event, at} records, a payload shape-shift the
- * help text ("output 0 carries the event stream only") said could not happen.
- * The measured casualty: an array's `.at` is Array.prototype.at, so even a
- * downstream `new Date(r.at || Date.now())` fallback throws RangeError.
+ * Snapshot mode answers input with the peer-table view — pinned at the node,
+ * because the behavior lives in the input handler, not lib/state. Feed mode no
+ * longer refuses an input: an input to a feed node is a no-op (§5 sweep — the
+ * editor is the protector, and a mis-wired feed node drops the input rather
+ * than raising), so only snapshot's positive path is left to pin here.
  *
  * The test drives the REAL node (stub-over-fiction lesson, #252/#267).
  */
@@ -65,17 +63,6 @@ function drive(node, msg) {
     );
   });
 }
-
-test('feed mode refuses input — no snapshot ever rides the event-stream wire', async () => {
-  const node = makeNode(
-    { connection: 'conn', mode: 'feed', events: 'stale,expired' },
-    { conn: conn() }
-  );
-  const { out, err } = await drive(node, { payload: 1755138744000 });
-  assert.match(err.message, /feed mode takes no input/);
-  assert.equal(out[0][0], null, 'nothing on the event-stream output');
-  assert.equal(out[0][1].result, 'failed');
-});
 
 test('snapshot mode still answers input with the peer-table view', async () => {
   const node = makeNode(
