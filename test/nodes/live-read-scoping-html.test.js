@@ -237,7 +237,7 @@ test('move goto position validators: saved action decides, own dialog reads live
   // The §6 redesign keys the lat/lon/alt requirement on the Action field the
   // way the stream validators key on delivery — same liveOr scoping rules.
   // No dialog anywhere: the saved action governs. A saved config without
-  // `action` parses as steer (resolveMoveAction), so blank stays legal.
+  // `action` parses as steer, so blank stays legal.
   const registered = loadNodeHtml('mavlink-move.html');
   const defaults = registered['mavlink-move'].defaults;
   assert.match(

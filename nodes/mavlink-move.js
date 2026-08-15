@@ -10,7 +10,6 @@ const {
   accelFrom,
   valueFrom,
   COMMAND_ACTIONS,
-  resolveMoveAction,
   buildTurnMessage,
   buildSpeedMessage,
   buildAttitudeMessage,
@@ -46,8 +45,7 @@ const DELIVERY_TIERS = ['build', 'send', 'confirm', 'stream'];
  * No blank arm, unlike `frameForAltRef`'s "blank is the GCS default": the
  * select always saves a tier (mavlink-move.html `delivery`, default
  * `'build'`), so a blank here is the same unclaimed state as a blank Move
- * action, not a value the operator chose to leave out — same treatment as
- * `resolveMoveAction`.
+ * action, not a value the operator chose to leave out.
  *
  * @param {*} value  config.delivery
  * @returns {'build'|'send'|'confirm'|'stream'}
@@ -300,7 +298,7 @@ module.exports = function registerMavlinkMove(RED) {
         // Action × Delivery derives the wire (§6 redesign): the operator
         // states an intent; carrier, message name, frame number, and mask are
         // code.
-        const action = resolveMoveAction(config.action);
+        const action = config.action;
 
         // Turn and Speed are acked MAV_CMDs, not setpoints (§9 roster): the
         // command tiers only, no Stream — a command has no streaming semantics,
@@ -562,67 +560,71 @@ module.exports = function registerMavlinkMove(RED) {
  * @returns {{name: string, fields: object}}
  */
 function setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode) {
-  if (action === 'attitude') {
-    return buildAttitudeMessage({
-      roll: valueFrom(payload, config, 'roll'),
-      pitch: valueFrom(payload, config, 'pitch'),
-      yaw: valueFrom(payload, config, 'yaw'),
-      rollRate: valueFrom(payload, config, 'rollRate'),
-      pitchRate: valueFrom(payload, config, 'pitchRate'),
-      yawRate: valueFrom(payload, config, 'yawRate'),
-      thrust: valueFrom(payload, config, 'thrust'),
-      timeBootMs: payload.timeBootMs,
-      target,
-    });
+  switch (action) {
+    case 'attitude':
+      return buildAttitudeMessage({
+        roll: valueFrom(payload, config, 'roll'),
+        pitch: valueFrom(payload, config, 'pitch'),
+        yaw: valueFrom(payload, config, 'yaw'),
+        rollRate: valueFrom(payload, config, 'rollRate'),
+        pitchRate: valueFrom(payload, config, 'pitchRate'),
+        yawRate: valueFrom(payload, config, 'yawRate'),
+        thrust: valueFrom(payload, config, 'thrust'),
+        timeBootMs: payload.timeBootMs,
+        target,
+      });
+    case 'manual':
+      return buildManualMessage({
+        x: valueFrom(payload, config, 'stickX'),
+        y: valueFrom(payload, config, 'stickY'),
+        z: valueFrom(payload, config, 'stickZ'),
+        r: valueFrom(payload, config, 'stickR'),
+        buttons: valueFrom(payload, config, 'buttons'),
+        target,
+      });
+    case 'goto':
+      // goto + Stream: the same intent, streamed — position setpoints on the
+      // global frame the altitude reference names. `speed`, `radius`,
+      // `changeMode` and `yawRate` belong to the command path; a setpoint has no
+      // field to carry them, so they are not read here. Ignoring a key the wire
+      // has no room for is what the driver does with msg (AGENTS.md, input
+      // trust) — it does not refuse over one.
+      return buildMoveMessage({
+        mode: 'position',
+        frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),
+        target,
+        position: payload.position || positionFrom(config),
+        yaw: valueFrom(payload, config, 'yaw'),
+        timeBootMs: payload.timeBootMs,
+      });
+    case 'steer': {
+      // The reference picks the axes (body is firmware-derived and fails
+      // closed on an unknown stack, §14); the mode derives from which groups
+      // carry values — filling fields IS the mode.
+      const position = payload.position || positionFrom(config);
+      const velocity = payload.velocity || velocityFrom(config);
+      const accel = payload.accel || accelFrom(config);
+      const yaw = valueFrom(payload, config, 'yaw');
+      const yawRate = valueFrom(payload, config, 'yawRate');
+      return buildMoveMessage({
+        mode: deriveSteerMode({ position, velocity, accel, yaw, yawRate }),
+        frame: frameForReference(
+          firstDefined(payload.reference, config.reference),
+          firmwareFor(vehicleAtDeploy, connectionNode)
+        ),
+        target,
+        position,
+        velocity,
+        accel,
+        yaw,
+        yawRate,
+        timeBootMs: payload.timeBootMs,
+      });
+    }
   }
-  if (action === 'manual') {
-    return buildManualMessage({
-      x: valueFrom(payload, config, 'stickX'),
-      y: valueFrom(payload, config, 'stickY'),
-      z: valueFrom(payload, config, 'stickZ'),
-      r: valueFrom(payload, config, 'stickR'),
-      buttons: valueFrom(payload, config, 'buttons'),
-      target,
-    });
-  }
-  if (action === 'goto') {
-    // goto + Stream: the same intent, streamed — position setpoints on the
-    // global frame the altitude reference names. `speed`, `radius`,
-    // `changeMode` and `yawRate` belong to the command path; a setpoint has no
-    // field to carry them, so they are not read here. Ignoring a key the wire
-    // has no room for is what the driver does with msg (AGENTS.md, input
-    // trust) — it does not refuse over one.
-    return buildMoveMessage({
-      mode: 'position',
-      frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),
-      target,
-      position: payload.position || positionFrom(config),
-      yaw: valueFrom(payload, config, 'yaw'),
-      timeBootMs: payload.timeBootMs,
-    });
-  }
-  // steer: the reference picks the axes (body is firmware-derived and fails
-  // closed on an unknown stack, §14); the mode derives from which groups carry
-  // values — filling fields IS the mode.
-  const position = payload.position || positionFrom(config);
-  const velocity = payload.velocity || velocityFrom(config);
-  const accel = payload.accel || accelFrom(config);
-  const yaw = valueFrom(payload, config, 'yaw');
-  const yawRate = valueFrom(payload, config, 'yawRate');
-  return buildMoveMessage({
-    mode: deriveSteerMode({ position, velocity, accel, yaw, yawRate }),
-    frame: frameForReference(
-      firstDefined(payload.reference, config.reference),
-      firmwareFor(vehicleAtDeploy, connectionNode)
-    ),
-    target,
-    position,
-    velocity,
-    accel,
-    yaw,
-    yawRate,
-    timeBootMs: payload.timeBootMs,
-  });
+  // A non-member action matches no case and returns undefined; the caller
+  // craters on it — serialize rejects it on send/stream, and the build tier
+  // ships it to a deferred crater at the next node.
 }
 
 function completeBuild(node, send, message) {

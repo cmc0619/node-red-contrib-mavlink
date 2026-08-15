@@ -202,7 +202,7 @@ test('mavlink-move goto requires the global position at deploy, steer requires n
       `${field} blank reds on goto`
     );
     assert.equal(defaults[field].validate.call(steerNode, '', {}), true, `${field} blank passes on steer`);
-    // A saved config without `action` parses as steer (resolveMoveAction), so
+    // A saved config without `action` parses as steer, so
     // the validator's blank-action fallback must be steer too.
     assert.equal(defaults[field].validate.call({}, '', {}), true, `${field} blank passes on a pre-action save`);
   }
@@ -760,7 +760,7 @@ test('mavlink-move: Steer cannot be set to the confirm tier', () => {
   for (const tier of ['build', 'send', 'stream']) {
     assert.equal(verdict({ action: 'steer', delivery: tier }), true, `steer + ${tier} is offered`);
   }
-  // A config with no action parses as steer (resolveMoveAction), so it reds too.
+  // A config with no action parses as steer, so it reds too.
   assert.match(String(verdict({ delivery: 'confirm' })), /cannot confirm/);
 });
 
