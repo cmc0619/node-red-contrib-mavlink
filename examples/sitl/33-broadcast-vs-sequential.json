@@ -11,8 +11,8 @@
     "id": "sitl11-comment",
     "type": "comment",
     "z": "sitl11-tab",
-    "name": "Sequential confirm vs broadcast \u2014 ack storm vs peer-table armed check",
-    "info": "Sequential: paced 200 ms, delivery=confirm, per-vehicle acks on status port.\nBroadcast: single target_system=0 frame; confirm waits on resolved set armed state (peer table), not ack count \u2014 inbound ack burst can congest the link.\n\nLaunch five ArduCopter instances:\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. Use Snapshot inject after each run to read armed state.\n\nNote the selection difference: sequential uses a sysid list (fan-out addresses each vehicle, so a subset is meaningful), while broadcast uses \"all\" \u2014 one target_system=0 frame reaches every vehicle on the link, so broadcast + list selection is refused before anything is sent. Both resolve to the same five vehicles here, which is what makes the aggregates comparable.",
+    "name": "Sequential confirm vs broadcast — ack storm vs peer-table armed check",
+    "info": "Sequential: paced 200 ms, delivery=confirm, per-vehicle acks on status port.\nBroadcast: single target_system=0 frame; confirm waits on resolved set armed state (peer table), not ack count — inbound ack burst can congest the link.\n\nLaunch five ArduCopter instances:\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551. Use Snapshot inject after each run to read armed state.\n\nNote the selection difference: sequential uses a sysid list (fan-out addresses each vehicle, so a subset is meaningful), while broadcast uses \"all\" — one target_system=0 frame reaches every vehicle on the link, so broadcast + list selection is refused before anything is sent. Both resolve to the same five vehicles here, which is what makes the aggregates comparable.",
     "x": 310,
     "y": 40,
     "wires": []
@@ -36,12 +36,13 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl11-connection",
     "type": "mavlink-connection",
-    "name": "UDP ArduPilot 5\u00d7SITL",
+    "name": "UDP ArduPilot 5×SITL",
     "mode": "udp",
     "bindHost": "0.0.0.0",
     "bindPort": 14550,

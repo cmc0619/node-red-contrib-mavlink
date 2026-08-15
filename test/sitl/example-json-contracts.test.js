@@ -40,6 +40,26 @@ test('mavlink-param confirm/collect nodes serialize timeout (Admin-API deploy)',
   );
 });
 
+test('mavlink-vehicle profiles serialize dialectRevision (Admin-API deploy)', () => {
+  // Editor default is dialectRevision: 'seed' (required). Admin deploy does not
+  // materialize omitted defaults — blank revision fails resolveDialect and
+  // Connection throws "has no loaded dialect" (#317).
+  const missing = [];
+  for (const { file, nodes } of loadFlows()) {
+    for (const n of nodes) {
+      if (n.type !== 'mavlink-vehicle') continue;
+      if (n.dialectRevision == null || n.dialectRevision === '') {
+        missing.push(`${file}:${n.name || n.id}`);
+      }
+    }
+  }
+  assert.deepEqual(
+    missing,
+    [],
+    'omitted dialectRevision → Vehicle Profile has no loaded dialect under Admin deploy'
+  );
+});
+
 test('mission upload injects put items under msg.payload.items (not a bare array)', () => {
   const bare = [];
   for (const { file, nodes } of loadFlows()) {

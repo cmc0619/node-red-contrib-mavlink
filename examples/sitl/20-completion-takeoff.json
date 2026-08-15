@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 20 Completion takeoff",
     "disabled": false,
-    "info": "GUIDED (confirm) \u2192 Arm (confirm) \u2192 Takeoff with completion-tier await on ArduPilot SITL sysid 1. Mode before arm: after a cold SITL boot, armed STABILIZE\u2192GUIDED is often DENIED until GPS/EKF is ready; GUIDED while disarmed succeeds early. NAV_TAKEOFF is DENIED outside GUIDED. The takeoff node uses delivery=complete which waits for IN_PROGRESS then ACCEPTED.",
+    "info": "GUIDED (confirm) → Arm (confirm) → Takeoff with completion-tier await on ArduPilot SITL sysid 1. Mode before arm: after a cold SITL boot, armed STABILIZE→GUIDED is often DENIED until GPS/EKF is ready; GUIDED while disarmed succeeds early. NAV_TAKEOFF is DENIED outside GUIDED. The takeoff node uses delivery=complete which waits for IN_PROGRESS then ACCEPTED.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex06-tab",
     "name": "GUIDED, arm, then takeoff (completion tier)",
-    "info": "This flow targets sysid 1 (first ArduPilot SITL). Chain: DO_SET_MODE GUIDED (custom_mode 4, confirm) \u2192 arm (confirm) \u2192 NAV_TAKEOFF 10 m (complete). GUIDED before arm avoids cold-boot DENIED on armed mode change. Without GUIDED, ArduPilot returns MAV_RESULT_DENIED (resultCode 4) for takeoff.\n\nSet completionTimeout to at least 30 s; ArduPilot typically sends IN_PROGRESS within 2 s then ACCEPTED once the vehicle is airborne.\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551 for a local Copter SITL started with\n  sim_vehicle.py -v ArduCopter --out udp:127.0.0.1:14550",
+    "info": "This flow targets sysid 1 (first ArduPilot SITL). Chain: DO_SET_MODE GUIDED (custom_mode 4, confirm) → arm (confirm) → NAV_TAKEOFF 10 m (complete). GUIDED before arm avoids cold-boot DENIED on armed mode change. Without GUIDED, ArduPilot returns MAV_RESULT_DENIED (resultCode 4) for takeoff.\n\nSet completionTimeout to at least 30 s; ArduPilot typically sends IN_PROGRESS within 2 s then ACCEPTED once the vehicle is airborne.\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551 for a local Copter SITL started with\n  sim_vehicle.py -v ArduCopter --out udp:127.0.0.1:14550",
     "x": 230,
     "y": 40,
     "wires": []
@@ -36,7 +36,8 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "ex06-connection",

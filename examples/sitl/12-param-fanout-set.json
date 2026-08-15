@@ -4,15 +4,15 @@
     "type": "tab",
     "label": "SITL 12 Param fan-out set",
     "disabled": false,
-    "info": "Build-tier PARAM_SET of LOIT_SPEED_MS=10 then sequential fan-out echo-confirm across ArduPilot sysids 1\u20135 (broadcast refused for PARAM_SET).",
+    "info": "Build-tier PARAM_SET of LOIT_SPEED_MS=10 then sequential fan-out echo-confirm across ArduPilot sysids 1–5 (broadcast refused for PARAM_SET).",
     "env": []
   },
   {
     "id": "sitl29-comment",
     "type": "comment",
     "z": "sitl29-tab",
-    "name": "Build PARAM_SET \u2192 sequential fan-out confirm \u00d75",
-    "info": "Wiring is param [Build] \u2192 fanout [sequential, confirm] per DESIGN.md \u00a710.\nPARAM_SET is sequential-only \u2014 broadcast makes the echoes a storm.\nSafe id: LOIT_SPEED_MS as MAV_PARAM_TYPE_REAL32 (Copter 4.7.0 has no WPNAV_SPEED).\n\nFive ArduCopter on bind 0.0.0.0:14550 \u2192 127.0.0.1:14551.",
+    "name": "Build PARAM_SET → sequential fan-out confirm ×5",
+    "info": "Wiring is param [Build] → fanout [sequential, confirm] per DESIGN.md §10.\nPARAM_SET is sequential-only — broadcast makes the echoes a storm.\nSafe id: LOIT_SPEED_MS as MAV_PARAM_TYPE_REAL32 (Copter 4.7.0 has no WPNAV_SPEED).\n\nFive ArduCopter on bind 0.0.0.0:14550 → 127.0.0.1:14551.",
     "x": 300,
     "y": 40,
     "wires": []
@@ -36,12 +36,13 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl29-connection",
     "type": "mavlink-connection",
-    "name": "UDP ArduPilot 5\u00d7SITL",
+    "name": "UDP ArduPilot 5×SITL",
     "mode": "udp",
     "bindHost": "0.0.0.0",
     "bindPort": 14550,
@@ -115,7 +116,7 @@
     "id": "sitl29-fanout",
     "type": "mavlink-fanout",
     "z": "sitl29-tab",
-    "name": "Set \u00d75 (confirm)",
+    "name": "Set ×5 (confirm)",
     "connection": "sitl29-connection",
     "selectionMode": "list",
     "members": [

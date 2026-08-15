@@ -36,7 +36,8 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 20,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl24-connection",

@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 13 PX4 param list",
     "disabled": false,
-    "info": "PX4 request-list + collect \u2014 the AP-only path in SITL 13, mirrored on sysid 11.",
+    "info": "PX4 request-list + collect — the AP-only path in SITL 13, mirrored on sysid 11.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl30-tab",
     "name": "PX4 PARAM_REQUEST_LIST collect",
-    "info": "Collects the full PX4 parameter table into one array on output 0 (status list-complete).\nAssert function checks length > 0 and known ids COM_RC_IN_MODE / MPC_XY_VEL_MAX.\n\nConnection: PX4 bind 0.0.0.0:14560 \u2192 127.0.0.1:14561 sysid 11.",
+    "info": "Collects the full PX4 parameter table into one array on output 0 (status list-complete).\nAssert function checks length > 0 and known ids COM_RC_IN_MODE / MPC_XY_VEL_MAX.\n\nConnection: PX4 bind 0.0.0.0:14560 → 127.0.0.1:14561 sysid 11.",
     "x": 250,
     "y": 40,
     "wires": []
@@ -36,7 +36,8 @@
     "dialect": "common",
     "defaultTargetSystem": 11,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl30-connection",

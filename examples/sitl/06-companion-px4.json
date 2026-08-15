@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 06 Companion PX4",
     "disabled": false,
-    "info": "Node-RED as onboard companion sharing vehicle sysid 21, compid 191. Lab ports bind 14542\u219214543.",
+    "info": "Node-RED as onboard companion sharing vehicle sysid 21, compid 191. Lab ports bind 14542→14543.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl16-tab",
     "name": "Companion SITL",
-    "info": "Companion role: MAV_TYPE_ONBOARD_CONTROLLER. Shares sysid 21 with the SITL vehicle; peer table shows two components. Bind 14542\u219214543. Prefer Docker lab: see sitl/README.md.",
+    "info": "Companion role: MAV_TYPE_ONBOARD_CONTROLLER. Shares sysid 21 with the SITL vehicle; peer table shows two components. Bind 14542→14543. Prefer Docker lab: see sitl/README.md.",
     "x": 200,
     "y": 40,
     "wires": []
@@ -36,7 +36,8 @@
     "dialect": "common",
     "defaultTargetSystem": 21,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl16-connection",

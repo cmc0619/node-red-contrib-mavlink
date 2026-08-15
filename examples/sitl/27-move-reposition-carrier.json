@@ -4,15 +4,15 @@
     "type": "tab",
     "label": "SITL 27 Move reposition carrier",
     "disabled": false,
-    "info": "Move's acked goto (#239) against ArduCopter sysid 1: the same DO_REPOSITION goto SITL 23 flies through the Command node, routed instead through mavlink-move with action=goto + Send & confirm (the COMMAND_INT/DO_REPOSITION carrier is derived, not configured). Same target coordinates as 23 on purpose \u2014 the sending node is the only variable, so a difference in outcome isolates it.",
+    "info": "Move's acked goto (#239) against ArduCopter sysid 1: the same DO_REPOSITION goto SITL 23 flies through the Command node, routed instead through mavlink-move with action=goto + Send & confirm (the COMMAND_INT/DO_REPOSITION carrier is derived, not configured). Same target coordinates as 23 on purpose — the sending node is the only variable, so a difference in outcome isolates it.",
     "env": []
   },
   {
     "id": "sitl37-comment",
     "type": "comment",
     "z": "sitl37-tab",
-    "name": "Move action=goto \u2014 ACKed guided goto",
-    "info": "Flow: Arm (COMMAND_LONG) -> Takeoff 10 m (COMMAND_LONG) -> delay -> Move goto, Send & confirm (COMMAND_INT / DO_REPOSITION, altitude above home = GLOBAL_RELATIVE_ALT).\n\nPrerequisite: ArduCopter in GUIDED before the chain fires (harness prep ap-guided-1). CHANGE_MODE is deliberately OFF here \u2014 this measures the plain guided goto; the without-GUIDED and CHANGE_MODE cases are separate runs.\n\nWhat this run measures (\u00a714 \u2014 nothing ships as an advisory until it does):\n1. AP accepts DO_REPOSITION from Move and the COMMAND_ACK reaches output 1 with resultCode 0.\n2. param4 yaw is RADIANS on the wire. Yaw is set to 90 degrees, so a correct encode turns the vehicle EAST (pi/2 rad). The dialect and MAVSDK both say radians but that is source-read, not measured; if the vehicle ends on any other heading the conversion is wrong.\n3. Blank speed and blank radius encode the spec sentinels (-1 = vehicle default, 0 = ignored) without disturbing the goto.\n\nCompare against SITL 23, which sends the identical goto via mavlink-command."
+    "name": "Move action=goto — ACKed guided goto",
+    "info": "Flow: Arm (COMMAND_LONG) -> Takeoff 10 m (COMMAND_LONG) -> delay -> Move goto, Send & confirm (COMMAND_INT / DO_REPOSITION, altitude above home = GLOBAL_RELATIVE_ALT).\n\nPrerequisite: ArduCopter in GUIDED before the chain fires (harness prep ap-guided-1). CHANGE_MODE is deliberately OFF here — this measures the plain guided goto; the without-GUIDED and CHANGE_MODE cases are separate runs.\n\nWhat this run measures (§14 — nothing ships as an advisory until it does):\n1. AP accepts DO_REPOSITION from Move and the COMMAND_ACK reaches output 1 with resultCode 0.\n2. param4 yaw is RADIANS on the wire. Yaw is set to 90 degrees, so a correct encode turns the vehicle EAST (pi/2 rad). The dialect and MAVSDK both say radians but that is source-read, not measured; if the vehicle ends on any other heading the conversion is wrong.\n3. Blank speed and blank radius encode the spec sentinels (-1 = vehicle default, 0 = ignored) without disturbing the goto.\n\nCompare against SITL 23, which sends the identical goto via mavlink-command."
   },
   {
     "id": "sitl37-identity",
@@ -33,7 +33,8 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl37-connection",

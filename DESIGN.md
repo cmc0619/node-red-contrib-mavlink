@@ -4259,6 +4259,17 @@ guards it.
 *Check:* `examples/sitl/04-param-defs-live.json`, `examples/sitl/08-param-echo-float32.json`,
 `nodes/mavlink-param.js`.
 
+**Vehicle Profile `dialectRevision` must be serialized for Admin deploy (2026-08-15).**
+*Wrong belief:* omitting `dialectRevision` is fine because the editor default is
+`seed`, so SITL Vehicle Profiles that only set `dialect` still load a bundle.
+*Fact:* after affirmative dialect picks (`ff7cf5e` / protocol omega), a blank
+revision fails `resolveDialect`, `_bundle` stays null, and Connection throws
+`Vehicle Profile '…' has no loaded dialect` (#317 — 31 FAIL). Ship
+`"dialectRevision": "seed"` on every example `mavlink-vehicle`; the SITL
+contract test guards it the same way as param `timeout`.
+*Check:* `examples/sitl/*.json` Vehicle Profiles, `nodes/mavlink-vehicle.html`
+(`defaults.dialectRevision`), `test/sitl/example-json-contracts.test.js`.
+
 **Mission upload items live under `msg.payload.items`, not a bare array (2026-08-11).**
 *Wrong belief:* example 02’s AP `phase: empty` failures were Admin-inject `props`
 loss or vehicle state under `restart: none`.

@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 05 Companion AP",
     "disabled": false,
-    "info": "Node-RED as onboard companion sharing vehicle sysid 20, compid 191. Lab ports bind 14540\u219214541.",
+    "info": "Node-RED as onboard companion sharing vehicle sysid 20, compid 191. Lab ports bind 14540→14541.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl15-tab",
     "name": "Companion SITL",
-    "info": "Companion role: MAV_TYPE_ONBOARD_CONTROLLER. Shares sysid 20 with the SITL vehicle; peer table shows two components. Bind 14540\u219214541. Prefer Docker lab: see sitl/README.md.",
+    "info": "Companion role: MAV_TYPE_ONBOARD_CONTROLLER. Shares sysid 20 with the SITL vehicle; peer table shows two components. Bind 14540→14541. Prefer Docker lab: see sitl/README.md.",
     "x": 200,
     "y": 40,
     "wires": []
@@ -36,7 +36,8 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 20,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl15-connection",

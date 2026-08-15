@@ -2,17 +2,17 @@
   {
     "id": "sitl10-tab",
     "type": "tab",
-    "label": "SITL 37 Dual-stack \u00d710",
+    "label": "SITL 37 Dual-stack ×10",
     "disabled": false,
-    "info": "Both stacks live: five ArduPilot (sysids 1\u20135) + five PX4 (11\u201315). State feed shows all ten peers; broadcast arm per connection (broadcast is single-stack).",
+    "info": "Both stacks live: five ArduPilot (sysids 1–5) + five PX4 (11–15). State feed shows all ten peers; broadcast arm per connection (broadcast is single-stack).",
     "env": []
   },
   {
     "id": "sitl10-comment",
     "type": "comment",
     "z": "sitl10-tab",
-    "name": "Ten-vehicle rig \u2014 two connections, two broadcast arms",
-    "info": "ArduPilot sysids 1\u20135 on one connection; PX4 sysids 11\u201315 on another. Broadcast arm must be issued per connection \u2014 target_system=0 is single-stack only.\n\nPrefer Docker lab:\n  cd sitl && docker compose --profile sitl up -d --build\n\nManual ArduPilot five (telemetry to bind 14550):\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nArduPilot Connection: bind 0.0.0.0:14550 \u2192 remote 127.0.0.1:14551.\nPX4 Connection: bind 0.0.0.0:14560 \u2192 remote 127.0.0.1:14561.\n\nSelection is \"all\" on both broadcast nodes, deliberately: broadcast sends one target_system=0 frame that every vehicle on the link acts on, so it cannot honour a subset \u2014 a fan-out node configured broadcast + list selection is refused before anything is sent. Each connection here already carries exactly one stack, so \"all\" resolves to that stack's five vehicles from the live peer table. To command a genuine subset, use sequential fan-out instead (see SITL 11).",
+    "name": "Ten-vehicle rig — two connections, two broadcast arms",
+    "info": "ArduPilot sysids 1–5 on one connection; PX4 sysids 11–15 on another. Broadcast arm must be issued per connection — target_system=0 is single-stack only.\n\nPrefer Docker lab:\n  cd sitl && docker compose --profile sitl up -d --build\n\nManual ArduPilot five (telemetry to bind 14550):\n  for i in 0 1 2 3 4; do\n    sim_vehicle.py -v ArduCopter -I $i --sysid $((i+1)) \\\n      --out=udp:127.0.0.1:14550 &\n  done\n\nArduPilot Connection: bind 0.0.0.0:14550 → remote 127.0.0.1:14551.\nPX4 Connection: bind 0.0.0.0:14560 → remote 127.0.0.1:14561.\n\nSelection is \"all\" on both broadcast nodes, deliberately: broadcast sends one target_system=0 frame that every vehicle on the link acts on, so it cannot honour a subset — a fan-out node configured broadcast + list selection is refused before anything is sent. Each connection here already carries exactly one stack, so \"all\" resolves to that stack's five vehicles from the live peer table. To command a genuine subset, use sequential fan-out instead (see SITL 11).",
     "x": 300,
     "y": 40,
     "wires": []
@@ -36,7 +36,8 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl10-vehicle-px4",
@@ -47,12 +48,13 @@
     "dialect": "common",
     "defaultTargetSystem": 11,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl10-connection-ap",
     "type": "mavlink-connection",
-    "name": "UDP ArduPilot 5\u00d7",
+    "name": "UDP ArduPilot 5×",
     "mode": "udp",
     "bindHost": "0.0.0.0",
     "bindPort": 14550,
@@ -72,7 +74,7 @@
   {
     "id": "sitl10-connection-px4",
     "type": "mavlink-connection",
-    "name": "UDP PX4 5\u00d7",
+    "name": "UDP PX4 5×",
     "mode": "udp",
     "bindHost": "0.0.0.0",
     "bindPort": 14560,
@@ -129,7 +131,7 @@
     "id": "sitl10-inject-ap",
     "type": "inject",
     "z": "sitl10-tab",
-    "name": "Broadcast arm AP 1\u20135",
+    "name": "Broadcast arm AP 1–5",
     "props": [
       {
         "p": "payload"
@@ -209,7 +211,7 @@
     "id": "sitl10-inject-px4",
     "type": "inject",
     "z": "sitl10-tab",
-    "name": "Broadcast arm PX4 11\u201315",
+    "name": "Broadcast arm PX4 11–15",
     "props": [
       {
         "p": "payload"

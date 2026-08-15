@@ -4,15 +4,15 @@
     "type": "tab",
     "label": "SITL 30 PX4 Move reposition carrier",
     "disabled": false,
-    "info": "PX4 twin of SITL 27 \u2014 closes #239\u2019s last acceptance box: DO_REPOSITION via mavlink-move (action=goto, Send & confirm) against PX4 sysid 11, CHANGE_MODE on (the shape SITL 29 measured accepted through mavlink-command). Records the ACK result either way; if accepted, yaw 90 must turn the nose EAST (param4 radians on PX4, \u00a714).",
+    "info": "PX4 twin of SITL 27 — closes #239’s last acceptance box: DO_REPOSITION via mavlink-move (action=goto, Send & confirm) against PX4 sysid 11, CHANGE_MODE on (the shape SITL 29 measured accepted through mavlink-command). Records the ACK result either way; if accepted, yaw 90 must turn the nose EAST (param4 radians on PX4, §14).",
     "env": []
   },
   {
     "id": "ex38-comment",
     "type": "comment",
     "z": "ex38-tab",
-    "name": "PX4 Move action=goto \u2014 measurement twin of 27",
-    "info": "Flow: Arm (COMMAND_LONG) -> Takeoff at the PX4 default altitude (COMMAND_LONG, param7 NaN) -> delay -> Move goto, Send & confirm (COMMAND_INT / DO_REPOSITION, altitude above home = GLOBAL_RELATIVE_ALT).\n\nPrerequisite: PX4 sysid 11 home-set and ready to arm (harness prep px4-home-ready). CHANGE_MODE is deliberately ON here \u2014 it is the shape SITL 29 measured accepted through mavlink-command, so the carrier is the only variable between the two runs.\n\nWhat this run measures (\u00a714 \u2014 nothing ships as an advisory until it does):\n1. The ACK result PX4 returns for DO_REPOSITION sent from Move, recorded either way: a denial is a measurement, not a harness failure. On acceptance the COMMAND_ACK reaches output 1 with resultCode 0.\n2. param4 yaw is RADIANS on the wire. Yaw is set to 90 degrees, so a correct encode turns the vehicle EAST (pi/2 rad). The dialect and MAVSDK both say radians but that is source-read, not measured; if the vehicle ends on any other heading the conversion is wrong.\n3. Blank speed and blank radius encode the spec sentinels (-1 = vehicle default, 0 = ignored) without disturbing the goto.\n\nCompare against SITL 29, which sends the identical goto to PX4 via mavlink-command, and SITL 27, the ArduPilot twin of this flow."
+    "name": "PX4 Move action=goto — measurement twin of 27",
+    "info": "Flow: Arm (COMMAND_LONG) -> Takeoff at the PX4 default altitude (COMMAND_LONG, param7 NaN) -> delay -> Move goto, Send & confirm (COMMAND_INT / DO_REPOSITION, altitude above home = GLOBAL_RELATIVE_ALT).\n\nPrerequisite: PX4 sysid 11 home-set and ready to arm (harness prep px4-home-ready). CHANGE_MODE is deliberately ON here — it is the shape SITL 29 measured accepted through mavlink-command, so the carrier is the only variable between the two runs.\n\nWhat this run measures (§14 — nothing ships as an advisory until it does):\n1. The ACK result PX4 returns for DO_REPOSITION sent from Move, recorded either way: a denial is a measurement, not a harness failure. On acceptance the COMMAND_ACK reaches output 1 with resultCode 0.\n2. param4 yaw is RADIANS on the wire. Yaw is set to 90 degrees, so a correct encode turns the vehicle EAST (pi/2 rad). The dialect and MAVSDK both say radians but that is source-read, not measured; if the vehicle ends on any other heading the conversion is wrong.\n3. Blank speed and blank radius encode the spec sentinels (-1 = vehicle default, 0 = ignored) without disturbing the goto.\n\nCompare against SITL 29, which sends the identical goto to PX4 via mavlink-command, and SITL 27, the ArduPilot twin of this flow."
   },
   {
     "id": "ex38-identity",
@@ -33,7 +33,8 @@
     "dialect": "common",
     "defaultTargetSystem": 11,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "ex38-connection",

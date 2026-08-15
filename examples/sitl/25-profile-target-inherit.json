@@ -36,7 +36,8 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 2,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl23-connection",
