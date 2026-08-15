@@ -51,6 +51,7 @@ const {
   resolveDeliveryContext,
   firstDefined,
   applyConnectionStatus,
+  finiteNumberOr,
 } = require('../lib/addressing');
 const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
 
@@ -230,10 +231,6 @@ module.exports = function registerMavlinkParam(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    const timeoutMs = config.timeout === '' ? DEFAULT_TIMEOUT_MS : Number(config.timeout);
-    // A quarter of the overall timeout, capped — inactivity must nest inside
-    // the outer bound with room for the refill rounds to fire before it.
-    const inactivityMs = Math.min(PARAM_LIST_INACTIVITY_MS, timeoutMs / 4);
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
@@ -279,6 +276,18 @@ module.exports = function registerMavlinkParam(RED) {
         // unconfirmed 'sent' (§14 selection-typo). Runs inside the try so a bad
         // token is a failed record, not a construction crash (sendAs precedent).
         resolveDeliveryTier(delivery);
+
+        // Echo/list deadline (owner ruling, 2026-08-14): blank keeps the
+        // library default; a present non-finite value used to coerce silently
+        // — `setTimeout(fn, NaN)` substitutes ~1 ms instead of refusing, on
+        // the deadline and (via the quarter-scaling below) the collect stall
+        // detector both. Neither reaches the wire, so nothing downstream
+        // catches it the way wire.js catches an integer field.
+        const timeoutMs = finiteNumberOr(config.timeout, DEFAULT_TIMEOUT_MS, 'Param timeout');
+        // A quarter of the overall timeout, capped — inactivity must nest
+        // inside the outer bound with room for the refill rounds to fire
+        // before it.
+        const inactivityMs = Math.min(PARAM_LIST_INACTIVITY_MS, timeoutMs / 4);
 
         const payload = msg.payload ?? {};
 

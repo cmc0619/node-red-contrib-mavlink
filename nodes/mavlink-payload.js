@@ -16,6 +16,7 @@ const {
 const {
   resolveDeliveryContext,
   applyConnectionStatus,
+  finiteNumberOr,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -27,6 +28,24 @@ const { loadMetadata } = require('../lib/metadata/load');
 const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
 
 const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';
+
+/**
+ * Delivery tiers the editor's `delivery` select can save. Affirmative dispatch
+ * (§14 selection-typo cluster): the input handler's only hard gates are
+ * `delivery === 'build'` and `delivery === 'confirm'`, so a typo'd or blank
+ * tier used to fall through both into the fire-and-forget wire send and report
+ * `sent` — a real message on the wire for a tier nobody asked for. The select
+ * has no blank option, so a non-member is hand-edit drift and craters. Move,
+ * Command, Mission and Param already carry this guard; Payload did not.
+ */
+const DELIVERY_TIERS = ['build', 'send', 'confirm'];
+
+function resolveDeliveryTier(value) {
+  if (DELIVERY_TIERS.includes(value)) return value;
+  throw new Error(
+    `unknown Payload delivery ${JSON.stringify(value)} — expected one of ${DELIVERY_TIERS.join(', ')}`
+  );
+}
 
 /**
  * Entries for every enum the form's fields reference, so the dialog can build
@@ -54,8 +73,6 @@ module.exports = function registerMavlinkPayload(RED) {
 
     // At most one COMMAND_ACK wait in flight per node.
     let activeWaiter = null;
-    const timeoutMs = config.timeout === '' ? DEFAULT_TIMEOUT_MS : Number(config.timeout);
-    const maxRetries = config.maxRetries === '' ? DEFAULT_MAX_RETRIES : Number(config.maxRetries);
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
@@ -73,6 +90,21 @@ module.exports = function registerMavlinkPayload(RED) {
           done();
           return;
         }
+
+        // Before any dispatch reads `delivery`: a non-member tier craters here
+        // rather than falling through the build/confirm gates below into an
+        // unconfirmed 'sent' (§14 selection-typo). Runs inside the try so a
+        // bad token is a failed record, not a construction crash.
+        resolveDeliveryTier(delivery);
+
+        // ACK timeout / retry count (owner ruling, 2026-08-14): blank keeps
+        // the library default; a present non-finite value used to coerce
+        // silently — `setTimeout(fn, NaN)` substitutes ~1 ms instead of
+        // refusing, closing the ack window before the send left the queue.
+        // Neither value reaches the wire, so nothing downstream catches it
+        // the way wire.js catches an integer field.
+        const timeoutMs = finiteNumberOr(config.timeout, DEFAULT_TIMEOUT_MS, 'Payload ACK timeout');
+        const maxRetries = finiteNumberOr(config.maxRetries, DEFAULT_MAX_RETRIES, 'Payload max retries');
 
         const payload = msg.payload ?? {};
         // Payload: compidFromConfig keeps the compid field authoritative even
@@ -95,8 +127,9 @@ module.exports = function registerMavlinkPayload(RED) {
             path: payload.path || config.path,
             target,
             values: payload.values || config.values || {},
-            // Required for command-backed verbs (§9): the builder throws when a
-            // MAV_CMD verb arrives without a carrier choice.
+            // Required for command-backed verbs (§9): a non-member carrier
+            // selects no builder (§5), so the message ships undefined and
+            // craters at the tier that touches it.
             carrier,
             frame: resolveFrame(payload.mavFrame, config.frame),
           });

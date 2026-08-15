@@ -168,7 +168,7 @@ test('an unparseable value coerces to NaN and still builds (driver rule)', () =>
   assert.ok(Number.isNaN(built.message.fields.pitch), 'pitch carries NaN');
 });
 
-test("carrier 'int' builds COMMAND_INT; anything else the frameless COMMAND_LONG (§9)", () => {
+test('carrier dispatch is affirmative: only CARRIER members select a builder (§5, §9)', () => {
   const base = {
     topic: 'servo',
     verb: 'set',
@@ -176,7 +176,10 @@ test("carrier 'int' builds COMMAND_INT; anything else the frameless COMMAND_LONG
     values: {},
   };
   assert.equal(buildPayloadMessage({ ...base, carrier: 'int' }).message.name, 'COMMAND_INT');
-  assert.equal(buildPayloadMessage({ ...base, carrier: 'bogus' }).message.name, 'COMMAND_LONG');
+  assert.equal(buildPayloadMessage({ ...base, carrier: 'long' }).message.name, 'COMMAND_LONG');
+  // A non-member selects no builder: `message` ships undefined and craters at
+  // the tier that touches it — never a silent LONG for a carrier nobody chose.
+  assert.equal(buildPayloadMessage({ ...base, carrier: 'bogus' }).message, undefined);
 });
 
 test('whitespace is blank for a required ROI coordinate (#141)', () => {

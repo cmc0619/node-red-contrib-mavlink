@@ -103,6 +103,29 @@ test("a typo'd delivery tier crashes instead of an unconfirmed 'sent' (protocol 
   assert.equal(conn.sent.length, 0, 'nothing left the wire under a mis-resolved tier');
 });
 
+test('a non-finite Param timeout refuses instead of arming a ~1 ms echo deadline', () => {
+  // setTimeout(fn, NaN) arms ~1 ms with nothing downstream to catch it (owner
+  // ruling, 2026-08-14): a hand-edited 'abc' timeout meant the echo deadline
+  // — and the NaN quarter-scaled stall detector — fired before the send left
+  // the queue. Same crater class as Command's ACK timeout.
+  const conn = connStubFull();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'confirm',
+    action: 'read',
+    connection: 'conn',
+    targetSystem: 1,
+    targetComponent: 1,
+    timeout: 'abc',
+  });
+  let err;
+  node.emit('input', { payload: { paramId: 'ARMING_CHECK' } }, () => {}, (e) => { err = e; });
+  assert.match(err.message, /Param timeout must be a finite number \(got "abc"\)/);
+  assert.equal(conn.sent.length, 0, 'nothing left the wire under a garbage deadline');
+});
+
 test('mavlink-param refuses a set whose value is blank end to end: nothing sent, named refusal, done(err) (§9, #258)', () => {
   // Blank config value + no payload value used to transmit a silent 0
   // (Number('') === 0) and report success. The refusal happens before
