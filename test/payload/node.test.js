@@ -340,11 +340,12 @@ test('blank Payload maxRetries keeps three temporary-rejection retries', async (
   node.emit('close', () => {});
 });
 
-test("a typo'd Payload delivery tier crashes instead of an unconfirmed 'sent'", () => {
+test("a typo'd Payload delivery tier sends nothing and completes as a no-op", () => {
   // 'sned' used to fall through the build/confirm gates into the
   // fire-and-forget wire send reporting 'sent' — a real message on the wire
-  // for a tier nobody asked for. Affirmative dispatch craters before anything
-  // is sent (§14 selection-typo), the guard Param and Command already carry.
+  // for a tier nobody asked for. Affirmative dispatch (§5): a non-member
+  // matches no case, so nothing reaches the wire and the input completes
+  // clean — the same shape as State's mode no-op.
   const conn = connStub();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-payload')(RED);
@@ -358,9 +359,11 @@ test("a typo'd Payload delivery tier crashes instead of an unconfirmed 'sent'", 
     targetSystem: 7,
     targetComponent: 1,
   });
+  const outputs = [];
   let err;
-  node.emit('input', { payload: { values: { servo: 8, pwm: 1600 } } }, () => {}, (e) => { err = e; });
-  assert.match(err.message, /unknown Payload delivery "sned" — expected one of build, send, confirm/);
+  node.emit('input', { payload: { values: { servo: 8, pwm: 1600 } } }, (m) => { outputs.push(m); }, (e) => { err = e; });
+  assert.equal(err, undefined, 'the no-op completes without an error');
+  assert.equal(outputs.length, 0, 'no output fires for a tier that selected no behavior');
   assert.equal(conn.sent.length, 0, 'nothing left the wire under a mis-resolved tier');
 });
 

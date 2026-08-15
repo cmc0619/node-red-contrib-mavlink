@@ -30,24 +30,6 @@ const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
 const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';
 
 /**
- * Delivery tiers the editor's `delivery` select can save. Affirmative dispatch
- * (§14 selection-typo cluster): the input handler's only hard gates are
- * `delivery === 'build'` and `delivery === 'confirm'`, so a typo'd or blank
- * tier used to fall through both into the fire-and-forget wire send and report
- * `sent` — a real message on the wire for a tier nobody asked for. The select
- * has no blank option, so a non-member is hand-edit drift and craters. Move,
- * Command, Mission and Param already carry this guard; Payload did not.
- */
-const DELIVERY_TIERS = ['build', 'send', 'confirm'];
-
-function resolveDeliveryTier(value) {
-  if (DELIVERY_TIERS.includes(value)) return value;
-  throw new Error(
-    `unknown Payload delivery ${JSON.stringify(value)} — expected one of ${DELIVERY_TIERS.join(', ')}`
-  );
-}
-
-/**
  * Entries for every enum the form's fields reference, so the dialog can build
  * its selects from the dialect instead of a baked table (§6).
  *
@@ -91,12 +73,6 @@ module.exports = function registerMavlinkPayload(RED) {
           return;
         }
 
-        // Before any dispatch reads `delivery`: a non-member tier craters here
-        // rather than falling through the build/confirm gates below into an
-        // unconfirmed 'sent' (§14 selection-typo). Runs inside the try so a
-        // bad token is a failed record, not a construction crash.
-        resolveDeliveryTier(delivery);
-
         // ACK timeout / retry count (owner ruling, 2026-08-14): blank keeps
         // the library default; a present non-finite value used to coerce
         // silently — `setTimeout(fn, NaN)` substitutes ~1 ms instead of
@@ -138,15 +114,6 @@ module.exports = function registerMavlinkPayload(RED) {
         const carrierChosen = payload.sendAs || config.sendAs;
         const built = buildFor(carrierChosen);
 
-        if (delivery === 'build') {
-          completeBuild(node, send, built);
-          done();
-          return;
-        }
-
-        if (!connectionNode) {
-          throw new Error('mavlink-payload requires a Connection');
-        }
         /**
          * Send a command-backed verb and wait for its COMMAND_ACK, resending once
          * in the other carrier if the vehicle answers COMMAND_INT_ONLY (8) or
@@ -221,31 +188,44 @@ module.exports = function registerMavlinkPayload(RED) {
             });
         }
 
-        // Confirm tier for a command-backed verb: wait for the COMMAND_ACK so
-        // a DENIED / TEMPORARILY_REJECTED / timeout can halt the chain (§9).
-        // Gimbal-manager setpoints carry no acknowledgement, so they can only
-        // ever be sent unconfirmed and fall through below.
-        if (delivery === 'confirm' && built.confirmation === 'command_ack') {
-          // Broadcast + confirm: the ack matcher accepts any source at sysid 0,
-          // so the first responder would settle for the fleet — and the
-          // carrier-swap above could then re-broadcast the command off one
-          // stray wrong-carrier ack (#260, §9). Send stays broadcast-legal;
-          // fan-out broadcast is the expected-set aggregator (§10).
-          if (target.sysid === 0) {
-            throw new Error(
-              'mavlink-payload confirm cannot target broadcast (sysid 0) — the first vehicle ' +
-              'to ack would answer for the whole fleet; use Send (fire-and-forget) or ' +
-              'mavlink-fanout broadcast (per-vehicle acks)'
-            );
+        // Affirmative dispatch on the tier (§5): a non-member matches no case,
+        // nothing reaches the wire, and the input completes as a no-op — the
+        // same shape as State's mode. No connection guard on the wire cases:
+        // the editor is the protector, and a missing Connection craters at
+        // `.send` / `.subscribe` like any other absent config node.
+        switch (delivery) {
+          case 'build':
+            completeBuild(node, send, built);
+            break;
+          case 'confirm':
+            // Wait for the COMMAND_ACK so a DENIED / TEMPORARILY_REJECTED /
+            // timeout can halt the chain (§9). Gimbal-manager setpoints carry
+            // no acknowledgement, so they fall through and send unconfirmed.
+            if (built.confirmation === 'command_ack') {
+              // Broadcast + confirm: the ack matcher accepts any source at
+              // sysid 0, so the first responder would settle for the fleet —
+              // and the carrier-swap above could then re-broadcast the command
+              // off one stray wrong-carrier ack (#260, §9). Send stays
+              // broadcast-legal; fan-out broadcast is the expected-set
+              // aggregator (§10).
+              if (target.sysid === 0) {
+                throw new Error(
+                  'mavlink-payload confirm cannot target broadcast (sysid 0) — the first vehicle ' +
+                  'to ack would answer for the whole fleet; use Send (fire-and-forget) or ' +
+                  'mavlink-fanout broadcast (per-vehicle acks)'
+                );
+              }
+              awaitAck(built, carrierChosen);
+              return;
+            }
+            // falls through
+          case 'send': {
+            connectionNode.send(built.message, { band: BAND.CONTROL, target, identityId });
+            const detail = built.confirmation === 'command_ack' ? 'sent' : 'sent (unconfirmed)';
+            completeResult(node, send, 'succeeded', detail, built);
+            break;
           }
-          awaitAck(built, carrierChosen);
-          return;
         }
-
-        // Send tier, or confirm requested on an unconfirmable message.
-        connectionNode.send(built.message, { band: BAND.CONTROL, target, identityId });
-        const detail = built.confirmation === 'command_ack' ? 'sent' : 'sent (unconfirmed)';
-        completeResult(node, send, 'succeeded', detail, built);
         done();
       } catch (err) {
         failInput(node, send, err, done);
