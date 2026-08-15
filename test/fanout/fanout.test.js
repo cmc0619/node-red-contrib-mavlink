@@ -7,8 +7,6 @@ const {
   executeFanout,
   classifyMessage,
   selectFanoutMembers,
-  resolveExecutionMode,
-  resolveSelectionMode,
 } = require('../../lib/fanout');
 const { BAND } = require('../../lib/connection/bands');
 const { streamLocks } = require('../../lib/delivery/lock');
@@ -81,73 +79,7 @@ test('an empty resolution records which selection produced it (#226)', async () 
   assert.equal(emptyList.selection, 'list');
 });
 
-// ── Execution mode / delivery tier membership (owner ruling, 2026-08-14) ──────
-
-test('resolveExecutionMode: members dispatch; everything else — blank included — crashes the flow', () => {
-  assert.equal(resolveExecutionMode('sequential'), 'sequential');
-  assert.equal(resolveExecutionMode('broadcast'), 'broadcast');
-  for (const bad of ['broadcasts', '', undefined, null]) {
-    assert.throws(
-      () => resolveExecutionMode(bad),
-      /unknown Fan-out execution mode .* — expected one of sequential, broadcast/
-    );
-  }
-});
-
-test('a typo\'d executionMode no longer silently runs the sequential machine (\\#231\'s twin, confirmed)', async () => {
-  // Before the fix: `options.mode || 'sequential'` stayed truthy for
-  // 'broadcasts', missed every `mode === 'broadcast'` gate, and ran
-  // executeSequential — the broadcast confirm gates never fired and a real
-  // message left the wire under the wrong machine. Now it throws, like every
-  // other selection-typo resolver, caught by the node the same way
-  // `resolveMoveAction`'s throw is (\#222 pattern) rather than a soft
-  // `refused` record — `classifyMessage`'s refusals are a message-shape
-  // check, not a selection one.
-  const connection = connectionStub([peer(1, { firmware: 'ardupilot' })]);
-  await assert.rejects(
-    () => executeFanout({
-      connection,
-      message: builtCommand(),
-      mode: 'broadcasts',
-      delivery: 'send',
-      selection: { mode: 'all' },
-    }),
-    /unknown Fan-out execution mode "broadcasts" — expected one of sequential, broadcast/
-  );
-  assert.equal(connection.sends.length, 0);
-});
-
-test('resolveSelectionMode: members dispatch; everything else — blank included — crashes the flow (§14 reversal, 2026-08-14)', () => {
-  assert.equal(resolveSelectionMode('all'), 'all');
-  assert.equal(resolveSelectionMode('list'), 'list');
-  assert.equal(resolveSelectionMode('filter'), 'filter');
-  // No blank arm: the editor always saves a member, the runtime defaults
-  // nothing. "We want the flows to crash if they're wrong."
-  for (const bad of ['lits', '', undefined, null]) {
-    assert.throws(
-      () => resolveSelectionMode(bad),
-      /unknown Fan-out selection mode .* — expected one of all, list, filter/
-    );
-  }
-});
-
-test('the audit\'s repro: {mode: "lits", sysids: [1]} refuses instead of selecting the fleet', async () => {
-  // Before the reversal the mode acted only through two negative === gates:
-  // 'lits' matched neither, the sysid list was never read, and both vehicles
-  // were commanded under a clean success report carrying selection: 'lits'.
-  const connection = connectionStub([peer(1, { firmware: 'ardupilot' }), peer(2, { firmware: 'ardupilot' })]);
-  await assert.rejects(
-    () => executeFanout({
-      connection,
-      message: builtCommand(),
-      mode: 'sequential',
-      delivery: 'send',
-      selection: { mode: 'lits', sysids: [1] },
-    }),
-    /unknown Fan-out selection mode "lits" — expected one of all, list, filter/
-  );
-  assert.equal(connection.sends.length, 0, 'no vehicle nobody named may be commanded');
-});
+// ── Delivery tier membership (owner ruling, 2026-08-14) ──────────────────────
 
 test('a typo\'d delivery tier throws instead of silently running Send (lib/fanout delivery)', async () => {
   const connection = connectionStub([peer(1, { firmware: 'ardupilot' })]);

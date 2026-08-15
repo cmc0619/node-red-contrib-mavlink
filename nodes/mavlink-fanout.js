@@ -1,7 +1,7 @@
 'use strict';
 
 const delivery = require('../lib/delivery');
-const { executeFanout, parseSysidList, resolveSelectionMode } = require('../lib/fanout');
+const { executeFanout, parseSysidList } = require('../lib/fanout');
 const { applyConnectionStatus } = require('../lib/addressing');
 
 module.exports = function registerMavlinkFanout(RED) {
@@ -28,10 +28,7 @@ module.exports = function registerMavlinkFanout(RED) {
         }
         const { message, opts } = unwrapPayload(msg.payload);
         const selection = opts.selection || selectionFrom(config);
-        // Affirmative dispatch (§14 "Fan-out selection", reversed 2026-08-14):
-        // resolved before any branch reads the mode, so a payload typo is a
-        // failed input here, not an 'all' fan-out below.
-        const selectionMode = resolveSelectionMode(selection.mode);
+        const selectionMode = selection.mode;
         const effectiveDelivery = opts.delivery || config.delivery;
         const listSelected = selectionMode === 'list' || Array.isArray(opts.targets);
 

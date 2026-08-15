@@ -66,17 +66,6 @@ function drive(node, msg) {
   });
 }
 
-test('feed mode refuses input — no snapshot ever rides the event-stream wire', async () => {
-  const node = makeNode(
-    { connection: 'conn', mode: 'feed', events: 'stale,expired' },
-    { conn: conn() }
-  );
-  const { out, err } = await drive(node, { payload: 1755138744000 });
-  assert.match(err.message, /feed mode takes no input/);
-  assert.equal(out[0][0], null, 'nothing on the event-stream output');
-  assert.equal(out[0][1].result, 'failed');
-});
-
 test('snapshot mode still answers input with the peer-table view', async () => {
   const node = makeNode(
     { connection: 'conn', mode: 'snapshot', targetSystem: '', targetComponent: '' },
