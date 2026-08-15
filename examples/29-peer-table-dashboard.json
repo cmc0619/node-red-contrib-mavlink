@@ -25,7 +25,8 @@
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1
+    "defaultTargetComponent": 1,
+    "dialectRevision": "seed"
   },
   {
     "id": "ex29-connection",
@@ -72,7 +73,10 @@
     "name": "MAVLink dashboard",
     "path": "/dashboard",
     "includeClientData": true,
-    "acceptsClientConfig": ["ui-notification", "ui-control"]
+    "acceptsClientConfig": [
+      "ui-notification",
+      "ui-control"
+    ]
   },
   {
     "id": "ex29-page",
@@ -131,7 +135,11 @@
     "type": "inject",
     "z": "ex29-tab",
     "name": "every 2s",
-    "props": [{ "p": "payload" }],
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
     "repeat": "2",
     "crontab": "",
     "once": true,
@@ -141,7 +149,11 @@
     "payloadType": "date",
     "x": 150,
     "y": 180,
-    "wires": [["ex29-snapshot"]]
+    "wires": [
+      [
+        "ex29-snapshot"
+      ]
+    ]
   },
   {
     "id": "ex29-snapshot",
@@ -155,7 +167,12 @@
     "targetComponent": "",
     "x": 370,
     "y": 180,
-    "wires": [["ex29-rows"], []]
+    "wires": [
+      [
+        "ex29-rows"
+      ],
+      []
+    ]
   },
   {
     "id": "ex29-rows",
@@ -171,7 +188,11 @@
     "libs": [],
     "x": 620,
     "y": 180,
-    "wires": [["ex29-table"]]
+    "wires": [
+      [
+        "ex29-table"
+      ]
+    ]
   },
   {
     "id": "ex29-table",
@@ -195,7 +216,9 @@
     "action": "replace",
     "x": 870,
     "y": 180,
-    "wires": [[]]
+    "wires": [
+      []
+    ]
   },
   {
     "id": "ex29-feed",
@@ -209,7 +232,11 @@
     "targetComponent": "",
     "x": 380,
     "y": 300,
-    "wires": [["ex29-event-row"]]
+    "wires": [
+      [
+        "ex29-event-row"
+      ]
+    ]
   },
   {
     "id": "ex29-event-row",
@@ -225,7 +252,11 @@
     "libs": [],
     "x": 620,
     "y": 300,
-    "wires": [["ex29-events-table"]]
+    "wires": [
+      [
+        "ex29-events-table"
+      ]
+    ]
   },
   {
     "id": "ex29-events-table",
@@ -249,6 +280,8 @@
     "action": "append",
     "x": 860,
     "y": 300,
-    "wires": [[]]
+    "wires": [
+      []
+    ]
   }
 ]

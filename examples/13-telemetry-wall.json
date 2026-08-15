@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex13-tab",
     "name": "Telemetry wall",
-    "info": "Five In subscriptions keyed by (message, sysid, compid). ATTITUDE rate-limited 5 Hz; HEARTBEAT changed-only; GLOBAL_POSITION_INT 4 Hz sysid 1; VFR_HUD has no rate/changed filters (contrast with filtered views). Optional inject sets GLOBAL_POSITION_INT interval via set_message_interval (see example 15). SITL bind 14550 \u2192 14551.",
+    "info": "Five In subscriptions keyed by (message, sysid, compid). ATTITUDE rate-limited 5 Hz; HEARTBEAT changed-only; GLOBAL_POSITION_INT 4 Hz sysid 1; VFR_HUD has no rate/changed filters (contrast with filtered views). Optional inject sets GLOBAL_POSITION_INT interval via set_message_interval (see example 15). SITL bind 14550 → 14551.",
     "x": 200,
     "y": 40,
     "wires": []
@@ -35,7 +35,8 @@
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1
+    "defaultTargetComponent": 1,
+    "dialectRevision": "seed"
   },
   {
     "id": "ex13-connection",

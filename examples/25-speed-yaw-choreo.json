@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex25-tab",
     "name": "Speed & yaw choreography",
-    "info": "Face and Rotate ride the raw MAV_CMD path (MAV_CMD_CONDITION_YAW 115) \u2014 there is no yaw preset; Move owns motion intents. Face 90\u00b0 sets param4=0 (absolute), Rotate +45\u00b0 sets param4=1 (relative), same command either way. Prep: arm\u2192GUIDED\u2192takeoff (complete). Bind 14550\u219214551.",
+    "info": "Face and Rotate ride the raw MAV_CMD path (MAV_CMD_CONDITION_YAW 115) — there is no yaw preset; Move owns motion intents. Face 90° sets param4=0 (absolute), Rotate +45° sets param4=1 (relative), same command either way. Prep: arm→GUIDED→takeoff (complete). Bind 14550→14551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -35,7 +35,8 @@
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1
+    "defaultTargetComponent": 1,
+    "dialectRevision": "seed"
   },
   {
     "id": "ex25-connection",
@@ -227,7 +228,7 @@
     "id": "ex25-inject-yaw",
     "type": "inject",
     "z": "ex25-tab",
-    "name": "Face 90\u00b0",
+    "name": "Face 90°",
     "props": [
       {
         "p": "payload"
@@ -252,7 +253,7 @@
     "id": "ex25-cmd-yaw",
     "type": "mavlink-command",
     "z": "ex25-tab",
-    "name": "Face 90\u00b0",
+    "name": "Face 90°",
     "mode": "advanced",
     "preset": "",
     "advancedCommand": "115",
@@ -281,7 +282,7 @@
     "id": "ex25-inject-rotate",
     "type": "inject",
     "z": "ex25-tab",
-    "name": "Rotate +45\u00b0",
+    "name": "Rotate +45°",
     "props": [
       {
         "p": "payload"
@@ -306,7 +307,7 @@
     "id": "ex25-cmd-rotate",
     "type": "mavlink-command",
     "z": "ex25-tab",
-    "name": "Rotate +45\u00b0",
+    "name": "Rotate +45°",
     "mode": "advanced",
     "preset": "",
     "advancedCommand": "115",

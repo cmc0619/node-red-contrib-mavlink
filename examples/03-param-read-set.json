@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "03 Param read set",
     "disabled": false,
-    "info": "Separate Param read and Param set (echo-confirm) demos \u2014 not chained, so a read PARAM_VALUE cannot race a set confirmation.",
+    "info": "Separate Param read and Param set (echo-confirm) demos — not chained, so a read PARAM_VALUE cannot race a set confirmation.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex03-tab",
     "name": "Param read and set (separate injects)",
-    "info": "Two independent demos \u2014 not chained. Read requests MAV_SYSID (Send). Set writes FS_GCS_ENABLE from the inject JSON with Send & confirm (DESIGN.md \u00a79 echo-confirm). Never wire read continue into set. Align Param targetSystem with the Vehicle profile. Param names match current ArduPilot; change them if your firmware differs.",
+    "info": "Two independent demos — not chained. Read requests MAV_SYSID (Send). Set writes FS_GCS_ENABLE from the inject JSON with Send & confirm (DESIGN.md §9 echo-confirm). Never wire read continue into set. Align Param targetSystem with the Vehicle profile. Param names match current ArduPilot; change them if your firmware differs.",
     "x": 220,
     "y": 40,
     "wires": []
@@ -35,7 +35,8 @@
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1
+    "defaultTargetComponent": 1,
+    "dialectRevision": "seed"
   },
   {
     "id": "ex03-connection",

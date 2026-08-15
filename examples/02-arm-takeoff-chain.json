@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex02-tab",
     "name": "Arm then takeoff",
-    "info": "Arm (confirm) \u2192 Takeoff (await completion). Command targets inherit the Vehicle profile when target fields are blank \u2014 edit the Vehicle defaultTargetSystem. Connection: bind 14550, remote 14551 for typical SITL.",
+    "info": "Arm (confirm) → Takeoff (await completion). Command targets inherit the Vehicle profile when target fields are blank — edit the Vehicle defaultTargetSystem. Connection: bind 14550, remote 14551 for typical SITL.",
     "x": 150,
     "y": 40,
     "wires": []
@@ -35,7 +35,8 @@
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1
+    "defaultTargetComponent": 1,
+    "dialectRevision": "seed"
   },
   {
     "id": "ex02-connection",

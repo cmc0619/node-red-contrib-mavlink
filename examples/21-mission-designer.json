@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex21-tab",
     "name": "Mission designer",
-    "info": "Four-item survey mission (NAV_WAYPOINT + DO_CHANGE_SPEED). Fence/rally are ArduPilot-only. Failed upload never degrades into clear. Bind 14550\u219214551.",
+    "info": "Four-item survey mission (NAV_WAYPOINT + DO_CHANGE_SPEED). Fence/rally are ArduPilot-only. Failed upload never degrades into clear. Bind 14550→14551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -35,7 +35,8 @@
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1
+    "defaultTargetComponent": 1,
+    "dialectRevision": "seed"
   },
   {
     "id": "ex21-connection",
@@ -265,7 +266,7 @@
     "id": "ex21-inject-clear-mission",
     "type": "inject",
     "z": "ex21-tab",
-    "name": "\u26a0 Clear mission",
+    "name": "⚠ Clear mission",
     "props": [
       {
         "p": "payload"
