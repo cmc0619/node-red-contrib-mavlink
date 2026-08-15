@@ -101,6 +101,26 @@ test('every key on a shipped mavlink node is one the node declares', () => {
   assert.deepEqual(unknown, [], `undeclared keys in shipped examples:\n${unknown.join('\n')}`);
 });
 
+test('every mavlink-vehicle in an example serializes dialectRevision', () => {
+  // Same Admin-API trap as SITL (#317): editor default `seed` is not written
+  // into the flow JSON, and affirmative dialect picks no longer invent it.
+  const missing = [];
+  for (const file of exampleFiles(EXAMPLES)) {
+    const rel = path.relative(EXAMPLES, file);
+    for (const node of nodesOf(JSON.parse(fs.readFileSync(file, 'utf8')))) {
+      if (node.type !== 'mavlink-vehicle') continue;
+      if (node.dialectRevision == null || node.dialectRevision === '') {
+        missing.push(`${rel}: ${node.name || node.id}`);
+      }
+    }
+  }
+  assert.deepEqual(
+    missing,
+    [],
+    'omitted dialectRevision → Vehicle Profile has no loaded dialect:\n' + missing.join('\n')
+  );
+});
+
 test('mavlink-in nodes use the messages list, not the retired singular key (#211)', () => {
   // Kept explicit on top of the shape check above: `messages` must be an
   // *array*, which "is it a declared key" alone would not catch.

@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex18-tab",
     "name": "Servo & release bench",
-    "info": "Servo set/repeat, gripper, winch, parachute (gated \u2014 real release; armed test only). All command-backed payloads use confirm delivery. SITL bind 14550 \u2192 14551.",
+    "info": "Servo set/repeat, gripper, winch, parachute (gated — real release; armed test only). All command-backed payloads use confirm delivery. SITL bind 14550 → 14551.",
     "x": 200,
     "y": 40,
     "wires": []
@@ -35,7 +35,8 @@
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1
+    "defaultTargetComponent": 1,
+    "dialectRevision": "seed"
   },
   {
     "id": "ex18-connection",
@@ -91,7 +92,7 @@
     "id": "ex18-payload-servo-repeat",
     "type": "mavlink-payload",
     "z": "ex18-tab",
-    "name": "Servo pulse \u00d73",
+    "name": "Servo pulse ×3",
     "connection": "ex18-connection",
     "delivery": "confirm",
     "timeout": 10000,
@@ -239,7 +240,7 @@
     "id": "ex18-inject-repeat",
     "type": "inject",
     "z": "ex18-tab",
-    "name": "Servo pulse \u00d73",
+    "name": "Servo pulse ×3",
     "props": [
       {
         "p": "payload",
@@ -316,7 +317,7 @@
     "id": "ex18-inject-chute",
     "type": "inject",
     "z": "ex18-tab",
-    "name": "\u26a0 Parachute (armed test only)",
+    "name": "⚠ Parachute (armed test only)",
     "props": [
       {
         "p": "payload"

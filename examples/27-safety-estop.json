@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex27-tab",
     "name": "Safety e-stop",
-    "info": "\u26a0 Force disarm uses COMPONENT_ARM_DISARM param2=21196 (Emergency band, never coalesced). \u26a0\u26a0 Flight termination requires msg.confirmed=true. Bind 14550\u219214551.",
+    "info": "⚠ Force disarm uses COMPONENT_ARM_DISARM param2=21196 (Emergency band, never coalesced). ⚠⚠ Flight termination requires msg.confirmed=true. Bind 14550→14551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -35,7 +35,8 @@
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1
+    "defaultTargetComponent": 1,
+    "dialectRevision": "seed"
   },
   {
     "id": "ex27-connection",
@@ -61,7 +62,7 @@
     "id": "ex27-inject-force-disarm",
     "type": "inject",
     "z": "ex27-tab",
-    "name": "\u26a0 Force disarm (21196)",
+    "name": "⚠ Force disarm (21196)",
     "props": [
       {
         "p": "payload"
@@ -115,7 +116,7 @@
     "id": "ex27-inject-flight-term",
     "type": "inject",
     "z": "ex27-tab",
-    "name": "\u26a0\u26a0 Flight termination (confirm)",
+    "name": "⚠⚠ Flight termination (confirm)",
     "props": [
       {
         "p": "payload"

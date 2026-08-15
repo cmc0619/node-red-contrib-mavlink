@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex17-tab",
     "name": "Camera & gimbal",
-    "info": "Photo/video, gimbal aim (legacy DO_MOUNT_CONTROL with ack vs manager setpoint fire-and-forget), ROI set/clear. Manager aim has no ack \u2014 delivery send only. SITL bind 14550 \u2192 14551.",
+    "info": "Photo/video, gimbal aim (legacy DO_MOUNT_CONTROL with ack vs manager setpoint fire-and-forget), ROI set/clear. Manager aim has no ack — delivery send only. SITL bind 14550 → 14551.",
     "x": 200,
     "y": 40,
     "wires": []
@@ -35,7 +35,8 @@
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1
+    "defaultTargetComponent": 1,
+    "dialectRevision": "seed"
   },
   {
     "id": "ex17-connection",
@@ -348,7 +349,7 @@
     "id": "ex17-inject-legacy",
     "type": "inject",
     "z": "ex17-tab",
-    "name": "Aim \u221245\u00b0/90\u00b0 (legacy)",
+    "name": "Aim −45°/90° (legacy)",
     "props": [
       {
         "p": "payload"

@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "10 Sunday drone stroll",
     "disabled": false,
-    "info": "Headline joyride: arm \u2192 GUIDED \u2192 takeoff \u2192 DO_ORBIT circle \u2192 spin \u2192 FLIP mode \u2192 land. Each step chains on output 0 with completion/confirm tiers. ArduCopter SITL: bind 127.0.0.1:14550, remote 14551. Circle = DO_ORBIT (real command, not a path planner). Flip = FLIP flight mode (14), not MAV_CMD_DO_FLIP. PX4 would need different mode numbers.",
+    "info": "Headline joyride: arm → GUIDED → takeoff → DO_ORBIT circle → spin → FLIP mode → land. Each step chains on output 0 with completion/confirm tiers. ArduCopter SITL: bind 127.0.0.1:14550, remote 14551. Circle = DO_ORBIT (real command, not a path planner). Flip = FLIP flight mode (14), not MAV_CMD_DO_FLIP. PX4 would need different mode numbers.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex10-tab",
     "name": "Sunday drone stroll chain",
-    "info": "Chain on output 0 \u2014 completion where available (arm/GUIDED/takeoff/land), confirm for orbit/spin/flip. The spin rides the raw MAV_CMD path (MAV_CMD_CONDITION_YAW 115, param4=1 = relative) \u2014 there is no yaw preset; Move owns motion intents. Honesty: circle is DO_ORBIT (~200 m diameter at 100 m radius, center lat/lon/alt = NaN = current); flip is ArduCopter FLIP mode only (airborne + armed). SITL: sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550. Bind 14550 \u2192 remote 14551.",
+    "info": "Chain on output 0 — completion where available (arm/GUIDED/takeoff/land), confirm for orbit/spin/flip. The spin rides the raw MAV_CMD path (MAV_CMD_CONDITION_YAW 115, param4=1 = relative) — there is no yaw preset; Move owns motion intents. Honesty: circle is DO_ORBIT (~200 m diameter at 100 m radius, center lat/lon/alt = NaN = current); flip is ArduCopter FLIP mode only (airborne + armed). SITL: sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550. Bind 14550 → remote 14551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -35,7 +35,8 @@
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1
+    "defaultTargetComponent": 1,
+    "dialectRevision": "seed"
   },
   {
     "id": "ex10-connection",
@@ -245,7 +246,7 @@
     "id": "ex10-cmd-rotate",
     "type": "mavlink-command",
     "z": "ex10-tab",
-    "name": "Spin 360\u00b0",
+    "name": "Spin 360°",
     "mode": "advanced",
     "preset": "",
     "advancedCommand": "115",
@@ -400,7 +401,7 @@
     "id": "ex10-inject-start",
     "type": "inject",
     "z": "ex10-tab",
-    "name": "\u25b6 Start stroll",
+    "name": "▶ Start stroll",
     "props": [
       {
         "p": "payload"
@@ -525,7 +526,7 @@
     "id": "ex10-inject-manual-rotate",
     "type": "inject",
     "z": "ex10-tab",
-    "name": "5 Spin 360\u00b0",
+    "name": "5 Spin 360°",
     "props": [
       {
         "p": "payload"

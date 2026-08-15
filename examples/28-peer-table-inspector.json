@@ -25,7 +25,8 @@
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
-    "defaultTargetComponent": 1
+    "defaultTargetComponent": 1,
+    "dialectRevision": "seed"
   },
   {
     "id": "ex28-connection",
@@ -62,7 +63,11 @@
     "type": "inject",
     "z": "ex28-tab",
     "name": "every 2s",
-    "props": [{ "p": "payload" }],
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
     "repeat": "2",
     "crontab": "",
     "once": true,
@@ -72,7 +77,11 @@
     "payloadType": "date",
     "x": 150,
     "y": 180,
-    "wires": [["ex28-snapshot"]]
+    "wires": [
+      [
+        "ex28-snapshot"
+      ]
+    ]
   },
   {
     "id": "ex28-snapshot",
@@ -86,7 +95,12 @@
     "targetComponent": "",
     "x": 370,
     "y": 180,
-    "wires": [["ex28-render"], []]
+    "wires": [
+      [
+        "ex28-render"
+      ],
+      []
+    ]
   },
   {
     "id": "ex28-render",
@@ -102,7 +116,12 @@
     "libs": [],
     "x": 600,
     "y": 180,
-    "wires": [["ex28-print", "ex28-raw"]]
+    "wires": [
+      [
+        "ex28-print",
+        "ex28-raw"
+      ]
+    ]
   },
   {
     "id": "ex28-print",
@@ -150,7 +169,11 @@
     "targetComponent": "",
     "x": 380,
     "y": 300,
-    "wires": [["ex28-events"]]
+    "wires": [
+      [
+        "ex28-events"
+      ]
+    ]
   },
   {
     "id": "ex28-events",
