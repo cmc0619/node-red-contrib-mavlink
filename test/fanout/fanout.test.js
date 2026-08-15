@@ -8,6 +8,7 @@ const {
   classifyMessage,
   selectFanoutMembers,
   resolveExecutionMode,
+  resolveSelectionMode,
 } = require('../../lib/fanout');
 const { BAND } = require('../../lib/connection/bands');
 const { streamLocks } = require('../../lib/delivery/lock');
@@ -114,6 +115,36 @@ test('a typo\'d executionMode no longer silently runs the sequential machine (\\
     /unknown Fan-out execution mode "broadcasts" — expected one of sequential, broadcast/
   );
   assert.equal(connection.sends.length, 0);
+});
+
+test('resolveSelectionMode: absent/blank is all, a typo throws naming the vocabulary (§14 reversal, 2026-08-14)', () => {
+  assert.equal(resolveSelectionMode(undefined), 'all');
+  assert.equal(resolveSelectionMode(''), 'all');
+  assert.equal(resolveSelectionMode('all'), 'all');
+  assert.equal(resolveSelectionMode('list'), 'list');
+  assert.equal(resolveSelectionMode('filter'), 'filter');
+  assert.throws(
+    () => resolveSelectionMode('lits'),
+    /unknown Fan-out selection mode "lits" — expected one of all, list, filter/
+  );
+});
+
+test('the audit\'s repro: {mode: "lits", sysids: [1]} refuses instead of selecting the fleet', async () => {
+  // Before the reversal the mode acted only through two negative === gates:
+  // 'lits' matched neither, the sysid list was never read, and both vehicles
+  // were commanded under a clean success report carrying selection: 'lits'.
+  const connection = connectionStub([peer(1, { firmware: 'ardupilot' }), peer(2, { firmware: 'ardupilot' })]);
+  await assert.rejects(
+    () => executeFanout({
+      connection,
+      message: builtCommand(),
+      mode: 'sequential',
+      delivery: 'send',
+      selection: { mode: 'lits', sysids: [1] },
+    }),
+    /unknown Fan-out selection mode "lits" — expected one of all, list, filter/
+  );
+  assert.equal(connection.sends.length, 0, 'no vehicle nobody named may be commanded');
 });
 
 test('a typo\'d delivery tier throws instead of silently running Send (lib/fanout delivery)', async () => {

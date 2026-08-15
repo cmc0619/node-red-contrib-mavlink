@@ -1,7 +1,7 @@
 'use strict';
 
 const delivery = require('../lib/delivery');
-const { executeFanout, parseSysidList } = require('../lib/fanout');
+const { executeFanout, parseSysidList, resolveSelectionMode } = require('../lib/fanout');
 const { applyConnectionStatus } = require('../lib/addressing');
 
 module.exports = function registerMavlinkFanout(RED) {
@@ -28,8 +28,12 @@ module.exports = function registerMavlinkFanout(RED) {
         }
         const { message, opts } = unwrapPayload(msg.payload);
         const selection = opts.selection || selectionFrom(config);
+        // Affirmative dispatch (§14 "Fan-out selection", reversed 2026-08-14):
+        // resolved before any branch reads the mode, so a payload typo is a
+        // failed input here, not an 'all' fan-out below.
+        const selectionMode = resolveSelectionMode(selection.mode);
         const effectiveDelivery = opts.delivery || config.delivery;
-        const listSelected = (selection.mode || 'all') === 'list' || Array.isArray(opts.targets);
+        const listSelected = selectionMode === 'list' || Array.isArray(opts.targets);
 
         let effectiveConnection = connectionNode;
         if (!connectionNode) {
@@ -43,7 +47,7 @@ module.exports = function registerMavlinkFanout(RED) {
             );
           } else {
             const rule = effectiveDelivery === 'build'
-              ? `build+${selection.mode || 'all'} selection requires a Connection — ` +
+              ? `build+${selectionMode} selection requires a Connection — ` +
                 'the live peer table is the only place that selection can resolve'
               : 'requires a Connection';
             throw new Error(`mavlink-fanout: ${rule}`);

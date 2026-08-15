@@ -48,6 +48,29 @@ test('a hand-edited executionMode typo fails loud through the node, not silently
   assert.equal(connection.sends.length, 0, 'nothing left the wire under the mis-resolved mode');
 });
 
+test('a payload selection-mode typo fails loud through the node instead of widening to the fleet (§14 reversal)', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({
+    connection: 'conn',
+    executionMode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  let sent;
+  const err = await emitInput(
+    node,
+    { payload: { message: builtCommand(), selection: { mode: 'lits', sysids: [1] } } },
+    (m) => { sent = m; }
+  ).then(() => null, (e) => e);
+  assert.ok(err, 'an unknown selection mode is passed to done(err)');
+  assert.match(err.message, /unknown Fan-out selection mode "lits" — expected one of all, list, filter/);
+  assert.equal(sent[0], null);
+  assert.equal(connection.sends.length, 0, 'the subset command must not reach the fleet');
+});
+
 test('a hand-edited delivery typo fails loud through the node instead of silently sending (lib/fanout delivery)', async () => {
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });
