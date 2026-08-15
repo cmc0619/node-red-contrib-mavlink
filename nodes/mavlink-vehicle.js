@@ -261,10 +261,11 @@ module.exports = function registerMavlinkVehicle(RED) {
 
     // Raw for the profile snapshot; the affirmative pick site (dialectPicks →
     // requireDialectToken, inside resolveDialect below) is the single validator
-    // — no `|| 'ardupilotmega'` / `|| 'seed'` code-literal inherit. A blank
-    // stays blank and craters there, surfacing as the red badge.
-    node.dialect = String(config.dialect || '').toLowerCase();
-    node.dialectRevision = String(config.dialectRevision || '');
+    // — no `|| 'ardupilotmega'` / `|| 'seed'` code-literal inherit, and no
+    // `|| ''` shim: both are required editor fields, so a blank stays blank and
+    // craters at the pick site, surfacing as the red badge.
+    node.dialect = config.dialect.toLowerCase();
+    node.dialectRevision = config.dialectRevision;
     // Component dialects, comma-joined `dialect@revision` from the editor.
     node.additionalDialects = config.additionalDialects || '';
     // Optional firmware/custom parameter-definition URL (PX4 / custom stacks).
