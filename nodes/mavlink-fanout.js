@@ -61,7 +61,8 @@ module.exports = function registerMavlinkFanout(RED) {
           targets: opts.targets,
           members: configMembersFor(config, opts),
           selection,
-          // lib/fanout owns the absence default for mode ('sequential').
+          // executionMode is editor-defaulted ('sequential') and always saved;
+          // lib/fanout throws on a blank/absent mode (affirmative dispatch).
           mode: opts.executionMode || config.executionMode,
           delivery: effectiveDelivery,
           dryRun: opts.dryRun !== undefined ? !!opts.dryRun : !!config.dryRun,
@@ -165,7 +166,7 @@ function selectionFrom(config) {
  */
 function configMembersFor(config, opts) {
   if (opts.targets !== undefined || opts.selection !== undefined) return undefined;
-  if ((config.selectionMode || 'all') !== 'list') return undefined;
+  if (config.selectionMode !== 'list') return undefined;
   const patched = config.members.some((member) =>
     member.north !== undefined || member.east !== undefined
     || member.up !== undefined || member.patch !== undefined);
