@@ -222,11 +222,12 @@ module.exports = function registerMavlinkMission(RED) {
         return;
       }
 
-      // Built before the lock is taken: createMachine throws on an unknown
-      // operation (#222), and a throw between acquire and start() would
-      // leave the lock held until redeploy — every later op on this target
-      // reporting "busy" over a transfer that never started. Constructors
-      // are store-only; the subscription only opens in start().
+      // An unknown operation matches no createMachine case and comes back
+      // undefined; the crater is the start() dereference below, inside the
+      // try that frees the lock — a throw between acquire and the promise
+      // chain would otherwise hold it until redeploy, every later op on this
+      // target reporting "busy" over a transfer that never started (#222).
+      // Constructors are store-only; the subscription only opens in start().
       const machine = createMachine(operation, {
         send: (message) =>
           connNode.send(message, {
@@ -267,10 +268,22 @@ module.exports = function registerMavlinkMission(RED) {
       const lockKey = locks.key(connNode.id, target, missionType);
 
       applyActionStatus(node, 'sending', `${operation} ${missionTypeKey}\u2026`);
+
+      // No path leaves the lock held (the stream-handover rule in
+      // mavlink-move): a sync throw out of this call — today, the undefined
+      // machine's start dereference — frees the lock on its way to failInput.
+      // The store waits until start() returns, so close() never iterates a
+      // handle that cannot cancel.
+      let settled;
+      try {
+        settled = machine.start();
+      } catch (err) {
+        release();
+        throw err;
+      }
       activeByKey.set(lockKey, machine);
 
-      machine
-        .start()
+      settled
         .then((outcome) => {
           if (activeByKey.get(lockKey) === machine) activeByKey.delete(lockKey);
           release();
