@@ -3969,6 +3969,18 @@ The empty-selection ruling (#226) stands: a `filter` matching nothing is a corre
 holds); an empty explicit `list` or an empty `all` is someone named or expected vehicles and
 reached none (loud: red badge, Catch-routable). Loudness follows whether the operator asserted
 that vehicles exist, not whether the count is zero.
+
+**Re-affirmed a third time (owner ruling, 2026-08-14: *"We don't protect typos."*).** An
+external audit re-raised this as its P0 with a live repro — `{mode: "lits", sysids: [1]}`
+selects the fleet, reproduced against HEAD — and argued the 2026-08-14 selection-typo cluster's
+blank-vs-present split (shipped the same day on `msg.band`, another trusted-msg override) had
+dissolved the distinction this entry rests on. The owner considered exactly that framing, with
+the repro and the widened-audience direction on the table, and declined again. The line the
+cluster does not cross: its resolvers guard tokens that pick a *wire machine* behind a config
+surface with editor cover; fan-out selection is a payload surface where the flow author is
+trusted end to end, and a hand-built payload with a garbage selection remains the author's bug.
+This surface is likewise excluded from the protector-side editor pass. Audits citing the
+typo-to-default shape here are re-raising a question settled three times.
 *Check:* `node --test test/fanout/fanout.test.js test/fanout/node.test.js`.
 
 ---
