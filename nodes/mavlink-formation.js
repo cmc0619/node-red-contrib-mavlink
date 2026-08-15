@@ -13,6 +13,32 @@ const {
   intCoordKinds,
 } = require('../lib/command');
 
+/** Affirmative dispatch: a member returns, anything else — blank included — throws. */
+function resolveAnchorMode(value) {
+  switch (value) {
+    case 'fixed':
+    case 'leader':
+      return value;
+    default:
+      throw new Error(
+        `unknown Formation anchor mode ${JSON.stringify(value)} — expected one of fixed, leader`
+      );
+  }
+}
+
+/** Affirmative dispatch: a member returns, anything else — blank included — throws. */
+function resolveCarrier(value) {
+  switch (value) {
+    case CARRIER.INT:
+    case CARRIER.LONG:
+      return value;
+    default:
+      throw new Error(
+        `unknown Formation send-as ${JSON.stringify(value)} — expected one of int, long`
+      );
+  }
+}
+
 /**
  * mavlink-formation — position a group of vehicles into a geometric formation.
  *
@@ -90,7 +116,7 @@ module.exports = function registerMavlinkFormation(RED) {
         // performed here because Fan-out patches are the raw surface (§10).
         const preset = getPreset(REPOSITION_PRESET);
         const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
-        const isInt = config.sendAs === CARRIER.INT;
+        const isInt = resolveCarrier(config.sendAs) === CARRIER.INT;
         const bundle = isInt ? dialectFromConnection(RED, connectionNode) : null;
         const message = isInt
           ? buildCommandInt(Number(preset.commandId), 0, 0, params, {
@@ -194,10 +220,16 @@ function resolveAnchor(config, payload, peerTable) {
     ? Number(payload.headingDeg)
     : isBlank(config.headingDeg) ? null : Number(config.headingDeg);
 
-  const explicit = payload.anchor
-    || (config.anchorMode === 'fixed'
-      ? { lat: config.lat, lon: config.lon, alt: config.alt }
-      : null);
+  // Affirmative dispatch (protocol omega): a payload anchor overrides
+  // outright, so config.anchorMode is only consulted — and only crashes on a
+  // typo — when no explicit anchor was supplied. 'fixed' reads the config
+  // coordinates; 'leader' falls through to the telemetry path below. A blank
+  // or unknown mode is a hand-edit the editor's no-blank select cannot
+  // produce, and throws rather than silently anchoring on the leader.
+  let explicit = payload.anchor || null;
+  if (!explicit && resolveAnchorMode(config.anchorMode) === 'fixed') {
+    explicit = { lat: config.lat, lon: config.lon, alt: config.alt };
+  }
   if (explicit) {
     return { anchor: explicit, headingDeg: heading ?? 0 };
   }
