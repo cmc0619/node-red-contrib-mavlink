@@ -100,8 +100,6 @@ module.exports = function registerMavlinkVehicle(RED) {
   }
 
   const {
-    requireFirmware,
-    requireFamily,
     resolveDialect,
     knownDialects,
   } = vehicleApi;
@@ -281,13 +279,13 @@ module.exports = function registerMavlinkVehicle(RED) {
     node._bundle = null;
 
     try {
-      // Affirmative dispatch (protocol omega): family and firmware are the
-      // profile's required definition, not values to inherit from a code
-      // literal — a blank/typo is a broken profile that craters as the red
-      // badge below (the editor's selects always save a member), the same
-      // surface as a dialect that will not compile.
-      node.vehicleFamily = requireFamily(config.vehicleFamily);
-      node.firmware = requireFirmware(config.firmware);
+      // Family and firmware are editor-guaranteed: both are `required` selects
+      // with member defaults (mavlink-vehicle.html), so the red ring is the
+      // protector and the runtime trusts the saved value (§6). No re-validation
+      // here — a hand-edited token craters where it is actually used, the same
+      // as any runtime-boundary value.
+      node.vehicleFamily = config.vehicleFamily;
+      node.firmware = config.firmware;
       node._bundle = resolveDialect({
         name: config.name,
         dialect: node.dialect,

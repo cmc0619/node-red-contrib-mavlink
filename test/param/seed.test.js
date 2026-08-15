@@ -162,10 +162,12 @@ test('catalogLabel names the definition set the operator is actually looking at'
     'ArduPilot Copter · 5719 definitions (shipped seed)'
   );
 
-  // An unnamed vehicle gets the union of names, so the label says "names" —
-  // it is why the Value field offers no bounds and no choice list, which
-  // otherwise reads as a second fault.
-  for (const family of ['unknown', '', undefined, 'drone']) {
+  // No named vehicle gets the union of names, so the label says "names" — it is
+  // why the Value field offers no bounds and no choice list, which otherwise
+  // reads as a second fault. Blank (the query omitted it) and an explicit
+  // 'unknown' pick both mean this; a present specific family is trusted, not
+  // coerced (§5), so only these reach the union label.
+  for (const family of ['unknown', '', undefined]) {
     assert.equal(
       catalogLabel({ firmware: 'ardupilot', vehicleFamily: family, count: 6827 }),
       'ArduPilot (no vehicle named) · 6827 names (shipped seed)',
