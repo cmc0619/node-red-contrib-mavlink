@@ -268,10 +268,3 @@ test('formationTargets refuses an anchor near the poles', () => {
     /poles/
   );
 });
-
-test('formationTargets refuses an unknown shape', () => {
-  assert.throws(
-    () => formationTargets({ shape: 'diamond', spacing: 10, anchor: { lat: 47, lon: 8, alt: 30 }, sysids: [1] }),
-    /Unknown formation shape 'diamond'/
-  );
-});

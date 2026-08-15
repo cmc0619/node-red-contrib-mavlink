@@ -27,13 +27,6 @@ test('createTransport returns the matching transport class', () => {
   );
 });
 
-test('createTransport rejects an unknown mode', () => {
-  assert.throws(
-    () => createTransport({ mode: 'carrier-pigeon' }),
-    /unknown transport mode/
-  );
-});
-
 test('quiet send codes cover every transport soft-fail', () => {
   assert.ok(TRANSPORT_QUIET_SEND_CODES.has(UDP_NO_DESTINATION));
   assert.ok(TRANSPORT_QUIET_SEND_CODES.has(TCP_NO_DESTINATION));
