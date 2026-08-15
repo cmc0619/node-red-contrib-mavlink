@@ -4502,10 +4502,13 @@ so the crater is for payload overrides and hand-edits:
   profile can be correct at message time through either escape, so a static validator would
   false-positive on working flows (the symmetric blank-firmware case has always been treated
   the same way).
-- **`sendAs`** (`nodes/mavlink-command.js`): unknown non-blank throws naming `int, long`;
-  blank keeps falling to LONG because the editor's select has no blank option, so blank is
-  not a reachable operator choice. Resolution moved from node construction into the input
-  handler so a bad token is a `failed` record + `done(err)`, not a construction crash.
+- **`sendAs`** (`nodes/mavlink-command.js`): unknown non-blank throws naming `int, long`.
+  Blank once fell through to LONG (the editor's select has no blank option, so blank read as
+  unreachable) — **reversed 2026-08-15**: blank throws too. It was the one carrier resolver
+  that defaulted a blank while formation's threw, and "blank crashes" now holds across the
+  codebase (protocol omega, `AGENTS.md`); a blank/typo is hand-edit drift, not an operator
+  choice. Resolution stays in the input handler so a bad token is a `failed` record +
+  `done(err)`, not a construction crash.
 - **Unknown preset**: was the worst report of the lot — `preset: 'arrrm'` built
   `MAV_CMD(null)` and said `built`. Now `done(err)` naming the known preset ids.
 - **Move `delivery`** (`nodes/mavlink-move.js`): an unknown tier fell through both dispatch
