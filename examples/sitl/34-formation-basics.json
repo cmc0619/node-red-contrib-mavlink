@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 34 Formation basics",
     "disabled": false,
-    "info": "Boring solidity: GUIDED \u2192 arm \u2192 takeoff \u2192 line formation \u2192 circle formation on ArduPilot sysids 1\u20135. Fixed anchor near Canberra home at 30 m AGL. Confirms mavlink-formation sequential DO_REPOSITION fan-out.",
+    "info": "Boring solidity: GUIDED → arm → takeoff → line formation → circle formation on ArduPilot sysids 1–5. Fixed anchor near Canberra home at 30 m AGL. Confirms mavlink-formation sequential DO_REPOSITION fan-out.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl26-tab",
     "name": "Formation line then circle (confirm)",
-    "info": "Prerequisite: fleet arm-ready (harness prep ap-arm-ready-fleet).\n\nChain: GUIDED \u00d75 \u2192 arm \u00d75 \u2192 takeoff 30 m \u00d75 \u2192 climb delay \u2192 line (spacing 12 m) \u2192 settle \u2192 circle (spacing 15 m).\n\nFixed anchor: -35.363262, 149.165237, alt 30 (GLOBAL_RELATIVE_ALT). Carrier COMMAND_INT.\n\nDebug: each fan-out/formation status should result succeeded; continue chain only advances on full aggregate success.",
+    "info": "Prerequisite: fleet arm-ready (harness prep ap-arm-ready-fleet).\n\nChain: GUIDED ×5 → arm ×5 → takeoff 30 m ×5 → climb delay → line (spacing 12 m) → settle → circle (spacing 15 m).\n\nFixed anchor: -35.363262, 149.165237, alt 30 (GLOBAL_RELATIVE_ALT). Carrier COMMAND_INT.\n\nDebug: each fan-out/formation status should result succeeded; continue chain only advances on full aggregate success.",
     "x": 300,
     "y": 40,
     "wires": []
@@ -36,12 +36,13 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl26-connection",
     "type": "mavlink-connection",
-    "name": "UDP ArduPilot 5\u00d7SITL",
+    "name": "UDP ArduPilot 5×SITL",
     "mode": "udp",
     "bindHost": "0.0.0.0",
     "bindPort": 14550,
@@ -87,7 +88,7 @@
     "id": "sitl26-guided-build",
     "type": "mavlink-command",
     "z": "sitl26-tab",
-    "name": "GUIDED \u00d75 (build)",
+    "name": "GUIDED ×5 (build)",
     "mode": "preset",
     "preset": "set_mode",
     "advancedCommand": "",
@@ -115,7 +116,7 @@
     "id": "sitl26-guided",
     "type": "mavlink-fanout",
     "z": "sitl26-tab",
-    "name": "GUIDED \u00d75",
+    "name": "GUIDED ×5",
     "connection": "sitl26-connection",
     "selectionMode": "list",
     "members": [
@@ -159,7 +160,7 @@
     "id": "sitl26-arm-build",
     "type": "mavlink-command",
     "z": "sitl26-tab",
-    "name": "Arm \u00d75 (build)",
+    "name": "Arm ×5 (build)",
     "mode": "preset",
     "preset": "arm",
     "advancedCommand": "",
@@ -187,7 +188,7 @@
     "id": "sitl26-arm",
     "type": "mavlink-fanout",
     "z": "sitl26-tab",
-    "name": "Arm \u00d75",
+    "name": "Arm ×5",
     "connection": "sitl26-connection",
     "selectionMode": "list",
     "members": [
@@ -231,7 +232,7 @@
     "id": "sitl26-takeoff-build",
     "type": "mavlink-command",
     "z": "sitl26-tab",
-    "name": "Takeoff 30 m \u00d75 (build)",
+    "name": "Takeoff 30 m ×5 (build)",
     "mode": "preset",
     "preset": "takeoff",
     "advancedCommand": "",
@@ -259,7 +260,7 @@
     "id": "sitl26-takeoff",
     "type": "mavlink-fanout",
     "z": "sitl26-tab",
-    "name": "Takeoff 30 m \u00d75",
+    "name": "Takeoff 30 m ×5",
     "connection": "sitl26-connection",
     "selectionMode": "list",
     "members": [

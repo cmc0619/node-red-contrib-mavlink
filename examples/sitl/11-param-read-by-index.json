@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 11 Param read by index",
     "disabled": false,
-    "info": "Collect the ArduPilot param list, pick LOIT_SPEED_MS by index, then PARAM_REQUEST_READ with param_index \u2265 0 and empty param_id.",
+    "info": "Collect the ArduPilot param list, pick LOIT_SPEED_MS by index, then PARAM_REQUEST_READ with param_index ≥ 0 and empty param_id.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl28-tab",
     "name": "Read by param_index after list collect",
-    "info": "1. request-list + collect \u2192 full PARAM_VALUE table.\n2. Function finds LOIT_SPEED_MS (safe on Copter 4.7.0; no WPNAV_SPEED) and sets msg.payload.paramIndex.\n3. Read (send) emits PARAM_REQUEST_READ; assert function checks param_index \u2265 0 and empty param_id.\n\nConnection: AP bind 0.0.0.0:14550 \u2192 127.0.0.1:14551 sysid 1.",
+    "info": "1. request-list + collect → full PARAM_VALUE table.\n2. Function finds LOIT_SPEED_MS (safe on Copter 4.7.0; no WPNAV_SPEED) and sets msg.payload.paramIndex.\n3. Read (send) emits PARAM_REQUEST_READ; assert function checks param_index ≥ 0 and empty param_id.\n\nConnection: AP bind 0.0.0.0:14550 → 127.0.0.1:14551 sysid 1.",
     "x": 280,
     "y": 40,
     "wires": []
@@ -36,7 +36,8 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl28-connection",

@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 26 Peer table in flight",
     "disabled": false,
-    "info": "Fly ArduPilot sysid 1, then snapshot the Connection peer table (\u00a78). Suite fires Start (GUIDED\u2192arm\u2192takeoff\u2192velocity stream) then Snapshot after a long gap. Hard field asserts live in sitl/measure-peer-table.js; this example is the flow-level regression.",
+    "info": "Fly ArduPilot sysid 1, then snapshot the Connection peer table (§8). Suite fires Start (GUIDED→arm→takeoff→velocity stream) then Snapshot after a long gap. Hard field asserts live in sitl/measure-peer-table.js; this example is the flow-level regression.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl36-tab",
     "name": "Peer table enrichment while airborne",
-    "info": "Chain: GUIDED (confirm) \u2192 Arm (confirm) \u2192 SET_MESSAGE_INTERVAL for GLOBAL_POSITION_INT / GPS_RAW_INT / SYS_STATUS \u2192 Takeoff 10 m (complete) \u2192 Move velocity stream north 1.5 m/s for 8 s.\n\nIntervals matter: completion and the peer table need GLOBAL_POSITION_INT; without an explicit request this SITL often leaves position null and takeoff times out with \"no position data\".\n\nSecond inject: mavlink-state snapshot \u2192 debug \"peer-table snapshot\". Expect armed:true, position.relativeAlt, gps.fixType, battery, home.\n\nConnection: bind 0.0.0.0:14550 \u2192 remote 127.0.0.1:14551, sysid 1.\n\nAuthoritative field checklist: node sitl/measure-peer-table.js (AP + PX4).",
+    "info": "Chain: GUIDED (confirm) → Arm (confirm) → SET_MESSAGE_INTERVAL for GLOBAL_POSITION_INT / GPS_RAW_INT / SYS_STATUS → Takeoff 10 m (complete) → Move velocity stream north 1.5 m/s for 8 s.\n\nIntervals matter: completion and the peer table need GLOBAL_POSITION_INT; without an explicit request this SITL often leaves position null and takeoff times out with \"no position data\".\n\nSecond inject: mavlink-state snapshot → debug \"peer-table snapshot\". Expect armed:true, position.relativeAlt, gps.fixType, battery, home.\n\nConnection: bind 0.0.0.0:14550 → remote 127.0.0.1:14551, sysid 1.\n\nAuthoritative field checklist: node sitl/measure-peer-table.js (AP + PX4).",
     "x": 250,
     "y": 40,
     "wires": []
@@ -36,7 +36,8 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl36-connection",

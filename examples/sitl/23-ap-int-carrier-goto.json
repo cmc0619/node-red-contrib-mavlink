@@ -1,282 +1,283 @@
 [
-    {
-        "id": "sitl19-tab",
-        "type": "tab",
-        "label": "SITL 23 AP INT carrier goto",
-        "disabled": false,
-        "info": "ArduPilot version of the INT carrier goto proof: Arm and takeoff use COMMAND_LONG, then Move's Go to action rides DO_REPOSITION on COMMAND_INT with GLOBAL_RELATIVE_ALT. The Move node has Change mode on, so it requests GUIDED as part of the reposition \u2014 the rig's ap-guided-1 prep is belt and braces, not a prerequisite.",
-        "env": []
-    },
-    {
-        "id": "sitl19-comment",
-        "type": "comment",
-        "z": "sitl19-tab",
-        "name": "ArduPilot DO_REPOSITION via COMMAND_INT",
-        "info": "The ArduCopter sibling of SITL 29, adapted to ArduCopter sysid 1 on the default Docker lab AP port pair.\n\nFlow: Arm (COMMAND_LONG) -> Takeoff (COMMAND_LONG) -> delay -> Move Go to (Send & confirm), which rides DO_REPOSITION as COMMAND_INT with MAV_FRAME_GLOBAL_RELATIVE_ALT = 3.\n\nChange mode is on, so the goto asks for GUIDED itself; no separate GUIDED setup flow is needed. The goto target is near the common AP Canberra home, about 100 m north of -35.36, 149.16, with a relative-altitude z value.",
-        "x": 280,
-        "y": 40,
-        "wires": []
-    },
-    {
-        "id": "sitl19-identity",
-        "type": "mavlink-local-identity",
-        "name": "GCS identity",
-        "role": "gcs",
-        "sourceSystemId": 255,
-        "sourceComponentId": 190,
-        "heartbeatType": "MAV_TYPE_GCS",
-        "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
-    },
-    {
-        "id": "sitl19-vehicle",
-        "type": "mavlink-vehicle",
-        "name": "ArduCopter sysid 1",
-        "vehicleFamily": "copter",
-        "firmware": "ardupilot",
-        "dialect": "ardupilotmega",
-        "defaultTargetSystem": 1,
-        "defaultTargetComponent": 1,
-        "paramDefsUrl": ""
-    },
-    {
-        "id": "sitl19-connection",
-        "type": "mavlink-connection",
-        "name": "UDP ArduPilot SITL",
-        "mode": "udp",
-        "bindHost": "0.0.0.0",
-        "bindPort": 14550,
-        "remoteHost": "127.0.0.1",
-        "remotePort": 14551,
-        "vehicle": "sitl19-vehicle",
-        "localIdentity": "sitl19-identity",
-        "additionalIdentities": [],
-        "signOutbound": false,
-        "requireSigned": false,
-        "acceptInvalid": false,
-        "linkId": 0,
-        "staleMs": "",
-        "expireMs": "",
-        "disabled": false
-    },
-    {
-        "id": "sitl19-inject",
-        "type": "inject",
-        "z": "sitl19-tab",
-        "name": "Arm + takeoff + INT goto",
-        "props": [
-            {
-                "p": "payload"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "",
-        "payloadType": "date",
-        "x": 160,
-        "y": 160,
-        "wires": [
-            [
-                "sitl19-arm"
-            ]
-        ]
-    },
-    {
-        "id": "sitl19-arm",
-        "type": "mavlink-command",
-        "z": "sitl19-tab",
-        "name": "Arm (confirm ACK)",
-        "mode": "preset",
-        "preset": "arm",
-        "advancedCommand": "",
-        "delivery": "confirm",
-        "connection": "sitl19-connection",
-        "timeout": "10000",
-        "maxRetries": "3",
-        "unconfirmedContinue": false,
-        "completionTimeout": "30000",
-        "params": "{}",
-        "sendAs": "long",
-        "frame": "",
-        "x": 380,
-        "y": 160,
-        "wires": [
-            [
-                "sitl19-takeoff"
-            ],
-            [
-                "sitl19-arm-status"
-            ]
-        ],
-        "targetSystem": "",
-        "targetComponent": ""
-    },
-    {
-        "id": "sitl19-takeoff",
-        "type": "mavlink-command",
-        "z": "sitl19-tab",
-        "name": "Takeoff 10 m (confirm ACK)",
-        "mode": "preset",
-        "preset": "takeoff",
-        "advancedCommand": "",
-        "delivery": "confirm",
-        "connection": "sitl19-connection",
-        "timeout": "10000",
-        "maxRetries": "3",
-        "unconfirmedContinue": false,
-        "completionTimeout": "30000",
-        "params": "{\"7\":10}",
-        "sendAs": "long",
-        "frame": "",
-        "x": 620,
-        "y": 160,
-        "wires": [
-            [
-                "sitl19-climb"
-            ],
-            [
-                "sitl19-takeoff-status"
-            ]
-        ],
-        "targetSystem": "",
-        "targetComponent": ""
-    },
-    {
-        "id": "sitl19-climb",
-        "type": "delay",
-        "z": "sitl19-tab",
-        "name": "let the climb finish",
-        "pauseType": "delay",
-        "timeout": "8",
-        "timeoutUnits": "seconds",
-        "rate": "1",
-        "nbRateUnits": "1",
-        "rateUnits": "second",
-        "randomFirst": "1",
-        "randomLast": "5",
-        "randomUnits": "seconds",
-        "drop": false,
-        "allowrate": false,
-        "outputs": 1,
-        "x": 850,
-        "y": 160,
-        "wires": [
-            [
-                "sitl19-goto"
-            ]
-        ]
-    },
-    {
-        "id": "sitl19-goto",
-        "type": "mavlink-move",
-        "z": "sitl19-tab",
-        "name": "AP goto via COMMAND_INT",
-        "identity": "",
-        "connection": "sitl19-connection",
-        "delivery": "confirm",
-        "action": "goto",
-        "altRef": "home",
-        "speed": "",
-        "radius": "",
-        "changeMode": true,
-        "ackTimeout": "10000",
-        "targetSystem": "",
-        "targetComponent": "",
-        "north": "",
-        "east": "",
-        "up": "",
-        "vNorth": "",
-        "vEast": "",
-        "vUp": "",
-        "aNorth": "",
-        "aEast": "",
-        "aUp": "",
-        "lat": -35.3591,
-        "lon": 149.16,
-        "alt": 20,
-        "yaw": "",
-        "yawRate": "",
-        "rateHz": 5,
-        "ttlMs": 3000,
-        "x": 1080,
-        "y": 160,
-        "wires": [
-            [
-                "sitl19-success"
-            ],
-            [
-                "sitl19-goto-status"
-            ]
-        ]
-    },
-    {
-        "id": "sitl19-arm-status",
-        "type": "debug",
-        "z": "sitl19-tab",
-        "name": "arm status",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 380,
-        "y": 240,
-        "wires": []
-    },
-    {
-        "id": "sitl19-takeoff-status",
-        "type": "debug",
-        "z": "sitl19-tab",
-        "name": "takeoff status",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 620,
-        "y": 240,
-        "wires": []
-    },
-    {
-        "id": "sitl19-goto-status",
-        "type": "debug",
-        "z": "sitl19-tab",
-        "name": "goto status",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 1080,
-        "y": 240,
-        "wires": []
-    },
-    {
-        "id": "sitl19-success",
-        "type": "debug",
-        "z": "sitl19-tab",
-        "name": "AP INT goto accepted",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "payload",
-        "targetType": "msg",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 1320,
-        "y": 160,
-        "wires": []
-    }
+  {
+    "id": "sitl19-tab",
+    "type": "tab",
+    "label": "SITL 23 AP INT carrier goto",
+    "disabled": false,
+    "info": "ArduPilot version of the INT carrier goto proof: Arm and takeoff use COMMAND_LONG, then Move's Go to action rides DO_REPOSITION on COMMAND_INT with GLOBAL_RELATIVE_ALT. The Move node has Change mode on, so it requests GUIDED as part of the reposition — the rig's ap-guided-1 prep is belt and braces, not a prerequisite.",
+    "env": []
+  },
+  {
+    "id": "sitl19-comment",
+    "type": "comment",
+    "z": "sitl19-tab",
+    "name": "ArduPilot DO_REPOSITION via COMMAND_INT",
+    "info": "The ArduCopter sibling of SITL 29, adapted to ArduCopter sysid 1 on the default Docker lab AP port pair.\n\nFlow: Arm (COMMAND_LONG) -> Takeoff (COMMAND_LONG) -> delay -> Move Go to (Send & confirm), which rides DO_REPOSITION as COMMAND_INT with MAV_FRAME_GLOBAL_RELATIVE_ALT = 3.\n\nChange mode is on, so the goto asks for GUIDED itself; no separate GUIDED setup flow is needed. The goto target is near the common AP Canberra home, about 100 m north of -35.36, 149.16, with a relative-altitude z value.",
+    "x": 280,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl19-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl19-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
+  },
+  {
+    "id": "sitl19-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "vehicle": "sitl19-vehicle",
+    "localIdentity": "sitl19-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl19-inject",
+    "type": "inject",
+    "z": "sitl19-tab",
+    "name": "Arm + takeoff + INT goto",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 160,
+    "wires": [
+      [
+        "sitl19-arm"
+      ]
+    ]
+  },
+  {
+    "id": "sitl19-arm",
+    "type": "mavlink-command",
+    "z": "sitl19-tab",
+    "name": "Arm (confirm ACK)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl19-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "sendAs": "long",
+    "frame": "",
+    "x": 380,
+    "y": 160,
+    "wires": [
+      [
+        "sitl19-takeoff"
+      ],
+      [
+        "sitl19-arm-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl19-takeoff",
+    "type": "mavlink-command",
+    "z": "sitl19-tab",
+    "name": "Takeoff 10 m (confirm ACK)",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl19-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"7\":10}",
+    "sendAs": "long",
+    "frame": "",
+    "x": 620,
+    "y": 160,
+    "wires": [
+      [
+        "sitl19-climb"
+      ],
+      [
+        "sitl19-takeoff-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl19-climb",
+    "type": "delay",
+    "z": "sitl19-tab",
+    "name": "let the climb finish",
+    "pauseType": "delay",
+    "timeout": "8",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 850,
+    "y": 160,
+    "wires": [
+      [
+        "sitl19-goto"
+      ]
+    ]
+  },
+  {
+    "id": "sitl19-goto",
+    "type": "mavlink-move",
+    "z": "sitl19-tab",
+    "name": "AP goto via COMMAND_INT",
+    "identity": "",
+    "connection": "sitl19-connection",
+    "delivery": "confirm",
+    "action": "goto",
+    "altRef": "home",
+    "speed": "",
+    "radius": "",
+    "changeMode": true,
+    "ackTimeout": "10000",
+    "targetSystem": "",
+    "targetComponent": "",
+    "north": "",
+    "east": "",
+    "up": "",
+    "vNorth": "",
+    "vEast": "",
+    "vUp": "",
+    "aNorth": "",
+    "aEast": "",
+    "aUp": "",
+    "lat": -35.3591,
+    "lon": 149.16,
+    "alt": 20,
+    "yaw": "",
+    "yawRate": "",
+    "rateHz": 5,
+    "ttlMs": 3000,
+    "x": 1080,
+    "y": 160,
+    "wires": [
+      [
+        "sitl19-success"
+      ],
+      [
+        "sitl19-goto-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl19-arm-status",
+    "type": "debug",
+    "z": "sitl19-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 380,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl19-takeoff-status",
+    "type": "debug",
+    "z": "sitl19-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 620,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl19-goto-status",
+    "type": "debug",
+    "z": "sitl19-tab",
+    "name": "goto status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1080,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl19-success",
+    "type": "debug",
+    "z": "sitl19-tab",
+    "name": "AP INT goto accepted",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1320,
+    "y": 160,
+    "wires": []
+  }
 ]

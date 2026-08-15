@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 24 Move stream stop",
     "disabled": false,
-    "info": "ArduPilot SITL move stream proof: prepare with Arm + GUIDED, stream a forward local velocity setpoint, then halt it with the first-class stop input {action:\"stop\"} \u2014 the node stops the stream, sends the zero-velocity brake, and reports detail:\"stopped\" with the delivered-setpoint count on output 1. Do not use payload:false \u2014 that is the toolkit-wide suppress rule and never reaches the stream.",
+    "info": "ArduPilot SITL move stream proof: prepare with Arm + GUIDED, stream a forward local velocity setpoint, then halt it with the first-class stop input {action:\"stop\"} — the node stops the stream, sends the zero-velocity brake, and reports detail:\"stopped\" with the delivered-setpoint count on output 1. Do not use payload:false — that is the toolkit-wide suppress rule and never reaches the stream.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl20-tab",
     "name": "Move stream with explicit stop",
-    "info": "Adapted from examples/23-velocity-joystick.json for the SITL lab. Connection binds 0.0.0.0:14550 and sends to 127.0.0.1:14551.\n\nUse the Arm + GUIDED inject first. Then fire Fwd 1 m/s to start the stream. The Stop inject sends {action:\"stop\"}: the node halts the stream, sends the zero-velocity brake, and completes with detail:\"stopped\" and the sent count \u2014 a second press succeeds with detail:\"no stream\". (Replacing the stream with a zero-velocity stream still works, but that is a handover that keeps streaming zeros, not a stop. DESIGN.md: payload===false suppresses and must not be used as stop.)",
+    "info": "Adapted from examples/23-velocity-joystick.json for the SITL lab. Connection binds 0.0.0.0:14550 and sends to 127.0.0.1:14551.\n\nUse the Arm + GUIDED inject first. Then fire Fwd 1 m/s to start the stream. The Stop inject sends {action:\"stop\"}: the node halts the stream, sends the zero-velocity brake, and completes with detail:\"stopped\" and the sent count — a second press succeeds with detail:\"no stream\". (Replacing the stream with a zero-velocity stream still works, but that is a handover that keeps streaming zeros, not a stop. DESIGN.md: payload===false suppresses and must not be used as stop.)",
     "x": 230,
     "y": 40,
     "wires": []
@@ -36,7 +36,8 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl20-connection",

@@ -11,8 +11,8 @@
     "id": "ex08-comment",
     "type": "comment",
     "z": "ex08-tab",
-    "name": "Param read\u2215set with definition catalog",
-    "info": "This flow demonstrates:\n\n1. Param read (Send tier) \u2014 reads ARMING_OPTIONS and shows the raw PARAM_VALUE on output 0.\n2. Param set (echo-confirm) \u2014 sets ARMING_OPTIONS=1 as MAV_PARAM_TYPE_INT32. Copter-4.7 removed ARMING_CHECK (PARAM_ERROR); ARMING_OPTIONS is the live bitmask stand-in. REAL32 encodes the wrong wire bits for int params.\n3. Param list (collect) \u2014 requests all params and collects them into one array on output 0.\n\nParameter definition catalog (DESIGN.md \u00a74):\n\u2022 ArduPilot copter/plane/rover/sub: the editor fetches defs from\n  https://autotest.ardupilot.org/Parameters/<Vehicle>/apm.pdef.json automatically.\n\u2022 PX4 / custom firmware: set paramDefsUrl in the Vehicle Profile \u2192 Advanced.\n\u2022 Generic / unknown family: no auto-defs; the Param id field remains free-form text.\n\nWith defs loaded, the Param id input becomes a searchable datalist. Selecting a param\nshows its description, unit, and range inline. For params with discrete values (enums),\nthe Value field offers a datalist of named options when Action=Set.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nBind Connection 0.0.0.0:14550 \u2192 remote 127.0.0.1:14551. Defs fetch needs internet once at the bench; read/set/list needs the live vehicle.",
+    "name": "Param read∕set with definition catalog",
+    "info": "This flow demonstrates:\n\n1. Param read (Send tier) — reads ARMING_OPTIONS and shows the raw PARAM_VALUE on output 0.\n2. Param set (echo-confirm) — sets ARMING_OPTIONS=1 as MAV_PARAM_TYPE_INT32. Copter-4.7 removed ARMING_CHECK (PARAM_ERROR); ARMING_OPTIONS is the live bitmask stand-in. REAL32 encodes the wrong wire bits for int params.\n3. Param list (collect) — requests all params and collects them into one array on output 0.\n\nParameter definition catalog (DESIGN.md §4):\n• ArduPilot copter/plane/rover/sub: the editor fetches defs from\n  https://autotest.ardupilot.org/Parameters/<Vehicle>/apm.pdef.json automatically.\n• PX4 / custom firmware: set paramDefsUrl in the Vehicle Profile → Advanced.\n• Generic / unknown family: no auto-defs; the Param id field remains free-form text.\n\nWith defs loaded, the Param id input becomes a searchable datalist. Selecting a param\nshows its description, unit, and range inline. For params with discrete values (enums),\nthe Value field offers a datalist of named options when Action=Set.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nBind Connection 0.0.0.0:14550 → remote 127.0.0.1:14551. Defs fetch needs internet once at the bench; read/set/list needs the live vehicle.",
     "x": 210,
     "y": 40,
     "wires": []
@@ -36,7 +36,8 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "ex08-connection",

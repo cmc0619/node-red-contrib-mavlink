@@ -11,8 +11,8 @@
     "id": "sitl31-comment",
     "type": "comment",
     "z": "sitl31-tab",
-    "name": "paramEncoding override \u2192 capabilities \u2192 firmware ladder",
-    "info": "Inject payloads carry paramEncoding so the \u00a711 ladder does not invent a stack default.\n\n1. PX4: COM_RC_IN_MODE=4 INT32 with paramEncoding bytewise \u2192 echo-confirm.\n2. ArduPilot: ARMING_OPTIONS=1 INT32 with paramEncoding c-cast \u2192 echo-confirm.\n3. ArduPilot crossed: same ARMING_OPTIONS set with paramEncoding bytewise \u2192 must echo-timeout. If the override were ignored, firmware would fall back to c-cast and this set would succeed \u2014 so the timeout is what proves the override rung.\n\nConnections mirror SITL 04/21: AP 14550\u219214551 sysid 1; PX4 14560\u219214561 sysid 11.",
+    "name": "paramEncoding override → capabilities → firmware ladder",
+    "info": "Inject payloads carry paramEncoding so the §11 ladder does not invent a stack default.\n\n1. PX4: COM_RC_IN_MODE=4 INT32 with paramEncoding bytewise → echo-confirm.\n2. ArduPilot: ARMING_OPTIONS=1 INT32 with paramEncoding c-cast → echo-confirm.\n3. ArduPilot crossed: same ARMING_OPTIONS set with paramEncoding bytewise → must echo-timeout. If the override were ignored, firmware would fall back to c-cast and this set would succeed — so the timeout is what proves the override rung.\n\nConnections mirror SITL 04/21: AP 14550→14551 sysid 1; PX4 14560→14561 sysid 11.",
     "x": 320,
     "y": 40,
     "wires": []
@@ -36,7 +36,8 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl31-vehicle-px4",
@@ -47,7 +48,8 @@
     "dialect": "common",
     "defaultTargetSystem": 11,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": ""
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
   },
   {
     "id": "sitl31-connection-ap",
