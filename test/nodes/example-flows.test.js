@@ -55,7 +55,7 @@ function exampleFiles(dir) {
 function nodesOf(flow) {
   const found = [];
   (function walk(value) {
-    if (Array.isArray(value)) return value.forEach(walk);
+    if (Array.isArray(value)) { value.forEach(walk); return; }
     if (value && typeof value === 'object') {
       if (typeof value.type === 'string') found.push(value);
       Object.values(value).forEach(walk);
