@@ -86,6 +86,11 @@ This repository implements a MAVLink toolkit for Node-RED. This file governs how
 review, and deliver it. Measured behavior and protocol sources outrank assumptions; re-measure
 disputed behavior instead of building around a stale belief.
 
+That ranking governs facts about the protocol and the wire. It is not a channel for
+overturning §0. A measurement can prove a mechanism; it cannot decide whether this project
+should guard against it — that is a design question and §0 already answers it. See §9,
+"A repro is not a ruling."
+
 Record durable lessons in the repository before work is considered ready. Engineering rules
 belong in `AGENTS.md`; protocol rulings and measurements belong in `MAVLINK.md`. Form protocol
 hypotheses from pymavlink, MAVSDK, Mission Planner, QGroundControl, MAVProxy, and especially the
@@ -115,7 +120,9 @@ authority.
   by exit status.
 - After review starts, use event triggers or periodic timers; never block or busy-poll. Gather
   all open findings into one plan. For each, state the concrete problem, the smallest fix, and
-  whether it is applied or declined under this file's rules. Get owner approval before a fix widens
+  whether it is applied or declined under this file's rules. Applied and declined are not equally
+  weighted defaults — §9 governs which findings a review bot has standing to raise at all, and
+  sets decline as the default for a named class. Get owner approval before a fix widens
   scope, adds code, or reaches beyond the finding. Resolve handled review threads.
 - Issues labeled `sitl-results` are measurement records, not work. Exclude them from triage and
   never close them as stale. Put confirmed protocol lessons in `MAVLINK.md`.
@@ -251,6 +258,73 @@ Use sub-agents for multi-module work and match capability to difficulty.
   exposed contracts, and required tests.
 - The dispatching agent reviews all output, integrates it, and runs the full suite centrally.
   A sub-agent's verification claim is evidence to recheck, not authority.
+
+## 9. Review findings
+
+Review bots are spell-checkers with a stack trace. They are authoritative on things that are
+true regardless of what this project is: a typo, a wrong identifier, a test that does not test
+what its name says, a copy-paste error, a real defect on a path that ships. Take those without
+ceremony and without discussion.
+
+They have no standing on §0. A bot cannot know that GIGO is the product here, its training says
+the opposite, and it will therefore keep proposing that the driver protect the operator. On §0
+the agent is the authority and the bot is an input. This is not a close call to be weighed
+again on each PR.
+
+### The default is decline
+
+A finding is DECLINED, by default and without further analysis, when its remedy adds or
+restores any of these to `lib/**` or `nodes/*.js`:
+
+- a `throw` on a config or `msg` value
+- a null, undefined, finiteness, length, or format check on a value the editor owns
+- a `default:` arm that does anything
+- a membership or vocabulary test
+- a fallback, substitution, or coercion
+
+This holds however good the finding's evidence is. Declining is a finished answer. It does not
+need to be re-argued, and a decline recorded in a merged commit message is not reopened by the
+same finding on a later PR — findings do not become correct through repetition.
+
+### The shape that is always true and never sufficient
+
+Nearly every finding against this codebase reduces to:
+
+> removing this guard replaced a clear message with a cryptic TypeError
+
+That is correct every single time — it is what removing a guard does — and it is never a reason
+on its own. A cryptic crash routed to `failInput` is a supported outcome: §0 rule 3 asks for
+loud, not for legible. Message quality is not a defect, and "the operator sees an internal
+error" is not a bug report.
+
+Exactly one thing promotes this shape into a real finding: the removal produces **silence or
+false success** — a run reported succeeded that did not happen, a member dropped from an
+aggregate, an output emitted as valid that was never built. That is the §0 rule 3 violation,
+and it is the only guard-shaped change an agent may accept unprompted. Fix it at the point
+where the outcome is *reported*, never by re-validating the input.
+
+### A repro is not a ruling
+
+§1 ranks measured behavior over assumption, and that governs the protocol and the wire. It does
+not govern this project's design.
+
+A bot demonstrating that `Buffer.from('..z..', 'hex')` silently returns 15 bytes has proved a
+mechanism. It has not proved that the driver should check it — that is a §0 question, and §0
+already answered it. Do not launder a design disagreement into a measurement. If a mechanism
+genuinely changes what §0 should say, that is a conversation with the owner, not a commit.
+
+### Write the procedure down, or do not write the check
+
+Before any new runtime check, the commit message must answer §0's three steps explicitly, by
+number, and name the step that permits it.
+
+- Step 1 is available only when the library or wire format **actually refuses**. Silently
+  accepting something undesirable is not a refusal, and "surface the refusal the library should
+  have made" is not step 1 — it is step 2 wearing a hat.
+- If step 2's answer is "the editor could catch this," the check goes in the `.html` or nowhere.
+  That Node-RED's `validate` is skipped by Admin-API deploys, flow imports, and restored flow
+  files is **not** an exception: it is true of every validator in the walled garden, so
+  admitting it once admits a runtime twin for all of them and §0 is finished.
 
 ## Cursor Cloud specific instructions
 
