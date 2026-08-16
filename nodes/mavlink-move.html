@@ -641,22 +641,13 @@
         },
       },
       // Broadcast (0) is refused only where an ack is actually awaited: the
-      // Send & confirm tier — which the delivery rebuild offers on the acked
-      // actions (Go to, Turn, Speed)
-      // (#260). Send/Stream/Build stay broadcast-legal, so this reds nothing
-      // they configure. The runtime guard stays for profile defaults and
-      // payload overrides.
+      // Send & confirm tier, which the delivery rebuild offers on the acked
+      // actions (Go to, Turn, Speed). Send/Stream/Build stay broadcast-legal,
+      // so this reds nothing they configure (#260). The driver no longer
+      // restates it — this is the only layer that catches the pair (§0).
       targetSystem: {
         value: '',
-        validate: function (v, opt) {
-          const range = RED.mavlink.validateUint8(0).call(this, v, opt);
-          if (range !== true) return range;
-          // Blank inherits the profile target and is the common case — and
-          // Number('') is 0, so the broadcast check below would red it.
-          if (RED.mavlink.isBlank(v)) return true;
-          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'confirm') return true;
-          return Number(v) !== 0 || 'broadcast (0) cannot be confirmed — one ack cannot answer for a fleet; use Send or mavlink-fanout';
-        },
+        validate: RED.mavlink.validateTargetSystem(['confirm']),
       },
       targetComponent: { value: '', validate: RED.validators.number(true) },
       // Steer groups are optional and default blank: filling fields IS the

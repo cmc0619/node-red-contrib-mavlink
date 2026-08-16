@@ -271,15 +271,6 @@ function buildSigning(config, credentials) {
   const passphrase = credentials && credentials.signingPassphrase;
   const keyHex = credentials && credentials.signingKeyHex && credentials.signingKeyHex.trim();
 
-  // Two independent key sources configured is an ambiguous deploy, and which
-  // one wins would be a silent guess — fail loud at construction (§7, §2).
-  if (passphrase && keyHex) {
-    throw new Error(
-      'mavlink-connection: both a signing passphrase and a raw signing key are set — ' +
-        'clear one; the connection will not guess which key to use'
-    );
-  }
-
   const signing = {
     linkId: config.linkId ? Number(config.linkId) : 0,
     signOutbound: !!config.signOutbound,
@@ -293,13 +284,8 @@ function buildSigning(config, credentials) {
     // provisioned with (SETUP_SIGNING carries raw bytes) and the only way to
     // match a fleet whose key did not come from a Mission-Planner-style
     // sha256(passphrase) (e.g. QGC derives via PBKDF2, which a passphrase
-    // here cannot reproduce).
-    if (!/^[0-9a-fA-F]{64}$/.test(keyHex)) {
-      throw new Error(
-        'mavlink-connection: raw signing key must be exactly 64 hex characters ' +
-          `(32 bytes); got ${keyHex.length} characters`
-      );
-    }
+    // here cannot reproduce). The editor owns the format and the exclusivity
+    // against the passphrase (mavlink-connection.html credentials).
     signing.key = Buffer.from(keyHex, 'hex');
   } else if (passphrase) {
     const { MavLinkPacketSignature } = require('node-mavlink');

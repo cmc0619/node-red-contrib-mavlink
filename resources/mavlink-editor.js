@@ -1398,6 +1398,38 @@
   };
 
   /**
+   * Target-sysid validator for a node with acknowledged delivery tiers.
+   *
+   * Broadcast (0) is a designed §7 capability and stays legal on Build and
+   * Send. What it cannot be is *confirmed*: an ack matcher accepts any source
+   * at sysid 0, so the first vehicle to answer settles for the whole fleet —
+   * partial success reported as total. The driver sends what it is addressed
+   * at (§0), so the editor is where the pair is caught; it knows both fields
+   * at deploy.
+   *
+   * Blank inherits the profile target and is the common case, so it passes:
+   * `Number('')` is 0 and would otherwise red every unfilled box.
+   *
+   * @param {string[]} ackedTiers  tiers that wait for an acknowledgement
+   * @param {string} [modeField='delivery']
+   * @param {string} [fallbackTier]  tier assumed when the field is unset
+   * @returns {function(*, object=): true|string}
+   */
+  RED.mavlink.validateTargetSystem = function (ackedTiers, modeField, fallbackTier) {
+    var field = '#node-input-' + (modeField || 'delivery');
+    return function (v, opt) {
+      var range = RED.mavlink.validateUint8(0).call(this, v, opt);
+      if (range !== true) return range;
+      if (RED.mavlink.isBlank(v) || Number(v) !== 0) return true;
+      var key = (modeField || 'delivery');
+      var tier = RED.mavlink.liveOr(this, field, this[key], fallbackTier);
+      if (ackedTiers.indexOf(tier) === -1) return true;
+      return 'broadcast (0) cannot be confirmed — one reply cannot answer for a fleet; '
+        + 'use Send, or mavlink-fanout broadcast for per-vehicle replies';
+    };
+  };
+
+  /**
    * Membership check for a closed-vocabulary select — a delivery tier, a
    * carrier, a lookup mode.
    *

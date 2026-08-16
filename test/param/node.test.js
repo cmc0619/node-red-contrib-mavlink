@@ -132,90 +132,29 @@ test('a set with a blank value sends the coercion, not a refusal — the editor 
   assert.equal(conn.sent[0].message.fields.param_value, 0);
 });
 
-test('mavlink-param refuses a configured broadcast target (sysid 0): nothing sent, no subscription, failed record, done(err)', () => {
+test('a broadcast target still sends — the editor is what reds it', () => {
+  // No vehicle answers as sysid 0, so every Param action would wait forever
+  // for a reply. That pair is a *configured* one the editor reds at deploy
+  // (mavlink-param.html targetSystem, RED.mavlink.validateTargetSystem, which
+  // gates every tier including Build). A payload override is trusted input
+  // and rides (§0).
   const conn = connStubFull();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-param')(RED);
   const Node = RED.nodes.types['mavlink-param'];
   const node = new Node({
     delivery: 'confirm',
-    action: 'set',
-    paramType: 'MAV_PARAM_TYPE_REAL32',
-    connection: 'conn',
-    targetSystem: 0,
-    targetComponent: 1,
-  });
-
-  let out;
-  let err;
-  node.emit(
-    'input',
-    { payload: { paramId: 'FOO', value: 1 } },
-    (m) => { out = m; },
-    (e) => { err = e; }
-  );
-
-  assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
-  assert.equal(conn.subs.length, 0, 'no PARAM_VALUE subscription opened');
-  assert.equal(out[0], null, 'output 0 must not fire');
-  assert.equal(out[1].result, 'failed');
-  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
-  assert.ok(err instanceof Error, 'done() is called with an error');
-  assert.match(err.message, /broadcast \(sysid 0\)/);
-});
-
-test('mavlink-param refuses a dynamic payload target of sysid 0, overriding a real configured sysid', () => {
-  const conn = connStubFull();
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-param')(RED);
-  const Node = RED.nodes.types['mavlink-param'];
-  const node = new Node({
-    delivery: 'send',
     action: 'read',
     connection: 'conn',
     targetSystem: 6,
     targetComponent: 1,
   });
 
-  let out;
-  let err;
-  node.emit(
-    'input',
-    { payload: { paramId: 'ARMING_CHECK', target: { sysid: 0, compid: 1 } } },
-    (m) => { out = m; },
-    (e) => { err = e; }
-  );
+  node.emit('input', { payload: { paramId: 'FOO', target: { sysid: 0 } } }, () => {}, () => {});
+  node.emit('close', () => {});
 
-  assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
-  assert.equal(out[1].result, 'failed');
-  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
-  assert.ok(err instanceof Error);
-});
-
-test('mavlink-param Build tier also refuses a broadcast target (sysid 0) — a built broadcast PARAM_SET forwarded to mavlink-out is the same fleet write', () => {
-  const RED = redStub({});
-  require('../../nodes/mavlink-param')(RED);
-  const Node = RED.nodes.types['mavlink-param'];
-  const node = new Node({
-    delivery: 'build',
-    action: 'set',
-    targetSystem: 0,
-    targetComponent: 1,
-  });
-
-  let out;
-  let err;
-  node.emit(
-    'input',
-    { payload: { paramId: 'FOO', value: 1, paramType: 'MAV_PARAM_TYPE_REAL32', firmware: 'ardupilot' } },
-    (m) => { out = m; },
-    (e) => { err = e; }
-  );
-
-  assert.equal(out[0], null, 'nothing built or sent on output 0');
-  assert.equal(out[1].result, 'failed');
-  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
-  assert.ok(err instanceof Error);
+  assert.equal(conn.sent.length, 1, 'the read reached the wire');
+  assert.equal(conn.sent[0].message.fields.target_system, 0);
 });
 
 test('mavlink-param confirm set works end to end with a broadcast COMPONENT (compid 0) and a real sysid — deliberate, supported behavior', () => {

@@ -238,20 +238,6 @@ module.exports = function registerMavlinkCommand(RED) {
         connectionNode: connNode,
       });
 
-      // Broadcast + ack-confirmed tier: the ack matcher accepts ANY source
-      // for target sysid 0, so the first vehicle to answer would settle for
-      // the whole fleet — partial success reported as total (#260, §9).
-      // Tier-scoped on purpose: broadcast addressing is a designed §7
-      // capability and Build/Send stay legal — only the single-ack promise
-      // is refused. Fan-out broadcast is the expected-set aggregator (§10).
-      if (target.sysid === 0 && (delivery === 'confirm' || delivery === 'complete')) {
-        throw new Error(
-          `mavlink-command ${delivery} cannot target broadcast (sysid 0) — the first vehicle ` +
-          'to ack would answer for the whole fleet; use Send (fire-and-forget) or ' +
-          'mavlink-fanout broadcast (per-vehicle acks)'
-        );
-      }
-
       const startMs = Date.now();
 
       function makeRecord(fields) {

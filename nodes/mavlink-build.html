@@ -121,7 +121,7 @@
             return true;
           },
         },
-        tier:        { value: 'send' },
+        tier:        { value: 'send', validate: RED.mavlink.oneOf(['build', 'send']) },
         band:        { value: '2' },
         // A typo here fails silently rather than loudly: Number('10OO') is NaN,
         // NaN > 0 is false, and the repeat timer simply never arms — the node

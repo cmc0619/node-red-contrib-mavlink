@@ -155,14 +155,11 @@ module.exports = function registerMavlinkBuild(RED) {
         return false;
       }
 
-      // Tier first: on a wire tier the dialect resolves *through* the
-      // Connection, so a typo'd tier can be the reason messageMeta is null —
-      // the generic refusal below would mask the specific one (Codacy, #310).
-      if (!tierKnown) {
-        return failRun(new Error(
-          `unknown Build tier ${JSON.stringify(tier)} — expected one of ${TIER.BUILD}, ${TIER.SEND}`
-        ));
-      }
+      // A tier the `tier` select cannot save (RED.mavlink.oneOf,
+      // mavlink-build.html) matches neither arm below, so nothing is emitted
+      // and nothing is sent. `tierKnown` gates the repeat timer for the same
+      // reason: an unresolved tier must not arm a loop that does nothing.
+      if (!tierKnown) return false;
 
       if (!messageMeta) {
         return failRun(new Error('dialect or message unresolved — fix the node config and redeploy'));
@@ -211,7 +208,8 @@ module.exports = function registerMavlinkBuild(RED) {
 
       const builtMessage = { name: messageName, fields: encodedFields };
 
-      if (tier === TIER.BUILD) {
+      switch (tier) {
+      case TIER.BUILD: {
         // Build tier: emit the message on output 0 for downstream processing.
         const outMsg = triggerMsg ? { ...triggerMsg } : {};
         outMsg.payload = { message: builtMessage, messageName, tier: TIER.BUILD };
@@ -225,6 +223,7 @@ module.exports = function registerMavlinkBuild(RED) {
         applyActionStatus(node, 'ok', messageName);
         node.send([outMsg, sr]);
         return true;
+      }
       }
 
       // Send tier: enqueue on the connection queue. Band membership is the

@@ -31,7 +31,10 @@
         topic: { value: 'camera' },
         verb: { value: 'photo' },
         path: { value: 'legacy' },
-        targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
+        targetSystem: {
+          value: '',
+          validate: RED.mavlink.validateTargetSystem(['confirm'], 'delivery', 'build'),
+        },
         targetComponent: { value: '', validate: RED.validators.number(true) },
         // One object, not a field per slot: rows are generated per verb, so
         // there is no #node-input-<slot> for Node-RED to read at save time.

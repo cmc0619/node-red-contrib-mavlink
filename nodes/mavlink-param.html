@@ -7,7 +7,15 @@
       identity: { value: '' },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'collect']) },
       action: { value: 'read' },
-      targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
+      // Every Param action is a two-way conversation: a set waits for its
+      // PARAM_VALUE echo, a read for the value, a list for the stream. None
+      // of them can be answered by "sysid 0", so broadcast reds on the tiers
+      // that wait — and on Build too, since a built broadcast PARAM_SET
+      // forwarded to mavlink-out is the same fleet-wide write.
+      targetSystem: {
+        value: '',
+        validate: RED.mavlink.validateTargetSystem(['build', 'send', 'confirm', 'collect'], 'delivery', 'build'),
+      },
       targetComponent: { value: '', validate: RED.validators.number(true) },
       // Which way the parameter is named. The protocol has one field for this
       // -- param_index -1 means "use param_id" -- so the two are alternatives,

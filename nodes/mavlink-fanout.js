@@ -42,12 +42,6 @@ module.exports = function registerMavlinkFanout(RED) {
                 ? opts.targets.map((t) => (typeof t === 'object' && t !== null ? t.sysid : t))
                 : selection.sysids
             );
-          } else {
-            const rule = effectiveDelivery === 'build'
-              ? `build+${selectionMode} selection requires a Connection — ` +
-                'the live peer table is the only place that selection can resolve'
-              : 'requires a Connection';
-            throw new Error(`mavlink-fanout: ${rule}`);
           }
         }
 

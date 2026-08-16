@@ -1412,7 +1412,10 @@ test('mavlink-build Build tier: codec error emits error status on output 1', () 
   assert.ok(typeof out1.detail === 'string');
 });
 
-test('mavlink-build: a typo\'d tier refuses instead of falling through to Send (§14 selection-typo cluster)', () => {
+test('mavlink-build: a typo\'d tier matches no arm — nothing built, nothing sent', () => {
+  // Build and Send are the only tiers, and the editor's `tier` select is the
+  // vocabulary (RED.mavlink.oneOf, mavlink-build.html). A token past it
+  // selects neither arm: no message on output 0, no frame on the wire.
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
   const { stub, sent } = makeConnectionStub();
@@ -1431,14 +1434,10 @@ test('mavlink-build: a typo\'d tier refuses instead of falling through to Send (
   node._input({ payload: {} });
 
   assert.equal(sent.length, 0, 'a typo of the tier must not put a frame on the wire');
-  assert.equal(node._sends.length, 1);
-  const [out0, out1] = node._sends[0];
-  assert.equal(out0, null, 'output 0 must not fire on a refused tier');
-  assert.equal(out1.result, 'failed');
-  assert.match(out1.detail, /unknown Build tier "sned" — expected one of build, send/);
+  assert.equal(node._sends.length, 0, 'and nothing is emitted downstream either');
 });
 
-test('mavlink-build: a typo\'d tier never arms the repeat timer — the refusal must not become the flood (Gitar, #310)', async () => {
+test('mavlink-build: a typo\'d tier never arms the repeat timer (Gitar, #310)', async () => {
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
   const { stub, sent } = makeConnectionStub();
@@ -1456,13 +1455,8 @@ test('mavlink-build: a typo\'d tier never arms the repeat timer — the refusal 
   });
 
   await new Promise((resolve) => setTimeout(resolve, 45));
-  assert.equal(node._sends.length, 0, 'no autonomous tick may repeat the refusal at the configured rate');
+  assert.equal(node._sends.length, 0, 'no autonomous tick at the configured rate');
   assert.equal(sent.length, 0);
-
-  // A manual trigger still fails loudly, once.
-  node._input({ payload: {} });
-  assert.equal(node._sends.length, 1);
-  assert.equal(node._sends[0][1].result, 'failed');
   node._close();
 });
 
