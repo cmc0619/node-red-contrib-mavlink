@@ -340,6 +340,60 @@ test('blank Payload maxRetries keeps three temporary-rejection retries', async (
   node.emit('close', () => {});
 });
 
+test("a typo'd Payload delivery tier sends nothing and completes as a no-op", () => {
+  // 'sned' used to fall through the build/confirm gates into the
+  // fire-and-forget wire send reporting 'sent' — a real message on the wire
+  // for a tier nobody asked for. Affirmative dispatch (§5): a non-member
+  // matches no case, so nothing reaches the wire and the input completes
+  // clean — the same shape as State's mode no-op.
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    sendAs: 'long',
+    delivery: 'sned',
+    topic: 'servo',
+    verb: 'set',
+    connection: 'conn',
+    targetSystem: 7,
+    targetComponent: 1,
+  });
+  const outputs = [];
+  let err;
+  node.emit('input', { payload: { values: { servo: 8, pwm: 1600 } } }, (m) => { outputs.push(m); }, (e) => { err = e; });
+  assert.equal(err, undefined, 'the no-op completes without an error');
+  assert.equal(outputs.length, 0, 'no output fires for a tier that selected no behavior');
+  assert.equal(conn.sent.length, 0, 'nothing left the wire under a mis-resolved tier');
+});
+
+test('a non-finite Payload ACK timeout or retry count refuses instead of a ~1 ms ack window', () => {
+  // setTimeout(fn, NaN) arms ~1 ms with nothing downstream to catch it
+  // (owner ruling, 2026-08-14) — the same crater Command's fields carry.
+  const RED = redStub({ conn: connStub() });
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const base = {
+    sendAs: 'long',
+    delivery: 'confirm',
+    topic: 'servo',
+    verb: 'set',
+    connection: 'conn',
+    targetSystem: 7,
+    targetComponent: 1,
+  };
+  for (const [cfg, expected] of [
+    [{ timeout: 'abc' }, /Payload ACK timeout must be a finite number \(got "abc"\)/],
+    [{ timeout: 2000, maxRetries: 'nope' }, /Payload max retries must be a finite number \(got "nope"\)/],
+  ]) {
+    const node = new Node({ ...base, ...cfg });
+    let err;
+    node.emit('input', { payload: { values: { servo: 8, pwm: 1600 } } }, () => {}, (e) => { err = e; });
+    assert.match(err.message, expected);
+    node.emit('close', () => {});
+  }
+});
+
 test('mavlink-payload inherits Vehicle Profile target when config is empty', () => {
   const veh = { defaultTargetSystem: 42, defaultTargetComponent: 191 };
   const RED = redStub({ veh });

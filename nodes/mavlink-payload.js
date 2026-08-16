@@ -16,6 +16,7 @@ const {
 const {
   resolveDeliveryContext,
   applyConnectionStatus,
+  finiteNumberOr,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -54,8 +55,6 @@ module.exports = function registerMavlinkPayload(RED) {
 
     // At most one COMMAND_ACK wait in flight per node.
     let activeWaiter = null;
-    const timeoutMs = config.timeout === '' ? DEFAULT_TIMEOUT_MS : Number(config.timeout);
-    const maxRetries = config.maxRetries === '' ? DEFAULT_MAX_RETRIES : Number(config.maxRetries);
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
@@ -73,6 +72,15 @@ module.exports = function registerMavlinkPayload(RED) {
           done();
           return;
         }
+
+        // ACK timeout / retry count (owner ruling, 2026-08-14): blank keeps
+        // the library default; a present non-finite value used to coerce
+        // silently — `setTimeout(fn, NaN)` substitutes ~1 ms instead of
+        // refusing, closing the ack window before the send left the queue.
+        // Neither value reaches the wire, so nothing downstream catches it
+        // the way wire.js catches an integer field.
+        const timeoutMs = finiteNumberOr(config.timeout, DEFAULT_TIMEOUT_MS, 'Payload ACK timeout');
+        const maxRetries = finiteNumberOr(config.maxRetries, DEFAULT_MAX_RETRIES, 'Payload max retries');
 
         const payload = msg.payload ?? {};
         // Payload: compidFromConfig keeps the compid field authoritative even
@@ -95,8 +103,9 @@ module.exports = function registerMavlinkPayload(RED) {
             path: payload.path || config.path,
             target,
             values: payload.values || config.values || {},
-            // Required for command-backed verbs (§9): the builder throws when a
-            // MAV_CMD verb arrives without a carrier choice.
+            // Required for command-backed verbs (§9): a non-member carrier
+            // selects no builder (§5), so the message ships undefined and
+            // craters at the tier that touches it.
             carrier,
             frame: resolveFrame(payload.mavFrame, config.frame),
           });
@@ -105,15 +114,6 @@ module.exports = function registerMavlinkPayload(RED) {
         const carrierChosen = payload.sendAs || config.sendAs;
         const built = buildFor(carrierChosen);
 
-        if (delivery === 'build') {
-          completeBuild(node, send, built);
-          done();
-          return;
-        }
-
-        if (!connectionNode) {
-          throw new Error('mavlink-payload requires a Connection');
-        }
         /**
          * Send a command-backed verb and wait for its COMMAND_ACK, resending once
          * in the other carrier if the vehicle answers COMMAND_INT_ONLY (8) or
@@ -188,31 +188,44 @@ module.exports = function registerMavlinkPayload(RED) {
             });
         }
 
-        // Confirm tier for a command-backed verb: wait for the COMMAND_ACK so
-        // a DENIED / TEMPORARILY_REJECTED / timeout can halt the chain (§9).
-        // Gimbal-manager setpoints carry no acknowledgement, so they can only
-        // ever be sent unconfirmed and fall through below.
-        if (delivery === 'confirm' && built.confirmation === 'command_ack') {
-          // Broadcast + confirm: the ack matcher accepts any source at sysid 0,
-          // so the first responder would settle for the fleet — and the
-          // carrier-swap above could then re-broadcast the command off one
-          // stray wrong-carrier ack (#260, §9). Send stays broadcast-legal;
-          // fan-out broadcast is the expected-set aggregator (§10).
-          if (target.sysid === 0) {
-            throw new Error(
-              'mavlink-payload confirm cannot target broadcast (sysid 0) — the first vehicle ' +
-              'to ack would answer for the whole fleet; use Send (fire-and-forget) or ' +
-              'mavlink-fanout broadcast (per-vehicle acks)'
-            );
+        // Affirmative dispatch on the tier (§5): a non-member matches no case,
+        // nothing reaches the wire, and the input completes as a no-op — the
+        // same shape as State's mode. No connection guard on the wire cases:
+        // the editor is the protector, and a missing Connection craters at
+        // `.send` / `.subscribe` like any other absent config node.
+        switch (delivery) {
+          case 'build':
+            completeBuild(node, send, built);
+            break;
+          case 'confirm':
+            // Wait for the COMMAND_ACK so a DENIED / TEMPORARILY_REJECTED /
+            // timeout can halt the chain (§9). Gimbal-manager setpoints carry
+            // no acknowledgement, so they fall through and send unconfirmed.
+            if (built.confirmation === 'command_ack') {
+              // Broadcast + confirm: the ack matcher accepts any source at
+              // sysid 0, so the first responder would settle for the fleet —
+              // and the carrier-swap above could then re-broadcast the command
+              // off one stray wrong-carrier ack (#260, §9). Send stays
+              // broadcast-legal; fan-out broadcast is the expected-set
+              // aggregator (§10).
+              if (target.sysid === 0) {
+                throw new Error(
+                  'mavlink-payload confirm cannot target broadcast (sysid 0) — the first vehicle ' +
+                  'to ack would answer for the whole fleet; use Send (fire-and-forget) or ' +
+                  'mavlink-fanout broadcast (per-vehicle acks)'
+                );
+              }
+              awaitAck(built, carrierChosen);
+              return;
+            }
+            // falls through
+          case 'send': {
+            connectionNode.send(built.message, { band: BAND.CONTROL, target, identityId });
+            const detail = built.confirmation === 'command_ack' ? 'sent' : 'sent (unconfirmed)';
+            completeResult(node, send, 'succeeded', detail, built);
+            break;
           }
-          awaitAck(built, carrierChosen);
-          return;
         }
-
-        // Send tier, or confirm requested on an unconfirmable message.
-        connectionNode.send(built.message, { band: BAND.CONTROL, target, identityId });
-        const detail = built.confirmation === 'command_ack' ? 'sent' : 'sent (unconfirmed)';
-        completeResult(node, send, 'succeeded', detail, built);
         done();
       } catch (err) {
         failInput(node, send, err, done);

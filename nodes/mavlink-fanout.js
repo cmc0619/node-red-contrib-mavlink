@@ -2,7 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
-const { applyConnectionStatus } = require('../lib/addressing');
+const { applyConnectionStatus, finiteNumberOr } = require('../lib/addressing');
 
 module.exports = function registerMavlinkFanout(RED) {
   function MavlinkFanoutNode(config) {
@@ -58,8 +58,8 @@ module.exports = function registerMavlinkFanout(RED) {
           targets: opts.targets,
           members: configMembersFor(config, opts),
           selection,
-          // executionMode is editor-defaulted ('sequential') and always saved;
-          // lib/fanout throws on a blank/absent mode (affirmative dispatch).
+          // Affirmative dispatch (§5): lib/fanout maps only broadcast and
+          // sequential — an unknown or blank mode selects no case and craters.
           mode: opts.executionMode || config.executionMode,
           delivery: effectiveDelivery,
           dryRun: opts.dryRun !== undefined ? !!opts.dryRun : !!config.dryRun,
@@ -204,18 +204,21 @@ function assignIfPresent(target, key, value) {
 
 /**
  * A numeric run option: the payload wrapper overrides, else the saved config
- * value — whose blank-rejecting editor validator guarantees it numeric, so a
- * present value takes the Number() coercion and is never re-validated.
+ * value.
  *
- * Absence stays absence (§5: blank ≠ 0 ≠ absent): a config with no key at
- * all passes `undefined` through so lib/fanout's own absence default fires.
+ * Absence stays absence (§5: blank ≠ 0 ≠ absent): no value at either level
+ * passes `undefined` through so lib/fanout's own absence default fires.
  * Coercing absence would hand the run NaN, and every pacing comparison
  * against NaN is false — an unthrottled fleet send with no symptom (Gitar,
- * #287).
+ * #287). A *present* garbage value is that same crater arriving on purpose,
+ * not trusted-msg territory (owner ruling, 2026-08-14): these keys arm
+ * timers and pacing/retry/capacity comparisons with no wire choke point
+ * downstream — `setTimeout(fn, NaN)` fires in ~1 ms instead of refusing —
+ * so both branches cross `finiteNumberOr`, which throws naming the field.
  */
 function numberOption(opts, config, key) {
-  if (opts[key] !== undefined) return opts[key];
-  return config[key] === undefined ? undefined : Number(config[key]);
+  const label = `Fan-out ${key}`;
+  return finiteNumberOr(opts[key], finiteNumberOr(config[key], undefined, label), label);
 }
 
 /**
