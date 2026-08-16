@@ -1,18 +1,32 @@
 version = 1
 
+# Generated artifacts and fixtures, not authored source. `seed/` is written by
+# scripts/generate-seed.js and generate-param-seed.js; `examples/` is Node-RED
+# flow JSON that the editor round-trips.
+exclude_patterns = ["seed/**", "examples/**"]
+
 # Tagged as tests so analyzer rules meant for shipped code (no-op stubs,
 # assert-shaped "redundant" literals) stop grading the harness files.
-test_patterns = ["test/**", "lib/**/test/**"]
+# `integration/` is the Node-RED smoke harness and belongs here too.
+test_patterns = ["test/**", "lib/**/test/**", "integration/**"]
 
 [[analyzers]]
 name = "javascript"
 enabled = true
 
   [analyzers.meta]
-  # Without these DeepSource assumes browser scripts and flags every
-  # top-level `function` in a CommonJS module as global-scope pollution —
-  # the repo's dominant false-positive class (see PR #307's review round).
-  environment = ["nodejs"]
+  # This package ships both halves of AGENTS.md §0, and they run in different
+  # places: the driver (`lib/**`, `nodes/*.js`, `test/**`) is CommonJS on Node,
+  # while the editor (`resources/**/*.js` and the `<script>` blocks in
+  # `nodes/*.html`) is browser script against `RED`, `$`, and `document`.
+  # `environment` must name both — it is the analyzer's own default pair, and
+  # narrowing it to nodejs alone left every editor file analysed with no
+  # browser globals.
+  #
+  # `module_system` is the setting that actually addresses the false-positive
+  # class this block was added for: without it a top-level `function` in a
+  # CommonJS module reads as global-scope pollution (PR #307's review round).
+  environment = ["nodejs", "browser"]
   module_system = "commonjs"
 
 [[analyzers]]
