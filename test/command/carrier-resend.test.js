@@ -299,7 +299,12 @@ test('INT + non-location command: XML kinds keep param5 raw on the wire', async 
   assert.equal(sent[1].result, 'accepted');
 });
 
-test('INT + NaN lat/lon refuses loud — nothing reaches the wire', async () => {
+test('INT + NaN lat/lon builds non-finite — the wire is what refuses it', async () => {
+  // int32 cannot express NaN. The driver does not coerce it to 0 (null
+  // island) and does not refuse it either: it builds what it was handed, and
+  // the real Connection.send serializes before enqueueing, so
+  // lib/connection/wire.js throws synchronously into this node's error path
+  // (test/connection/wire-nonfinite.test.js covers that half).
   const { node, conn } = deploy(
     [MAV_RESULT.ACCEPTED],
     {
@@ -311,16 +316,8 @@ test('INT + NaN lat/lon refuses loud — nothing reaches the wire', async () => 
   );
   conn.vehicle = Object.freeze({ id: 'veh' });
 
-  let doneErr;
-  const sent = await runInput(
-    node,
-    { payload: { 5: NaN, 6: 149, 7: 50 } },
-    (err) => { doneErr = err; }
-  );
+  await runInput(node, { payload: { 5: NaN, 6: 149, 7: 50 } }, () => {});
 
-  assert.equal(conn.sent.length, 0, 'the null-island command must never be sent');
-  assert.equal(sent[0], null, 'output 0 must not continue');
-  assert.equal(sent[1].result, 'failed');
-  assert.match(sent[1].detail, /must be finite/);
-  assert.ok(doneErr instanceof Error, 'done(err) fired for Catch nodes');
+  assert.equal(conn.sent.length, 1, 'the stub connection does not serialize');
+  assert.ok(Number.isNaN(conn.sent[0].message.fields.x), 'the coordinate is never coerced to 0');
 });

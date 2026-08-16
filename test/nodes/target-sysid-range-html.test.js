@@ -74,12 +74,13 @@ function descriptorBlock(html, prop) {
 for (const [file, prop] of TARGET_FILES) {
   test(`${file}: ${prop} validates as uint8 0..255 and has min/max on the input`, () => {
     const html = fs.readFileSync(path.join(nodesDir, file), 'utf8');
-    // The range rule must come from the shared helper, not a reimplementation —
-    // reached directly or through a conditional wrapper (§6, #260).
+    // The range rule must come from the shared helpers, not a
+    // reimplementation — validateUint8 directly, or validateTargetSystem,
+    // which layers the broadcast-on-an-acked-tier rule over it (§6, #260).
     assert.match(
       descriptorBlock(html, prop),
-      /RED\.mavlink\.validateUint8\(0\)/,
-      `${prop} must use RED.mavlink.validateUint8(0)`
+      /RED\.mavlink\.(validateUint8\(0\)|validateTargetSystem\()/,
+      `${prop} must use a shared RED.mavlink target validator`
     );
     assert.match(
       html,
@@ -112,26 +113,26 @@ test('vehicle defaultTargetSystem still uses the shared uint8 validator', () => 
 // by falling through to an unconfirmed send. An unconditional validator there
 // would red a legal flow.
 const CONDITIONAL_BROADCAST_FILES = [
-  ['mavlink-command.html', "liveOr(this, '#node-input-delivery'"],
-  // Move gates on delivery too since the Action surface (§6 redesign):
-  // Send & confirm is only offered on the Go to action, so the tier field
-  // alone carries the rule — the carrier field it used to read is gone.
-  ['mavlink-move.html', "liveOr(this, '#node-input-delivery'"],
+  // [file, the tiers that wait for a reply]
+  // Move gates on delivery since the Action surface (§6 redesign): Send &
+  // confirm is only offered on the Go to action, so the tier field alone
+  // carries the rule — the carrier field it used to read is gone.
+  //
+  // Command, Param and Payload keep their hand-written validators until the
+  // PRs that convert them; this list grows a row per module.
+  ['mavlink-move.html', ['confirm']],
 ];
 
-for (const [file, gate] of CONDITIONAL_BROADCAST_FILES) {
-  test(`${file}: targetSystem reds a configured broadcast on the ack-confirmed tier (#260)`, () => {
+for (const [file, tiers] of CONDITIONAL_BROADCAST_FILES) {
+  test(`${file}: targetSystem reds a configured broadcast on the acked tiers (#260)`, () => {
     const html = fs.readFileSync(path.join(nodesDir, file), 'utf8');
     const block = descriptorBlock(html, 'targetSystem');
-    assert.match(block, /Number\(v\) !== 0/, 'the rule must key on a literal 0');
-    assert.match(block, /cannot be confirmed/, 'the reason must say why, not just fail');
-    assert.ok(
-      block.includes(gate),
-      `the rule must be gated on the tier/carrier field, not applied unconditionally (${gate})`
-    );
-    // Gating uses the node-first helper rather than a bare global selector:
-    // a raw $('#node-input-…') read is the cross-dialog leak shape of #217.
-    assert.ok(!/\$\(\s*['"]#node-input-/.test(block), 'gate via RED.mavlink.liveOr, not a raw selector');
+    // One helper, not a copy per node: the rule and its wording live in the
+    // shared editor resource, so the four cannot drift apart.
+    assert.match(block, /RED\.mavlink\.validateTargetSystem\(/);
+    for (const tier of tiers) {
+      assert.ok(block.includes(`'${tier}'`), `${tier} must be listed as an acked tier`);
+    }
   });
 }
 

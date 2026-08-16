@@ -261,7 +261,9 @@ test('mavlink-move stream: stop with nothing running reports stopped with detail
   assert.equal(sends.length, 0, 'nothing running, so nothing sent');
 });
 
-test('mavlink-move send delivery refuses {action:"stop"} — only the stream tier owns streams', () => {
+test('a stop on a tier that owns no stream completes with "no stream"', () => {
+  // `delivery` is fixed per node, so only the stream tier can ever hold one.
+  // A stop elsewhere is not an error — it has nothing to stop, and says so.
   const conn = { vehicle: {}, send() {} };
   const RED = redStub({ conn });
   require('../../nodes/mavlink-move')(RED);
@@ -282,13 +284,14 @@ test('mavlink-move send delivery refuses {action:"stop"} — only the stream tie
   let doneError;
   node.emit('input', { payload: { action: 'stop' } }, (m) => { out = m; }, (err) => { doneError = err; });
 
-  assert.equal(out[0], null);
-  assert.equal(out[1].result, 'failed');
-  assert.match(doneError.message, /requires stream delivery/);
+  assert.equal(doneError, undefined);
+  assert.equal(out[1].result, 'stopped');
+  assert.equal(out[1].detail, 'no stream');
 });
 
-test('mavlink-move: an unknown action throws naming the valid actions', () => {
-  const conn = { vehicle: {}, send() {} };
+test('a payload action that is not "stop" selects no stop and rides the build path', () => {
+  const sends = [];
+  const conn = { id: 'conn', vehicle: {}, send(message, opts) { sends.push({ message, opts }); } };
   const RED = redStub({ conn });
   require('../../nodes/mavlink-move')(RED);
   const Node = RED.nodes.types['mavlink-move'];
@@ -309,11 +312,11 @@ test('mavlink-move: an unknown action throws naming the valid actions', () => {
   let out;
   let doneError;
   node.emit('input', { payload: { action: 'hover' } }, (m) => { out = m; }, (err) => { doneError = err; });
+  node.emit('close', () => {});
 
-  assert.equal(out[0], null);
-  assert.equal(out[1].result, 'failed');
-  assert.match(doneError.message, /unknown Move action "hover"/);
-  assert.match(doneError.message, /stop/, 'names the valid actions');
+  assert.equal(doneError, undefined);
+  assert.equal(out[1].result, 'streaming', 'the configured action still ran');
+  assert.ok(sends.length, 'the setpoint reached the wire');
 });
 
 test('mavlink-move stream: {action:"stop"} releases the target for a new stream (#176)', () => {
@@ -583,9 +586,9 @@ const repositionCfg = {
 
 
 
-test('mavlink-move goto + Send refuses a yaw rate through the reposition builder\'s own guard', () => {
-  // DO_REPOSITION carries a yaw heading only: the node adds no second guard —
-  // buildRepositionMessage's refusal is the single deploy-time error path.
+test('mavlink-move goto + Send ignores a yaw rate — DO_REPOSITION has no field for it', () => {
+  // The reposition carrier reads a yaw heading only. A key the wire has no
+  // room for is dropped, not refused (AGENTS.md, input trust).
   const conn = repositionConn();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-move')(RED);
@@ -595,15 +598,11 @@ test('mavlink-move goto + Send refuses a yaw rate through the reposition builder
   let out;
   let doneError;
   node.emit('input', { payload: { yawRate: 10 } }, (m) => { out = m; }, (err) => { doneError = err; });
-  assert.equal(out[0], null);
-  assert.equal(out[1].result, 'failed');
-  assert.match(doneError.message, /no yaw rate/);
-  assert.equal(conn.sends.length, 0, 'nothing reached the wire');
+  assert.equal(doneError, undefined);
+  assert.equal(out[1].result, 'sent');
+  assert.equal(conn.sends.length, 1);
+  assert.equal(conn.sends[0].message.name, 'COMMAND_INT');
 });
-
-
-
-
 
 test('mavlink-move reposition confirm: a garbage ackTimeout refuses instead of arming a ~1 ms window (owner ruling, 2026-08-14)', async () => {
   const conn = repositionConn();
@@ -624,26 +623,24 @@ test('mavlink-move reposition confirm: a garbage ackTimeout refuses instead of a
   assert.match(doneError.message, /Move ACK timeout must be a finite number \(got "abc"\)/);
 });
 
-test('mavlink-move reposition confirm refuses a broadcast target (sysid 0): nothing sent, failed record, done(err) (#260)', () => {
-  // The ack matcher accepts any source at sysid 0 — the first vehicle to
-  // answer would settle the goto for the whole fleet. Thrown before any send
-  // or subscription, through the same failInput path as the carrier refusals.
+test('mavlink-move reposition confirm sends to a broadcast target — the editor is what reds it', () => {
+  // The ack matcher accepts any source at sysid 0, so the first vehicle to
+  // answer settles the goto for the whole fleet. That is a configuration the
+  // editor reds at deploy (mavlink-move.html `delivery`); the driver sends
+  // what it is addressed at.
   const conn = repositionConn();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-move')(RED);
   const Node = RED.nodes.types['mavlink-move'];
   const node = new Node({ ...repositionCfg, targetSystem: 0, delivery: 'confirm', connection: 'conn' });
 
-  let out;
   let doneError;
-  node.emit('input', { payload: {} }, (m) => { out = m; }, (err) => { doneError = err; });
+  node.emit('input', { payload: {} }, () => {}, (err) => { doneError = err; });
+  node.emit('close', () => {});
 
-  assert.equal(conn.sends.length, 0, 'nothing reached the wire');
-  assert.equal(conn.subs.length, 0, 'no COMMAND_ACK subscription opened');
-  assert.equal(out[0], null, 'output 0 must not fire');
-  assert.equal(out[1].result, 'failed');
-  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
-  assert.ok(doneError instanceof Error);
+  assert.equal(doneError, undefined);
+  assert.equal(conn.sends.length, 1, 'the goto reached the wire');
+  assert.equal(conn.sends[0].message.fields.target_system, 0);
 });
 
 
