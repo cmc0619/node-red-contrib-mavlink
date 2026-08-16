@@ -378,7 +378,7 @@
       function loadParamDefs() {
         var target = RED.mavlink.resolveCatalogTarget();
         var missing = paramDefsTargetError(target);
-        if (missing) return noParamDefs(missing);
+        if (missing) { noParamDefs(missing); return; }
 
         var seq = ++_defsSeq;
         // Cache under the key this request was built from, not whatever the
@@ -482,7 +482,7 @@
       }
 
       function renderParamResults(query, keepIndex) {
-        if (!_paramIds.length) return hideParamResults();
+        if (!_paramIds.length) { hideParamResults(); return; }
         _hitQuery = String(query || '');
         _hits = searchParams(_hitQuery);
         _hitIndex = _hits.length

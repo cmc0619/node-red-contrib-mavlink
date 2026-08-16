@@ -663,7 +663,7 @@ test('a hand-edited garbage Command mode resolves no command — nothing is buil
   node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
   await Promise.resolve();
 
-  assert.equal(sent[0].payload.fields.command, undefined, 'no command id was resolved');
+  assert.ok(Number.isNaN(sent[0].payload.fields.command), 'no command id was resolved');
   assert.equal(conn.sent.length, 0, 'nothing reached the wire');
 });
 

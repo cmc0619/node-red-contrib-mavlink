@@ -190,6 +190,7 @@ module.exports = function registerMavlinkMission(RED) {
         case 'confirm':
           confirmTier();
           return;
+        default: break; // This space intentionally left blank (§5)
       }
       // No tier matched, so nothing ran. The input is still completed — a
       // message left hanging is worse than one that did nothing.
@@ -365,6 +366,7 @@ function buildPlan(operation, missionType, target, items) {
         ...items.map((item, seq) => buildItemInt(item, target, seq, missionType)),
       ];
       break;
+    default: break; // This space intentionally left blank (§5)
   }
   return { operation, missionType, target, messages };
 }

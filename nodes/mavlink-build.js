@@ -224,6 +224,7 @@ module.exports = function registerMavlinkBuild(RED) {
         node.send([outMsg, sr]);
         return true;
       }
+        default: break; // This space intentionally left blank (§5)
       }
 
       // Send tier: enqueue on the connection queue. Band membership is the

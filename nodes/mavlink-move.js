@@ -199,6 +199,7 @@ module.exports = function registerMavlinkMove(RED) {
           connectionNode.send(message, { band: BAND.CONTROL, target, identityId });
           completeResult(node, send, 'sent', null, { message });
           return false;
+        default: break; // This space intentionally left blank (§5)
       }
       return false;
     }
@@ -233,6 +234,7 @@ module.exports = function registerMavlinkMove(RED) {
             done();
             return;
           }
+          default: break; // This space intentionally left blank (§5)
         }
         // Move: companion hides both sysid and compid — no compidFromConfig.
         const { connectionNode, target, identityId } = resolveDeliveryContext(RED, {
@@ -452,6 +454,7 @@ module.exports = function registerMavlinkMove(RED) {
             connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
             completeResult(node, send, 'sent', null, { message });
             break;
+          default: break; // This space intentionally left blank (§5)
         }
         done();
       } catch (err) {
@@ -567,10 +570,12 @@ function setpointFor(action, payload, config, target, vehicleAtDeploy, connectio
         timeBootMs: payload.timeBootMs,
       });
     }
+    default: break; // This space intentionally left blank (§5)
   }
   // A non-member action matches no case and returns undefined; the caller
   // craters on it — serialize rejects it on send/stream, and the build tier
   // ships it to a deferred crater at the next node.
+  return undefined; // nothing matched: no behavior selected (§5)
 }
 
 function completeBuild(node, send, message) {

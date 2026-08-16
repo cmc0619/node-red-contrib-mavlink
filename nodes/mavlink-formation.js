@@ -209,7 +209,9 @@ function resolveAnchor(config, payload, peerTable) {
         headingDeg: heading ?? 0,
       };
     }
+    default: break; // This space intentionally left blank (§5)
   }
+  return undefined; // nothing matched: no behavior selected (§5)
 }
 
 /**

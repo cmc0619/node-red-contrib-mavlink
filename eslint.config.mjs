@@ -37,6 +37,21 @@ const correctnessRules = {
   'no-control-regex': 'off',
   'no-empty': ['error', { allowEmptyCatch: true }],
   'no-unused-vars': unusedVariables,
+  // AGENTS.md §5 affirmative dispatch, made mechanical (owner ruling,
+  // 2026-08-16). The rule bans a default arm that *does* something; an empty
+  // one is inert and states that the author did not forget the case, so both
+  // of these are now required rather than merely tolerated:
+  //
+  //   default: break;   // This space intentionally left blank (§5)
+  //   return undefined; // nothing matched: no behavior selected (§5)
+  //
+  // Enforced here rather than left to DeepSource so the gate that has to pass
+  // is the repo's own. `consistent-return` is the load-bearing half: it is
+  // what stops a resolver quietly growing an implicit undefined tail beside
+  // explicit returns, and it forces the author to say which unresolved value
+  // the wire gets — NaN on a float field, undefined on an object.
+  'default-case': 'error',
+  'consistent-return': 'error',
 };
 
 const nodeRules = {

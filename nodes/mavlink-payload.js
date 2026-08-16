@@ -212,6 +212,7 @@ module.exports = function registerMavlinkPayload(RED) {
             completeResult(node, send, 'succeeded', detail, built);
             break;
           }
+          default: break; // This space intentionally left blank (§5)
         }
         done();
       } catch (err) {

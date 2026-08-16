@@ -91,7 +91,9 @@ function resolveCommandId(config) {
       const preset = getPreset(config.preset);
       return preset ? preset.commandId : null;
     }
+    default: break; // This space intentionally left blank (§5)
   }
+  return NaN; // nothing matched: no behavior selected (§5)
 }
 
 module.exports = function registerMavlinkCommand(RED) {
@@ -300,7 +302,9 @@ module.exports = function registerMavlinkCommand(RED) {
             });
           case CARRIER.LONG:
             return buildCommandLong(commandId, target.sysid, target.compid, paramArray, confirmation);
+          default: break; // This space intentionally left blank (§5)
         }
+        return undefined; // nothing matched: no behavior selected (§5)
       }
 
       // ── Delivery ──────────────────────────────────────────────────────────
@@ -334,6 +338,7 @@ module.exports = function registerMavlinkCommand(RED) {
           done();
           return;
         }
+        default: break; // This space intentionally left blank (§5)
       }
 
       // ── Delivery: Confirm / Complete ──────────────────────────────────────
