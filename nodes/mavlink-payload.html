@@ -4,6 +4,21 @@
   // actually speaks (§6 — no baked protocol copy in editor HTML). Topic and
   // Verb pick the recipe; everything below them is painted from the answer.
   (function () {
+    /**
+     * Recipe slots the wire has no sentinel for, keyed `topic|verb`.
+     *
+     * DO_SET_ROI_LOCATION's lat/lon/alt name the point the camera aims at.
+     * A blank one is sent as 0 — the Gulf of Guinea, with a clean ACCEPTED —
+     * and the driver sends what it is handed (§0), so this is the layer that
+     * has to say so.
+     *
+     * Static for the same reason mavlink-command.html keeps PRESET_LOCATION
+     * static: `validate` runs at deploy for every node, with no dialog open
+     * and no catalog fetched. A drift test pins it against the recipes
+     * (test/nodes/payload-verb-html.test.js).
+     */
+    var REQUIRED_VALUES = { 'gimbal|roi-set': ['lat', 'lon', 'alt'] };
+
     var payloadDefaults = Object.assign(
       {
         name: { value: '' },
@@ -20,7 +35,23 @@
         targetComponent: { value: '', validate: RED.validators.number(true) },
         // One object, not a field per slot: rows are generated per verb, so
         // there is no #node-input-<slot> for Node-RED to read at save time.
-        values: { value: {} }
+        values: {
+          value: {},
+          validate: function (v, _opt) {
+            var topic = RED.mavlink.liveOr(this, '#node-input-topic', this.topic, 'camera');
+            var verb = RED.mavlink.liveOr(this, '#node-input-verb', this.verb, '');
+            var needed = REQUIRED_VALUES[topic + '|' + verb];
+            if (!needed) return true;
+            var values = v || {};
+            for (var i = 0; i < needed.length; i++) {
+              if (RED.mavlink.isBlank(values[needed[i]])) {
+                return 'needs ' + needed.join(', ') + ' — the command has no sentinel for '
+                  + 'an unset one, so a blank field is sent as 0';
+              }
+            }
+            return true;
+          },
+        }
       },
       RED.mavlink.buildTierDialectDefaults()
     );

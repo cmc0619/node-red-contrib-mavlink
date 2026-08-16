@@ -61,10 +61,12 @@ test('resolveDialect seed + known name → returns DialectBundle', () => {
   assert.ok(typeof bundle.messages === 'object');
 });
 
-test('resolveDialect without a dialect fails loud (no code-literal default)', () => {
+test('resolveDialect without a dialect craters — no code-literal default', () => {
   // No `|| 'ardupilotmega'`: the profile is the source of truth for its own
-  // dialect, so a blank is a broken profile, not an inherit from a code literal.
-  assert.throws(() => resolveDialect({ dialectRevision: 'seed' }), /dialect is required/);
+  // dialect, so a blank is a broken profile, not an inherit from a code
+  // literal. Both fields are `required` in mavlink-vehicle.html, so a blank
+  // one is hand-edit drift and it fails where the name is actually used.
+  assert.throws(() => resolveDialect({ dialectRevision: 'seed' }));
 });
 
 test('resolveDialect seed + unknown name → throws naming the dialect', () => {
@@ -74,10 +76,9 @@ test('resolveDialect seed + unknown name → throws naming the dialect', () => {
   );
 });
 
-test('resolveDialect without a revision fails loud (no code-literal default)', () => {
-  // No `|| 'seed'`: absent revision is drift, not the seed default — the editor
-  // always saves a version.
-  assert.throws(() => resolveDialect({ dialect: 'minimal' }), /dialect version is required/);
+test('resolveDialect without a revision craters — no code-literal default', () => {
+  // No `|| 'seed'`: an absent revision is drift, not the seed default.
+  assert.throws(() => resolveDialect({ dialect: 'minimal' }));
 });
 
 test('resolveDialect seed bundles are memoized', () => {

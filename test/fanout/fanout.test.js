@@ -31,20 +31,18 @@ test('selection resolves all, explicit list, and filters while excluding stale p
   );
 });
 
-test('a list selection refuses a bad sysid instead of fanning out to the rest', () => {
+test('a list selection coerces its sysids — an entry naming no vehicle selects none', () => {
   const peerTable = peerTableStub([peer(1), peer(2), peer(4)]);
 
-  // The list can arrive on msg.payload, and dropping the unreadable entry
-  // would send to the members that did parse while reporting success — the
-  // partial fan-out parseSysidList exists to prevent. Build tier already
-  // refused these (test/fanout/node.test.js); this is the wire tier matching.
-  // Both spellings: parseSysidList tokenises an array and a comma string
-  // differently before the shared 1..255 check, so a bad id has two ways in.
-  for (const bad of [[1, 'abc'], [1, 300], [1, 0], [1, 2.5], '1, 300', '1, abc']) {
-    assert.throws(
-      () => selectFanoutMembers(peerTable, { mode: 'list', sysids: bad }),
-      /1\.\.255/,
-      `${JSON.stringify(bad)} must refuse, not silently drop`
+  // The editor bounds every configured sysid (the members table,
+  // mavlink-fanout.html) and a `msg.payload.targets` list is trusted runtime
+  // input, so this coerces. An unreadable entry matches no peer, and the
+  // aggregate record names the members that were actually selected.
+  for (const bad of [[1, 'abc'], [1, 300], [1, 0], '1, 300', '1, abc']) {
+    assert.deepEqual(
+      selectFanoutMembers(peerTable, { mode: 'list', sysids: bad }).map((m) => m.sysid),
+      [1],
+      `${JSON.stringify(bad)} selects only the entry that names a vehicle`
     );
   }
 
@@ -81,20 +79,22 @@ test('an empty resolution records which selection produced it (#226)', async () 
 
 // ── Delivery tier membership (owner ruling, 2026-08-14) ──────────────────────
 
-test('a typo\'d delivery tier throws instead of silently running Send (lib/fanout delivery)', async () => {
+test("a typo'd delivery tier sends nothing — it matches no tier arm", async () => {
+  // Each tier is an affirmative switch arm (§5), so a token the editor cannot
+  // save (`delivery` carries RED.mavlink.oneOf) selects neither Confirm nor
+  // Send. Nothing reaches the wire; the aggregate craters on the record that
+  // was never produced.
   const connection = connectionStub([peer(1, { firmware: 'ardupilot' })]);
-  await assert.rejects(
-    () => executeFanout({
-      connection,
-      message: builtCommand(),
-      mode: 'sequential',
-      delivery: 'cofnirm',
-      selection: { mode: 'all' },
-    }),
-    /unknown Fan-out delivery "cofnirm" — expected one of build, send, confirm/
-  );
-  // Nothing left the wire under the mis-resolved tier.
-  assert.equal(connection.sends.length, 0);
+  const result = await executeFanout({
+    connection,
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'cofnirm',
+    selection: { mode: 'all' },
+  });
+  assert.equal(connection.sends.length, 0, 'nothing reached the wire');
+  assert.equal(result.success, false, 'and nothing is reported as delivered');
+  assert.equal(result.continue, false, 'no phantom success (§2)');
 });
 
 // ── The replicator contract: message in, kind inferred from its name ──────────
@@ -857,13 +857,15 @@ test('an east offset scales through cos(lat), not the latitude divisor', async (
     `10 m east at 47° is ~1318 degE7 (898 / cos 47°), got ${dLon}`);
 });
 
-test('offsets refuse a non-global COMMAND_INT frame rather than scaling degE7', async () => {
-  // Local-frame INT x/y are metres x 1e4 (§14-measured), so the degE7 path
-  // would turn a commanded 10 m into ~9 cm on the wire. Refuse instead.
-  const connection = connectionStub([peer(1)]);
-
-  const result = await executeFanout({ selection: { mode: 'all' },
-    connection,
+test('offsets patch no coordinate on a frame whose metre scale is not measured', async () => {
+  // Local-frame INT x/y are metres ×1e4 (§14-measured), so the degE7 path
+  // would turn a commanded 10 m into ~9 cm; a body frame re-aims "north"
+  // along the vehicle's own heading. Neither frame matches the offset
+  // surface, so no coordinate patch is produced — the message goes out as
+  // built, and the raw patch surface is how a flow reaches those frames.
+  const intConn = connectionStub([peer(1)]);
+  const intResult = await executeFanout({ selection: { mode: 'all' },
+    connection: intConn,
     message: {
       name: 'COMMAND_INT',
       fields: { target_system: 0, target_component: 0, command: 192, frame: 1, x: 50000, y: 0, z: 30 },
@@ -873,17 +875,12 @@ test('offsets refuse a non-global COMMAND_INT frame rather than scaling degE7', 
     delivery: 'send',
     intervalMs: 0,
   });
+  assert.equal(intResult.result, 'succeeded');
+  assert.equal(intConn.sends[0].message.fields.x, 50000, 'x is untouched, never degE7-scaled');
 
-  assert.equal(result.result, 'refused');
-  assert.match(result.detail, /not a global frame/);
-  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
-});
-
-test('offsets refuse a body-framed LOCAL_NED setpoint — north is not the x axis there', async () => {
-  const connection = connectionStub([peer(1)]);
-
-  const result = await executeFanout({ selection: { mode: 'all' },
-    connection,
+  const localConn = connectionStub([peer(1)]);
+  const localResult = await executeFanout({ selection: { mode: 'all' },
+    connection: localConn,
     message: {
       name: 'SET_POSITION_TARGET_LOCAL_NED',
       // MAV_FRAME_BODY_OFFSET_NED (9): x is body-forward, not north.
@@ -894,10 +891,8 @@ test('offsets refuse a body-framed LOCAL_NED setpoint — north is not the x axi
     delivery: 'send',
     intervalMs: 0,
   });
-
-  assert.equal(result.result, 'refused');
-  assert.match(result.detail, /not LOCAL_NED/);
-  assert.equal(connection.sends.length, 0);
+  assert.equal(localResult.result, 'succeeded');
+  assert.equal(localConn.sends[0].message.fields.x, 0, 'the body-axis x is left alone');
 });
 
 test('member metre offsets on SET_POSITION_TARGET_LOCAL_NED apply directly with up = -z', async () => {

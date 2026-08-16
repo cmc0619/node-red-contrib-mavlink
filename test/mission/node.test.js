@@ -162,22 +162,23 @@ test('build tier plans a fence transfer under a px4 firmware profile (mission_ty
   assert.deepEqual(plan.messages.map((m) => m.name), ['MISSION_REQUEST_LIST']);
 });
 
-test('an unknown payload.missionType string fails loud through missionTypeValue', async () => {
+test('an unknown payload.missionType resolves no type rather than a wrong one', async () => {
+  // The editor's Type select is the vocabulary (RED.mavlink.oneOf); a
+  // payload override is trusted runtime input. A token that names no type
+  // resolves to nothing — never quietly to mission (0), which would run the
+  // transfer against the wrong plan.
   const conn = new StubConnection();
   conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
   const Node = loadNode(conn);
   const node = new Node({
     operation: 'download',
     connection: 'conn',
-    delivery: 'confirm',
+    delivery: 'build',
     missionType: 'mission',
   });
-  const { outputs, err } = await runInput(node, { payload: { missionType: 'bogus' } });
-  assert.ok(err, 'an unknown mission type must fail loud');
-  assert.match(String(err), /unknown mission type/);
+  const { outputs } = await runInput(node, { payload: { missionType: 'bogus' } });
   assert.equal(conn.sent.length, 0, 'nothing was sent');
-  assert.equal(outputs[0][0], null, 'output 0 stays silent');
-  assert.equal(outputs[0][1].result, 'failed');
+  assert.equal(outputs[0][0].payload.missionType, undefined, 'the type is unresolved, not 0');
 });
 
 test('a garbage step timeout refuses instead of arming a ~1 ms retry storm (owner ruling, 2026-08-14)', async () => {

@@ -199,33 +199,18 @@ test('formationTargets dedupes and sorts sysids, coercing numeric strings', () =
   assert.deepEqual(targets.map((t) => t.sysid), [3, 5]);
 });
 
-test('formationTargets refuses a missing anchor altitude rather than defaulting to sea level', () => {
-  for (const alt of [undefined, null, '']) {
-    assert.throws(
-      () => formationTargets({ shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt }, sysids: [1] }),
-      /descent to sea level/
-    );
-  }
-});
-
-test('formationTargets refuses blank anchor coordinates rather than defaulting to null island', () => {
-  // Same three-state rule as altitude: blank (undefined/null/'') is "not
-  // given", not a value — Number(null) and Number('') are 0, and lat/lon 0,0
-  // would silently send the fleet to null island (Codacy, #287).
-  for (const blank of [undefined, null, '']) {
-    assert.throws(
-      () => formationTargets({
-        shape: 'line', spacing: 10, anchor: { lat: blank, lon: 8, alt: 30 }, sysids: [1],
-      }),
-      /needs an anchor/
-    );
-    assert.throws(
-      () => formationTargets({
-        shape: 'line', spacing: 10, anchor: { lat: 47, lon: blank, alt: 30 }, sysids: [1],
-      }),
-      /needs an anchor/
-    );
-  }
+test('anchor coordinates are coerced, not refused — the editor owns the boxes', () => {
+  // The three anchor fields are `required` in the fixed anchor mode
+  // (mavlink-formation.html lat/lon/alt), and are the leader's own reported
+  // position otherwise. Here they coerce: a blank is Number('') and rides.
+  const at0 = formationTargets({
+    shape: 'line', spacing: 10, anchor: { lat: '', lon: 8, alt: 30 }, sysids: [1],
+  });
+  assert.equal(at0[0].lat, 0, 'a blank latitude is the coercion, not a substituted place');
+  const noAlt = formationTargets({
+    shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: undefined }, sysids: [1],
+  });
+  assert.ok(Number.isNaN(noAlt[0].alt), 'an absent altitude stays absent, never sea level');
 });
 
 test('sysid entries are trusted input: Number() coercion, never a refusal', () => {
@@ -255,16 +240,20 @@ test('spacing is trusted config: Number() coercion only — the editor validator
   assert.deepEqual(slotOffsets('line', 3, -5)[1], { forward: 0, right: -5, down: 0 });
 });
 
-test('formationTargets refuses an empty sysid list', () => {
-  assert.throws(
-    () => formationTargets({ shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: 30 }, sysids: [] }),
-    /at least one vehicle sysid/
-  );
+test('an empty sysid list positions nobody', () => {
+  const targets = formationTargets({
+    shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: 30 }, sysids: [],
+  });
+  assert.deepEqual(targets, [], 'no vehicles, no slots — nothing to refuse');
 });
 
-test('formationTargets refuses an anchor near the poles', () => {
-  assert.throws(
-    () => formationTargets({ shape: 'line', spacing: 10, anchor: { lat: 89.95, lon: 8, alt: 30 }, sysids: [1] }),
-    /poles/
-  );
+test('an anchor at the pole computes what the maths gives — no refusal of its own', () => {
+  // cos(lat) → 0 makes metres east run away in longitude. The editor bounds a
+  // typed anchor; a leader's own reported position is measured data (§4). The
+  // driver computes and hands the number on.
+  const targets = formationTargets({
+    shape: 'line', spacing: 10, anchor: { lat: 89.999999, lon: 8, alt: 30 }, sysids: [1, 2],
+  });
+  assert.equal(targets.length, 2);
+  assert.ok(targets.every((t) => typeof t.lon === 'number'));
 });

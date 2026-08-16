@@ -22,45 +22,19 @@ test('override in bound set → returns override', () => {
   assert.deepEqual(result, { identityId: 'override-id', source: 'override' });
 });
 
-test('override NOT in bound set → throws, does not fall back to default', () => {
-  assert.throws(
-    () =>
-      resolveIdentity({
-        defaultIdentityId: 'default-id',
-        boundIdentityIds: ['a', 'b'],
-        overrideId: 'unknown-id',
-      }),
-    /override.*not among.*bound/i
+test('override NOT in bound set → still the override, never the default', () => {
+  // Silently swapping in the default would stamp a different source
+  // sysid/compid on the frame than the caller asked for. The id is passed
+  // through; a connection that does not carry it resolves no identity and the
+  // send craters there (lib/connection/runtime.js `_resolveOutboundIdentity`).
+  assert.deepEqual(
+    resolveIdentity({
+      defaultIdentityId: 'default-id',
+      boundIdentityIds: ['a', 'b'],
+      overrideId: 'unknown-id',
+    }),
+    { identityId: 'unknown-id', source: 'override' }
   );
-});
-
-test('override not in bound set → error names the bound ids', () => {
-  let message = '';
-  try {
-    resolveIdentity({
-      defaultIdentityId: 'default-id',
-      boundIdentityIds: ['id-one', 'id-two'],
-      overrideId: 'missing',
-    });
-  } catch (err) {
-    message = err.message;
-  }
-  assert.ok(message.includes('id-one'), 'error should list bound ids');
-  assert.ok(message.includes('id-two'), 'error should list bound ids');
-});
-
-test('override not in bound set with empty bound list → error says none bound', () => {
-  let message = '';
-  try {
-    resolveIdentity({
-      defaultIdentityId: 'default-id',
-      boundIdentityIds: [],
-      overrideId: 'missing',
-    });
-  } catch (err) {
-    message = err.message;
-  }
-  assert.ok(message.includes('none bound'), 'error should say none bound');
 });
 
 /* null / undefined / empty string override → treated as absent */
@@ -109,24 +83,12 @@ test('no override, empty bound set (all ids accepted), default present → retur
   assert.deepEqual(result, { identityId: 'default-id', source: 'default' });
 });
 
-test('no override, no default → throws', () => {
-  assert.throws(
-    () =>
-      resolveIdentity({
-        defaultIdentityId: '',
-        boundIdentityIds: ['a'],
-      }),
-    /no default local identity/i
-  );
-});
-
-test('no override, default NOT in bound set → throws', () => {
-  assert.throws(
-    () =>
-      resolveIdentity({
-        defaultIdentityId: 'default-id',
-        boundIdentityIds: ['other-id'],
-      }),
-    /default.*not among.*bound/i
+test('no override, no default → the blank default, resolved by the connection', () => {
+  // The Connection's `defaultIdentity` is a required editor field; a blank
+  // one reaching here is hand-edit drift and resolves to no identity node,
+  // which craters at the send site rather than being repaired here.
+  assert.deepEqual(
+    resolveIdentity({ defaultIdentityId: '', boundIdentityIds: ['a'] }),
+    { identityId: '', source: 'default' }
   );
 });

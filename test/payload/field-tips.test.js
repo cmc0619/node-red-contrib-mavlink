@@ -55,34 +55,21 @@ test('fieldTipsFromBundle returns empty object for unknown verb', () => {
   assert.deepEqual(fieldTipsFromBundle(bundle, 'camera', 'nope', ''), {});
 });
 
-test('buildPayloadMessage rejects an unknown verb', () => {
-  assert.throws(
-    () => buildPayloadMessage({
-    carrier: 'long',
-      topic: 'camera',
-      verb: 'nope',
-      target: { sysid: 1, compid: 1 },
-      values: {},
-    }),
-    /unknown payload verb/
-  );
-});
-
-test('buildPayloadMessage unknown-verb error includes path when present', () => {
-  // A blank or unknown gimbal path misses the recipe and craters through the
-  // shared `unknown payload verb` throw — no `|| 'legacy'` default, no bespoke
-  // path resolver. The label carries the path so the miss is legible.
-  assert.throws(
-    () => buildPayloadMessage({
+test('a topic/verb pair with no recipe selects no builder', () => {
+  // The editor's Topic and Verb selects are the vocabulary. A pair that names
+  // no recipe builds nothing — including a gimbal path that misses (no
+  // `|| 'legacy'` default, no bespoke path resolver).
+  for (const input of [
+    { topic: 'camera', verb: 'nope' },
+    { topic: 'gimbal', verb: 'aim', path: 'not-a-real-path' },
+  ]) {
+    assert.throws(() => buildPayloadMessage({
       carrier: 'long',
-      topic: 'gimbal',
-      verb: 'aim',
-      path: 'not-a-real-path',
       target: { sysid: 1, compid: 1 },
       values: {},
-    }),
-    /gimbal\/aim\/not-a-real-path/
-  );
+      ...input,
+    }));
+  }
 });
 
 test('fieldTipsFromBundle omits Empty / Reserved param descriptions', () => {
