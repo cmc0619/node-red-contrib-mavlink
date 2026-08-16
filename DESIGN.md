@@ -4555,6 +4555,53 @@ remainder of the audit (editor red-rings for mission items, `mavlink-in` field n
 `bindPort` 0, command advanced params, payload values, formation anchors — and
 `mavlink-build`'s band twin) is protector-side work, not driver holes.
 
+**The selection-typo cluster is superseded by §0 (owner ruling, 2026-08-16).** `AGENTS.md`
+§0 — the two-artifact doctrine — settles the question the cluster above answered the other way.
+The driver is pymavlink for Node-RED: *low level, general purpose, message processing*. It has
+no vocabulary opinions; the editor is the walled garden and holds every one of them. So the
+resolution-time refusals the cluster installed are gone, and each is now a `switch` with
+affirmative `case` arms only (§5) plus a red ring in the `.html`:
+
+- **Move** `delivery`, the reposition carrier's mode/frame/yaw-rate/changeMode refusals,
+  `resolveModeAndFrame`, `requireNumber`, `enumValue`, `frameForAltRef`, `frameForReference`,
+  `deriveSteerMode`'s unmeasured-mix refusal, manual's blank-axis refusal, turn's and speed's.
+- **Command** `sendAs`, `mode`, `delivery`, `preset`. **Param** `action`, `delivery`, encoding,
+  `paramType`, `paramId`, the blank/non-finite value refusals. **Mission** `delivery`,
+  `operation`, `missionType`. **Fan-out** `delivery` (and its `default:` arm). **Payload** verb
+  and its required ROI slots. **Build** `tier`.
+- **Broadcast on an acked tier** and **passphrase vs raw signing key** — the two
+  dependency-between-fields cases `AGENTS.md` §0 names by name — moved to the editor whole.
+  `RED.mavlink.validateTargetSystem` and `RED.mavlink.oneOf` are the shared red rings; four
+  copies of the broadcast rule became one.
+
+*Measured cost, and it is the point:* an unresolved selection now rides out as `undefined` or
+`NaN`. On a float field that is legal MAVLink ("field not used"). On an integer field
+`lib/connection/wire.js` refuses it at the one choke point every outbound message crosses —
+the guard §14 already ruled and pinned — so the crater is loud and lands in the sending node's
+existing error path, before anything is enqueued. Nothing silently becomes a *different legal
+value*, which was the cluster's real subject.
+
+*What did not move, and the line:* a value that never reaches the wire has no downstream layer
+to catch it, so its guard stays. `finiteNumberOr` (timers, rates, ports: `setTimeout(fn, NaN)`
+substitutes ~1 ms rather than refusing) and `resolveBand` (`Number('')` is `0` is
+`BAND.EMERGENCY` — a blank band silently outranking every other message) are both that shape,
+and both are ruled above. Config-node *resolution* failures stay too — a deleted Vehicle
+Profile is an absent object, not a judgement about input. So does anything the wire format or
+the underlying library genuinely refuses.
+
+*Where a "no behavior selected" outcome would have been silence, it is a record instead.*
+Fan-out's per-member dispatch aggregates through `records.filter(Boolean)`, so a member no tier
+arm reached would have been dropped and the run reported `succeeded` — §2's phantom success by
+another door. It emits a `failed` member record naming the unmatched tier. §0 rule 3: never a
+validation throw, never silence.
+
+*Check:* `grep -rn "expected one of" lib nodes --include=*.js` leaves exactly the two ruled
+exceptions — `lib/connection/bands.js` (both arms) and `lib/metadata/commands-list.js`, whose
+"unknown dialect" is a catalog route answering the editor about an absent resource. Anything
+else appearing there is a regression. The editor's static tables are drift-pinned against the
+library they mirror (`REQUIRED_VALUES` in `mavlink-payload.html` against `PAYLOAD_RECIPES`;
+the acked-tier lists in `test/nodes/target-sysid-range-html.test.js`).
+
 **Mission Clear needs no confirmation gate (owner ruling, 2026-08-13).**
 *Wrong belief:* destructive operations need a second yes — a `confirmClear` checkbox or
 `msg.confirmed === true` — before a MISSION_CLEAR_ALL may be built or sent.
