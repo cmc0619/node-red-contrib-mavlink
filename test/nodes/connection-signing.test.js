@@ -239,3 +239,32 @@ test('the node wires the rejected handler and the untrusted flag into the runtim
     'every state badge carries the untrusted flag'
   );
 });
+
+// A raw key is the one config value whose corruption is completely silent.
+// Buffer.from(hex, 'hex') stops at the first non-hex character and returns
+// what it managed to decode — no throw, no warning. A single typo therefore
+// yields a short key, every signed packet is rejected by the vehicle, and
+// nothing local says why. That is not GIGO reaching the wire (§0's supported
+// behavior); it is a *different* key reaching the wire, so the decoded length
+// is checked and the refusal surfaced (§0 rule 1).
+test('a raw signing key that does not decode to 32 bytes refuses loud', () => {
+  const cases = {
+    'one typo mid-string': `${'a'.repeat(30)}z${'a'.repeat(33)}`,
+    'half a key': 'a'.repeat(32),
+    'double a key': 'a'.repeat(128),
+    'not hex at all': 'not-a-signing-key',
+  };
+  for (const [name, hex] of Object.entries(cases)) {
+    assert.throws(
+      () => buildSigning({}, { signingKeyHex: hex }),
+      /decoded to \d+ bytes, not 32/,
+      `${name} must not become a silently short key`
+    );
+  }
+});
+
+test('a well-formed raw key is untouched by that check', () => {
+  const signing = buildSigning({}, { signingKeyHex: 'ab'.repeat(32) });
+  assert.equal(signing.key.length, 32);
+  assert.equal(signing.key.toString('hex'), 'ab'.repeat(32));
+});

@@ -287,6 +287,20 @@ function buildSigning(config, credentials) {
     // here cannot reproduce). The editor owns the format and the exclusivity
     // against the passphrase (mavlink-connection.html credentials).
     signing.key = Buffer.from(keyHex, 'hex');
+    // §0 rule 1: surface a refusal the underlying library should make and
+    // does not. Buffer.from('…', 'hex') stops at the first non-hex character
+    // and returns what it got — a key with one typo at position 30 comes back
+    // 15 bytes long, and nothing throws. That is not GIGO reaching the wire;
+    // it is a *different* key reaching the wire, and the only symptom is a
+    // vehicle silently rejecting every signed packet. Checked on the result
+    // rather than the input so this stays a length fact about what was
+    // produced, not a second copy of the editor's format rule.
+    if (signing.key.length !== 32) {
+      throw new Error(
+        `mavlink-connection: signing key decoded to ${signing.key.length} bytes, not 32 — `
+        + 'the raw key is 64 hex characters'
+      );
+    }
   } else if (passphrase) {
     const { MavLinkPacketSignature } = require('node-mavlink');
     signing.key = MavLinkPacketSignature.key(passphrase);

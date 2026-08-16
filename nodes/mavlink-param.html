@@ -6,7 +6,12 @@
       name: { value: '' },
       identity: { value: '' },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'collect']) },
-      action: { value: 'read' },
+      // Without this, a drifted action falls through buildParamMessage's
+      // switch to `return undefined` (§5) and the Build tier reports it as a
+      // succeeded build of `{ payload: undefined }` — phantom success, which
+      // §0 rule 3 forbids. The driver is right to select no behavior; the
+      // red ring is what stops the flow reaching that state.
+      action: { value: 'read', validate: RED.mavlink.oneOf(['read', 'set', 'request-list']) },
       // Every Param action is a two-way conversation: a set waits for its
       // PARAM_VALUE echo, a read for the value, a list for the stream. None
       // of them can be answered by "sysid 0", so broadcast reds on the tiers

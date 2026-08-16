@@ -109,8 +109,9 @@ module.exports = function registerMavlinkMission(RED) {
       // stays silent until the transfer deadline (download) — operational
       // failures the existing paths already report loud (§9). The editor's
       // Type dropdown is the firmware protector (§11). No `|| 'mission'`
-      // default: a blank or unknown key throws here (missionTypeValue craters
-      // on both), routed through failInput — the editor always saves a member.
+      // default: a blank or unknown key resolves to no type (missionTypeValue
+      // matches no case and returns undefined) — the editor always saves a
+      // member, so only a hand-edited flow gets here.
       const missionType = missionTypeValue(missionTypeKey);
 
       // Per-step timeout / retry count (owner ruling, 2026-08-14, the
@@ -199,6 +200,14 @@ module.exports = function registerMavlinkMission(RED) {
       /** Emit the protocol plan on output 0 and send nothing. */
       function buildTier() {
       const plan = buildPlan(operation, missionType, target, uploadItems);
+      // No operation matched, so buildPlan selected no behavior and built no
+      // messages (§5). Same answer as the tier dispatch above: nothing ran,
+      // and the input still completes rather than dereferencing a plan that
+      // was never built.
+      if (!plan.messages) {
+        done();
+        return;
+      }
       applyActionStatus(node, 'preview', `plan ${operation} ${missionTypeKey}`);
       send([
         { payload: plan },
