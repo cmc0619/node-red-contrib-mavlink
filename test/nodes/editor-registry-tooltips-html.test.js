@@ -70,8 +70,8 @@ test('select title-sync and missing-option sentinel live once in the resource', 
   assert.match(resourceScript, /RED\.mavlink\.bindSelectTitleSync\s*=/);
   assert.match(resourceScript, /RED\.mavlink\.ensureSavedEnumOption\s*=/);
   assert.match(resourceScript, /#.*\(not in dialect\)/);
-  // Namespace is concatenated (`'change.' + ns`); default ns is mavEnumTip.
-  assert.match(resourceScript, /off\('change\.' \+ ns\)\.on\('change\.' \+ ns/);
+  // The handler is namespaced (`change.${ns}`); default ns is mavEnumTip.
+  assert.match(resourceScript, /off\(`change\.\$\{ns\}`\)\.on\(`change\.\$\{ns\}`/);
   assert.match(resourceScript, /namespace \|\| 'mavEnumTip'/);
 });
 

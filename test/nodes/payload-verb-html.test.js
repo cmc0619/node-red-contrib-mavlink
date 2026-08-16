@@ -355,7 +355,7 @@ test('REQUIRED_VALUES is a drift pin, not a second vocabulary (§0 walled garden
     // unused slot is a hole — 8 of the 57 across the table. `slot &&` is what
     // steps over them, not a defensive habit.
     const slots = [...(recipe.params || []), ...(recipe.fields || [])]
-      .filter((slot) => slot && slot.required)
+      .filter((slot) => slot?.required)
       .map((slot) => slot.field);
     // Recipe keys are `topic|verb|path`; the editor keys on `topic|verb`.
     if (slots.length) expected[key.split('|').slice(0, 2).join('|')] = slots;
