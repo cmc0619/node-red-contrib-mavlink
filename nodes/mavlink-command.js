@@ -307,33 +307,33 @@ module.exports = function registerMavlinkCommand(RED) {
       // Build and Send finish here; Confirm and Complete share the ack waiter
       // below, where `delivery === 'complete'` adds the completion poll.
       switch (delivery) {
-      case 'build': {
-        const message = buildCarrierMessage(configuredCarrier, 0);
-        applyActionStatus(node, 'preview', `build ${displayName}`);
-        // Output 1 reports every terminal outcome, success included (§9); a
-        // successful build emits a 'built' status record for status/debug
-        // consumers, consistent with the other action nodes.
-        const rec = makeRecord({
-          result: 'built',
-          resultCode: null,
-          confirmedBy: 'none',
-          elapsed: Date.now() - startMs,
-          detail: 'build tier: message constructed, not sent',
-        });
-        emitStatus(rec, send, true, message);
-        done();
-        return;
-      }
-      case 'send': {
-        const message = buildCarrierMessage(configuredCarrier, 0);
-        applyActionStatus(node, 'sending', `sending ${displayName}\u2026`);
-        connNode.send(message, { band: BAND.CONTROL, target, identityId });
-        const rec = makeRecord({ result: 'sent', confirmedBy: 'none', elapsed: 0 });
-        applyActionStatus(node, 'ok', `sent ${displayName}`);
-        emitStatus(rec, send, true, message);
-        done();
-        return;
-      }
+        case 'build': {
+          const message = buildCarrierMessage(configuredCarrier, 0);
+          applyActionStatus(node, 'preview', `build ${displayName}`);
+          // Output 1 reports every terminal outcome, success included (§9); a
+          // successful build emits a 'built' status record for status/debug
+          // consumers, consistent with the other action nodes.
+          const rec = makeRecord({
+            result: 'built',
+            resultCode: null,
+            confirmedBy: 'none',
+            elapsed: Date.now() - startMs,
+            detail: 'build tier: message constructed, not sent',
+          });
+          emitStatus(rec, send, true, message);
+          done();
+          return;
+        }
+        case 'send': {
+          const message = buildCarrierMessage(configuredCarrier, 0);
+          applyActionStatus(node, 'sending', `sending ${displayName}\u2026`);
+          connNode.send(message, { band: BAND.CONTROL, target, identityId });
+          const rec = makeRecord({ result: 'sent', confirmedBy: 'none', elapsed: 0 });
+          applyActionStatus(node, 'ok', `sent ${displayName}`);
+          emitStatus(rec, send, true, message);
+          done();
+          return;
+        }
       }
 
       // ── Delivery: Confirm / Complete ──────────────────────────────────────
