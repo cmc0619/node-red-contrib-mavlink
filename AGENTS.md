@@ -1,5 +1,85 @@
 # AGENTS.md
 
+## 0. The two artifacts (read first)
+
+Pymavlink describes itself: "a low level and general purpose MAVLink message
+processing library." This repo's **driver** (`lib/**`, `nodes/*.js`) IS that, for
+Node-RED. Three words are the whole doctrine:
+
+- **low level** — no policy. The library packs, sends, receives, unpacks. What the
+  messages mean, and whether sending them is wise, is not this layer.
+- **general purpose** — no application opinions. The library does not know what a
+  safe input is, and must not learn.
+- **message processing** — the job is the wire format. If the wire can carry it,
+  the library carries it. Pinned facts: pymavlink performs no semantic
+  validation — any mode number, any param value, any target id is packed and
+  sent; it raises only at pack time (a type/range the underlying struct cannot
+  carry) or on I/O error. Where you are unsure what pymavlink does with an
+  input, the answer is: nothing — it packs and sends it. Parsing inbound frames
+  and discarding malformed ones is part of the job; that is the wire format
+  talking, not validation policy.
+
+The **editor** (`nodes/*.html`) is the application built ON that library — what
+MAVProxy and DroneKit are to pymavlink. Applications own protection: pymavlink
+does not stop MAVProxy from sending a bad mode number; MAVProxy validates its
+own UI. Here, the editor is the protector — ALL input validation lives in
+`.html` as deploy-time red rings. It is paranoid so the driver doesn't have to
+be.
+
+### The driver rule
+
+**The driver trusts its input. GIGO is supported behavior.** If pymavlink would
+send it, this driver sends it — including commands that fly the aircraft into a
+building. That is the product, not a defect.
+
+Decision procedure before writing ANY runtime check:
+
+1. Does the wire format or underlying library itself refuse this? → The driver
+   may surface that refusal (a serializer range error, a queue that is actually
+   full, a socket that is actually dead).
+2. Could the editor reject this at deploy time? → It belongs in the `.html` as
+   a red ring. Write it there, or nowhere.
+3. Is it an operational failure that cannot exist until runtime (dead link
+   mid-send, ack timeout, full queue)? → Settle it as a result record or node
+   status via the async plumbing. Never a validation throw, never silence.
+
+If none apply, there is no check. Bad input rides to whatever the spec does
+with it. The correct response to bad input is to send it.
+
+### Forbidden in the driver (PRs containing these are rejected on sight)
+
+- `throw` whose message names a vocabulary ("expected one of …"), a required
+  field, or a range
+- Membership tests on input: `includes(x) ? x : 'custom'`, `hasOwnProperty`
+  guards, enum/vocabulary resolver functions
+- Defaults or coercions on input: `x || 'default'`, `Number(x) || 0`,
+  `?? fallback`
+- `switch` with a `default:` arm — behavior dispatch is affirmative `case` arms
+  only (§5); an unmatched value selects no behavior
+- try/catch whose purpose is converting bad input into a nicer error
+- "Helpful" refusal errors ("refusing to …", "must be …", "cannot target
+  broadcast")
+- Comments describing checks that do not exist
+
+Existing violations in the tree are scheduled for removal. Do not imitate them.
+Do not "fix" bad input. Do not add a test asserting that bad input is
+rejected — the driver's contract with bad input is that it is sent.
+
+### The walled garden rule
+
+The editor is where protection lives, and it MUST be exhaustive: every
+closed-vocabulary field is a `required` select; every numeric field carries a
+range validator; every dependency between fields (delivery tier vs broadcast
+target, passphrase vs raw key) is a deploy-time red ring. If you feel the urge
+to protect the operator while editing driver code, that urge is correct — and
+it belongs HERE. Write the red ring instead.
+
+### The shibboleth
+
+Ask: "What happens if `msg.payload.x` is garbage?" The only correct answer:
+"It goes on the wire." (Or, where the wire format itself cannot carry it: the
+serializer's own error.)
+
 ## 1. Mission and authority
 
 This repository implements a MAVLink toolkit for Node-RED. This file governs how agents build,
@@ -76,53 +156,29 @@ Comments describe the code as it exists. Do not leave archaeology such as what c
 used to happen, why an old approach was removed, or which PR caused the current implementation.
 That history belongs in Git and repository documentation, not source comments.
 
-## 4. Driver, editor, and failure boundary
+## 4. Wire ingress and operational specifics
 
-The architecture is one sentence:
+`mavlink-in` is the only runtime doorguard, and it is one because it alone
+receives untrusted wire input:
 
-> The editor validates configuration; `mavlink-in` guards the wire; the driver obeys.
+- It rejects malformed wire frames by discarding them, then continues parsing
+  subsequent bytes.
+- A valid vehicle message is data, not a policy decision. Forward results such
+  as `DENIED` unchanged; the flow programmer may act on them or ignore them.
+- An operation that waits for a response may expose a programmer-configurable
+  timeout. Use a protocol-defined timeout when MAVLink specifies one. Do not
+  invent a hidden timeout, retry, fallback, or recovery policy.
+- Once `mavlink-in` emits a `msg`, that message is trusted. No downstream node
+  repeats ingress validation.
 
-`nodes/*.html` validates static node configuration before deploy. Runtime receives that
-configuration and assumes it is correct. `nodes/*.js` and `lib/**` form a training-wheels-free
-driver with the same expressive power and outbound failure boundary as pymavlink. `mavlink-in`
-is the only runtime doorguard because it alone receives untrusted wire input.
+Outbound specifics §0 does not restate:
 
-| Input | Treatment |
-|---|---|
-| Static node configuration | The editor validates it before deploy. Runtime assumes it is correct and never checks it again. |
-| MAVLink wire input | `mavlink-in` parses it. Discard malformed frames and keep receiving. Forward every valid message unchanged. |
-| `msg`, flow context, and node context | Trust them, including messages emitted by `mavlink-in`. Pass them directly to the driver without type, range, shape, or safety checks. If the underlying operation rejects them, it crashes. |
-
-### 4.1 Outbound driver rules
-
-- Pass configured and `msg` values directly into the driver operation. Do not preflight,
-  validate, normalize, clamp, or reject them because they are dangerous, unusual, out of range,
-  `NaN`, or likely to be ignored by a vehicle.
-- Never invent an omitted value. Do not substitute a safe enum member, first option, default
-  frame, or other legal value the caller did not choose.
-- If the equivalent pymavlink call accepts the values, send them. If it crashes, this driver
-  crashes too. Do not catch, translate, default, retry, recover, downgrade to a warning/status,
-  or continue past that failure. There are no pymavlink guardrails here.
-- Type conversion required by Node-RED serialization is plumbing, not validation.
-- Do not emit advisories about what a vehicle may do with a legal request. Keep those facts in
-  `MAVLINK.md`.
-
-`msg` and the runtime driver are training-wheels-free. Bad flow data is fixed at its source—the
-flow or wiring—after the unmodified failure exposes it. Outside the `mavlink-in` wire boundary,
-remove runtime guardrails in `lib/**` or `nodes/*.js` on sight, including their supporting tests
-and scaffolding.
-
-### 4.2 Ingress and operational results
-
-- `mavlink-in` is the only runtime validation boundary. It rejects malformed wire frames by
-  discarding them, then continues parsing subsequent bytes.
-- A valid vehicle message is data, not a policy decision. Forward results such as `DENIED`
-  unchanged; the flow programmer may act on them or ignore them.
-- An operation that waits for a response may expose a programmer-configurable timeout. Use a
-  protocol-defined timeout when MAVLink specifies one. Do not invent a hidden timeout, retry,
-  fallback, or recovery policy.
-- Once `mavlink-in` emits a `msg`, that message is trusted. No downstream node repeats ingress
+- Never invent an omitted value. Do not substitute a safe enum member, first
+  option, default frame, or other legal value the caller did not choose.
+- Type conversion required by Node-RED serialization is plumbing, not
   validation.
+- Do not emit advisories about what a vehicle may do with a legal request.
+  Keep those facts in `MAVLINK.md`.
 
 ## 5. Runtime affirmative selection dispatch
 
@@ -150,8 +206,7 @@ Remove validation-only switches and all defaulting, fall-open, validation, and e
 real dispatch switches on sight. A real dispatcher contains affirmative `case` arms only.
 
 This rule does not apply to data lookup tables, metadata maps, option registries, or display
-mappings. The GUI in `nodes/*.html` is the protector: it may use those structures to render
-choices and validate operator input. The runtime driver does not repeat that validation.
+mappings — including the ones the editor uses to render choices and validate operator input.
 
 ## 6. Node-RED configuration contract
 
@@ -173,9 +228,6 @@ the schema for static configuration.
   layer owns multiple behaviors; otherwise pass it directly to the core implementation.
 - This is a pre-1.0 driver under active development. Do not add migrations, compatibility
   shims, legacy-format handling, deprecation paths, or tests for old flow shapes.
-
-Static configuration is validated in the editor. Runtime code uses the deployed values directly
-without checking them.
 
 ## 7. Tests
 
