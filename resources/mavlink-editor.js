@@ -35,12 +35,12 @@
    */
   RED.mavlink.ensureConfigNodePicker = function (node, property, type, prefix) {
     prefix = prefix || 'node-input';
-    if ($('#' + prefix + '-btn-' + property + '-add').length) {
+    if ($(`#${prefix}-btn-${property}-add`).length) {
       return;
     }
 
-    var typeDef = RED.nodes.getType(type);
-    var $el = $('#' + prefix + '-' + property);
+    const typeDef = RED.nodes.getType(type);
+    const $el = $(`#${prefix}-${property}`);
     if (!$el.length) return;
 
     if (!typeDef || typeDef.category !== 'config') {
@@ -48,17 +48,17 @@
         $el.prop('readonly', true)
           .attr(
             'placeholder',
-            type + ' not loaded — check Node-RED log / dependencies'
+            `${type} not loaded — check Node-RED log / dependencies`
           );
       }
       return;
     }
 
     if ($el.is('select')) {
-      var val = $el.val();
-      var style = $el.attr('style') || 'width:70%';
-      var $input = $('<input type="text">')
-        .attr('id', prefix + '-' + property)
+      const val = $el.val();
+      const style = $el.attr('style') || 'width:70%';
+      const $input = $('<input type="text">')
+        .attr('id', `${prefix}-${property}`)
         .attr('style', style);
       if (val) node[property] = val;
       $el.replaceWith($input);
@@ -78,7 +78,7 @@
    * @returns {string}
    */
   RED.mavlink.enumOptionLabel = function (entry) {
-    return entry.name + ' (' + entry.value + ')';
+    return `${entry.name} (${entry.value})`;
   };
 
   /**
@@ -167,20 +167,20 @@
    */
   RED.mavlink.refreshVerbOptions = function (opts) {
     opts = opts || {};
-    var topicSelector = '#node-input-topic';
-    var verbSelector = '#node-input-verb';
-    var topic = $(topicSelector).val() || 'camera';
-    var $verb = $(verbSelector);
-    var verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
-    var saved = Object.prototype.hasOwnProperty.call(opts, 'saved')
+    const topicSelector = '#node-input-topic';
+    const verbSelector = '#node-input-verb';
+    const topic = $(topicSelector).val() || 'camera';
+    const $verb = $(verbSelector);
+    const verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
+    const saved = Object.prototype.hasOwnProperty.call(opts, 'saved')
       ? (opts.saved || $verb.val())
       : $verb.val();
     $verb.empty();
-    for (var i = 0; i < verbs.length; i++) {
-      var entry = verbs[i];
+    for (let i = 0; i < verbs.length; i++) {
+      const entry = verbs[i];
       $verb.append($('<option></option>').val(entry.value).text(entry.label));
     }
-    var valid = verbs.some(function (v) { return v.value === saved; });
+    const valid = verbs.some(function (v) { return v.value === saved; });
     $verb.val(valid ? saved : (verbs[0] ? verbs[0].value : ''));
   };
 
@@ -194,8 +194,8 @@
    * @returns {string}
    */
   RED.mavlink.bitmaskTitle = function (description) {
-    var base = description || 'Bitmask flags';
-    return base + ' (Ctrl/Cmd-click to select multiple flags.)';
+    const base = description || 'Bitmask flags';
+    return `${base} (Ctrl/Cmd-click to select multiple flags.)`;
   };
 
   /**
@@ -205,7 +205,7 @@
    * @returns {string}
    */
   RED.mavlink.booleanEntryLabel = function (entry) {
-    var name = entry && entry.name ? entry.name : '';
+    const name = entry && entry.name ? entry.name : '';
     if (name === 'FALSE' || name.slice(-6) === '_FALSE') return 'false';
     if (name === 'TRUE' || name.slice(-5) === '_TRUE') return 'true';
     return (entry && entry.label) || name;
@@ -230,17 +230,17 @@
    */
   RED.mavlink.booleanEnumInput = function (entries, opts) {
     opts = opts || {};
-    var trueValue = opts.trueValue !== undefined ? String(opts.trueValue) : null;
+    let trueValue = opts.trueValue !== undefined ? String(opts.trueValue) : null;
     if (trueValue === null) {
-      var trueEntry = null;
-      for (var i = 0; i < entries.length; i++) {
-        var name = entries[i] && entries[i].name ? entries[i].name : '';
+      let trueEntry = null;
+      for (let i = 0; i < entries.length; i++) {
+        const name = entries[i] && entries[i].name ? entries[i].name : '';
         if (name === 'TRUE' || name.slice(-5) === '_TRUE') trueEntry = entries[i];
       }
       trueValue = trueEntry ? String(trueEntry.value) : '1';
     }
-    var saved = opts.saved;
-    var checked = saved !== undefined && saved !== null && saved !== ''
+    const saved = opts.saved;
+    const checked = saved !== undefined && saved !== null && saved !== ''
       && String(saved) === trueValue;
     return $('<input type="checkbox">')
       .addClass(opts.className || '')
@@ -252,7 +252,7 @@
   };
 
   /** MAV_CMD_DO_SET_MODE, whose param2 is the custom_mode below. */
-  var DO_SET_MODE = 176;
+  const DO_SET_MODE = 176;
 
   /**
    * ArduPilot custom-mode tables by Vehicle Profile family.
@@ -271,7 +271,7 @@
    *
    * @type {Object<string, string>}
    */
-  var CUSTOM_MODE_ENUMS = {
+  const CUSTOM_MODE_ENUMS = {
     copter: 'COPTER_MODE',
     plane: 'PLANE_MODE',
     rover: 'ROVER_MODE',
@@ -291,7 +291,7 @@
    */
   RED.mavlink.customModeEnum = function (commandId, paramIndex) {
     if (Number(commandId) !== DO_SET_MODE || Number(paramIndex) !== 2) return null;
-    var target = RED.mavlink.resolveCatalogTarget();
+    const target = RED.mavlink.resolveCatalogTarget();
     if (target.firmware !== 'ardupilot') return null;
     return CUSTOM_MODE_ENUMS[target.vehicleFamily] || null;
   };
@@ -326,8 +326,8 @@
    * @returns {?number}
    */
   RED.mavlink.magicBooleanValue = function (commandId, paramIndex) {
-    var key = String(commandId) + ':' + String(paramIndex);
-    var value = RED.mavlink.MAGIC_BOOLEAN_PARAMS[key];
+    const key = `${commandId}:${paramIndex}`;
+    const value = RED.mavlink.MAGIC_BOOLEAN_PARAMS[key];
     return value === undefined ? null : value;
   };
 
@@ -355,17 +355,17 @@
    */
   RED.mavlink.selectedBitmaskValues = function (saved, entries) {
     if (saved === undefined || saved === null || saved === '') return [];
-    var mask;
+    let mask;
     try {
       mask = BigInt(String(saved));
     } catch (_e) {
       return [];
     }
-    var selected = [];
-    var list = entries || [];
-    for (var i = 0; i < list.length; i++) {
-      var entry = list[i];
-      var value;
+    const selected = [];
+    const list = entries || [];
+    for (let i = 0; i < list.length; i++) {
+      const entry = list[i];
+      let value;
       try {
         value = BigInt(String(entry.value));
       } catch (_e2) {
@@ -398,10 +398,10 @@
    * @returns {?number} the mask, or null when nothing is selected
    */
   RED.mavlink.bitmaskFromSelection = function (raw) {
-    var values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    const values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
     if (!values.length) return null;
-    var mask = 0n;
-    for (var i = 0; i < values.length; i++) {
+    let mask = 0n;
+    for (let i = 0; i < values.length; i++) {
       mask = mask | BigInt(String(values[i]));
     }
     return Number(mask);
@@ -417,21 +417,21 @@
    */
   RED.mavlink.isFalseTrueEnum = function (entries) {
     if (!Array.isArray(entries) || entries.length !== 2) return false;
-    var falseOk = false;
-    var trueOk = false;
-    for (var i = 0; i < entries.length; i++) {
-      var entry = entries[i];
+    let falseOk = false;
+    let trueOk = false;
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
       // Require valued objects — never synthesize 0/1 for bare name strings.
       if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string') return false;
-      var name = entry.name;
-      var isFalse = name === 'FALSE' || name.slice(-6) === '_FALSE';
-      var isTrue = name === 'TRUE' || name.slice(-5) === '_TRUE';
+      const name = entry.name;
+      const isFalse = name === 'FALSE' || name.slice(-6) === '_FALSE';
+      const isTrue = name === 'TRUE' || name.slice(-5) === '_TRUE';
       if (!isFalse && !isTrue) return false;
       // Reject null/false/'' — Number(null)===0 would falsely match FALSE=0.
-      var rawValue = entry.value;
+      const rawValue = entry.value;
       if (typeof rawValue !== 'number' && typeof rawValue !== 'string') return false;
       if (typeof rawValue === 'string' && rawValue.trim() === '') return false;
-      var value = Number(rawValue);
+      const value = Number(rawValue);
       if (!Number.isInteger(value)) return false;
       if (isFalse) {
         if (value !== 0 || falseOk) return false;
@@ -456,7 +456,7 @@
    * @returns {string[]}
    */
   RED.mavlink.normalizeIdentityIds = function (ids, primaryId) {
-    var out = [];
+    const out = [];
     (ids || []).forEach(function (id) {
       if (!id || id === primaryId || out.indexOf(id) !== -1) return;
       out.push(id);
@@ -465,7 +465,7 @@
   };
 
   function valueFromSelector(selector) {
-    var $el = $(selector);
+    const $el = $(selector);
     return $el && $el.length ? String($el.val() || '').trim() : '';
   }
 
@@ -495,23 +495,23 @@
    * @returns {Object<string, string>}
    */
   function currentEnumQuery(names) {
-    var query = {};
+    const query = {};
     // Build-tier detection must match resolveCatalogTarget: most action nodes
     // use `#node-input-delivery`, but mavlink-build uses `#node-input-tier`.
     // Prefer delivery when that control exists; otherwise read tier (Codex #118).
-    var mode = $('#node-input-delivery').length
+    const mode = $('#node-input-delivery').length
       ? valueFromSelector('#node-input-delivery')
       : valueFromSelector('#node-input-tier');
-    var buildTier = mode === 'build';
+    const buildTier = mode === 'build';
     if (buildTier) {
-      var buildDialect = valueFromSelector('#node-input-dialect');
+      const buildDialect = valueFromSelector('#node-input-dialect');
       if (buildDialect && buildDialect !== '__vehicle') {
         query.dialect = buildDialect;
       } else if (buildDialect === '__vehicle') {
-        var buildVehicle = valueFromSelector('#node-input-vehicle');
+        const buildVehicle = valueFromSelector('#node-input-vehicle');
         if (buildVehicle) {
           query.vehicle = buildVehicle;
-          var buildProfile = RED.nodes.node(buildVehicle);
+          const buildProfile = RED.nodes.node(buildVehicle);
           if (buildProfile && buildProfile.dialect) query.dialect = buildProfile.dialect;
         }
       }
@@ -523,20 +523,20 @@
     // Config-node dialogs (Vehicle Profile): dialect lives on the config form,
     // not on a Connection. Must run before the wire-tier connection branch so
     // /mavlink/enums is not called with {} (400 after empty-query rejection).
-    var configDialect = valueFromSelector('#node-config-input-dialect');
+    const configDialect = valueFromSelector('#node-config-input-dialect');
     if (configDialect && configDialect !== '__vehicle') {
       query.dialect = configDialect;
       addEnumNames(query, names);
       return query;
     }
 
-    var vehicle = '';
-    var dialect = '';
-    var connection = valueFromSelector('#node-input-connection');
+    let vehicle = '';
+    let dialect = '';
+    const connection = valueFromSelector('#node-input-connection');
     if (connection) {
-      var conn = RED.nodes.node(connection);
+      const conn = RED.nodes.node(connection);
       vehicle = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
-      var connProfile = vehicle ? RED.nodes.node(vehicle) : null;
+      const connProfile = vehicle ? RED.nodes.node(vehicle) : null;
       if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
     }
     if (!vehicle) return query;
@@ -589,28 +589,28 @@
     opts = opts || {};
     // Selectors are fixed, not options: every dialog uses the stock
     // `#node-input-<key>` ids, and no caller has ever overridden one (#221).
-    var dialectSelector = '#node-input-dialect';
-    var vehicleSelector = '#node-input-vehicle';
-    var connectionSelector = '#node-input-connection';
-    var firmwareSelector = '#node-input-firmware';
-    var source = opts.source;
+    const dialectSelector = '#node-input-dialect';
+    const vehicleSelector = '#node-input-vehicle';
+    const connectionSelector = '#node-input-connection';
+    const firmwareSelector = '#node-input-firmware';
+    const source = opts.source;
 
     function read(field, selector) {
       if (!source) return valueFromSelector(selector);
-      var v = source[field];
+      const v = source[field];
       return v === undefined || v === null ? '' : String(v).trim();
     }
 
-    var isBuild;
+    let isBuild;
     if (typeof opts.isBuild === 'boolean') {
       isBuild = opts.isBuild;
     } else {
-      var deliverySelector = '#node-input-delivery';
-      var tierSelector = '#node-input-tier';
-      var hasDelivery = source
+      const deliverySelector = '#node-input-delivery';
+      const tierSelector = '#node-input-tier';
+      const hasDelivery = source
         ? source.delivery !== undefined
         : !!$(deliverySelector).length;
-      var mode = hasDelivery
+      const mode = hasDelivery
         ? read('delivery', deliverySelector)
         : read('tier', tierSelector);
       isBuild = mode === 'build';
@@ -631,15 +631,15 @@
     // vehicle family — joins its key, so editing any of them on an undeployed
     // profile misses the cache instead of being served the previous catalog.
     function forProfile(vehicleId) {
-      var profile = vehicleId ? RED.nodes.node(vehicleId) : null;
-      var dialect = (profile && profile.dialect) || '';
-      var firmware = (profile && profile.firmware) || '';
-      var family = (profile && profile.vehicleFamily) || '';
-      var query = { vehicle: vehicleId, dialect: dialect };
+      const profile = vehicleId ? RED.nodes.node(vehicleId) : null;
+      const dialect = (profile && profile.dialect) || '';
+      const firmware = (profile && profile.firmware) || '';
+      const family = (profile && profile.vehicleFamily) || '';
+      const query = { vehicle: vehicleId, dialect: dialect };
       if (firmware) query.firmware = firmware;
       if (family) query.vehicleFamily = family;
       return {
-        key: ['vehicle:' + vehicleId, dialect, firmware, family].join('|'),
+        key: [`vehicle:${vehicleId}`, dialect, firmware, family].join('|'),
         query: query,
         dialect: dialect,
         vehicleId: vehicleId,
@@ -649,17 +649,17 @@
     }
 
     if (isBuild) {
-      var dialectVal = read('dialect', dialectSelector);
+      const dialectVal = read('dialect', dialectSelector);
       if (!dialectVal) return empty();
       if (dialectVal !== '__vehicle') {
         // Firmware is a definition axis, not a dialect one: PX4 and ArduPilot
         // document the same id with different bounds and units. Dialogs
         // without the field read '' and keep their original key.
-        var firmwareVal = read('firmware', firmwareSelector);
-        var query = { dialect: dialectVal };
+        const firmwareVal = read('firmware', firmwareSelector);
+        const query = { dialect: dialectVal };
         if (firmwareVal) query.firmware = firmwareVal;
         return {
-          key: 'dialect:' + dialectVal + (firmwareVal ? '|' + firmwareVal : ''),
+          key: `dialect:${dialectVal}${firmwareVal ? `|${firmwareVal}` : ''}`,
           query: query,
           dialect: dialectVal,
           vehicleId: '',
@@ -667,16 +667,16 @@
           vehicleFamily: '',
         };
       }
-      var vehicleId = read('vehicle', vehicleSelector);
+      const vehicleId = read('vehicle', vehicleSelector);
       if (!vehicleId) return empty();
       return forProfile(vehicleId);
     }
 
     // Wire tier: the connection's bound Vehicle Profile is the catalog source.
-    var connectionId = read('connection', connectionSelector);
+    const connectionId = read('connection', connectionSelector);
     if (connectionId) {
-      var conn = RED.nodes.node(connectionId);
-      var vehicleRef = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
+      const conn = RED.nodes.node(connectionId);
+      const vehicleRef = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
       if (vehicleRef) return forProfile(vehicleRef);
     }
     return empty();
@@ -690,7 +690,7 @@
    * @returns {string}
    */
   RED.mavlink.adminApiUrl = function (path) {
-    var root = (RED.settings && RED.settings.httpAdminRoot) || '/';
+    let root = (RED.settings && RED.settings.httpAdminRoot) || '/';
     if (root.slice(-1) !== '/') root += '/';
     return root + String(path || '').replace(/^\//, '');
   };
@@ -705,7 +705,7 @@
    */
   RED.mavlink.populateDialectSelect = function ($select, opts) {
     opts = opts || {};
-    var saved = opts.saved !== undefined && opts.saved !== null
+    const saved = opts.saved !== undefined && opts.saved !== null
       ? String(opts.saved)
       : String($select.val() || '');
 
@@ -714,7 +714,7 @@
     }
 
     function hasOption(value) {
-      return $select.find('option[value="' + value + '"]').length > 0;
+      return $select.find(`option[value="${value}"]`).length > 0;
     }
 
     function finish(dialects) {
@@ -762,7 +762,7 @@
    */
   RED.mavlink.loadEnumsCatalog = function (names, cb, token, opts) {
     opts = opts || {};
-    var query = currentEnumQuery(names);
+    const query = currentEnumQuery(names);
     if (!query.dialect && !query.vehicle && opts.dialect) {
       query.dialect = opts.dialect;
       addEnumNames(query, names);
@@ -794,7 +794,7 @@
    * @returns {string}
    */
   RED.mavlink.missingEnumOptionLabel = function (saved) {
-    return '#' + String(saved) + ' (not in dialect)';
+    return `#${saved} (not in dialect)`;
   };
 
   /**
@@ -806,8 +806,8 @@
    */
   RED.mavlink.ensureSavedEnumOption = function ($select, saved) {
     if (saved === undefined || saved === null || saved === '') return false;
-    var value = String(saved);
-    if ($select.find('option[value="' + value + '"]').length) return false;
+    const value = String(saved);
+    if ($select.find(`option[value="${value}"]`).length) return false;
     $select.append(
       $('<option></option>').val(value).text(RED.mavlink.missingEnumOptionLabel(value))
     );
@@ -825,13 +825,13 @@
    */
   RED.mavlink.bindSelectTitleSync = function ($select, opts) {
     opts = opts || {};
-    var ns = opts.namespace || 'mavEnumTip';
+    const ns = opts.namespace || 'mavEnumTip';
     function sync() {
-      var tip = $select.find('option:selected').attr('title') || '';
+      const tip = $select.find('option:selected').attr('title') || '';
       if (tip) $select.attr('title', tip);
       else $select.removeAttr('title');
     }
-    $select.off('change.' + ns).on('change.' + ns, sync);
+    $select.off(`change.${ns}`).on(`change.${ns}`, sync);
     sync();
     return sync;
   };
@@ -855,13 +855,13 @@
    */
   RED.mavlink.fillEnumSelect = function ($select, entries, opts) {
     opts = opts || {};
-    var valueKey = opts.valueKey || 'value';
-    var live = $select.val();
+    const valueKey = opts.valueKey || 'value';
+    const live = $select.val();
     // An explicit `saved: ''` means "select nothing"; it is not the same as
     // omitting it, so the default branch keeps testing for undefined/null and
     // not for blankness.
-    var savedGiven = opts.saved !== undefined && opts.saved !== null;
-    var saved = opts.preferLive && !RED.mavlink.isBlank(live)
+    const savedGiven = opts.saved !== undefined && opts.saved !== null;
+    const saved = opts.preferLive && !RED.mavlink.isBlank(live)
       ? String(live)
       : (savedGiven ? String(opts.saved) : String(live || ''));
     $select.empty();
@@ -871,13 +871,13 @@
     // `groupOf` puts an entry under an <optgroup>; entries it returns nothing
     // for stay top level. Used to float the components a payload topic
     // plausibly means above the rest of MAV_COMPONENT.
-    var groups = {};
+    const groups = {};
     (entries || []).forEach(function (entry) {
-      var value = String(entry[valueKey]);
-      var label = entry.label || RED.mavlink.enumOptionLabel(entry);
-      var $opt = $('<option></option>').val(value).text(label);
+      const value = String(entry[valueKey]);
+      const label = entry.label || RED.mavlink.enumOptionLabel(entry);
+      const $opt = $('<option></option>').val(value).text(label);
       if (entry.description) $opt.attr('title', entry.description);
-      var group = typeof opts.groupOf === 'function' ? opts.groupOf(entry) : '';
+      const group = typeof opts.groupOf === 'function' ? opts.groupOf(entry) : '';
       if (!group) {
         $select.append($opt);
         return;
@@ -910,12 +910,12 @@
    * @param {string} [text]
    */
   RED.mavlink.applyFieldTitle = function (inputId, text) {
-    var $input = $('#' + inputId);
+    const $input = $(`#${inputId}`);
     if (!$input.length) return;
-    var tip = text != null ? String(text).trim() : '';
+    const tip = text != null ? String(text).trim() : '';
     if (tip) $input.attr('title', tip);
     else $input.removeAttr('title');
-    var $label = $input.closest('.form-row').find('label').first();
+    const $label = $input.closest('.form-row').find('label').first();
     if ($label.length) {
       if (tip) $label.attr('title', tip);
       else $label.removeAttr('title');
@@ -930,16 +930,16 @@
    * @param {string} [units]
    */
   RED.mavlink.applyFieldUnits = function (inputId, units) {
-    var $input = $('#' + inputId);
+    const $input = $(`#${inputId}`);
     if (!$input.length) return;
-    var $row = $input.closest('.form-row');
-    var $u = $row.children('.mav-field-units');
+    const $row = $input.closest('.form-row');
+    let $u = $row.children('.mav-field-units');
     if (!$u.length) {
       $u = $('<span class="mav-field-units"></span>');
       $input.after($u);
     }
-    var text = units != null ? String(units).trim() : '';
-    $u.text(text ? (' ' + text) : '');
+    const text = units != null ? String(units).trim() : '';
+    $u.text(text ? ` ${text}` : '');
   };
 
   /**
@@ -950,8 +950,8 @@
    * @param {string|{description?: string, units?: string}|null|undefined} meta
    */
   RED.mavlink.applyFieldMeta = function (inputId, meta) {
-    var tip = '';
-    var units = '';
+    let tip = '';
+    let units = '';
     if (typeof meta === 'string') {
       tip = meta;
     } else if (meta && typeof meta === 'object') {
@@ -972,12 +972,12 @@
       RED.mavlink.fillEnumSelect($select, entries, opts);
       return;
     }
-    var split = RED.mavlink.splitCompIdsByTopic(entries, opts.suggest);
+    const split = RED.mavlink.splitCompIdsByTopic(entries, opts.suggest);
     if (!split.suggested.length) {
       RED.mavlink.fillEnumSelect($select, entries, opts);
       return;
     }
-    var suggested = split.suggested;
+    const suggested = split.suggested;
     RED.mavlink.fillEnumSelect($select, suggested.concat(split.others), Object.assign({}, opts, {
       groupOf: function (entry) {
         return suggested.indexOf(entry) !== -1 ? 'Suggested' : 'Other components';
@@ -1003,14 +1003,14 @@
     opts = opts || {};
     if (!$select || !$select.length) return;
 
-    var seqKey = 'mavCompIdSeq';
-    var seq = (Number($select.data(seqKey)) || 0) + 1;
+    const seqKey = 'mavCompIdSeq';
+    const seq = (Number($select.data(seqKey)) || 0) + 1;
     $select.data(seqKey, seq);
 
     // After the first fill, honour the live value including '' (profile default).
     // Truthiness fallbacks would resurrect a previously saved nonzero compid.
-    var initialized = $select.find('option').length > 0;
-    var saved = initialized
+    const initialized = $select.find('option').length > 0;
+    const saved = initialized
       ? $select.val()
       : (opts.initialSaved !== undefined && opts.initialSaved !== null
         ? opts.initialSaved
@@ -1046,10 +1046,10 @@
    * @returns {{suggested: Array, others: Array}}
    */
   RED.mavlink.splitCompIdsByTopic = function (entries, topic) {
-    var all = entries || [];
-    var name = String(topic || '').toUpperCase();
+    const all = entries || [];
+    const name = String(topic || '').toUpperCase();
     if (!name) return { suggested: [], others: all };
-    var suggested = all.filter(function (entry) {
+    const suggested = all.filter(function (entry) {
       return String(entry.name || '').toUpperCase().indexOf(name) !== -1;
     });
     if (!suggested.length) return { suggested: [], others: all };
@@ -1071,8 +1071,8 @@
    */
   RED.mavlink.reloadTargetCompId = function (node, opts) {
     opts = opts || {};
-    var field = opts.field || 'targetComponent';
-    var selector = opts.selector || ('#node-input-' + field);
+    const field = opts.field || 'targetComponent';
+    const selector = opts.selector || `#node-input-${field}`;
     RED.mavlink.reloadCompIdSelect($(selector), {
       initialSaved: node[field],
       emptyLabel: opts.emptyLabel,
@@ -1102,21 +1102,21 @@
     // `listKey` is required, not sniffed from the endpoint: all six call sites
     // pass it, and guessing from the URL would silently pick the wrong list for
     // a new endpoint (#221). Same for `cb` — every caller supplies one.
-    var listKey = opts.listKey;
-    var resolveOpts = typeof opts.isBuild === 'boolean' ? { isBuild: opts.isBuild } : {};
-    var target = RED.mavlink.resolveCatalogTarget(resolveOpts);
+    const listKey = opts.listKey;
+    const resolveOpts = typeof opts.isBuild === 'boolean' ? { isBuild: opts.isBuild } : {};
+    const target = RED.mavlink.resolveCatalogTarget(resolveOpts);
     state.seq += 1;
-    var seq = state.seq;
+    const seq = state.seq;
 
     function emptyShape(dialect, error) {
-      var catalog = { enums: {}, dialect: dialect || '' };
+      const catalog = { enums: {}, dialect: dialect || '' };
       catalog[listKey] = [];
       if (error !== undefined) catalog.error = error;
       return catalog;
     }
 
     function fromData(data) {
-      var catalog = emptyShape(data.dialect || target.dialect);
+      const catalog = emptyShape(data.dialect || target.dialect);
       catalog[listKey] = data[listKey] || [];
       catalog.enums = data.enums || {};
       return catalog;
@@ -1133,7 +1133,7 @@
 
     $.getJSON(RED.mavlink.adminApiUrl(endpoint), target.query, function (data) {
       if (seq !== state.seq) return;
-      var catalog = fromData(data || {});
+      const catalog = fromData(data || {});
       render(catalog);
     }).fail(function (_xhr, _status, err) {
       if (seq !== state.seq) return;
@@ -1149,8 +1149,8 @@
    * @returns {'gcs'|'companion'|'custom'}
    */
   RED.mavlink.identityRole = function (identityId) {
-    var idNode = identityId ? RED.nodes.node(identityId) : null;
-    var role = idNode && idNode.role;
+    const idNode = identityId ? RED.nodes.node(identityId) : null;
+    const role = idNode && idNode.role;
     return role === 'companion' || role === 'custom' ? role : 'gcs';
   };
 
@@ -1163,20 +1163,20 @@
    * @returns {Array<{id: string, role: string, label: string}>}
    */
   RED.mavlink.identityOptionsFor = function (connectionId, rolesAllowed) {
-    var out = [];
+    const out = [];
     if (!connectionId) return out;
-    var conn = RED.nodes.node(connectionId);
+    const conn = RED.nodes.node(connectionId);
     if (!conn) return out;
-    var ids = [conn.localIdentity].concat(conn.additionalIdentities || []);
-    var seen = {};
+    const ids = [conn.localIdentity].concat(conn.additionalIdentities || []);
+    const seen = {};
     ids.forEach(function (id) {
       if (!id || seen[id]) return;
       seen[id] = true;
-      var idNode = RED.nodes.node(id);
+      const idNode = RED.nodes.node(id);
       if (!idNode) return;
-      var role = RED.mavlink.identityRole(id);
+      const role = RED.mavlink.identityRole(id);
       if (rolesAllowed && rolesAllowed.indexOf(role) === -1) return;
-      out.push({ id: id, role: role, label: (idNode.name || 'identity') + ' (' + role + ')' });
+      out.push({ id: id, role: role, label: `${idNode.name || 'identity'} (${role})` });
     });
     return out;
   };
@@ -1194,13 +1194,13 @@
    */
   RED.mavlink.fillIdentitySelect = function ($select, connectionId, opts) {
     opts = opts || {};
-    var options = RED.mavlink.identityOptionsFor(connectionId, opts.rolesAllowed);
+    const options = RED.mavlink.identityOptionsFor(connectionId, opts.rolesAllowed);
     $select.empty();
     options.forEach(function (o) {
       $select.append($('<option></option>').val(o.id).text(o.label));
     });
-    var eligible = options.some(function (o) { return o.id === opts.saved; });
-    var selected = eligible ? opts.saved : (options.length ? options[0].id : '');
+    const eligible = options.some(function (o) { return o.id === opts.saved; });
+    const selected = eligible ? opts.saved : (options.length ? options[0].id : '');
     $select.val(selected);
     return selected;
   };
@@ -1216,7 +1216,7 @@
    */
   RED.mavlink.refreshIdentitySelect = function (node, opts) {
     opts = opts || {};
-    var connectionId = $('#node-input-connection').val() || '';
+    const connectionId = $('#node-input-connection').val() || '';
     return RED.mavlink.fillIdentitySelect(
       $('#node-input-identity'),
       connectionId,
@@ -1255,10 +1255,10 @@
    */
   RED.mavlink.ownDialogField = function (owner, selector) {
     if (!owner || !owner.id) return null;
-    var stack = RED.editor.getEditStack();
-    var top = stack.length ? stack[stack.length - 1] : null;
+    const stack = RED.editor.getEditStack();
+    const top = stack.length ? stack[stack.length - 1] : null;
     if (!top || top.id !== owner.id) return null;
-    var $el = $(selector);
+    const $el = $(selector);
     return $el && $el.length ? $el : null;
   };
 
@@ -1285,9 +1285,9 @@
    * @returns {boolean}
    */
   RED.mavlink.isMissingFromDialect = function (owner, selector, value) {
-    var $el = RED.mavlink.ownDialogField(owner, selector);
+    const $el = RED.mavlink.ownDialogField(owner, selector);
     if (!$el) return false;
-    var $opt = $el.find('option:selected');
+    const $opt = $el.find('option:selected');
     if (!$opt || !$opt.length) return false;
     return $opt.text() === RED.mavlink.missingEnumOptionLabel(value);
   };
@@ -1333,8 +1333,8 @@
         "liveOr: the first argument is the owning node, not a selector — liveOr(this, '#node-input-…', saved, fallback)"
       );
     }
-    var $own = RED.mavlink.ownDialogField(owner, selector);
-    var live = $own ? $own.val() : undefined;
+    const $own = RED.mavlink.ownDialogField(owner, selector);
+    const live = $own ? $own.val() : undefined;
     if (!RED.mavlink.isBlank(live)) return String(live);
     if (!RED.mavlink.isBlank(saved)) return String(saved);
     return fallback === undefined ? '' : String(fallback);
@@ -1358,9 +1358,9 @@
   RED.mavlink.validateIntRange = function (min, max) {
     return function (v, _opt) {
       if (RED.mavlink.isBlank(v)) return true;
-      var n = Number(v);
+      const n = Number(v);
       if (!Number.isInteger(n) || n < min || n > max) {
-        return 'must be an integer between ' + min + ' and ' + max;
+        return `must be an integer between ${min} and ${max}`;
       }
       return true;
     };
@@ -1378,9 +1378,9 @@
   RED.mavlink.validateRange = function (min, max) {
     return function (v, _opt) {
       if (RED.mavlink.isBlank(v)) return true;
-      var n = Number(v);
+      const n = Number(v);
       if (!Number.isFinite(n) || n < min || n > max) {
-        return 'must be a number between ' + min + ' and ' + max;
+        return `must be a number between ${min} and ${max}`;
       }
       return true;
     };
@@ -1395,6 +1395,65 @@
    */
   RED.mavlink.validateUint8 = function (min) {
     return RED.mavlink.validateIntRange(min, 255);
+  };
+
+  /**
+   * Target-sysid validator for a node with acknowledged delivery tiers.
+   *
+   * Broadcast (0) is a designed §7 capability and stays legal on Build and
+   * Send. What it cannot be is *confirmed*: an ack matcher accepts any source
+   * at sysid 0, so the first vehicle to answer settles for the whole fleet —
+   * partial success reported as total. The driver sends what it is addressed
+   * at (§0), so the editor is where the pair is caught; it knows both fields
+   * at deploy.
+   *
+   * Blank inherits the profile target and is the common case, so it passes:
+   * `Number('')` is 0 and would otherwise red every unfilled box.
+   *
+   * @param {string[]} ackedTiers  tiers that wait for an acknowledgement
+   * @param {string} [modeField='delivery']
+   * @param {string} [fallbackTier]  tier assumed when the field is unset
+   * @returns {function(*, object=): true|string}
+   */
+  RED.mavlink.validateTargetSystem = function (ackedTiers, modeField, fallbackTier) {
+    const key = modeField || 'delivery';
+    const field = `#node-input-${key}`;
+    return function (v, opt) {
+      const range = RED.mavlink.validateUint8(0).call(this, v, opt);
+      if (range !== true) return range;
+      if (RED.mavlink.isBlank(v) || Number(v) !== 0) return true;
+      const tier = RED.mavlink.liveOr(this, field, this[key], fallbackTier);
+      if (ackedTiers.indexOf(tier) === -1) return true;
+      return 'broadcast (0) cannot be confirmed — one reply cannot answer for a fleet; '
+        + 'use Send, or mavlink-fanout broadcast for per-vehicle replies';
+    };
+  };
+
+  /**
+   * Membership check for a closed-vocabulary select — a delivery tier, a
+   * carrier, a lookup mode.
+   *
+   * This is the editor half of §5 affirmative dispatch. The runtime switches
+   * on these values with `case` arms only, so a token the dialog can never
+   * produce matches nothing and selects no behavior: the node deploys clean
+   * and then quietly does nothing. Only a hand-edited flow can hold one, and
+   * only the editor can see it at deploy — so this is where it reds.
+   *
+   * Two arguments so Node-RED renders the reason (§14: a one-arg validator's
+   * returned string is coerced with `!!` and reads as valid).
+   *
+   * @param {string[]} members  the values the dialog can save
+   * @param {function(*, object=): (boolean|string)} [also]  further rule, run
+   *   only once membership passes
+   * @returns {function(*, object=): true|string}
+   */
+  RED.mavlink.oneOf = function (members, also) {
+    return function (v, opt) {
+      if (members.indexOf(v) === -1) {
+        return `must be one of: ${members.join(', ')}`;
+      }
+      return also ? also.call(this, v, opt) : true;
+    };
   };
 
   /**
@@ -1430,8 +1489,8 @@
    */
   RED.mavlink.connectionDefault = function (opts) {
     opts = opts || {};
-    var modeField = opts.modeField || 'delivery';
-    var modeSelector = '#node-input-' + modeField;
+    const modeField = opts.modeField || 'delivery';
+    const modeSelector = `#node-input-${modeField}`;
     return {
       value: '',
       type: 'mavlink-connection',
@@ -1444,7 +1503,7 @@
         // Declaring validate at all suppresses Node-RED's own config-node
         // reference check, so restate it here — without this, a deleted or
         // broken Connection stops being reported.
-        var cfg = RED.nodes.node(v);
+        const cfg = RED.nodes.node(v);
         if (!cfg) return 'no longer exists — reselect a Connection';
         if (cfg.valid === false) return 'is not properly configured';
         return true;
@@ -1454,10 +1513,10 @@
 
   RED.mavlink.buildTierDialectDefaults = function (opts) {
     opts = opts || {};
-    var modeField = opts.modeField || 'delivery';
+    const modeField = opts.modeField || 'delivery';
     // Derived, not an option: no caller overrides either selector (#221).
-    var modeSelector = '#node-input-' + modeField;
-    var dialectSelector = '#node-input-dialect';
+    const modeSelector = `#node-input-${modeField}`;
+    const dialectSelector = '#node-input-dialect';
 
     function currentMode(self) {
       return RED.mavlink.liveOr(self, modeSelector, self && self[modeField]);
@@ -1466,7 +1525,7 @@
       return RED.mavlink.liveOr(self, dialectSelector, self && self.dialect);
     }
 
-    var defaults = {
+    const defaults = {
       dialect: {
         value: '',
         validate: function (v) {
@@ -1493,7 +1552,7 @@
       defaults.firmware = {
         value: '',
         validate: function (v) {
-          var dialect = currentDialect(this);
+          const dialect = currentDialect(this);
           if (currentMode(this) === 'build' && dialect && dialect !== '__vehicle') return !!v;
           return true;
         },
@@ -1512,7 +1571,7 @@
    */
   RED.mavlink.toggleRow = function (selector, shown) {
     if (!selector) return;
-    var $el = $(selector);
+    const $el = $(selector);
     if ($el && $el.length) $el.toggle(!!shown);
   };
 
@@ -1531,9 +1590,9 @@
    */
   RED.mavlink.applyBuildTierRowVisibility = function (opts) {
     opts = opts || {};
-    var isBuild = !!opts.isBuild;
-    var dialect = opts.dialect || '';
-    var toggle = RED.mavlink.toggleRow;
+    const isBuild = !!opts.isBuild;
+    const dialect = opts.dialect || '';
+    const toggle = RED.mavlink.toggleRow;
     toggle(opts.dialectRow, isBuild);
     toggle(opts.vehicleRow, isBuild && dialect === '__vehicle');
     toggle(opts.firmwareRow, isBuild && !!dialect && dialect !== '__vehicle');
@@ -1556,13 +1615,13 @@
    */
   RED.mavlink.applyCompanionTargetVisibility = function (opts) {
     opts = opts || {};
-    var isBuild = !!opts.isBuild;
-    var identityId = opts.identityId != null ? opts.identityId : '';
-    var hideCompid = opts.hideCompidWhenCompanion !== false;
-    var isCompanion = !isBuild && RED.mavlink.identityRole(identityId) === 'companion';
-    var targetSystem = isBuild || !isCompanion;
-    var targetComponent = hideCompid ? (isBuild || !isCompanion) : true;
-    var toggle = RED.mavlink.toggleRow;
+    const isBuild = !!opts.isBuild;
+    const identityId = opts.identityId != null ? opts.identityId : '';
+    const hideCompid = opts.hideCompidWhenCompanion !== false;
+    const isCompanion = !isBuild && RED.mavlink.identityRole(identityId) === 'companion';
+    const targetSystem = isBuild || !isCompanion;
+    const targetComponent = hideCompid ? (isBuild || !isCompanion) : true;
+    const toggle = RED.mavlink.toggleRow;
     if (opts.combinedTargetRow) toggle(opts.combinedTargetRow, targetSystem);
     toggle(opts.targetSystemRow, targetSystem);
     toggle(opts.targetComponentRow, targetComponent);
@@ -1604,15 +1663,15 @@
    * @returns {string} the value now selected
    */
   RED.mavlink.refreshOptionSelect = function (opts) {
-    var $select = $(opts.select);
-    var withhold = opts.withhold || function () { return false; };
+    const $select = $(opts.select);
+    const withhold = opts.withhold || function () { return false; };
     // Read the live value BEFORE emptying: a rebuild triggered by some other
     // field changing must not lose an in-progress choice the operator made and
     // has not saved yet.
-    var live = $select.val();
-    var saved = opts.saved;
+    const live = $select.val();
+    const saved = opts.saved;
 
-    var options = opts.options.filter(function (opt) {
+    const options = opts.options.filter(function (opt) {
       return !withhold(opt[0]) || opt[0] === live || opt[0] === saved;
     });
 
@@ -1626,7 +1685,7 @@
     // and setting a select to a value it does not offer leaves it showing one
     // thing while the code reads another. So every candidate, the fallback
     // included, has to be in the rebuilt list; the first option is the floor.
-    var value = [live, saved, opts.fallback].filter(function (candidate) {
+    let value = [live, saved, opts.fallback].filter(function (candidate) {
       return options.some(function (opt) { return opt[0] === candidate; });
     })[0];
     if (value === undefined && options.length) value = options[0][0];

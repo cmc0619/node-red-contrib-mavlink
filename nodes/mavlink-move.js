@@ -29,34 +29,6 @@ const {
   failInput,
 } = require('../lib/delivery');
 
-/** Delivery tiers the editor's DELIVERY_OPTIONS vocabulary can save (§6). */
-const DELIVERY_TIERS = ['build', 'send', 'confirm', 'stream'];
-
-/**
- * Delivery tier membership check (owner ruling, 2026-08-14, extending the
- * Action×Delivery no-defaults ruling to Delivery itself). The dialog only
- * ever offers the tiers `DELIVERY_OPTIONS` lists for the selected action, so
- * a Steer node cannot be *set* to `confirm` through the UI — but a
- * hand-edited flow can hold an unrecognised token, and it used to fall
- * through both dispatch points' (`deliverCommand`, the setpoint branch)
- * final `else` into Send: a real message left the wire and reported `sent`
- * for a tier nobody asked for (confirmed: `delivery: 'sned'`).
- *
- * No blank arm, unlike `frameForAltRef`'s "blank is the GCS default": the
- * select always saves a tier (mavlink-move.html `delivery`, default
- * `'build'`), so a blank here is the same unclaimed state as a blank Move
- * action, not a value the operator chose to leave out.
- *
- * @param {*} value  config.delivery
- * @returns {'build'|'send'|'confirm'|'stream'}
- */
-function resolveDelivery(value) {
-  if (DELIVERY_TIERS.includes(value)) return value;
-  throw new Error(
-    `unknown Move delivery ${JSON.stringify(value)} — expected one of ${DELIVERY_TIERS.join(', ')}`
-  );
-}
-
 module.exports = function registerMavlinkMove(RED) {
   function MavlinkMoveNode(config) {
     RED.nodes.createNode(this, config);
@@ -214,32 +186,21 @@ module.exports = function registerMavlinkMove(RED) {
      *   of `done`; the caller must return without calling it
      */
     function deliverCommand(label, message, target, identityId, connectionNode, send, done, idempotent) {
-      if (delivery === 'build') {
-        completeBuild(node, send, message);
-        return false;
+      switch (delivery) {
+        case 'build':
+          completeBuild(node, send, message);
+          return false;
+        case 'confirm':
+          confirmCommand(label, message, target, identityId, connectionNode, send, done, idempotent)
+            .catch((err) => failInput(node, send, err, done));
+          return true;
+        case 'send':
+          // Commands ride the Control band, not Streaming.
+          connectionNode.send(message, { band: BAND.CONTROL, target, identityId });
+          completeResult(node, send, 'sent', null, { message });
+          return false;
+        default: break; // This space intentionally left blank (§5)
       }
-      if (!connectionNode) {
-        throw new Error('mavlink-move requires a Connection for send/confirm delivery');
-      }
-      if (delivery === 'confirm') {
-        // Broadcast + confirm: the ack matcher accepts any source at sysid 0,
-        // so the first vehicle to answer would settle for the fleet (#260, §9).
-        // Send stays broadcast-legal; the expected-set aggregator is fan-out
-        // broadcast (§10).
-        if (target.sysid === 0) {
-          throw new Error(
-            `Move ${label} confirm cannot target broadcast (sysid 0) — the first ` +
-            'vehicle to ack would answer for the whole fleet; use Send or ' +
-            'mavlink-fanout broadcast (per-vehicle acks)'
-          );
-        }
-        confirmCommand(label, message, target, identityId, connectionNode, send, done, idempotent)
-          .catch((err) => failInput(node, send, err, done));
-        return true;
-      }
-      // Send tier: commands ride the Control band, not Streaming.
-      connectionNode.send(message, { band: BAND.CONTROL, target, identityId });
-      completeResult(node, send, 'sent', null, { message });
       return false;
     }
 
@@ -250,42 +211,30 @@ module.exports = function registerMavlinkMove(RED) {
           return;
         }
 
-        // Delivery membership, before anything reads `delivery` below
-        // (including the stop handler's stream-tier check): a hand-edited
-        // token must not silently reach either dispatch point's Send
-        // fallthrough.
-        resolveDelivery(delivery);
-
         const payload = msg.payload ?? {};
-        // Actions are handled before target resolution: a stop names no
-        // target — it halts whatever this node is streaming — so nothing a
-        // resolver could refuse may refuse an otherwise-valid stop. Runtime-
-        // boundary data fails loud: an unknown action throws naming the valid
-        // set, and only the stream tier owns streams.
-        if (payload.action !== undefined) {
-          if (payload.action !== 'stop') {
-            throw new Error(
-              `unknown Move action ${JSON.stringify(payload.action)} — expected one of: stop`
-            );
+        // The one runtime verb, dispatched before target resolution: a stop
+        // names no target — it halts whatever this node is streaming — so
+        // nothing a resolver could refuse may refuse it. Any other value
+        // selects no stop and rides the build path below.
+        switch (payload.action) {
+          case 'stop': {
+            if (stream) {
+              const sent = stream.sent;
+              // brake: true — an explicit stop is an end of control. A brake
+              // send that throws routes to failInput below: that input
+              // genuinely failed (the lock is still freed by stopStream).
+              const stopMessage = stopStream();
+              completeResult(node, send, 'stopped', null, { message: stopMessage, sent });
+            } else {
+              // A stop with nothing running completes with a distinguishing
+              // detail — a stop control must not punish a second press
+              // (§ "Move setpoint matrix").
+              completeResult(node, send, 'stopped', 'no stream', {});
+            }
+            done();
+            return;
           }
-          if (delivery !== 'stream') {
-            throw new Error('Move action "stop" requires stream delivery — only the stream tier owns streams');
-          }
-          if (stream) {
-            const sent = stream.sent;
-            // brake: true — an explicit stop is an end of control. A brake
-            // send that throws routes to failInput below: that input
-            // genuinely failed (the lock is still freed by stopStream).
-            const stopMessage = stopStream();
-            completeResult(node, send, 'stopped', null, { message: stopMessage, sent });
-          } else {
-            // A stop with nothing running completes with a distinguishing
-            // detail — a stop control must not punish a second press
-            // (§ "Move setpoint matrix").
-            completeResult(node, send, 'stopped', 'no stream', {});
-          }
-          done();
-          return;
+          default: break; // This space intentionally left blank (§5)
         }
         // Move: companion hides both sysid and compid — no compidFromConfig.
         const { connectionNode, target, identityId } = resolveDeliveryContext(RED, {
@@ -364,13 +313,11 @@ module.exports = function registerMavlinkMove(RED) {
 
         const message = setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode);
 
-        if (delivery === 'build') {
-          completeBuild(node, send, message);
-        } else {
-          if (!connectionNode) {
-            throw new Error('mavlink-move requires a Connection for send/stream delivery');
-          }
-          if (delivery === 'stream') {
+        switch (delivery) {
+          case 'build':
+            completeBuild(node, send, message);
+            break;
+          case 'stream': {
             // Validate the replacement fully before stopping the active
             // stream: a rejected input must leave the running stream running,
             // the same way a buildMoveMessage refusal above already does —
@@ -499,13 +446,15 @@ module.exports = function registerMavlinkMove(RED) {
             streamKey = key;
             releaseStream = release;
             completeResult(node, send, 'streaming', null, { message });
-          } else {
-            // Send tier. No stopStream here: `delivery` is fixed per node, so
-            // a send-delivery node can never own a stream — the guard would
-            // protect an unreachable state (AGENTS "Proof-of-possibility").
+            break;
+          }
+          case 'send':
+            // No stopStream here: `delivery` is fixed per node, so a
+            // send-delivery node can never own a stream.
             connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
             completeResult(node, send, 'sent', null, { message });
-          }
+            break;
+          default: break; // This space intentionally left blank (§5)
         }
         done();
       } catch (err) {
@@ -621,10 +570,12 @@ function setpointFor(action, payload, config, target, vehicleAtDeploy, connectio
         timeBootMs: payload.timeBootMs,
       });
     }
+    default: break; // This space intentionally left blank (§5)
   }
   // A non-member action matches no case and returns undefined; the caller
   // craters on it — serialize rejects it on send/stream, and the build tier
   // ships it to a deferred crater at the next node.
+  return undefined; // nothing matched: no behavior selected (§5)
 }
 
 function completeBuild(node, send, message) {

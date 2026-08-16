@@ -606,3 +606,31 @@ test('the Index field advertises the same floor the validator enforces', () => {
     'the spinner may not offer -1 when the validator refuses it'
   );
 });
+
+// Gitar (#326): the Build tier reports whatever buildParamMessage returns as
+// a succeeded build. An action outside the implemented set matches no case
+// and returns undefined (§5), which would surface as a succeeded build of
+// `{ payload: undefined }` — phantom success. The driver is right to select
+// no behavior; this red ring is what stops a flow reaching that state, so it
+// must name exactly the actions lib/param implements.
+test('the action select is pinned to the actions the driver implements', () => {
+  assert.match(
+    html,
+    /action:\s*\{\s*value:\s*'read',\s*validate:\s*RED\.mavlink\.oneOf\(\[[^\]]*\]\)\s*\}/,
+    'action carries a oneOf validator'
+  );
+
+  const offered = [...html.matchAll(/<option value="(read|set|request-list)"/g)].map((m) => m[1]);
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'lib', 'param', 'index.js'),
+    'utf8'
+  );
+  const buildFn = source.slice(source.indexOf('function buildParamMessage'));
+  const implemented = [...buildFn.slice(0, buildFn.indexOf('\n}')).matchAll(/case '([a-z-]+)':/g)]
+    .map((m) => m[1]);
+
+  for (const action of implemented) {
+    assert.ok(offered.includes(action), `the dialog offers the implemented action ${action}`);
+    assert.match(html, new RegExp(`oneOf\\(\\[[^\\]]*'${action}'`), `oneOf admits ${action}`);
+  }
+});

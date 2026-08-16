@@ -23,14 +23,11 @@ test('speed builds COMMAND_LONG / DO_CHANGE_SPEED with SPEED_TYPE in param1', ()
   assert.equal(message.fields.param3, 60);
 });
 
-test('a blank or absent speedType crashes instead of defaulting to groundspeed (protocol omega)', () => {
+test('an unlisted speedType resolves to no SPEED_TYPE, and none is invented', () => {
   // DO_CHANGE_SPEED param1 has no dialect "unchanged" encoding (unlike param2's
-  // −1), so a blank speed type is operator intent we do not hold — it throws,
-  // the peer of frameForAltRef/frameForReference (§14, 2026-08-14).
-  assert.throws(() => buildSpeedMessage(input({ speedType: '' })), /unknown Move speed type/);
-  assert.throws(() => buildSpeedMessage(input()), /unknown Move speed type/);
+  // −1), so there is no sentinel to spend on a token that is not a member. The
+  // editor's select is what keeps one from being saved.
+  for (const speedType of ['', undefined, 'airsped']) {
+    assert.ok(Number.isNaN(buildSpeedMessage(input({ speedType })).fields.param1));
+  }
 });
-
-
-
-

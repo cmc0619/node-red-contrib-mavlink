@@ -68,17 +68,25 @@ test('raw key hex is case-insensitive and tolerates surrounding whitespace', () 
   assert.equal(signing.key.toString('hex'), hex.toLowerCase());
 });
 
-test('passphrase AND raw key together fail loud — the connection never guesses', () => {
-  assert.throws(
-    () => buildSigning({}, { signingPassphrase: 'secret', signingKeyHex: 'aa'.repeat(32) }),
-    /both a signing passphrase and a raw signing key/
+test('the two key rules live in the editor, not in buildSigning (§0)', () => {
+  // Both are static, cross-field, deploy-time facts about the *form*: exactly
+  // 64 hex characters, and never alongside a passphrase. AGENTS.md names the
+  // passphrase/raw-key pair as a walled-garden red ring by name, so the
+  // driver takes the credentials as saved and derives the key.
+  const html = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', '..', 'nodes', 'mavlink-connection.html'),
+    'utf8'
   );
-});
+  const block = html.slice(html.indexOf('signingKeyHex: {'), html.indexOf('label: function ()'));
+  assert.match(block, /64 hex characters/, 'the format rule reds in the editor');
+  assert.match(block, /cannot be set alongside a passphrase/, 'and so does the exclusivity');
+  // Saved password credentials surface as has_* booleans, so both spellings
+  // have to be read or the rule only fires while the dialog is open.
+  assert.match(block, /has_signingPassphrase/);
 
-test('a malformed raw key fails loud naming the requirement', () => {
-  // Too short, and non-hex characters — both must reject, never truncate/pad.
-  assert.throws(() => buildSigning({}, { signingKeyHex: 'abc123' }), /64 hex characters/);
-  assert.throws(() => buildSigning({}, { signingKeyHex: 'zz'.repeat(32) }), /64 hex characters/);
+  // A well-formed raw key still derives the same 32 bytes.
+  const signing = buildSigning({}, { signingKeyHex: 'aa'.repeat(32) });
+  assert.ok(signing.key.equals(Buffer.from('aa'.repeat(32), 'hex')));
 });
 
 // ── issue #243: rejected-frame surfacing and the untrusted badge ─────────────
@@ -231,3 +239,4 @@ test('the node wires the rejected handler and the untrusted flag into the runtim
     'every state badge carries the untrusted flag'
   );
 });
+

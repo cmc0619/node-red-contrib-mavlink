@@ -341,3 +341,39 @@ test('payload frame dropdown: blank names the wire default (relative alt); frame
 
 
 
+test('REQUIRED_VALUES is a drift pin, not a second vocabulary (§0 walled garden)', () => {
+  // The driver sends a blank slot as its recipe fallback, so the editor's
+  // `values` validator is the only thing between a blank ROI coordinate and
+  // 0,0 on the wire. It has to be static — `validate` runs at deploy with no
+  // dialog open — so this asserts it still names exactly the recipe slots
+  // marked `required`. A new required slot fails here instead of shipping
+  // unprotected.
+  const { PAYLOAD_RECIPES } = require('../../lib/payload');
+  const expected = {};
+  for (const [key, recipe] of Object.entries(PAYLOAD_RECIPES)) {
+    // A recipe's `params` is positional over the seven MAV_CMD slots, so an
+    // unused slot is a hole — 8 of the 57 across the table. `slot &&` is what
+    // steps over them, not a defensive habit.
+    const slots = [...(recipe.params || []), ...(recipe.fields || [])]
+      .filter((slot) => slot?.required)
+      .map((slot) => slot.field);
+    // Recipe keys are `topic|verb|path`; the editor keys on `topic|verb`.
+    if (slots.length) expected[key.split('|').slice(0, 2).join('|')] = slots;
+  }
+
+  const table = payloadHtml.slice(
+    payloadHtml.indexOf('var REQUIRED_VALUES = '),
+    payloadHtml.indexOf('var payloadDefaults')
+  );
+  for (const [key, slots] of Object.entries(expected)) {
+    assert.ok(
+      table.includes(`'${key}': [${slots.map((s) => `'${s}'`).join(', ')}]`),
+      `the editor must require ${slots.join(', ')} for ${key}`
+    );
+  }
+  assert.equal(
+    (table.match(/':\s*\[/g) || []).length,
+    Object.keys(expected).length,
+    'the editor table has no entry the recipes do not'
+  );
+});

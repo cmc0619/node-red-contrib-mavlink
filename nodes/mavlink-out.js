@@ -66,9 +66,6 @@ module.exports = function registerMavlinkOut(RED) {
       // unknown identity — exits through one terminal record plus done(err),
       // so the chain halts and a Catch node hears about it (§2, §9).
       try {
-        if (!connectionNode) {
-          throw new Error('requires a Connection');
-        }
         // No shape guardrail: an unrecognised payload resolves to null and
         // craters in connectionNode.send, whose serialize-validate throws
         // synchronously on a non-message before anything is enqueued

@@ -84,24 +84,6 @@ const PARAM_LIST_REFILL_ROUNDS = 3;
  */
 const PARAM_LIST_REFILL_BATCH = 32;
 
-/**
- * Delivery tiers. Affirmative dispatch (§14 selection-typo cluster): the only
- * hard gate in the input handler is `delivery === 'build'`, so a typo'd or
- * blank tier used to fall through the confirm/collect checks into a
- * fire-and-forget wire send that reported `sent` — an unconfirmed real send the
- * operator never asked for. The editor's select always saves a member, so a
- * non-member is hand-edit drift and craters. Mission and Command already carry
- * this guard; Param did not.
- */
-const DELIVERY_TIERS = ['build', 'send', 'confirm', 'collect'];
-
-function resolveDeliveryTier(value) {
-  if (DELIVERY_TIERS.includes(value)) return value;
-  throw new Error(
-    `unknown Param delivery ${JSON.stringify(value)} — expected one of ${DELIVERY_TIERS.join(', ')}`
-  );
-}
-
 /** Admin route for the parameter definition catalog. */
 const PARAM_DEFS_ROUTE = '/mavlink/param/defs';
 const PARAM_DEFS_UPDATE_ROUTE = '/mavlink/param/defs/update';
@@ -271,12 +253,6 @@ module.exports = function registerMavlinkParam(RED) {
           return;
         }
 
-        // Before any dispatch reads `delivery`: a non-member tier craters here
-        // rather than falling through the confirm/collect gates below into an
-        // unconfirmed 'sent' (§14 selection-typo). Runs inside the try so a bad
-        // token is a failed record, not a construction crash (sendAs precedent).
-        resolveDeliveryTier(delivery);
-
         // Echo/list deadline (owner ruling, 2026-08-14): blank keeps the
         // library default; a present non-finite value used to coerce silently
         // — `setTimeout(fn, NaN)` substitutes ~1 ms instead of refusing, on
@@ -311,21 +287,6 @@ module.exports = function registerMavlinkParam(RED) {
           connectionNode: connNode,
         });
 
-        // No real vehicle sources sysid 0, so a PARAM_SET aimed at broadcast
-        // writes every vehicle on the link while the echo matcher — which
-        // scopes the confirm subscription to the target sysid, lib/param —
-        // can never see a reply from "sysid 0" to settle it: the node reports
-        // timed-out only after already doing the fleet-wide write, and a
-        // retry repeats it (mirrors the mission node's broadcast gate, #246).
-        // Read and list share the same subscription scoping, so every action
-        // is refused here, before anything is built — including Build: a
-        // built broadcast PARAM_SET forwarded to mavlink-out is the same
-        // fleet write. Broadcast COMPONENT (compid 0) is untouched — that is
-        // deliberate, supported behavior in the echo matcher, not a bug.
-        if (target.sysid === 0) {
-          throw new Error(`mavlink-param ${request.action} cannot target broadcast (sysid 0) — no vehicle answers as sysid 0; address one vehicle`);
-        }
-
         const message = buildParamMessage(request);
 
         if (delivery === 'build') {
@@ -334,9 +295,6 @@ module.exports = function registerMavlinkParam(RED) {
           return;
         }
 
-        if (!connNode) {
-          throw new Error('mavlink-param requires a Connection');
-        }
         connNode.send(message, {
           band: request.action === 'request-list' ? BAND.BULK : BAND.CONTROL,
           target: request.target,

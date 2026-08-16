@@ -252,17 +252,17 @@ test('coordKinds raw/dege7 params are never ×1e7-scaled on a global frame', () 
   assert.equal(native.y, -1225000000);
 });
 
-test('NaN in param5/6 refuses the INT build — no silent null island (§9)', () => {
+test('NaN in param5/6 stays non-finite — no silent null island (§9)', () => {
   // LONG's NaN means "leave unchanged"; int32 cannot express it, and coercing
-  // to 0 would aim a global-frame command at 0,0. The spec routes such
-  // commands to COMMAND_LONG, so the INT build fails loud.
-  assert.throws(() => longToIntFields([0, 0, 0, 0, NaN, 149, 50]), /must be finite/);
-  assert.throws(() => longToIntFields([0, 0, 0, 0, -35, NaN, 50]), /must be finite/);
-  // The reject is kind-independent: NaN flags are equally meaningless.
-  assert.throws(
-    () => longToIntFields([0, 0, 0, 0, NaN, 0, 0], { coordKinds: { 5: 'raw', 6: 'raw' } }),
-    /must be finite/
-  );
+  // to 0 would aim a global-frame command at 0,0. It rides out non-finite
+  // instead, and lib/connection/wire.js refuses it at the one choke point
+  // every outbound message crosses (test/connection/wire-nonfinite.test.js).
+  assert.ok(Number.isNaN(longToIntFields([0, 0, 0, 0, NaN, 149, 50]).x));
+  assert.ok(Number.isNaN(longToIntFields([0, 0, 0, 0, -35, NaN, 50]).y));
+  // Kind-independent: NaN flags are equally meaningless.
+  assert.ok(Number.isNaN(
+    longToIntFields([0, 0, 0, 0, NaN, 0, 0], { coordKinds: { 5: 'raw', 6: 'raw' } }).x
+  ));
   // NaN stays legal where the wire is float: param1–4 and z.
   const ok = longToIntFields([NaN, 0, 0, 0, -35, 149, NaN]);
   assert.ok(Number.isNaN(ok.param1));

@@ -170,7 +170,8 @@ module.exports = function registerMavlinkVehicle(RED) {
       RED.auth.needsPermission('mavlink.read'),
       (_req, res) => {
         if (!catalogApi) {
-          return catalogUnavailable(res);
+          catalogUnavailable(res);
+          return;
         }
         try {
           const catalog = newCatalog();
@@ -189,16 +190,19 @@ module.exports = function registerMavlinkVehicle(RED) {
       RED.auth.needsPermission('mavlink.write'),
       (req, res) => {
         if (!catalogApi) {
-          return catalogUnavailable(res);
+          catalogUnavailable(res);
+          return;
         }
         const body = req.body && typeof req.body === 'object' ? req.body : {};
         // `repo`/`ref` are interpolated into GitHub URLs — constrain their shape
         // so a crafted value cannot inject extra path segments server-side.
         if (body.repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(String(body.repo))) {
-          return res.status(400).json({ ok: false, error: "repo must look like 'owner/name'." });
+          res.status(400).json({ ok: false, error: "repo must look like 'owner/name'." });
+          return;
         }
         if (body.ref !== undefined && !/^[\w./-]+$/.test(String(body.ref))) {
-          return res.status(400).json({ ok: false, error: 'ref contains unsupported characters.' });
+          res.status(400).json({ ok: false, error: 'ref contains unsupported characters.' });
+          return;
         }
         newCatalog()
           .update({
@@ -217,7 +221,8 @@ module.exports = function registerMavlinkVehicle(RED) {
       RED.auth.needsPermission('mavlink.read'),
       (req, res) => {
         if (!catalogApi) {
-          return catalogUnavailable(res);
+          catalogUnavailable(res);
+          return;
         }
         try {
           const result = newCatalog().compare({
@@ -241,7 +246,8 @@ module.exports = function registerMavlinkVehicle(RED) {
       RED.auth.needsPermission('mavlink.write'),
       (_req, res) => {
         if (!catalogApi) {
-          return catalogUnavailable(res);
+          catalogUnavailable(res);
+          return;
         }
         res.json({ ok: true, cleared: catalogApi.clearCompiledCache() });
       }
@@ -257,11 +263,9 @@ module.exports = function registerMavlinkVehicle(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    // Raw for the profile snapshot; the affirmative pick site (dialectPicks →
-    // requireDialectToken, inside resolveDialect below) is the single validator
-    // — no `|| 'ardupilotmega'` / `|| 'seed'` code-literal inherit, and no
-    // `|| ''` shim: both are required editor fields, so a blank stays blank and
-    // craters at the pick site, surfacing as the red badge.
+    // Both are `required` editor fields (mavlink-vehicle.html), so the saved
+    // value is used as-is — no `|| 'ardupilotmega'` / `|| 'seed'` code-literal
+    // inherit, and no `|| ''` shim.
     node.dialect = config.dialect.toLowerCase();
     node.dialectRevision = config.dialectRevision;
     // Component dialects, comma-joined `dialect@revision` from the editor.

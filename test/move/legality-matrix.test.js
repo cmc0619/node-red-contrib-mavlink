@@ -218,73 +218,42 @@ for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
   }
 }
 
-// ── The combos that still refuse ─────────────────────────────────────────────
+// ── The combos the editor withholds ──────────────────────────────────────────
 //
-// Not "everything the editor does not offer": the altRef and reference
-// vocabularies are coerced now rather than checked (AGENTS.md, input trust —
-// both are payload-overridable, and msg is trusted). What is left refuses for
-// reasons that are not about vetting operator input: an action the surface
-// does not define; a body frame with no firmware to derive it from — we asked
-// the vehicle what it is and got no answer, so there is no frame number to
-// pick; and the one steer mix with no wire encoding we can vouch for —
-// position + acceleration without velocity has no named ArduPilot submode and
-// no §14 measurement, and a setpoint's missing ack would hide the failure.
-// A steer with no field filled is not here any more: the editor requires one
-// (mavlink-move.html `action`), and a payload that blanks every group builds
-// the honest all-ignore packet.
+// The driver does not vet these (§0): the editor is what reds them, and its
+// own red rings are covered in test/nodes/move-html.test.js. What the driver
+// must never do is quietly pick a *different, legal* wire value for a
+// selection that did not resolve. These assert that line — an unresolved
+// selection either rides as non-finite (and craters at the wire's own choke
+// point, lib/connection/wire.js) or selects no behavior at all.
 
-const REFUSED = [
-  // Turn on PX4 is NOT here: CONDITION_YAW is a legal message PX4 ignores, and
-  // §9 rules that known-unsupported combos send with the runtime silent. The
-  // editor reds it (mavlink-move.html `action`), which is the protector's half.
-  // Relative changes what the heading number means, so it is a strict boolean
-  // opt-in like changeMode — a truthy token must refuse, not silently pick.
-  {
-    name: 'turn relative as a truthy token',
-    config: { ...configFor('turn', 'send', 'absolute'), connection: 'conn', relative: 'yes' },
-    firmware: 'ardupilot',
-    error: /relative must be boolean/,
-  },
-  // Body without a firmware fails closed — the stacks read different body
-  // frames, and an unadapted guess is silently dropped by the vehicle (§14).
-  {
-    name: 'body reference without firmware',
-    config: configFor('steer', 'send', 'body'),
-    error: /Vehicle Profile with firmware ardupilot or px4/,
-  },
-  // The unmeasured steer mix. The editor reds the configured shape; a
-  // hand-edited flow or a payload override still reaches the derivation,
-  // which refuses with the actual reason rather than "unknown mode".
-  {
-    name: 'position + acceleration without velocity',
-    // All three velocity axes blank: an explicit 0 is a value and names the
-    // group, which would make this the measured PosVelAccel instead.
-    config: { ...configFor('steer', 'send', 'world'), vNorth: '', vEast: '', vUp: '', north: 5, aUp: 0.5 },
-    error: /position \+ acceleration needs a velocity too/,
-  },
-  // Delivery is closed too: the four tiers DELIVERY_OPTIONS can ever save,
-  // nothing else. A hand-edited token used to fall through both dispatch
-  // points' final `else` into Send — a real message left the wire and
-  // reported `sent` for a tier nobody asked for (owner ruling, 2026-08-14,
-  // extending the Action×Delivery no-defaults ruling to Delivery itself).
-  {
-    name: 'unknown delivery',
-    config: { ...configFor('steer', 'send', 'world'), delivery: 'sned' },
-    error: /unknown Move delivery "sned" — expected one of build, send, confirm, stream/,
-  },
-];
+test('unoffered: a body reference with no firmware resolves no frame, and never guesses one', async () => {
+  const { err, node, conn } = await drive(configFor('steer', 'send', 'body'));
+  node.emit('close', () => {});
+  assert.equal(err, undefined, 'the driver builds and hands off — no refusal of its own');
+  assert.equal(conn.sends.length, 1, 'the message is built');
+  const frame = conn.sends[0].message.fields.coordinate_frame;
+  assert.ok(!Number.isFinite(frame), 'the unresolved frame is non-finite, not a substituted number');
+});
 
-for (const { name, config, firmware, error } of REFUSED) {
-  test(`unoffered: ${name} refuses loud`, async () => {
-    const { out, err, node, conn } = await drive(config, { firmware });
-    node.emit('close', () => {});
-    assert.ok(err instanceof Error, 'the input fails');
-    assert.match(err.message, error, 'the refusal names the rule');
-    assert.equal(out[0], null, 'the continue port must not fire');
-    assert.equal(out[1].result, 'failed');
-    assert.equal(conn.sends.length, 0, 'nothing reached the wire');
-  });
-}
+test('unoffered: a steer mix with no MODES row selects no behavior and reaches no wire', async () => {
+  // All three velocity axes blank: an explicit 0 is a value and names the
+  // group, which would make this the measured PosVelAccel instead.
+  const config = { ...configFor('steer', 'send', 'world'), vNorth: '', vEast: '', vUp: '', north: 5, aUp: 0.5 };
+  const { err, node, conn } = await drive(config);
+  node.emit('close', () => {});
+  assert.ok(err instanceof Error, 'the build craters');
+  assert.equal(conn.sends.length, 0, 'nothing reached the wire');
+});
+
+test('unoffered: an unknown delivery tier matches no case, so nothing is sent', async () => {
+  const config = { ...configFor('steer', 'send', 'world'), delivery: 'sned' };
+  const { out, err, node, conn } = await drive(config);
+  node.emit('close', () => {});
+  assert.equal(err, undefined);
+  assert.equal(out, undefined, 'no tier ran, so no outcome was reported');
+  assert.equal(conn.sends.length, 0, 'nothing reached the wire');
+});
 
 // ── Re-issue safety is per command, not per carrier ──────────────────────────
 

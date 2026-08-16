@@ -58,45 +58,19 @@ test('global position Move encodes whole-number degrees as degE7, not as raw wir
 
 
 
-test('force is not a Move mode — no firmware actuated the force bit (§14)', () => {
-  // Removed, not aliased (pre-1.0, no migrations): the mode throws naming the
-  // valid set rather than quietly building an acceleration setpoint.
-  assert.throws(
-    () => buildMoveMessage({ frame: 1,
-      mode: 'force',
-      target: { sysid: 2, compid: 1 },
-      accel: { north: 2, east: 0, up: 3 },
-    }),
-    /unknown Move mode "force"/
-  );
-});
-
-
-
-
-test('string frame names throw — the retired operator vocabulary is deleted, not aliased', () => {
-  // The Action surface derives numbers; the parsing layer for member names and
-  // the deprecated *_INT aliases (names and numbers 5/6/11) is deleted.
-  const { resolveModeAndFrame } = require('../../lib/move/frames');
-  for (const frame of ['LOCAL_NED', 'GLOBAL_RELATIVE_ALT', 'GLOBAL_RELATIVE_ALT_INT', 'GLOBAL_INT', 'BODY_FRD']) {
-    assert.throws(
-      () => resolveModeAndFrame({ mode: 'position', frame }),
-      /not a SET_POSITION_TARGET frame/,
-      `string frame ${JSON.stringify(frame)} must throw`
-    );
-  }
-  // The deprecated wire numbers and the retired terrain frames are not in the
-  // vocabulary either — same simplified error. LOCAL_OFFSET_NED (7) is NOT in
-  // this list any more: it came back as Steer's Offset reference (2026-08-13),
-  // being both un-deprecated in common.xml and the only local frame ArduPlane
-  // accepts. Terrain stays out until its datum is measured.
-  for (const frame of [5, 6, 10, 11]) {
-    assert.throws(
-      () => resolveModeAndFrame({ mode: 'position', frame }),
-      /not a SET_POSITION_TARGET frame/,
-      `frame ${frame} must throw`
-    );
-  }
+test('a frame the Action surface never derives rides as non-finite, never as a substitute', () => {
+  // String frame names died with the operator frame surface: the Action layer
+  // derives numbers. One that does not coerce reaches the wire's own choke
+  // point non-finite (lib/connection/wire.js refuses it there) rather than
+  // being quietly replaced with a legal frame number.
+  const message = buildMoveMessage({
+    frame: 'LOCAL_NED',
+    mode: 'position',
+    target: { sysid: 2, compid: 1 },
+    position: { north: 1, east: 2, up: 3 },
+  });
+  assert.equal(message.name, 'SET_POSITION_TARGET_LOCAL_NED', 'a non-global frame is the local carrier');
+  assert.ok(!Number.isFinite(message.fields.coordinate_frame));
 });
 
 
@@ -151,14 +125,12 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the
     'position-velocity-acceleration'
   );
   // Position + acceleration WITHOUT velocity is the one mix with no named
-  // submode and no §14 measurement — unmeasured stays off the surface (the
-  // terrain-frame precedent). It refuses loud, here at derivation, because
-  // the operator never typed a mode name for "unknown mode" to make sense of,
-  // and a setpoint's missing ack would otherwise make the failure symptomless.
-  assert.throws(
-    () => deriveSteerMode(g({ accel: filled, position: filled })),
-    /position \+ acceleration needs a velocity too/
-  );
+  // submode and no §14 measurement, so MODES carries no row for the name this
+  // composes — the build craters on the missing row and the editor is what
+  // reds the combination (mavlink-move.html `action`).
+  assert.equal(deriveSteerMode(g({ accel: filled, position: filled })), 'position-acceleration');
+  const { MODES } = require('../../lib/move/frames');
+  assert.equal(MODES['position-acceleration'], undefined, 'the unmeasured mix has no wire encoding');
   // Nothing filled derives yaw-only, which with no yaw is the all-ignore
   // packet (§14 / #115). It used to refuse; the editor requires at least one
   // Steer field now, so the configured path cannot get here.
@@ -179,20 +151,10 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the
 
 
 test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)', () => {
-  // Still load-bearing: ' ' is not '', so without trimming it reaches Number()
-  // and comes back a finite 0. That 0 is what isBlank exists to stop — inside a
-  // commanded group it would be a commanded zero, and on the ignore-bit rules
-  // it would flip a bit. Whitespace has to read as absent in both places.
-  assert.throws(
-    () => buildMoveMessage({ frame: 1,
-      mode: 'position',
-      target: { sysid: 2, compid: 1 },
-      position: { north: ' ', east: 2, up: 3 },
-    }),
-    /Move needs a north position/,
-    'a whitespace axis is absent, and an absent axis in a commanded group refuses'
-  );
-
+  // Still load-bearing where presence drives a mask bit: ' ' is not '', so
+  // without trimming it reaches Number() and comes back a finite 0, which
+  // would clear an ignore bit and command a value nobody typed.
+  //
   // Yaw follows the presence rule: whitespace is absent, so the ignore bit
   // stays set rather than commanding a yaw of 0 (north) nobody asked for.
   const yawBlank = buildMoveMessage({ frame: 1,
@@ -213,14 +175,13 @@ test('a whitespace-only string is blank — Number(\' \') is a finite 0 (§10)',
   assert.equal(padded.fields.x, 4);
 });
 
-test('a blank position axis is a zero offset on frame 7, and a missing value on frame 1', () => {
-  // The one place a blank coordinate is not a hole. On an absolute local frame
-  // a 0 is the EKF origin — a real place — so a half-filled triplet refuses.
-  // On LOCAL_OFFSET_NED a 0 is a zero *offset*, which is no movement on that
-  // axis (§14 2026-08-05, the frame-7 probe), and filling one axis is the whole
-  // point of the reference: QGC's guided altitude change fills only the
-  // vertical, and ArduPlane's handler reads only the vertical. The editor draws
-  // the same line (steerAxisValidator); this is the runtime half.
+test('a commanded group coerces every axis — the editor is what requires them whole', () => {
+  // The mask has no per-axis bit, so a group the mode names is commanded in
+  // full and a blank axis coerces to 0 the way the wire reads it. On
+  // LOCAL_OFFSET_NED that 0 is a zero *offset*, which is no movement on that
+  // axis (§14 2026-08-05, the frame-7 probe); on LOCAL_NED it is the EKF
+  // origin. Telling those apart is the editor's job — `steerAxisValidator`
+  // reds a half-filled triplet on every frame but Offset.
   const offset = buildMoveMessage({ frame: 7,
     mode: 'position',
     target: { sysid: 2, compid: 1 },
@@ -231,27 +192,15 @@ test('a blank position axis is a zero offset on frame 7, and a missing value on 
   assert.equal(offset.fields.y, 0, 'a blank east is a zero offset');
   assert.equal(offset.fields.z, -10, 'and the filled axis still flips to NED');
 
-  assert.throws(
-    () => buildMoveMessage({ frame: 1,
-      mode: 'position',
-      target: { sysid: 2, compid: 1 },
-      position: { north: '', east: '', up: 10 },
-    }),
-    /Move needs a north position/,
-    'the same triplet on LOCAL_NED refuses — 0 there is the origin, not "no change"'
-  );
-
-  // The exemption is position-only. A velocity is a rate whatever the origin is
-  // measured from, so a zero one is commanded rather than absent.
-  assert.throws(
-    () => buildMoveMessage({ frame: 7,
-      mode: 'velocity',
-      target: { sysid: 2, compid: 1 },
-      velocity: { north: 1, east: '', up: '' },
-    }),
-    /Move needs an east velocity/,
-    'offset does not exempt the velocity group'
-  );
+  // An axis nobody supplied at all rides as NaN, which is legal MAVLink on a
+  // float field — the driver does not invent a number for it.
+  const absent = buildMoveMessage({ frame: 1,
+    mode: 'velocity',
+    target: { sysid: 2, compid: 1 },
+    velocity: { north: 1 },
+  });
+  assert.equal(absent.fields.vx, 1);
+  assert.ok(Number.isNaN(absent.fields.vy));
 });
 
 test('buildStopMessage copies target ids and does not invent system 1', () => {

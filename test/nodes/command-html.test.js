@@ -432,7 +432,7 @@ test('sendAs defaults to the first valid option with no blank prompt', () => {
   assert.doesNotMatch(html, /id="node-input-carrier"/, 'retired carrier control must not be rendered');
   assert.match(
     html,
-    /sendAs:\s*\{ value: 'int' \}/,
+    /sendAs:\s*\{ value: 'int',/,
     'new command nodes default to COMMAND_INT'
   );
   assert.doesNotMatch(html, /select carrier/i, 'send-as select has no meaningless blank prompt');

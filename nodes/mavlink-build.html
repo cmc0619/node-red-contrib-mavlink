@@ -121,7 +121,12 @@
             return true;
           },
         },
-        tier:        { value: 'send' },
+        // The vocabulary is TIER_OPTIONS, which also paints the select — one
+        // list, so the red ring cannot drift from what the dialog offers.
+        tier: {
+          value: 'send',
+          validate: RED.mavlink.oneOf(TIER_OPTIONS.map(function (o) { return o.value; })),
+        },
         band:        { value: '2' },
         // A typo here fails silently rather than loudly: Number('10OO') is NaN,
         // NaN > 0 is false, and the repeat timer simply never arms — the node
