@@ -187,7 +187,24 @@ multiple implementation behaviors, dispatch it with a `switch`. This is the only
 form of runtime affirmative behavioral dispatch. If this layer merely forwards the value, it
 has no dispatcher at all.
 
-- Write one `case` for each implemented behavior. Do not add a `default` arm.
+- Write one `case` for each implemented behavior. The `default` arm must be present and must
+  be **empty** — a `break` and nothing else (owner ruling, 2026-08-16, revising "do not add a
+  `default` arm"). What the rule bans is a default that *does* something; an empty one is
+  inert, satisfies the convention every linter and reviewer expects, and says out loud that
+  the author did not forget the case. Write it with the reason attached:
+
+      default: break; // This space intentionally left blank (§5)
+
+  A `default` arm containing anything — a return, an assignment, a throw — is the fallback
+  this section exists to prevent, and is rejected on sight.
+- **State the unresolved tail too.** A dispatcher whose cases return values ends with an
+  explicit `return`, not an implicit fall-off: `return NaN` where the contract is a number
+  (NaN is legal MAVLink on a float field and is refused by `lib/connection/wire.js` on an
+  integer one — right either way), `return undefined` where it is an object or a string.
+  Never `return null` in a numeric resolver: `Number(null)` is `0`, so a null tail silently
+  becomes a legal frame, command or type, which is exactly the substitution §0 forbids.
+- Both are mechanical, not conventions to remember: `default-case` and `consistent-return` are
+  in the ESLint gate (`eslint.config.mjs`), so `npm run lint` fails on either.
 - Do not validate the verb or test vocabulary membership before dispatch.
 - If a switch's only purpose is to prove that a forwarded verb matches a known member, delete
   the switch and pass the value through untouched.
@@ -203,7 +220,8 @@ has no dispatcher at all.
   rule into unrelated numeric logic.
 
 Remove validation-only switches and all defaulting, fall-open, validation, and error arms from
-real dispatch switches on sight. A real dispatcher contains affirmative `case` arms only.
+real dispatch switches on sight. A real dispatcher contains affirmative `case` arms and one
+empty `default`.
 
 This rule does not apply to data lookup tables, metadata maps, option registries, or display
 mappings — including the ones the editor uses to render choices and validate operator input.

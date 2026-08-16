@@ -4581,6 +4581,34 @@ the guard §14 already ruled and pinned — so the crater is loud and lands in t
 existing error path, before anything is enqueued. Nothing silently becomes a *different legal
 value*, which was the cluster's real subject.
 
+*Revision, same day — the empty `default` arm (owner ruling, 2026-08-16).* §5 originally read
+"do not add a `default` arm", which put it head-on against `default-case`, the convention every
+JS linter ships: *"always explicitly state what the default behavior should be, so it's clear
+the developer didn't forget."* The owner — §5's author — ruled the convention right and the
+prohibition counterintuitive: an empty default **still does nothing**, so the rule loses no
+teeth by requiring one. What §5 actually bans is a default that *acts*. 32 sites tree-wide now
+carry `default: break; // This space intentionally left blank (§5)`.
+
+Adding them immediately earned its keep: `frameForReference`'s nested firmware switch turned
+out to fall through into the outer arm, which `no-fallthrough` caught the moment a subsequent
+clause existed. Behaviour was identical (both arms do nothing) — but the fallthrough had been
+invisible while the switch simply ended, and would have silently inherited whatever a future
+edit put in the outer default. The convention surfaced a latent hazard the prohibition hid.
+
+*The tail is not the same question.* The sibling lint rule, `consistent-return`, wants a
+`return` at the end of a function whose cases return values, and its usual fix is `return
+null` — which here is **not** inert. `Number(null)` is `0`; `Number(undefined)` is `NaN`. A
+null tail on `frameForAltRef` becomes `MAV_FRAME_GLOBAL`, on `resolveCommandId` a finite
+command id, on `resolveParamType` a legal type — each a legal value silently standing in for
+one nobody chose, the precise substitution this section removed. So the tail is explicit but
+typed: **`return NaN`** where the contract is a number (legal MAVLink on a float field,
+refused by `wire.js` on an integer one), **`return undefined`** where it is an object or
+string. 21 sites.
+
+Both rules are in the ESLint gate now, so the repo's own `npm run lint` enforces them rather
+than a third-party dashboard. Four Express handlers and three helpers that used `return f(x)`
+as an early-exit idiom became `f(x); return;` — same behaviour, consistent shape.
+
 *What did not move, and the line:* a value that never reaches the wire has no downstream layer
 to catch it, so its guard stays. `finiteNumberOr` (timers, rates, ports: `setTimeout(fn, NaN)`
 substitutes ~1 ms rather than refusing) and `resolveBand` (`Number('')` is `0` is
