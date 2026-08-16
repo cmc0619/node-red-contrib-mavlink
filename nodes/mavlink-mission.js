@@ -200,14 +200,6 @@ module.exports = function registerMavlinkMission(RED) {
       /** Emit the protocol plan on output 0 and send nothing. */
       function buildTier() {
       const plan = buildPlan(operation, missionType, target, uploadItems);
-      // No operation matched, so buildPlan selected no behavior and built no
-      // messages (§5). Same answer as the tier dispatch above: nothing ran,
-      // and the input still completes rather than dereferencing a plan that
-      // was never built.
-      if (!plan.messages) {
-        done();
-        return;
-      }
       applyActionStatus(node, 'preview', `plan ${operation} ${missionTypeKey}`);
       send([
         { payload: plan },
