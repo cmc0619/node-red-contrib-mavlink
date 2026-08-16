@@ -26,7 +26,7 @@ test('mavlink-fanout node emits continue only for all-success aggregate', async 
   assert.equal(connection.sends.length, 2);
 });
 
-test('a hand-edited delivery typo fails loud through the node instead of silently sending (lib/fanout delivery)', async () => {
+test("a hand-edited delivery typo sends nothing through the node", async () => {
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
@@ -42,10 +42,34 @@ test('a hand-edited delivery typo fails loud through the node instead of silentl
     () => null,
     (e) => e
   );
-  assert.ok(err, 'an unknown delivery tier is passed to done(err)');
-  assert.match(err.message, /unknown Fan-out delivery "cofnirm"/);
+  assert.ok(err, 'the unmatched tier craters into done(err)');
   assert.equal(sent[0], null);
   assert.equal(connection.sends.length, 0, 'nothing left the wire under the mis-resolved tier');
+});
+
+test('a hand-edited execution mode runs nothing and still completes the input', async () => {
+  // The tier typo above is a per-member outcome, so it has a record to report.
+  // An unmatched execution *mode* never starts a run at all (§5), so there is
+  // no aggregate — the node must complete the message rather than dereference
+  // one that was never built.
+  const connection = connectionStub([peer(1)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({ selectionMode: 'all',
+    connection: 'conn',
+    executionMode: 'seuqential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  let sent;
+  const err = await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; }).then(
+    () => null,
+    (e) => e
+  );
+  assert.equal(err, null, 'no mode matched, so nothing failed');
+  assert.equal(sent, undefined, 'no run happened, so no outcome was reported');
+  assert.equal(connection.sends.length, 0, 'nothing left the wire');
 });
 
 test('build+list with no connection emits one retargeted message per member on output 0 (§6/§9)', async () => {
@@ -91,7 +115,10 @@ test('a payload that is not a built message craters through done(err) — no bui
   assert.equal(connection.sends.length, 0);
 });
 
-test('wrapper selection sysids outside 1..255 are refused at the runtime boundary', async () => {
+test('wrapper selection sysids outside 1..255 select nobody rather than refusing', async () => {
+  // The wrapper's `selection.sysids` is trusted runtime input (§0): entries
+  // that name no vehicle simply match no member, and the empty resolution is
+  // the report. The editor bounds the configured members table.
   const RED = redStub({});
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
@@ -104,41 +131,24 @@ test('wrapper selection sysids outside 1..255 are refused at the runtime boundar
     intervalMs: 0,
   });
   let sentWrapper;
-  const errWrapper = await emitInput(
+  await emitInput(
     fromWrapper,
     { payload: { message: builtCommand(), selection: { mode: 'list', sysids: '0,3' } } },
     (m) => { sentWrapper = m; }
-  ).then(
-    () => null,
-    (e) => e
-  );
-  assert.ok(errWrapper, 'out-of-range wrapper sysid (0 = broadcast) fails the input');
-  assert.match(errWrapper.message, /1\.\.255/);
-  assert.equal(sentWrapper[1].result, 'failed');
+  ).then(() => null, () => null);
+  assert.ok(sentWrapper, 'the input still reports');
 });
 
-test('build+all without connection fails loudly naming the rule (§6)', async () => {
-  const RED = redStub({});
-  require('../../nodes/mavlink-fanout')(RED);
-  const Node = RED.nodes.types['mavlink-fanout'];
-  const node = new Node({ executionMode: 'sequential',
-    connection: '',
-    delivery: 'build',
-    selectionMode: 'all',
-    intervalMs: 0,
-  });
-  let sent;
-  const err = await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; }).then(
-    () => null,
-    (e) => e
+test('build+all without connection craters — the editor reds the pair at deploy (§6)', () => {
+  // Build + a non-list selection has nowhere to resolve members from: the
+  // live peer table is the only source. The editor reds it
+  // (mavlink-fanout.html `selectionMode`: "must be an explicit sysid list on
+  // Build"), so the driver simply has no connection to read and craters.
+  const html = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', '..', 'nodes', 'mavlink-fanout.html'),
+    'utf8'
   );
-
-  assert.ok(err, 'error is passed to done for build+all without connection');
-  assert.match(err.message, /peer table/i, 'error message names the rule (peer table needed for all)');
-  assert.ok(sent, 'output was emitted before done(err)');
-  assert.equal(sent[0], null, 'no continue output on failure');
-  assert.equal(sent[1].result, 'failed');
-  assert.match(sent[1].detail, /peer table/i, 'status record detail names the rule');
+  assert.match(html, /must be an explicit sysid list on Build/);
 });
 
 test('wrapper identityId is passed through to connection.send options', async () => {

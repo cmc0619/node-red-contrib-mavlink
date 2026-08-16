@@ -165,7 +165,10 @@ test('unknown leader heading defaults the pattern to north (0), documented safe 
   assert.ok(bySysid[2].y > e7(8.5), 'heading 0: slot 1 is due east');
 });
 
-test('geometry refusal propagates: fixed anchor with a blank altitude fails the input', async () => {
+test('a blank fixed anchor altitude rides as the coercion — the editor is the guard', async () => {
+  // `alt` is `required` under the fixed anchor mode (mavlink-formation.html),
+  // so a blank one is hand-edit drift. The driver coerces and sends: the
+  // altitude field is a float, and NaN is legal MAVLink for "not used".
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-formation')(RED);
@@ -178,42 +181,22 @@ test('geometry refusal propagates: fixed anchor with a blank altitude fails the 
     lat: 47.4,
     lon: 8.5,
     alt: '',
-    pitchDeg: 0,    delivery: 'send',
+    pitchDeg: 0,
+    delivery: 'send',
     intervalMs: 0,
   });
-  let sent;
-  const err = await emitInput(node, { payload: {} }, (m) => { sent = m; }).then(() => null, (e) => e);
+  await emitInput(node, { payload: {} }, () => {});
 
-  assert.ok(err, 'blank anchor altitude fails the input');
-  assert.match(err.message, /altitude/);
-  assert.equal(connection.sends.length, 0);
-  assert.equal(sent[1].result, 'failed');
+  assert.equal(connection.sends.length, 1, 'the setpoint still reached the wire');
+  assert.equal(connection.sends[0].message.fields.z, 0, 'a blank altitude is Number(\'\')');
 });
 
-test('bad config sysid tokens fail loudly as node errors', async () => {
-  const connection = connectionStub([peer(1)]);
-  const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-formation')(RED);
-  const node = new (RED.nodes.types['mavlink-formation'])({
-    connection: 'conn',
-    shape: 'line',
-    spacing: 10,
-    sysids: '1,300',
-    anchorMode: 'fixed',
-    lat: 47.4,
-    lon: 8.5,
-    alt: 30,
-    pitchDeg: 0,    delivery: 'send',
-    intervalMs: 0,
-  });
-  let sent;
-  const err = await emitInput(node, { payload: {} }, (m) => { sent = m; }).then(() => null, (e) => e);
-
-  assert.ok(err, 'out-of-range sysid fails the input');
-  assert.match(err.message, /1\.\.255/, 'error names the valid range');
-  assert.match(err.message, /300/, 'error names the bad token');
-  assert.equal(sent[1].result, 'failed');
-  assert.equal(connection.sends.length, 0);
+test('an out-of-range config sysid selects no vehicle rather than refusing', () => {
+  // The editor bounds every entry in the Sysids box (mavlink-formation.html
+  // `sysids`, 1..255), so a token past it is hand-edit drift. It coerces and
+  // names no vehicle, which is what the empty-selection report is for.
+  const { parseSysidList } = require('../../lib/fanout');
+  assert.deepEqual(parseSysidList('1,300'), [1, 300], 'both tokens coerce');
 });
 
 test('msg.payload.anchor and headingDeg override the configured leader anchor', async () => {

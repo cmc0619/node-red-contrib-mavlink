@@ -42,12 +42,6 @@ module.exports = function registerMavlinkFanout(RED) {
                 ? opts.targets.map((t) => (typeof t === 'object' && t !== null ? t.sysid : t))
                 : selection.sysids
             );
-          } else {
-            const rule = effectiveDelivery === 'build'
-              ? `build+${selectionMode} selection requires a Connection — ` +
-                'the live peer table is the only place that selection can resolve'
-              : 'requires a Connection';
-            throw new Error(`mavlink-fanout: ${rule}`);
           }
         }
 
@@ -59,7 +53,8 @@ module.exports = function registerMavlinkFanout(RED) {
           members: configMembersFor(config, opts),
           selection,
           // Affirmative dispatch (§5): lib/fanout maps only broadcast and
-          // sequential — an unknown or blank mode selects no case and craters.
+          // sequential — an unknown or blank mode selects no case, so no run
+          // starts and the aggregate comes back undefined (handled below).
           mode: opts.executionMode || config.executionMode,
           delivery: effectiveDelivery,
           dryRun: opts.dryRun !== undefined ? !!opts.dryRun : !!config.dryRun,
@@ -72,10 +67,14 @@ module.exports = function registerMavlinkFanout(RED) {
           confirmed: msg.confirmed === true || config.confirm === true,
         }));
 
-        // A redeploy cancelled us. The node is going away: finish quietly
-        // rather than emitting or raising on a closed node, which would trip a
-        // Catch node wired for "fan-out failed → failsafe" on a mere deploy.
-        if (aggregate.result === 'cancelled') {
+        // Two ways there is nothing to report. A redeploy cancelled us: the
+        // node is going away, so finish quietly rather than emitting or raising
+        // on a closed node, which would trip a Catch node wired for "fan-out
+        // failed → failsafe" on a mere deploy. Or no execution mode matched, so
+        // no run started (§5) and executeFanout selected no behavior. Either
+        // way the input still completes — a message left hanging is worse than
+        // one that did nothing (same rule as mavlink-mission's tier dispatch).
+        if (aggregate === undefined || aggregate.result === 'cancelled') {
           done();
           return;
         }

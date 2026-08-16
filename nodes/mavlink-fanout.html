@@ -105,7 +105,7 @@
       dryRun: { value: false },
       stopOnError: { value: false },
       confirm: { value: false },
-      delivery: { value: 'build' },
+      delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
       timeoutMs: {
         value: 10000,
         // RED.validators.number() accepts 0 and negatives, and the input's

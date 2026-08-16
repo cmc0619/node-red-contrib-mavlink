@@ -5,9 +5,9 @@
     {
       name: { value: '' },
       identity: { value: '' },
-      delivery: { value: 'confirm' },
-      operation: { value: 'download' },
-      missionType: { value: 'mission' },
+      delivery: { value: 'confirm', validate: RED.mavlink.oneOf(['build', 'confirm']) },
+      operation: { value: 'download', validate: RED.mavlink.oneOf(['download', 'upload', 'clear']) },
+      missionType: { value: 'mission', validate: RED.mavlink.oneOf(['mission', 'fence', 'rally']) },
       targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
       targetComponent: { value: '', validate: RED.validators.number(true) },
       items: {
