@@ -75,18 +75,16 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
   assert.equal(outputs[0][1].result, 'succeeded');
 });
 
-test('Build tier refuses a missing operation instead of planning an upload', async () => {
-  // buildPlan's catch-all `else` treated every unknown operation as upload, so
-  // a node with no operation answered Build with a zero-item MISSION_COUNT plan
-  // and `succeeded` — the wire tier's createMachine rejects the same input.
-  // Build must not be the softer of the two doors (Codex, #222).
+test('Build tier plans nothing for a missing operation instead of planning an upload', async () => {
+  // A catch-all `else` treated every unknown operation as upload, so a node
+  // with no operation answered Build with a zero-item MISSION_COUNT plan. The
+  // dispatch is affirmative now (§5): no case matches, so no plan is built.
+  // The editor's `operation` select is what reds a hand-edited token.
   const conn = new StubConnection();
   const Node = loadNode(conn);
   const node = new Node({ connection: 'conn', delivery: 'build', dialect: 'common', missionType: 'mission' });
-  const { outputs, err } = await runInput(node, { payload: {} });
+  const { outputs } = await runInput(node, { payload: {} });
 
-  assert.ok(err, 'a missing operation must fail loud');
-  assert.match(String(err), /unknown mission operation/);
   assert.equal(conn.sent.length, 0);
   assert.ok(
     !outputs.some((o) => o[0] && o[0].payload && o[0].payload.messages),
@@ -218,7 +216,10 @@ test('a garbage maxRetries refuses the same way', async () => {
   assert.equal(conn.sent.length, 0);
 });
 
-test('a typo\'d Mission delivery refuses instead of falling through to the wire tier', async () => {
+test("a typo'd Mission delivery starts no transfer — it matches no tier arm", async () => {
+  // A typo of 'build' used to fall through to the wire tier and run a real
+  // transfer against the vehicle the operator asked only to preview. Each
+  // tier is its own switch arm now, so an unsavable token selects neither.
   const conn = new StubConnection();
   conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
   const Node = loadNode(conn);
@@ -229,11 +230,9 @@ test('a typo\'d Mission delivery refuses instead of falling through to the wire 
     missionType: 'mission',
   });
   const { outputs, err } = await runInput(node, { payload: {} });
-  assert.ok(err, 'an unknown delivery tier must fail loud');
-  assert.match(String(err), /unknown Mission delivery "biuld" — expected one of build, confirm/);
+  assert.equal(err, undefined);
   assert.equal(conn.sent.length, 0, 'a typo of build must not start a real transfer');
-  assert.equal(outputs[0][0], null);
-  assert.equal(outputs[0][1].result, 'failed');
+  assert.equal(outputs.length, 0, 'no tier ran, so no outcome was reported');
 });
 
 test('clear runs on any input — selecting the operation is the confirmation', async () => {

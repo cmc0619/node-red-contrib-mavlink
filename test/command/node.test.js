@@ -700,34 +700,11 @@ test('a garbage Command maxRetries refuses the same way', async () => {
   assert.match(doneError.message, /Command max retries must be a finite number \(got "nope"\)/);
 });
 
-test('a hand-edited garbage Command delivery tier fails loud instead of silently running Confirm', async () => {
-  const conn = connStubWithInject();
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({
-    sendAs: 'long',
-    mode: 'preset',
-    preset: 'arm',
-    delivery: 'cofnirm',
-    connection: 'conn',
-    targetSystem: '1',
-    targetComponent: '1',
-  });
-
-  let sent;
-  let doneError;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, (err) => { doneError = err; });
-  await Promise.resolve();
-
-  assert.equal(sent[0], null);
-  assert.match(doneError.message, /unknown Command delivery "cofnirm" — expected one of build, send, confirm, complete/);
-  assert.equal(conn.sent.length, 0, 'the mis-resolved tier never reached the wire');
-});
-
-test('a hand-edited garbage Command mode fails loud instead of silently building a preset', async () => {
-  // 'presett' used to fall through the `!== 'advanced'` gates into the preset
-  // branch silently. Affirmative dispatch craters in the input handler.
+test('a hand-edited garbage Command mode resolves no command — nothing is built', async () => {
+  // Only Preset and Advanced are modes. A token the editor cannot save
+  // (`mode` carries RED.mavlink.oneOf) matches neither, so no preset and no
+  // command id resolve, and the message craters at the wire's own guard
+  // rather than silently building the preset branch.
   const conn = connStubWithInject();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-command')(RED);
@@ -736,20 +713,18 @@ test('a hand-edited garbage Command mode fails loud instead of silently building
     sendAs: 'long',
     mode: 'presett',
     preset: 'arm',
-    delivery: 'confirm',
+    delivery: 'build',
     connection: 'conn',
     targetSystem: '1',
     targetComponent: '1',
   });
 
   let sent;
-  let doneError;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, (err) => { doneError = err; });
+  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
   await Promise.resolve();
 
-  assert.equal(sent[0], null);
-  assert.match(doneError.message, /unknown Command mode "presett" — expected one of preset, advanced/);
-  assert.equal(conn.sent.length, 0, 'the mis-resolved mode never reached the wire');
+  assert.equal(sent[0].payload.fields.command, undefined, 'no command id was resolved');
+  assert.equal(conn.sent.length, 0, 'nothing reached the wire');
 });
 
 test('silent ACK windows re-send a LONG with incremented confirmation, badge telemetry, then the unchanged unconfirmed record (#248)', async (t) => {
@@ -880,57 +855,35 @@ test('Advanced mode sends once on a silent window — a raw MAV_CMD id never opt
 // DESIGN.md §14 had left both sites explicitly un-ruled ("COMMAND_LONG is a
 // defensible default"); the owner has now ruled the Move precedent applies.
 
-test('unknown "Send as" token refuses loud instead of silently building COMMAND_LONG', async () => {
-  const RED = redStub({});
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({ sendAs: 'lng', mode: 'preset', preset: 'arm', delivery: 'build' });
+test('a "Send as" token that is not a carrier builds nothing at all', async () => {
+  // The carrier dispatch has one case per carrier and no default arm (§5), so
+  // a blank or typo'd token selects neither COMMAND_LONG nor COMMAND_INT. The
+  // editor's `sendAs` select is what reds it (RED.mavlink.oneOf).
+  for (const sendAs of ['lng', '']) {
+    const RED = redStub({});
+    require('../../nodes/mavlink-command')(RED);
+    const Node = RED.nodes.types['mavlink-command'];
+    const node = new Node({ sendAs, mode: 'preset', preset: 'arm', delivery: 'build' });
 
-  let output;
-  let doneErr;
-  node.emit('input', { payload: null }, (m) => { output = m; }, (err) => { doneErr = err; });
-  await new Promise((resolve) => setImmediate(resolve));
+    let output;
+    node.emit('input', { payload: null }, (m) => { output = m; }, () => {});
+    await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(output[0], null, 'output 0 must not fire');
-  assert.equal(output[1].result, 'failed');
-  assert.match(output[1].detail, /unknown Command "Send as" "lng" — expected one of long, int/);
-  assert.ok(doneErr instanceof Error, 'the input fails through Catch');
+    assert.equal(output[0].payload, undefined, 'the carrier selects no builder');
+  }
 });
 
-test('blank "Send as" now craters instead of resolving to COMMAND_LONG (protocol omega, reversing §14:4505)', async () => {
-  // The editor's select never saves blank, so this is hand-edit drift. It used
-  // to fall through to COMMAND_LONG; now it throws like any non-member, matching
-  // formation's carrier resolver and the codebase-wide "blank crashes" line.
-  const RED = redStub({});
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({ sendAs: '', mode: 'preset', preset: 'arm', delivery: 'build' });
-
-  let output;
-  let doneErr;
-  node.emit('input', { payload: null }, (m) => { output = m; }, (err) => { doneErr = err; });
-  await new Promise((resolve) => setImmediate(resolve));
-
-  assert.equal(output[0], null, 'output 0 must not fire');
-  assert.match(output[1].detail, /unknown Command "Send as" "" — expected one of long, int/);
-  assert.ok(doneErr instanceof Error);
-});
-
-test('unknown preset fails the input instead of building MAV_CMD(null) and reporting success', async () => {
+test('an unlisted preset resolves no command id rather than a guess', async () => {
   const RED = redStub({});
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({ sendAs: 'long', mode: 'preset', preset: 'arrrm', delivery: 'build' });
 
   let output;
-  let doneErr;
-  node.emit('input', { payload: null }, (m) => { output = m; }, (err) => { doneErr = err; });
+  node.emit('input', { payload: null }, (m) => { output = m; }, () => {});
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(output[0], null, 'output 0 must not fire');
-  assert.equal(output[1].result, 'failed');
-  assert.match(output[1].detail, /unknown Command preset "arrrm" — expected one of/);
-  assert.ok(doneErr instanceof Error, 'the input fails through Catch');
+  assert.equal(output[0].payload.fields.command, null, 'MAV_CMD is unresolved, not invented');
 });
 
 test('Advanced mode never reads preset — an unset preset field does not refuse', async () => {

@@ -5,7 +5,7 @@
     {
       name: { value: '' },
       identity: { value: '' },
-      delivery: { value: 'build' },
+      delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'collect']) },
       action: { value: 'read' },
       targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
       targetComponent: { value: '', validate: RED.validators.number(true) },
@@ -13,7 +13,30 @@
       // -- param_index -1 means "use param_id" -- so the two are alternatives,
       // not a pair, and the dialog shows one at a time.
       lookup: { value: 'name' },
-      paramId: { value: '' },
+      /**
+       * Required wherever the parameter is addressed by name — which is every
+       * Set, and a Read that is not in Index mode. `PARAM_REQUEST_LIST` names
+       * no parameter at all, so the row is hidden and the rule is off.
+       *
+       * The driver sends what it is handed: a blank id rides as 16 empty bytes
+       * and the vehicle answers nothing, so the only place this can be caught
+       * before the wire is here (§0 walled garden).
+       */
+      paramId: {
+        value: '',
+        validate: function (v, _opt) {
+          var action = RED.mavlink.liveOr(this, '#node-input-action', this && this.action, 'read');
+          if (action === 'request-list' || indexAddressed(this)) return true;
+          if (RED.mavlink.isBlank(v)) {
+            return 'is required — a set or a read by name identifies the parameter by its '
+              + 'PARAM_ID, and a blank one reaches the vehicle as an empty name';
+          }
+          // char[16] on the wire. The input carries maxlength, so this catches
+          // a hand-edited flow rather than typing.
+          if (String(v).trim().length > 16) return 'exceeds the wire\'s PARAM_ID length of 16';
+          return true;
+        },
+      },
       /**
        * Only a real index is edited, so only a real index is checked.
        *

@@ -1398,6 +1398,33 @@
   };
 
   /**
+   * Membership check for a closed-vocabulary select — a delivery tier, a
+   * carrier, a lookup mode.
+   *
+   * This is the editor half of §5 affirmative dispatch. The runtime switches
+   * on these values with `case` arms only, so a token the dialog can never
+   * produce matches nothing and selects no behavior: the node deploys clean
+   * and then quietly does nothing. Only a hand-edited flow can hold one, and
+   * only the editor can see it at deploy — so this is where it reds.
+   *
+   * Two arguments so Node-RED renders the reason (§14: a one-arg validator's
+   * returned string is coerced with `!!` and reads as valid).
+   *
+   * @param {string[]} members  the values the dialog can save
+   * @param {function(*, object=): (boolean|string)} [also]  further rule, run
+   *   only once membership passes
+   * @returns {function(*, object=): true|string}
+   */
+  RED.mavlink.oneOf = function (members, also) {
+    return function (v, opt) {
+      if (members.indexOf(v) === -1) {
+        return 'must be one of: ' + members.join(', ');
+      }
+      return also ? also.call(this, v, opt) : true;
+    };
+  };
+
+  /**
    * Shared Build-tier dialect / vehicle / firmware default descriptors and
    * validators for `registerType({ defaults })`. Every Build-tier builder
    * gets the same rule: dialect required on Build; the Vehicle Profile is

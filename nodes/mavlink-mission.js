@@ -51,28 +51,6 @@ const {
   finiteNumberOr,
 } = require('../lib/addressing');
 
-/** Delivery tiers the editor's `delivery` select can save (§9). */
-const DELIVERY_TIERS = ['build', 'confirm'];
-
-/**
- * Delivery-tier membership (owner ruling, 2026-08-14, selection-typo cluster
- * §14 — the Mission site the audit missed; surfaced by #309's review round).
- * `delivery === 'build'` is the only gate below, so an unknown token fell
- * through to the wire tier: a typo'd hand-edit of 'build' ran a real
- * transfer against the vehicle the operator asked only to preview. Blank
- * throws too — the editor's select has no blank option, so blank is not a
- * reachable operator choice (same shape as Move's resolveDelivery).
- *
- * @param {*} value  config.delivery
- * @returns {'build'|'confirm'}
- */
-function resolveDeliveryTier(value) {
-  if (DELIVERY_TIERS.includes(value)) return value;
-  throw new Error(
-    `unknown Mission delivery ${JSON.stringify(value)} — expected one of ${DELIVERY_TIERS.join(', ')}`
-  );
-}
-
 module.exports = function registerMavlinkMission(RED) {
   function MavlinkMissionNode(config) {
     RED.nodes.createNode(this, config);
@@ -115,10 +93,6 @@ module.exports = function registerMavlinkMission(RED) {
         done();
         return;
       }
-
-      // Before anything reads `delivery` below: the build/wire fork is the
-      // only dispatch on it, and its else side sends.
-      resolveDeliveryTier(delivery);
 
       const payload = msg.payload ?? {};
       const missionTypeKey = payload.missionType || config.missionType;
@@ -206,117 +180,135 @@ module.exports = function registerMavlinkMission(RED) {
         }
       }
 
-      // ── Build tier: emit the protocol plan, send nothing. ─────────────────
-      if (delivery === 'build') {
-        const plan = buildPlan(operation, missionType, target, uploadItems);
-        applyActionStatus(node, 'preview', `plan ${operation} ${missionTypeKey}`);
-        send([
-          { payload: plan },
-          record(operation, missionTypeKey, target, {
-            result: 'succeeded',
-            phase: 'built',
-            messageCount: plan.messages.length,
-          }),
-        ]);
-        done();
-        return;
+      // Affirmative tier dispatch (§5): each tier is a whole arm, so a
+      // token the `delivery` select cannot save (RED.mavlink.oneOf,
+      // mavlink-mission.html) matches nothing and starts no transfer.
+      switch (delivery) {
+        case 'build':
+          buildTier();
+          return;
+        case 'confirm':
+          confirmTier();
+          return;
+      }
+      // No tier matched, so nothing ran. The input is still completed — a
+      // message left hanging is worse than one that did nothing.
+      done();
+
+      /** Emit the protocol plan on output 0 and send nothing. */
+      function buildTier() {
+      const plan = buildPlan(operation, missionType, target, uploadItems);
+      applyActionStatus(node, 'preview', `plan ${operation} ${missionTypeKey}`);
+      send([
+        { payload: plan },
+        record(operation, missionTypeKey, target, {
+          result: 'succeeded',
+          phase: 'built',
+          messageCount: plan.messages.length,
+        }),
+      ]);
+      done();
+      return;
       }
 
-      // An unknown operation matches no createMachine case and comes back
-      // undefined; the crater is the start() dereference below, inside the
-      // try that frees the lock — a throw between acquire and the promise
-      // chain would otherwise hold it until redeploy, every later op on this
-      // target reporting "busy" over a transfer that never started (#222).
-      // Constructors are store-only; the subscription only opens in start().
-      const machine = createMachine(operation, {
-        send: (message) =>
-          connNode.send(message, {
-            band: BAND.BULK,
-            target,
-            identityId: payload.identityId || config.identity,
-          }),
-        subscribe: (filter, handler) => connNode.subscribe(filter, handler),
-        target,
-        missionType,
-        items: uploadItems,
-        timeoutMs,
-        maxRetries,
-        onProgress: (update) => {
-          send([
-            null,
-            record(operation, missionTypeKey, target, { result: 'progress', ...update }),
-          ]);
-        },
-      });
-
-      // ── Lock per (connection, target, mission_type) (§9). ─────────────────
-      const release = locks.acquire(connNode.id, target, missionType);
-      if (!release) {
-        const rec = record(operation, missionTypeKey, target, {
-          result: 'failed',
-          phase: 'locked',
-          reason: `a ${missionTypeKey} transfer is already in progress for this target`,
+      /** Run the transfer machine to its MISSION_ACK. */
+      function confirmTier() {
+        // An unknown operation matches no createMachine case and comes back
+        // undefined; the crater is the start() dereference below, inside the
+        // try that frees the lock — a throw between acquire and the promise
+        // chain would otherwise hold it until redeploy, every later op on this
+        // target reporting "busy" over a transfer that never started (#222).
+        // Constructors are store-only; the subscription only opens in start().
+        const machine = createMachine(operation, {
+          send: (message) =>
+            connNode.send(message, {
+              band: BAND.BULK,
+              target,
+              identityId: payload.identityId || config.identity,
+            }),
+          subscribe: (filter, handler) => connNode.subscribe(filter, handler),
+          target,
+          missionType,
+          items: uploadItems,
+          timeoutMs,
+          maxRetries,
+          onProgress: (update) => {
+            send([
+              null,
+              record(operation, missionTypeKey, target, { result: 'progress', ...update }),
+            ]);
+          },
         });
-        applyActionStatus(node, 'error', `${missionTypeKey} busy`);
-        send([null, rec]);
-        done(new Error(`mavlink-mission: ${rec.reason}`));
-        return;
-      }
 
-      // Key the in-flight handle the same way as the lock so a fence upload
-      // does not cancel an in-flight mission download on this node (§9).
-      const lockKey = locks.key(connNode.id, target, missionType);
-
-      applyActionStatus(node, 'sending', `${operation} ${missionTypeKey}\u2026`);
-
-      // No path leaves the lock held (the stream-handover rule in
-      // mavlink-move): a sync throw out of this call — today, the undefined
-      // machine's start dereference — frees the lock on its way to failInput.
-      // The store waits until start() returns, so close() never iterates a
-      // handle that cannot cancel.
-      let settled;
-      try {
-        settled = machine.start();
-      } catch (err) {
-        release();
-        throw err;
-      }
-      activeByKey.set(lockKey, machine);
-
-      settled
-        .then((outcome) => {
-          if (activeByKey.get(lockKey) === machine) activeByKey.delete(lockKey);
-          release();
-
-          const rec = record(operation, missionTypeKey, target, outcome);
-          if (outcome.result === 'succeeded') {
-            applyActionStatus(node, 'ok', successBadge(operation, missionTypeKey, outcome));
-            send([{ payload: rec }, rec]);
-            done();
-          } else if (outcome.result === 'cancelled') {
-            // A redeploy cancelled the machine: the node is going away, so
-            // finish quietly — emitting here would land a record and an error
-            // badge on a closed node over a mere deploy (same rule as fanout,
-            // formation, command, and payload).
-            done();
-          } else {
-            applyActionStatus(node, 'error', `${operation} ${outcome.result}`);
-            send([null, rec]);
-            const detail = `${operation} ${outcome.result}${outcome.reason ? `: ${outcome.reason}` : ''}`;
-            done(new Error(`mavlink-mission: ${detail}`));
-          }
-        })
-        .catch((err) => {
-          if (activeByKey.get(lockKey) === machine) activeByKey.delete(lockKey);
-          release();
-          applyActionStatus(node, 'error', `${operation} error`);
-          send([null, record(operation, missionTypeKey, target, {
+        // ── Lock per (connection, target, mission_type) (§9). ─────────────────
+        const release = locks.acquire(connNode.id, target, missionType);
+        if (!release) {
+          const rec = record(operation, missionTypeKey, target, {
             result: 'failed',
-            phase: 'error',
-            reason: err.message,
-          })]);
-          done(err);
-        });
+            phase: 'locked',
+            reason: `a ${missionTypeKey} transfer is already in progress for this target`,
+          });
+          applyActionStatus(node, 'error', `${missionTypeKey} busy`);
+          send([null, rec]);
+          done(new Error(`mavlink-mission: ${rec.reason}`));
+          return;
+        }
+
+        // Key the in-flight handle the same way as the lock so a fence upload
+        // does not cancel an in-flight mission download on this node (§9).
+        const lockKey = locks.key(connNode.id, target, missionType);
+
+        applyActionStatus(node, 'sending', `${operation} ${missionTypeKey}\u2026`);
+
+        // No path leaves the lock held (the stream-handover rule in
+        // mavlink-move): a sync throw out of this call — today, the undefined
+        // machine's start dereference — frees the lock on its way to failInput.
+        // The store waits until start() returns, so close() never iterates a
+        // handle that cannot cancel.
+        let settled;
+        try {
+          settled = machine.start();
+        } catch (err) {
+          release();
+          throw err;
+        }
+        activeByKey.set(lockKey, machine);
+
+        settled
+          .then((outcome) => {
+            if (activeByKey.get(lockKey) === machine) activeByKey.delete(lockKey);
+            release();
+
+            const rec = record(operation, missionTypeKey, target, outcome);
+            if (outcome.result === 'succeeded') {
+              applyActionStatus(node, 'ok', successBadge(operation, missionTypeKey, outcome));
+              send([{ payload: rec }, rec]);
+              done();
+            } else if (outcome.result === 'cancelled') {
+              // A redeploy cancelled the machine: the node is going away, so
+              // finish quietly — emitting here would land a record and an error
+              // badge on a closed node over a mere deploy (same rule as fanout,
+              // formation, command, and payload).
+              done();
+            } else {
+              applyActionStatus(node, 'error', `${operation} ${outcome.result}`);
+              send([null, rec]);
+              const detail = `${operation} ${outcome.result}${outcome.reason ? `: ${outcome.reason}` : ''}`;
+              done(new Error(`mavlink-mission: ${detail}`));
+            }
+          })
+          .catch((err) => {
+            if (activeByKey.get(lockKey) === machine) activeByKey.delete(lockKey);
+            release();
+            applyActionStatus(node, 'error', `${operation} error`);
+            send([null, record(operation, missionTypeKey, target, {
+              result: 'failed',
+              phase: 'error',
+              reason: err.message,
+            })]);
+            done(err);
+          });
+      }
     }
 
     node.on('close', (done) => {
@@ -360,20 +352,19 @@ function record(operation, missionTypeKey, target, fields) {
  */
 function buildPlan(operation, missionType, target, items) {
   let messages;
-  if (operation === OPERATION.DOWNLOAD) {
-    messages = [buildRequestList(target, missionType)];
-  } else if (operation === OPERATION.CLEAR) {
-    messages = [buildClearAll(target, missionType)];
-  } else if (operation === OPERATION.UPLOAD) {
-    messages = [
-      buildCount(target, items.length, missionType),
-      ...items.map((item, seq) => buildItemInt(item, target, seq, missionType)),
-    ];
-  } else {
-    // Same rejection createMachine makes on the wire tier. A catch-all `else`
-    // here made every unknown operation an upload, so Build answered a missing
-    // one with a zero-item plan and `succeeded` (Codex, #222).
-    throw new Error(`unknown mission operation ${JSON.stringify(operation)}`);
+  switch (operation) {
+    case OPERATION.DOWNLOAD:
+      messages = [buildRequestList(target, missionType)];
+      break;
+    case OPERATION.CLEAR:
+      messages = [buildClearAll(target, missionType)];
+      break;
+    case OPERATION.UPLOAD:
+      messages = [
+        buildCount(target, items.length, missionType),
+        ...items.map((item, seq) => buildItemInt(item, target, seq, missionType)),
+      ];
+      break;
   }
   return { operation, missionType, target, messages };
 }

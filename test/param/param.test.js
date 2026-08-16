@@ -31,11 +31,11 @@ test('PARAM_SET for PX4 integer params writes the int bits into the float slot',
   assert.equal(message.fields.param_value, paramValueToWire(42, 'MAV_PARAM_TYPE_INT32'));
 });
 
-test('a set refuses a blank or non-finite value by name — nothing is built (§9, #258)', () => {
-  // The c-cast encode was a bare Number(value): a blank transmitted a silent 0
-  // (Number('') === 0), and 'abc'/NaN went out as wire NaN which then
-  // self-confirmed (numericEqual(NaN, NaN); an undefined value short-circuits
-  // the echo match). The set boundary now refuses before anything is built.
+test('a set coerces the value it is handed — the editor is what requires one', () => {
+  // The driver encodes and sends (§0). A blank value is `Number('')`, and a
+  // non-numeric one rides as the wire NaN a float field is allowed to carry;
+  // neither is repaired, and neither confirms (the echo match compares the
+  // decoded value, and NaN matches no expected number).
   const set = (value) => buildParamMessage({
     action: 'set',
     target: { sysid: 1, compid: 1 },
@@ -45,13 +45,8 @@ test('a set refuses a blank or non-finite value by name — nothing is built (§
     firmware: 'ardupilot',
   });
 
-  assert.throws(() => set(''), /param set requires a value, got blank/);
-  assert.throws(() => set('   '), /param set requires a value, got blank/);
-  assert.throws(() => set(undefined), /param set requires a value, got blank/);
-  assert.throws(() => set(null), /param set requires a value, got blank/);
-  assert.throws(() => set('abc'), /finite numeric value, got "abc"/);
-  assert.throws(() => set(NaN), /finite numeric value, got NaN/);
-
+  assert.ok(Number.isNaN(set('abc').fields.param_value));
+  assert.ok(Number.isNaN(set(NaN).fields.param_value));
   // A string numeric is a value — the editor's number box serializes one.
   assert.equal(set('1100').fields.param_value, 1100);
   // An explicit 0 is a value, not a blank.
@@ -170,10 +165,11 @@ test('a read addressed by index neither needs a param id nor sends one', () => {
   );
 
   // -1 is the other half of the same sentinel: the id is back to being the
-  // address, so a missing one is still an error rather than an empty read.
-  assert.throws(
-    () => buildParamMessage({ action: 'read', target: { sysid: 9, compid: 1 }, paramIndex: -1 }),
-    /param id is required/
+  // address, and a missing one reaches the wire as the empty name it is. The
+  // editor requires the id wherever the parameter is addressed by name.
+  assert.equal(
+    buildParamMessage({ action: 'read', target: { sysid: 9, compid: 1 }, paramIndex: -1 }).fields.param_id,
+    ''
   );
 });
 
@@ -213,35 +209,18 @@ test('resolveParamEncoding: capabilities beat firmware when no explicit override
   );
 });
 
-test('resolveParamEncoding: known firmware when capabilities absent; missing fails loud', () => {
+test('resolveParamEncoding: known firmware when capabilities absent; anything else resolves nothing', () => {
   assert.equal(resolveParamEncoding({ firmware: 'px4' }), PARAM_ENCODING.BYTEWISE);
   assert.equal(resolveParamEncoding({ firmware: 'ardupilot' }), PARAM_ENCODING.C_CAST);
-  assert.throws(() => resolveParamEncoding({}), /param encoding unresolved/);
-});
-
-test('resolveParamEncoding: unrecognized firmware token throws instead of falling to c-cast', () => {
-  // Wrong case is not the same string as 'px4' — no normalization, matching the
-  // Move no-defaults precedent (frameForReference refuses 'MSL' rather than
-  // lowercasing it).
-  assert.throws(
-    () => resolveParamEncoding({ firmware: 'PX4' }),
-    /param encoding unresolved: firmware "PX4" is not ardupilot or px4/
-  );
-  assert.throws(
-    () => resolveParamEncoding({ firmware: 'apm' }),
-    /param encoding unresolved: firmware "apm" is not ardupilot or px4/
-  );
-});
-
-test('resolveParamEncoding: custom firmware has no default encoding either', () => {
-  // 'custom' is a real, deployable Vehicle Profile value (FIRMWARE_TYPES), not a
-  // typo — but it explicitly disables firmware-specific behaviour, encoding
-  // included, so it gets the same refusal as an unrecognized token rather than
-  // silently inheriting the ardupilot/c-cast branch it used to fall into.
-  assert.throws(
-    () => resolveParamEncoding({ firmware: 'custom' }),
-    /param encoding unresolved: firmware "custom" is not ardupilot or px4 \(custom has no default encoding either\)/
-  );
+  // No firmware, a wrong-case token, and `custom` (a real Vehicle Profile
+  // value that explicitly disables firmware-specific behaviour) all resolve to
+  // no encoding at all. Bytewise and C-cast disagree on how an integer rides
+  // the PARAM_VALUE float, so there is no direction to fall to — and none is
+  // invented: encodeParamValue matches no case and writes the float's NaN,
+  // which no echo confirms.
+  for (const firmware of [undefined, 'PX4', 'apm', 'custom']) {
+    assert.equal(resolveParamEncoding({ firmware }), undefined);
+  }
 });
 
 test('resolveParamEncoding: explicit override still wins over a garbage firmware token', () => {
@@ -257,35 +236,18 @@ test('resolveParamEncoding: explicit override still wins over a garbage firmware
   );
 });
 
-test('resolveParamEncoding: present-but-invalid override rejects (no silent fallthrough)', () => {
-  assert.throws(
-    () => resolveParamEncoding({
+test('resolveParamEncoding: an override is passed through, never second-guessed', () => {
+  // The ladder short-circuits on a present override, so capabilities and
+  // firmware are not consulted. A token that is not one of the two encodings
+  // matches no case downstream and selects no encoding — it never silently
+  // becomes the opposite one.
+  assert.equal(
+    resolveParamEncoding({
       encoding: 'bitwise',
       capabilities: CAP_PARAM_ENCODE_BYTEWISE,
       firmware: 'px4',
     }),
-    /unsupported param encoding/
-  );
-  assert.throws(
-    () => buildParamMessage({
-      action: 'set',
-      target: { sysid: 1, compid: 1 },
-      paramId: 'FOO',
-      value: 1,
-      paramType: 'MAV_PARAM_TYPE_INT32',
-      encoding: 'nope',
-      firmware: 'ardupilot',
-    }),
-    /unsupported param encoding/
-  );
-  // Absent / empty override still falls through.
-  assert.equal(
-    resolveParamEncoding({ encoding: '', firmware: 'px4' }),
-    PARAM_ENCODING.BYTEWISE
-  );
-  assert.equal(
-    resolveParamEncoding({ encoding: null, firmware: 'ardupilot' }),
-    PARAM_ENCODING.C_CAST
+    'bitwise'
   );
 });
 
