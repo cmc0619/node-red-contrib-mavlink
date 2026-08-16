@@ -47,6 +47,31 @@ test("a hand-edited delivery typo sends nothing through the node", async () => {
   assert.equal(connection.sends.length, 0, 'nothing left the wire under the mis-resolved tier');
 });
 
+test('a hand-edited execution mode runs nothing and still completes the input', async () => {
+  // The tier typo above is a per-member outcome, so it has a record to report.
+  // An unmatched execution *mode* never starts a run at all (§5), so there is
+  // no aggregate — the node must complete the message rather than dereference
+  // one that was never built.
+  const connection = connectionStub([peer(1)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({ selectionMode: 'all',
+    connection: 'conn',
+    executionMode: 'seuqential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+  let sent;
+  const err = await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; }).then(
+    () => null,
+    (e) => e
+  );
+  assert.equal(err, null, 'no mode matched, so nothing failed');
+  assert.equal(sent, undefined, 'no run happened, so no outcome was reported');
+  assert.equal(connection.sends.length, 0, 'nothing left the wire');
+});
+
 test('build+list with no connection emits one retargeted message per member on output 0 (§6/§9)', async () => {
   const RED = redStub({});  // no connection registered
   require('../../nodes/mavlink-fanout')(RED);

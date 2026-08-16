@@ -351,6 +351,9 @@ test('REQUIRED_VALUES is a drift pin, not a second vocabulary (§0 walled garden
   const { PAYLOAD_RECIPES } = require('../../lib/payload');
   const expected = {};
   for (const [key, recipe] of Object.entries(PAYLOAD_RECIPES)) {
+    // A recipe's `params` is positional over the seven MAV_CMD slots, so an
+    // unused slot is a hole — 8 of the 57 across the table. `slot &&` is what
+    // steps over them, not a defensive habit.
     const slots = [...(recipe.params || []), ...(recipe.fields || [])]
       .filter((slot) => slot && slot.required)
       .map((slot) => slot.field);
