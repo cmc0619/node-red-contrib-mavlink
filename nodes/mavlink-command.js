@@ -38,7 +38,6 @@ const {
   MAV_RESULT,
   RESULT_NAME,
   getPreset,
-  PRESET_BY_ID,
   buildParamArray,
   mergeParams,
   AckWaiter,
@@ -85,78 +84,17 @@ function metadataApi() {
  * @returns {number|null}
  */
 function resolveCommandId(config) {
-  if (config.mode === 'advanced') {
-    const id = Number(config.advancedCommand);
-    return Number.isFinite(id) ? id : null;
+  switch (config.mode) {
+    case 'advanced':
+      return Number(config.advancedCommand);
+    case 'preset': {
+      const preset = getPreset(config.preset);
+      return preset ? preset.commandId : null;
+    }
+    default: break; // This space intentionally left blank (§5)
   }
-  const preset = getPreset(config.preset);
-  return preset ? preset.commandId : null;
+  return NaN; // nothing matched: no behavior selected (§5)
 }
-
-/**
- * Resolve the configured carrier choice. Affirmative dispatch (owner ruling,
- * 2026-08-15, reversing the blank carve-out of §14:4505): the editor's `sendAs`
- * select only ever saves `'int'` or `'long'` — no blank prompt — so a blank or
- * typo'd token is hand-edit drift, not an operator choice, and craters. The
- * former blank → `null` → LONG fallthrough is gone: it made this the one
- * carrier resolver that defaulted a blank while formation's threw, and "blank
- * crashes" holds across the codebase now.
- *
- * @param {object} config  node config from editor
- * @returns {'long'|'int'}
- */
-function resolveCarrier(config) {
-  if (config.sendAs === CARRIER.INT) return CARRIER.INT;
-  if (config.sendAs === CARRIER.LONG) return CARRIER.LONG;
-  throw new Error(
-    `unknown Command "Send as" ${JSON.stringify(config.sendAs)} — expected one of ${Object.values(CARRIER).join(', ')}`
-  );
-}
-
-/** Delivery tiers the editor's `delivery` select can save (§9 "Delivery tiers"). */
-const DELIVERY_TIERS = ['build', 'send', 'confirm', 'complete'];
-
-/**
- * Delivery-tier membership (owner ruling, 2026-08-14, selection-typo cluster
- * — extending Move's `resolveDelivery` to Command). The `delivery` select
- * has no blank option (default `'confirm'`), so a hand-edited token outside
- * the four tiers is not a choice the operator made. Every tier past Build
- * and Send falls into the same Confirm/Complete ack-waiter below — only
- * `delivery === 'complete'` gates the extra completion poll — so a typo used
- * to silently run Confirm's machinery (or silently downgrade Complete to
- * Confirm) instead of failing loud.
- *
- * @param {*} value  config.delivery
- * @returns {'build'|'send'|'confirm'|'complete'}
- */
-function resolveDeliveryTier(value) {
-  if (DELIVERY_TIERS.includes(value)) return value;
-  throw new Error(
-    `unknown Command delivery ${JSON.stringify(value)} — expected one of ${DELIVERY_TIERS.join(', ')}`
-  );
-}
-
-/** Command form modes: a preset from the dropdown, or a raw advanced command. */
-const COMMAND_MODES = ['preset', 'advanced'];
-
-/**
- * Affirmative dispatch for the mode token (selection-typo cluster). The
- * `=== 'advanced'` / `!== 'advanced'` gates route non-match to the preset
- * branch, so a typo'd or blank mode used to silently precompute a preset; the
- * dialog's select has no blank option (default `'preset'`), so a non-member is
- * hand-edit drift. Enforced at the top of the input handler, like preset and
- * delivery, so a bad token is a failed record rather than a construction crash.
- *
- * @param {*} value  config.mode
- * @returns {'preset'|'advanced'}
- */
-function resolveCommandMode(value) {
-  if (COMMAND_MODES.includes(value)) return value;
-  throw new Error(
-    `unknown Command mode ${JSON.stringify(value)} — expected one of ${COMMAND_MODES.join(', ')}`
-  );
-}
-
 
 module.exports = function registerMavlinkCommand(RED) {
   function MavlinkCommandNode(config) {
@@ -176,8 +114,9 @@ module.exports = function registerMavlinkCommand(RED) {
     // no deploy-time badge or refusing input handler restating it here.
     const commandId = resolveCommandId(config);
 
-    const preset =
-      config.mode !== 'advanced' ? getPreset(config.preset) : null;
+    // Affirmative: only Preset mode reads the field, so a mode the editor
+    // cannot save resolves no preset (and no command id above with it).
+    const preset = config.mode === 'preset' ? getPreset(config.preset) : null;
     const commandName =
       preset ? preset.command : `MAV_CMD(${commandId})`;
     const displayName = preset ? preset.name : `#${commandId}`;
@@ -257,7 +196,7 @@ module.exports = function registerMavlinkCommand(RED) {
      */
     function emitStatus(record, sendFn, continueOut, send0Payload) {
       if (continueOut) {
-        sendFn([{ payload: send0Payload || record }, record]);
+        sendFn([{ payload: send0Payload }, record]);
       } else {
         sendFn([null, record]);
       }
@@ -270,38 +209,9 @@ module.exports = function registerMavlinkCommand(RED) {
         return;
       }
 
-      // Affirmative dispatch for the mode token (preset | advanced) before the
-      // `!== 'advanced'` gate below reads it: a typo'd or blank mode used to
-      // route silently to the preset branch (§14 selection-typo).
-      resolveCommandMode(config.mode);
-
-      // Preset mode's dropdown cannot produce an id outside PRESET_PARAMS; a
-      // hand-edited flow can (confirmed: preset 'arrrm'). Advanced mode never
-      // reads `preset`, so it is untouched (getPreset/resolveCommandId already
-      // ignore the field there). Unrecognised → the input fails rather than
-      // silently building MAV_CMD(null) and reporting a phantom 'built'
-      // (owner ruling, 2026-08-14 — a false success is a different animal
-      // from garbage-out, and this is the layer that can tell them apart).
-      if (config.mode !== 'advanced' && !PRESET_BY_ID.has(config.preset)) {
-        throw new Error(
-          `unknown Command preset ${JSON.stringify(config.preset)} — expected one of ${[...PRESET_BY_ID.keys()].join(', ')}`
-        );
-      }
-
-      // Delivery-tier membership (owner ruling, 2026-08-14, selection-typo
-      // cluster — extending Move's `resolveDelivery` to Command). The
-      // dialog's `delivery` select always saves one of the four tiers, so a
-      // hand-edited token is not a choice the operator made; unrecognised
-      // used to fall through Build's and Send's early returns straight into
-      // the Confirm/Complete ack-waiter below, silently running a tier
-      // nobody asked for.
-      resolveDeliveryTier(delivery);
-
-      // Carrier resolution (owner ruling, 2026-08-14, extending the Move
-      // no-defaults ruling — DESIGN.md §14 had left this un-ruled). Resolved
-      // per-input, like Move's action/frame resolvers, so an unknown token
-      // reports a real 'failed' status record instead of crashing the deploy.
-      const configuredCarrier = resolveCarrier(config);
+      // The editor's `sendAs` select is the vocabulary (mavlink-command.html);
+      // buildCarrierMessage dispatches it affirmatively.
+      const configuredCarrier = config.sendAs;
 
       // ACK timeout / retry count (owner ruling, 2026-08-14): blank keeps the
       // library default; a present non-finite value used to coerce silently
@@ -329,20 +239,6 @@ module.exports = function registerMavlinkCommand(RED) {
         payload,
         connectionNode: connNode,
       });
-
-      // Broadcast + ack-confirmed tier: the ack matcher accepts ANY source
-      // for target sysid 0, so the first vehicle to answer would settle for
-      // the whole fleet — partial success reported as total (#260, §9).
-      // Tier-scoped on purpose: broadcast addressing is a designed §7
-      // capability and Build/Send stay legal — only the single-ack promise
-      // is refused. Fan-out broadcast is the expected-set aggregator (§10).
-      if (target.sysid === 0 && (delivery === 'confirm' || delivery === 'complete')) {
-        throw new Error(
-          `mavlink-command ${delivery} cannot target broadcast (sysid 0) — the first vehicle ` +
-          'to ack would answer for the whole fleet; use Send (fire-and-forget) or ' +
-          'mavlink-fanout broadcast (per-vehicle acks)'
-        );
-      }
 
       const startMs = Date.now();
 
@@ -398,44 +294,51 @@ module.exports = function registerMavlinkCommand(RED) {
        * @returns {{name: string, fields: object}}
        */
       function buildCarrierMessage(carrier, confirmation) {
-        if (carrier === CARRIER.INT) {
-          return buildCommandInt(commandId, target.sysid, target.compid, paramArray, {
-            frame,
-            coordKinds: coordKinds() || undefined,
-          });
+        switch (carrier) {
+          case CARRIER.INT:
+            return buildCommandInt(commandId, target.sysid, target.compid, paramArray, {
+              frame,
+              coordKinds: coordKinds() || undefined,
+            });
+          case CARRIER.LONG:
+            return buildCommandLong(commandId, target.sysid, target.compid, paramArray, confirmation);
+          default: break; // This space intentionally left blank (§5)
         }
-        return buildCommandLong(commandId, target.sysid, target.compid, paramArray, confirmation);
+        return undefined; // nothing matched: no behavior selected (§5)
       }
 
-      // ── Delivery: Build ───────────────────────────────────────────────────
-      if (delivery === 'build') {
-        const message = buildCarrierMessage(configuredCarrier, 0);
-        applyActionStatus(node, 'preview', `build ${displayName}`);
-        // Output 1 reports every terminal outcome, success included (§9); a
-        // successful build emits a 'built' status record for status/debug
-        // consumers, consistent with the other action nodes.
-        const rec = makeRecord({
-          result: 'built',
-          resultCode: null,
-          confirmedBy: 'none',
-          elapsed: Date.now() - startMs,
-          detail: 'build tier: message constructed, not sent',
-        });
-        emitStatus(rec, send, true, message);
-        done();
-        return;
-      }
-
-      // ── Delivery: Send (fire-and-forget) ──────────────────────────────────
-      if (delivery === 'send') {
-        const message = buildCarrierMessage(configuredCarrier, 0);
-        applyActionStatus(node, 'sending', `sending ${displayName}\u2026`);
-        connNode.send(message, { band: BAND.CONTROL, target, identityId });
-        const rec = makeRecord({ result: 'sent', confirmedBy: 'none', elapsed: 0 });
-        applyActionStatus(node, 'ok', `sent ${displayName}`);
-        emitStatus(rec, send, true, message);
-        done();
-        return;
+      // ── Delivery ──────────────────────────────────────────────────────────
+      // Build and Send finish here; Confirm and Complete share the ack waiter
+      // below, where `delivery === 'complete'` adds the completion poll.
+      switch (delivery) {
+        case 'build': {
+          const message = buildCarrierMessage(configuredCarrier, 0);
+          applyActionStatus(node, 'preview', `build ${displayName}`);
+          // Output 1 reports every terminal outcome, success included (§9); a
+          // successful build emits a 'built' status record for status/debug
+          // consumers, consistent with the other action nodes.
+          const rec = makeRecord({
+            result: 'built',
+            resultCode: null,
+            confirmedBy: 'none',
+            elapsed: Date.now() - startMs,
+            detail: 'build tier: message constructed, not sent',
+          });
+          emitStatus(rec, send, true, message);
+          done();
+          return;
+        }
+        case 'send': {
+          const message = buildCarrierMessage(configuredCarrier, 0);
+          applyActionStatus(node, 'sending', `sending ${displayName}\u2026`);
+          connNode.send(message, { band: BAND.CONTROL, target, identityId });
+          const rec = makeRecord({ result: 'sent', confirmedBy: 'none', elapsed: 0 });
+          applyActionStatus(node, 'ok', `sent ${displayName}`);
+          emitStatus(rec, send, true, message);
+          done();
+          return;
+        }
+        default: break; // This space intentionally left blank (§5)
       }
 
       // ── Delivery: Confirm / Complete ──────────────────────────────────────

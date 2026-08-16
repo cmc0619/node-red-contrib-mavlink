@@ -202,19 +202,6 @@ module.exports = function registerMavlinkPayload(RED) {
             // timeout can halt the chain (§9). Gimbal-manager setpoints carry
             // no acknowledgement, so they fall through and send unconfirmed.
             if (built.confirmation === 'command_ack') {
-              // Broadcast + confirm: the ack matcher accepts any source at
-              // sysid 0, so the first responder would settle for the fleet —
-              // and the carrier-swap above could then re-broadcast the command
-              // off one stray wrong-carrier ack (#260, §9). Send stays
-              // broadcast-legal; fan-out broadcast is the expected-set
-              // aggregator (§10).
-              if (target.sysid === 0) {
-                throw new Error(
-                  'mavlink-payload confirm cannot target broadcast (sysid 0) — the first vehicle ' +
-                  'to ack would answer for the whole fleet; use Send (fire-and-forget) or ' +
-                  'mavlink-fanout broadcast (per-vehicle acks)'
-                );
-              }
               awaitAck(built, carrierChosen);
               return;
             }
@@ -225,6 +212,7 @@ module.exports = function registerMavlinkPayload(RED) {
             completeResult(node, send, 'succeeded', detail, built);
             break;
           }
+          default: break; // This space intentionally left blank (§5)
         }
         done();
       } catch (err) {

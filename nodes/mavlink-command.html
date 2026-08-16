@@ -264,7 +264,7 @@
   const commandDefaults = Object.assign(
     {
       name:              { value: '' },
-      mode:              { value: 'preset' },
+      mode:              { value: 'preset', validate: RED.mavlink.oneOf(['preset', 'advanced']) },
       // The dropdown cannot produce an unknown preset; a hand-edited flow can.
       // The runtime does not repair it (AGENTS.md, input trust) — `getPreset`
       // returns undefined, `resolveCommandId` yields null, and the node builds
@@ -293,28 +293,17 @@
           return !RED.mavlink.isBlank(v) || 'is required in Advanced mode — pick a command';
         },
       },
-      delivery:          { value: 'confirm' },
-      sendAs:            { value: 'int' },
+      delivery:          { value: 'confirm', validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'complete']) },
+      sendAs:            { value: 'int', validate: RED.mavlink.oneOf(['int', 'long']) },
       frame:             { value: '' },
       identity:          { value: '' },
       // A statically configured broadcast (0) on an ack-confirmed tier is a
-      // combination the runtime refuses (#260) — the editor knows the tier, so
-      // it reds at deploy rather than on the first message (AGENTS "conditional
-      // validation when requirements depend on another configured field").
-      // The runtime guard stays for the rungs the editor cannot see: a profile
-      // default and a msg.payload.target override.
+      // cross-field static requirement, so it reds at deploy rather than on
+      // the first message (#260). The driver no longer restates it — this is
+      // the only layer that catches the pair (§0).
       targetSystem: {
         value: '',
-        validate: function (v, opt) {
-          const range = RED.mavlink.validateUint8(0).call(this, v, opt);
-          if (range !== true) return range;
-          // Blank inherits the profile target and is the common case — and
-          // Number('') is 0, so the broadcast check below would red it.
-          if (RED.mavlink.isBlank(v)) return true;
-          const tier = RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery, 'confirm');
-          if (tier !== 'confirm' && tier !== 'complete') return true;
-          return Number(v) !== 0 || 'broadcast (0) cannot be confirmed — one ack cannot answer for a fleet; use Send or mavlink-fanout';
-        },
+        validate: RED.mavlink.validateTargetSystem(['confirm', 'complete'], 'delivery', 'confirm'),
       },
       targetComponent:      { value: '', validate: RED.validators.number(true) },
       // Blank allowed: the runtime reads '' as "use the default"

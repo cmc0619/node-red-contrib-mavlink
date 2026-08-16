@@ -173,9 +173,11 @@ test('mavlink-payload confirm tier with carrier int sends COMMAND_INT without a 
   node.emit('close', () => {});
 });
 
-test('mavlink-payload confirm refuses a broadcast target (sysid 0): nothing sent, failed record, done(err) (#260)', async () => {
-  // First responder would settle for the fleet — and the carrier-swap could
-  // then re-broadcast the command off one stray wrong-carrier ack.
+test('a broadcast target on the confirm tier still sends — the editor is what reds it (#260)', async () => {
+  // One ack cannot answer for a fleet, and the carrier swap could re-broadcast
+  // off a stray wrong-carrier ack. A *configured* sysid 0 on the confirm tier
+  // reds at deploy (mavlink-payload.html targetSystem); a payload override is
+  // trusted input and rides (§0).
   const conn = connStub();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-payload')(RED);
@@ -186,22 +188,18 @@ test('mavlink-payload confirm refuses a broadcast target (sysid 0): nothing sent
     topic: 'servo',
     verb: 'set',
     connection: 'conn',
-    targetSystem: 0,
+    targetSystem: 1,
     targetComponent: 1,
     timeout: 2000,
   });
 
-  let out;
-  let doneError;
-  node.emit('input', { payload: { values: { servo: 8, pwm: 1600 } } }, (m) => { out = m; }, (e) => { doneError = e; });
+  node.emit('input', {
+    payload: { values: { servo: 8, pwm: 1600 }, target: { sysid: 0 } },
+  }, () => {}, () => {});
   await tick();
 
-  assert.equal(conn.sent.length, 0, 'nothing sent to the connection');
-  assert.equal(conn.subs.length, 0, 'no COMMAND_ACK subscription opened');
-  assert.equal(out[0], null, 'output 0 must not fire');
-  assert.equal(out[1].result, 'failed');
-  assert.match(out[1].detail, /broadcast \(sysid 0\)/);
-  assert.ok(doneError instanceof Error);
+  assert.equal(conn.sent.length, 1, 'the command reached the wire');
+  assert.equal(conn.sent[0].message.fields.target_system, 0);
 
   node.emit('close', () => {});
 });

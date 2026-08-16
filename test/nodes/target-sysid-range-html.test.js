@@ -114,13 +114,16 @@ test('vehicle defaultTargetSystem still uses the shared uint8 validator', () => 
 // would red a legal flow.
 const CONDITIONAL_BROADCAST_FILES = [
   // [file, the tiers that wait for a reply]
-  // Move gates on delivery since the Action surface (§6 redesign): Send &
-  // confirm is only offered on the Go to action, so the tier field alone
-  // carries the rule — the carrier field it used to read is gone.
-  //
-  // Command, Param and Payload keep their hand-written validators until the
-  // PRs that convert them; this list grows a row per module.
+  ['mavlink-command.html', ['confirm', 'complete']],
+  // Move gates on delivery too since the Action surface (§6 redesign):
+  // Send & confirm is only offered on the Go to action, so the tier field
+  // alone carries the rule — the carrier field it used to read is gone.
   ['mavlink-move.html', ['confirm']],
+  // Every Param action waits for a reply, so every tier is gated — including
+  // Build, since a built broadcast PARAM_SET forwarded to mavlink-out is the
+  // same fleet-wide write.
+  ['mavlink-param.html', ['build', 'send', 'confirm', 'collect']],
+  ['mavlink-payload.html', ['confirm']],
 ];
 
 for (const [file, tiers] of CONDITIONAL_BROADCAST_FILES) {
