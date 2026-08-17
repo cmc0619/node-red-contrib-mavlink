@@ -285,170 +285,188 @@ module.exports = function registerMavlinkParam(RED) {
 
         const message = buildParamMessage(request);
 
-        if (delivery === 'build') {
-          completeBuild(node, send, message);
-          done();
-          return;
+        // Affirmative dispatch on the tier (§5): a token the editor's delivery
+        // ring cannot save (mavlink-param.html) matches no case, so nothing
+        // reaches the wire and the input completes as a no-op.
+        switch (delivery) {
+          case 'build':
+            completeBuild(node, send, message);
+            break;
+          case 'send':
+          case 'confirm':
+          case 'collect':
+            wireTier();
+            return;
+          default: break; // This space intentionally left blank (§5)
         }
+        // Build has emitted by here; an unmatched tier has done nothing at all
+        // — no send, no output, no status record. Either way the input is
+        // completed, because a message left hanging is worse than one that did
+        // nothing (mavlink-mission precedent).
+        done();
+        return;
 
-        connNode.send(message, {
-          band: request.action === 'request-list' ? BAND.BULK : BAND.CONTROL,
-          target: request.target,
-          identityId,
-        });
+        /** Send the message and, on a waiting tier, arm its transaction. */
+        function wireTier() {
+          connNode.send(message, {
+            band: request.action === 'request-list' ? BAND.BULK : BAND.CONTROL,
+            target: request.target,
+            identityId,
+          });
 
-        // Scope the PARAM_VALUE subscription to the addressed vehicle so a
-        // reply from another system on a shared connection cannot confirm this
-        // operation or interleave into a list from a different vehicle.
-        // trustedOnly: an explicitly untrusted PARAM_VALUE must never confirm
-        // a set or feed a collect (§7 trust ruling #264); plain unsigned
-        // links carry no mark and pass.
-        const echoFilter = { message: 'PARAM_VALUE', sysid: request.target.sysid, trustedOnly: true };
-        if (request.target.compid) echoFilter.compid = request.target.compid;
+          // Scope the PARAM_VALUE subscription to the addressed vehicle so a
+          // reply from another system on a shared connection cannot confirm this
+          // operation or interleave into a list from a different vehicle.
+          // trustedOnly: an explicitly untrusted PARAM_VALUE must never confirm
+          // a set or feed a collect (§7 trust ruling #264); plain unsigned
+          // links carry no mark and pass.
+          const echoFilter = { message: 'PARAM_VALUE', sysid: request.target.sysid, trustedOnly: true };
+          if (request.target.compid) echoFilter.compid = request.target.compid;
 
-        const isConfirmSet = delivery === 'confirm' && request.action === 'set';
-        const isConfirmRead = delivery === 'confirm' && request.action === 'read';
-        const isCollectList = delivery === 'collect' && request.action === 'request-list';
+          const isConfirmSet = delivery === 'confirm' && request.action === 'set';
+          const isConfirmRead = delivery === 'confirm' && request.action === 'read';
+          const isCollectList = delivery === 'collect' && request.action === 'request-list';
 
-        if (!isConfirmSet && !isConfirmRead && !isCollectList) {
-          completeResult(node, send, 'succeeded', 'sent', message);
-          done();
-          return;
-        }
-
-        // Supersede any prior in-flight transaction, releasing its done().
-        clearPending(true);
-        const myGen = ++generation;
-
-        /** Settle the current transaction if it has not been superseded. */
-        function settle(fn) {
-          if (!pending || pending.gen !== myGen) return;
-          const finishDone = pending.done;
-          clearPending(false);
-          fn(finishDone);
-        }
-
-        let attempt = 1;
-        let refillRounds = 0;
-        const collector = isCollectList
-          ? createParamListCollector({ warn: (text) => node.warn(`mavlink-param: ${text}`) })
-          : null;
-
-        const unsubscribe = connNode.subscribe(echoFilter, (decoded) => {
-          if (!pending || pending.gen !== myGen) return;
-          if (isConfirmSet) {
-            if (!matchesParamEcho(request, decoded)) return;
-            settle((finishDone) => {
-              completeResult(node, send, 'succeeded', 'echo-confirmed', decoded, { attempts: attempt });
-              finishDone();
-            });
-          } else if (isConfirmRead) {
-            if (!matchesParamReadReply(request, decoded)) return;
-            settle((finishDone) => {
-              completeResult(node, send, 'succeeded', 'value-received', decoded);
-              finishDone();
-            });
-          } else {
-            const params = collector.accept(decoded);
-            // Only a frame the collector kept is list progress: re-arming on a
-            // 65535 set echo or an out-of-range index lets a steady echo
-            // stream postpone the refill while a real index is still missing.
-            if (params === null) return;
-            if (params === true) {
-              armInactivity();
-              return;
-            }
-            settle((finishDone) => {
-              completeResult(node, send, 'succeeded', 'list-complete', params);
-              finishDone();
-            });
+          if (!isConfirmSet && !isConfirmRead && !isCollectList) {
+            completeResult(node, send, 'succeeded', 'sent', message);
+            done();
+            return;
           }
-        });
 
-        const timeoutDetail = isConfirmSet ? 'echo timeout'
-          : isConfirmRead ? 'read timeout' : 'list timeout';
+          // Supersede any prior in-flight transaction, releasing its done().
+          clearPending(true);
+          const myGen = ++generation;
 
-        /**
-         * Arm the deadline. On a confirm set the timeout is per attempt: echo
-         * silence re-sends the PARAM_SET (common.xml: it "should be re-sent if
-         * no PARAM_VALUE is received") until the attempts are spent. Read and
-         * collect arm it once — for collect it is the outer bound the
-         * inactivity refill nests inside.
-         */
-        function armDeadline() {
-          return setTimeout(() => {
+          /** Settle the current transaction if it has not been superseded. */
+          function settle(fn) {
             if (!pending || pending.gen !== myGen) return;
-            if (isConfirmSet && attempt < PARAM_SET_ATTEMPTS) {
-              attempt += 1;
-              applyActionStatus(node, 'sending', `resend ${attempt}/${PARAM_SET_ATTEMPTS} ${request.paramId}\u2026`);
-              send([null, statusRecord('progress', `resend ${attempt}/${PARAM_SET_ATTEMPTS}`)]);
-              try {
-                connNode.send(message, { band: BAND.CONTROL, target: request.target, identityId });
-              } catch (err) {
-                // Timer context: Connection.send throws by design (queue
-                // overflow, dead link) and nothing above this catches, so a
-                // throw here would be an uncaughtException — settle instead
-                // (same rule as lib/command/ack.js retry send).
-                settle((finishDone) => failInput(node, send, err, finishDone));
+            const finishDone = pending.done;
+            clearPending(false);
+            fn(finishDone);
+          }
+
+          let attempt = 1;
+          let refillRounds = 0;
+          const collector = isCollectList
+            ? createParamListCollector({ warn: (text) => node.warn(`mavlink-param: ${text}`) })
+            : null;
+
+          const unsubscribe = connNode.subscribe(echoFilter, (decoded) => {
+            if (!pending || pending.gen !== myGen) return;
+            if (isConfirmSet) {
+              if (!matchesParamEcho(request, decoded)) return;
+              settle((finishDone) => {
+                completeResult(node, send, 'succeeded', 'echo-confirmed', decoded, { attempts: attempt });
+                finishDone();
+              });
+            } else if (isConfirmRead) {
+              if (!matchesParamReadReply(request, decoded)) return;
+              settle((finishDone) => {
+                completeResult(node, send, 'succeeded', 'value-received', decoded);
+                finishDone();
+              });
+            } else {
+              const params = collector.accept(decoded);
+              // Only a frame the collector kept is list progress: re-arming on a
+              // 65535 set echo or an out-of-range index lets a steady echo
+              // stream postpone the refill while a real index is still missing.
+              if (params === null) return;
+              if (params === true) {
+                armInactivity();
                 return;
               }
-              pending.timer = armDeadline();
-              return;
+              settle((finishDone) => {
+                completeResult(node, send, 'succeeded', 'list-complete', params);
+                finishDone();
+              });
             }
-            settle((finishDone) =>
-              timeoutResult(node, send, timeoutDetail, finishDone,
-                isConfirmSet ? { attempts: attempt } : undefined));
-          }, timeoutMs);
-        }
+          });
 
-        /** (Re-)arm the collect stall detector; nests inside the deadline. */
-        function armInactivity() {
-          if (!pending || pending.gen !== myGen) return;
-          if (pending.inactivityTimer) clearTimeout(pending.inactivityTimer);
-          pending.inactivityTimer = setTimeout(onInactivity, inactivityMs);
-        }
+          const timeoutDetail = isConfirmSet ? 'echo timeout'
+            : isConfirmRead ? 'read timeout' : 'list timeout';
 
-        /**
-         * The list stream went quiet before completing: re-request missing
-         * indexes by PARAM_REQUEST_READ, a bounded number of rounds with a
-         * bounded batch. Never terminal — the overall deadline stays the one
-         * authority on giving up, so a spent budget just stops the nudging.
-         */
-        function onInactivity() {
-          if (!pending || pending.gen !== myGen) return;
-          const missing = collector.missing();
-          if (missing.length > 0 && refillRounds < PARAM_LIST_REFILL_ROUNDS) {
-            refillRounds += 1;
-            const batch = missing.slice(0, PARAM_LIST_REFILL_BATCH);
-            applyActionStatus(node, 'sending', `refill ${missing.length} missing\u2026`);
-            send([null, statusRecord('progress',
-              `re-requesting ${batch.length} of ${missing.length} missing`, { round: refillRounds })]);
-            for (const paramIndex of batch) {
-              try {
-                connNode.send(
-                  buildParamMessage({ action: 'read', target: request.target, paramIndex }),
-                  { band: BAND.BULK, target: request.target, identityId }
-                );
-              } catch (err) {
-                // Bulk overflow throws by design (§7); the stream may still
-                // resume, so the collect stays open under the deadline — drop
-                // the rest of this round and say so.
-                node.warn(`mavlink-param: list refill stopped: ${err.message}`);
-                break;
+          /**
+           * Arm the deadline. On a confirm set the timeout is per attempt: echo
+           * silence re-sends the PARAM_SET (common.xml: it "should be re-sent if
+           * no PARAM_VALUE is received") until the attempts are spent. Read and
+           * collect arm it once — for collect it is the outer bound the
+           * inactivity refill nests inside.
+           */
+          function armDeadline() {
+            return setTimeout(() => {
+              if (!pending || pending.gen !== myGen) return;
+              if (isConfirmSet && attempt < PARAM_SET_ATTEMPTS) {
+                attempt += 1;
+                applyActionStatus(node, 'sending', `resend ${attempt}/${PARAM_SET_ATTEMPTS} ${request.paramId}\u2026`);
+                send([null, statusRecord('progress', `resend ${attempt}/${PARAM_SET_ATTEMPTS}`)]);
+                try {
+                  connNode.send(message, { band: BAND.CONTROL, target: request.target, identityId });
+                } catch (err) {
+                  // Timer context: Connection.send throws by design (queue
+                  // overflow, dead link) and nothing above this catches, so a
+                  // throw here would be an uncaughtException — settle instead
+                  // (same rule as lib/command/ack.js retry send).
+                  settle((finishDone) => failInput(node, send, err, finishDone));
+                  return;
+                }
+                pending.timer = armDeadline();
+                return;
               }
-            }
+              settle((finishDone) =>
+                timeoutResult(node, send, timeoutDetail, finishDone,
+                  isConfirmSet ? { attempts: attempt } : undefined));
+            }, timeoutMs);
           }
-          // Keep watching while a round may still fire; before a count is
-          // known there is nothing to name yet (missing() is empty), and a
-          // round's replies re-arm through the subscription either way.
-          if (missing.length === 0 || refillRounds < PARAM_LIST_REFILL_ROUNDS) {
+
+          /** (Re-)arm the collect stall detector; nests inside the deadline. */
+          function armInactivity() {
+            if (!pending || pending.gen !== myGen) return;
+            if (pending.inactivityTimer) clearTimeout(pending.inactivityTimer);
             pending.inactivityTimer = setTimeout(onInactivity, inactivityMs);
           }
-        }
 
-        pending = { unsubscribe, timer: null, inactivityTimer: null, done, gen: myGen };
-        pending.timer = armDeadline();
-        if (isCollectList) armInactivity();
+          /**
+           * The list stream went quiet before completing: re-request missing
+           * indexes by PARAM_REQUEST_READ, a bounded number of rounds with a
+           * bounded batch. Never terminal — the overall deadline stays the one
+           * authority on giving up, so a spent budget just stops the nudging.
+           */
+          function onInactivity() {
+            if (!pending || pending.gen !== myGen) return;
+            const missing = collector.missing();
+            if (missing.length > 0 && refillRounds < PARAM_LIST_REFILL_ROUNDS) {
+              refillRounds += 1;
+              const batch = missing.slice(0, PARAM_LIST_REFILL_BATCH);
+              applyActionStatus(node, 'sending', `refill ${missing.length} missing\u2026`);
+              send([null, statusRecord('progress',
+                `re-requesting ${batch.length} of ${missing.length} missing`, { round: refillRounds })]);
+              for (const paramIndex of batch) {
+                try {
+                  connNode.send(
+                    buildParamMessage({ action: 'read', target: request.target, paramIndex }),
+                    { band: BAND.BULK, target: request.target, identityId }
+                  );
+                } catch (err) {
+                  // Bulk overflow throws by design (§7); the stream may still
+                  // resume, so the collect stays open under the deadline — drop
+                  // the rest of this round and say so.
+                  node.warn(`mavlink-param: list refill stopped: ${err.message}`);
+                  break;
+                }
+              }
+            }
+            // Keep watching while a round may still fire; before a count is
+            // known there is nothing to name yet (missing() is empty), and a
+            // round's replies re-arm through the subscription either way.
+            if (missing.length === 0 || refillRounds < PARAM_LIST_REFILL_ROUNDS) {
+              pending.inactivityTimer = setTimeout(onInactivity, inactivityMs);
+            }
+          }
+
+          pending = { unsubscribe, timer: null, inactivityTimer: null, done, gen: myGen };
+          pending.timer = armDeadline();
+          if (isCollectList) armInactivity();
+        }
       } catch (err) {
         failInput(node, send, err, done);
       }

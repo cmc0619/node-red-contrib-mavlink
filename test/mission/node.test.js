@@ -162,11 +162,14 @@ test('build tier plans a fence transfer under a px4 firmware profile (mission_ty
   assert.deepEqual(plan.messages.map((m) => m.name), ['MISSION_REQUEST_LIST']);
 });
 
-test('an unknown payload.missionType resolves no type rather than a wrong one', async () => {
+test('an unknown payload.missionType rides as given — never resolved to 0, never absent', async () => {
   // The editor's Type select is the vocabulary (RED.mavlink.oneOf); a
-  // payload override is trusted runtime input. A token that names no type
-  // resolves to nothing — never quietly to mission (0), which would run the
-  // transfer against the wrong plan.
+  // payload override is trusted runtime input. A key that names no member
+  // forwards unchanged (missionTypeValue §5), so the frames carry the
+  // garbage PRESENT — where the wire's finite-integer choke refuses it
+  // naming the field (pinned in test/connection/wire-nonfinite.test.js).
+  // Resolving nothing instead would serialize the field absent, decode as
+  // type 0, and aim download/clear at the vehicle's real mission plan.
   const conn = new StubConnection();
   conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
   const Node = loadNode(conn);
@@ -176,9 +179,65 @@ test('an unknown payload.missionType resolves no type rather than a wrong one', 
     delivery: 'build',
     missionType: 'mission',
   });
-  const { outputs } = await runInput(node, { payload: { missionType: 'bogus' } });
-  assert.equal(conn.sent.length, 0, 'nothing was sent');
-  assert.equal(outputs[0][0].payload.missionType, undefined, 'the type is unresolved, not 0');
+  const { outputs, err } = await runInput(node, { payload: { missionType: 'bogus' } });
+  assert.equal(err, undefined);
+  assert.equal(conn.sent.length, 0, 'build tier sends nothing');
+  const plan = outputs[0][0].payload;
+  assert.equal(plan.missionType, 'bogus', 'the garbage rides visible and as-given');
+  assert.equal(plan.messages[0].fields.mission_type, 'bogus', 'present on the frame, not absent');
+
+  // Wire tier, on the destructive operation (gitar): the frame the machine
+  // hands to the connection carries the garbage present and as-given — a
+  // regression to resolve-to-nothing would show up here as undefined, the
+  // shape that serializes absent and erases the REAL plan as type 0. The
+  // stub bypasses the wire choke; in the real runtime the dry-run serialize
+  // refuses this frame before transmission (wire-nonfinite pins), so the
+  // operation fails loud either way.
+  const clearNode = new Node({
+    operation: 'clear',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+    timeout: 5,
+    maxRetries: 0,
+  });
+  const res = await runInput(clearNode, { payload: { missionType: 'bogus' } });
+  assert.ok(res.err, 'the transfer fails loud');
+  assert.equal(conn.sentNames()[0], 'MISSION_CLEAR_ALL');
+  assert.equal(conn.sent[0].message.fields.mission_type, 'bogus', 'present and as-given, never absent');
+});
+
+test('a numeric 0 payload.missionType overrides the config type — presence, not truthiness', async () => {
+  // `??`, not `||` (§5 presence fallback): 0 is MISSION, a real member; the
+  // old falsy test silently dropped it to the configured type.
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'build',
+    missionType: 'fence',
+  });
+  const { outputs, err } = await runInput(node, { payload: { missionType: 0 } });
+  assert.equal(err, undefined);
+  assert.equal(outputs[0][0].payload.missionType, 0, 'the numeric override wins over the config fence');
+});
+
+test('an upload under a type no family answers to fails before any packet', async () => {
+  // validateItems is affirmative (§5): garbage selects no validator, and the
+  // crater is the result dereference — before this, the items validated as
+  // mission-family and the transfer ran against the vehicle's real plan
+  // buffer with mission_type undefined, stalling to its deadline.
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  const Node = loadNode(conn);
+  const node = new Node({ operation: 'upload', connection: 'conn', delivery: 'confirm', missionType: 'mission' });
+  const res = await runInput(node, {
+    payload: { missionType: 'bogus', items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }] },
+  });
+  assert.ok(res.err, 'the unresolved type must fail loud');
+  assert.equal(conn.sent.length, 0, 'no packet reached the wire');
 });
 
 test("a typo'd Mission delivery starts no transfer — it matches no tier arm", async () => {

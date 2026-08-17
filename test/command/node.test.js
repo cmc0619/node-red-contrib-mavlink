@@ -753,6 +753,48 @@ test('a "Send as" token that is not a carrier builds nothing at all', async () =
   }
 });
 
+test('a Delivery token the editor cannot save runs no tier at all (§5)', async () => {
+  // Confirm/Complete used to be reached by falling *out* of the delivery
+  // switch, so a typo of 'confirm' ran a full send-and-await AckWaiter
+  // transaction against the vehicle. Every tier is its own arm now, and a
+  // token the delivery select cannot save (RED.mavlink.oneOf,
+  // mavlink-command.html) selects none of them.
+  for (const delivery of ['cnfirm', '']) {
+    const conn = connStubWithInject();
+    const RED = redStub({ conn });
+    require('../../nodes/mavlink-command')(RED);
+    const Node = RED.nodes.types['mavlink-command'];
+    const node = new Node({
+      params: '{}',
+      sendAs: 'long',
+      mode: 'preset',
+      preset: 'arm',
+      delivery,
+      connection: 'conn',
+      targetSystem: '1',
+      targetComponent: '1',
+    });
+
+    const outputs = [];
+    let err;
+    let doneCalls = 0;
+    node.emit(
+      'input',
+      { payload: { 1: 1 } },
+      (m) => { outputs.push(m); },
+      (e) => { doneCalls += 1; err = e; }
+    );
+    await tick();
+    node.emit('close', () => {});
+
+    assert.equal(conn.sent.length, 0, `delivery "${delivery}" must not reach the wire`);
+    assert.equal(conn.subs.length, 0, 'no ack wait was opened');
+    assert.equal(outputs.length, 0, 'no tier ran, so no outcome was reported');
+    assert.equal(doneCalls, 1, 'the input is still completed');
+    assert.equal(err, undefined, 'a no-op is not a failure');
+  }
+});
+
 test('an unlisted preset resolves no command id rather than a guess', async () => {
   const RED = redStub({});
   require('../../nodes/mavlink-command')(RED);

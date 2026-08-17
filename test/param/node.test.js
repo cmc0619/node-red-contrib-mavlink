@@ -580,6 +580,45 @@ test('mavlink-param wire tier inherits from connection vehicle profile', () => {
   assert.equal(msg.fields.target_component, 200);
 });
 
+test('a Delivery token the editor cannot save performs no tier at all (§5)', () => {
+  // The dispatch used to test only 'build' and then send unconditionally, so a
+  // typo of 'send' reached the wire and reported 'succeeded'. Each tier is its
+  // own switch arm now, and a token the delivery ring cannot save
+  // (RED.mavlink.oneOf, mavlink-param.html) matches none of them.
+  for (const delivery of ['snd', '']) {
+    const conn = connStubFull();
+    const RED = redStub({ conn });
+    require('../../nodes/mavlink-param')(RED);
+    const Node = RED.nodes.types['mavlink-param'];
+    const node = new Node({
+      delivery,
+      action: 'set',
+      paramType: 'MAV_PARAM_TYPE_REAL32',
+      connection: 'conn',
+      targetSystem: 6,
+      targetComponent: 1,
+      value: 1,
+    });
+
+    const outputs = [];
+    let err;
+    let doneCalls = 0;
+    node.emit(
+      'input',
+      { payload: { paramId: 'FOO' } },
+      (m) => { outputs.push(m); },
+      (e) => { doneCalls += 1; err = e; }
+    );
+    node.emit('close', () => {});
+
+    assert.equal(conn.sent.length, 0, `delivery "${delivery}" must not reach the wire`);
+    assert.equal(conn.activeCount(), 0, 'no transaction was armed');
+    assert.equal(outputs.length, 0, 'no tier ran, so no outcome was reported');
+    assert.equal(doneCalls, 1, 'the input is still completed');
+    assert.equal(err, undefined, 'a no-op is not a failure');
+  }
+});
+
 /* ---------- confirm-tier PARAM_SET re-send (#242) ---------- */
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

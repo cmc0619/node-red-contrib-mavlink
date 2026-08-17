@@ -333,102 +333,137 @@ module.exports = function registerMavlinkCommand(RED) {
           done();
           return;
         }
+        case 'confirm':
+        case 'complete':
+          await confirmTier();
+          return;
         default: break; // This space intentionally left blank (§5)
       }
-
-      // ── Delivery: Confirm / Complete ──────────────────────────────────────
-      // Cancel any in-flight waiter for this node before starting a new one.
-      if (_activeWaiter) {
-        _activeWaiter.cancel();
-        _activeWaiter = null;
-      }
-      if (_activeCompletion) {
-        _activeCompletion.cancel();
-        _activeCompletion = null;
-      }
-      const myGen = ++_generation;
-
-      applyActionStatus(node, 'sending', `${displayName}\u2026`);
+      // No tier matched, so nothing ran — no send, no ack wait, no record. The
+      // input is still completed, because a message left hanging is worse than
+      // one that did nothing (mavlink-mission precedent).
+      done();
+      return;
 
       /**
-       * Run one AckWaiter transaction in the given carrier and resolve with its
-       * outcome. Registers itself as the node's active waiter for cancellation.
-       *
-       * @param {'long'|'int'} carrier
-       * @returns {Promise<object>} AckResult
+       * Send under the ack waiter and settle on its COMMAND_ACK; on Complete,
+       * poll the peer table for the completion condition after an ACCEPTED.
+       * Rejections propagate to handleInput's caller, which routes them to
+       * failInput like any other send failure.
        */
-      async function runWaiter(carrier) {
-        const waiter = new AckWaiter({
-          subscribe: (filter, handler) => connNode.subscribe(filter, handler),
-          sendFn: (confirmation) => {
-            connNode.send(buildCarrierMessage(carrier, confirmation), { band: BAND.CONTROL, target, identityId });
-          },
-          commandId,
-          targetSystem: target.sysid,
-          targetComponent: target.compid,
-          // Ack attribution (§9): ignore an ack explicitly addressed to a
-          // different GCS on a shared link.
-          sourceIds: connNode.resolveSourceIds(identityId),
-          timeoutMs,
-          maxRetries: noAutoRetry ? 0 : maxRetries,
-          noAutoRetry,
-          // Timeout re-send is opt-in (#249). A preset that does not set
-          // noAutoRetry is a curated statement that re-issuing this command is
-          // safe. Advanced mode is a raw MAV_CMD id — nothing says whether a
-          // second REBOOT_SHUTDOWN or MISSION_START is harmless, and a silent
-          // window is the *normal* outcome for a rebooting vehicle — so it
-          // passes nothing and inherits the library's no-resend default.
-          maxResends: preset && !noAutoRetry ? DEFAULT_MAX_RESENDS : undefined,
-          // Per-attempt telemetry on the badge only (#248) — same channel as
-          // the carrier-swap retry; outputs stay terminal-only.
-          onResend: (attempt, max) => {
-            applyActionStatus(node, 'sending', `retrying (${attempt}/${max}) ${displayName}\u2026`);
-          },
-          // Same badge channel: a takeoff answers IN_PROGRESS for seconds (\u00a79),
-          // and without this the operator watches an unchanging wait.
-          onInProgress: (progress) => {
-            applyActionStatus(
-              node,
-              'sending',
-              progress === null
-                ? `in progress ${displayName}\u2026`
-                : `in progress ${progress}% ${displayName}\u2026`
-            );
-          },
-        });
-        _activeWaiter = waiter;
-        try {
-          return await waiter.start();
-        } finally {
-          if (_activeWaiter === waiter) _activeWaiter = null;
+      async function confirmTier() {
+        // ── Delivery: Confirm / Complete ────────────────────────────────────
+        // Cancel any in-flight waiter for this node before starting a new one.
+        if (_activeWaiter) {
+          _activeWaiter.cancel();
+          _activeWaiter = null;
         }
-      }
+        if (_activeCompletion) {
+          _activeCompletion.cancel();
+          _activeCompletion = null;
+        }
+        const myGen = ++_generation;
 
-      // First attempt is the operator's configured carrier (§9): a required
-      // choice, so the wire format is stated intent — never a guess.
-      let carrier = configuredCarrier;
-      let ackOutcome = await runWaiter(carrier);
+        applyActionStatus(node, 'sending', `${displayName}\u2026`);
 
-      // ── Carrier auto-resend (§9 "resend in the other form") ───────────────
-      // At most ONE swap per transaction. When the vehicle acks INT_ONLY (8) or
-      // LONG_ONLY (7) it will only accept the other carrier: warn and resend
-      // once in that form. A second wrong-carrier ack (the same code again, or
-      // a contradictory one) is failed loudly — no further silent retry.
-      const wanted = carrierWantedBy(ackOutcome.resultCode);
-      if (wanted && wanted !== carrier) {
-        const from = carrier;
-        carrier = wanted;
-        node.warn(
-          `mavlink-command: ${displayName} rejected as ` +
-            `${RESULT_NAME[ackOutcome.resultCode]} — resending as ` +
-            `COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'} (§9 carrier swap)`
-        );
-        applyActionStatus(node, 'sending', `retry ${carrier === CARRIER.INT ? 'INT' : 'LONG'} ${displayName}\u2026`);
-        ackOutcome = await runWaiter(carrier);
+        /**
+         * Run one AckWaiter transaction in the given carrier and resolve with its
+         * outcome. Registers itself as the node's active waiter for cancellation.
+         *
+         * @param {'long'|'int'} carrier
+         * @returns {Promise<object>} AckResult
+         */
+        async function runWaiter(carrier) {
+          const waiter = new AckWaiter({
+            subscribe: (filter, handler) => connNode.subscribe(filter, handler),
+            sendFn: (confirmation) => {
+              connNode.send(buildCarrierMessage(carrier, confirmation), { band: BAND.CONTROL, target, identityId });
+            },
+            commandId,
+            targetSystem: target.sysid,
+            targetComponent: target.compid,
+            // Ack attribution (§9): ignore an ack explicitly addressed to a
+            // different GCS on a shared link.
+            sourceIds: connNode.resolveSourceIds(identityId),
+            timeoutMs,
+            maxRetries: noAutoRetry ? 0 : maxRetries,
+            noAutoRetry,
+            // Timeout re-send is opt-in (#249). A preset that does not set
+            // noAutoRetry is a curated statement that re-issuing this command is
+            // safe. Advanced mode is a raw MAV_CMD id — nothing says whether a
+            // second REBOOT_SHUTDOWN or MISSION_START is harmless, and a silent
+            // window is the *normal* outcome for a rebooting vehicle — so it
+            // passes nothing and inherits the library's no-resend default.
+            maxResends: preset && !noAutoRetry ? DEFAULT_MAX_RESENDS : undefined,
+            // Per-attempt telemetry on the badge only (#248) — same channel as
+            // the carrier-swap retry; outputs stay terminal-only.
+            onResend: (attempt, max) => {
+              applyActionStatus(node, 'sending', `retrying (${attempt}/${max}) ${displayName}\u2026`);
+            },
+            // Same badge channel: a takeoff answers IN_PROGRESS for seconds (\u00a79),
+            // and without this the operator watches an unchanging wait.
+            onInProgress: (progress) => {
+              applyActionStatus(
+                node,
+                'sending',
+                progress === null
+                  ? `in progress ${displayName}\u2026`
+                  : `in progress ${progress}% ${displayName}\u2026`
+              );
+            },
+          });
+          _activeWaiter = waiter;
+          try {
+            return await waiter.start();
+          } finally {
+            if (_activeWaiter === waiter) _activeWaiter = null;
+          }
+        }
 
-        // Second attempt is the last: a repeated wrong-carrier ack cannot be
-        // resolved by another swap, so fail loud (§9 user requirement).
-        if (carrierWantedBy(ackOutcome.resultCode) !== null) {
+        // First attempt is the operator's configured carrier (§9): a required
+        // choice, so the wire format is stated intent — never a guess.
+        let carrier = configuredCarrier;
+        let ackOutcome = await runWaiter(carrier);
+
+        // ── Carrier auto-resend (§9 "resend in the other form") ─────────────
+        // At most ONE swap per transaction. When the vehicle acks INT_ONLY (8) or
+        // LONG_ONLY (7) it will only accept the other carrier: warn and resend
+        // once in that form. A second wrong-carrier ack (the same code again, or
+        // a contradictory one) is failed loudly — no further silent retry.
+        const wanted = carrierWantedBy(ackOutcome.resultCode);
+        if (wanted && wanted !== carrier) {
+          const from = carrier;
+          carrier = wanted;
+          node.warn(
+            `mavlink-command: ${displayName} rejected as ` +
+              `${RESULT_NAME[ackOutcome.resultCode]} — resending as ` +
+              `COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'} (§9 carrier swap)`
+          );
+          applyActionStatus(node, 'sending', `retry ${carrier === CARRIER.INT ? 'INT' : 'LONG'} ${displayName}\u2026`);
+          ackOutcome = await runWaiter(carrier);
+
+          // Second attempt is the last: a repeated wrong-carrier ack cannot be
+          // resolved by another swap, so fail loud (§9 user requirement).
+          if (carrierWantedBy(ackOutcome.resultCode) !== null) {
+            const rec = makeRecord({
+              result: RESULT_NAME[ackOutcome.resultCode],
+              resultCode: ackOutcome.resultCode,
+              resultParam2: ackOutcome.resultParam2,
+              confirmedBy: 'ack',
+              retries: ackOutcome.retries,
+              elapsed: Date.now() - startMs,
+              detail:
+                `carrier swap ${from}\u2192${carrier} still rejected as ` +
+                `${RESULT_NAME[ackOutcome.resultCode]} — no carrier satisfies the vehicle`,
+            });
+            applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
+            emitStatus(rec, send, false);
+            failDone(rec.detail);
+            return;
+          }
+        } else if (wanted) {
+          // The vehicle asked for the carrier we already sent — a contradiction we
+          // cannot resolve by swapping. Fail loud rather than loop (§9).
           const rec = makeRecord({
             result: RESULT_NAME[ackOutcome.resultCode],
             resultCode: ackOutcome.resultCode,
@@ -437,207 +472,189 @@ module.exports = function registerMavlinkCommand(RED) {
             retries: ackOutcome.retries,
             elapsed: Date.now() - startMs,
             detail:
-              `carrier swap ${from}\u2192${carrier} still rejected as ` +
-              `${RESULT_NAME[ackOutcome.resultCode]} — no carrier satisfies the vehicle`,
+              `vehicle demands COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'} ` +
+              `but that carrier was already sent`,
           });
           applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
           emitStatus(rec, send, false);
           failDone(rec.detail);
           return;
         }
-      } else if (wanted) {
-        // The vehicle asked for the carrier we already sent — a contradiction we
-        // cannot resolve by swapping. Fail loud rather than loop (§9).
-        const rec = makeRecord({
-          result: RESULT_NAME[ackOutcome.resultCode],
-          resultCode: ackOutcome.resultCode,
-          resultParam2: ackOutcome.resultParam2,
-          confirmedBy: 'ack',
-          retries: ackOutcome.retries,
-          elapsed: Date.now() - startMs,
-          detail:
-            `vehicle demands COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'} ` +
-            `but that carrier was already sent`,
-        });
-        applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
-        emitStatus(rec, send, false);
-        failDone(rec.detail);
-        return;
-      }
 
-      // A redeploy cancelled the wait (close() calls _activeWaiter.cancel()).
-      // The node is being torn down, so finish quietly: emitting or raising
-      // here would trip a Catch node wired for "command failed → failsafe" on
-      // a mere deploy, which is the same rule mavlink-mission already follows.
-      if (ackOutcome.result === 'cancelled') {
-        done();
-        return;
-      }
-
-      // From here the outcome may be from either the configured or swapped
-      // carrier; note a completed swap in the success/failure detail below.
-      const carrierSwapped = carrier !== configuredCarrier;
-      const carrierLabel = `COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'}`;
-
-      // Completion's TAKEOFF datum is frame-aware, but only COMMAND_INT carries
-      // a frame on the wire — COMMAND_LONG has none. After a possible INT→LONG
-      // carrier swap, the effective carrier decides whether a frame applies:
-      // pass it for INT, withhold it for LONG so completion uses the relative
-      // datum instead of AMSL math against a frame the vehicle never saw.
-      const completionFrame = carrier === CARRIER.INT ? frame : undefined;
-
-      // Timeout: check peer table for completion condition.
-      if (ackOutcome.result === 'timeout') {
-        if (completionKey && connNode.peerTable) {
-          const stateCheck = checkCompletion(
-            completionKey,
-            paramArray,
-            connNode.peerTable,
-            target.sysid,
-            target.compid,
-            completionFrame
-          );
-          if (stateCheck.done) {
-            // Ack was lost on the return leg; the command ran.
-            const rec = makeRecord({
-              result: 'accepted',
-              resultCode: null,
-              confirmedBy: 'state',
-              retries: ackOutcome.retries,
-              elapsed: Date.now() - startMs,
-              detail: `ack timeout but ${stateCheck.detail}`,
-            });
-            applyActionStatus(node, 'ok', `${displayName} accepted`);
-            emitStatus(rec, send, true, rec);
-            done();
-            return;
-          }
-        }
-
-        // Genuinely unknown — report unconfirmed.
-        const rec = makeRecord({
-          result: 'unconfirmed',
-          resultCode: null,
-          confirmedBy: 'none',
-          retries: ackOutcome.retries,
-          elapsed: Date.now() - startMs,
-          detail: ackOutcome.detail,
-        });
-        applyActionStatus(node, 'error', `timeout ${displayName}`);
-        const cont = unconfirmedContinue;
-        emitStatus(rec, send, cont, cont ? rec : undefined);
-        failDone(`${displayName} timed out`);
-        return;
-      }
-
-      // Terminal ack result.
-      if (ackOutcome.result === 'accepted') {
-        // ── Complete tier: poll peer table for actual completion. ──────────
-        if (delivery === 'complete' && completionKey && connNode.peerTable) {
-          applyActionStatus(node, 'sending', `${displayName} climbing\u2026`);
-          const completionWait = waitForCompletion({
-            completionKey,
-            params: paramArray,
-            peerTable: connNode.peerTable,
-            sysid: target.sysid,
-            compid: target.compid,
-            frame: completionFrame,
-            timeoutMs: completionTimeoutMs,
-          });
-          if (myGen === _generation) {
-            _activeCompletion = completionWait;
-          } else {
-            // The ack settled and a close or new input ran in the same
-            // synchronous stack: the sweep fired before this continuation
-            // could record its handle, so nothing else can cancel the wait
-            // it just created — cancel it here (Codex, #236). Also keeps a
-            // stale run from clobbering the newer run's handle.
-            completionWait.cancel();
-          }
-          let compOutcome;
-          try {
-            compOutcome = await completionWait.promise;
-          } finally {
-            if (_activeCompletion === completionWait) _activeCompletion = null;
-          }
-
-          // A redeploy cancelled the wait (close() calls the completion
-          // cancel), or the wait settled before any cancel could land —
-          // waitForCompletion polls once at creation, so an already-satisfied
-          // completion resolves synchronously and the settle-once cancel()
-          // becomes a no-op (Codex, #236). Either way this run is stale:
-          // finish quietly, same rule as the ack cancel above (M1).
-          if (compOutcome.cancelled || myGen !== _generation) {
-            done();
-            return;
-          }
-
-          if (compOutcome.success) {
-            const rec = makeRecord({
-              result: 'accepted',
-              resultCode: MAV_RESULT.ACCEPTED,
-              resultParam2: ackOutcome.resultParam2,
-              confirmedBy: 'state',
-              retries: ackOutcome.retries,
-              elapsed: Date.now() - startMs,
-              detail: compOutcome.detail,
-            });
-            applyActionStatus(node, 'ok', `${displayName} done`);
-            emitStatus(rec, send, true, rec);
-          } else {
-            const rec = makeRecord({
-              result: 'timeout',
-              resultCode: null,
-              // This branch is gated on an ACCEPTED ack: the vehicle answered,
-              // then the state never arrived. `null` is reserved for settles
-              // with no ack at all, so the ack's field rides through here the
-              // same way its retry count does (CodeRabbit).
-              resultParam2: ackOutcome.resultParam2,
-              confirmedBy: 'none',
-              retries: ackOutcome.retries,
-              elapsed: Date.now() - startMs,
-              detail: compOutcome.detail,
-            });
-            applyActionStatus(node, 'error', `${displayName} timeout`);
-            emitStatus(rec, send, false);
-            failDone(`${displayName} completion timeout`);
-            return;
-          }
+        // A redeploy cancelled the wait (close() calls _activeWaiter.cancel()).
+        // The node is being torn down, so finish quietly: emitting or raising
+        // here would trip a Catch node wired for "command failed → failsafe" on
+        // a mere deploy, which is the same rule mavlink-mission already follows.
+        if (ackOutcome.result === 'cancelled') {
           done();
           return;
         }
 
-        // Confirm tier or complete tier with no condition: accepted is complete.
+        // From here the outcome may be from either the configured or swapped
+        // carrier; note a completed swap in the success/failure detail below.
+        const carrierSwapped = carrier !== configuredCarrier;
+        const carrierLabel = `COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'}`;
+
+        // Completion's TAKEOFF datum is frame-aware, but only COMMAND_INT carries
+        // a frame on the wire — COMMAND_LONG has none. After a possible INT→LONG
+        // carrier swap, the effective carrier decides whether a frame applies:
+        // pass it for INT, withhold it for LONG so completion uses the relative
+        // datum instead of AMSL math against a frame the vehicle never saw.
+        const completionFrame = carrier === CARRIER.INT ? frame : undefined;
+
+        // Timeout: check peer table for completion condition.
+        if (ackOutcome.result === 'timeout') {
+          if (completionKey && connNode.peerTable) {
+            const stateCheck = checkCompletion(
+              completionKey,
+              paramArray,
+              connNode.peerTable,
+              target.sysid,
+              target.compid,
+              completionFrame
+            );
+            if (stateCheck.done) {
+              // Ack was lost on the return leg; the command ran.
+              const rec = makeRecord({
+                result: 'accepted',
+                resultCode: null,
+                confirmedBy: 'state',
+                retries: ackOutcome.retries,
+                elapsed: Date.now() - startMs,
+                detail: `ack timeout but ${stateCheck.detail}`,
+              });
+              applyActionStatus(node, 'ok', `${displayName} accepted`);
+              emitStatus(rec, send, true, rec);
+              done();
+              return;
+            }
+          }
+
+          // Genuinely unknown — report unconfirmed.
+          const rec = makeRecord({
+            result: 'unconfirmed',
+            resultCode: null,
+            confirmedBy: 'none',
+            retries: ackOutcome.retries,
+            elapsed: Date.now() - startMs,
+            detail: ackOutcome.detail,
+          });
+          applyActionStatus(node, 'error', `timeout ${displayName}`);
+          const cont = unconfirmedContinue;
+          emitStatus(rec, send, cont, cont ? rec : undefined);
+          failDone(`${displayName} timed out`);
+          return;
+        }
+
+        // Terminal ack result.
+        if (ackOutcome.result === 'accepted') {
+          // ── Complete tier: poll peer table for actual completion. ────────
+          if (delivery === 'complete' && completionKey && connNode.peerTable) {
+            applyActionStatus(node, 'sending', `${displayName} climbing\u2026`);
+            const completionWait = waitForCompletion({
+              completionKey,
+              params: paramArray,
+              peerTable: connNode.peerTable,
+              sysid: target.sysid,
+              compid: target.compid,
+              frame: completionFrame,
+              timeoutMs: completionTimeoutMs,
+            });
+            if (myGen === _generation) {
+              _activeCompletion = completionWait;
+            } else {
+              // The ack settled and a close or new input ran in the same
+              // synchronous stack: the sweep fired before this continuation
+              // could record its handle, so nothing else can cancel the wait
+              // it just created — cancel it here (Codex, #236). Also keeps a
+              // stale run from clobbering the newer run's handle.
+              completionWait.cancel();
+            }
+            let compOutcome;
+            try {
+              compOutcome = await completionWait.promise;
+            } finally {
+              if (_activeCompletion === completionWait) _activeCompletion = null;
+            }
+
+            // A redeploy cancelled the wait (close() calls the completion
+            // cancel), or the wait settled before any cancel could land —
+            // waitForCompletion polls once at creation, so an already-satisfied
+            // completion resolves synchronously and the settle-once cancel()
+            // becomes a no-op (Codex, #236). Either way this run is stale:
+            // finish quietly, same rule as the ack cancel above (M1).
+            if (compOutcome.cancelled || myGen !== _generation) {
+              done();
+              return;
+            }
+
+            if (compOutcome.success) {
+              const rec = makeRecord({
+                result: 'accepted',
+                resultCode: MAV_RESULT.ACCEPTED,
+                resultParam2: ackOutcome.resultParam2,
+                confirmedBy: 'state',
+                retries: ackOutcome.retries,
+                elapsed: Date.now() - startMs,
+                detail: compOutcome.detail,
+              });
+              applyActionStatus(node, 'ok', `${displayName} done`);
+              emitStatus(rec, send, true, rec);
+            } else {
+              const rec = makeRecord({
+                result: 'timeout',
+                resultCode: null,
+                // This branch is gated on an ACCEPTED ack: the vehicle answered,
+                // then the state never arrived. `null` is reserved for settles
+                // with no ack at all, so the ack's field rides through here the
+                // same way its retry count does (CodeRabbit).
+                resultParam2: ackOutcome.resultParam2,
+                confirmedBy: 'none',
+                retries: ackOutcome.retries,
+                elapsed: Date.now() - startMs,
+                detail: compOutcome.detail,
+              });
+              applyActionStatus(node, 'error', `${displayName} timeout`);
+              emitStatus(rec, send, false);
+              failDone(`${displayName} completion timeout`);
+              return;
+            }
+            done();
+            return;
+          }
+
+          // Confirm tier or complete tier with no condition: accepted is complete.
+          const rec = makeRecord({
+            result: 'accepted',
+            resultCode: MAV_RESULT.ACCEPTED,
+            resultParam2: ackOutcome.resultParam2,
+            confirmedBy: 'ack',
+            retries: ackOutcome.retries,
+            elapsed: Date.now() - startMs,
+            detail: carrierSwapped ? `accepted after ${carrierLabel} carrier swap (§9)` : null,
+          });
+          applyActionStatus(node, 'ok', `${displayName} accepted`);
+          emitStatus(rec, send, true, rec);
+          done();
+          return;
+        }
+
+        // Any other terminal failure.
         const rec = makeRecord({
-          result: 'accepted',
-          resultCode: MAV_RESULT.ACCEPTED,
+          result: ackOutcome.result,
+          resultCode: ackOutcome.resultCode,
           resultParam2: ackOutcome.resultParam2,
-          confirmedBy: 'ack',
+          confirmedBy: ackOutcome.confirmedBy,
           retries: ackOutcome.retries,
           elapsed: Date.now() - startMs,
-          detail: carrierSwapped ? `accepted after ${carrierLabel} carrier swap (§9)` : null,
+          detail: carrierSwapped
+            ? `${ackOutcome.detail || RESULT_NAME[ackOutcome.resultCode] || 'failed'} (after ${carrierLabel} carrier swap, §9)`
+            : ackOutcome.detail,
         });
-        applyActionStatus(node, 'ok', `${displayName} accepted`);
-        emitStatus(rec, send, true, rec);
-        done();
-        return;
+        applyActionStatus(node, 'error', `${displayName} ${ackOutcome.result}`);
+        emitStatus(rec, send, false);
+        failDone(`${displayName} ${ackOutcome.result}`);
       }
-
-      // Any other terminal failure.
-      const rec = makeRecord({
-        result: ackOutcome.result,
-        resultCode: ackOutcome.resultCode,
-        resultParam2: ackOutcome.resultParam2,
-        confirmedBy: ackOutcome.confirmedBy,
-        retries: ackOutcome.retries,
-        elapsed: Date.now() - startMs,
-        detail: carrierSwapped
-          ? `${ackOutcome.detail || RESULT_NAME[ackOutcome.resultCode] || 'failed'} (after ${carrierLabel} carrier swap, §9)`
-          : ackOutcome.detail,
-      });
-      applyActionStatus(node, 'error', `${displayName} ${ackOutcome.result}`);
-      emitStatus(rec, send, false);
-      failDone(`${displayName} ${ackOutcome.result}`);
     }
 
     // Node-RED does not await async input handlers, so an uncaught rejection

@@ -95,7 +95,9 @@ module.exports = function registerMavlinkMission(RED) {
       }
 
       const payload = msg.payload ?? {};
-      const missionTypeKey = payload.missionType || config.missionType;
+      // Presence fallback (§5): `??`, not `||` — a numeric 0 is MISSION, a
+      // real member the falsy test would silently drop to the config value.
+      const missionTypeKey = payload.missionType ?? config.missionType;
 
       const { target } = resolveDeliveryContext(RED, {
         delivery,
@@ -104,14 +106,14 @@ module.exports = function registerMavlinkMission(RED) {
         connectionNode: connNode,
       });
 
-      // The vehicle judges type support: a stack that does not carry this type
-      // answers the transfer with a MAV_MISSION_UNSUPPORTED ack (upload) or
-      // stays silent until the transfer deadline (download) — operational
-      // failures the existing paths already report loud (§9). The editor's
-      // Type dropdown is the firmware protector (§11). No `|| 'mission'`
-      // default: a blank or unknown key resolves to no type (missionTypeValue
-      // matches no case and returns undefined) — the editor always saves a
-      // member, so only a hand-edited flow gets here.
+      // The vehicle judges type support: the type rides as given (msg is
+      // trusted) and a stack that does not carry it answers with a
+      // MAV_MISSION_UNSUPPORTED ack or the transfer deadline — operational
+      // failures the existing paths report loud (§9). The editor's Type
+      // dropdown is the firmware protector (§11). No `|| 'mission'` default,
+      // and no refusal here: a key that names no member forwards unchanged
+      // (missionTypeValue §5) and craters present at the wire's
+      // finite-integer choke — never absent-decoded-as-0 at the vehicle.
       const missionType = missionTypeValue(missionTypeKey);
 
       // Blank keeps the library default; the editor's number validator owns

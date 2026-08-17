@@ -222,34 +222,41 @@ function identitySnapshot(idNode, defaults, bundle, connectionId) {
  * UDP/TCP share bind + optional remote; serial uses path + baud.
  *
  * @param {object} config  Node-RED node config
- * @returns {object}
+ * @returns {object|undefined} undefined for a mode no case answers to (§5)
  */
 function buildTransportConfig(config) {
   // The editor owns the transport fields: mode is a required closed select,
   // serial path / baud red when serial, and bind host/port red for UDP/TCP.
   // Number() is Node-RED serialization plumbing, not validation (§0).
-  const mode = config.mode;
-  if (mode === 'serial') {
-    return {
-      mode: 'serial',
-      path: config.serialPath,
-      baudRate: Number(config.baudRate),
-    };
-  }
-  return {
-    mode,
+  const socket = () => ({
+    mode: config.mode,
     bindAddress: config.bindHost,
     bindPort: Number(config.bindPort),
-    remoteAddress: config.remoteHost || undefined,
+    // A blank host rides as '' — every transport consumer tests these fields
+    // for truthiness, so '' already reads as absent. The port keeps its
+    // ternary: Number('') is 0, a value nobody chose.
+    remoteAddress: config.remoteHost,
     remotePort: config.remotePort ? Number(config.remotePort) : undefined,
-    // UDP only — TCP has no broadcast, and the editor hides the row for it.
-    broadcastAddress: mode === 'udp' && config.broadcastHost
-      ? config.broadcastHost
-      : undefined,
-    broadcastPort: mode === 'udp' && config.broadcastPort
-      ? Number(config.broadcastPort)
-      : undefined,
-  };
+  });
+  switch (config.mode) {
+    case 'serial':
+      return {
+        mode: 'serial',
+        path: config.serialPath,
+        baudRate: Number(config.baudRate),
+      };
+    case 'tcp':
+      return socket();
+    case 'udp':
+      return {
+        ...socket(),
+        // UDP only — TCP has no broadcast, and the editor hides the row for it.
+        broadcastAddress: config.broadcastHost,
+        broadcastPort: config.broadcastPort ? Number(config.broadcastPort) : undefined,
+      };
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined; // nothing matched: no behavior selected (§5)
 }
 
 /**
