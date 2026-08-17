@@ -243,7 +243,7 @@ test('transport numeric fields carry range rings; bind host is required for IP m
   // owns the ranges: ports are 16-bit and 0 is a silent trap (bind 0 is a
   // random port; a remote/swarm port 0 reads as "no destination" on send).
   const defaults = loadNodeDefaults('mavlink-connection');
-  const portReason = /port from 1 to 65535/;
+  const portReason = /between 1 and 65535/;
 
   assert.equal(defaults.bindPort.validate.call({ id: 'c1', mode: 'udp' }, '14550', {}), true);
   assert.match(String(defaults.bindPort.validate.call({ id: 'c1', mode: 'udp' }, '0', {})), portReason);
