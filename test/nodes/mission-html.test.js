@@ -8,7 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { assertChangeHandlerContains } = require('./html-assert');
+const { assertChangeHandlerContains, loadNodeDefaults } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-mission.html'),
@@ -134,6 +134,89 @@ test('mavlink-mission items validator rejects a configured empty array (#241)', 
   assert.doesNotMatch(itemsInput[0], /placeholder="\[\]/, 'placeholder no longer offers []');
   assert.match(itemsInput[0], /placeholder="non-empty JSON array, or set msg\.payload\.items"/,
     'placeholder asks for a non-empty array or the payload');
+});
+
+test('mavlink-mission items validator reds per-item: uint16 command and family reservation', () => {
+  // The runtime validator (lib/mission/validate.js) refuses these on the first
+  // message; the editor red-rings the configured JSON at deploy — the still-open
+  // protector-side work named in DESIGN.md §14 ("editor red-rings for mission
+  // items"). Payload-supplied items stay the runtime's to judge.
+  const { items } = loadNodeDefaults('mavlink-mission');
+  const verdict = (over, arr) => items.validate.call(
+    Object.assign({ id: 'm1', operation: 'upload', missionType: 'mission' }, over),
+    JSON.stringify(arr), {}
+  );
+
+  assert.equal(items.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+
+  // Structural: the wire command field is uint16 — 5001.9 would truncate onto
+  // the reserved fence id 5001, and a non-object item has no command at all.
+  assert.match(String(verdict({}, [{ command: 5001.9 }])), /integer command id/);
+  assert.match(String(verdict({}, [{ command: -1 }])), /integer command id/);
+  assert.match(String(verdict({}, [{ command: 65536 }])), /integer command id/);
+  assert.match(String(verdict({}, [null])), /integer command id/);
+  assert.match(String(verdict({}, [16])), /integer command id/);
+  // Blank/absent commands must not coerce to a legal 0 and upload command 0
+  // (Codex); an explicit numeric 0 and a numeric string stay legal.
+  assert.match(String(verdict({}, [{ command: '' }])), /integer command id/);
+  assert.match(String(verdict({}, [{ command: null }])), /integer command id/);
+  assert.match(String(verdict({}, [{ command: false }])), /integer command id/);
+  assert.match(String(verdict({}, [{}])), /integer command id/);
+  assert.equal(verdict({}, [{ command: 0 }]), true, 'an explicit numeric 0 rides');
+  assert.equal(verdict({}, [{ command: '16' }]), true, 'a numeric string names its command');
+
+  // Family reservation (§9, issue #90): a mission may carry any command except
+  // the fence and rally families; fence and rally are their families only.
+  assert.equal(verdict({}, [{ command: 16 }, { command: 530 }, { command: 2000 }]), true,
+    'mission items are not allowlisted — 530/2000 upload as mission items (#90)');
+  assert.match(String(verdict({}, [{ command: 5001 }])), /not a valid mission item/);
+  assert.match(String(verdict({}, [{ command: 5100 }])), /not a valid mission item/);
+  assert.equal(verdict({ missionType: 'fence' }, [{ command: 5001 }]), true);
+  assert.match(String(verdict({ missionType: 'fence' }, [{ command: 16 }])), /not a valid fence item/);
+  assert.equal(verdict({ missionType: 'rally' }, [{ command: 5100 }]), true);
+  assert.match(String(verdict({ missionType: 'rally' }, [{ command: 5001 }])), /not a valid rally item/);
+
+  // The gates around the per-item walk are unchanged.
+  assert.equal(verdict({ operation: 'download' }, [{ command: 5001 }]), true,
+    'only Upload reads items');
+  assert.equal(items.validate.call({ id: 'm1', operation: 'upload' }, '', {}), true,
+    'blank means items come from the payload');
+});
+
+test('mavlink-mission editor family tables match lib/mission/validate.js exactly', () => {
+  // MISSION_FENCE_COMMANDS / MISSION_RALLY_COMMAND are a second copy of the
+  // library's reservation, carried because a validator is synchronous. Two
+  // copies of one rule only stay honest if something compares them.
+  const { FENCE_COMMANDS, RALLY_COMMAND } = require('../../lib/mission');
+  const fence = /var MISSION_FENCE_COMMANDS = \[([^\]]*)\];/.exec(html);
+  assert.ok(fence, 'MISSION_FENCE_COMMANDS must be extractable');
+  const fromEditor = fence[1].split(',').map((s) => Number(s.trim())).sort((a, b) => a - b);
+  assert.deepEqual(fromEditor, [...FENCE_COMMANDS].sort((a, b) => a - b),
+    'the same fence ids are reserved on both sides');
+  const rally = /var MISSION_RALLY_COMMAND = (\d+);/.exec(html);
+  assert.ok(rally, 'MISSION_RALLY_COMMAND must be extractable');
+  assert.equal(Number(rally[1]), RALLY_COMMAND);
+});
+
+test('mavlink-mission target sysid: a configured broadcast reds for download/upload, not clear', () => {
+  // Download and upload refuse sysid 0 on every tier (§9 — no vehicle answers
+  // as the broadcast id), so a statically configured pair is a deploy-time
+  // verdict, the #260 shape. Clear stays a broadcast-legal single message.
+  const { targetSystem, targetComponent } = loadNodeDefaults('mavlink-mission');
+  const verdict = (op, v) => targetSystem.validate.call({ id: 'm1', operation: op }, v, {});
+
+  assert.equal(targetSystem.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+  assert.match(String(verdict('download', '0')), /broadcast \(0\) cannot download/);
+  assert.match(String(verdict('upload', '0')), /broadcast \(0\) cannot upload/);
+  assert.equal(verdict('clear', '0'), true, 'clear fans out legitimately (§10)');
+  assert.equal(verdict('download', ''), true, 'blank inherits the profile default');
+  assert.equal(verdict('download', '7'), true);
+  assert.match(String(verdict('download', '300')), /between 0 and 255/, 'uint8 range still applies');
+
+  // Compid is a wire uint8 with a blank inherit.
+  assert.equal(targetComponent.validate.call({ id: 'm1' }, '', {}), true);
+  assert.equal(targetComponent.validate.call({ id: 'm1' }, '190', {}), true);
+  assert.match(String(targetComponent.validate.call({ id: 'm1' }, '300', {})), /between 0 and 255/);
 });
 
 test('mavlink-mission has no clear-confirmation control (owner ruling, 2026-08-13)', () => {

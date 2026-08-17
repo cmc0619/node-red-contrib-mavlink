@@ -98,7 +98,7 @@ module.exports = function registerMavlinkPayload(RED) {
             verb: payload.verb || config.verb,
             path: payload.path || config.path,
             target,
-            values: payload.values || config.values || {},
+            values: payload.values || config.values,
             // Required for command-backed verbs (§9): a non-member carrier
             // selects no builder (§5), so the message ships undefined and
             // craters at the tier that touches it.
@@ -339,7 +339,7 @@ function failAck(node, send, built, outcome, msg, done) {
   applyActionStatus(node, 'error', `${built.message.name} ${outcome.result}`);
   send([
     null,
-    statusRecord(outcome.result, outcome.detail || 'command not accepted', {
+    statusRecord(outcome.result, outcome.detail, {
       confirmation: built.confirmation,
       resultCode: outcome.resultCode,
       resultParam2: outcome.resultParam2,

@@ -23,11 +23,18 @@
       {
         name: { value: '' },
         identity: { value: '' },
-        delivery: { value: 'build' },
-        sendAs: { value: 'int' },
+        // The tiers the runtime dispatches (§5): a drifted tier matches no
+        // case there and completes as a no-op, so the red ring is the only
+        // thing that names the drift to the operator.
+        delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
+        // The CARRIER members commandBacked dispatches (§5). A drifted
+        // carrier selects no builder, and the Build tier would report that as
+        // a succeeded build of `{ payload: undefined }` — phantom success,
+        // which §0 rule 3 forbids. This red ring stops the flow reaching it.
+        sendAs: { value: 'int', validate: RED.mavlink.oneOf(['int', 'long']) },
         frame: { value: '' },
-        timeout: { value: 10000, validate: RED.validators.number(true) },
-        maxRetries: { value: 3, validate: RED.validators.number(true) },
+        timeout: { value: 10000, validate: RED.mavlink.validateAtLeast(0) },
+        maxRetries: { value: 3, validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
         topic: { value: 'camera' },
         verb: { value: 'photo' },
         path: { value: 'legacy' },

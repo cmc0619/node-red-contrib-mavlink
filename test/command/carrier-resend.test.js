@@ -100,6 +100,7 @@ function deploy(ackResults, config = {}, extraNodes = {}) {
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: config.sendAs || 'long',
     mode: 'preset',
     preset: 'reposition',

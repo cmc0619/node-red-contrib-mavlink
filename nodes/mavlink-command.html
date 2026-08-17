@@ -295,7 +295,10 @@
       },
       delivery:          { value: 'confirm', validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'complete']) },
       sendAs:            { value: 'int', validate: RED.mavlink.oneOf(['int', 'long']) },
-      frame:             { value: '' },
+      // Closed vocabulary: the frame select's own options (blank = the carrier
+      // module's documented default). Other frames ride msg.mavFrame at
+      // runtime; a hand-edited config value the dialog cannot save reds here.
+      frame:             { value: '', validate: RED.mavlink.oneOf(['', '0', '3', '10', '1']) },
       identity:          { value: '' },
       // A statically configured broadcast (0) on an ack-confirmed tier is a
       // cross-field static requirement, so it reds at deploy rather than on
@@ -305,14 +308,16 @@
         value: '',
         validate: RED.mavlink.validateTargetSystem(['confirm', 'complete'], 'delivery', 'confirm'),
       },
-      targetComponent:      { value: '', validate: RED.validators.number(true) },
+      // Compid is a wire uint8; the select's catalog values all fit, so this
+      // reds only a hand-edited flow. Blank inherits the profile default.
+      targetComponent:      { value: '', validate: RED.mavlink.validateUint8(0) },
       // Blank allowed: the runtime reads '' as "use the default"
       // (mavlink-command.js — `config.timeout === '' ? DEFAULT_TIMEOUT_MS`),
       // so the validator must accept it. Same shape as Mission, Move, Payload.
-      timeout:           { value: '10000', validate: RED.validators.number(true) },
-      maxRetries:        { value: '3', validate: RED.validators.number(true) },
+      timeout:           { value: '10000', validate: RED.mavlink.validateAtLeast(0) },
+      maxRetries:        { value: '3', validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
       unconfirmedContinue: { value: false },
-      completionTimeout: { value: '60000', validate: RED.validators.number(true) },
+      completionTimeout: { value: '60000', validate: RED.mavlink.validateAtLeast(0) },
       // The preset params blob. Nothing checked it before, and the runtime
       // refused blank/out-of-range coordinates on its behalf; that refusal is
       // gone (AGENTS.md, input trust), so this is now the only thing between a
@@ -325,9 +330,16 @@
       params: {
         value: '{}',
         validate: function (v, _opt) {
-          if (RED.mavlink.liveOr(this, '#node-input-mode', this.mode, 'preset') !== 'preset') return true;
+          // The blob must parse in both modes — Advanced included, where the
+          // runtime reads it through the same JSON.parse and a corrupt blob
+          // is drift the editor can already see at deploy. The preset rules
+          // below are preset-only. Blank reds too: mergeParams parses this
+          // string as saved and '' is not JSON — '{}' is the empty spelling —
+          // while paramValues' own '' fallback would vouch for it (Codex).
+          if (RED.mavlink.isBlank(v)) return 'is not valid JSON — {} is the empty set';
           const values = paramValues(this, v);
           if (values === null) return 'is not valid JSON';
+          if (RED.mavlink.liveOr(this, '#node-input-mode', this.mode, 'preset') !== 'preset') return true;
           if (!localFrameSelected(this)) {
             if (presentParam(values[5]) && Math.abs(Number(values[5])) > 90) {
               return 'latitude must be within ±90°';

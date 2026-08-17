@@ -376,7 +376,7 @@ function buildPlan(operation, missionType, target, items) {
  */
 function resolveItems(config, payload) {
   if (Array.isArray(payload.items)) return payload.items;
-  return config.items && config.items.trim() ? JSON.parse(config.items) : [];
+  return config.items.trim() ? JSON.parse(config.items) : [];
 }
 
 /**

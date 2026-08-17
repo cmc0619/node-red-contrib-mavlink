@@ -498,8 +498,8 @@ function requestFrom(config, payload, { target, profile, connectionNode }) {
     // the library's -1 default. Absent (undefined) is left for the library.
     paramIndex: firstDefined(payload.paramIndex, config.paramIndex),
     value: payload.value !== undefined ? payload.value : config.value,
-    // No REAL32 fallback: resolveParamType throws `unknown MAV_PARAM_TYPE`
-    // on undefined. Guessing the type silently mis-encodes the value (#222).
+    // No REAL32 fallback: an absent type resolves to nothing, never to a
+    // guess — guessing the type silently mis-encodes the value (#222).
     paramType: payload.paramType || config.paramType,
     firmware,
     encoding,

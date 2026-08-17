@@ -141,6 +141,52 @@ test('members validator: per-row reasons, offsets-vs-position-patch conflict red
     'a position-field patch without offsets is legitimate');
 });
 
+test('selectionMode and executionMode red on membership, then on the Build pairing rules', () => {
+  // §5's editor half: the runtime dispatches these tokens with affirmative
+  // cases only, so a hand-edited stray must red at deploy — the audit's
+  // `{mode: "lits"}` shape, on the config surface the editor owns.
+  const defaults = loadNodeDefaults('mavlink-fanout');
+  const sel = defaults.selectionMode.validate;
+  const exec = defaults.executionMode.validate;
+
+  for (const mode of ['all', 'list', 'filter']) {
+    assert.equal(sel.call({ delivery: 'send' }, mode, {}), true, mode);
+  }
+  assert.match(String(sel.call({ delivery: 'send' }, 'lits', {})), /must be one of/);
+  assert.match(String(sel.call({ delivery: 'build' }, 'nonsense', {})), /must be one of/,
+    'membership reds before the Build rule is consulted');
+  // The Build pairing rule still holds behind the membership check.
+  assert.equal(sel.call({ delivery: 'build' }, 'list', {}), true);
+  assert.match(String(sel.call({ delivery: 'build' }, 'all', {})), /explicit sysid list on Build/);
+
+  assert.equal(exec.call({ delivery: 'send' }, 'sequential', {}), true);
+  assert.equal(exec.call({ delivery: 'send' }, 'broadcast', {}), true);
+  assert.match(String(exec.call({ delivery: 'send' }, 'parallel', {})), /must be one of/);
+  assert.match(String(exec.call({ delivery: 'build' }, 'broadcast', {})), /All.*selection/);
+  assert.equal(exec.call({ delivery: 'build' }, 'sequential', {}), true);
+});
+
+test('intervalMs and maxRetries: blank stays absent, present values carry range red rings', () => {
+  // Blank rides through numberOption as absence so lib/fanout's own defaults
+  // fire (blank ≠ 0 ≠ absent, Gitar #287); a present value is what the editor
+  // owns — min="0" is not enforced on save.
+  const defaults = loadNodeDefaults('mavlink-fanout');
+  const interval = defaults.intervalMs.validate;
+  const retries = defaults.maxRetries.validate;
+
+  assert.equal(interval.call({}, '', {}), true, 'blank interval means the lib default');
+  assert.equal(interval.call({}, 0, {}), true, '0 is a legitimate no-pause interval');
+  assert.equal(interval.call({}, 250, {}), true);
+  assert.match(String(interval.call({}, -100, {})), />= 0/, 'negative pacing reds');
+  assert.match(String(interval.call({}, 'abc', {})), />= 0/);
+
+  assert.equal(retries.call({}, '', {}), true, 'blank retries means the lib default');
+  assert.equal(retries.call({}, 0, {}), true);
+  assert.equal(retries.call({}, 3, {}), true);
+  assert.match(String(retries.call({}, -1, {})), />= 0/);
+  assert.match(String(retries.call({}, 1.5, {})), /whole number/, 'a fractional retry count reds');
+});
+
 test('concurrency is a bounded integer with a strictly-sequential default of 1', () => {
   assert.match(html, /concurrency:\s*\{[\s\S]*?value:\s*1/, 'concurrency defaults to 1');
   assert.match(html, /Number\.isInteger\(n\) && n >= 1/, 'validator requires an integer ≥ 1');

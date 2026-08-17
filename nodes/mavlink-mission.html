@@ -1,4 +1,11 @@
 <script type="text/javascript">
+  // Family reservation for configured items — a mirror of
+  // lib/mission/validate.js (FENCE_COMMANDS / RALLY_COMMAND), carried here
+  // because a Node-RED validator is synchronous and cannot reach the library.
+  // Drift-tested against it in test/nodes/mission-html.test.js.
+  var MISSION_FENCE_COMMANDS = [5000, 5001, 5002, 5003, 5004, 5005];
+  var MISSION_RALLY_COMMAND = 5100;
+
   // Dialect + Vehicle + Firmware validators are the shared Build-tier rule
   // (§6 Firmware XOR); Mission's mode field is `delivery` (default confirm).
   var missionDefaults = Object.assign(
@@ -8,8 +15,25 @@
       delivery: { value: 'confirm', validate: RED.mavlink.oneOf(['build', 'confirm']) },
       operation: { value: 'download', validate: RED.mavlink.oneOf(['download', 'upload', 'clear']) },
       missionType: { value: 'mission', validate: RED.mavlink.oneOf(['mission', 'fence', 'rally']) },
-      targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
-      targetComponent: { value: '', validate: RED.validators.number(true) },
+      // A statically configured broadcast (0) can never run a transfer:
+      // download and upload are refused for sysid 0 on every tier (§9 — no
+      // vehicle answers as sysid 0), so the pair reds at deploy rather than
+      // on the first message. Clear stays broadcast-legal, and blank passes
+      // (it inherits the profile default). Two args so the reason renders.
+      targetSystem: {
+        value: '',
+        validate: function (v, opt) {
+          var range = RED.mavlink.validateUint8(0).call(this, v, opt);
+          if (range !== true) return range;
+          if (RED.mavlink.isBlank(v) || Number(v) !== 0) return true;
+          var op = RED.mavlink.liveOr(this, '#node-input-operation', this.operation, 'download');
+          if (op === 'clear') return true;
+          return 'broadcast (0) cannot ' + op + ' — no vehicle answers as sysid 0; address one vehicle';
+        },
+      },
+      // Compid is a wire uint8; the select's catalog values all fit, so this
+      // reds only a hand-edited flow. Blank inherits the profile default.
+      targetComponent: { value: '', validate: RED.mavlink.validateUint8(0) },
       items: {
         value: '',
         // Two args so a returned reason counts as invalid rather than being
@@ -19,20 +43,48 @@
         validate: function (v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-operation', this.operation) !== 'upload') return true;
           if (RED.mavlink.isBlank(v)) return true;
+          var arr;
           try {
-            var arr = JSON.parse(v);
-            if (!Array.isArray(arr)) return 'must be a JSON array';
-            // A configured [] would upload MISSION_COUNT 0 — the wire's
-            // "erase the plan" — not a no-op (#241). Use Clear for that.
-            if (arr.length === 0) return 'must not be empty — use the Clear operation to erase a plan';
+            arr = JSON.parse(v);
           } catch {
             return 'is not valid JSON';
+          }
+          if (!Array.isArray(arr)) return 'must be a JSON array';
+          // A configured [] would upload MISSION_COUNT 0 — the wire's
+          // "erase the plan" — not a no-op (#241). Use Clear for that.
+          if (arr.length === 0) return 'must not be empty — use the Clear operation to erase a plan';
+          // Per-item red rings, mirroring the runtime validator (§9 "Item
+          // validation is per type"): the wire `command` is a uint16 (a
+          // fractional id truncates into the reserved fence range on
+          // serialization), and an item must belong to the selected plan's
+          // family so buffers cannot corrupt each other.
+          var type = RED.mavlink.liveOr(this, '#node-input-missionType', this.missionType, 'mission');
+          for (var i = 0; i < arr.length; i++) {
+            var item = arr[i];
+            // The raw value must be present and numeric before Number() runs:
+            // '' / null / false all coerce to 0, a legal uint16, and would
+            // upload command 0 instead of red-ringing the blank (Codex). An
+            // explicit numeric 0 and a numeric string stay legal.
+            var raw = item && typeof item === 'object' ? item.command : undefined;
+            var cmd = typeof raw === 'number' ? raw
+              : (typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN);
+            if (!Number.isInteger(cmd) || cmd < 0 || cmd > 0xffff) {
+              return 'item ' + i + ' needs an integer command id (0–65535)';
+            }
+            var fence = MISSION_FENCE_COMMANDS.indexOf(cmd) !== -1;
+            var rally = cmd === MISSION_RALLY_COMMAND;
+            var wrongFamily = type === 'fence' ? !fence
+              : type === 'rally' ? !rally
+                : (fence || rally);
+            if (wrongFamily) {
+              return 'item ' + i + ' command ' + cmd + ' is not a valid ' + type + ' item';
+            }
           }
           return true;
         },
       },
-      timeout: { value: '', validate: RED.validators.number(true) },
-      maxRetries: { value: '', validate: RED.validators.number(true) }
+      timeout: { value: '', validate: RED.mavlink.validateAtLeast(0) },
+      maxRetries: { value: '', validate: RED.mavlink.validateAtLeast(0, { integer: true }) }
     },
     RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
   );

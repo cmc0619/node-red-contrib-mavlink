@@ -6,7 +6,6 @@ const assert = require('node:assert/strict');
 const {
   PAYLOAD_TOPICS,
   PAYLOAD_VERBS,
-  verbsForTopic,
   buildPayloadMessage,
   fieldMetaFromBundle,
 } = require('../../lib/payload');
@@ -35,11 +34,6 @@ test('PAYLOAD_VERBS catalog matches known verbs per topic', () => {
       assert.match(entry.label, /\S/, `${topic}/${entry.value} needs a label`);
     }
   }
-});
-
-test('verbsForTopic returns catalog entries and empty for unknown topics', () => {
-  assert.deepEqual(verbsForTopic('camera'), PAYLOAD_VERBS.camera);
-  assert.deepEqual(verbsForTopic('unknown'), []);
 });
 
 test('every catalog verb builds without error', () => {

@@ -160,7 +160,7 @@ module.exports = function registerMavlinkCommand(RED) {
     // Resolved per-input (below, like `resolveCarrier`) rather than here: a
     // throw at construction crashes the whole node's deploy, and a
     // hand-edited config is a per-message failure like any other resolver.
-    const unconfirmedContinue = !!config.unconfirmedContinue;
+    const unconfirmedContinue = config.unconfirmedContinue;
 
     /**
      * Build the 7-element param array for this send, merging config + payload.
@@ -227,7 +227,7 @@ module.exports = function registerMavlinkCommand(RED) {
         ? numberOr(config.completionTimeout, 60000)
         : null;
 
-      const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
+      const payload = msg.payload ?? {};
       const { target, identityId } = resolveDeliveryContext(RED, {
         delivery,
         config,

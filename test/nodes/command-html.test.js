@@ -577,6 +577,39 @@ test('mavlink-command: preset coordinates are checked here, and nowhere else', (
   assert.match(String(params.validate.call(cfg({ preset: 'arm' }), '{oops', {})), /valid JSON/);
 });
 
+test('mavlink-command: an unreadable params blob reds in Advanced mode too', () => {
+  // Advanced mode reads the same blob through the same JSON.parse; a corrupt
+  // blob is drift the editor can already see at deploy (the "command advanced
+  // params" protector-side work named in DESIGN.md §14). The preset rules stay
+  // preset-mode only.
+  const { params } = loadNodeDefaults('mavlink-command');
+  const verdict = (blob) => params.validate.call({ id: 'c1', mode: 'advanced' }, blob, {});
+
+  assert.match(String(verdict('{oops')), /valid JSON/);
+  assert.equal(verdict('{"1":5}'), true, 'a readable blob passes untouched — no preset rules apply');
+  assert.equal(verdict('{}'), true);
+  // Blank is not the empty set: mergeParams parses this string as saved and
+  // '' is not JSON, so the ring must not vouch for a hand-edited blank (Codex).
+  assert.match(String(verdict('')), /valid JSON/);
+});
+
+test('mavlink-command: frame and compid carry their own red rings', () => {
+  // Frame is a closed-vocabulary select — the dialog's own options, blank
+  // meaning the carrier module's documented default. Other frames stay
+  // reachable per message via msg.mavFrame. Compid is a wire uint8.
+  const { frame, targetComponent } = loadNodeDefaults('mavlink-command');
+
+  for (const v of ['', '0', '3', '10', '1']) {
+    assert.equal(frame.validate.call({ id: 'c1' }, v, {}), true, `frame ${JSON.stringify(v)} is offered`);
+  }
+  assert.match(String(frame.validate.call({ id: 'c1' }, '2', {})), /must be one of/,
+    'a frame the dialog cannot save reds');
+
+  assert.equal(targetComponent.validate.call({ id: 'c1' }, '', {}), true, 'blank inherits');
+  assert.equal(targetComponent.validate.call({ id: 'c1' }, '190', {}), true);
+  assert.match(String(targetComponent.validate.call({ id: 'c1' }, '300', {})), /between 0 and 255/);
+});
+
 test('mavlink-command: the editor\'s location rules match the library\'s, exactly', () => {
   // PRESET_LOCATION is a second copy of lib/command/presets.js's
   // requireLocation, and it exists because a Node-RED validator is synchronous

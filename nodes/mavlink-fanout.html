@@ -11,16 +11,18 @@
         // 'list' — the delivery default is Build, and Build requires the list,
         // so a fresh node must not be born invalid behind a greyed dropdown.
         value: 'list',
-        // Build emits to a downstream mavlink-out, so the Connection's only
-        // remaining job is the member directory — and an explicit list is the
-        // one selection that does not need it. Requiring the list on Build is
-        // what lets `connection` above share the standard blank-on-Build rule
-        // (#191). All/filter selection stays on the wire tiers, where a
-        // Connection is present anyway.
-        validate: function (v, _opt) {
+        // Membership first (§5's editor half: the runtime dispatches this
+        // token with affirmative cases only, so a hand-edited stray must red
+        // here). Then the Build rule: Build emits to a downstream mavlink-out,
+        // so the Connection's only remaining job is the member directory — and
+        // an explicit list is the one selection that does not need it.
+        // Requiring the list on Build is what lets `connection` above share
+        // the standard blank-on-Build rule (#191). All/filter selection stays
+        // on the wire tiers, where a Connection is present anyway.
+        validate: RED.mavlink.oneOf(['all', 'list', 'filter'], function (v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'build') return true;
           return v === 'list' || 'must be an explicit sysid list on Build';
-        },
+        }),
       },
       members: {
         // One row per member: {sysid, north?, east?, up?, patch?}. Offsets are
@@ -85,16 +87,24 @@
       armedFilter: { value: '' },
       executionMode: {
         value: 'sequential',
-        // Broadcast only pairs with the "All" selection, which Build cannot
-        // choose — the reshape below also resets a retained Broadcast, but a
-        // hand-set value must still red rather than deploy a node the runtime
-        // refuses on every message.
-        validate: function (v, _opt) {
+        // Membership first (§5's editor half, as on selectionMode). Then the
+        // Build rule: Broadcast only pairs with the "All" selection, which
+        // Build cannot choose — the reshape below also resets a retained
+        // Broadcast, but a hand-set value must still red rather than deploy a
+        // node the runtime refuses on every message.
+        validate: RED.mavlink.oneOf(['sequential', 'broadcast'], function (v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'build') return true;
           return v !== 'broadcast' || 'Broadcast needs the "All" selection, which Build cannot use';
-        },
+        }),
       },
-      intervalMs: { value: 100, validate: RED.validators.number() },
+      intervalMs: {
+        value: 100,
+        // Blank stays absent — numberOption hands it through so lib/fanout's
+        // own default fires (blank ≠ 0 ≠ absent, Gitar #287). A present value
+        // must be milliseconds >= 0: the input's min="0" is not enforced on
+        // save, and a saved negative paces nothing.
+        validate: RED.mavlink.validateAtLeast(0),
+      },
       concurrency: {
         value: 1,
         validate: function (v) {
@@ -117,7 +127,13 @@
           return Number.isInteger(n) && n >= 1;
         },
       },
-      maxRetries: { value: 0, validate: RED.validators.number() }
+      maxRetries: {
+        value: 0,
+        // Blank stays absent (lib default 0), like intervalMs above. A present
+        // value must be a whole retry count >= 0: min="0" is not enforced on
+        // save, and a negative or fractional count reaches AckWaiter as-is.
+        validate: RED.mavlink.validateAtLeast(0, { integer: true }),
+      }
     },
     inputs: 1,
     outputs: 2,
