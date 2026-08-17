@@ -162,23 +162,24 @@ test('build tier plans a fence transfer under a px4 firmware profile (mission_ty
   assert.deepEqual(plan.messages.map((m) => m.name), ['MISSION_REQUEST_LIST']);
 });
 
-test('an unknown payload.missionType resolves no type rather than a wrong one', async () => {
+test('an unknown payload.missionType fails loud before any operation runs', async () => {
   // The editor's Type select is the vocabulary (RED.mavlink.oneOf); a
-  // payload override is trusted runtime input. A token that names no type
-  // resolves to nothing — never quietly to mission (0), which would run the
-  // transfer against the wrong plan.
+  // payload override is trusted runtime input. A key that resolves to no
+  // member is refused where the resolution is reported (§0 rule 3): frames
+  // would otherwise carry mission_type: undefined — decoded as 0 — and
+  // download or clear would act on the vehicle's real mission plan.
   const conn = new StubConnection();
   conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
   const Node = loadNode(conn);
-  const node = new Node({
-    operation: 'download',
-    connection: 'conn',
-    delivery: 'build',
-    missionType: 'mission',
-  });
-  const { outputs } = await runInput(node, { payload: { missionType: 'bogus' } });
-  assert.equal(conn.sent.length, 0, 'nothing was sent');
-  assert.equal(outputs[0][0].payload.missionType, undefined, 'the type is unresolved, not 0');
+  for (const operation of ['download', 'clear']) {
+    for (const delivery of ['build', 'confirm']) {
+      const node = new Node({ operation, connection: 'conn', delivery, missionType: 'mission' });
+      const res = await runInput(node, { payload: { missionType: 'bogus' } });
+      assert.ok(res.err, `${operation}/${delivery} must fail loud`);
+      assert.match(res.err.message, /names no mission type/);
+      assert.equal(conn.sent.length, 0, `${operation}/${delivery} sent nothing`);
+    }
+  }
 });
 
 test('a numeric 0 payload.missionType overrides the config type — presence, not truthiness', async () => {
