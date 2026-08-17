@@ -315,6 +315,7 @@ module.exports = function registerMavlinkVehicle(RED) {
      */
     node.getDialect = () => {
       if (!node._bundle) {
+        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: the configured dialect failed to compile at deploy
         throw new Error(
           `Vehicle Profile '${config.name || node.id}' has no loaded dialect` +
             ' — check the Dialect and Version picks in the profile.'

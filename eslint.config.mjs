@@ -190,4 +190,46 @@ export default [
       'no-bitwise': 'error',
     },
   },
+  {
+    // AGENTS.md §0 / §9, made mechanical (owner ruling, 2026-08-17).
+    //
+    // §9 requires the §0 decision procedure written down before any new
+    // runtime check. Left as prose that is a promise, and a persuasive commit
+    // message can launder a guardrail past it — which is exactly how three
+    // came back in one session. A missing disable directive cannot be
+    // persuaded, and a present one sits in the diff next to the code with its
+    // §0 rule number, where a reviewer sees it.
+    //
+    // Constructing a refusal is what is banned. `throw err` re-raises
+    // something already caught and is plumbing, so it stays legal.
+    //
+    // Scope is the message path — where §0 bites. lib/metadata, param
+    // defs/seed and the test helpers are catalog and harness code, and
+    // lib/connection + lib/codec are the wire boundary, where a refusal is
+    // rule 1 by construction and the annotation would say nothing.
+    files: [
+      'lib/addressing/**/*.js',
+      'lib/command/**/*.js',
+      'lib/delivery/**/*.js',
+      'lib/fanout/**/*.js',
+      'lib/formation/**/*.js',
+      'lib/identity/**/*.js',
+      'lib/mission/**/*.js',
+      'lib/move/**/*.js',
+      'lib/payload/**/*.js',
+      'lib/vehicle/**/*.js',
+      'lib/param/index.js',
+      'nodes/**/*.js',
+    ],
+    ignores: ['lib/**/test/**'],
+    rules: {
+      'no-restricted-syntax': ['error', {
+        selector: "ThrowStatement > NewExpression[callee.name='Error']",
+        message: 'AGENTS.md §0: the driver does not refuse its input. Keep this only if it '
+          + 'is a real wire/library refusal (rule 1) or an operational failure that cannot '
+          + 'exist until runtime (rule 3), and say which with an eslint-disable naming the '
+          + 'rule. Otherwise the check belongs in the .html (rule 2), or nowhere.',
+      }],
+    },
+  },
 ];

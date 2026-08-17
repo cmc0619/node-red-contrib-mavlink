@@ -247,6 +247,7 @@ function buildListStub(sysids) {
       },
     },
     send() {
+      // eslint-disable-next-line no-restricted-syntax -- outside §0: an unreachable-by-design stub — the build-tier list stub has no link to send on
       throw new Error('mavlink-fanout: build-mode list stub does not send — output goes to mavlink-out');
     },
     subscribe() {

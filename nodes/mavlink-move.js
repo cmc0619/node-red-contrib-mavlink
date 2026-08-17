@@ -362,6 +362,7 @@ module.exports = function registerMavlinkMove(RED) {
             if (!sameKey) {
               release = streamLocks.acquire(connectionNode.id, target);
               if (!release) {
+                // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: another node holds the setpoint stream lock — live runtime state
                 throw new Error(
                   `a setpoint stream to ${target.sysid}.${target.compid} is already running on this connection — stop it first or target it from one node`
                 );

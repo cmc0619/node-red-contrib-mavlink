@@ -194,12 +194,14 @@ function resolveAnchor(config, payload, peerTable) {
       const autopilot = peer && (peer.components || []).find((c) => c.compid === 1);
       const position = autopilot && autopilot.position;
       if (!position) {
+        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: no GLOBAL_POSITION_INT seen yet is a live telemetry state, not an input
         throw new Error(`mavlink-formation: leader ${config.leader} has no reported position `
           + '(no GLOBAL_POSITION_INT seen) — refusing to anchor the formation on unknown coordinates');
       }
       // Targets ride MAV_FRAME_GLOBAL_RELATIVE_ALT, where a defaulted 0 commands
       // a descent to home level.
       if (!Number.isFinite(position.relativeAlt)) {
+        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: no relative altitude reported yet is a live telemetry state, not an input
         throw new Error(`mavlink-formation: leader ${config.leader} reports no relative altitude — `
           + 'refusing to default the formation altitude');
       }

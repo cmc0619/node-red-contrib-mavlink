@@ -48,6 +48,7 @@ module.exports = function registerMavlinkConnection(RED) {
       node.status({ fill: 'grey', shape: 'ring', text: 'disabled' });
       node.subscribe = () => () => {};
       node.send = () => {
+        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: a send on a disabled link is an operational failure at send time
         throw new Error(
           'mavlink-connection: connection disabled — enable it in the connection config and redeploy'
         );
@@ -63,6 +64,7 @@ module.exports = function registerMavlinkConnection(RED) {
     // same clear-message style buildSigning uses, not a raw TypeError (#95).
     const vehicleNode = RED.nodes.getNode(config.vehicle);
     if (!vehicleNode) {
+      // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: a config-node reference that did not resolve at deploy
       throw new Error(
         'mavlink-connection: the referenced Vehicle Profile is missing or disabled — reselect a Vehicle in the connection config and redeploy'
       );
@@ -90,6 +92,7 @@ module.exports = function registerMavlinkConnection(RED) {
     node._identityNodes = identityIds.map((id) => {
       const idNode = RED.nodes.getNode(id);
       if (!idNode) {
+        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: a config-node reference that did not resolve at deploy
         throw new Error(
           `mavlink-connection: the referenced Local Identity "${id}" is missing or disabled — reselect the Identity in the connection config and redeploy`
         );
@@ -365,6 +368,7 @@ function rejectedSurface(reason, hasKey) {
 function enumValue(bundle, enumName, entryName) {
   const enumDef = bundle.enums[enumName];
   const entry = enumDef && enumDef.entries.find((e) => e.name === entryName);
+  // eslint-disable-next-line no-restricted-syntax -- §0 rule 1: the compiled dialect bundle does not carry this enum entry
   if (!entry) throw new Error(`${entryName} is not defined in enum ${enumName}`);
   return Number(entry.value);
 }

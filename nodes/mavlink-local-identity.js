@@ -105,6 +105,7 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
     node.getIdentity = () => {
       if (node.derivesSysidFromVehicle) {
         if (node._vehicleSysid === null) {
+          // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: no Connection has resolved the vehicle sysid yet at call time
           throw new Error(
             `Local Identity '${config.name || node.id}' is an onboard companion whose` +
               ' source SysID comes from the Vehicle Profile it is bound to,' +
