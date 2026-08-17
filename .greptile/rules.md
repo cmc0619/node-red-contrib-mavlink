@@ -48,6 +48,9 @@ it is five lines someone has to read, test, and keep true forever.
 
 ## 3. Fail loud; do not repair silently
 
+**Low level drivers don't have pretty error messages.** That is the whole rule.
+Everything below is elaboration.
+
 This toolkit builds Node-RED flows. Collect correct data in the editor, deploy
 it, and let the runtime fail loudly when inputs or the environment are wrong.
 
