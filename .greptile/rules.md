@@ -56,13 +56,25 @@ input, or "gracefully degrading" past a broken deploy. A crash that names the
 problem is the correct behaviour, and several are deliberate. Suggesting a
 try/catch around one is a downgrade.
 
-**"Fail loudly" means the process crashes.** It does not mean the driver checks
-its input and raises a tidy validation error — that is the opposite of this rule.
-An unresolved value dereferenced as `undefined`, a NaN refused by the serializer,
-a null config node hit at `.send()`: those *are* the loud failure, and they are
-correct as they stand. A finding that reads this rule as "so add a check that
-throws a clear message" has inverted it. This is the same rule as `AGENTS.md` §0,
-stated in shorthand, and §0 is the long form:
+**"Fail loudly" means it CRASHES.** Stack traces, brokenness, the whole nine
+yards. `TypeError: Cannot read properties of undefined` in the Node-RED log,
+with a stack, is not a defect to be dressed up — it is the specified behaviour
+and it is what this rule is asking for.
+
+It does **not** mean the driver inspects its input and raises a tidy validation
+error. That is the opposite of this rule, and it is the single most common way a
+finding gets it backwards. An unresolved value dereferenced as `undefined`, a
+NaN the serializer refuses, a null config node hit at `.send()` — those *are*
+the loud failure. They are correct as they stand. Nothing about them needs a
+nicer message.
+
+Nor is the crash swallowed on the way out: `failInput` passes the real `Error`
+to `done(err)`, so Node-RED logs it with its stack and hands it to Catch nodes
+intact. The status badge and record carry `err.message` *in addition*, never
+instead. "It only surfaces as a cryptic internal error" describes the design.
+
+This is the same rule as `AGENTS.md` §0, stated in shorthand, and §0 is the long
+form:
 
 - The **driver** (`lib/**`, `nodes/*.js`) is pymavlink for Node-RED — low level,
   general purpose, no policy. It trusts its input. GIGO is supported behaviour:
@@ -89,11 +101,16 @@ so the vehicle acts on a number nobody asked for and nothing says why. A guard
 that throws at least fails loud. Replacing one with a silent fallback is a
 downgrade in both directions.
 
-"Removing this guard replaced a clear message with a cryptic TypeError" is true
-every time a guard is removed and is never a reason on its own — the cryptic
-crash is the loud failure this rule asks for. "A hand-edited flow or an
-Admin-API deploy skips the editor" is true of *every* validator in the walled
-garden, so it argues for a runtime twin of all of them and is not an exception.
+"Removing this guard replaced a clear message with a cryptic TypeError" is not a
+finding. It is a description of the intended result, restated as a complaint —
+true every time a guard is removed, because that is what removing a guard does.
+The cryptic crash is the win. Do not file it, and do not file "the diagnostic
+regressed" or "the operator sees an internal error" either; message quality is
+not a defect here.
+
+"A hand-edited flow or an Admin-API deploy skips the editor" is true of *every*
+validator in the walled garden, so it argues for a runtime twin of all of them
+and is not an exception.
 
 One thing does promote a guard-shaped finding into a real one, and it is the
 half of "fail loud" that gets missed: the removal makes a failure **quiet**, or
