@@ -227,8 +227,8 @@ module.exports = function registerMavlinkBuild(RED) {
       }
 
       // Send tier: enqueue on the connection queue. msg.band overrides the
-      // config default by presence and rides as given; the queue's own
-      // isBand boundary refuses a value no band answers to.
+      // config default by presence and rides as given — msg is trusted (§0);
+      // a band no queue case answers to selects no behavior at the switch (§5).
       const band = triggerMsg?.band ?? defaultBand;
       const target = (triggerMsg && triggerMsg.target) || null;
       const identityId = (triggerMsg && triggerMsg.identityId) || undefined;

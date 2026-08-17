@@ -72,8 +72,8 @@ module.exports = function registerMavlinkOut(RED) {
         // wire cannot carry, no curated "expected { name, fields }" hand-holding.
         const message = resolveMessage(msg);
         // msg.band overrides the config default by presence and rides as
-        // given; the queue's own isBand boundary refuses a value no band
-        // answers to.
+        // given — msg is trusted (§0); a band no queue case answers to
+        // selects no behavior at the switch (§5).
         const band = msg.band ?? defaultBand;
         connectionNode.send(message, {
           band,
