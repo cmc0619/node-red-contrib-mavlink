@@ -51,9 +51,13 @@
         // Comma-joined picks from the members-only multi-select. Blank is the
         // full default set; a token STATE_EVENTS does not name would subscribe
         // to an event the peer table never emits, so it reds here instead.
+        // The dialog always writes a string (the hidden input joins the
+        // multi-select), so a non-string is hand-edit drift the runtime's
+        // split(',') cannot read — it reds rather than vouching for it.
         events: {
           value: 'stale,expired,statustext',
           validate: function (v, _opt) {
+            if (typeof v !== 'string') return 'is the comma-joined picks string, not a list';
             return parseSavedEvents(v).every(function (name) {
               return STATE_EVENTS.indexOf(name) !== -1;
             }) || 'names an event the peer table does not emit';

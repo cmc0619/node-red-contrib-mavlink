@@ -267,6 +267,14 @@ test('transport numeric fields carry range rings; bind host is required for IP m
   );
   assert.equal(defaults.broadcastPort.validate.call({ id: 'c1' }, '', {}), true);
   assert.match(String(defaults.broadcastPort.validate.call({ id: 'c1' }, '65536', {})), portReason);
+  // Hidden by the mode → stale values must not red what cannot be seen:
+  // remote is IP-only, swarm is UDP-only (Codex, #331).
+  assert.equal(
+    defaults.remotePort.validate.call({ id: 'c1', mode: 'serial', remoteHost: '' }, '70000', {}),
+    true
+  );
+  assert.equal(defaults.broadcastPort.validate.call({ id: 'c1', mode: 'tcp' }, '70000', {}), true);
+  assert.equal(defaults.broadcastPort.validate.call({ id: 'c1', mode: 'serial' }, '0', {}), true);
 
   assert.equal(defaults.baudRate.validate.call({ id: 'c1', mode: 'serial' }, '57600', {}), true);
   assert.match(

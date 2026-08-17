@@ -61,6 +61,10 @@ test('events red-rings a token the peer table never emits; blank is the default 
   assert.equal(events.validate.call({}, 'stale,expired,statustext', {}), true);
   assert.equal(events.validate.call({}, DEFAULT_EVENTS.join(','), {}), true, 'the full set passes');
   assert.match(String(events.validate.call({}, 'stale,exipred', {})), /does not emit/);
+  // The dialog always writes the comma-joined string; a hand-edited array
+  // would crater the runtime's split(','), so the ring must not vouch for it
+  // (Codex, #331).
+  assert.match(String(events.validate.call({}, ['stale'], {})), /comma-joined/);
 });
 
 test('target filters carry the uint8 range ring, compid included', () => {

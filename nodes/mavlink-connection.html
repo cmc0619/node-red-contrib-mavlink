@@ -55,15 +55,23 @@
         return remotePairReason(v, $port ? $port.val() : this.remotePort);
       } },
       remotePort: { value: '', validate: function (v, opt) {
-        var range = RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
-        if (range !== true) return range;
+        // Mode gate first: serial hides this field, and a stale value must
+        // not red a control the operator cannot see (same gate as bindPort).
         var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
         if (mode === 'serial') return true;
+        var range = RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
+        if (range !== true) return range;
         var $host = RED.mavlink.ownDialogField(this, '#node-config-input-remoteHost');
         return remotePairReason(v, $host ? $host.val() : this.remoteHost);
       } },
       broadcastHost: { value: '' },
-      broadcastPort: { value: '', validate: RED.mavlink.validateIntRange(1, 65535) },
+      // UDP-only, like its row: TCP and serial hide the field, and a stale
+      // value must not red a control the operator cannot see.
+      broadcastPort: { value: '', validate: function (v, opt) {
+        var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
+        if (mode !== 'udp') return true;
+        return RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
+      } },
       serialPath: { value: '', validate: function (v) {
         var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
         if (mode !== 'serial') return true;

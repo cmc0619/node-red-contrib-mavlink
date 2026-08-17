@@ -39,7 +39,10 @@ const nodeIds = [
  */
 function editorShaped(type, overrides) {
   const config = { type };
-  for (const [name, def] of Object.entries(loadNodeDefaults(type))) {
+  // root: packageRoot — in the package-and-install job the runtime modules
+  // load from the unpacked tarball, so the editor defaults must too, or the
+  // test deploys checkout-derived defaults against packaged runtime code.
+  for (const [name, def] of Object.entries(loadNodeDefaults(type, {}, { root: packageRoot }))) {
     // structuredClone: array/object defaults come out of loadNodeDefaults'
     // vm sandbox as cross-realm values, and the helper's deepEqual against
     // the runtime's stored flow checks prototypes, not just shape.
