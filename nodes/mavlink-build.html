@@ -127,12 +127,17 @@
           value: 'send',
           validate: RED.mavlink.oneOf(TIER_OPTIONS.map(function (o) { return o.value; })),
         },
-        band:        { value: '2' },
+        // The vocabulary is the shared BAND_OPTIONS list that paints the
+        // select, so the ring cannot drift from what the dialog offers.
+        band: {
+          value: '2',
+          validate: RED.mavlink.oneOf(RED.mavlink.BAND_OPTIONS.map(function (o) { return o.value; })),
+        },
         // A typo here fails silently rather than loudly: Number('10OO') is NaN,
         // NaN > 0 is false, and the repeat timer simply never arms — the node
         // looks configured and does nothing. Blank is 0, which is the real
         // "off" value, so blank stays legal.
-        repeatMs:    { value: 0, validate: RED.validators.number(true) },
+        repeatMs:    { value: 0, validate: RED.mavlink.validateAtLeast(0) },
       },
       RED.mavlink.buildTierDialectDefaults({ modeField: 'tier' })
     );

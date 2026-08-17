@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const test = require('node:test');
 const helper = require('node-red-node-test-helper');
+const { loadNodeDefaults } = require('../test/nodes/html-assert.js');
 
 const packageRoot = process.env.MAVLINK_PACKAGE_ROOT
   ? path.resolve(process.env.MAVLINK_PACKAGE_ROOT)
@@ -29,12 +30,32 @@ const nodeIds = [
   'node-fanout'
 ];
 
+/**
+ * A node config as the editor would deploy it: every key the node's
+ * `defaults` declares, at its registered editor default, with this flow's
+ * explicit choices on top. The runtime trusts editor-produced configuration
+ * (§0), so the smoke flow must actually be one — a hand-authored skeleton
+ * missing defaults keys craters in the very constructors this test deploys.
+ */
+function editorShaped(type, overrides) {
+  const config = { type };
+  // root: packageRoot — in the package-and-install job the runtime modules
+  // load from the unpacked tarball, so the editor defaults must too, or the
+  // test deploys checkout-derived defaults against packaged runtime code.
+  for (const [name, def] of Object.entries(loadNodeDefaults(type, {}, { root: packageRoot }))) {
+    // structuredClone: array/object defaults come out of loadNodeDefaults'
+    // vm sandbox as cross-realm values, and the helper's deepEqual against
+    // the runtime's stored flow checks prototypes, not just shape.
+    config[name] = structuredClone(def.value);
+  }
+  return Object.assign(config, overrides);
+}
+
 function representativeFlow() {
   return [
     { id: 'flow', type: 'tab', label: 'CI smoke' },
-    {
+    editorShaped('mavlink-local-identity', {
       id: 'identity',
-      type: 'mavlink-local-identity',
       name: 'CI GCS',
       role: 'gcs',
       sourceSystemId: '255',
@@ -42,31 +63,28 @@ function representativeFlow() {
       heartbeatType: 'MAV_TYPE_GCS',
       heartbeatAutopilot: 'MAV_AUTOPILOT_INVALID',
       heartbeatIntervalMs: '1000'
-    },
-    {
+    }),
+    editorShaped('mavlink-vehicle', {
       id: 'vehicle',
-      type: 'mavlink-vehicle',
       name: 'CI vehicle',
       vehicleFamily: 'generic',
       firmware: 'ardupilot',
       dialect: 'common',
       dialectRevision: 'seed'
-    },
-    {
+    }),
+    editorShaped('mavlink-connection', {
       id: 'connection',
-      type: 'mavlink-connection',
       name: 'CI disabled connection',
       disabled: true,
       mode: 'udp',
       vehicle: 'vehicle',
       localIdentity: 'identity'
-    },
-    { id: 'node-in', z: 'flow', type: 'mavlink-in', connection: 'connection', wires: [[]] },
-    { id: 'node-out', z: 'flow', type: 'mavlink-out', connection: 'connection', wires: [] },
-    {
+    }),
+    editorShaped('mavlink-in', { id: 'node-in', z: 'flow', connection: 'connection', wires: [[]] }),
+    editorShaped('mavlink-out', { id: 'node-out', z: 'flow', connection: 'connection', wires: [] }),
+    editorShaped('mavlink-build', {
       id: 'node-build',
       z: 'flow',
-      type: 'mavlink-build',
       tier: 'build',
       dialect: '__vehicle',
       messageName: 'HEARTBEAT',
@@ -74,11 +92,10 @@ function representativeFlow() {
       vehicle: 'vehicle',
       identity: 'identity',
       wires: [[]]
-    },
-    {
+    }),
+    editorShaped('mavlink-command', {
       id: 'node-command',
       z: 'flow',
-      type: 'mavlink-command',
       connection: 'connection',
       // Without a carrier the node reds out and its inputs do nothing. The
       // smoke test only asserts each node was *created*, so an invalid node
@@ -88,11 +105,10 @@ function representativeFlow() {
       preset: 'arm',
       sendAs: 'long',
       wires: [[], []]
-    },
-    {
+    }),
+    editorShaped('mavlink-move', {
       id: 'node-move',
       z: 'flow',
-      type: 'mavlink-move',
       delivery: 'build',
       dialect: '__vehicle',
       vehicle: 'vehicle',
@@ -100,11 +116,10 @@ function representativeFlow() {
       targetSystem: '1',
       targetComponent: '1',
       wires: [[], []]
-    },
-    {
+    }),
+    editorShaped('mavlink-param', {
       id: 'node-param',
       z: 'flow',
-      type: 'mavlink-param',
       delivery: 'build',
       dialect: '__vehicle',
       action: 'set',
@@ -115,11 +130,10 @@ function representativeFlow() {
       targetSystem: '1',
       targetComponent: '1',
       wires: [[], []]
-    },
-    {
+    }),
+    editorShaped('mavlink-payload', {
       id: 'node-payload',
       z: 'flow',
-      type: 'mavlink-payload',
       delivery: 'build',
       dialect: '__vehicle',
       topic: 'camera',
@@ -130,21 +144,19 @@ function representativeFlow() {
       targetSystem: '1',
       targetComponent: '1',
       wires: [[], []]
-    },
-    {
+    }),
+    editorShaped('mavlink-state', {
       id: 'node-state',
       z: 'flow',
-      type: 'mavlink-state',
       mode: 'snapshot',
       connection: 'connection',
       targetSystem: '1',
       targetComponent: '1',
       wires: [[]]
-    },
-    {
+    }),
+    editorShaped('mavlink-mission', {
       id: 'node-mission',
       z: 'flow',
-      type: 'mavlink-mission',
       operation: 'download',
       delivery: 'build',
       dialect: '__vehicle',
@@ -153,17 +165,16 @@ function representativeFlow() {
       targetSystem: '1',
       targetComponent: '1',
       wires: [[], []]
-    },
-    {
+    }),
+    editorShaped('mavlink-fanout', {
       id: 'node-fanout',
       z: 'flow',
-      type: 'mavlink-fanout',
       delivery: 'build',
       selectionMode: 'list',
       members: [{ sysid: 1 }, { sysid: 2 }],
       identity: 'identity',
       wires: [[], []]
-    }
+    })
   ];
 }
 

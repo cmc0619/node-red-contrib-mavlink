@@ -87,7 +87,7 @@ test('an explicit swarm port overrides the bind port', async () => {
 test('a group that cannot be joined fails the deploy loudly', async () => {
   const { module, sockets } = mockDgram();
   const transport = new UdpTransport(
-    { bindPort: 14550, broadcastAddress: '239.255.145.50' },
+    { bindAddress: '0.0.0.0', bindPort: 14550, broadcastAddress: '239.255.145.50' },
     { dgram: module }
   );
   // Node throws ENODEV here when the interface has no route to the group.

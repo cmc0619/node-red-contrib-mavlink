@@ -1398,6 +1398,28 @@
   };
 
   /**
+   * Open-ended lower-bound check — the duration / retry-count shape. Blank
+   * passes (absence is the field's own business: the runtime side falls to
+   * its documented default); a present value must be a number at least `min`,
+   * a whole number when `opts.integer` is set. Fields where blank must fail
+   * keep their own one-line guard in front — this ring never owns presence.
+   *
+   * @param {number} min
+   * @param {{integer?: boolean}} [opts]
+   * @returns {function(*, object=): true|string}
+   */
+  RED.mavlink.validateAtLeast = function (min, opts) {
+    const integer = Boolean(opts?.integer);
+    return function (v, _opt) {
+      if (RED.mavlink.isBlank(v)) return true;
+      const n = Number(v);
+      const numeric = integer ? Number.isInteger(n) : Number.isFinite(n);
+      if (numeric && n >= min) return true;
+      return `must be ${integer ? 'a whole number' : 'a number'} >= ${min}`;
+    };
+  };
+
+  /**
    * Target-sysid validator for a node with acknowledged delivery tiers.
    *
    * Broadcast (0) is a designed §7 capability and stays legal on Build and

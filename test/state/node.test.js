@@ -15,7 +15,12 @@ test('mavlink-state node emits peer table snapshots on demand', () => {
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-state')(RED);
   const Node = RED.nodes.types['mavlink-state'];
-  const node = new Node({ connection: 'conn', mode: 'snapshot', targetSystem: 4 });
+  const node = new Node({
+    connection: 'conn',
+    mode: 'snapshot',
+    events: 'stale,expired,statustext',
+    targetSystem: 4,
+  });
   let sent;
 
   node.emit(

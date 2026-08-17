@@ -21,6 +21,19 @@ test('Build band select uses shared BAND_OPTIONS / fillBandSelect', () => {
   assert.doesNotMatch(html, /BAND_OPTIONS\s*=/, 'no local BAND_OPTIONS copy');
 });
 
+test('band is ringed to the shared BAND_OPTIONS vocabulary on Build and Out', () => {
+  // One list paints the select and feeds the validator, so the ring cannot
+  // drift from what the dialog offers (walled garden).
+  for (const nodeName of ['mavlink-build', 'mavlink-out']) {
+    const { band } = loadNodeDefaults(nodeName);
+    for (const member of ['0', '1', '2', '3', '4']) {
+      assert.equal(band.validate.call({}, member, {}), true, `${nodeName}: band ${member}`);
+    }
+    assert.match(String(band.validate.call({}, '', {})), /must be one of/, `${nodeName}: blank reds`);
+    assert.match(String(band.validate.call({}, '5', {})), /must be one of/, `${nodeName}: out of range reds`);
+  }
+});
+
 test('Build dialect + vehicle defaults come from the shared Build-tier helper', () => {
   // dialect/vehicle default descriptors + validators are the shared §6 rule,
   // merged in via buildTierDialectDefaults; the Build node keys it off `tier`.

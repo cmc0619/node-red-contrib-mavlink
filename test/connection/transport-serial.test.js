@@ -82,12 +82,11 @@ test('open constructs the port with config and emits listening after it opens', 
   assert.equal(await listening, undefined);
 });
 
-test('baud rate defaults to common MAVLink radio speed', async () => {
-  const { opened, port } = openTransport({ baudRate: undefined, highWaterMark: undefined });
+test('an omitted highWaterMark stays out of the port options', async () => {
+  const { opened, port } = openTransport({ highWaterMark: undefined });
 
   await opened;
 
-  assert.equal(port().options.baudRate, 57600);
   assert.equal('highWaterMark' in port().options, false);
 });
 

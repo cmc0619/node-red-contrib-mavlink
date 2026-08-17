@@ -54,13 +54,51 @@
         name:        { value: '' },
         connection:  { value: '', type: 'mavlink-connection', required: true },
         // A list, not a single name (#211). An empty list matches every
-        // message, which is what a blank single filter used to mean.
-        messages:    { value: [] },
+        // message, which is what a blank single filter used to mean. The
+        // runtime subscribes straight off this array, so the ring guarantees
+        // the shape oneditsave produces: an array of non-blank names.
+        messages:    {
+          value: [],
+          validate: function (v, _opt) {
+            if (!Array.isArray(v)) return 'must be a list of message names';
+            // Strings only: the runtime filter compares each entry strictly
+            // against the decoded name, so a hand-edited number or object
+            // matches nothing and the node listens while discarding every
+            // frame (Codex) — the ring must not vouch for that.
+            return v.every(function (name) {
+              return typeof name === 'string' && !RED.mavlink.isBlank(name);
+            }) || 'every entry must be a non-blank message name string';
+          },
+        },
         sysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
         compid:      { value: '', validate: RED.mavlink.validateUint8(0) },
         changedOnly: { value: false },
-        changedFields: { value: '' },
-        fieldName:   { value: '' },
+        // Comma-separated decoded field names. A token that is not a field
+        // name — a stray comma, a space mid-name — can never match a decoded
+        // field, and under changed-only that suppresses the stream after one
+        // delivery; red it at deploy instead. Gated on Changed only: the
+        // field is hidden and inert without it, and a stale value must not
+        // red a control the operator cannot see.
+        changedFields: {
+          value: '',
+          validate: function (v, _opt) {
+            var $own = RED.mavlink.ownDialogField(this, '#node-input-changedOnly');
+            var changedOnly = $own ? $own.is(':checked') : this.changedOnly === true;
+            if (changedOnly !== true) return true;
+            if (RED.mavlink.isBlank(v)) return true;
+            return String(v).split(',').every(function (token) {
+              return /^[A-Za-z_][A-Za-z0-9_]*$/.test(token.trim());
+            }) || 'must be comma-separated field names';
+          },
+        },
+        fieldName:   {
+          value: '',
+          validate: function (v, _opt) {
+            if (RED.mavlink.isBlank(v)) return true;
+            return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(v).trim())
+              || 'must be a single field name';
+          },
+        },
         fieldValue:  { value: '' },
         rateLimit:   {
           value: 0,

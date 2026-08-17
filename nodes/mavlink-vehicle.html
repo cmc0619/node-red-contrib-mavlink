@@ -8,7 +8,19 @@
         firmware:              { value: 'ardupilot', required: true },
         dialect:               { value: 'ardupilotmega', required: true },
         dialectRevision:       { value: 'seed', required: true },
-        additionalDialects:    { value: '' },
+        // Comma-joined `dialect@revision` picks from the Components
+        // multi-select; each token needs both halves to resolve a bundle.
+        additionalDialects:    { value: '',
+          validate: function (v, _opt) {
+            if (RED.mavlink.isBlank(v)) return true;
+            // Exactly one @ per token: dialectPicks slices on the separator,
+            // so a second one would silently mis-split the pick.
+            return String(v).split(',').every(function (token) {
+              var parts = token.trim().split('@');
+              return parts.length === 2 && parts[0].trim() !== '' && parts[1].trim() !== '';
+            }) || 'must be comma-separated dialect@revision picks';
+          }
+        },
         paramDefsUrl:          { value: '' },
         defaultTargetSystem:   { value: 1, validate: RED.mavlink.validateUint8(0) },
         defaultTargetComponent:{ value: 1, validate: RED.mavlink.validateUint8(0) }

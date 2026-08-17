@@ -66,11 +66,43 @@ function drive(node, msg) {
 
 test('snapshot mode still answers input with the peer-table view', async () => {
   const node = makeNode(
-    { connection: 'conn', mode: 'snapshot', targetSystem: '', targetComponent: '' },
+    {
+      connection: 'conn',
+      mode: 'snapshot',
+      events: 'stale,expired,statustext',
+      targetSystem: '',
+      targetComponent: '',
+    },
     { conn: conn() }
   );
   const { out, err } = await drive(node, { payload: {} });
   assert.equal(err, undefined);
   assert.equal(out[0][0].payload.length, 1);
   assert.equal(out[0][1].result, 'succeeded');
+});
+
+test('feed mode subscribes to the comma-joined events the editor saved', () => {
+  const connection = conn();
+  const emitted = [];
+  const node = makeNode(
+    {
+      connection: 'conn',
+      mode: 'feed',
+      events: 'stale,expired',
+      targetSystem: '',
+      targetComponent: '',
+    },
+    { conn: connection }
+  );
+  node.send = (msgs) => emitted.push(msgs[0].payload);
+
+  connection.peerTable.emit('stale', { sysid: 1, compid: 1 });
+  connection.peerTable.emit('statustext', { sysid: 1, compid: 1, text: 'EKF OK' });
+  connection.peerTable.emit('expired', { sysid: 1, compid: 1 });
+
+  assert.deepEqual(
+    emitted.map((r) => r.event),
+    ['stale', 'expired'],
+    'only the selected events reach the flow'
+  );
 });

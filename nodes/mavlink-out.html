@@ -6,7 +6,12 @@
       defaults: {
         name:       { value: '' },
         connection: { value: '', type: 'mavlink-connection', required: true },
-        band:       { value: '2' },
+        // The vocabulary is the shared BAND_OPTIONS list that paints the
+        // select, so the ring cannot drift from what the dialog offers.
+        band: {
+          value: '2',
+          validate: RED.mavlink.oneOf(RED.mavlink.BAND_OPTIONS.map(function (o) { return o.value; })),
+        },
       },
       inputs: 1,
       outputs: 2,

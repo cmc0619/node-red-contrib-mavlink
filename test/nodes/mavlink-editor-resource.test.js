@@ -1022,6 +1022,29 @@ test('validateRange accepts blank and any finite value in bounds, refuses outsid
   assert.match(String(heading('abc')), /between 0 and 360/, 'non-numeric');
 });
 
+test('validateAtLeast: blank passes, a present value must clear the floor', () => {
+  const { RED } = loadResource();
+  // The duration shape: milliseconds, decimals allowed, 0 legal.
+  const ms = RED.mavlink.validateAtLeast(0);
+  assert.equal(ms(''), true, 'blank falls to the runtime default, as elsewhere');
+  assert.equal(ms(0), true, 'the floor');
+  assert.equal(ms(2500.5), true, 'fractional milliseconds ride');
+  assert.match(String(ms(-1)), />= 0/, 'a negative duration reds');
+  assert.match(String(ms('abc')), />= 0/, 'non-numeric reds');
+
+  // The retry-count shape: whole numbers only.
+  const retries = RED.mavlink.validateAtLeast(0, { integer: true });
+  assert.equal(retries(''), true);
+  assert.equal(retries(3), true);
+  assert.match(String(retries(1.5)), /whole number/, 'a fractional count reds');
+  assert.match(String(retries(-1)), />= 0/, 'a negative count reds');
+
+  // A non-zero floor (stream rate style).
+  const rate = RED.mavlink.validateAtLeast(0.1);
+  assert.equal(rate(0.1), true);
+  assert.match(String(rate(0)), />= 0.1/, 'below the floor reds');
+});
+
 // ── PARAM_TYPE_OPTIONS ───────────────────────────────────────────────────────
 
 test('PARAM_TYPE_OPTIONS mirrors the codec table it copies', () => {

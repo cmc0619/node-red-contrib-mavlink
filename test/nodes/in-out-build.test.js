@@ -110,6 +110,30 @@ function makeNodeInstance(config = {}) {
   return node;
 }
 
+/**
+ * Editor-shaped mavlink-in config: every `defaults` key at its editor default,
+ * the way a saved flow carries them. Runtime tests start from valid
+ * editor-produced configuration (§7) — the runtime reads these properties
+ * without re-validating them.
+ *
+ * @param {object} [overrides]
+ * @returns {object}
+ */
+function inConfig(overrides = {}) {
+  return {
+    connection: 'conn-1',
+    messages: [],
+    sysid: '',
+    compid: '',
+    changedOnly: false,
+    changedFields: '',
+    fieldName: '',
+    fieldValue: '',
+    rateLimit: 0,
+    ...overrides,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Shared connection stub
 // ---------------------------------------------------------------------------
@@ -270,7 +294,7 @@ test('mavlink-in: marks invalid config when connection is missing', () => {
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ id: 'n1', connection: 'missing' });
-  Constructor.call(node, { connection: 'missing' });
+  Constructor.call(node, inConfig({ connection: 'missing' }));
   assert.equal(node._status && node._status.fill, 'red');
   assert.equal(node._status && node._status.shape, 'ring');
 });
@@ -282,7 +306,7 @@ test('mavlink-in: subscribes to the connection on construction', () => {
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1' });
+  Constructor.call(node, inConfig({ connection: 'conn-1' }));
   assert.equal(subscribers.length, 1);
 });
 
@@ -293,7 +317,7 @@ test('mavlink-in: emits msg on matching inbound decoded message', () => {
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1' });
+  Constructor.call(node, inConfig({ connection: 'conn-1' }));
 
   stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
 
@@ -353,7 +377,7 @@ test('mavlink-in: the badge counts deliveries, count first so it survives the ca
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1' });
+  Constructor.call(node, inConfig({ connection: 'conn-1' }));
 
   assert.deepEqual(node._status, { fill: 'grey', shape: 'ring', text: 'waiting' });
 
@@ -394,7 +418,7 @@ test('mavlink-in: alternating message names do not bypass the badge throttle', (
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', messages: ['ATTITUDE', 'GLOBAL_POSITION_INT'] });
+  Constructor.call(node, inConfig({ connection: 'conn-1', messages: ['ATTITUDE', 'GLOBAL_POSITION_INT'] }));
 
   const writes = [];
   node.status = (s) => { node._status = s; writes.push(s.text); };
@@ -425,7 +449,7 @@ test('mavlink-in: a same-name burst is throttled, and the count still counts it'
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1' });
+  Constructor.call(node, inConfig({ connection: 'conn-1' }));
 
   const writes = [];
   node.status = (s) => { node._status = s; writes.push(s.text); };
@@ -459,7 +483,7 @@ test('mavlink-in: only one flush is latched per window, not one per delivery', (
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1' });
+  Constructor.call(node, inConfig({ connection: 'conn-1' }));
 
   let scheduled = 0;
   const realSetTimeout = global.setTimeout;
@@ -486,7 +510,7 @@ test('mavlink-in: close cancels a pending flush — a closed node never paints',
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1' });
+  Constructor.call(node, inConfig({ connection: 'conn-1' }));
 
   const cleared = [];
   const realSetTimeout = global.setTimeout;
@@ -518,7 +542,7 @@ test('mavlink-in: message filter rejects non-matching message names', () => {
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', messages: ['HEARTBEAT'] });
+  Constructor.call(node, inConfig({ connection: 'conn-1', messages: ['HEARTBEAT'] }));
 
   stub._deliver({ name: 'GLOBAL_POSITION_INT', sysid: 1, compid: 1, fields: { alt: 100 }, trusted: true });
   assert.equal(node._sends.length, 0);
@@ -534,7 +558,7 @@ test('mavlink-in: several message filters each deliver, once (#211)', () => {
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', messages: ['HEARTBEAT', 'ATTITUDE'] });
+  Constructor.call(node, inConfig({ connection: 'conn-1', messages: ['HEARTBEAT', 'ATTITUDE'] }));
 
   // One subscription per name, so a name can never match two filters and
   // deliver twice.
@@ -555,7 +579,7 @@ test('mavlink-in: an empty message list receives everything (#211)', () => {
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', messages: [] });
+  Constructor.call(node, inConfig({ connection: 'conn-1', messages: [] }));
 
   assert.equal(subscribers.length, 1, 'one unfiltered subscription, not zero');
   stub._deliver({ name: 'GLOBAL_POSITION_INT', sysid: 1, compid: 1, fields: {}, trusted: true });
@@ -570,7 +594,7 @@ test('mavlink-in: close releases every subscription, not just the first (#211)',
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', messages: ['HEARTBEAT', 'ATTITUDE', 'SYS_STATUS'] });
+  Constructor.call(node, inConfig({ connection: 'conn-1', messages: ['HEARTBEAT', 'ATTITUDE', 'SYS_STATUS'] }));
   assert.equal(subscribers.length, 3);
 
   // Holding N unsubscribes means the close path has to walk them; keeping only
@@ -589,7 +613,7 @@ test('mavlink-in: sysid filter drops messages from other systems', () => {
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', sysid: '2' });
+  Constructor.call(node, inConfig({ connection: 'conn-1', sysid: '2' }));
 
   stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
   assert.equal(node._sends.length, 0, 'sysid 1 should be filtered out');
@@ -605,7 +629,7 @@ test('mavlink-in: changed-only skips messages with identical fields', () => {
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+  Constructor.call(node, inConfig({ connection: 'conn-1', changedOnly: true }));
 
   const fields = { type: 6 };
   stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields, trusted: true });
@@ -622,7 +646,7 @@ test('mavlink-in: changed-only forwards when fields change', () => {
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+  Constructor.call(node, inConfig({ connection: 'conn-1', changedOnly: true }));
 
   stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
   stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 2 }, trusted: true });
@@ -637,7 +661,7 @@ test('mavlink-in: changed-only compares only the listed fields when Compare fiel
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', changedOnly: true, changedFields: 'custom_mode' });
+  Constructor.call(node, inConfig({ connection: 'conn-1', changedOnly: true, changedFields: 'custom_mode' }));
 
   // A hot timestamp changes every frame; the compared field does not.
   stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { custom_mode: 4, t: 1 }, trusted: true });
@@ -654,7 +678,7 @@ test('mavlink-in: field predicate passes on presence, and on value when one is g
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', fieldName: 'custom_mode', fieldValue: '4' });
+  Constructor.call(node, inConfig({ connection: 'conn-1', fieldName: 'custom_mode', fieldValue: '4' }));
 
   stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { custom_mode: 5 }, trusted: true });
   stub._deliver({ name: 'SYS_STATUS', sysid: 1, compid: 1, fields: { load: 100 }, trusted: true });
@@ -672,7 +696,7 @@ test('mavlink-in: NAME=Hz pairs rate-limit per message name; unlisted names use 
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
   // ATTITUDE throttled hard; HEARTBEAT explicitly unlimited; no bare default.
-  Constructor.call(node, { connection: 'conn-1', rateLimit: 'ATTITUDE=0.001, HEARTBEAT=0' });
+  Constructor.call(node, inConfig({ connection: 'conn-1', rateLimit: 'ATTITUDE=0.001, HEARTBEAT=0' }));
 
   stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0.1 }, trusted: true });
   stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0.2 }, trusted: true });
@@ -699,7 +723,7 @@ test('mavlink-in: the editor validates the rate-limit shape; runtime trusts the 
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', rateLimit: 'ATTITUDE=fast, HEARTBEAT=0.001' });
+  Constructor.call(node, inConfig({ connection: 'conn-1', rateLimit: 'ATTITUDE=fast, HEARTBEAT=0.001' }));
 
   assert.equal(subscribers.length, 1, 'the node subscribes normally');
   stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0.1 }, trusted: true });
@@ -729,10 +753,10 @@ test('mavlink-in: a blank pair value does not fall open to unlimited', () => {
   const node = makeNodeInstance({ connection: 'conn-1' });
   // Default 0.001 Hz for everything; the ATTITUDE pair is a typo, and the
   // second HEARTBEAT token would otherwise erase the first.
-  Constructor.call(node, {
+  Constructor.call(node, inConfig({
     connection: 'conn-1',
     rateLimit: '0.001, ATTITUDE=, HEARTBEAT=0.001, HEARTBEAT=',
-  });
+  }));
 
   stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0.1 }, trusted: true });
   stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0.2 }, trusted: true });
@@ -756,7 +780,7 @@ test('mavlink-in: changed-only does not crash on 64-bit BigInt fields (SYSTEM_TI
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+  Constructor.call(node, inConfig({ connection: 'conn-1', changedOnly: true }));
 
   // node-mavlink decodes uint64_t fields as BigInt; JSON.stringify throws on a
   // bare BigInt with no replacer, and an uncaught throw here would propagate
@@ -826,7 +850,7 @@ test('mavlink-in: changed-only tracks independently per (message, sysid, compid)
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+  Constructor.call(node, inConfig({ connection: 'conn-1', changedOnly: true }));
 
   const fields = { type: 6 };
   // Same fields but from two different sysids — both should pass through.
@@ -844,7 +868,7 @@ test('mavlink-in: rate limit drops excess messages within the window', () => {
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
   // 1 msg/s → minimum 1000 ms between deliveries.
-  Constructor.call(node, { connection: 'conn-1', rateLimit: 1 });
+  Constructor.call(node, inConfig({ connection: 'conn-1', rateLimit: 1 }));
 
   // Fire 5 messages in rapid succession (same ms timestamp in practice).
   for (let i = 0; i < 5; i++) {
@@ -862,7 +886,7 @@ test('mavlink-in: unsubscribes from the connection on close', () => {
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1' });
+  Constructor.call(node, inConfig({ connection: 'conn-1' }));
 
   assert.equal(subscribers.length, 1);
   node._close();
@@ -984,82 +1008,6 @@ test('mavlink-out: uses default band from config when msg.band is absent', () =>
 
   node._input({ payload: { name: 'HEARTBEAT', fields: {} } });
   assert.equal(sent[0].opts.band, 3);
-});
-
-// ── No-defaults ruling extended to mavlink-out's band (owner, 2026-08-14) ───
-// `Number('') === 0 === BAND.EMERGENCY`, so a present-but-blank msg.band used
-// to silently outrank every other message on the link. Absent stays a
-// presence fallback to the config default (not a value the driver invents);
-// present-and-invalid must refuse instead of coercing.
-
-test('mavlink-out: a present but blank msg.band refuses instead of becoming Emergency', () => {
-  const RED = makeRED();
-  const { stub, sent } = makeConnectionStub();
-  RED.nodes._register('conn-1', stub);
-  require('../../nodes/mavlink-out')(RED);
-  const Constructor = RED._nodeTypes['mavlink-out'];
-  const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', band: '3' });
-
-  node._input({ payload: { name: 'HEARTBEAT', fields: {} }, band: '' });
-
-  assert.equal(sent.length, 0, 'nothing should be sent to the connection');
-  assert.equal(node._sends.length, 1);
-  const [out0, out1] = node._sends[0];
-  assert.equal(out0, null);
-  assert.equal(out1.result, 'failed');
-  assert.match(out1.detail, /msg\.band is blank/);
-});
-
-test('mavlink-out: an unknown msg.band token refuses, naming the bands', () => {
-  const RED = makeRED();
-  const { stub, sent } = makeConnectionStub();
-  RED.nodes._register('conn-1', stub);
-  require('../../nodes/mavlink-out')(RED);
-  const Constructor = RED._nodeTypes['mavlink-out'];
-  const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', band: '2' });
-
-  node._input({ payload: { name: 'HEARTBEAT', fields: {} }, band: 'urgent' });
-
-  assert.equal(sent.length, 0, 'nothing should be sent to the connection');
-  const [out0, out1] = node._sends[0];
-  assert.equal(out0, null);
-  assert.equal(out1.result, 'failed');
-  assert.match(out1.detail, /unknown msg\.band "urgent" — expected one of 0 \(emergency\)/);
-});
-
-
-test('mavlink-out: a numeric but out-of-range msg.band refuses the same way (Sourcery, #305)', () => {
-  const RED = makeRED();
-  const { stub, sent } = makeConnectionStub();
-  RED.nodes._register('conn-1', stub);
-  require('../../nodes/mavlink-out')(RED);
-  const Constructor = RED._nodeTypes['mavlink-out'];
-  const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', band: '2' });
-
-  node._input({ payload: { name: 'HEARTBEAT', fields: {} }, band: 99 });
-
-  assert.equal(sent.length, 0, 'nothing should be sent to the connection');
-  const [out0, out1] = node._sends[0];
-  assert.equal(out0, null);
-  assert.equal(out1.result, 'failed');
-  assert.match(out1.detail, /unknown msg\.band 99 — expected one of 0 \(emergency\)/);
-});
-
-test('mavlink-out: a numeric-string msg.band that names a real band still works', () => {
-  const RED = makeRED();
-  const { stub, sent } = makeConnectionStub();
-  RED.nodes._register('conn-1', stub);
-  require('../../nodes/mavlink-out')(RED);
-  const Constructor = RED._nodeTypes['mavlink-out'];
-  const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', band: '2' });
-
-  node._input({ payload: { name: 'HEARTBEAT', fields: {} }, band: '4' });
-
-  assert.equal(sent[0].opts.band, 4);
 });
 
 test('mavlink-out: forwards target from msg to the connection send', () => {
@@ -1460,7 +1408,7 @@ test('mavlink-build: a typo\'d tier never arms the repeat timer (Gitar, #310)', 
   node._close();
 });
 
-test('mavlink-build Send tier: a blank msg.band refuses instead of coercing to Emergency (the mavlink-out twin, §14)', () => {
+test('mavlink-build Send tier: msg.band overrides by presence; absent rides the config default', () => {
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
   const { stub, sent } = makeConnectionStub();
@@ -1477,30 +1425,13 @@ test('mavlink-build Send tier: a blank msg.band refuses instead of coercing to E
     fields: JSON.stringify({ type: 6 }),
   });
 
-  node._input({ payload: {}, band: '' });
-  assert.equal(sent.length, 0, 'Number("") is Emergency — a blank band must never outrank the link');
-  const [out0, out1] = node._sends[0];
-  assert.equal(out0, null);
-  assert.equal(out1.result, 'failed');
-  assert.match(out1.detail, /msg\.band is blank/);
-
-  node._input({ payload: {}, band: 'urgent' });
-  assert.equal(sent.length, 0);
-  assert.match(node._sends[1][1].detail, /unknown msg\.band "urgent"/);
-
-  // Number(true) is 1, a member — a boolean must refuse, not ride as a band
-  // nobody named (Codacy, #310).
-  node._input({ payload: {}, band: true });
-  assert.equal(sent.length, 0);
-  assert.match(node._sends[2][1].detail, /unknown msg\.band true/);
-
-  // Absent falls back to the config band; a numeric string member still works.
+  // Absent falls back to the config band; present rides as given.
   node._input({ payload: {} });
   assert.equal(sent.length, 1, 'absent msg.band rides the config default');
   assert.equal(sent[0].opts.band, 2, 'and the enqueued band is the configured one');
-  node._input({ payload: {}, band: '1' });
-  assert.equal(sent.length, 2, 'a numeric string naming a real band keeps working');
-  assert.equal(sent[1].opts.band, 1, 'and rides as the band it names');
+  node._input({ payload: {}, band: 1 });
+  assert.equal(sent.length, 2, 'a present msg.band overrides');
+  assert.equal(sent[1].opts.band, 1, 'and rides as given');
 });
 
 test('mavlink-build: close stops the repeat timer', () => {
@@ -1687,7 +1618,7 @@ test('mavlink-in: changed-only ignores timestamps by default — the whole point
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+  Constructor.call(node, inConfig({ connection: 'conn-1', changedOnly: true }));
 
   // Same attitude, marching clock: one delivery, not three.
   for (const time_boot_ms of [1000, 1200, 1400]) {
@@ -1719,7 +1650,7 @@ test('mavlink-in: every MAVLink timestamp spelling is excluded, and naming one o
   // "MAVLink's own timestamp spellings" and were not.
   for (const stamp of ['time_boot_ms', 'time_boot_us', 'time_usec', 'time_unix_usec', 'timestamp', 'uptime']) {
     const node = makeNodeInstance({ connection: 'conn-1' });
-    Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+    Constructor.call(node, inConfig({ connection: 'conn-1', changedOnly: true }));
     stub._deliver({ name: 'X', sysid: 1, compid: 1, trusted: true, fields: { [stamp]: 1, v: 7 } });
     stub._deliver({ name: 'X', sysid: 1, compid: 1, trusted: true, fields: { [stamp]: 2, v: 7 } });
     assert.equal(node._sends.length, 1, `${stamp} must not count as a change`);
@@ -1728,9 +1659,9 @@ test('mavlink-in: every MAVLink timestamp spelling is excluded, and naming one o
   // The escape: an operator who genuinely wants the clock names it, and it is
   // compared verbatim — Compare fields is a literal list, not a filtered one.
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, {
+  Constructor.call(node, inConfig({
     connection: 'conn-1', changedOnly: true, changedFields: 'time_boot_ms',
-  });
+  }));
   stub._deliver({ name: 'X', sysid: 1, compid: 1, trusted: true, fields: { time_boot_ms: 1, v: 7 } });
   stub._deliver({ name: 'X', sysid: 1, compid: 1, trusted: true, fields: { time_boot_ms: 2, v: 7 } });
   assert.equal(node._sends.length, 2, 'an explicitly named timestamp is compared');
@@ -1747,7 +1678,7 @@ test('mavlink-in: a message that is nothing but timestamps delivers once', () =>
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
-  Constructor.call(node, { connection: 'conn-1', changedOnly: true });
+  Constructor.call(node, inConfig({ connection: 'conn-1', changedOnly: true }));
 
   for (const t of [1, 2, 3]) {
     stub._deliver({

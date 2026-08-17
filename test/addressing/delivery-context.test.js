@@ -26,7 +26,7 @@ test('resolveDeliveryContext Build+__vehicle uses the Vehicle Profile', () => {
   });
   const ctx = resolveDeliveryContext(RED, {
     delivery: 'build',
-    config: { dialect: '__vehicle', vehicle: 'veh', targetSystem: '', targetComponent: '' },
+    config: { dialect: '__vehicle', vehicle: 'veh', identity: '', targetSystem: '', targetComponent: '' },
     payload: {},
   });
   assert.equal(ctx.useVehicle, true);
@@ -38,7 +38,7 @@ test('resolveDeliveryContext Param buildFirmwareProfile supplies firmware', () =
   const RED = redStub();
   const ctx = resolveDeliveryContext(RED, {
     delivery: 'build',
-    config: { dialect: 'common', firmware: 'px4', targetSystem: '1', targetComponent: '1' },
+    config: { dialect: 'common', firmware: 'px4', identity: '', targetSystem: '1', targetComponent: '1' },
     payload: {},
     buildFirmwareProfile: true,
   });
@@ -54,6 +54,7 @@ test('resolveDeliveryContext wire tiers use only the deploy-bound Connection', (
     delivery: 'send',
     config: {
       connection: 'conn',
+      identity: '',
       targetSystem: '',
       targetComponent: '',
     },
@@ -71,7 +72,7 @@ test('resolveDeliveryContext does not re-resolve a missing deploy-time Connectio
   });
   const ctx = resolveDeliveryContext(RED, {
     delivery: 'send',
-    config: { connection: 'conn', targetSystem: '1', targetComponent: '1' },
+    config: { connection: 'conn', identity: '', targetSystem: '1', targetComponent: '1' },
     payload: {},
   });
   assert.equal(ctx.connectionNode, null);

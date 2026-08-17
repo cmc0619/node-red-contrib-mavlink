@@ -269,7 +269,7 @@ module.exports = function registerMavlinkVehicle(RED) {
     node.dialect = config.dialect.toLowerCase();
     node.dialectRevision = config.dialectRevision;
     // Component dialects, comma-joined `dialect@revision` from the editor.
-    node.additionalDialects = config.additionalDialects || '';
+    node.additionalDialects = config.additionalDialects;
     // Optional firmware/custom parameter-definition URL (PX4 / custom stacks).
     node.paramDefsUrl = typeof config.paramDefsUrl === 'string' ? config.paramDefsUrl.trim() : '';
 

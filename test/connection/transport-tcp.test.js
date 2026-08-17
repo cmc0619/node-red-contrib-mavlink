@@ -133,7 +133,7 @@ function mockNet() {
 
 test('server listens, receives from a client, and writes back to the matching endpoint', async () => {
   const net = mockNet();
-  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
   const heard = [];
   transport.on('message', (message) => heard.push(message));
 
@@ -261,7 +261,7 @@ test('client disconnect emits error so the runtime can leave CONNECTED', async (
 
 test('server peer disconnect emits endpoint-gone for stream-decoder cleanup', async () => {
   const net = mockNet();
-  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
   await transport.open();
 
   const a = new MockSocket({ address: '10.0.0.1', port: 1 });
@@ -293,7 +293,7 @@ test('client disconnect emits endpoint-gone for stream-decoder cleanup', async (
 
 test('stale server close does not emit endpoint-gone after same address:port reconnect', async () => {
   const net = mockNet();
-  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
   await transport.open();
 
   const a = new MockSocket({ address: '10.0.0.1', port: 1 });
@@ -327,7 +327,7 @@ test('stale server close does not emit endpoint-gone after same address:port rec
 
 test('superseded server socket data does not emit message after reconnect', async () => {
   const net = mockNet();
-  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
   await transport.open();
 
   const a = new MockSocket({ address: '10.0.0.1', port: 1 });
@@ -348,7 +348,7 @@ test('superseded server socket data does not emit message after reconnect', asyn
 
 test('server peer error does not emit transport error for remaining clients', async () => {
   const net = mockNet();
-  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
   await transport.open();
 
   const a = new MockSocket({ address: '10.0.0.1', port: 1 });
@@ -375,7 +375,7 @@ test('server peer error does not emit transport error for remaining clients', as
 
 test('targeted send to a removed server peer fails loud with TCP_PEER_GONE', async () => {
   const net = mockNet();
-  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
   await transport.open();
 
   const a = new MockSocket({ address: '10.0.0.1', port: 1 });
@@ -392,7 +392,7 @@ test('targeted send to a removed server peer fails loud with TCP_PEER_GONE', asy
 
 test('server peer error removes the socket before pending write callbacks resume', async () => {
   const net = mockNet();
-  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
   await transport.open();
 
   const a = new MockSocket({ address: '10.0.0.1', port: 1 });
@@ -426,7 +426,7 @@ test('server peer error removes the socket before pending write callbacks resume
 
 test('server peer close fails pending writes loud with TCP_PEER_GONE', async () => {
   const net = mockNet();
-  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
   await transport.open();
 
   const peer = new MockSocket({ address: '10.0.0.9', port: 9 });
@@ -478,7 +478,7 @@ test('client disconnect emits error before pending write callbacks resume', asyn
 
 test('no destination returns the quiet TCP_NO_DESTINATION code', async () => {
   const net = mockNet();
-  const serverTransport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  const serverTransport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
   await serverTransport.open();
 
   await new Promise((resolve) => {
@@ -499,7 +499,7 @@ test('no destination returns the quiet TCP_NO_DESTINATION code', async () => {
 
 test('close ends tracked sockets, closes the listener, and removes clients on socket close', async () => {
   const net = mockNet();
-  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
   await transport.open();
 
   const client = new MockSocket({ address: '10.0.0.44', port: 49001 });
@@ -571,7 +571,7 @@ test('close() during a client connect settles the pending open()', async () => {
 
 test('close() during a server bind settles the pending open()', async () => {
   const net = mockNet();
-  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
 
   const opening = transport.open(); // MockServer emits 'listening' on a queued timeout
   transport.close(() => {});
@@ -587,7 +587,7 @@ test('a TCP server reaches every connected vehicle without a broadcast mechanism
   // that a server routes N distinct endpoints to N distinct sockets — the
   // property the fan-out relies on.
   const net = mockNet();
-  const transport = new TcpTransport({ bindPort: 5760 }, { net: net.module });
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
 
   return transport.open().then(() => {
     assert.equal(
