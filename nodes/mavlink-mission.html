@@ -77,8 +77,8 @@
           return true;
         },
       },
-      timeout: { value: '', validate: RED.validators.number(true) },
-      maxRetries: { value: '', validate: RED.validators.number(true) }
+      timeout: { value: '', validate: RED.mavlink.validateAtLeast(0) },
+      maxRetries: { value: '', validate: RED.mavlink.validateAtLeast(0, { integer: true }) }
     },
     RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
   );

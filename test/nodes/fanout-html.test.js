@@ -177,14 +177,14 @@ test('intervalMs and maxRetries: blank stays absent, present values carry range 
   assert.equal(interval.call({}, '', {}), true, 'blank interval means the lib default');
   assert.equal(interval.call({}, 0, {}), true, '0 is a legitimate no-pause interval');
   assert.equal(interval.call({}, 250, {}), true);
-  assert.match(String(interval.call({}, -100, {})), /milliseconds/, 'negative pacing reds');
-  assert.match(String(interval.call({}, 'abc', {})), /milliseconds/);
+  assert.match(String(interval.call({}, -100, {})), />= 0/, 'negative pacing reds');
+  assert.match(String(interval.call({}, 'abc', {})), />= 0/);
 
   assert.equal(retries.call({}, '', {}), true, 'blank retries means the lib default');
   assert.equal(retries.call({}, 0, {}), true);
   assert.equal(retries.call({}, 3, {}), true);
-  assert.match(String(retries.call({}, -1, {})), /retries/);
-  assert.match(String(retries.call({}, 1.5, {})), /retries/, 'a fractional retry count reds');
+  assert.match(String(retries.call({}, -1, {})), />= 0/);
+  assert.match(String(retries.call({}, 1.5, {})), /whole number/, 'a fractional retry count reds');
 });
 
 test('concurrency is a bounded integer with a strictly-sequential default of 1', () => {

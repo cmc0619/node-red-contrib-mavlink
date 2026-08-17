@@ -33,8 +33,8 @@
         // which §0 rule 3 forbids. This red ring stops the flow reaching it.
         sendAs: { value: 'int', validate: RED.mavlink.oneOf(['int', 'long']) },
         frame: { value: '' },
-        timeout: { value: 10000, validate: RED.validators.number(true) },
-        maxRetries: { value: 3, validate: RED.validators.number(true) },
+        timeout: { value: 10000, validate: RED.mavlink.validateAtLeast(0) },
+        maxRetries: { value: 3, validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
         topic: { value: 'camera' },
         verb: { value: 'photo' },
         path: { value: 'legacy' },

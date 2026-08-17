@@ -1,17 +1,20 @@
 <script type="text/javascript">
   // Validate a field only while its anchor mode is selected — other modes hide
   // the field, and a hidden field's stale value must not block the dialog.
+  // The mode read goes through liveOr so it is scoped to the node that owns
+  // the open dialog (#217): a raw selector read would apply one node's live
+  // mode to every sibling being validated behind it.
   function whenAnchorMode(mode, check) {
     return function (v) {
-      var $mode = $('#node-input-anchorMode');
-      var current = ($mode && $mode.length) ? $mode.val() : (this.anchorMode || 'leader');
-      if (current !== mode) return true;
-      return check(v);
+      if (RED.mavlink.liveOr(this, '#node-input-anchorMode', this.anchorMode, 'leader') !== mode) {
+        return true;
+      }
+      return check.call(this, v);
     };
   }
   // A required finite number: blank must not silently become 0.
   function finiteRequired(v) {
-    return Number.isFinite(Number(v)) && String(v).trim() !== '';
+    return !RED.mavlink.isBlank(v) && Number.isFinite(Number(v));
   }
 
   RED.nodes.registerType('mavlink-formation', {

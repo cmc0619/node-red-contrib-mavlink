@@ -103,11 +103,7 @@
         // own default fires (blank ≠ 0 ≠ absent, Gitar #287). A present value
         // must be milliseconds >= 0: the input's min="0" is not enforced on
         // save, and a saved negative paces nothing.
-        validate: function (v, _opt) {
-          if (RED.mavlink.isBlank(v)) return true;
-          var n = Number(v);
-          return (Number.isFinite(n) && n >= 0) || 'must be a number of milliseconds >= 0';
-        },
+        validate: RED.mavlink.validateAtLeast(0),
       },
       concurrency: {
         value: 1,
@@ -136,11 +132,7 @@
         // Blank stays absent (lib default 0), like intervalMs above. A present
         // value must be a whole retry count >= 0: min="0" is not enforced on
         // save, and a negative or fractional count reaches AckWaiter as-is.
-        validate: function (v, _opt) {
-          if (RED.mavlink.isBlank(v)) return true;
-          var n = Number(v);
-          return (Number.isInteger(n) && n >= 0) || 'must be a whole number of retries >= 0';
-        },
+        validate: RED.mavlink.validateAtLeast(0, { integer: true }),
       }
     },
     inputs: 1,

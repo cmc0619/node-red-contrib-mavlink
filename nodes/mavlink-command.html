@@ -314,10 +314,10 @@
       // Blank allowed: the runtime reads '' as "use the default"
       // (mavlink-command.js — `config.timeout === '' ? DEFAULT_TIMEOUT_MS`),
       // so the validator must accept it. Same shape as Mission, Move, Payload.
-      timeout:           { value: '10000', validate: RED.validators.number(true) },
-      maxRetries:        { value: '3', validate: RED.validators.number(true) },
+      timeout:           { value: '10000', validate: RED.mavlink.validateAtLeast(0) },
+      maxRetries:        { value: '3', validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
       unconfirmedContinue: { value: false },
-      completionTimeout: { value: '60000', validate: RED.validators.number(true) },
+      completionTimeout: { value: '60000', validate: RED.mavlink.validateAtLeast(0) },
       // The preset params blob. Nothing checked it before, and the runtime
       // refused blank/out-of-range coordinates on its behalf; that refusal is
       // gone (AGENTS.md, input trust), so this is now the only thing between a
