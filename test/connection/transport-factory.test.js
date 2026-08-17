@@ -25,6 +25,9 @@ test('createTransport returns the matching transport class', () => {
     createTransport({ mode: 'serial', path: '/dev/null', baudRate: 57600 }) instanceof
       SerialTransport
   );
+  // A mode no case answers to selects no transport (§5) — the caller craters
+  // on the undefined, at construction, not mid-flight.
+  assert.equal(createTransport({ mode: 'upd' }), undefined);
 });
 
 test('quiet send codes cover every transport soft-fail', () => {
