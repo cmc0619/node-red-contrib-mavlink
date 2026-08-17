@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "MAVLink toolkit for Node-RED — GCS and companion roles, one node set.",
+  "description": "MAVLink toolkit for Node-RED \u2014 GCS and companion roles, one node set.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -26,7 +26,8 @@
     "test:runtime": "node --test integration/node-red-smoke.test.js",
     "validate:node-red": "npm exec --yes --package=node-red-dev@0.1.6 -- node-red-dev validate",
     "generate-seed": "node scripts/generate-seed.js",
-    "generate-param-seed": "node scripts/generate-param-seed.js"
+    "generate-param-seed": "node scripts/generate-param-seed.js",
+    "count": "node scripts/count-logic.js"
   },
   "files": [
     "lib",
