@@ -1409,7 +1409,7 @@
    * @returns {function(*, object=): true|string}
    */
   RED.mavlink.validateAtLeast = function (min, opts) {
-    const integer = Boolean(opts && opts.integer);
+    const integer = Boolean(opts?.integer);
     return function (v, _opt) {
       if (RED.mavlink.isBlank(v)) return true;
       const n = Number(v);
