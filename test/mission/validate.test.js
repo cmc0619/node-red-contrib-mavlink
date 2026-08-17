@@ -84,6 +84,11 @@ test('validateItems dispatches by mission type', () => {
   assert.equal(validateItems([{ command: 5100 }], MISSION_TYPE.RALLY).ok, true);
   // Wrong family under a given type is rejected.
   assert.equal(validateItems([{ command: 16 }], MISSION_TYPE.FENCE).ok, false);
+  // A type no family answers to selects no validator (§5) — before this,
+  // garbage validated as mission-family and the transfer stalled to its
+  // deadline with mission_type undefined on every frame.
+  assert.equal(validateItems([{ command: 16 }], undefined), undefined);
+  assert.equal(validateItems([{ command: 16 }], 42), undefined);
 });
 
 test('an item without a numeric command is rejected naming its sequence', () => {

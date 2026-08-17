@@ -95,7 +95,9 @@ module.exports = function registerMavlinkMission(RED) {
       }
 
       const payload = msg.payload ?? {};
-      const missionTypeKey = payload.missionType || config.missionType;
+      // Presence fallback (§5): `??`, not `||` — a numeric 0 is MISSION, a
+      // real member the falsy test would silently drop to the config value.
+      const missionTypeKey = payload.missionType ?? config.missionType;
 
       const { target } = resolveDeliveryContext(RED, {
         delivery,
@@ -109,9 +111,9 @@ module.exports = function registerMavlinkMission(RED) {
       // stays silent until the transfer deadline (download) — operational
       // failures the existing paths already report loud (§9). The editor's
       // Type dropdown is the firmware protector (§11). No `|| 'mission'`
-      // default: a blank or unknown key resolves to no type (missionTypeValue
-      // matches no case and returns undefined) — the editor always saves a
-      // member, so only a hand-edited flow gets here.
+      // default: an unknown string key resolves to no type (undefined), which
+      // no validateItems family answers to, so the crater is the validation
+      // result dereference below; a number rides as given (msg is trusted).
       const missionType = missionTypeValue(missionTypeKey);
 
       // Blank keeps the library default; the editor's number validator owns

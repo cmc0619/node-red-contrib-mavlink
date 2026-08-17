@@ -181,6 +181,22 @@ test('an unknown payload.missionType resolves no type rather than a wrong one', 
   assert.equal(outputs[0][0].payload.missionType, undefined, 'the type is unresolved, not 0');
 });
 
+test('an upload under a type no family answers to fails before any packet', async () => {
+  // validateItems is affirmative (§5): garbage selects no validator, and the
+  // crater is the result dereference — before this, the items validated as
+  // mission-family and the transfer ran against the vehicle's real plan
+  // buffer with mission_type undefined, stalling to its deadline.
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  const Node = loadNode(conn);
+  const node = new Node({ operation: 'upload', connection: 'conn', delivery: 'confirm', missionType: 'mission' });
+  const res = await runInput(node, {
+    payload: { missionType: 'bogus', items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }] },
+  });
+  assert.ok(res.err, 'the unresolved type must fail loud');
+  assert.equal(conn.sent.length, 0, 'no packet reached the wire');
+});
+
 test("a typo'd Mission delivery starts no transfer — it matches no tier arm", async () => {
   // A typo of 'build' used to fall through to the wire tier and run a real
   // transfer against the vehicle the operator asked only to preview. Each
