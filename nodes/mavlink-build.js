@@ -37,7 +37,6 @@ const {
   shouldSuppress,
   applyActionStatus,
 } = require('../lib/delivery');
-const { resolveBand } = require('../lib/connection/bands');
 const { dialectFromVehicleId, dialectFromConnection, applyConnectionStatus } = require('../lib/addressing');
 const { loadMetadata } = require('../lib/metadata/load');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
@@ -227,18 +226,10 @@ module.exports = function registerMavlinkBuild(RED) {
         default: break; // This space intentionally left blank (§5)
       }
 
-      // Send tier: enqueue on the connection queue. Band membership is the
-      // shared `resolveBand` — the twin of mavlink-out's site §14 flagged
-      // ("the identical Number() coercion... not yet fixed"): `Number('')` is
-      // 0, BAND.EMERGENCY, so a blank msg.band silently outranked every other
-      // message on the link. Absent msg.band still falls back to the config
-      // default the operator chose.
-      let band;
-      try {
-        band = resolveBand(triggerMsg ? triggerMsg.band : undefined, defaultBand);
-      } catch (err) {
-        return failRun(err, { tier: TIER.SEND });
-      }
+      // Send tier: enqueue on the connection queue. msg.band overrides the
+      // config default by presence and rides as given; the queue's own
+      // isBand boundary refuses a value no band answers to.
+      const band = triggerMsg?.band ?? defaultBand;
       const target = (triggerMsg && triggerMsg.target) || null;
       const identityId = (triggerMsg && triggerMsg.identityId) || undefined;
 

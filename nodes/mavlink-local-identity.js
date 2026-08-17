@@ -71,7 +71,10 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
 
     node.heartbeatType = config.heartbeatType || preset.heartbeatType;
     node.heartbeatAutopilot = config.heartbeatAutopilot || preset.heartbeatAutopilot;
-    node.heartbeatIntervalMs = parseHeartbeatIntervalMs(config.heartbeatIntervalMs);
+    // Blank defaults to 1 Hz. The editor's `positiveNumberValidator`
+    // (mavlink-local-identity.html) owns the rest (§14: a finite-number check
+    // on operator input is a guardrail).
+    node.heartbeatIntervalMs = numberOr(config.heartbeatIntervalMs, 1000);
 
     node.status({ fill: 'grey', shape: 'ring', text: 'idle' });
 
@@ -143,15 +146,3 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
 
   RED.nodes.registerType('mavlink-local-identity', MavlinkLocalIdentityNode);
 };
-
-/**
- * Blank defaults to 1 Hz. The editor's `positiveNumberValidator`
- * (mavlink-local-identity.html) owns the rest (§14: a finite-number check on
- * operator input is a guardrail).
- *
- * @param {*} value
- * @returns {number} interval in milliseconds; defaults to 1 Hz
- */
-function parseHeartbeatIntervalMs(value) {
-  return numberOr(value, 1000);
-}

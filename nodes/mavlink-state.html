@@ -46,10 +46,21 @@
       defaults: {
         name: { value: '' },
         connection: { value: '', type: 'mavlink-connection', required: true },
-        mode: { value: 'snapshot' },
-        events: { value: 'stale,expired,statustext' },
+        // Closed vocabulary: the mode select offers exactly these two.
+        mode: { value: 'snapshot', validate: RED.mavlink.oneOf(['snapshot', 'feed']) },
+        // Comma-joined picks from the members-only multi-select. Blank is the
+        // full default set; a token STATE_EVENTS does not name would subscribe
+        // to an event the peer table never emits, so it reds here instead.
+        events: {
+          value: 'stale,expired,statustext',
+          validate: function (v, _opt) {
+            return parseSavedEvents(v).every(function (name) {
+              return STATE_EVENTS.indexOf(name) !== -1;
+            }) || 'names an event the peer table does not emit';
+          }
+        },
         targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
-        targetComponent: { value: '', validate: RED.validators.number(true) }
+        targetComponent: { value: '', validate: RED.mavlink.validateUint8(0) }
       },
       inputs: 1,
       outputs: 2,

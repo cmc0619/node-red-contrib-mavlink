@@ -17,16 +17,34 @@
     return 'Remote host and port are a pair — set both or neither';
   }
 
+  // Ports are 16-bit, and 0 is a silent trap rather than a port: binding 0
+  // asks the OS for a random port no vehicle can be pointed at, and a remote
+  // or swarm port 0 reads as "no destination" on the send path (§14 audit:
+  // bindPort 0 is protector-side work). The runtime trusts the range.
+  function portReason(v) {
+    var n = Number(v);
+    if (Number.isInteger(n) && n >= 1 && n <= 65535) return true;
+    return 'must be a port from 1 to 65535';
+  }
+
   RED.nodes.registerType('mavlink-connection', {
     category: 'config',
     defaults: {
       name: { value: '' },
       mode: { value: 'udp', required: true },
-      bindHost: { value: '0.0.0.0' },
-      bindPort: { value: 14550, validate: function (v) {
+      // The runtime hands bindHost/bindPort to the socket as saved, so both
+      // must be present for the IP transports — blanking the host would bind
+      // nothing nameable, not "all interfaces" (that is what 0.0.0.0 says).
+      bindHost: { value: '0.0.0.0', validate: function (v, _opt) {
         var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
         if (mode === 'serial') return true;
-        return RED.validators.number()(v);
+        if (String(v == null ? '' : v).trim().length > 0) return true;
+        return 'bind host is required — 0.0.0.0 means all interfaces';
+      } },
+      bindPort: { value: 14550, validate: function (v, _opt) {
+        var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
+        if (mode === 'serial') return true;
+        return portReason(v);
       } },
       // Sibling reads go through ownDialogField, not `live || saved` (the
       // #284 lesson, same trap one node over): an emptied box is the
@@ -40,23 +58,31 @@
         return remotePairReason(v, $port ? $port.val() : this.remotePort);
       } },
       remotePort: { value: '', validate: function (v, _opt) {
-        if (!RED.validators.number(true)(v)) return false;
+        var blank = String(v == null ? '' : v).trim() === '';
+        if (!blank && portReason(v) !== true) return portReason(v);
         var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
         if (mode === 'serial') return true;
         var $host = RED.mavlink.ownDialogField(this, '#node-config-input-remoteHost');
         return remotePairReason(v, $host ? $host.val() : this.remoteHost);
       } },
       broadcastHost: { value: '' },
-      broadcastPort: { value: '', validate: RED.validators.number(true) },
+      broadcastPort: { value: '', validate: function (v, _opt) {
+        if (String(v == null ? '' : v).trim() === '') return true;
+        return portReason(v);
+      } },
       serialPath: { value: '', validate: function (v) {
         var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
         if (mode !== 'serial') return true;
         return String(v == null ? '' : v).trim().length > 0;
       } },
-      baudRate: { value: 57600, validate: function (v) {
+      // The runtime opens the port at this rate as saved (§0) — the editor
+      // owns the 57600 default and the positive-integer ring.
+      baudRate: { value: 57600, validate: function (v, _opt) {
         var mode = $('#node-config-input-mode').val() || this.mode || 'udp';
         if (mode !== 'serial') return true;
-        return RED.validators.number()(v);
+        var n = Number(v);
+        if (Number.isInteger(n) && n > 0) return true;
+        return 'must be a positive baud rate';
       } },
       // Config-node references (§6 — everything enumerable is a dropdown).
       vehicle: { value: '', type: 'mavlink-vehicle', required: true },
@@ -65,9 +91,26 @@
       signOutbound: { value: false },
       requireSigned: { value: false },
       acceptInvalid: { value: false },
-      linkId: { value: 0, validate: RED.validators.number() },
-      staleMs: { value: '', validate: RED.validators.number(true) },
-      expireMs: { value: '', validate: RED.validators.number(true) },
+      // The signature block carries the link id as one byte on the wire.
+      linkId: { value: 0, validate: function (v, _opt) {
+        var n = String(v == null ? '' : v).trim() === '' ? NaN : Number(v);
+        if (Number.isInteger(n) && n >= 0 && n <= 255) return true;
+        return 'the signing link id is a byte — 0 to 255';
+      } },
+      // Blank means "use the peer table's 5s/15s defaults"; a set value must
+      // be a positive interval, or staleness silently never fires.
+      staleMs: { value: '', validate: function (v, _opt) {
+        if (String(v == null ? '' : v).trim() === '') return true;
+        var n = Number(v);
+        if (Number.isInteger(n) && n > 0) return true;
+        return 'must be a positive number of milliseconds';
+      } },
+      expireMs: { value: '', validate: function (v, _opt) {
+        if (String(v == null ? '' : v).trim() === '') return true;
+        var n = Number(v);
+        if (Number.isInteger(n) && n > 0) return true;
+        return 'must be a positive number of milliseconds';
+      } },
       disabled: { value: false },
     },
     credentials: {

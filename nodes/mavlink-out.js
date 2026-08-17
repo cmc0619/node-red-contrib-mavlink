@@ -38,7 +38,6 @@ const {
   failInput,
 } = require('../lib/delivery');
 const { applyConnectionStatus } = require('../lib/addressing');
-const { resolveBand } = require('../lib/connection/bands');
 
 module.exports = function registerMavlinkOut(RED) {
   /**
@@ -72,7 +71,10 @@ module.exports = function registerMavlinkOut(RED) {
         // (lib/connection/runtime.js send()) — the same crater as any shape the
         // wire cannot carry, no curated "expected { name, fields }" hand-holding.
         const message = resolveMessage(msg);
-        const band = resolveBand(msg.band, defaultBand);
+        // msg.band overrides the config default by presence and rides as
+        // given; the queue's own isBand boundary refuses a value no band
+        // answers to.
+        const band = msg.band ?? defaultBand;
         connectionNode.send(message, {
           band,
           target: msg.target || null,

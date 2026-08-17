@@ -28,7 +28,7 @@ const { BADGE_MAX } = require('../../lib/delivery');
 
 test('a passphrase alone (both checkboxes off) still derives a key', () => {
   const signing = buildSigning(
-    { signOutbound: false, requireSigned: false },
+    { linkId: 0, signOutbound: false, requireSigned: false },
     { signingPassphrase: 'correct horse battery staple' }
   );
   assert.equal(signing.hasKey, true);
@@ -38,14 +38,14 @@ test('a passphrase alone (both checkboxes off) still derives a key', () => {
 });
 
 test('no passphrase means no key, regardless of the switches', () => {
-  const signing = buildSigning({ signOutbound: false, requireSigned: true }, {});
+  const signing = buildSigning({ linkId: 0, signOutbound: false, requireSigned: true }, {});
   assert.equal(signing.hasKey, false);
   assert.equal(signing.key, null);
 });
 
 test('sign-outbound and require-signed still carry through as independent policy flags', () => {
   const signing = buildSigning(
-    { signOutbound: true, requireSigned: true },
+    { linkId: 0, signOutbound: true, requireSigned: true },
     { signingPassphrase: 'secret' }
   );
   assert.equal(signing.signOutbound, true);
@@ -55,7 +55,7 @@ test('sign-outbound and require-signed still carry through as independent policy
 
 test('a raw hex key becomes the key bytes verbatim — no hashing', () => {
   const hex = 'aa'.repeat(16) + 'bb'.repeat(16); // 64 hex chars, 32 bytes
-  const signing = buildSigning({ signOutbound: true }, { signingKeyHex: hex });
+  const signing = buildSigning({ linkId: 0, signOutbound: true }, { signingKeyHex: hex });
   assert.equal(signing.hasKey, true);
   assert.ok(Buffer.isBuffer(signing.key));
   assert.equal(signing.key.length, 32);
@@ -64,7 +64,7 @@ test('a raw hex key becomes the key bytes verbatim — no hashing', () => {
 
 test('raw key hex is case-insensitive and tolerates surrounding whitespace', () => {
   const hex = 'AbCdEf'.repeat(10) + 'AbCd'; // 64 chars mixed case
-  const signing = buildSigning({}, { signingKeyHex: `  ${hex}  ` });
+  const signing = buildSigning({ linkId: 0 }, { signingKeyHex: `  ${hex}  ` });
   assert.equal(signing.key.toString('hex'), hex.toLowerCase());
 });
 
@@ -85,7 +85,7 @@ test('the two key rules live in the editor, not in buildSigning (§0)', () => {
   assert.match(block, /has_signingPassphrase/);
 
   // A well-formed raw key still derives the same 32 bytes.
-  const signing = buildSigning({}, { signingKeyHex: 'aa'.repeat(32) });
+  const signing = buildSigning({ linkId: 0 }, { signingKeyHex: 'aa'.repeat(32) });
   assert.ok(signing.key.equals(Buffer.from('aa'.repeat(32), 'hex')));
 });
 

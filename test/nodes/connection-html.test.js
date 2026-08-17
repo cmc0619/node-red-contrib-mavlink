@@ -238,6 +238,68 @@ test('remote pairing: clearing both live fields switches back to listen-only (Co
     'a foreign dialog\'s empty boxes do not clear this node\'s pair');
 });
 
+test('transport numeric fields carry range rings; bind host is required for IP modes', () => {
+  // The runtime hands these to the socket as saved (§0), so the walled garden
+  // owns the ranges: ports are 16-bit and 0 is a silent trap (bind 0 is a
+  // random port; a remote/swarm port 0 reads as "no destination" on send).
+  const defaults = loadNodeDefaults('mavlink-connection');
+  const portReason = /port from 1 to 65535/;
+
+  assert.equal(defaults.bindPort.validate.call({ id: 'c1', mode: 'udp' }, '14550', {}), true);
+  assert.match(String(defaults.bindPort.validate.call({ id: 'c1', mode: 'udp' }, '0', {})), portReason);
+  assert.match(String(defaults.bindPort.validate.call({ id: 'c1', mode: 'tcp' }, '70000', {})), portReason);
+  // Serial hides the control, so a stale value must not red what cannot be seen.
+  assert.equal(defaults.bindPort.validate.call({ id: 'c1', mode: 'serial' }, '', {}), true);
+
+  assert.equal(defaults.bindHost.validate.call({ id: 'c1', mode: 'udp' }, '0.0.0.0', {}), true);
+  assert.match(
+    String(defaults.bindHost.validate.call({ id: 'c1', mode: 'tcp' }, '  ', {})),
+    /bind host is required/
+  );
+  assert.equal(defaults.bindHost.validate.call({ id: 'c1', mode: 'serial' }, '', {}), true);
+
+  // Blank remote/swarm ports stay legal (listen-only / no swarm address).
+  assert.match(
+    String(defaults.remotePort.validate.call(
+      { id: 'c1', mode: 'udp', remoteHost: '10.0.0.9' }, '0', {}
+    )),
+    portReason
+  );
+  assert.equal(defaults.broadcastPort.validate.call({ id: 'c1' }, '', {}), true);
+  assert.match(String(defaults.broadcastPort.validate.call({ id: 'c1' }, '65536', {})), portReason);
+
+  assert.equal(defaults.baudRate.validate.call({ id: 'c1', mode: 'serial' }, '57600', {}), true);
+  assert.match(
+    String(defaults.baudRate.validate.call({ id: 'c1', mode: 'serial' }, '-1', {})),
+    /positive baud/
+  );
+  assert.equal(defaults.baudRate.validate.call({ id: 'c1', mode: 'udp' }, 'garbage', {}), true);
+});
+
+test('link id is a wire byte; peer-freshness overrides are blank or positive', () => {
+  const defaults = loadNodeDefaults('mavlink-connection');
+
+  // The signature block carries the link id as one byte — the runtime writes
+  // it to the wire as saved, so out-of-range would truncate silently.
+  assert.equal(defaults.linkId.validate.call({ id: 'c1' }, '0', {}), true);
+  assert.equal(defaults.linkId.validate.call({ id: 'c1' }, '255', {}), true);
+  assert.match(String(defaults.linkId.validate.call({ id: 'c1' }, '256', {})), /byte — 0 to 255/);
+  assert.match(String(defaults.linkId.validate.call({ id: 'c1' }, '', {})), /byte — 0 to 255/);
+
+  for (const field of ['staleMs', 'expireMs']) {
+    assert.equal(
+      defaults[field].validate.call({ id: 'c1' }, '', {}),
+      true,
+      `${field} blank means the peer table's built-in default`
+    );
+    assert.equal(defaults[field].validate.call({ id: 'c1' }, '5000', {}), true);
+    assert.match(
+      String(defaults[field].validate.call({ id: 'c1' }, '0', {})),
+      /positive number of milliseconds/
+    );
+  }
+});
+
 test('Local Identity editor exposes heartbeatIntervalMs', () => {
   assert.match(
     identityHtml,

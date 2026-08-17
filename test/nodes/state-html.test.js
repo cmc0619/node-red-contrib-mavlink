@@ -11,6 +11,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const { DEFAULT_EVENTS } = require('../../lib/state');
+const { loadNodeDefaults } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-state.html'),
@@ -43,6 +44,33 @@ test('events save as a comma-joined string for the runtime node property', () =>
   assert.match(html, /values\.join\(','\)/, 'selected events are comma-joined on save');
   assert.match(html, /oneditsave/, 'save hook writes the hidden events property');
   assert.match(html, /raw\.split\(','\)/, 'saved comma string is parsed back into selections');
+});
+
+test('mode is a closed vocabulary — the select offers exactly snapshot and feed', () => {
+  const { mode } = loadNodeDefaults('mavlink-state');
+  assert.equal(mode.validate.call({}, 'snapshot', {}), true);
+  assert.equal(mode.validate.call({}, 'feed', {}), true);
+  assert.match(String(mode.validate.call({}, 'snapshoot', {})), /must be one of/);
+  assert.match(String(mode.validate.call({}, '', {})), /must be one of/, 'blank is not a mode');
+});
+
+test('events red-rings a token the peer table never emits; blank is the default set', () => {
+  const { events } = loadNodeDefaults('mavlink-state');
+  assert.equal(events.validate.length, 2, 'two args, or a reason string reads as valid (§14)');
+  assert.equal(events.validate.call({}, '', {}), true, 'blank = full default set');
+  assert.equal(events.validate.call({}, 'stale,expired,statustext', {}), true);
+  assert.equal(events.validate.call({}, DEFAULT_EVENTS.join(','), {}), true, 'the full set passes');
+  assert.match(String(events.validate.call({}, 'stale,exipred', {})), /does not emit/);
+});
+
+test('target filters carry the uint8 range ring, compid included', () => {
+  const { targetSystem, targetComponent } = loadNodeDefaults('mavlink-state');
+  for (const field of [targetSystem, targetComponent]) {
+    assert.equal(field.validate.call({}, '', {}), true, 'blank = any');
+    assert.equal(field.validate.call({}, 0, {}), true, 'broadcast/all is legal');
+    assert.equal(field.validate.call({}, 255, {}), true);
+    assert.match(String(field.validate.call({}, 256, {})), /between 0 and 255/);
+  }
 });
 
 test('DEFAULT_EVENTS covers every peer-table emission name', () => {

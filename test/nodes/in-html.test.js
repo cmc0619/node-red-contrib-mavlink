@@ -11,6 +11,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const { installEditorHelpers } = require('../helpers/editor-resource');
+const { loadNodeDefaults } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-in.html'),
@@ -89,6 +90,36 @@ test('compid filter validates as uint8 0..255 via the shared helper; blank = any
   assert.equal(validate(255), true, 'the uint8 ceiling');
   assert.match(String(validate(256)), /between 0 and 255/, 'out of range reds the node');
   assert.match(String(validate(-1)), /between 0 and 255/);
+});
+
+test('messages red-rings anything but a list of non-blank names (walled garden)', () => {
+  // The runtime subscribes straight off this array, so the editor guarantees
+  // the shape oneditsave produces.
+  const { messages } = loadNodeDefaults('mavlink-in');
+  assert.equal(messages.validate.length, 2, 'two args, or a reason string reads as valid (§14)');
+  assert.equal(messages.validate.call({}, [], {}), true, 'empty list = match all');
+  assert.equal(messages.validate.call({}, ['HEARTBEAT', 'ATTITUDE'], {}), true);
+  assert.match(String(messages.validate.call({}, 'HEARTBEAT', {})), /list/, 'a bare string reds');
+  assert.match(String(messages.validate.call({}, ['HEARTBEAT', ''], {})), /blank/, 'a blank row reds');
+});
+
+test('changedFields red-rings tokens that can never name a decoded field', () => {
+  // Under changed-only an unmatchable token suppresses the stream after one
+  // delivery, so the shape is caught at deploy.
+  const { changedFields } = loadNodeDefaults('mavlink-in');
+  assert.equal(changedFields.validate.length, 2);
+  assert.equal(changedFields.validate.call({}, '', {}), true, 'blank = all fields except timestamps');
+  assert.equal(changedFields.validate.call({}, 'custom_mode, base_mode', {}), true);
+  assert.match(String(changedFields.validate.call({}, 'custom_mode,', {})), /field names/, 'a stray comma reds');
+  assert.match(String(changedFields.validate.call({}, 'custom mode', {})), /field names/, 'a space mid-name reds');
+});
+
+test('fieldName red-rings anything but a single field name; blank = any', () => {
+  const { fieldName } = loadNodeDefaults('mavlink-in');
+  assert.equal(fieldName.validate.length, 2);
+  assert.equal(fieldName.validate.call({}, '', {}), true, 'blank disables the predicate');
+  assert.equal(fieldName.validate.call({}, 'base_mode', {}), true);
+  assert.match(String(fieldName.validate.call({}, 'base_mode, custom_mode', {})), /single field name/);
 });
 
 test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)', () => {

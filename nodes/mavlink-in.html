@@ -54,13 +54,42 @@
         name:        { value: '' },
         connection:  { value: '', type: 'mavlink-connection', required: true },
         // A list, not a single name (#211). An empty list matches every
-        // message, which is what a blank single filter used to mean.
-        messages:    { value: [] },
+        // message, which is what a blank single filter used to mean. The
+        // runtime subscribes straight off this array, so the ring guarantees
+        // the shape oneditsave produces: an array of non-blank names.
+        messages:    {
+          value: [],
+          validate: function (v, _opt) {
+            if (!Array.isArray(v)) return 'must be a list of message names';
+            return v.every(function (name) {
+              return !RED.mavlink.isBlank(name);
+            }) || 'must not contain a blank message name';
+          },
+        },
         sysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
         compid:      { value: '', validate: RED.mavlink.validateUint8(0) },
         changedOnly: { value: false },
-        changedFields: { value: '' },
-        fieldName:   { value: '' },
+        // Comma-separated decoded field names. A token that is not a field
+        // name — a stray comma, a space mid-name — can never match a decoded
+        // field, and under changed-only that suppresses the stream after one
+        // delivery; red it at deploy instead.
+        changedFields: {
+          value: '',
+          validate: function (v, _opt) {
+            if (RED.mavlink.isBlank(v)) return true;
+            return String(v).split(',').every(function (token) {
+              return /^[A-Za-z_][A-Za-z0-9_]*$/.test(token.trim());
+            }) || 'must be comma-separated field names';
+          },
+        },
+        fieldName:   {
+          value: '',
+          validate: function (v, _opt) {
+            if (RED.mavlink.isBlank(v)) return true;
+            return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(v).trim())
+              || 'must be a single field name';
+          },
+        },
         fieldValue:  { value: '' },
         rateLimit:   {
           value: 0,

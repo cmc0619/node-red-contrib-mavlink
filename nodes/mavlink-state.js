@@ -18,7 +18,10 @@ module.exports = function registerMavlinkState(RED) {
 
     let feed = null;
     if (config.mode === 'feed') {
-      feed = createStateFeed(connectionNode.peerTable, { events: selectedEvents(config) }, (record) => {
+      // The editor saves events as a comma-joined string from a members-only
+      // multi-select; an empty selection means the full default set.
+      const events = config.events.split(',').map((s) => s.trim()).filter(Boolean);
+      feed = createStateFeed(connectionNode.peerTable, { events }, (record) => {
         node.send([{ payload: record }]);
       });
       node.status({ fill: 'grey', shape: 'ring', text: 'listening' });
@@ -63,11 +66,3 @@ module.exports = function registerMavlinkState(RED) {
 
   RED.nodes.registerType('mavlink-state', MavlinkStateNode);
 };
-
-function selectedEvents(config) {
-  if (Array.isArray(config.events)) return config.events;
-  if (typeof config.events === 'string' && config.events.trim()) {
-    return config.events.split(',').map((s) => s.trim()).filter(Boolean);
-  }
-  return undefined;
-}

@@ -98,10 +98,10 @@ module.exports = function registerMavlinkIn(RED) {
     applyConnectionStatus(node, true, connectionNode);
     if (!connectionNode) return;
 
-    // Message filters — an empty list means "match all" (#211).
-    const filterMessages = (Array.isArray(config.messages) ? config.messages : [])
-      .map((name) => String(name).trim())
-      .filter(Boolean);
+    // Message filters — an empty list means "match all" (#211). The editor
+    // owns the shape: oneditsave trims each row and drops blanks and
+    // duplicates, and the array red ring guards a hand-edited flow.
+    const filterMessages = config.messages;
     const filterSysid = isBlank(config.sysid) ? null : Number(config.sysid);
     const filterCompid = isBlank(config.compid) ? null : Number(config.compid);
 
@@ -178,7 +178,7 @@ module.exports = function registerMavlinkIn(RED) {
       // Field predicate: absent field never passes; a configured value must
       // string-equal the decoded one.
       if (fieldName) {
-        const value = decoded.fields ? decoded.fields[fieldName] : undefined;
+        const value = decoded.fields[fieldName];
         if (value === undefined) return;
         if (fieldValue !== null && String(value) !== fieldValue) return;
       }
@@ -206,7 +206,7 @@ module.exports = function registerMavlinkIn(RED) {
         // identically, so the stream delivers once and then never again, with
         // nothing to say why. Warn once per absent name; the comparison still
         // runs exactly as configured.
-        if (changedFields && decoded.fields) {
+        if (changedFields) {
           for (const name of changedFields) {
             if (!(name in decoded.fields) && !warnedAbsentFields.has(`${key}:${name}`)) {
               warnedAbsentFields.add(`${key}:${name}`);
@@ -215,8 +215,8 @@ module.exports = function registerMavlinkIn(RED) {
           }
         }
         const subject = changedFields
-          ? Object.fromEntries(changedFields.map((name) => [name, decoded.fields ? decoded.fields[name] : undefined]))
-          : withoutTimestamps(decoded.fields || {});
+          ? Object.fromEntries(changedFields.map((name) => [name, decoded.fields[name]]))
+          : withoutTimestamps(decoded.fields);
         // 64-bit fields decode as BigInt (node-mavlink); JSON.stringify throws
         // on those unless given a replacer. This only affects the comparison
         // key — msg.payload below still carries the original decoded.fields.
@@ -295,11 +295,11 @@ module.exports = function registerMavlinkIn(RED) {
 /**
  * Comma-separated name list → array, or null when blank (= all).
  *
- * @param {*} value
+ * @param {string} value  editor-owned comma list; the field red ring owns the shape
  * @returns {string[]|null}
  */
 function parseNameList(value) {
-  const names = String(value || '')
+  const names = value
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean);
@@ -319,7 +319,7 @@ function parseNameList(value) {
  */
 function parseRateLimit(value) {
   const result = { defaultMs: 0, perMessageMs: new Map() };
-  const raw = String(value === undefined || value === null ? '' : value).trim();
+  const raw = String(value).trim();
   if (!raw) return result;
   for (const token of raw.split(',')) {
     const part = token.trim();

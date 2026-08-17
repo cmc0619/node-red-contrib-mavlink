@@ -10,6 +10,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { loadNodeDefaults } = require('./html-assert');
+
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-vehicle.html'),
   'utf8'
@@ -116,6 +118,17 @@ test('the component-dialect picker is a plain multi-select synced to a hidden fi
   // node-config-input-* field, so Node-RED serializes it.
   assert.ok(!/editableList/.test(html));
   assert.ok(!/oneditsave/.test(html));
+});
+
+test('additionalDialects red-rings a token missing either half of dialect@revision', () => {
+  const { additionalDialects } = loadNodeDefaults('mavlink-vehicle');
+  assert.equal(additionalDialects.validate.length, 2, 'two args, or a reason string reads as valid (§14)');
+  assert.equal(additionalDialects.validate.call({}, '', {}), true, 'blank = no component dialects');
+  assert.equal(additionalDialects.validate.call({}, 'storm32@seed', {}), true);
+  assert.equal(additionalDialects.validate.call({}, 'storm32@seed,icarous@2026-01-01', {}), true);
+  assert.match(String(additionalDialects.validate.call({}, 'storm32', {})), /dialect@revision/);
+  assert.match(String(additionalDialects.validate.call({}, 'storm32@', {})), /dialect@revision/);
+  assert.match(String(additionalDialects.validate.call({}, '@seed', {})), /dialect@revision/);
 });
 
 test('the picker hides dialects the primary already includes', () => {
