@@ -25,7 +25,6 @@ const {
   bindVehicleSysid,
   releaseVehicleSysid,
 } = require('../lib/identity');
-const { numberOr } = require('../lib/addressing');
 
 module.exports = function registerMavlinkLocalIdentity(RED) {
   /**
@@ -71,10 +70,9 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
 
     node.heartbeatType = config.heartbeatType || preset.heartbeatType;
     node.heartbeatAutopilot = config.heartbeatAutopilot || preset.heartbeatAutopilot;
-    // Blank defaults to 1 Hz. The editor's `positiveNumberValidator`
-    // (mavlink-local-identity.html) owns the rest (§14: a finite-number check
-    // on operator input is a guardrail).
-    node.heartbeatIntervalMs = numberOr(config.heartbeatIntervalMs, 1000);
+    // The editor owns the 1000 default and the positive ring
+    // (mavlink-local-identity.html) — just convert it.
+    node.heartbeatIntervalMs = Number(config.heartbeatIntervalMs);
 
     node.status({ fill: 'grey', shape: 'ring', text: 'idle' });
 

@@ -107,15 +107,23 @@ test('messages red-rings anything but a list of non-blank names (walled garden)'
   assert.match(String(messages.validate.call({}, [{}], {})), /string/, 'an object row reds');
 });
 
-test('changedFields red-rings tokens that can never name a decoded field', () => {
+test('changedFields red-rings tokens that can never name a decoded field — only when changed-only is on', () => {
   // Under changed-only an unmatchable token suppresses the stream after one
-  // delivery, so the shape is caught at deploy.
+  // delivery, so the shape is caught at deploy. With changed-only off the
+  // field is hidden and unused, so a stale value must not red the node
+  // (hidden-widget rule).
   const { changedFields } = loadNodeDefaults('mavlink-in');
   assert.equal(changedFields.validate.length, 2);
-  assert.equal(changedFields.validate.call({}, '', {}), true, 'blank = all fields except timestamps');
-  assert.equal(changedFields.validate.call({}, 'custom_mode, base_mode', {}), true);
-  assert.match(String(changedFields.validate.call({}, 'custom_mode,', {})), /field names/, 'a stray comma reds');
-  assert.match(String(changedFields.validate.call({}, 'custom mode', {})), /field names/, 'a space mid-name reds');
+  const on = { changedOnly: true };
+  assert.equal(changedFields.validate.call(on, '', {}), true, 'blank = all fields except timestamps');
+  assert.equal(changedFields.validate.call(on, 'custom_mode, base_mode', {}), true);
+  assert.match(String(changedFields.validate.call(on, 'custom_mode,', {})), /field names/, 'a stray comma reds');
+  assert.match(String(changedFields.validate.call(on, 'custom mode', {})), /field names/, 'a space mid-name reds');
+  assert.equal(
+    changedFields.validate.call({ changedOnly: false }, 'custom_mode,', {}),
+    true,
+    'a stale token must not red a control changed-only hides'
+  );
 });
 
 test('fieldName red-rings anything but a single field name; blank = any', () => {

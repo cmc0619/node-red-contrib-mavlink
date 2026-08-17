@@ -13,10 +13,11 @@
         additionalDialects:    { value: '',
           validate: function (v, _opt) {
             if (RED.mavlink.isBlank(v)) return true;
+            // Exactly one @ per token: dialectPicks slices on the separator,
+            // so a second one would silently mis-split the pick.
             return String(v).split(',').every(function (token) {
-              var raw = token.trim();
-              var at = raw.lastIndexOf('@');
-              return at > 0 && at < raw.length - 1;
+              var parts = token.trim().split('@');
+              return parts.length === 2 && parts[0].trim() !== '' && parts[1].trim() !== '';
             }) || 'must be comma-separated dialect@revision picks';
           }
         },

@@ -76,10 +76,15 @@
         // Comma-separated decoded field names. A token that is not a field
         // name — a stray comma, a space mid-name — can never match a decoded
         // field, and under changed-only that suppresses the stream after one
-        // delivery; red it at deploy instead.
+        // delivery; red it at deploy instead. Gated on Changed only: the
+        // field is hidden and inert without it, and a stale value must not
+        // red a control the operator cannot see.
         changedFields: {
           value: '',
           validate: function (v, _opt) {
+            var $own = RED.mavlink.ownDialogField(this, '#node-input-changedOnly');
+            var changedOnly = $own ? $own.is(':checked') : this.changedOnly === true;
+            if (changedOnly !== true) return true;
             if (RED.mavlink.isBlank(v)) return true;
             return String(v).split(',').every(function (token) {
               return /^[A-Za-z_][A-Za-z0-9_]*$/.test(token.trim());

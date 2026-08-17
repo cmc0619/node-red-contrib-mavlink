@@ -11,9 +11,11 @@
 <script type="text/javascript">
   (function () {
     function positiveNumberValidator(v, _opt) {
-      if (RED.mavlink.isBlank(v)) return true;
-      var n = Number(v);
-      if (!Number.isFinite(n) || n <= 0) return 'must be a positive number';
+      // Blank reds: the runtime opens the heartbeat timer at this value as
+      // saved (§0), and Number('') is 0 — a zero-interval timer, not 1 Hz.
+      // The 1000 default is this dialog's, not the runtime's.
+      var n = RED.mavlink.isBlank(v) ? NaN : Number(v);
+      if (!Number.isFinite(n) || n <= 0) return 'must be a positive number of milliseconds';
       return true;
     }
 

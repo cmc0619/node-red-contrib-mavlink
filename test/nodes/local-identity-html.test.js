@@ -600,6 +600,23 @@ test('loadEnumsCatalog returns empty catalog locally when no dialect or vehicle 
   assert.deepEqual(plain(payload), { dialect: '', enums: {} });
 });
 
+test('heartbeatIntervalMs red-rings blank and non-positive values (walled garden)', () => {
+  // The runtime opens the heartbeat timer at this value as saved (§0), and
+  // Number('') is 0 — a zero-interval timer. The 1000 default belongs to the
+  // dialog, so blank reds instead of silently meaning "1 Hz".
+  const context = loadHelpers();
+  const { heartbeatIntervalMs } = context.identityDefinition.defaults;
+  assert.equal(heartbeatIntervalMs.validate.length, 2, 'two args, or a reason string reads as valid (§14)');
+  const validate = (v) => heartbeatIntervalMs.validate.call({}, v, {});
+
+  assert.equal(validate(1000), true);
+  assert.equal(validate('250'), true);
+  assert.match(String(validate('')), /positive number/, 'blank reds — the default is the dialog’s');
+  assert.match(String(validate(0)), /positive number/, 'a zero-interval timer reds');
+  assert.match(String(validate(-5)), /positive number/);
+  assert.match(String(validate('abc')), /positive number/);
+});
+
 test('Companion save clears hidden source IDs before Node-RED copies editor inputs', () => {
   const context = loadHelpers({
     '#node-config-input-role': 'companion',

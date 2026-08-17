@@ -129,6 +129,9 @@ test('additionalDialects red-rings a token missing either half of dialect@revisi
   assert.match(String(additionalDialects.validate.call({}, 'storm32', {})), /dialect@revision/);
   assert.match(String(additionalDialects.validate.call({}, 'storm32@', {})), /dialect@revision/);
   assert.match(String(additionalDialects.validate.call({}, '@seed', {})), /dialect@revision/);
+  // dialectPicks splits on lastIndexOf('@'), so a second @ would silently
+  // mis-split the dialect name — exactly one @ per token.
+  assert.match(String(additionalDialects.validate.call({}, 'storm32@seed@extra', {})), /dialect@revision/);
 });
 
 test('the picker hides dialects the primary already includes', () => {
