@@ -11,9 +11,11 @@ test('mavlink-local-identity converts heartbeatIntervalMs as saved', () => {
 
   // The editor owns the 1000 default and reds blank (positiveNumberValidator,
   // mavlink-local-identity.html), so the runtime sees only a saved positive
-  // number and just converts it — no second default here (§0).
-  const custom = new Node({ id: 'custom', role: 'gcs', heartbeatIntervalMs: 250 });
-  const stock = new Node({ id: 'stock', role: 'gcs', heartbeatIntervalMs: 1000 });
+  // number and just converts it — no second default here (§0). Identity
+  // fields carry the editor defaults so only the interval varies (§7).
+  const base = { role: 'gcs', sourceSystemId: 255, sourceComponentId: 190 };
+  const custom = new Node({ ...base, id: 'custom', heartbeatIntervalMs: 250 });
+  const stock = new Node({ ...base, id: 'stock', heartbeatIntervalMs: 1000 });
 
   assert.equal(custom.heartbeatIntervalMs, 250);
   assert.equal(stock.heartbeatIntervalMs, 1000);
