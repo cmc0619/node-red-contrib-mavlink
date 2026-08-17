@@ -185,6 +185,26 @@ test('an unknown payload.missionType rides as given — never resolved to 0, nev
   const plan = outputs[0][0].payload;
   assert.equal(plan.missionType, 'bogus', 'the garbage rides visible and as-given');
   assert.equal(plan.messages[0].fields.mission_type, 'bogus', 'present on the frame, not absent');
+
+  // Wire tier, on the destructive operation (gitar): the frame the machine
+  // hands to the connection carries the garbage present and as-given — a
+  // regression to resolve-to-nothing would show up here as undefined, the
+  // shape that serializes absent and erases the REAL plan as type 0. The
+  // stub bypasses the wire choke; in the real runtime the dry-run serialize
+  // refuses this frame before transmission (wire-nonfinite pins), so the
+  // operation fails loud either way.
+  const clearNode = new Node({
+    operation: 'clear',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+    timeout: 5,
+    maxRetries: 0,
+  });
+  const res = await runInput(clearNode, { payload: { missionType: 'bogus' } });
+  assert.ok(res.err, 'the transfer fails loud');
+  assert.equal(conn.sentNames()[0], 'MISSION_CLEAR_ALL');
+  assert.equal(conn.sent[0].message.fields.mission_type, 'bogus', 'present and as-given, never absent');
 });
 
 test('a numeric 0 payload.missionType overrides the config type — presence, not truthiness', async () => {
