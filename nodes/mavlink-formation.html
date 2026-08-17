@@ -21,7 +21,10 @@
     defaults: {
       name: { value: '' },
       connection: { value: '', type: 'mavlink-connection', required: true },
-      shape: { value: 'line' },
+      // Closed vocabularies red on membership (§5's editor half): the runtime
+      // dispatches these tokens with affirmative cases only, so a hand-edited
+      // stray value must be caught here, the only place that can see it.
+      shape: { value: 'line', validate: RED.mavlink.oneOf(['line', 'column', 'grid', 'wedge', 'circle', 'sphere']) },
       spacing: {
         value: 10,
         validate: function (v) {
@@ -43,7 +46,7 @@
           });
         },
       },
-      anchorMode: { value: 'leader' },
+      anchorMode: { value: 'leader', validate: RED.mavlink.oneOf(['leader', 'fixed']) },
       leader: {
         value: '',
         validate: whenAnchorMode('leader', function (v) {
@@ -51,15 +54,33 @@
           return Number.isInteger(n) && n >= 1 && n <= 255;
         }),
       },
-      lat: { value: '', validate: whenAnchorMode('fixed', finiteRequired) },
-      lon: { value: '', validate: whenAnchorMode('fixed', finiteRequired) },
+      // A fixed anchor must be a place on the ellipsoid: latitude ±90,
+      // longitude ±180. Out of range is a typo, not a position.
+      lat: {
+        value: '',
+        validate: whenAnchorMode('fixed', function (v) {
+          return finiteRequired(v) && Number(v) >= -90 && Number(v) <= 90;
+        }),
+      },
+      lon: {
+        value: '',
+        validate: whenAnchorMode('fixed', function (v) {
+          return finiteRequired(v) && Number(v) >= -180 && Number(v) <= 180;
+        }),
+      },
       // alt is required whenever set as the fixed anchor: a blank altitude
       // must not become 0 — that commands a descent to home level.
       alt: { value: '', validate: whenAnchorMode('fixed', finiteRequired) },
       headingDeg: { value: '', validate: RED.mavlink.validateRange(0, 360) },
       pitchDeg: { value: 0, validate: RED.validators.number() },
-      delivery: { value: 'build' },
-      intervalMs: { value: 100, validate: RED.validators.number() },
+      delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
+      intervalMs: {
+        value: 100,
+        // The input's min="0" is not enforced on save, and the runtime reads a
+        // present value as Number(): blank would ride as 0 and a negative
+        // paces nothing — an unthrottled fleet send either way.
+        validate: function (v) { return finiteRequired(v) && Number(v) >= 0; },
+      },
       timeoutMs: {
         value: 10000,
         // RED.validators.number() accepts 0 and negatives, and the input's

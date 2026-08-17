@@ -191,7 +191,7 @@ function resolveAnchor(config, payload, peerTable) {
     case 'leader': {
       const sysid = Number(config.leader);
       const peer = peerTable.snapshot().find((p) => p.sysid === sysid);
-      const autopilot = peer && (peer.components || []).find((c) => c.compid === 1);
+      const autopilot = peer && peer.components.find((c) => c.compid === 1);
       const position = autopilot && autopilot.position;
       if (!position) {
         // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: no GLOBAL_POSITION_INT seen yet is a live telemetry state, not an input

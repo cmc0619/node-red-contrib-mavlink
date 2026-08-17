@@ -71,7 +71,7 @@ test('bodyToNed at heading 0 maps forward to north and right to east', () => {
 });
 
 test('bodyToNed at heading 90 maps forward to east and right to south', () => {
-  const ned = bodyToNed({ forward: 3, right: 4 }, 90);
+  const ned = bodyToNed({ forward: 3, right: 4, down: 0 }, 90);
   approx(ned.north, -4, 1e-9, 'north');
   approx(ned.east, 3, 1e-9, 'east');
   assert.equal(ned.down, 0);

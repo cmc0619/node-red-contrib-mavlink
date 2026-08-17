@@ -233,13 +233,13 @@ test('a blank msg.payload override stays blank instead of coercing to 0 (Greptil
   // distinction still matters after the coordinate guards went to the editor —
   // buildParamArray reads "absent" and "0" differently, and blank means absent.
   for (const blank of ['', '   ', '\t']) {
-    const merged = mergeParams({}, { 5: blank, 6: 8.5 });
+    const merged = mergeParams({ params: '{}' }, { 5: blank, 6: 8.5 });
     assert.equal(merged[5], undefined, `${JSON.stringify(blank)} must not become a coordinate`);
   }
 
   // A real override still lands, and an explicit 0 still counts as typed.
-  assert.equal(mergeParams({}, { 5: 47.4 })[5], 47.4);
-  assert.equal(mergeParams({}, { 5: 0 })[5], 0);
+  assert.equal(mergeParams({ params: '{}' }, { 5: 47.4 })[5], 47.4);
+  assert.equal(mergeParams({ params: '{}' }, { 5: 0 })[5], 0);
 });
 
 test('GCS parity: blank reposition speed and yaw encode the spec sentinels (#240)', () => {

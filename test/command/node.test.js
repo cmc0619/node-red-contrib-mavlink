@@ -23,7 +23,7 @@ test('Build tier: output 0 carries the COMMAND_LONG and output 1 a top-level sta
   const RED = redStub({});
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({ sendAs: 'long', mode: 'preset', preset: 'arm', delivery: 'build' });
+  const node = new Node({ params: '{}', sendAs: 'long', mode: 'preset', preset: 'arm', delivery: 'build' });
 
   let sent;
   node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
@@ -41,6 +41,7 @@ test('Build tier with carrier int: output 0 carries a COMMAND_INT with config fr
   // reposition (MAV_CMD_DO_REPOSITION) carries lat/lon in params 5/6 —
   // entered as degrees, scaled to degE7 by the INT carrier (§9).
   const node = new Node({
+    params: '{}',
     sendAs: 'int',
     frame: '3', // GLOBAL_RELATIVE_ALT
     mode: 'preset',
@@ -70,6 +71,7 @@ test('Safety preset refuses a truthy-but-non-boolean confirmation token', async 
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'flight_termination',
@@ -95,6 +97,7 @@ test('Safety preset Build tier also requires msg.confirmed === true', async () =
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'flight_termination',
@@ -118,6 +121,7 @@ test('Safety preset with confirmed === true proceeds to send the command', async
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'flight_termination',
@@ -148,6 +152,7 @@ test('Async handler contains a throw as a terminal failed status plus done(err)'
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -182,6 +187,7 @@ test('two consecutive INT inputs both fail loud when dialect lookup fails', asyn
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'int',
     frame: '3',
     mode: 'preset',
@@ -249,6 +255,7 @@ test('resolveTarget: wire tier empty config inherits Vehicle Profile target from
   const Node = RED.nodes.types['mavlink-command'];
   // Wire tier (send) with empty target config — must inherit from connNode.vehicle.
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -272,6 +279,7 @@ test('resolveTarget: explicit config value wins over Vehicle Profile', async () 
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -300,6 +308,7 @@ test('resolveTarget: companion identity derives {airframe sysid, 1} as target', 
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -329,6 +338,7 @@ test('resolveTarget: msg.payload.target overrides companion derivation', async (
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -353,6 +363,7 @@ test('resolveTarget: config 0 is broadcast and survives (new semantics)', async 
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -380,6 +391,7 @@ test('a broadcast target on the confirm tier still sends — the editor is what 
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -407,6 +419,7 @@ test('resolveTarget: build tier inherits from config.vehicle profile stub', asyn
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -435,6 +448,7 @@ test('resolveTarget: build tier ignores config.vehicle profile unless dialect is
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -464,6 +478,7 @@ test('ack-matcher pin: companion target used for COMMAND_ACK matching; ack from 
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',   // commandId 400
@@ -501,6 +516,7 @@ test('blank Command timeout keeps the 10000 ms ACK window', async (t) => {
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -528,6 +544,7 @@ test('blank Command maxRetries keeps three temporary-rejection retries', async (
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -569,6 +586,7 @@ test('a hand-edited garbage Command mode resolves no command — nothing is buil
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'presett',
     preset: 'arm',
@@ -596,6 +614,7 @@ test('silent ACK windows re-send a LONG with incremented confirmation, badge tel
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -646,6 +665,7 @@ test('silent ACK windows re-send an INT as-is — no confirmation byte, identica
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'int',
     frame: '3',
     mode: 'preset',
@@ -685,6 +705,7 @@ test('Advanced mode sends once on a silent window — a raw MAV_CMD id never opt
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'advanced',
     advancedCommand: '246', // PREFLIGHT_REBOOT_SHUTDOWN — silence IS the success
@@ -722,7 +743,7 @@ test('a "Send as" token that is not a carrier builds nothing at all', async () =
     const RED = redStub({});
     require('../../nodes/mavlink-command')(RED);
     const Node = RED.nodes.types['mavlink-command'];
-    const node = new Node({ sendAs, mode: 'preset', preset: 'arm', delivery: 'build' });
+    const node = new Node({ params: '{}', sendAs, mode: 'preset', preset: 'arm', delivery: 'build' });
 
     let output;
     node.emit('input', { payload: null }, (m) => { output = m; }, () => {});
@@ -736,7 +757,7 @@ test('an unlisted preset resolves no command id rather than a guess', async () =
   const RED = redStub({});
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({ sendAs: 'long', mode: 'preset', preset: 'arrrm', delivery: 'build' });
+  const node = new Node({ params: '{}', sendAs: 'long', mode: 'preset', preset: 'arrrm', delivery: 'build' });
 
   let output;
   node.emit('input', { payload: null }, (m) => { output = m; }, () => {});
@@ -753,6 +774,7 @@ test('Advanced mode never reads preset — an unset preset field does not refuse
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'advanced',
     advancedCommand: '400', // MAV_CMD_COMPONENT_ARM_DISARM
@@ -894,6 +916,7 @@ test('a redeploy-cancelled ack wait finishes quietly, not as a command failure (
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     connection: 'conn',
     sendAs: 'long',
     mode: 'preset',
@@ -932,6 +955,7 @@ test('ack settle and close in one synchronous stack cannot spawn a zombie wait (
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     connection: 'conn',
     sendAs: 'long',
     mode: 'preset',
@@ -985,6 +1009,7 @@ test('a completion already satisfied at the ack cannot emit through a same-stack
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     connection: 'conn',
     sendAs: 'long',
     mode: 'preset',
@@ -1026,6 +1051,7 @@ test('a redeploy-cancelled completion wait finishes quietly (accepted-risk M1)',
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     connection: 'conn',
     sendAs: 'long',
     mode: 'preset',
@@ -1061,6 +1087,7 @@ test('IN_PROGRESS moves the badge and the terminal record carries result_param2 
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -1104,6 +1131,7 @@ test('a denial reports its result_param2 rather than a bare name (§9)', async (
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     sendAs: 'long',
     mode: 'preset',
     preset: 'arm',
@@ -1138,6 +1166,7 @@ test('a completion timeout keeps the accepted ack\'s result_param2 (CodeRabbit)'
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
+    params: '{}',
     connection: 'conn',
     sendAs: 'long',
     mode: 'preset',

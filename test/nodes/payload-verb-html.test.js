@@ -295,7 +295,7 @@ test('payload sendAs defaults to the first valid option with no blank prompt', (
   assert.doesNotMatch(payloadHtml, /id="node-input-carrier"/, 'retired carrier control must not be rendered');
   assert.match(
     payloadHtml,
-    /sendAs:\s*\{ value: 'int' \}/,
+    /sendAs:\s*\{ value: 'int',/,
     'new payload nodes default to COMMAND_INT'
   );
   assert.doesNotMatch(payloadHtml, /select carrier/i, 'send-as select has no meaningless blank prompt');
@@ -340,6 +340,55 @@ test('payload frame dropdown: blank names the wire default (relative alt); frame
 });
 
 
+
+// A drifted carrier selects no builder (§5), and the Build tier would report
+// that as a succeeded build of `{ payload: undefined }` — phantom success,
+// the one guard shape §9 sanctions. The ring must name exactly the CARRIER
+// members the driver dispatches.
+test('the send-as select is pinned to the carriers the driver implements', () => {
+  const { CARRIER } = require('../../lib/command');
+  const members = Object.values(CARRIER).sort();
+  assert.match(
+    payloadHtml,
+    /sendAs:\s*\{ value: 'int', validate: RED\.mavlink\.oneOf\(\[[^\]]*\]\) \}/,
+    'sendAs carries a oneOf validator'
+  );
+  for (const member of members) {
+    assert.match(
+      payloadHtml,
+      new RegExp(`sendAs:[^\\n]*oneOf\\(\\[[^\\]]*'${member}'`),
+      `oneOf admits the CARRIER member ${member}`
+    );
+  }
+});
+
+test('the delivery select is pinned to the tiers the driver dispatches', () => {
+  assert.match(
+    payloadHtml,
+    /delivery:\s*\{ value: 'build', validate: RED\.mavlink\.oneOf\(\[[^\]]*\]\) \}/,
+    'delivery carries a oneOf validator'
+  );
+  const nodeSource = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'nodes', 'mavlink-payload.js'),
+    'utf8'
+  );
+  const dispatch = nodeSource.slice(nodeSource.indexOf('switch (delivery)'));
+  const implemented = [...dispatch.slice(0, dispatch.indexOf('default:'))
+    .matchAll(/case '([a-z]+)':/g)].map((m) => m[1]);
+  assert.ok(implemented.length >= 3, 'the delivery dispatcher was found');
+  for (const tier of implemented) {
+    assert.match(
+      payloadHtml,
+      new RegExp(`delivery:[^\\n]*oneOf\\(\\[[^\\]]*'${tier}'`),
+      `oneOf admits the dispatched tier ${tier}`
+    );
+    assert.match(
+      payloadHtml,
+      new RegExp(`<option value="${tier}">`),
+      `the dialog offers the dispatched tier ${tier}`
+    );
+  }
+});
 
 test('REQUIRED_VALUES is a drift pin, not a second vocabulary (§0 walled garden)', () => {
   // The driver sends a blank slot as its recipe fallback, so the editor's
