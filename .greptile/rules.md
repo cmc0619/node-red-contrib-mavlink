@@ -46,22 +46,35 @@ A suggestion missing any of the three will be declined.
 Net code length is a budget. A five-line guard is not free because it is small —
 it is five lines someone has to read, test, and keep true forever.
 
-## 3. The driver does not validate its input; the editor does
+## 3. Fail loud; do not repair silently
 
-This is the rule most findings get wrong, so read it before filing one.
+This toolkit builds Node-RED flows. Collect correct data in the editor, deploy
+it, and let the runtime fail loudly when inputs or the environment are wrong.
 
-`AGENTS.md` §0 splits the package in two. The **driver** (`lib/**`, `nodes/*.js`)
-is pymavlink for Node-RED: low level, general purpose, no policy. It trusts its
-input. GIGO is supported behaviour — if the wire can carry it, the driver carries
-it, including commands that fly the aircraft into a building. The **editor**
-(`nodes/*.html`) is the application on top, and *all* input validation lives
-there, as deploy-time red rings.
+So: do **not** suggest swallowing an error, substituting a default for bad
+input, or "gracefully degrading" past a broken deploy. A crash that names the
+problem is the correct behaviour, and several are deliberate. Suggesting a
+try/catch around one is a downgrade.
 
-The shibboleth: "what happens if `msg.payload.x` is garbage?" The only correct
-answer is "it goes on the wire."
+**"Fail loudly" means the process crashes.** It does not mean the driver checks
+its input and raises a tidy validation error — that is the opposite of this rule.
+An unresolved value dereferenced as `undefined`, a NaN refused by the serializer,
+a null config node hit at `.send()`: those *are* the loud failure, and they are
+correct as they stand. A finding that reads this rule as "so add a check that
+throws a clear message" has inverted it. This is the same rule as `AGENTS.md` §0,
+stated in shorthand, and §0 is the long form:
+
+- The **driver** (`lib/**`, `nodes/*.js`) is pymavlink for Node-RED — low level,
+  general purpose, no policy. It trusts its input. GIGO is supported behaviour:
+  if the wire can carry it, the driver carries it, including commands that fly
+  the aircraft into a building. The shibboleth is "what happens if
+  `msg.payload.x` is garbage?" and the only correct answer is "it goes on the
+  wire."
+- The **editor** (`nodes/*.html`) is the application on top, and *all* input
+  validation lives there, as deploy-time red rings.
 
 So do **not** suggest any of these in `lib/**` or `nodes/*.js`. They are declined
-on sight and re-proposing one costs more to decline than it would have cost to
+on sight, and re-proposing one costs more to decline than it would have cost to
 skip:
 
 - a `throw` on a config or `msg` value
@@ -70,24 +83,24 @@ skip:
 - a `default:` arm that does anything, a membership or vocabulary test
 - a fallback, substitution, or coercion
 
+Substituting a default deserves its own line, because it is *worse* than the
+guard it replaces: it invents a value the caller did not choose (`AGENTS.md` §4),
+so the vehicle acts on a number nobody asked for and nothing says why. A guard
+that throws at least fails loud. Replacing one with a silent fallback is a
+downgrade in both directions.
+
 "Removing this guard replaced a clear message with a cryptic TypeError" is true
-every time a guard is removed, and is never a reason on its own — a crash routed
-to `failInput` is a supported outcome. "A hand-edited flow or an Admin-API deploy
-skips the editor" is true of *every* validator in the walled garden, so it argues
-for a runtime twin of all of them and is not an exception.
+every time a guard is removed and is never a reason on its own — the cryptic
+crash is the loud failure this rule asks for. "A hand-edited flow or an
+Admin-API deploy skips the editor" is true of *every* validator in the walled
+garden, so it argues for a runtime twin of all of them and is not an exception.
 
-One thing does promote a guard-shaped finding into a real one: the removal
-produces **silence or false success** — a run reported succeeded that did not
-happen, a member dropped from an aggregate, an output emitted as valid that was
-never built. Report those. The fix belongs where the outcome is *reported*, never
-at the input.
-
-Separately, and not in tension with the above: do **not** suggest swallowing an
-error, substituting a default for bad input, or "gracefully degrading" past a
-broken deploy. Substituting a default is the worse half of that — it invents a
-value the caller did not choose (`AGENTS.md` §4), so it is a downgrade even from
-the guard it replaces. Where a crash already exists it is usually deliberate;
-wrapping one in try/catch is a downgrade too.
+One thing does promote a guard-shaped finding into a real one, and it is the
+half of "fail loud" that gets missed: the removal makes a failure **quiet**, or
+reports it as success — a run reported succeeded that did not happen, a member
+dropped from an aggregate, an output emitted as valid that was never built.
+Report those. The fix belongs where the outcome is *reported*, never at the
+input.
 
 ## 4. Pre-1.0: no migrations, no compatibility shims
 
