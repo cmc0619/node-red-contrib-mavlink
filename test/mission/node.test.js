@@ -181,6 +181,23 @@ test('an unknown payload.missionType resolves no type rather than a wrong one', 
   assert.equal(outputs[0][0].payload.missionType, undefined, 'the type is unresolved, not 0');
 });
 
+test('a numeric 0 payload.missionType overrides the config type — presence, not truthiness', async () => {
+  // `??`, not `||` (§5 presence fallback): 0 is MISSION, a real member; the
+  // old falsy test silently dropped it to the configured type.
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'build',
+    missionType: 'fence',
+  });
+  const { outputs, err } = await runInput(node, { payload: { missionType: 0 } });
+  assert.equal(err, undefined);
+  assert.equal(outputs[0][0].payload.missionType, 0, 'the numeric override wins over the config fence');
+});
+
 test('an upload under a type no family answers to fails before any packet', async () => {
   // validateItems is affirmative (§5): garbage selects no validator, and the
   // crater is the result dereference — before this, the items validated as
