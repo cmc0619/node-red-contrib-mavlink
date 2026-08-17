@@ -48,7 +48,7 @@ const {
 const {
   resolveDeliveryContext,
   applyConnectionStatus,
-  finiteNumberOr,
+  numberOr,
 } = require('../lib/addressing');
 
 module.exports = function registerMavlinkMission(RED) {
@@ -114,16 +114,10 @@ module.exports = function registerMavlinkMission(RED) {
       // member, so only a hand-edited flow gets here.
       const missionType = missionTypeValue(missionTypeKey);
 
-      // Per-step timeout / retry count (owner ruling, 2026-08-14, the
-      // timer half of the selection-typo audit). Blank keeps the library
-      // default; a present non-finite value used to coerce silently —
-      // `setTimeout(fn, NaN)` (`lib/mission/transfer.js`) substitutes ~1 ms
-      // instead of refusing, turning a hand-edited 'abc' step timeout into a
-      // retry storm rather than the configured cadence. Neither value
-      // reaches the wire, so nothing downstream catches it the way wire.js
-      // catches an integer field.
-      const timeoutMs = finiteNumberOr(config.timeout, undefined, 'Mission step timeout');
-      const maxRetries = finiteNumberOr(config.maxRetries, undefined, 'Mission max retries');
+      // Blank keeps the library default; the editor's number validator owns
+      // the rest (§14: a finite-number check on operator input is a guardrail).
+      const timeoutMs = numberOr(config.timeout, undefined);
+      const maxRetries = numberOr(config.maxRetries, undefined);
 
       // A download or upload is a two-way conversation with one vehicle: the
       // machine subscribes exact-match on the target sysid, and no vehicle

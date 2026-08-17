@@ -60,7 +60,7 @@ const {
   applyConnectionStatus,
   dialectFromVehicleId,
   dialectFromConnection,
-  finiteNumberOr,
+  numberOr,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -213,15 +213,10 @@ module.exports = function registerMavlinkCommand(RED) {
       // buildCarrierMessage dispatches it affirmatively.
       const configuredCarrier = config.sendAs;
 
-      // ACK timeout / retry count (owner ruling, 2026-08-14): blank keeps the
-      // library default; a present non-finite value used to coerce silently
-      // — `setTimeout(fn, NaN)` substitutes ~1 ms instead of refusing, so a
-      // hand-edited 'abc' ACK timeout meant a command's ack window closed
-      // before the send even left the queue (measured ~4 ms). Neither value
-      // reaches the wire, so nothing downstream catches it the way wire.js
-      // catches an integer field.
-      const timeoutMs = finiteNumberOr(config.timeout, DEFAULT_TIMEOUT_MS, 'Command ACK timeout');
-      const maxRetries = finiteNumberOr(config.maxRetries, DEFAULT_MAX_RETRIES, 'Command max retries');
+      // Blank keeps the library default; the editor's number validator owns
+      // the rest (§14: a finite-number check on operator input is a guardrail).
+      const timeoutMs = numberOr(config.timeout, DEFAULT_TIMEOUT_MS);
+      const maxRetries = numberOr(config.maxRetries, DEFAULT_MAX_RETRIES);
       // Complete's poll timeout resolves here too — before the send, not in
       // the post-ack continuation where it used to sit: by then the vehicle
       // has already accepted and begun executing the command, so a garbage
@@ -229,7 +224,7 @@ module.exports = function registerMavlinkCommand(RED) {
       // so a cleared value cannot red a Build/Send/Confirm node that never
       // reads it (the same liveOr rule the editors follow).
       const completionTimeoutMs = delivery === 'complete'
-        ? finiteNumberOr(config.completionTimeout, 60000, 'Command completion timeout')
+        ? numberOr(config.completionTimeout, 60000)
         : null;
 
       const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};

@@ -81,30 +81,6 @@ test('a set with no paramType resolves no MAV_PARAM_TYPE rather than guessing RE
   );
 });
 
-
-test('a non-finite Param timeout refuses instead of arming a ~1 ms echo deadline', () => {
-  // setTimeout(fn, NaN) arms ~1 ms with nothing downstream to catch it (owner
-  // ruling, 2026-08-14): a hand-edited 'abc' timeout meant the echo deadline
-  // — and the NaN quarter-scaled stall detector — fired before the send left
-  // the queue. Same crater class as Command's ACK timeout.
-  const conn = connStubFull();
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-param')(RED);
-  const Node = RED.nodes.types['mavlink-param'];
-  const node = new Node({
-    delivery: 'confirm',
-    action: 'read',
-    connection: 'conn',
-    targetSystem: 1,
-    targetComponent: 1,
-    timeout: 'abc',
-  });
-  let err;
-  node.emit('input', { payload: { paramId: 'ARMING_CHECK' } }, () => {}, (e) => { err = e; });
-  assert.match(err.message, /Param timeout must be a finite number \(got "abc"\)/);
-  assert.equal(conn.sent.length, 0, 'nothing left the wire under a garbage deadline');
-});
-
 test('a set with a blank value sends the coercion, not a refusal — the editor owns the box', () => {
   // The driver encodes and sends (§0): a blank value is `Number('')`. The
   // editor's `value` field is deliberately blank-legal because a blank defers

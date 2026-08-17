@@ -21,7 +21,7 @@ const {
 const { AckWaiter } = require('../lib/command');
 const { DEFAULT_MAX_RESENDS } = require('../lib/command/ack');
 const { BAND } = require('../lib/connection/bands');
-const { firstDefined, finiteNumberOr, resolveDeliveryContext, applyConnectionStatus } = require('../lib/addressing');
+const { firstDefined, numberOr, resolveDeliveryContext, applyConnectionStatus } = require('../lib/addressing');
 const {
   shouldSuppress,
   makeStatusRecord,
@@ -101,12 +101,9 @@ module.exports = function registerMavlinkMove(RED) {
         // Ack attribution (§9): ignore an ack explicitly addressed to a
         // different GCS on a shared link.
         sourceIds: connectionNode.resolveSourceIds(identityId),
-        // Blank inherits the AckWaiter default, like the Command node's
-        // field. A present non-finite value is the same crater as Command's
-        // ACK timeout (owner ruling, 2026-08-14): a poll/ack timer, not a
-        // wire field, so `setTimeout(fn, NaN)` has nothing downstream to
-        // catch it and substitutes ~1 ms instead of refusing.
-        timeoutMs: finiteNumberOr(config.ackTimeout, undefined, 'Move ACK timeout'),
+        // Blank keeps the library default; the editor's number validator owns
+        // the rest (§14: a finite-number check on operator input is a guardrail).
+        timeoutMs: numberOr(config.ackTimeout, undefined),
         // The timeout re-send is opt-in and the library's contract is explicit
         // (lib/command/ack.js): pass DEFAULT_MAX_RESENDS "only for a command
         // affirmatively known to tolerate re-issue", because re-sending is
@@ -318,35 +315,10 @@ module.exports = function registerMavlinkMove(RED) {
             completeBuild(node, send, message);
             break;
           case 'stream': {
-            // Validate the replacement fully before stopping the active
-            // stream: a rejected input must leave the running stream running,
-            // the same way a buildMoveMessage refusal above already does —
-            // never stop it as a side effect of a failed replacement.
-            // Payload overrides config (§6 runtime override of last resort);
-            // the editor default guarantees config when the payload is silent.
-            // Blank inherits the editor-validated config. A present garbage
-            // rate/TTL is not "input trust" territory (AGENTS.md's `msg`
-            // exemption is for values the core runtime judges downstream) —
-            // rateHz arms `1000 / rateHz` as a raw `setInterval` delay with no
-            // wire choke point to catch a NaN, and Node substitutes ~1 ms for
-            // one instead of refusing: `payload.rateHz: 'fast'` is a silent
-            // ~1 kHz setpoint flood, not a coerced-and-sent value (owner
-            // ruling, 2026-08-14, measured). `finiteNumberOr` throws instead.
-            // The config value crosses the same guard — a hand-edited
-            // `config.rateHz` arms the identical timer, so it is the same
-            // resource-exhaustion boundary the sibling sites (Identity
-            // heartbeat, Mission timeout, Connection stale/expire) already
-            // refuse at; the editor defaults (5 Hz / 1000 ms) back a blank.
-            const rateHz = finiteNumberOr(
-              payload.rateHz,
-              finiteNumberOr(config.rateHz, 5, 'Move stream rate (rateHz)'),
-              'Move stream rate (rateHz)'
-            );
-            const ttlMs = finiteNumberOr(
-              payload.ttlMs,
-              finiteNumberOr(config.ttlMs, 1000, 'Move stream TTL (ttlMs)'),
-              'Move stream TTL (ttlMs)'
-            );
+            // Blank keeps the library default; the editor's number validator owns
+            // the rest (§14: a finite-number check on operator input is a guardrail).
+            const rateHz = numberOr(payload.rateHz, numberOr(config.rateHz, 5));
+            const ttlMs = numberOr(payload.ttlMs, numberOr(config.ttlMs, 1000));
             // One stream per (connection, target) (#176): a second node
             // streaming to the same vehicle would alternate contradictory
             // setpoints — the vehicle oscillates while both nodes report

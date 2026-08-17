@@ -22,7 +22,7 @@ const { Connection, STATE, PeerTable } = require('../lib/connection');
 const { resolveIdentity } = require('../lib/identity');
 const { autopilotForFirmware } = require('../lib/vehicle');
 const { capBadge } = require('../lib/delivery');
-const { finiteNumberOr } = require('../lib/addressing');
+const { numberOr } = require('../lib/addressing');
 
 module.exports = function registerMavlinkConnection(RED) {
   /**
@@ -137,13 +137,10 @@ module.exports = function registerMavlinkConnection(RED) {
         boundIdentityIds: identityIds,
         signing,
         // Blank stays `undefined` — PeerTable's own default (5s/15s) applies.
-        // A present non-finite value used to coerce silently: `Number('abc')`
-        // is NaN, and every `age > this._opts.heartbeatStaleMs` comparison
-        // against NaN is false, so a hand-edited 'abc' meant peers could
-        // never go stale or expire (owner ruling, 2026-08-14, measured).
+        // The editor's number validator owns the rest (§14).
         heartbeat: {
-          staleMs: finiteNumberOr(config.staleMs, undefined, 'Connection stale threshold (staleMs)'),
-          expireMs: finiteNumberOr(config.expireMs, undefined, 'Connection expire threshold (expireMs)'),
+          staleMs: numberOr(config.staleMs, undefined),
+          expireMs: numberOr(config.expireMs, undefined),
         },
       }, {
         logger: {

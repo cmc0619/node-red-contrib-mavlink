@@ -16,7 +16,7 @@ const {
 const {
   resolveDeliveryContext,
   applyConnectionStatus,
-  finiteNumberOr,
+  numberOr,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -73,14 +73,10 @@ module.exports = function registerMavlinkPayload(RED) {
           return;
         }
 
-        // ACK timeout / retry count (owner ruling, 2026-08-14): blank keeps
-        // the library default; a present non-finite value used to coerce
-        // silently — `setTimeout(fn, NaN)` substitutes ~1 ms instead of
-        // refusing, closing the ack window before the send left the queue.
-        // Neither value reaches the wire, so nothing downstream catches it
-        // the way wire.js catches an integer field.
-        const timeoutMs = finiteNumberOr(config.timeout, DEFAULT_TIMEOUT_MS, 'Payload ACK timeout');
-        const maxRetries = finiteNumberOr(config.maxRetries, DEFAULT_MAX_RETRIES, 'Payload max retries');
+        // Blank keeps the library default; the editor's number validator owns
+        // the rest (§14: a finite-number check on operator input is a guardrail).
+        const timeoutMs = numberOr(config.timeout, DEFAULT_TIMEOUT_MS);
+        const maxRetries = numberOr(config.maxRetries, DEFAULT_MAX_RETRIES);
 
         const payload = msg.payload ?? {};
         // Payload: compidFromConfig keeps the compid field authoritative even

@@ -2,7 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
-const { applyConnectionStatus, finiteNumberOr } = require('../lib/addressing');
+const { applyConnectionStatus, numberOr } = require('../lib/addressing');
 
 module.exports = function registerMavlinkFanout(RED) {
   function MavlinkFanoutNode(config) {
@@ -209,15 +209,12 @@ function assignIfPresent(target, key, value) {
  * passes `undefined` through so lib/fanout's own absence default fires.
  * Coercing absence would hand the run NaN, and every pacing comparison
  * against NaN is false — an unthrottled fleet send with no symptom (Gitar,
- * #287). A *present* garbage value is that same crater arriving on purpose,
- * not trusted-msg territory (owner ruling, 2026-08-14): these keys arm
- * timers and pacing/retry/capacity comparisons with no wire choke point
- * downstream — `setTimeout(fn, NaN)` fires in ~1 ms instead of refusing —
- * so both branches cross `finiteNumberOr`, which throws naming the field.
+ * #287). A present garbage value is the editor's to red (§14): these keys
+ * never reach the wire, and a finite-number check on operator input is a
+ * guardrail.
  */
 function numberOption(opts, config, key) {
-  const label = `Fan-out ${key}`;
-  return finiteNumberOr(opts[key], finiteNumberOr(config[key], undefined, label), label);
+  return numberOr(opts[key], numberOr(config[key], undefined));
 }
 
 /**
