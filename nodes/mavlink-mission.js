@@ -106,21 +106,15 @@ module.exports = function registerMavlinkMission(RED) {
         connectionNode: connNode,
       });
 
-      // The vehicle judges type support: a numeric type rides as given (msg
-      // is trusted) and a stack that does not carry it answers with a
+      // The vehicle judges type support: the type rides as given (msg is
+      // trusted) and a stack that does not carry it answers with a
       // MAV_MISSION_UNSUPPORTED ack or the transfer deadline — operational
       // failures the existing paths report loud (§9). The editor's Type
-      // dropdown is the firmware protector (§11). No `|| 'mission'` default.
+      // dropdown is the firmware protector (§11). No `|| 'mission'` default,
+      // and no refusal here: a key that names no member forwards unchanged
+      // (missionTypeValue §5) and craters present at the wire's
+      // finite-integer choke — never absent-decoded-as-0 at the vehicle.
       const missionType = missionTypeValue(missionTypeKey);
-      // A key that resolves to no member would ride as mission_type:
-      // undefined — absent on the wire, decoded as type 0 — so download and
-      // clear would act on the vehicle's REAL mission plan (clear erases it)
-      // before stalling to the deadline. That is the §0 rule 3 silence
-      // class, refused where the resolution is reported (CodeRabbit).
-      if (missionType === undefined) {
-        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: the resolution selected no type; acting would hit the wrong plan buffer
-        throw new Error(`mavlink-mission: '${missionTypeKey}' names no mission type`);
-      }
 
       // Blank keeps the library default; the editor's number validator owns
       // the rest (§14: a finite-number check on operator input is a guardrail).

@@ -162,24 +162,29 @@ test('build tier plans a fence transfer under a px4 firmware profile (mission_ty
   assert.deepEqual(plan.messages.map((m) => m.name), ['MISSION_REQUEST_LIST']);
 });
 
-test('an unknown payload.missionType fails loud before any operation runs', async () => {
+test('an unknown payload.missionType rides as given — never resolved to 0, never absent', async () => {
   // The editor's Type select is the vocabulary (RED.mavlink.oneOf); a
-  // payload override is trusted runtime input. A key that resolves to no
-  // member is refused where the resolution is reported (§0 rule 3): frames
-  // would otherwise carry mission_type: undefined — decoded as 0 — and
-  // download or clear would act on the vehicle's real mission plan.
+  // payload override is trusted runtime input. A key that names no member
+  // forwards unchanged (missionTypeValue §5), so the frames carry the
+  // garbage PRESENT — where the wire's finite-integer choke refuses it
+  // naming the field (pinned in test/connection/wire-nonfinite.test.js).
+  // Resolving nothing instead would serialize the field absent, decode as
+  // type 0, and aim download/clear at the vehicle's real mission plan.
   const conn = new StubConnection();
   conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
   const Node = loadNode(conn);
-  for (const operation of ['download', 'clear']) {
-    for (const delivery of ['build', 'confirm']) {
-      const node = new Node({ operation, connection: 'conn', delivery, missionType: 'mission' });
-      const res = await runInput(node, { payload: { missionType: 'bogus' } });
-      assert.ok(res.err, `${operation}/${delivery} must fail loud`);
-      assert.match(res.err.message, /names no mission type/);
-      assert.equal(conn.sent.length, 0, `${operation}/${delivery} sent nothing`);
-    }
-  }
+  const node = new Node({
+    operation: 'download',
+    connection: 'conn',
+    delivery: 'build',
+    missionType: 'mission',
+  });
+  const { outputs, err } = await runInput(node, { payload: { missionType: 'bogus' } });
+  assert.equal(err, undefined);
+  assert.equal(conn.sent.length, 0, 'build tier sends nothing');
+  const plan = outputs[0][0].payload;
+  assert.equal(plan.missionType, 'bogus', 'the garbage rides visible and as-given');
+  assert.equal(plan.messages[0].fields.mission_type, 'bogus', 'present on the frame, not absent');
 });
 
 test('a numeric 0 payload.missionType overrides the config type — presence, not truthiness', async () => {
