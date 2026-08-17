@@ -9,8 +9,10 @@ where Greptile looks; nothing here is Greptile-specific. CodeRabbit is pointed a
 the same file by `.coderabbit.yaml`. Edit the rules here — there is one copy on
 purpose, so the two reviewers cannot drift apart.
 
-The long-form versions live in `AGENTS.md` and `DESIGN.md` §2 (code principles),
-§6 (UI rules) and §14 (ground truth). Where this file and those disagree, they win.
+The long-form versions live in `AGENTS.md` — especially §0 (the two-artifact
+doctrine, which rule 3 below restates) and §9 (which findings a review bot has
+standing to raise at all) — and in `DESIGN.md` §2 (code principles), §6 (UI
+rules) and §14 (ground truth). Where this file and those disagree, they win.
 
 ---
 
@@ -44,15 +46,48 @@ A suggestion missing any of the three will be declined.
 Net code length is a budget. A five-line guard is not free because it is small —
 it is five lines someone has to read, test, and keep true forever.
 
-## 3. Fail loud; do not repair silently
+## 3. The driver does not validate its input; the editor does
 
-This toolkit builds Node-RED flows. Collect correct data in the editor, deploy
-it, and let the runtime fail loudly when inputs or the environment are wrong.
+This is the rule most findings get wrong, so read it before filing one.
 
-So: do **not** suggest swallowing an error, substituting a default for bad
-input, or "gracefully degrading" past a broken deploy. A crash that names the
-problem is the correct behaviour, and several are deliberate. Suggesting a
-try/catch around one is a downgrade.
+`AGENTS.md` §0 splits the package in two. The **driver** (`lib/**`, `nodes/*.js`)
+is pymavlink for Node-RED: low level, general purpose, no policy. It trusts its
+input. GIGO is supported behaviour — if the wire can carry it, the driver carries
+it, including commands that fly the aircraft into a building. The **editor**
+(`nodes/*.html`) is the application on top, and *all* input validation lives
+there, as deploy-time red rings.
+
+The shibboleth: "what happens if `msg.payload.x` is garbage?" The only correct
+answer is "it goes on the wire."
+
+So do **not** suggest any of these in `lib/**` or `nodes/*.js`. They are declined
+on sight and re-proposing one costs more to decline than it would have cost to
+skip:
+
+- a `throw` on a config or `msg` value
+- a null / undefined / finiteness / length / format check on a value the editor
+  owns
+- a `default:` arm that does anything, a membership or vocabulary test
+- a fallback, substitution, or coercion
+
+"Removing this guard replaced a clear message with a cryptic TypeError" is true
+every time a guard is removed, and is never a reason on its own — a crash routed
+to `failInput` is a supported outcome. "A hand-edited flow or an Admin-API deploy
+skips the editor" is true of *every* validator in the walled garden, so it argues
+for a runtime twin of all of them and is not an exception.
+
+One thing does promote a guard-shaped finding into a real one: the removal
+produces **silence or false success** — a run reported succeeded that did not
+happen, a member dropped from an aggregate, an output emitted as valid that was
+never built. Report those. The fix belongs where the outcome is *reported*, never
+at the input.
+
+Separately, and not in tension with the above: do **not** suggest swallowing an
+error, substituting a default for bad input, or "gracefully degrading" past a
+broken deploy. Substituting a default is the worse half of that — it invents a
+value the caller did not choose (`AGENTS.md` §4), so it is a downgrade even from
+the guard it replaces. Where a crash already exists it is usually deliberate;
+wrapping one in try/catch is a downgrade too.
 
 ## 4. Pre-1.0: no migrations, no compatibility shims
 
