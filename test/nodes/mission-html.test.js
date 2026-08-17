@@ -156,6 +156,14 @@ test('mavlink-mission items validator reds per-item: uint16 command and family r
   assert.match(String(verdict({}, [{ command: 65536 }])), /integer command id/);
   assert.match(String(verdict({}, [null])), /integer command id/);
   assert.match(String(verdict({}, [16])), /integer command id/);
+  // Blank/absent commands must not coerce to a legal 0 and upload command 0
+  // (Codex); an explicit numeric 0 and a numeric string stay legal.
+  assert.match(String(verdict({}, [{ command: '' }])), /integer command id/);
+  assert.match(String(verdict({}, [{ command: null }])), /integer command id/);
+  assert.match(String(verdict({}, [{ command: false }])), /integer command id/);
+  assert.match(String(verdict({}, [{}])), /integer command id/);
+  assert.equal(verdict({}, [{ command: 0 }]), true, 'an explicit numeric 0 rides');
+  assert.equal(verdict({}, [{ command: '16' }]), true, 'a numeric string names its command');
 
   // Family reservation (§9, issue #90): a mission may carry any command except
   // the fence and rally families; fence and rally are their families only.

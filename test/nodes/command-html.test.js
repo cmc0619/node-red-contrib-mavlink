@@ -588,6 +588,9 @@ test('mavlink-command: an unreadable params blob reds in Advanced mode too', () 
   assert.match(String(verdict('{oops')), /valid JSON/);
   assert.equal(verdict('{"1":5}'), true, 'a readable blob passes untouched — no preset rules apply');
   assert.equal(verdict('{}'), true);
+  // Blank is not the empty set: mergeParams parses this string as saved and
+  // '' is not JSON, so the ring must not vouch for a hand-edited blank (Codex).
+  assert.match(String(verdict('')), /valid JSON/);
 });
 
 test('mavlink-command: frame and compid carry their own red rings', () => {

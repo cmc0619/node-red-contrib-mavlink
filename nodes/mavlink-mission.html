@@ -61,7 +61,13 @@
           var type = RED.mavlink.liveOr(this, '#node-input-missionType', this.missionType, 'mission');
           for (var i = 0; i < arr.length; i++) {
             var item = arr[i];
-            var cmd = item && typeof item === 'object' ? Number(item.command) : NaN;
+            // The raw value must be present and numeric before Number() runs:
+            // '' / null / false all coerce to 0, a legal uint16, and would
+            // upload command 0 instead of red-ringing the blank (Codex). An
+            // explicit numeric 0 and a numeric string stay legal.
+            var raw = item && typeof item === 'object' ? item.command : undefined;
+            var cmd = typeof raw === 'number' ? raw
+              : (typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN);
             if (!Number.isInteger(cmd) || cmd < 0 || cmd > 0xffff) {
               return 'item ' + i + ' needs an integer command id (0–65535)';
             }

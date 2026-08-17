@@ -333,7 +333,10 @@
           // The blob must parse in both modes — Advanced included, where the
           // runtime reads it through the same JSON.parse and a corrupt blob
           // is drift the editor can already see at deploy. The preset rules
-          // below are preset-mode only.
+          // below are preset-only. Blank reds too: mergeParams parses this
+          // string as saved and '' is not JSON — '{}' is the empty spelling —
+          // while paramValues' own '' fallback would vouch for it (Codex).
+          if (RED.mavlink.isBlank(v)) return 'is not valid JSON — {} is the empty set';
           const values = paramValues(this, v);
           if (values === null) return 'is not valid JSON';
           if (RED.mavlink.liveOr(this, '#node-input-mode', this.mode, 'preset') !== 'preset') return true;
