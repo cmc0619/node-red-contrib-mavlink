@@ -70,13 +70,16 @@ function assertChangeHandlerContains(html, binder, needle, msg) {
  * @param {object} [nodeLookup]  ids visible to RED.nodes.node()
  * @param {{dom?: Object<string,{val?: *, selectedText?: string,
  *   items?: Array<{val?: *, attrs?: object, checked?: boolean}>}>,
- *   editStack?: Array<{id: string}>}} [opts]
+ *   editStack?: Array<{id: string}>,
+ *   root?: string}} [opts]  `root` reads the node HTML and shared resource
+ *   from another package root (the integration smoke test points it at the
+ *   installed artifact so the packaged test stays self-consistent)
  * @returns {object} the registered `defaults`
  */
 function loadNodeDefaults(nodeName, nodeLookup = {}, opts = {}) {
   const dom = opts.dom || {};
   const editStack = opts.editStack || [];
-  const root = path.join(__dirname, '..', '..');
+  const root = opts.root || path.join(__dirname, '..', '..');
   const html = fs.readFileSync(path.join(root, 'nodes', `${nodeName}.html`), 'utf8');
   const start = html.indexOf('<script type="text/javascript">');
   assert.ok(start >= 0, `${nodeName}.html must have an editor script block`);
