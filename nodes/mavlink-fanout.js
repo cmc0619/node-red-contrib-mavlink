@@ -2,7 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
-const { applyConnectionStatus, finiteNumberOr } = require('../lib/addressing');
+const { applyConnectionStatus, numberOr } = require('../lib/addressing');
 
 module.exports = function registerMavlinkFanout(RED) {
   function MavlinkFanoutNode(config) {
@@ -213,11 +213,11 @@ function assignIfPresent(target, key, value) {
  * not trusted-msg territory (owner ruling, 2026-08-14): these keys arm
  * timers and pacing/retry/capacity comparisons with no wire choke point
  * downstream — `setTimeout(fn, NaN)` fires in ~1 ms instead of refusing —
- * so both branches cross `finiteNumberOr`, which throws naming the field.
+ * so both branches cross `numberOr`, which throws naming the field.
  */
 function numberOption(opts, config, key) {
   const label = `Fan-out ${key}`;
-  return finiteNumberOr(opts[key], finiteNumberOr(config[key], undefined, label), label);
+  return numberOr(opts[key], numberOr(config[key], undefined, label), label);
 }
 
 /**

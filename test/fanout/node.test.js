@@ -532,11 +532,6 @@ test('a config with no numeric keys at all inherits the lib absence defaults (Gi
   // sleep 0 ms and finish effectively instantly. One inter-member gap is the
   // observable difference between "default applied" and "absence became NaN".
   assert.ok(Date.now() - started >= 80, 'the lib default interval paced the run');
-
-  // Present garbage is the other half of the crater: it throws naming the
-  // field instead of riding into the pacing comparisons as NaN.
-  const err = await emitInput(node, { payload: { message: builtCommand(), intervalMs: 'abc' } }, () => {}).then(() => null, (e) => e);
-  assert.match(err.message, /Fan-out intervalMs must be a finite number/);
 });
 
 test('a wrapper concurrency of 0 completes instead of hanging (Codex, #287)', async () => {

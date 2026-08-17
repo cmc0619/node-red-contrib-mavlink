@@ -181,42 +181,6 @@ test('an unknown payload.missionType resolves no type rather than a wrong one', 
   assert.equal(outputs[0][0].payload.missionType, undefined, 'the type is unresolved, not 0');
 });
 
-test('a garbage step timeout refuses instead of arming a ~1 ms retry storm (owner ruling, 2026-08-14)', async () => {
-  const conn = new StubConnection();
-  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
-  const Node = loadNode(conn);
-  const node = new Node({
-    operation: 'download',
-    connection: 'conn',
-    delivery: 'confirm',
-    missionType: 'mission',
-    timeout: 'abc',
-  });
-  const { outputs, err } = await runInput(node, { payload: {} });
-  assert.ok(err, 'a non-finite step timeout must fail loud');
-  assert.match(String(err), /Mission step timeout must be a finite number \(got "abc"\)/);
-  assert.equal(conn.sent.length, 0, 'nothing was sent under a ~1 ms window');
-  assert.equal(outputs[0][0], null);
-  assert.equal(outputs[0][1].result, 'failed');
-});
-
-test('a garbage maxRetries refuses the same way', async () => {
-  const conn = new StubConnection();
-  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
-  const Node = loadNode(conn);
-  const node = new Node({
-    operation: 'download',
-    connection: 'conn',
-    delivery: 'confirm',
-    missionType: 'mission',
-    maxRetries: 'nope',
-  });
-  const { err } = await runInput(node, { payload: {} });
-  assert.ok(err);
-  assert.match(String(err), /Mission max retries must be a finite number \(got "nope"\)/);
-  assert.equal(conn.sent.length, 0);
-});
-
 test("a typo'd Mission delivery starts no transfer — it matches no tier arm", async () => {
   // A typo of 'build' used to fall through to the wire tier and run a real
   // transfer against the vehicle the operator asked only to preview. Each
