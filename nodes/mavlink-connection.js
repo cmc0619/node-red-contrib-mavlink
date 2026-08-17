@@ -232,7 +232,10 @@ function buildTransportConfig(config) {
     mode: config.mode,
     bindAddress: config.bindHost,
     bindPort: Number(config.bindPort),
-    remoteAddress: config.remoteHost || undefined,
+    // A blank host rides as '' — every transport consumer tests these fields
+    // for truthiness, so '' already reads as absent. The port keeps its
+    // ternary: Number('') is 0, a value nobody chose.
+    remoteAddress: config.remoteHost,
     remotePort: config.remotePort ? Number(config.remotePort) : undefined,
   });
   switch (config.mode) {
@@ -248,7 +251,7 @@ function buildTransportConfig(config) {
       return {
         ...socket(),
         // UDP only — TCP has no broadcast, and the editor hides the row for it.
-        broadcastAddress: config.broadcastHost || undefined,
+        broadcastAddress: config.broadcastHost,
         broadcastPort: config.broadcastPort ? Number(config.broadcastPort) : undefined,
       };
     default: break; // This space intentionally left blank (§5)
