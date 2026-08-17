@@ -93,18 +93,8 @@
       } },
       // Blank means "use the peer table's 5s/15s defaults"; a set value must
       // be a positive interval, or staleness silently never fires.
-      staleMs: { value: '', validate: function (v, _opt) {
-        if (String(v == null ? '' : v).trim() === '') return true;
-        var n = Number(v);
-        if (Number.isInteger(n) && n > 0) return true;
-        return 'must be a positive number of milliseconds';
-      } },
-      expireMs: { value: '', validate: function (v, _opt) {
-        if (String(v == null ? '' : v).trim() === '') return true;
-        var n = Number(v);
-        if (Number.isInteger(n) && n > 0) return true;
-        return 'must be a positive number of milliseconds';
-      } },
+      staleMs: { value: '', validate: RED.mavlink.validateAtLeast(1, { integer: true }) },
+      expireMs: { value: '', validate: RED.mavlink.validateAtLeast(1, { integer: true }) },
       disabled: { value: false },
     },
     credentials: {

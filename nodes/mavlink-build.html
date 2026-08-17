@@ -137,7 +137,7 @@
         // NaN > 0 is false, and the repeat timer simply never arms — the node
         // looks configured and does nothing. Blank is 0, which is the real
         // "off" value, so blank stays legal.
-        repeatMs:    { value: 0, validate: RED.validators.number(true) },
+        repeatMs:    { value: 0, validate: RED.mavlink.validateAtLeast(0) },
       },
       RED.mavlink.buildTierDialectDefaults({ modeField: 'tier' })
     );

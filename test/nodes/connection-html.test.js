@@ -295,7 +295,7 @@ test('link id is a wire byte; peer-freshness overrides are blank or positive', (
     assert.equal(defaults[field].validate.call({ id: 'c1' }, '5000', {}), true);
     assert.match(
       String(defaults[field].validate.call({ id: 'c1' }, '0', {})),
-      /positive number of milliseconds/
+      />= 1/
     );
   }
 });
