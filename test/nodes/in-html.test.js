@@ -101,6 +101,10 @@ test('messages red-rings anything but a list of non-blank names (walled garden)'
   assert.equal(messages.validate.call({}, ['HEARTBEAT', 'ATTITUDE'], {}), true);
   assert.match(String(messages.validate.call({}, 'HEARTBEAT', {})), /list/, 'a bare string reds');
   assert.match(String(messages.validate.call({}, ['HEARTBEAT', ''], {})), /blank/, 'a blank row reds');
+  // Non-string entries match no decoded name, so the node would listen while
+  // silently discarding every frame (Codex) — the ring reds them instead.
+  assert.match(String(messages.validate.call({}, [1], {})), /string/, 'a numeric row reds');
+  assert.match(String(messages.validate.call({}, [{}], {})), /string/, 'an object row reds');
 });
 
 test('changedFields red-rings tokens that can never name a decoded field', () => {

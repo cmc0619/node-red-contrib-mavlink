@@ -61,9 +61,13 @@
           value: [],
           validate: function (v, _opt) {
             if (!Array.isArray(v)) return 'must be a list of message names';
+            // Strings only: the runtime filter compares each entry strictly
+            // against the decoded name, so a hand-edited number or object
+            // matches nothing and the node listens while discarding every
+            // frame (Codex) — the ring must not vouch for that.
             return v.every(function (name) {
-              return !RED.mavlink.isBlank(name);
-            }) || 'must not contain a blank message name';
+              return typeof name === 'string' && !RED.mavlink.isBlank(name);
+            }) || 'every entry must be a non-blank message name string';
           },
         },
         sysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
