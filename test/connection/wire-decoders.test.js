@@ -152,6 +152,45 @@ test('cap pressure prefers never-validated pipelines over a live peer mid-frame'
   assert.equal(wire.decode(full.subarray(6), ep(1), t + 4).length, 1);
 });
 
+test('an UNKNOWN_<id> frame surfaces but does not earn eviction standing', () => {
+  // Surfacing an unverifiable frame must not hand its sender the standing a
+  // CRC-verified peer earns: UNKNOWN_<id> is trivially forgeable, so if it
+  // promoted the decoder past the first eviction tier, one spoofed datagram
+  // would buy protection from the source-churn guard (Greptile #33, Gitar #344).
+  const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
+  const common = createWire({ bundle: loadBundled('common') });
+  const unknown = common.serialize(
+    {
+      name: 'PARAM_VALUE',
+      fields: { param_id: 'X', param_value: 1, param_type: 9, param_count: 1, param_index: 0 },
+    },
+    { sysid: 7, compid: 1, seq: 0 }
+  );
+  const ep = (n) => ({ address: '10.0.0.' + n, port: 14550 });
+  const t = 4_000_000;
+
+  // The frame reaches the flow — that is the whole point of the feature.
+  assert.equal(wire.decode(unknown, ep(1), t)[0].name, 'UNKNOWN_22');
+
+  // A real peer validates and parks a partial; the spoof fills the last slot.
+  assert.equal(wire.decode(heartbeatFrame(wire), ep(2), t + 1).length, 1);
+  assert.equal(
+    wire.decode(heartbeatFrame(wire).subarray(0, 6), ep(2), t + 2).length,
+    0
+  );
+  assert.equal(wire.decoderCount(), 2);
+
+  // Allocating a third endpoint must evict the unknown-only slot, not the
+  // mid-frame peer — proof the unknown frame never set `validated`.
+  assert.equal(wire.decode(heartbeatFrame(wire), ep(3), t + 3).length, 1);
+  assert.equal(wire.decoderCount(), 2);
+  assert.equal(
+    wire.decode(heartbeatFrame(wire).subarray(6), ep(2), t + 4).length,
+    1,
+    'the mid-frame peer survived and completed its frame'
+  );
+});
+
 test('cap pressure prefers empty-buffer validated over a mid-frame peer', () => {
   const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
   const full = heartbeatFrame(wire);
