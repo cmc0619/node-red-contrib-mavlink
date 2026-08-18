@@ -8,6 +8,20 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Added
 
+- **An unknown message id is a message, not silence.** A msgid that the bound
+  dialect does not carry used to vanish inside the frame splitter — the one
+  clue that diagnoses a dialect mismatch, dropped before anything could show
+  it. It now surfaces as an <code>UNKNOWN_&lt;id&gt;</code> frame carrying the
+  raw payload: the peer table counts the sender as alive, and the id is a
+  searchable string instead of a wire-capture exercise. In nodes gate it behind
+  a **Show unknown ids** checkbox, off by default — a diagnostic is not traffic
+  a working flow asked for. The box adds unknowns *alongside* a message-name
+  filter rather than being masked by it, since an id you have never seen cannot
+  be typed into a whitelist. Unknown frames are structurally framed but
+  CRC-unverifiable by construction (the checksum seed lives in the definition
+  the dialect lacks) — the In help says so.
+
+
 - **The peer table announces flight-dynamic transitions.** Six new State feed
   events — `armed-changed`, `mode-changed`, `landed-changed`, `gps-fix-changed`,
   `home-changed`, `sensor-health-changed` — fire when a held value actually

@@ -125,6 +125,7 @@ function inConfig(overrides = {}) {
     messages: [],
     sysid: '',
     compid: '',
+    showUnknown: false,
     changedOnly: false,
     changedFields: '',
     fieldName: '',
@@ -544,6 +545,96 @@ test('mavlink-in: sysid filter drops messages from other systems', () => {
 
   stub._deliver({ name: 'HEARTBEAT', sysid: 2, compid: 1, fields: { type: 6 }, trusted: true });
   assert.equal(node._sends.length, 1, 'sysid 2 should pass through');
+});
+
+test('mavlink-in: an unknown id is dropped unless Show unknown ids is ticked', () => {
+  // #344 surfaces UNKNOWN_<id> on the wire for everyone; an In node is where
+  // it becomes opt-in, so a flow that never asked for diagnostics is not fed
+  // frames it cannot decode.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, inConfig({ connection: 'conn-1' }));
+
+  stub._deliver({ name: 'UNKNOWN_441', sysid: 1, compid: 1, fields: { msgid: 441, payload: Buffer.alloc(2) }, trusted: true });
+  assert.equal(node._sends.length, 0, 'unknown dropped by default');
+
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
+  assert.equal(node._sends.length, 1, 'known messages are unaffected');
+});
+
+test('mavlink-in: Show unknown ids passes UNKNOWN_<id> through unfiltered', () => {
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, inConfig({ connection: 'conn-1', showUnknown: true }));
+
+  stub._deliver({ name: 'UNKNOWN_441', sysid: 1, compid: 1, fields: { msgid: 441, payload: Buffer.alloc(2) }, trusted: true });
+
+  assert.equal(node._sends.length, 1);
+  assert.equal(node._sends[0].topic, 'UNKNOWN_441');
+  assert.equal(node._sends[0].payload.msgid, 441);
+});
+
+test('mavlink-in: Show unknown ids reaches past a message-name filter', () => {
+  // The name filter is a whitelist and an unknown id cannot be whitelisted —
+  // its name is the thing the operator does not know yet. So the box has to
+  // add unknowns alongside the named messages, not be masked by them.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, inConfig({
+    connection: 'conn-1', messages: ['HEARTBEAT'], showUnknown: true,
+  }));
+
+  stub._deliver({ name: 'UNKNOWN_441', sysid: 1, compid: 1, fields: { msgid: 441, payload: Buffer.alloc(2) }, trusted: true });
+  stub._deliver({ name: 'HEARTBEAT', sysid: 1, compid: 1, fields: { type: 6 }, trusted: true });
+  stub._deliver({ name: 'ATTITUDE', sysid: 1, compid: 1, fields: { roll: 0 }, trusted: true });
+
+  assert.deepEqual(
+    node._sends.map((m) => m.topic),
+    ['UNKNOWN_441', 'HEARTBEAT'],
+    'the unknown rides alongside the named message; other names stay filtered out'
+  );
+});
+
+test('mavlink-in: a name filter without the box still hides unknowns', () => {
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, inConfig({ connection: 'conn-1', messages: ['HEARTBEAT'] }));
+
+  stub._deliver({ name: 'UNKNOWN_441', sysid: 1, compid: 1, fields: { msgid: 441 }, trusted: true });
+  assert.equal(node._sends.length, 0);
+});
+
+test('mavlink-in: a dropped unknown does not consume the rate-limit slot', () => {
+  // The unknown gate runs ahead of every other filter, so an unwanted frame
+  // cannot spend a budget the operator meant for real traffic.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, inConfig({ connection: 'conn-1', rateLimit: 'UNKNOWN_441=1' }));
+
+  stub._deliver({ name: 'UNKNOWN_441', sysid: 1, compid: 1, fields: { msgid: 441 }, trusted: true });
+  stub._deliver({ name: 'UNKNOWN_441', sysid: 1, compid: 1, fields: { msgid: 441 }, trusted: true });
+
+  assert.equal(node._sends.length, 0);
 });
 
 test('mavlink-in: changed-only skips messages with identical fields', () => {
