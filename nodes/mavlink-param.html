@@ -593,6 +593,20 @@
         $type.attr('title', published
           ? 'Published by the firmware for this parameter.'
           : 'This firmware publishes no type for its parameters — pick the one the parameter actually stores.');
+        // A pulldown with one choice is not a choice (owner ruling,
+        // 2026-08-18): when the firmware publishes the type, the row *states*
+        // it instead. The select stays in the DOM, hidden and holding the
+        // value — it is still the field Node-RED saves, the same mechanism as
+        // the hidden `lookup` input the Identify-by radios drive.
+        var $typeShown = $('#mav-param-type-display');
+        if (published) {
+          var option = RED.mavlink.PARAM_TYPE_OPTIONS.filter(function (o) { return o.name === def.type; })[0];
+          $typeShown.text((option ? option.label : def.type) + ' — published by the firmware').show();
+          $type.hide();
+        } else {
+          $typeShown.hide();
+          $type.show();
+        }
 
         refreshValueField(def);
       }
@@ -966,7 +980,7 @@
          help text promises the documented increment becomes the step. -->
     <input type="number" id="node-input-value">
   </div>
-  <div class="form-row" id="row-paramType"><label for="node-input-paramType">Type</label><select id="node-input-paramType"></select></div>
+  <div class="form-row" id="row-paramType"><label for="node-input-paramType">Type</label><select id="node-input-paramType"></select><span id="mav-param-type-display" style="display:none"></span></div>
   <div class="form-row" id="row-timeout"><label for="node-input-timeout">Timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="10000"></div>
 </script>
 
