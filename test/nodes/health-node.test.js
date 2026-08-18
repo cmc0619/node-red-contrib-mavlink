@@ -55,8 +55,13 @@ function makeNode() {
   };
 }
 
-function build(config, connection) {
-  const RED = makeRED({ conn: connection, ...(config._extra || {}) });
+/** An identity config-node stub — enough for RED.nodes.getNode existence. */
+function idNode(id) {
+  return { id, type: 'mavlink-local-identity' };
+}
+
+function build(config, connection, extraNodes = {}) {
+  const RED = makeRED({ conn: connection, ...extraNodes });
   registerMavlinkHealth(RED);
   const node = makeNode();
   RED._type().call(node, { connection: 'conn', ttlS: 5, ...config });
@@ -73,9 +78,9 @@ test('single-identity Connection asserts its Local Identity, ignoring a stale sa
   assert.equal(conn._asserts[0].healthy, true);
 });
 
-test('multi-identity Connection honours the saved identity pick', () => {
+test('multi-identity Connection honours a bound, existing saved pick', () => {
   const conn = makeConnection({ localIdentity: 'comp', additionalIdentities: ['gcs'] });
-  const node = build({ identity: 'gcs' }, conn);
+  const node = build({ identity: 'gcs' }, conn, { gcs: idNode('gcs') });
   node._input({ payload: { health: 'fatal' } });
   assert.equal(conn._asserts[0].id, 'gcs');
   assert.equal(conn._asserts[0].healthy, false);
@@ -97,4 +102,16 @@ test('a saved id the Connection does not bind falls back to the Local Identity',
   const node = build({ identity: 'loose' }, conn);
   node._input({ payload: { health: 'ok' } });
   assert.equal(conn._asserts[0].id, 'comp', 'stale unbound pick ignored, Local Identity asserted');
+});
+
+test('a listed-but-dangling saved id falls back to the Local Identity', () => {
+  // The saved id IS in additionalIdentities, but its identity node was deleted.
+  // Membership alone would honour it and assertHealth on an id no scheduler
+  // heartbeats — a false "healthy". Existence gates it: getNode fails, so it
+  // resolves to the Local Identity, matching the editor's existence-filtered
+  // options (CodeRabbit #351).
+  const conn = makeConnection({ localIdentity: 'comp', additionalIdentities: ['dangling'] });
+  const node = build({ identity: 'dangling' }, conn); // 'dangling' node not registered
+  node._input({ payload: { health: 'ok' } });
+  assert.equal(conn._asserts[0].id, 'comp', 'listed-but-missing id ignored, Local Identity asserted');
 });

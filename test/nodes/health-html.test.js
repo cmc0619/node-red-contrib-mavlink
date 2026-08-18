@@ -14,7 +14,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { loadNodeDefaults } = require('./html-assert');
+const { loadNodeDefaults, loadNodeType } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-health.html'),
@@ -45,12 +45,21 @@ test('Identity is a connection-scoped select in a toggleable row, not a raw pick
   );
 });
 
-test('the Identity row is hidden for a single-identity Connection, shown for many', () => {
-  // The hide/show pivots on how many identities the Connection binds.
-  assert.match(html, /identityOptionsFor\(connId\)/, 'row toggle reads the bound-identity count');
+test('one helper decides single-vs-multi, so the three sites cannot drift', () => {
+  // The bound-identity count lives in one place (Sourcery); every site turns
+  // on isSingleIdentity, not its own inline `<= 1`.
   assert.match(
     html,
-    /options\.length <= 1[\s\S]*?\$\('#row-health-identity'\)\.hide\(\)/,
+    /function isSingleIdentity\(connId\)\s*\{\s*return RED\.mavlink\.identityOptionsFor\(connId\)\.length <= 1;/,
+    'a single helper owns the count'
+  );
+  assert.doesNotMatch(html, /options\.length <= 1/, 'no inline count survives the helper');
+});
+
+test('the Identity row is hidden for a single-identity Connection, shown for many', () => {
+  assert.match(
+    html,
+    /if \(isSingleIdentity\(connId\)\)\s*\{\s*\$\('#row-health-identity'\)\.hide\(\)/,
     'a single-identity Connection hides the row'
   );
   assert.match(
@@ -58,7 +67,6 @@ test('the Identity row is hidden for a single-identity Connection, shown for man
     /\$\('#row-health-identity'\)\.show\(\)[\s\S]*?refreshIdentitySelect\(node\)/,
     'a multi-identity Connection shows the row and fills the scoped select'
   );
-  // The toggle re-runs when the Connection changes.
   assert.match(
     html,
     /\$\('#node-input-connection'\)\.on\('change',\s*refreshIdentityRow\)/,
@@ -66,12 +74,42 @@ test('the Identity row is hidden for a single-identity Connection, shown for man
   );
 });
 
-test('oneditsave blanks the Identity for a single-identity Connection', () => {
+test('oneditsave clears the Identity (DOM and property) for a single-identity Connection', () => {
+  // Both, on purpose: Node-RED harvests #node-input-* into the node after
+  // oneditsave, so the property alone would be overwritten by the select
+  // (Codacy). Clearing the DOM element makes the harvested value blank too.
   assert.match(
     html,
-    /oneditsave:\s*function[\s\S]*?identityOptionsFor\(connId\)\.length <= 1[\s\S]*?this\.identity = ''/,
-    'a hidden field stores blank so nothing stale is kept'
+    /oneditsave:\s*function[\s\S]*?if \(isSingleIdentity\(connId\)\)\s*\{\s*\$\('#node-input-identity'\)\.val\(''\);\s*this\.identity = ''/,
+    'a hidden field clears both the select and the property'
   );
+});
+
+test('oneditsave executes: clears a hidden field for a single-identity Connection', () => {
+  // Run the hook for real, not just grep the source — the persistence behaviour
+  // is what matters (CodeRabbit). A single-identity Connection clears the
+  // stored id so nothing stale survives; a real multi-identity pick is kept.
+  const single = loadNodeType(
+    'mavlink-health',
+    { c1: { localIdentity: 'comp', additionalIdentities: [] }, comp: { role: 'companion' } },
+    { dom: { '#node-input-connection': { val: 'c1' } } }
+  );
+  const singleNode = { connection: 'c1', identity: 'loose' };
+  single.oneditsave.call(singleNode);
+  assert.equal(singleNode.identity, '', 'hidden single-identity field is cleared');
+
+  const multi = loadNodeType(
+    'mavlink-health',
+    {
+      c1: { localIdentity: 'comp', additionalIdentities: ['gcs'] },
+      comp: { role: 'companion' },
+      gcs: { role: 'gcs' },
+    },
+    { dom: { '#node-input-connection': { val: 'c1' } } }
+  );
+  const multiNode = { connection: 'c1', identity: 'gcs' };
+  multi.oneditsave.call(multiNode);
+  assert.equal(multiNode.identity, 'gcs', 'a real multi-identity pick is preserved');
 });
 
 test('a single-identity Connection never rings — even with a stale unbound pick', () => {

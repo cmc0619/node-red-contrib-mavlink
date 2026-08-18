@@ -39,17 +39,19 @@ module.exports = function registerMavlinkHealth(RED) {
     applyConnectionStatus(node, true, connectionNode);
 
     // Which identity's health this asserts. Resolved from the Connection's own
-    // identity ids by membership, not by trusting the saved value: the saved
-    // pick is used only when it is genuinely one of the Connection's bound
-    // identities, else it falls back to the required Local Identity. The editor
-    // hides this field — and does not ring — for a single-identity Connection,
-    // so the runtime owns the guard: a blank, leftover, or hand-edited id the
-    // Connection does not heartbeat must not reach assertHealth and report
-    // healthy over a no-op (§0 silent-false-success). Membership (not a raw
-    // additionalIdentities count) is what keeps this decision aligned with the
-    // editor's own bound-identity set — the divergence Gitar flagged (#351).
+    // identity ids, not by trusting the saved value: the saved pick is used
+    // only when it is both listed among the Connection's bound identities and
+    // an identity node that actually exists — otherwise it falls back to the
+    // required Local Identity. The editor hides this field — and does not ring
+    // — for a single-identity Connection, so the runtime owns the guard: a
+    // blank, leftover, or hand-edited id the Connection does not heartbeat must
+    // not reach assertHealth and report healthy over a no-op (§0
+    // silent-false-success). Membership plus existence is exactly the
+    // bound-and-existing set the editor's identityOptionsFor builds, so runtime
+    // and editor cannot disagree on what "bound" means (Gitar/CodeRabbit #351)
+    // — a dangling id listed in additionalIdentities is excluded by both.
     const boundIds = [connectionNode.localIdentity].concat(connectionNode.additionalIdentities || []);
-    const identityId = boundIds.indexOf(config.identity) !== -1
+    const identityId = boundIds.indexOf(config.identity) !== -1 && RED.nodes.getNode(config.identity)
       ? config.identity
       : connectionNode.localIdentity;
 

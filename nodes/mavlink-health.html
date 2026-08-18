@@ -8,6 +8,14 @@
       return true;
     }
 
+    // One place decides single- vs multi-identity so the three sites that turn
+    // on it — row visibility, save-time clear, and the validator — cannot drift
+    // apart (Sourcery). A Connection with at most one bound identity has no
+    // real choice: its sole identity is the Local Identity the runtime asserts.
+    function isSingleIdentity(connId) {
+      return RED.mavlink.identityOptionsFor(connId).length <= 1;
+    }
+
     /**
      * A choice of Identity exists only when the Connection carries more than
      * one. A single-identity Connection has exactly one — its Local Identity —
@@ -29,13 +37,12 @@
       var connId = RED.mavlink.liveOr(this, '#node-input-connection', this.connection, '');
       // No Connection resolved yet — its own required ring owns that.
       if (RED.mavlink.isBlank(connId) || connId === '_ADD_' || !RED.nodes.node(connId)) return true;
-      var options = RED.mavlink.identityOptionsFor(connId);
       // Single-identity Connection: field hidden, value ignored — never ring.
-      if (options.length <= 1) return true;
+      if (isSingleIdentity(connId)) return true;
       // Multi-identity: a bound identity must be chosen.
       if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required';
       if (!RED.nodes.node(v)) return 'references a missing Identity';
-      if (!options.some(function (o) { return o.id === v; })) {
+      if (!RED.mavlink.identityOptionsFor(connId).some(function (o) { return o.id === v; })) {
         return 'is not bound to the selected Connection — bind it there or pick a bound Identity';
       }
       return true;
@@ -75,8 +82,7 @@
         // every Connection change.
         function refreshIdentityRow() {
           var connId = $('#node-input-connection').val() || '';
-          var options = RED.mavlink.identityOptionsFor(connId);
-          if (options.length <= 1) {
+          if (isSingleIdentity(connId)) {
             $('#row-health-identity').hide();
           } else {
             $('#row-health-identity').show();
@@ -89,8 +95,12 @@
       oneditsave: function () {
         // A single-identity Connection hides the field; store blank so nothing
         // stale is kept and the runtime resolves the sole Local Identity.
+        // Clear the DOM element, not just the property: Node-RED harvests
+        // #node-input-* values into the node after oneditsave, so setting only
+        // this.identity would be overwritten by the select's value (Codacy).
         var connId = $('#node-input-connection').val() || '';
-        if (RED.mavlink.identityOptionsFor(connId).length <= 1) {
+        if (isSingleIdentity(connId)) {
+          $('#node-input-identity').val('');
           this.identity = '';
         }
       },
