@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "sitl41-vehicle-ap",
@@ -143,7 +144,8 @@
       ]
     ],
     "targetSystem": "",
-    "targetComponent": ""
+    "targetComponent": "",
+    "identity": ""
   },
   {
     "id": "sitl41-in-modes-ap",
@@ -209,7 +211,8 @@
       []
     ],
     "targetSystem": "",
-    "targetComponent": ""
+    "targetComponent": "",
+    "identity": ""
   },
   {
     "id": "sitl41-guided-payload",
@@ -258,7 +261,8 @@
       ]
     ],
     "targetSystem": "",
-    "targetComponent": ""
+    "targetComponent": "",
+    "identity": ""
   },
   {
     "id": "sitl41-inject-px4",
@@ -312,7 +316,8 @@
       ]
     ],
     "targetSystem": "",
-    "targetComponent": ""
+    "targetComponent": "",
+    "identity": ""
   },
   {
     "id": "sitl41-position-payload",
@@ -361,7 +366,8 @@
       ]
     ],
     "targetSystem": "",
-    "targetComponent": ""
+    "targetComponent": "",
+    "identity": ""
   },
   {
     "id": "sitl41-state-ap",

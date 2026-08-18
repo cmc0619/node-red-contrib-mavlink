@@ -1060,6 +1060,33 @@ function verdictFrom(profile, summary, log) {
       reason: `transition feed incomplete: armed=${armed} mode=${mode} landed=${landed}`,
     };
   }
+  if (/mode set by name/i.test(expect)) {
+    // Feed records are payload-only — key on resolved names in the excerpt.
+    // Command accepteds alone must not PASS this example (#267 class). Either
+    // ladder tier may win the spelling: AP 'Guided' (vehicle-published) vs
+    // 'GUIDED' (COPTER_MODE); PX4 'POSITION_HOLD' (standard-mode name) vs
+    // 'Position' (baked table) — both are the ladder working.
+    const seen = (pattern) =>
+      summary.debug.some((d) => pattern.test(d.excerpt || '')) || pattern.test(log || '');
+    const ap = seen(/toName:\s*'GUIDED'/i);
+    const px4 = seen(/toName:\s*'(Position|POSITION_HOLD)'/);
+    if (ap && px4) {
+      return {
+        status: 'PASS',
+        reason: 'mode-changed named on both stacks: AP Guided, PX4 Position',
+      };
+    }
+    if (ap || px4) {
+      return {
+        status: 'PARTIAL',
+        reason: `named mode-changed on one stack: ap=${ap} px4=${px4}`,
+      };
+    }
+    return {
+      status: 'FAIL',
+      reason: 'no named mode-changed record on either stack',
+    };
+  }
   if (/WPNAV_SPEED echo timeout|unknown .*echo timeout/i.test(expect)) {
     // Negative path: timed-out is the success — but only after a known-param
     // confirm proves AP-1 is reachable (dead peer would also echo-timeout).
