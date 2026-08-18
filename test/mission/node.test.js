@@ -220,26 +220,25 @@ test('a numeric 0 payload.missionType overrides the config type — presence, no
   assert.equal(outputs[0][0].payload.missionType, 0, 'the numeric override wins over the config fence');
 });
 
-test('an upload under a type no family answers to still sends — the vehicle judges', async () => {
+test('an upload under a type no family answers to still builds — the vehicle judges', async () => {
   // missionTypeValue forwards an unknown key as-given (§5). Family
   // reservation is an editor red ring; a payload override rides.
   const conn = new StubConnection();
-  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
-  conn.onSend((message, deliver) => {
-    if (message.name === 'MISSION_COUNT') {
-      deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 'bogus' } });
-    } else if (message.name === 'MISSION_ITEM_INT') {
-      deliver({ name: 'MISSION_ACK', fields: { type: 0, mission_type: 'bogus' } });
-    }
-  });
   const Node = loadNode(conn);
-  const node = new Node({ operation: 'upload', connection: 'conn', delivery: 'confirm', missionType: 'mission' });
+  const node = new Node({
+    operation: 'upload',
+    connection: 'conn',
+    delivery: 'build',
+    dialect: 'common',
+    firmware: 'ardupilot',
+    missionType: 'mission',
+  });
   const res = await runInput(node, {
     payload: { missionType: 'bogus', items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }] },
   });
   assert.equal(res.err, undefined);
-  assert.equal(conn.sentNames()[0], 'MISSION_COUNT');
-  assert.equal(conn.sent[0].message.fields.mission_type, 'bogus');
+  assert.equal(res.outputs[0][0].payload.messages[0].name, 'MISSION_COUNT');
+  assert.equal(res.outputs[0][0].payload.messages[0].fields.mission_type, 'bogus');
 });
 
 test("a typo'd Mission delivery starts no transfer — it matches no tier arm", async () => {
