@@ -3365,18 +3365,22 @@ the field.
 **A `PARAM_VALUE` echo is decoded by the vehicle's own `param_type` — the request's type only
 encodes the outbound set.**
 *Wrong belief:* the node knows the parameter's type because the operator configured it, so
-`request.paramType || fields.param_type` is a sensible precedence for reading the echo.
-*Fact:* `param_value` is encoded per the `param_type` carried in the same frame, so that field is
-the only correct decode key. Measured live against ArduPilot (SITL example 13): a flow configured
-`MAV_PARAM_TYPE_REAL32` set `ARMING_CHECK`, an integer parameter. The vehicle applied the set and
-echoed bytewise with its own type (`INT16`); decoding those bits as `REAL32` yields the denormal
-`1.401298464324817e-45` against an expected `1`, and the confirm tier reported `echo timeout` for
-a set that had succeeded. Any integer parameter set through a `REAL32`-configured node on a
-bytewise vehicle failed the same way. Tolerance follows the wire too: a float32-quantized echo
-(`REAL32`, or anything c-cast) needs float32-precision comparison, while a bytewise integer echo
-must compare exactly — past 2^24 consecutive integers collide under `Math.fround`, and a
-tolerance there confirms a value the vehicle never stored.
-*Check:* `node --test test/param/param.test.js`
+`request.paramType || fields.param_type` is a sensible precedence for reading the echo; and
+(older reading) ArduPilot carries integer `param_value` bytewise and echoed `ARMING_CHECK` as
+`INT16` with denormal bits.
+*Fact:* `param_value` is encoded per the `param_type` carried in the same frame, so that field
+is the only correct decode key. Re-measured 2026-08-18 on Copter-4.7.0 SITL with raw float32
+bits (IEEE pattern): `ARMING_CHECK` is gone; the live substitute `ARMING_OPTIONS` is
+`MAV_PARAM_TYPE_INT32` (6). A deliberately mislabeled `PARAM_SET` declaring `REAL32` (9) for
+value `1` still **stores 1.0** (independent re-read `0x3F800000`), and the echo / re-read both
+report **type 6**, not the type we sent — AP reports its table type and ignores the wire type
+for storage. The older "bytewise INT16 / denormal `1.4e-45`" claim does **not** reproduce;
+ArduPilot's integer slot is **c-cast** (`1` → `0x3F800000`, `9` → `0x41100000`), confirmed
+with PX4 control returning bytewise `0x00000001` for the same capture method. Tolerance still
+follows the wire: a float32-quantized / c-cast echo needs float32-precision comparison; a
+bytewise integer echo (PX4) must compare exactly.
+*Check:* `/opt/cursor/artifacts/ap-param-wire-capture.json` (2026-08-18),
+`node --test test/param/param.test.js`, and the 2026-08-13 c-cast fidelity entry below.
 
 **The raw codec does no unit conversion — degE7 scaling belongs only to the typed surfaces.**
 This entry replaces one that argued the opposite ("degE7 encode must be value-blind: degrees
@@ -4608,6 +4612,28 @@ bits, so `-1` (all 32 bits) and `-2147483648` (−2³¹, a power of two) survive
 `-2147483648`. The loss is in storage, not just the echo — an independent re-read after
 reconnect returns the truncated value. A bitmask parameter is precisely a sparse mask over a
 wide range, so "ESC 1 and ESC 32" is the shape that cannot be set on ArduPilot at all.
+
+**ArduPilot PARAM_SET type is decorative; echo type is the vehicle's (SITL wire capture,
+2026-08-18).**
+*Wrong belief:* (a) AP might still be bytewise on some params (example-13 era); (b) AP might
+parrot the `param_type` we put on `PARAM_SET`; (c) a mislabeled type would garbage-store.
+*Fact:* one capture on Copter-4.7.0 (`ARMING_OPTIONS` INT32 + `ATC_RAT_RLL_P` REAL32) with
+PX4 `COM_FLIGHT_UUID` as method control:
+
+| Q | Result | Evidence |
+|---|---|---|
+| Encoding | **c-cast** | T1 echo `0x3F800000` for value 1; T4 echo `0x41100000` for 9 |
+| Echo type | **own table type** | T2 sent type 9; echo + re-read type 6 |
+| Mislabeled set | **ignored** | T2 re-read still `0x3F800000` / 1.0 |
+| Capture valid | **yes** | T5 PX4 echo `0x00000001` |
+
+So `matchesParamEchoWire`'s type-equality check against the *sent* type fires on ArduPilot
+integer params with **no storage failure to catch** — a REAL32-configured set stores fine
+(Q3) but the echo type is INT32 ≠ REAL32, producing false unconfirmed. The gate should be
+encoding-aware / compare against the echo's own type (already the decode key), not assume
+"REAL32 for everything" on AP.
+*Check:* `/opt/cursor/artifacts/ap-param-wire-report.md`,
+`/opt/cursor/artifacts/ap-param-wire-capture.json`; retire example-13 bytewise claim above.
 
 The sharp end is not the loss, it is that the loss reports success. `matchesParamEcho` applies
 float32 tolerance whenever the wire is not bytewise-int (correctly — a c-cast value really did
