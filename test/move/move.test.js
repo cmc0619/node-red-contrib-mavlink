@@ -60,8 +60,7 @@ test('global position Move encodes whole-number degrees as degE7, not as raw wir
 
 test('a frame the Action surface never derives rides as non-finite, never as a substitute', () => {
   // String frame names died with the operator frame surface: the Action layer
-  // derives numbers. One that does not coerce reaches the wire's own choke
-  // point non-finite (lib/connection/wire.js refuses it there) rather than
+  // derives numbers. One that does not coerce rides non-finite rather than
   // being quietly replaced with a legal frame number.
   const message = buildMoveMessage({
     frame: 'LOCAL_NED',

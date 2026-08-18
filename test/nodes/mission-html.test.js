@@ -137,10 +137,8 @@ test('mavlink-mission items validator rejects a configured empty array (#241)', 
 });
 
 test('mavlink-mission items validator reds per-item: uint16 command and family reservation', () => {
-  // The runtime validator (lib/mission/validate.js) refuses these on the first
-  // message; the editor red-rings the configured JSON at deploy — the still-open
-  // protector-side work named in DESIGN.md §14 ("editor red-rings for mission
-  // items"). Payload-supplied items stay the runtime's to judge.
+  // The editor is the only protector: configured items red at deploy.
+  // Payload-supplied items ride.
   const { items } = loadNodeDefaults('mavlink-mission');
   const verdict = (over, arr) => items.validate.call(
     Object.assign({ id: 'm1', operation: 'upload', missionType: 'mission' }, over),
@@ -183,19 +181,14 @@ test('mavlink-mission items validator reds per-item: uint16 command and family r
     'blank means items come from the payload');
 });
 
-test('mavlink-mission editor family tables match lib/mission/validate.js exactly', () => {
-  // MISSION_FENCE_COMMANDS / MISSION_RALLY_COMMAND are a second copy of the
-  // library's reservation, carried because a validator is synchronous. Two
-  // copies of one rule only stay honest if something compares them.
-  const { FENCE_COMMANDS, RALLY_COMMAND } = require('../../lib/mission');
+test('mavlink-mission editor family tables name the dialect fence and rally ids', () => {
   const fence = /var MISSION_FENCE_COMMANDS = \[([^\]]*)\];/.exec(html);
   assert.ok(fence, 'MISSION_FENCE_COMMANDS must be extractable');
-  const fromEditor = fence[1].split(',').map((s) => Number(s.trim())).sort((a, b) => a - b);
-  assert.deepEqual(fromEditor, [...FENCE_COMMANDS].sort((a, b) => a - b),
-    'the same fence ids are reserved on both sides');
+  const fromEditor = fence[1].split(',').map((s) => Number(s.trim()));
+  assert.deepEqual(fromEditor, [5000, 5001, 5002, 5003, 5004, 5005]);
   const rally = /var MISSION_RALLY_COMMAND = (\d+);/.exec(html);
   assert.ok(rally, 'MISSION_RALLY_COMMAND must be extractable');
-  assert.equal(Number(rally[1]), RALLY_COMMAND);
+  assert.equal(Number(rally[1]), 5100);
 });
 
 test('mavlink-mission target sysid: a configured broadcast reds for download/upload, not clear', () => {

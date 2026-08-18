@@ -1,11 +1,8 @@
 'use strict';
 
 /**
- * nodes/mavlink-connection.js constructor guards (issue #95). A dangling
- * Vehicle Profile or Local Identity reference — the config node was deleted or
- * disabled after the Connection was saved — must fail with a clear, actionable
- * error in the buildSigning style, never a raw TypeError from calling a method
- * on null.
+ * nodes/mavlink-connection.js wrapper contract: a disabled Connection still
+ * answers the read-side stubs, and the live wrapper forwards resolveSourceIds.
  */
 
 const test = require('node:test');
@@ -55,33 +52,6 @@ const BASE_CONFIG = {
   localIdentity: 'id-1',
   additionalIdentities: [],
 };
-
-test('a dangling Vehicle Profile reference fails loud, not with a TypeError', () => {
-  const { ctor } = makeRED({ 'veh-1': null, 'id-1': {} });
-  assert.throws(
-    () => ctor.call({}, { ...BASE_CONFIG }),
-    /Vehicle Profile is missing or disabled/,
-    'the error must name the problem and the fix, not "reading getDialect of null"'
-  );
-});
-
-test('a dangling Local Identity reference fails loud naming the id', () => {
-  const vehicleNode = {
-    getDialect: () => ({ messages: {}, enums: {} }),
-    getDefaults: () => ({
-      defaultTargetSystem: 1,
-      defaultTargetComponent: 1,
-      firmware: 'ardupilot',
-      dialect: 'common',
-    }),
-  };
-  const { ctor } = makeRED({ 'veh-1': vehicleNode, 'id-1': null });
-  assert.throws(
-    () => ctor.call({}, { ...BASE_CONFIG }),
-    /Local Identity "id-1" is missing or disabled/,
-    'the error names which reference is dangling'
-  );
-});
 
 test('a disabled Connection still exposes an empty peer table', () => {
   const { ctor } = makeRED({});

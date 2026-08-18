@@ -22,9 +22,7 @@
  * Guards (§9 "What triggers an action node"):
  *   msg.payload === false → suppress
  * Clear carries no confirmation gate: selecting the Clear operation in the
- * editor IS the confirmation (owner ruling, 2026-08-13). The destructive
- * guard this node keeps is the empty-upload refusal — an upload can never
- * degrade into an accidental clear.
+ * editor IS the confirmation (owner ruling, 2026-08-13).
  */
 
 const {
@@ -36,7 +34,6 @@ const {
 const { BAND } = require('../lib/connection/bands');
 const {
   createMachine,
-  validateItems,
   missionTypeValue,
   locks,
   OPERATION,
@@ -112,8 +109,7 @@ module.exports = function registerMavlinkMission(RED) {
       // failures the existing paths report loud (§9). The editor's Type
       // dropdown is the firmware protector (§11). No `|| 'mission'` default,
       // and no refusal here: a key that names no member forwards unchanged
-      // (missionTypeValue §5) and craters present at the wire's
-      // finite-integer choke — never absent-decoded-as-0 at the vehicle.
+      // (missionTypeValue §5) — never absent-decoded-as-0 at the vehicle.
       const missionType = missionTypeValue(missionTypeKey);
 
       // Blank keeps the library default; the editor's number validator owns
@@ -121,61 +117,13 @@ module.exports = function registerMavlinkMission(RED) {
       const timeoutMs = numberOr(config.timeout, undefined);
       const maxRetries = numberOr(config.maxRetries, undefined);
 
-      // A download or upload is a two-way conversation with one vehicle: the
-      // machine subscribes exact-match on the target sysid, and no vehicle
-      // sources sysid 0 — a broadcast transfer starts the protocol on every
-      // vehicle on the link and can never match a reply (§10 refuses mission
-      // transfer steps for fan-out for the same reason). Refused on every
-      // tier: a built broadcast plan forwarded to mavlink-out is the same
-      // fleet-wide transfer. Clear stays a single addressed message that
-      // legitimately fans out (§10) and is not gated here.
-      if (target.sysid === 0 && operation !== OPERATION.CLEAR) {
-        const rec = record(operation, missionTypeKey, target, {
-          result: 'failed',
-          phase: 'broadcast',
-          reason: `mission ${operation} cannot target broadcast (sysid 0) — no vehicle answers as sysid 0; address one vehicle`,
-        });
-        applyActionStatus(node, 'error', `no broadcast ${operation}`);
-        send([null, rec]);
-        done(new Error(`mavlink-mission: ${rec.reason}`));
-        return;
-      }
-
       // Upload item source: msg.payload.items overrides configured items.
-      let uploadItems = [];
-      if (operation === OPERATION.UPLOAD) {
-        uploadItems = resolveItems(config, payload);
-        // MISSION_COUNT 0 is the wire's "erase the plan": an empty upload
-        // would silently clear the vehicle mission and report success,
-        // bypassing the confirmation gate the explicit Clear path has (#241).
-        // The items source is dynamic (payload overrides config), so this is
-        // a runtime boundary; refused before anything is built or sent, on
-        // every tier.
-        if (uploadItems.length === 0) {
-          const rec = record(operation, missionTypeKey, target, {
-            result: 'failed',
-            phase: 'empty',
-            reason: 'upload requires at least one item — an empty upload would erase the plan; use the Clear operation instead',
-          });
-          applyActionStatus(node, 'error', 'no items to upload');
-          send([null, rec]);
-          done(new Error(`mavlink-mission: ${rec.reason}`));
-          return;
-        }
-        const check = validateItems(uploadItems, missionType);
-        if (!check.ok) {
-          const rec = record(operation, missionTypeKey, target, {
-            result: 'failed',
-            phase: 'validate',
-            reason: check.reason,
-            seq: check.seq,
-          });
-          applyActionStatus(node, 'error', `invalid ${missionTypeKey} item`);
-          send([null, rec]);
-          done(new Error(`mavlink-mission: ${check.reason}`));
-          return;
-        }
-      }
+      // Family and broadcast are editor red rings. An explicit payload `[]`
+      // rides — COUNT 0 is the wire erase. An omitted items field over blank
+      // config does not become `[]`.
+      const uploadItems = operation === OPERATION.UPLOAD
+        ? resolveItems(config, payload)
+        : [];
 
       // Affirmative tier dispatch (§5): each tier is a whole arm, so a
       // token the `delivery` select cannot save (RED.mavlink.oneOf,
@@ -377,8 +325,9 @@ function buildPlan(operation, missionType, target, items) {
  * @returns {object[]}
  */
 function resolveItems(config, payload) {
-  if (Array.isArray(payload.items)) return payload.items;
-  return config.items.trim() ? JSON.parse(config.items) : [];
+  if (payload.items !== undefined && payload.items !== null) return payload.items;
+  if (config.items.trim()) return JSON.parse(config.items);
+  return undefined;
 }
 
 /**

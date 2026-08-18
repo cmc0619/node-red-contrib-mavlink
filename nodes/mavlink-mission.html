@@ -1,8 +1,8 @@
 <script type="text/javascript">
-  // Family reservation for configured items — a mirror of
-  // lib/mission/validate.js (FENCE_COMMANDS / RALLY_COMMAND), carried here
-  // because a Node-RED validator is synchronous and cannot reach the library.
-  // Drift-tested against it in test/nodes/mission-html.test.js.
+  // Family reservation for configured items. The editor is the only
+  // protector: fence vertices cannot be saved as a mission, a configured []
+  // cannot be saved as an upload, and broadcast cannot be saved on
+  // download/upload. Payload items ride.
   var MISSION_FENCE_COMMANDS = [5000, 5001, 5002, 5003, 5004, 5005];
   var MISSION_RALLY_COMMAND = 5100;
 
@@ -53,11 +53,10 @@
           // A configured [] would upload MISSION_COUNT 0 — the wire's
           // "erase the plan" — not a no-op (#241). Use Clear for that.
           if (arr.length === 0) return 'must not be empty — use the Clear operation to erase a plan';
-          // Per-item red rings, mirroring the runtime validator (§9 "Item
-          // validation is per type"): the wire `command` is a uint16 (a
-          // fractional id truncates into the reserved fence range on
-          // serialization), and an item must belong to the selected plan's
-          // family so buffers cannot corrupt each other.
+          // Per-item red rings (§9 "Item validation is per type"): the wire
+          // `command` is a uint16 (a fractional id truncates into the reserved
+          // fence range on serialization), and an item must belong to the
+          // selected plan's family so buffers cannot corrupt each other.
           var type = RED.mavlink.liveOr(this, '#node-input-missionType', this.missionType, 'mission');
           for (var i = 0; i < arr.length; i++) {
             var item = arr[i];
@@ -252,7 +251,7 @@
   <p>Output 0 (continue) fires only on a successful <code>MISSION_ACK</code>. Output 1 (status) carries progress records (phase and item counts) as they happen and the terminal record either way.</p>
   <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on output 0 without sending. Choose a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. <i>Send and confirm</i> runs the transfer to its acknowledgement over the selected <b>Connection</b>.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type list is gated by the effective firmware — the Build Firmware field, the Build Vehicle Profile escape, or the connection's bound profile on wire tiers — because PX4 does not carry fence and rally the same way as ArduPilot.</p>
-  <p><b>Upload</b> answers whatever sequence the vehicle requests. A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>; an upload that resolves zero items is refused, because a zero count erases the plan on the vehicle — use <b>Clear</b> for that.</p>
+  <p><b>Upload</b> answers whatever sequence the vehicle requests. A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>. An explicit empty array sends <code>MISSION_COUNT</code> 0 (the wire erase). A message that omits <code>items</code> over blank config does not invent an empty list. Use <b>Clear</b> to erase a plan on purpose.</p>
   <p><b>Clear</b> erases the selected plan on the vehicle. Selecting the Clear operation is the confirmation — any input triggers it.</p>
   <p>Set <code>msg.payload === false</code> to suppress. Status records are plain objects on output 1; they are not refused if wired into another action input — chain control is silence on output 0.</p>
 </script>

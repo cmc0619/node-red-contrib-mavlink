@@ -224,8 +224,7 @@ for (const [action, { deliveries, variants }] of Object.entries(OFFERED)) {
 // own red rings are covered in test/nodes/move-html.test.js. What the driver
 // must never do is quietly pick a *different, legal* wire value for a
 // selection that did not resolve. These assert that line — an unresolved
-// selection either rides as non-finite (and craters at the wire's own choke
-// point, lib/connection/wire.js) or selects no behavior at all.
+// selection either rides as non-finite or selects no behavior at all.
 
 test('unoffered: a body reference with no firmware resolves no frame, and never guesses one', async () => {
   const { err, node, conn } = await drive(configFor('steer', 'send', 'body'));
