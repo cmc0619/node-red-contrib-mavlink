@@ -201,22 +201,31 @@ importable tab per file with shared config nodes inline.
 - **Inject buttons:** none (passive). Optional `inject` `Set 4 Hz posn` wired to a
   `command` `set_message_interval` to make the streams actually appear (cross-refs 15).
 
-### 14 — Peer table & events (State)
+### 14 — Peer table (State → debug + dashboard)
 
 - **File:** `examples/14-peer-events.json`
-- **Tab label:** `14 Peer table & events`
-- **Story:** A live operations panel: a State feed emits edge events as vehicles appear,
-  go stale, change their primary endpoint, or shout STATUSTEXT, while a second State node
-  snapshots the whole peer table on demand. This is how a flow reacts to fleet changes
-  without polling.
-- **Nodes:** config triplet, `state` (`mode: "feed"`, `events` = all ten), `state`
-  (snapshot), `inject` `Snapshot now`, `debug`.
-- **Key config:** feed events list spelled out so the demo shows `peer-new`/`stale`/
-  `expired`/`primary-changed`/`profile-mismatch`. Snapshot node reads on inject and on a
-  1 s repeat option. Comment: bind a `profile-mismatch` warning to an ArduPilot connection
-  that a PX4 vehicle wandered onto to demonstrate the §7 binding check.
-- **Inject buttons:** **`Snapshot now`**, **`Snapshot sysid 1 only`**
-  (`payload:{sysid:1}`).
+- **Tab label:** `14 Peer table`
+- **Requires (optional):** `@flowfuse/node-red-dashboard` for `/dashboard/peers`. Debug
+  panes work with core Node-RED alone — the only shipped example that soft-depends on a
+  package outside this one.
+- **Story:** One peer-table story that used to be three examples (14 events, 28 inspector,
+  29 dashboard). A State snapshot of the Connection-owned peer table fans out to a raw
+  debug, a readable layout debug, and a Dashboard table (replace every tick); a State feed
+  subscribed to every peer-table event (including the flight-dynamic `*-changed` edges)
+  fans out to an events debug and a rolling Dashboard log (append, capped at 200). Nothing
+  on the page is configured — every cell is built from received traffic, so identity and
+  mode appear well before position, GPS, battery, or home.
+- **Nodes:** config triplet, `ui-theme`/`ui-base`/`ui-page`/`ui-group` ×2, `inject` ×3,
+  `state` snapshot, `function` ×2 (layout text; one row per component), `debug` ×3,
+  `ui-table` (replace), `state` feed, `function` (event → row), `ui-table` (append).
+- **Key config:** feed lists the full event set (liveness + `armed-changed` /
+  `mode-changed` / `landed-changed` / `gps-fix-changed` / `home-changed` /
+  `sensor-health-changed`). Both tables run `autocols: true`. Enum labels in the Function
+  nodes are display-only — the wire carries numbers and the dialect catalog is the
+  authority. Tip: point a PX4 vehicle at an ArduPilot-profile connection to see
+  `profile-mismatch`.
+- **Inject buttons:** **`every 2s`** (fires once 3 s after deploy, then repeats),
+  **`Snapshot now`**, **`Snapshot sysid 1 only`** (`payload:{sysid:1}`).
 
 ### 15 — Telemetry rates (Request / Set / Stop interval)
 
@@ -432,48 +441,6 @@ importable tab per file with shared config nodes inline.
   never auto-continue a chain and force-disarm rides the Emergency band that is never
   coalesced or dropped (§7).
 - **Inject buttons:** **`⚠ Force disarm (21196)`**, **`⚠⚠ Flight termination (confirm)`**.
-
-### 28 — Peer table inspector
-
-- **File:** `examples/28-peer-table-inspector.json`
-- **Tab label:** `28 Peer table inspector`
-- **Story:** Every field the Connection-owned peer table holds, decoded and laid out as
-  text. Example 14 shows the same snapshot raw, where `type: 2, autopilot: 3` tells the
-  operator nothing; this one renders identity, mode, per-section ages, position, GPS,
-  battery, home, endpoints and the STATUSTEXT ring, and names the enums. Nothing in the
-  table is configured — it is built entirely from received traffic, so fields stay `null`
-  until a message carrying them arrives.
-- **Nodes:** config triplet, `inject` (2 s repeat), `state` `snapshot`, `function`
-  (decode + lay out), `debug` ×2 (rendered text, raw snapshot), `state` `feed` subscribed
-  to all ten event types, `debug`.
-- **Key config:** the feed node lists the complete event set
-  (`peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,
-  multi-endpoint,profile-mismatch,statustext`) rather than the three-event default, so a
-  run shows every transition the table can emit. The Function node's enum tables are
-  display-only labels, not authoritative metadata — the wire carries numbers and the
-  editor's catalog is the authority.
-- **Inject buttons:** **`every 2s`** (fires once 3 s after deploy, then repeats).
-
-### 29 — Peer table dashboard (requires Dashboard 2.0)
-
-- **File:** `examples/29-peer-table-dashboard.json`
-- **Tab label:** `29 Peer table dashboard`
-- **Requires:** `@flowfuse/node-red-dashboard` — the only shipped example with a dependency
-  outside core Node-RED and this package. Example 28 is the same data with none.
-- **Story:** The peer table as a live table at `/dashboard/peers`, one row per component,
-  replaced every 2 s from a `state` snapshot; underneath, a rolling log of all ten
-  peer-table events, appended and capped at 200 rows. The point of both is that nothing on
-  the page is configured — every cell is built from received traffic, so columns fill in as
-  the vehicle starts talking.
-- **Nodes:** config triplet, `ui-theme`/`ui-base`/`ui-page`/`ui-group` ×2, `inject` (2 s),
-  `state` `snapshot`, `function` (one row per component), `ui-table` (`action: replace`),
-  `state` `feed` (all ten events), `function` (event → row), `ui-table`
-  (`action: append`, `maxrows: 200`).
-- **Key config:** both tables run `autocols: true`, so column order follows the key order
-  the Function nodes emit rather than an explicit `columns` array. The snapshot table
-  replaces; the event table appends. Enum labels in the Function nodes are display-only —
-  the wire carries numbers and the dialect catalog is the authority.
-- **Inject buttons:** **`every 2s`** (fires once 3 s after deploy, then repeats).
 
 ---
 
