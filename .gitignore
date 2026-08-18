@@ -38,6 +38,10 @@ bower_components
 build/Release
 
 # Dependency directories
+# No trailing slash: agent worktrees symlink node_modules at the repo root,
+# and `node_modules/` matches directories only — the symlink slipped past it
+# and got committed once, whereupon cherry-picking that commit replaced the
+# real directory with a self-referential link and took the install with it.
 node_modules
 jspm_packages/
 

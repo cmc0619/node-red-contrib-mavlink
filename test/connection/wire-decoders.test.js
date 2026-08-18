@@ -13,6 +13,7 @@ const { createWire, DEFAULT_MAX_DECODERS } = require('../../lib/connection/wire'
 
 const EP_A = { address: '10.0.0.1', port: 14550 };
 const EP_B = { address: '10.0.0.2', port: 14551 };
+const SIGNING_KEY = Buffer.alloc(32, 7);
 
 function heartbeatFrame(wire) {
   return wire.serialize(
@@ -152,6 +153,45 @@ test('cap pressure prefers never-validated pipelines over a live peer mid-frame'
   assert.equal(wire.decode(full.subarray(6), ep(1), t + 4).length, 1);
 });
 
+test('an UNKNOWN_<id> frame surfaces but does not earn eviction standing', () => {
+  // Surfacing an unverifiable frame must not hand its sender the standing a
+  // CRC-verified peer earns: UNKNOWN_<id> is trivially forgeable, so if it
+  // promoted the decoder past the first eviction tier, one spoofed datagram
+  // would buy protection from the source-churn guard (Greptile #33, Gitar #344).
+  const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
+  const common = createWire({ bundle: loadBundled('common') });
+  const unknown = common.serialize(
+    {
+      name: 'PARAM_VALUE',
+      fields: { param_id: 'X', param_value: 1, param_type: 9, param_count: 1, param_index: 0 },
+    },
+    { sysid: 7, compid: 1, seq: 0 }
+  );
+  const ep = (n) => ({ address: `10.0.0.${n}`, port: 14550 });
+  const t = 4_000_000;
+
+  // The frame reaches the flow — that is the whole point of the feature.
+  assert.equal(wire.decode(unknown, ep(1), t)[0].name, 'UNKNOWN_22');
+
+  // A real peer validates and parks a partial; the spoof fills the last slot.
+  assert.equal(wire.decode(heartbeatFrame(wire), ep(2), t + 1).length, 1);
+  assert.equal(
+    wire.decode(heartbeatFrame(wire).subarray(0, 6), ep(2), t + 2).length,
+    0
+  );
+  assert.equal(wire.decoderCount(), 2);
+
+  // Allocating a third endpoint must evict the unknown-only slot, not the
+  // mid-frame peer — proof the unknown frame never set `validated`.
+  assert.equal(wire.decode(heartbeatFrame(wire), ep(3), t + 3).length, 1);
+  assert.equal(wire.decoderCount(), 2);
+  assert.equal(
+    wire.decode(heartbeatFrame(wire).subarray(6), ep(2), t + 4).length,
+    1,
+    'the mid-frame peer survived and completed its frame'
+  );
+});
+
 test('cap pressure prefers empty-buffer validated over a mid-frame peer', () => {
   const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
   const full = heartbeatFrame(wire);
@@ -191,4 +231,67 @@ test('cap pressure keeps a never-validated first-frame partial over junk', () =>
   assert.equal(wire.decoderCount(), 2);
 
   assert.equal(wire.decode(full.subarray(6), ep(1), t + 3).length, 1);
+});
+
+test('a msgid the bound dialect does not carry surfaces as UNKNOWN_<id>, not silence', () => {
+  // A vehicle speaking a newer dialect than the bound profile used to vanish
+  // frame by frame — the one clue that diagnoses the mismatch (the id) was
+  // dropped before anything could show it. The raw payload rides so the frame
+  // is inspectable; a known frame in the same stream decodes as always.
+  const minimal = createWire({ bundle: loadBundled('minimal') });
+  const common = createWire({ bundle: loadBundled('common') });
+  const paramValue = common.serialize(
+    {
+      name: 'PARAM_VALUE',
+      fields: { param_id: 'X', param_value: 1, param_type: 9, param_count: 1, param_index: 0 },
+    },
+    { sysid: 7, compid: 1, seq: 0 }
+  );
+
+  const frames = minimal.decode(Buffer.concat([paramValue, heartbeatFrame(minimal)]), EP_A);
+
+  assert.equal(frames.length, 2, 'both frames surface');
+  assert.equal(frames[0].name, 'UNKNOWN_22');
+  assert.equal(frames[0].sysid, 7);
+  assert.equal(frames[0].compid, 1);
+  assert.equal(frames[0].fields.msgid, 22);
+  // Byte-for-byte against the wire, not just "is a Buffer": node-mavlink
+  // hands out a fixed 255-byte payload buffer, so an untrimmed frame passes
+  // an isBuffer check while carrying 230 bytes of padding the sender never
+  // sent (CodeRabbit #344). The v2 header's length byte is the wire length.
+  assert.deepEqual(
+    frames[0].fields.payload,
+    paramValue.subarray(10, 10 + paramValue[1]),
+    'the payload is exactly the bytes that arrived'
+  );
+  assert.equal(frames[1].name, 'HEARTBEAT', 'known frames are unaffected');
+});
+
+test('a signed UNKNOWN_<id> frame carries its signature verdict like any other', () => {
+  // The signature block is framing, not payload semantics — it verifies
+  // without the message definition, so an unknown id is exactly as signable
+  // as a known one. If the verdict did not ride, requireSigned would read a
+  // properly signed unknown frame as unsigned and drop it (CodeRabbit #344).
+  const minimal = createWire({ bundle: loadBundled('minimal'), key: SIGNING_KEY });
+  const common = createWire({ bundle: loadBundled('common') });
+  const signed = common.serialize(
+    {
+      name: 'PARAM_VALUE',
+      fields: { param_id: 'X', param_value: 1, param_type: 9, param_count: 1, param_index: 0 },
+    },
+    { sysid: 7, compid: 1, seq: 0, sign: true, linkId: 3, key: SIGNING_KEY, timestamp: 1_234_567 }
+  );
+
+  const [frame] = minimal.decode(signed, EP_A);
+
+  assert.equal(frame.name, 'UNKNOWN_22');
+  assert.equal(frame.signaturePresent, true);
+  assert.equal(frame.signatureValid, true, 'the HMAC verifies without the definition');
+  assert.equal(frame.linkId, 3);
+  assert.equal(frame.timestamp, 1_234_567);
+  assert.deepEqual(
+    frame.fields.payload,
+    signed.subarray(10, 10 + signed[1]),
+    'the signature block is not mistaken for payload'
+  );
 });

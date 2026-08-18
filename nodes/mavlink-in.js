@@ -105,6 +105,11 @@ module.exports = function registerMavlinkIn(RED) {
     const filterSysid = isBlank(config.sysid) ? null : Number(config.sysid);
     const filterCompid = isBlank(config.compid) ? null : Number(config.compid);
 
+    // Unknown frames are opt-in. A msgid the dialect does not carry arrives as
+    // UNKNOWN_<id> (#344); that is a diagnostic, not traffic a working flow
+    // asked for, so an In node stays quiet about it until the box is ticked.
+    const showUnknown = !!config.showUnknown;
+
     const changedOnly = !!config.changedOnly;
     // Changed-only field subset: compare only these fields when set, so a
     // hot timestamp does not make every frame look "changed".
@@ -143,6 +148,11 @@ module.exports = function registerMavlinkIn(RED) {
      * @param {object} decoded
      */
     const onDecoded = (decoded) => {
+      // Ahead of every other filter: an unwanted unknown should not consume a
+      // rate-limit slot or seed the changed-only map for a name that will
+      // never be delivered.
+      if (!showUnknown && isUnknownName(decoded.name)) return;
+
       const key = `${decoded.name}\u0000${decoded.sysid}\u0000${decoded.compid}`;
       const now = Date.now();
 
@@ -240,6 +250,17 @@ module.exports = function registerMavlinkIn(RED) {
       ? filterMessages.map((name) => connectionNode.subscribe({ ...target, message: name }, onDecoded))
       : [connectionNode.subscribe(target, onDecoded)];
 
+    // A name filter is a whitelist, and an unknown id cannot be whitelisted —
+    // its name is the thing you do not know yet. So with both a name filter
+    // and Show unknown, one more subscription carries the unknowns alongside
+    // the named ones. Unfiltered nodes need nothing extra: their single
+    // subscription already sees every frame, and onDecoded does the gating.
+    if (showUnknown && filterMessages.length) {
+      unsubscribes.push(connectionNode.subscribe(target, (decoded) => {
+        if (isUnknownName(decoded.name)) onDecoded(decoded);
+      }));
+    }
+
     node.on('close', () => {
       for (const unsubscribe of unsubscribes) unsubscribe();
     });
@@ -247,6 +268,18 @@ module.exports = function registerMavlinkIn(RED) {
 
   RED.nodes.registerType('mavlink-in', MavlinkInNode);
 };
+
+/**
+ * True for the synthetic name `decode()` gives a msgid the bound dialect does
+ * not carry (#344). Matched on the prefix the wire produces, not on a
+ * registry lookup: by construction there is no definition to look up.
+ *
+ * @param {string} name  decoded message name
+ * @returns {boolean}
+ */
+function isUnknownName(name) {
+  return name.startsWith('UNKNOWN_');
+}
 
 /**
  * Comma-separated name list → array, or null when blank (= all).
