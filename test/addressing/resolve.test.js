@@ -120,11 +120,16 @@ test('firmware ladder is payload → profile via firstDefined (no invented ardup
   assert.equal(firstDefined(undefined, undefined), undefined);
 });
 
-test('profileFromVehicleNode maps defaults and firmware, null-safe', () => {
+test('profileFromVehicleNode maps defaults, firmware and family, null-safe', () => {
   assert.equal(profileFromVehicleNode(null), null);
   assert.deepEqual(
-    profileFromVehicleNode({ defaultTargetSystem: 3, defaultTargetComponent: 4, firmware: 'px4' }),
-    { targetSystem: 3, targetComponent: 4, firmware: 'px4' }
+    profileFromVehicleNode({
+      defaultTargetSystem: 3,
+      defaultTargetComponent: 4,
+      firmware: 'px4',
+      vehicleFamily: 'copter',
+    }),
+    { targetSystem: 3, targetComponent: 4, firmware: 'px4', vehicleFamily: 'copter' }
   );
 });
 

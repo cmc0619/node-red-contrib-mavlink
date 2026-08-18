@@ -8,6 +8,24 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Added
 
+- **Flight modes have names end-to-end.** One resolution ladder
+  (`lib/vehicle/modes.js`), both directions: the vehicle's own
+  `AVAILABLE_MODES` table — cached per peer component, requested explicitly
+  via the command node's `request_message` preset, never speculatively — is
+  the authority; beneath it the shipped hypothesis is the dialect's per-family
+  mode enum for ArduPilot and a baked main/sub table for PX4 (measured
+  2026-08-18 against PX4 1.18 SIH — the wire renumbered AUTO sub-modes vs the
+  historical `px4_custom_mode.h`); an unresolved name is NaN (loud at the wire
+  choke, never a silent mode 0) and an unresolved number simply stays a
+  number. Outputs: State snapshots gain `modeName` beside `flightMode`, and
+  `mode-changed` feed records gain `fromName`/`toName`, each only when the
+  ladder resolves. Input: `msg.payload.mode = 'GUIDED'` on a Set Mode command
+  resolves into the custom-mode params — decomposed main/sub for PX4, the
+  number whole for everyone else — and sets param1's custom-mode-enabled bit;
+  explicit numeric payload params keep winning. The editor's Set Mode dialog
+  now offers a PX4 dropdown from the same table (drift-tested against the
+  lib), saving the decomposed pair the wire wants; ArduPilot's dialog is
+  unchanged. SITL example 41 exercises both stacks by name.
 - **An unknown message id is a message, not silence.** A msgid that the bound
   dialect does not carry used to vanish inside the frame splitter — the one
   clue that diagnoses a dialect mismatch, dropped before anything could show
@@ -20,6 +38,7 @@ config-node shapes and message contracts may still change without a major bump.
   be typed into a whitelist. Unknown frames are structurally framed but
   CRC-unverifiable by construction (the checksum seed lives in the definition
   the dialect lacks) — the In help says so.
+
 
 
 - **The peer table announces flight-dynamic transitions.** Six new State feed

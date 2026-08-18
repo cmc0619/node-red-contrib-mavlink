@@ -81,6 +81,7 @@ module.exports = function registerMavlinkConnection(RED) {
       targetSystem: defaults.defaultTargetSystem,
       targetComponent: defaults.defaultTargetComponent,
       firmware: defaults.firmware,
+      vehicleFamily: defaults.vehicleFamily,
       dialect: defaults.dialect,
       autopilot: autopilotForFirmware(defaults.firmware),
     });

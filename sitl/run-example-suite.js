@@ -175,6 +175,16 @@ const PROFILE = {
       'GUIDED ACK — same-tick ARM returns FAILED (4) on Copter-4.7.0. First observation ' +
       'is not a transition, so a quiet connect phase is expected, not a FAIL.',
   },
+  '41-mode-names': {
+    restart: 'fleet',
+    waitMs: 30000,
+    expect: 'AP + PX4 mode set by name; mode-changed carries fromName/toName',
+    prep: 'px4-mode-ready',
+    notes:
+      'REQUEST_MESSAGE(435) on both stacks: Copter-4.7.0 answers one AVAILABLE_MODES frame ' +
+      'per requested index (a function node walks 1..number_modes); PX4 bursts the full ' +
+      'list from one param2=0 request. A mute stack still resolves via the shipped tables.',
+  },
   '04-param-defs-live': {
     restart: 'none',
     waitMs: 20000,
@@ -1048,6 +1058,33 @@ function verdictFrom(profile, summary, log) {
     return {
       status: 'FAIL',
       reason: `transition feed incomplete: armed=${armed} mode=${mode} landed=${landed}`,
+    };
+  }
+  if (/mode set by name/i.test(expect)) {
+    // Feed records are payload-only — key on resolved names in the excerpt.
+    // Command accepteds alone must not PASS this example (#267 class). Either
+    // ladder tier may win the spelling: AP 'Guided' (vehicle-published) vs
+    // 'GUIDED' (COPTER_MODE); PX4 'POSITION_HOLD' (standard-mode name) vs
+    // 'Position' (baked table) — both are the ladder working.
+    const seen = (pattern) =>
+      summary.debug.some((d) => pattern.test(d.excerpt || '')) || pattern.test(log || '');
+    const ap = seen(/toName:\s*'GUIDED'/i);
+    const px4 = seen(/toName:\s*'(Position|POSITION_HOLD)'/);
+    if (ap && px4) {
+      return {
+        status: 'PASS',
+        reason: 'mode-changed named on both stacks: AP Guided, PX4 Position',
+      };
+    }
+    if (ap || px4) {
+      return {
+        status: 'PARTIAL',
+        reason: `named mode-changed on one stack: ap=${ap} px4=${px4}`,
+      };
+    }
+    return {
+      status: 'FAIL',
+      reason: 'no named mode-changed record on either stack',
     };
   }
   if (/WPNAV_SPEED echo timeout|unknown .*echo timeout/i.test(expect)) {

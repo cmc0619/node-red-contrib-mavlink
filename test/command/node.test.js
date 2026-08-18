@@ -65,6 +65,83 @@ test('Build tier with carrier int: output 0 carries a COMMAND_INT with config fr
   assert.equal(sent[1].result, 'built');
 });
 
+test('Build tier: payload.mode resolves through the AP profile into param2', async () => {
+  const { loadBundled } = require('../../lib/metadata');
+  const vehicle = {
+    defaultTargetSystem: 1,
+    defaultTargetComponent: 1,
+    firmware: 'ardupilot',
+    vehicleFamily: 'copter',
+    getDialect: () => loadBundled('ardupilotmega'),
+  };
+  const RED = redStub({ veh: vehicle });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: '{}',
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'set_mode',
+    delivery: 'build',
+    dialect: '__vehicle',
+    vehicle: 'veh',
+  });
+
+  let sent;
+  node.emit('input', { payload: { mode: 'GUIDED' } }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.fields.param2, 4, 'COPTER_MODE_GUIDED');
+  assert.equal(sent[0].payload.fields.param1, 1, 'custom-mode-enabled bit set');
+
+  // An unknown name builds NaN — the loud tail, nothing invented (§5).
+  let bad;
+  node.emit('input', { payload: { mode: 'WARP_9' } }, (m) => { bad = m; }, () => {});
+  await tick();
+  assert.equal(Number.isNaN(bad[0].payload.fields.param2), true);
+});
+
+test('Build tier: an explicit custom-mode param suppresses the whole named pair', async () => {
+  // PX4's resolution is a pair (param2 main_mode, param3 sub_mode). Filling one
+  // side from the name while the flow supplied the other would command a mode
+  // nobody asked for — main 5 with Hold's sub 3 maps to nothing (Gitar, #346).
+  const { loadBundled } = require('../../lib/metadata');
+  const vehicle = {
+    defaultTargetSystem: 1,
+    defaultTargetComponent: 1,
+    firmware: 'px4',
+    vehicleFamily: 'copter',
+    getDialect: () => loadBundled('common'),
+  };
+  const RED = redStub({ veh: vehicle });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: '{}',
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'set_mode',
+    delivery: 'build',
+    dialect: '__vehicle',
+    vehicle: 'veh',
+  });
+
+  // Name alone: the decomposed pair rides (Hold = main 4, sub 3).
+  let named;
+  node.emit('input', { payload: { mode: 'Hold' } }, (m) => { named = m; }, () => {});
+  await tick();
+  assert.equal(named[0].payload.fields.param2, 4, 'main_mode from the name');
+  assert.equal(named[0].payload.fields.param3, 3, 'sub_mode from the name');
+
+  // Name plus an explicit param2: the number wins whole, so the name's sub
+  // must NOT leak into param3 and mint a combination never requested.
+  let mixed;
+  node.emit('input', { payload: { mode: 'Hold', 2: 5 } }, (m) => { mixed = m; }, () => {});
+  await tick();
+  assert.equal(mixed[0].payload.fields.param2, 5, 'explicit number wins');
+  assert.notEqual(mixed[0].payload.fields.param3, 3, "the name's sub_mode must not ride along");
+});
+
 test('Safety preset refuses a truthy-but-non-boolean confirmation token', async () => {
   const conn = connStub();
   const RED = redStub({ conn });

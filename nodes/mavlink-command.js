@@ -54,12 +54,18 @@ const {
 } = require('../lib/command');
 
 const { DEFAULT_MAX_RESENDS } = require('../lib/command/ack');
+const {
+  DO_SET_MODE,
+  MODE_FLAG_CUSTOM_MODE_ENABLED,
+  setModeParams,
+} = require('../lib/vehicle/modes');
 const { loadMetadata } = require('../lib/metadata/load');
 const {
   resolveDeliveryContext,
   applyConnectionStatus,
   dialectFromVehicleId,
   dialectFromConnection,
+  isBlank,
   numberOr,
 } = require('../lib/addressing');
 const {
@@ -163,13 +169,87 @@ module.exports = function registerMavlinkCommand(RED) {
     const unconfirmedContinue = config.unconfirmedContinue;
 
     /**
+     * Mode-name resolution context for this send (lib/vehicle/modes.js
+     * ModeContext). Wire tiers resolve against the addressed peer component
+     * (the vehicle-published cache) plus the bound profile's firmware/family
+     * and bundle; Build resolves through the Vehicle Profile escape only — a
+     * concrete Build dialect has no firmware axis on this node, so shipped
+     * tables cannot pick and an unmatched name rides to the NaN tail. Same
+     * build/wire split as coordKinds above.
+     *
+     * @param {{target: {sysid: number, compid: number}, profile: object|null}} resolution
+     * @returns {import('../lib/vehicle/modes').ModeContext}
+     */
+    function modeContext(resolution) {
+      const profile = resolution.profile || {};
+      const base = {
+        firmware: profile.firmware,
+        vehicleFamily: profile.vehicleFamily,
+      };
+      if (delivery === 'build') {
+        return {
+          ...base,
+          bundle: config.dialect === '__vehicle'
+            ? dialectFromVehicleId(RED, config.vehicle)
+            : null,
+        };
+      }
+      return {
+        ...base,
+        component: connNode.peerTable.getComponent(
+          resolution.target.sysid,
+          resolution.target.compid
+        ),
+        bundle: dialectFromConnection(RED, connNode),
+      };
+    }
+
+    /**
+     * Fold a payload `mode` name into DO_SET_MODE's params through the
+     * mode-name ladder. Presence rules unchanged: an explicit numeric payload
+     * param keeps winning over the name; the name beats configured params.
+     * param1 gains MAV_MODE_FLAG_CUSTOM_MODE_ENABLED — without it the
+     * autopilot ignores the custom mode (the preset's help text) — OR-ed into
+     * whatever base-mode flags were already supplied. An unresolvable name is
+     * NaN in param2: loud at the wire choke, never a silent mode 0.
+     *
+     * @param {Object<number, number>} userParams  mergeParams output, mutated
+     * @param {*} payload
+     * @param {object} resolution  { target, profile } from resolveDeliveryContext
+     */
+    function applyModeName(userParams, payload, resolution) {
+      if (commandId !== DO_SET_MODE) return;
+      if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return;
+      if (isBlank(payload.mode)) return;
+      const modeParams = setModeParams(payload.mode, modeContext(resolution));
+      // A resolved mode is one indivisible answer, so an explicit number wins
+      // over the *whole* of it, never half. PX4's answer is a pair — param2
+      // main_mode, param3 sub_mode — and filling one side from the name while
+      // the flow supplied the other commands a mode nobody asked for:
+      // `{ mode: 'Hold', 2: 5 }` would send main 5 with Hold's sub 3, a
+      // combination that maps to no mode at all and fails silently as a
+      // wrong one (Gitar, #346). If any index the resolution would write is
+      // already supplied, the name selects nothing — including param1's bit,
+      // because a flow spelling out custom-mode numbers owns base_mode too.
+      if (Object.keys(modeParams).some((idx) => !isBlank(payload[idx]))) return;
+      for (const [idx, value] of Object.entries(modeParams)) {
+        userParams[idx] = value;
+      }
+      userParams[1] = userParams[1] === undefined
+        ? MODE_FLAG_CUSTOM_MODE_ENABLED
+        : (Number(userParams[1]) | MODE_FLAG_CUSTOM_MODE_ENABLED);
+    }
+
+    /**
      * Build the 7-element param array for this send, merging config + payload.
      *
      * @param {*} payload
+     * @param {object} resolution  { target, profile } for the mode-name ladder
      * @returns {number[]}
      */
-    function getParams(payload) {
+    function getParams(payload, resolution) {
       const userParams = mergeParams(config, payload);
+      applyModeName(userParams, payload, resolution);
       if (preset) {
         // buildParamArray zero-fills a blank param, so a blank lat/lon becomes
         // 0,0 — a legal coordinate the vehicle will fly to. The editor is what
@@ -228,7 +308,7 @@ module.exports = function registerMavlinkCommand(RED) {
         : null;
 
       const payload = msg.payload ?? {};
-      const { target, identityId } = resolveDeliveryContext(RED, {
+      const { target, identityId, profile } = resolveDeliveryContext(RED, {
         delivery,
         config,
         payload,
@@ -276,7 +356,7 @@ module.exports = function registerMavlinkCommand(RED) {
       // it is the frame the COMMAND_INT builder scales param5/6 by, nothing
       // more.
       const frame = resolveFrame(msg.mavFrame, config.frame);
-      const paramArray = getParams(msg.payload);
+      const paramArray = getParams(msg.payload, { target, profile });
 
       /**
        * Build the wire message for a carrier at a given confirmation counter.

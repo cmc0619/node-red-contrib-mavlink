@@ -133,4 +133,6 @@
     <li><code>home</code> — <code>lat</code>/<code>lon</code> degrees, <code>alt</code> m AMSL.</li>
   </ul>
   <p>These are last-seen values, not live readings — gate on the <code>sections.*</code> ages (ms) for freshness.</p>
+  <h3>Mode names</h3>
+  <p>When the flight mode resolves through the mode-name ladder — the vehicle's own <code>AVAILABLE_MODES</code> table first (request it via the Command node's Request Message preset, message 435), then the bound profile's shipped table — a snapshot component gains <code>modeName</code> beside the raw <code>flightMode</code>, and a <code>mode-changed</code> feed record gains <code>fromName</code>/<code>toName</code>. An unresolved mode simply stays a number.</p>
 </script>

@@ -188,6 +188,16 @@
         params[idx] = RED.mavlink.booleanEnumValue($input);
         return;
       }
+      if (kind === 'px4mode') {
+        // One control, two wire params: PX4 reads DO_SET_MODE param2 as the
+        // decomposed main mode and param3 as the sub mode (DESIGN.md §14 "PX4
+        // DO_SET_MODE on this SIH wants main_mode in param2") — the packed
+        // option value is split here, never saved whole.
+        const packed = Number($input.val());
+        params[idx] = RED.mavlink.px4MainMode(packed);
+        params[idx + 1] = RED.mavlink.px4SubMode(packed);
+        return;
+      }
       const raw = $input.val();
       if (kind === 'bitmask') {
         // Nothing selected omits the param, which resolves to 0 on the wire
@@ -808,7 +818,61 @@
             return sel;
           }
         }
+        // PX4's DO_SET_MODE dropdown lives on the preset surface only: in
+        // Advanced mode param3 (custom submode) has its own dialect-rendered
+        // number field, and a packed dropdown writing param3 behind it would
+        // fight that control. The preset renders params 1\u20132, so the pair is
+        // this control's to own (scrapeParamInputs splits it into 2 + 3).
+        const px4Entries = RED.mavlink.px4ModeEntries(commandId, spec.index);
+        if (px4Entries) {
+          const $px4 = px4ModeInput(px4Entries);
+          if ($px4) return $px4;
+        }
         return advancedParamInput(spec, enums || {}, commandId);
+      }
+
+      /** Blank, or an integer the packed byte can hold \u2014 the pair the PX4
+       * mode select can represent without rewriting it on save. */
+      function px4ByteOrBlank(v) {
+        if (v === undefined || v === null || v === '') return true;
+        const n = Number(v);
+        return Number.isInteger(n) && n >= 0 && n <= 255;
+      }
+
+      /**
+       * The PX4 flight-mode select: options are the baked table, valued by
+       * the packed custom_mode (unique per mode); the saved config carries
+       * the decomposed pair the wire wants, recomposed here so open-and-save
+       * round-trips. A saved pair the table lacks survives via the shared
+       * sentinel \u2014 the same rule advancedParamInput applies to the AP mode
+       * dropdown (Codex #198).
+       *
+       * A saved pair the packing cannot even represent (a hand-edited packed
+       * word in param2, say) returns null instead — the raw number fields
+       * keep it verbatim rather than silently rewriting it on Done.
+       *
+       * @param {Array<{name: string, value: number, label: string}>} entries
+       * @returns {?jQuery}
+       */
+      function px4ModeInput(entries) {
+        if (!px4ByteOrBlank(savedParams[2]) || !px4ByteOrBlank(savedParams[3])) return null;
+        const sel = $('<select class="param-input"></select>')
+          .attr('data-idx', 2)
+          .attr('data-kind', 'px4mode')
+          .attr('title', 'PX4 flight mode \u2014 saved as main mode (param 2) and sub mode (param 3)');
+        for (const entry of entries) {
+          sel.append($('<option></option>').val(String(entry.value)).text(entry.label));
+        }
+        const savedMain = savedParams[2];
+        if (savedMain !== undefined && savedMain !== null && savedMain !== '') {
+          const packed = RED.mavlink.px4PackCustomMode(
+            Number(savedMain),
+            Number(savedParams[3] !== undefined && savedParams[3] !== null && savedParams[3] !== '' ? savedParams[3] : 0)
+          );
+          RED.mavlink.ensureSavedEnumOption(sel, String(packed));
+          sel.val(String(packed));
+        }
+        return sel;
       }
 
       function refreshParamFields() {
@@ -1103,6 +1167,15 @@
     </dd>
     <dt class="optional">payload.identityId <span class="property-type">string</span></dt>
     <dd>Runtime override for the Identity row's Local Identity node id.</dd>
+    <dt class="optional">payload.mode <span class="property-type">string</span></dt>
+    <dd>
+      Set Mode (<code>MAV_CMD_DO_SET_MODE</code>) only: a flight-mode name
+      (<code>'GUIDED'</code>, <code>'Position'</code>) resolved into the
+      custom-mode params — the vehicle's published <code>AVAILABLE_MODES</code>
+      table first, then the profile's shipped table. Sets param1's
+      custom-mode-enabled bit; an explicit numeric payload param still wins.
+      A name nothing resolves rides as NaN and fails loudly at the wire.
+    </dd>
     <dt class="optional">confirmed <span class="property-type">boolean</span></dt>
     <dd>Must be <code>true</code> for Safety presets (e.g. Flight Termination).</dd>
     <dt class="optional">mavFrame <span class="property-type">number</span></dt>
