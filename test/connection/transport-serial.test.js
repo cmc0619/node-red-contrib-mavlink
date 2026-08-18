@@ -223,3 +223,18 @@ test('missing optional serialport dependency rejects with a clear error', async 
     Module._load = originalLoad;
   }
 });
+
+test('close releases a port that errored after opening — the handle must not leak', async () => {
+  // Codex (#334): a port error flips `_open` false without closing the OS
+  // handle (serialport keeps `isOpen` true through an error). close() used to
+  // read `!_open` as "open still in flight" and return without releasing —
+  // so the reconnect redial, and the next deploy, found the device busy.
+  const { transport, opened, port } = openTransport();
+  await opened;
+  transport.on('error', () => {}); // the transport forwards the port error
+  port().emit('error', new Error('EIO'));
+  assert.equal(port().closed, false, 'the error alone does not close the handle');
+
+  await new Promise((resolve) => transport.close(resolve));
+  assert.equal(port().closed, true, 'close releases the errored handle');
+});

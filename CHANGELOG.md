@@ -8,6 +8,22 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Added
 
+- **Connections recover dropped links.** A transport that opened and later
+  failed — serial device unplugged, TCP peer restarting, socket error, wedged
+  write — redials itself from the bound config on a jittered exponential
+  backoff (inside 1 s at first, doubling to a 30 s ceiling, forever; redeploy
+  always wins because close cancels the pending attempt). The Connection badge
+  shows a yellow `reconnecting` ring while the loop runs; heartbeats stop for
+  the outage and resume with the link; and the peer table keeps sweeping so
+  "vehicle lost" still fires on a dead link. Recovery resumes *live* traffic
+  only: anything queued against the dead link is dropped at the moment the
+  link returns, because its sender was already told it failed (ack waiters
+  time out in seconds) — a vehicle must not act on an hour-old command whose
+  flow reported `timed-out` an hour ago. Deploy-time
+  behavior is unchanged: a transport that never once opened stays a loud
+  terminal `error` — retrying a config that never worked would bury an editor
+  mistake (wrong port, missing device) under an eternally yellow badge.
+
 - **Move's primitive roster: Turn, Speed, and Offset-from-here.** The node's
   charter moved from "`SET_POSITION_TARGET_*`" to *where the vehicle goes and
   how it moves* (`DESIGN.md` §3, §9 "Move primitive roster"), and the roster is
@@ -99,6 +115,18 @@ config-node shapes and message contracts may still change without a major bump.
   button *does* is the vehicle's own configuration (ArduSub's
   `BTNn_FUNCTION`), not protocol. If upstream ever annotates the field, the
   upgrade path is compiled enum names over these generic labels.
+
+### Changed
+
+- **The In node's badge names the message, nothing else.** The
+  `<count> <MESSAGE>` badge dropped its delivered counter: at seven digits the
+  count was 8 of the badge's 24 characters and actively truncated the name —
+  the only half that told you anything. With the counter gone, the latched
+  trailing write that existed to land the badge on the "true total" had no
+  subject, so the whole flush-timer machinery went with it: a write suppressed
+  by the four-per-second throttle is now simply dropped, and the badge path
+  schedules no timers at all. The throttle itself is unchanged (#219's
+  regression pin still holds).
 
 ### Fixed
 

@@ -404,6 +404,7 @@ function applyStatus(node, state, untrusted) {
 const STATUS_BADGES = {
   [STATE.CONNECTED]: { fill: 'green', shape: 'dot', text: 'connected' },
   [STATE.CONNECTING]: { fill: 'yellow', shape: 'ring', text: 'connecting' },
+  [STATE.RECONNECTING]: { fill: 'yellow', shape: 'ring', text: 'reconnecting' },
   [STATE.IDLE]: { fill: 'grey', shape: 'ring', text: 'idle' },
   [STATE.CLOSED]: { fill: 'grey', shape: 'ring', text: 'closed' },
   [STATE.DISABLED]: { fill: 'grey', shape: 'ring', text: 'disabled' },
