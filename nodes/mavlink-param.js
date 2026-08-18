@@ -369,8 +369,17 @@ module.exports = function registerMavlinkParam(RED) {
               }
               request.paramType = Number(reported);
               // `done` and `finishDone` are the same input's completion —
-              // runWire finishes it through its own paths.
-              runWire(buildParamMessage(request));
+              // runWire finishes it through its own paths. Guarded (gitar
+              // #335): this runs in a subscription callback, where dispatch
+              // swallows throws after logging — and Connection.send throws by
+              // design (queue overflow, dead link). Unguarded, the input
+              // would hang with done() never called; same rule as the resend
+              // timer below.
+              try {
+                runWire(buildParamMessage(request));
+              } catch (err) {
+                failInput(node, send, err, finishDone);
+              }
             });
           });
 

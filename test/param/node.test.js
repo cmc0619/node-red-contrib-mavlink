@@ -1146,3 +1146,41 @@ test('type-read silence times out loud, and no PARAM_SET follows', () => {
       });
   });
 });
+
+test('a PARAM_SET send that throws after the type reply fails loud — never a silent hang', () => {
+  // Gitar (#335): the reply handler runs in a subscription callback, where
+  // dispatch swallows throws after logging. Unguarded, a Connection.send
+  // throw (queue overflow, dead link) after settleRead tore down the timer
+  // and subscription would leave the input hung with done() never called.
+  const conn = connStubFull();
+  const realSend = conn.send.bind(conn);
+  conn.send = (message, options) => {
+    if (message.name === 'PARAM_SET') throw new Error('Control queue overflow');
+    realSend(message, options);
+  };
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'confirm',
+    action: 'set',
+    paramType: 'auto',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 1,
+  });
+
+  const outs = [];
+  let err;
+  node.emit('input', { payload: { paramId: 'FOO', value: 7 } },
+    (m) => outs.push(m), (e) => { err = e; });
+
+  conn.inject({ name: 'PARAM_VALUE', sysid: 6, compid: 1, fields: { param_id: 'FOO', param_value: 1, param_count: 1, param_index: 0, param_type: 2 } });
+
+  assert.ok(err, 'done carries the failure');
+  assert.match(err.message, /Control queue overflow/);
+  const terminal = outs[outs.length - 1];
+  assert.equal(terminal[0], null, 'output 0 must not fire');
+  assert.equal(conn.activeCount(), 0, 'nothing is left subscribed');
+  node.emit('close', () => {});
+});
