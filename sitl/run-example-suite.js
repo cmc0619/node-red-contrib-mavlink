@@ -1424,13 +1424,22 @@ async function waitApGuidedArmReadyStabilize(sysid = 1) {
       const deadline = Date.now() + 20000;
       const compOf = () => conn.peerTable.getComponent(${sysid}, 1);
       while (!compOf()?.primaryEndpoint && Date.now() < deadline) await sleep(200);
+      // The arm-ready probe's force-disarm is fire-and-forget (armReadySource
+      // sleeps 800 ms, never confirms) — one lost datagram would hand the
+      // example an armed vehicle and erase its armed-changed edge. Confirm
+      // disarmed here, retrying the disarm alongside the mode flip.
       while (Date.now() < deadline) {
-        if (compOf()?.flightMode === 0) break;
-        conn.send(buildCommandLong(176, ${sysid}, 1, [1, 0, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+        const comp = compOf();
+        if (comp?.flightMode === 0 && comp.armed === false) break;
+        const command = comp?.armed
+          ? buildCommandLong(400, ${sysid}, 1, [0, 21196, 0, 0, 0, 0, 0], 0)
+          : buildCommandLong(176, ${sysid}, 1, [1, 0, 0, 0, 0, 0, 0], 0);
+        conn.send(command, { band: BAND.CONTROL, target: t });
         await sleep(500);
       }
-      if (compOf()?.flightMode !== 0) {
-        throw new Error('AP-${sysid} did not return to STABILIZE after GUIDED arm-ready');
+      const final = compOf();
+      if (final?.flightMode !== 0 || final.armed !== false) {
+        throw new Error('AP-${sysid} did not return disarmed to STABILIZE after GUIDED arm-ready');
       }
     `,
     30000
