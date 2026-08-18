@@ -786,6 +786,11 @@ function mountActionRows(action, lookup) {
     // liveOr in mavlink-editor-resource.test.js, the results panel above.
     indexAddressed: () => action === 'read' && lookup === 'index',
     hideParamResults: () => {},
+    // The Type row also answers to firmware — ArduPilot hides it outright,
+    // since nothing reads the declared type there. That half is sliced from
+    // the real file by the value-field harness below; only the action half is
+    // under test here.
+    applyTypeRowVisibility: () => element('#row-paramType').toggle(action === 'set'),
   };
   context.RED.mavlink.toggleRow = (selector, shown) => {
     if (selector) element(selector).toggle(!!shown);

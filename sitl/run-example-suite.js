@@ -246,7 +246,10 @@ const PROFILE = {
     restart: 'none',
     waitMs: 40000,
     expect: 'PARAM_SET fan-out sequential confirm ×5',
-    notes: 'build LOIT_SPEED_MS → fanout confirm on AP 1–5; no arm prep',
+    notes:
+      'build ARMING_OPTIONS (INT32) declared REAL32 → fanout confirm on AP 1–5; no arm prep. ' +
+      'AP echoes its own INT32 type, so all five accepted proves the wire matcher only ' +
+      'type-checks on bytewise — a regression here reads as five unconfirmed',
   },
   '13-px4-param-list': {
     restart: 'none',

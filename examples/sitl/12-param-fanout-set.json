@@ -4,15 +4,15 @@
     "type": "tab",
     "label": "SITL 12 Param fan-out set",
     "disabled": false,
-    "info": "Build-tier PARAM_SET of LOIT_SPEED_MS=10 then sequential fan-out echo-confirm across ArduPilot sysids 1–5 (broadcast refused for PARAM_SET).",
+    "info": "Build-tier PARAM_SET of ARMING_OPTIONS=1 then sequential fan-out echo-confirm across ArduPilot sysids 1-5 (broadcast refused for PARAM_SET).\n\nARMING_OPTIONS is INT32 on Copter-4.7.0 and the node declares MAV_PARAM_TYPE_REAL32 -- deliberately. ArduPilot ignores the declared type, c-casts the value, and echoes its OWN table type (INT32), so the echo type never equals the sent type. All five members must still report accepted: the wire matcher only compares types on bytewise, where a type mismatch really does mean a garbage store.",
     "env": []
   },
   {
     "id": "sitl29-comment",
     "type": "comment",
     "z": "sitl29-tab",
-    "name": "Build PARAM_SET → sequential fan-out confirm ×5",
-    "info": "Wiring is param [Build] → fanout [sequential, confirm] per DESIGN.md §10.\nPARAM_SET is sequential-only — broadcast makes the echoes a storm.\nSafe id: LOIT_SPEED_MS as MAV_PARAM_TYPE_REAL32 (Copter 4.7.0 has no WPNAV_SPEED).\n\nFive ArduCopter on bind 0.0.0.0:14550 → 127.0.0.1:14551.",
+    "name": "Build PARAM_SET -> sequential fan-out confirm x5 (AP integer param)",
+    "info": "Wiring is param [Build] -> fanout [sequential, confirm] per DESIGN.md 10.\nPARAM_SET is sequential-only -- broadcast makes the echoes a storm.\n\nARMING_OPTIONS (INT32) set to 1 while the node declares REAL32. AP stores it correctly and echoes INT32; a sent-vs-echo type equality check would false-unconfirm all five. Bit 0 only suppresses a prearm GCS display, so the fleet is unaffected.\n\nFive ArduCopter on bind 0.0.0.0:14550 -> 127.0.0.1:14551.",
     "x": 300,
     "y": 40,
     "wires": []
@@ -63,7 +63,7 @@
     "id": "sitl29-inject",
     "type": "inject",
     "z": "sitl29-tab",
-    "name": "Fan-out set LOIT_SPEED_MS",
+    "name": "Fan-out set ARMING_OPTIONS",
     "props": [
       {
         "p": "payload"
@@ -88,7 +88,7 @@
     "id": "sitl29-build",
     "type": "mavlink-param",
     "z": "sitl29-tab",
-    "name": "Build LOIT_SPEED_MS=10",
+    "name": "Build ARMING_OPTIONS=1 (declared REAL32)",
     "connection": "",
     "delivery": "build",
     "action": "set",
@@ -97,9 +97,9 @@
     "targetSystem": "",
     "targetComponent": "",
     "lookup": "name",
-    "paramId": "LOIT_SPEED_MS",
+    "paramId": "ARMING_OPTIONS",
     "paramIndex": -1,
-    "value": "10",
+    "value": "1",
     "paramType": "MAV_PARAM_TYPE_REAL32",
     "x": 440,
     "y": 160,

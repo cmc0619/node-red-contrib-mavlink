@@ -238,7 +238,7 @@
         toggle('#row-paramId', showName);
         toggle('#row-paramIndex', namesOne && byIndex);
         toggle('#row-value', action === 'set');
-        toggle('#row-paramType', action === 'set');
+        applyTypeRowVisibility();
 
         if (!byIndex) $('#node-input-paramIndex').val(-1);
         // The results panel floats under the name field, so it is tied to that
@@ -532,6 +532,19 @@
         renderParamResults(_hitQuery, next);
       }
 
+      /**
+       * The Type row answers to two conditions that change independently — the
+       * action (only `set` carries a type at all) and the firmware (ArduPilot
+       * reads the declared type nowhere, so there is nothing to ask). Both
+       * `applyActionRows` and `refreshParamInfo` route through here, so neither
+       * can win the row by running last.
+       */
+      function applyTypeRowVisibility() {
+        var action = $('#node-input-action').val() || 'read';
+        var decorative = RED.mavlink.resolveCatalogTarget().firmware === 'ardupilot';
+        RED.mavlink.toggleRow('#row-paramType', action === 'set' && !decorative);
+      }
+
       function refreshParamInfo() {
         var id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
         var def = _paramDefs[id];
@@ -560,23 +573,30 @@
         if (hover) $('#node-input-paramId').attr('title', hover);
         else $('#node-input-paramId').removeAttr('title');
 
-        // A published type is shown and locked; an unpublished one is asked for.
+        // Three states, in order of how much the firmware knows.
         //
-        // Keyed on whether a type was published, not on the firmware's name —
-        // PX4 is simply the only publisher today, and ArduPilot starting would
-        // need no change here. §14 measured what the operator picking it costs:
-        // a REAL32-typed set of an integer parameter is applied by the vehicle,
-        // echoed back with the vehicle's own type, decodes to
-        // 1.401298464324817e-45, and times out the confirm for a set that
-        // succeeded. Where the firmware states the answer, offering the operator
-        // a way to contradict it is offering them that failure.
+        // On a bytewise firmware the type decides the bit pattern, so picking
+        // it wrong mis-stores the value: §14 measured a REAL32-typed set of an
+        // integer parameter arriving as the denormal 1.401298464324817e-45.
+        // PX4 publishes a type for every parameter, so the answer is stated and
+        // the operator is never offered a way to contradict it.
+        //
+        // On ArduPilot the row goes away entirely. SITL wire capture
+        // (2026-08-18) found the declared type read by nobody: AP c-casts the
+        // value, ignores the `param_type` on the set, and echoes its own table
+        // type — and our encoder, decoder and both echo matchers agree. A field
+        // that changes nothing, whose right answer AP publishes nowhere, is a
+        // question with no answer; the select keeps its saved value because
+        // `buildParamMessage` still needs a resolvable type on the wire.
+        //
+        // Otherwise (custom firmware, or none picked yet) the choice is real
+        // and unresolved, so the full list is offered.
+        //
         // Immutable by having nothing else to offer, not by `disabled`. A
         // disabled control is the obvious way to say "you cannot change this",
         // but nothing else in this palette disables a field that `defaults`
         // saves, so whether Node-RED round-trips one is unverified here — and a
         // Type that silently saves empty is the §14 failure with extra steps.
-        // Narrowing the option list needs no new save path: the field is read
-        // exactly as every other field is.
         var $type = $('#node-input-paramType');
         var published = def && def.type;
         // Option values are the MAV_PARAM_TYPE *name*, which is what the node
@@ -599,6 +619,7 @@
         // value — it is still the field Node-RED saves, the same mechanism as
         // the hidden `lookup` input the Identify-by radios drive.
         var $typeShown = $('#mav-param-type-display');
+        applyTypeRowVisibility();
         if (published) {
           var option = RED.mavlink.PARAM_TYPE_OPTIONS.filter(function (o) { return o.name === def.type; })[0];
           $typeShown.text((option ? option.label : def.type) + ' — published by the firmware').show();

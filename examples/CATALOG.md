@@ -584,9 +584,15 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 ### sitl/12 — Param fan-out set
 
 - **File:** `examples/sitl/12-param-fanout-set.json` · **Tab:** `SITL 12 Param fan-out set`
-- **Story:** Build-tier `PARAM_SET` of `LOIT_SPEED_MS=10` then sequential fan-out
+- **Story:** Build-tier `PARAM_SET` of `ARMING_OPTIONS=1` then sequential fan-out
   echo-confirm across AP sysids 1–5 (§10 sequential-only for sets).
 - **Nodes:** config triplet, `param` (Build) → `fanout` (confirm), `inject`, `debug`.
+- **Why this parameter:** `ARMING_OPTIONS` is INT32 on Copter-4.7.0 and the node
+  declares `MAV_PARAM_TYPE_REAL32` on purpose. ArduPilot ignores the declared type,
+  c-casts the value, and echoes its *own* table type, so sent and echoed types never
+  match. All five members must still report accepted — the wire matcher compares
+  types only on bytewise, where a mismatch really does mean a garbage store. Five
+  `unconfirmed` is the regression signal.
 
 ### sitl/13 — PX4 param list collect
 

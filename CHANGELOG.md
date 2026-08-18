@@ -116,7 +116,29 @@ config-node shapes and message contracts may still change without a major bump.
   `BTNn_FUNCTION`), not protocol. If upstream ever annotates the field, the
   upgrade path is compiled enum names over these generic labels.
 
+### Fixed
+
+- **A fan-out param set on ArduPilot no longer reports `unconfirmed` for a
+  write that worked.** The replicator's echo matcher required the vehicle's
+  echoed `param_type` to equal the one we sent. SITL wire capture (2026-08-18,
+  Copter-4.7.0, PX4 control) shows ArduPilot ignores the declared type,
+  c-casts the value, and echoes its *own* table type — so on any AP integer
+  parameter the two never matched and every member reported `unconfirmed` on a
+  correct store. The check is now conditioned on the resolved encoding. It
+  stays on for bytewise (PX4), where a type mismatch really does mean the
+  float's bit pattern was stored as a garbage integer, and it is written as
+  "not proven c-cast" so an unresolved encoding keeps the gate rather than
+  dropping it.
+
 ### Changed
+
+- **ArduPilot has no Type field in the param dialog.** The declared
+  `MAV_PARAM_TYPE` is read by nobody on that stack — not ArduPilot's firmware,
+  not our encoder, decoder, or either echo matcher — and ArduPilot publishes no
+  type for any parameter, so the dropdown asked a question with no discoverable
+  right answer. The row is hidden on ArduPilot; the select keeps its saved value
+  because the built `PARAM_SET` still needs a resolvable type on the wire. PX4
+  is unchanged: it publishes a type for every parameter and states it.
 
 - **A published param type is stated, not offered.** When the definition
   catalog documents a parameter's `MAV_PARAM_TYPE`, the Set dialog used to
