@@ -4266,15 +4266,21 @@ slug names (Lucy, peer-table) remain the durable identity.
 `landed-changed` from firing — the ACK only starts the stream, so a copter
 already climbing when frame one lands gives the feed an `IN_AIR` baseline and
 no edge.
-*Fact:* `--only 40` PASSED at `f86acde` (owner rig report). The ON_GROUND frame
-does land before liftoff at 2 Hz, so the race does not bite; the three required
-edges (`armed-changed`, `mode-changed`, `landed-changed`) all fired. A 2 s delay
-inserted between the interval ACK and takeoff was reverted for that reason, and
-because it is not free: ArduCopter's idle-armed auto-disarm (`DISARM_DELAY`,
-10 s default) runs during exactly that window, so padding it spends real budget
-to insure a failure measurement says does not occur. Recorded because the only
-prior §14 datum was the `1d9cd1f` FAIL, and reasoning from that alone concluded
-— wrongly — that feature 3's example was unproven.
+*Fact:* both examples PASS. Rig run recorded in issue #345 — `--only 39,40` at
+`4d85e77`, 2026-08-18, 87 s, **2 PASS**. Example 40's observed edges:
+`mode-changed` 0→4 (STABILIZE→GUIDED), `armed-changed` false→true,
+`landed-changed` 1→3. The ON_GROUND frame does land before liftoff at 2 Hz, so
+the race does not bite. A 2 s delay inserted between the interval ACK and
+takeoff was reverted for that reason, and because it is not free: ArduCopter's
+idle-armed auto-disarm (`DISARM_DELAY`, 10 s default) runs during exactly that
+window, so padding it spends real budget to insure a failure measurement says
+does not occur. Recorded because the only prior §14 datum was the `1d9cd1f`
+FAIL, and reasoning from that alone concluded — wrongly — that feature 3's
+example was unproven.
+*Read the landed value, not the word:* the first `landed-changed` edge is
+`1 → 3`, `ON_GROUND` → **`MAV_LANDED_STATE_TAKEOFF`**, not `IN_AIR` (which is
+`2`). ArduCopter reports `TAKEOFF` through the climb and only then `IN_AIR`, so
+a flow gating "airborne" on `to === 2` misses the edge this example produces.
 *Not expected, by design:* `home-changed`. `HOME_POSITION` is not streamed; it
 is published when home is set (at arming), so the feed's first sight of it is a
 baseline, not an edge. It stays subscribed; the verdict never required it.
