@@ -11,12 +11,18 @@
     /**
      * The Identity must be bound to the selected Connection: a lease on an
      * unbound identity faults an id no heartbeat scheduler reads — a green
-     * "healthy" badge over a no-op, the silent-false-success shape §0 sends
-     * to the editor. Declaring `validate` on a config-node reference replaces
-     * Node-RED's built-in existence check, so the first half restates it.
-     * The connection is read live through liveOr so the check is scoped to
-     * this node's own open dialog (#217); with no Connection chosen the
-     * membership half passes — that field's own required ring reds it.
+     * "healthy" badge over a no-op, the silent-false-success shape §0 keeps a
+     * guard for. Through the dialog this is now unreachable: the Identity is a
+     * connection-scoped select (see oneditprepare) that only ever offers bound
+     * identities and auto-picks the sole one, so a normal edit cannot land an
+     * unbound value. This validator remains solely as the hand-edited-flow
+     * backstop — that is why it stays where command/fanout, whose unbound pick
+     * is not the promoted false-success class, carry no identity validator.
+     * Declaring `validate` on a config-node reference replaces Node-RED's
+     * built-in existence check, so the first half restates it. The connection
+     * is read live through liveOr so the check is scoped to this node's own
+     * open dialog (#217); with no Connection chosen the membership half passes
+     * — that field's own required ring reds it.
      */
     function boundIdentityValidator(v, _opt) {
       if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required';
@@ -49,8 +55,19 @@
         return this.name ? 'node_label_italic' : '';
       },
       oneditprepare: function () {
+        var node = this;
         RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
-        RED.mavlink.ensureConfigNodePicker(this, 'identity', 'mavlink-local-identity', 'node-input');
+        // Identity offers only the identities bound to the selected Connection
+        // — the same scoped select command and fanout use — so the editor
+        // never presents an unbindable pick (§0: offer viable choices, do not
+        // offer a wrong one and then red-ring it). No role filter: health
+        // asserts any bound identity, gcs included. When the Connection carries
+        // exactly one identity it is auto-selected, so the field does not ask a
+        // question that has a single answer. Re-fill when the Connection changes.
+        RED.mavlink.refreshIdentitySelect(node);
+        $('#node-input-connection').on('change', function () {
+          RED.mavlink.refreshIdentitySelect(node);
+        });
       },
     });
   }());
@@ -67,7 +84,7 @@
   </div>
   <div class="form-row">
     <label for="node-input-identity"><i class="fa fa-id-card"></i> Identity</label>
-    <input type="text" id="node-input-identity">
+    <select id="node-input-identity"></select>
   </div>
   <div class="form-row">
     <label for="node-input-ttlS"><i class="fa fa-clock-o"></i> Default lease (s)</label>
