@@ -25,7 +25,7 @@ const {
   applyActionStatus,
   failInput,
 } = require('../lib/delivery');
-const { applyConnectionStatus } = require('../lib/addressing');
+const { applyConnectionStatus, isBlank } = require('../lib/addressing');
 
 module.exports = function registerMavlinkHealth(RED) {
   /**
@@ -36,8 +36,22 @@ module.exports = function registerMavlinkHealth(RED) {
     const node = this;
 
     const connectionNode = RED.nodes.getNode(config.connection);
-    const identityNode = RED.nodes.getNode(config.identity);
     applyConnectionStatus(node, true, connectionNode);
+
+    // Which identity's health this asserts. The editor offers a choice only
+    // when the Connection carries more than one identity; a single-identity
+    // Connection hides the field, so the identity is resolved from the
+    // Connection's shape — its sole identity is always its Local Identity. A
+    // multi-identity Connection uses the saved pick, falling back to the Local
+    // Identity when blank (§0 presence-fallback). Resolving from the
+    // Connection rather than trusting a possibly-stale saved id is deliberate:
+    // the field is hidden and unvalidated in the single case, so a leftover
+    // value must not reach assertHealth and fault an id the scheduler never
+    // heartbeats — the silent-"healthy"-over-a-no-op this node exists to avoid.
+    const additionalIdentities = connectionNode.additionalIdentities || [];
+    const identityId = additionalIdentities.length === 0 || isBlank(config.identity)
+      ? connectionNode.localIdentity
+      : config.identity;
 
     // The editor owns the default and the positive-number ring — just convert
     // it. msg.payload.ttl_s overrides by presence (§0 presence-fallback).
@@ -45,12 +59,12 @@ module.exports = function registerMavlinkHealth(RED) {
 
     // Subscribed eagerly, like mavlink-in's message subscriptions, so a
     // lease expiring between inputs still reaches this node's own status and
-    // output. Both references are editor-required, so the runtime trusts them
-    // (§0) the way mavlink-state's feed does — a disabled Connection still
-    // answers with its stub, and a hand-edited dangling reference craters
+    // output. The Connection reference is editor-required, so the runtime
+    // trusts it (§0) the way mavlink-state's feed does — a disabled Connection
+    // still answers with its stub, and a hand-edited dangling reference craters
     // here at construction rather than deferring the failure.
-    const unsubscribeExpired = connectionNode.onHealthExpired(({ identityId }) => {
-      if (identityId !== identityNode.id) return;
+    const unsubscribeExpired = connectionNode.onHealthExpired(({ identityId: expiredId }) => {
+      if (expiredId !== identityId) return;
       applyActionStatus(node, 'error', 'lease expired');
       node.send([null, makeStatusRecord({
         node: 'mavlink-health',
@@ -79,23 +93,23 @@ module.exports = function registerMavlinkHealth(RED) {
         switch (payload.health) {
           case 'ok': {
             const ttlS = payload.ttl_s ?? defaultTtlS;
-            connectionNode.assertHealth(identityNode.id, true, Number(ttlS) * 1000);
+            connectionNode.assertHealth(identityId, true, Number(ttlS) * 1000);
             applyActionStatus(node, 'ok', `healthy (${ttlS}s lease)`);
             send([msg, makeStatusRecord({
               node: 'mavlink-health',
               result: 'healthy',
-              identity: identityNode.id,
+              identity: identityId,
               ttlS: Number(ttlS),
             })]);
             break;
           }
           case 'fatal': {
-            connectionNode.assertHealth(identityNode.id, false, 0);
+            connectionNode.assertHealth(identityId, false, 0);
             applyActionStatus(node, 'error', 'faulted');
             send([msg, makeStatusRecord({
               node: 'mavlink-health',
               result: 'faulted',
-              identity: identityNode.id,
+              identity: identityId,
             })]);
             break;
           }

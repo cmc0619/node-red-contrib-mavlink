@@ -9,28 +9,35 @@
     }
 
     /**
-     * The Identity must be bound to the selected Connection: a lease on an
-     * unbound identity faults an id no heartbeat scheduler reads — a green
-     * "healthy" badge over a no-op, the silent-false-success shape §0 keeps a
-     * guard for. Through the dialog this is now unreachable: the Identity is a
-     * connection-scoped select (see oneditprepare) that only ever offers bound
-     * identities and auto-picks the sole one, so a normal edit cannot land an
-     * unbound value. This validator remains solely as the hand-edited-flow
-     * backstop — that is why it stays where command/fanout, whose unbound pick
-     * is not the promoted false-success class, carry no identity validator.
-     * Declaring `validate` on a config-node reference replaces Node-RED's
-     * built-in existence check, so the first half restates it. The connection
-     * is read live through liveOr so the check is scoped to this node's own
-     * open dialog (#217); with no Connection chosen the membership half passes
-     * — that field's own required ring reds it.
+     * A choice of Identity exists only when the Connection carries more than
+     * one. A single-identity Connection has exactly one — its Local Identity —
+     * so the editor hides the field (see oneditprepare) and the runtime asserts
+     * that identity; whatever is stored here is ignored, so it must never ring,
+     * even for a stale saved value from before the field was hidden. That is
+     * the first branch: with the Connection resolved to a single identity, pass.
+     *
+     * When the Connection does carry additionals, a bound pick is required. The
+     * field is then a connection-scoped select that only offers bound
+     * identities and auto-picks one, so the ring is unreachable through the
+     * dialog — this validator survives solely as the hand-edited-flow backstop
+     * for the promoted silent-false-success case (a lease on an unbound id no
+     * scheduler heartbeats). command/fanout, whose unbound pick is not that
+     * class, carry no identity validator. The connection is read live through
+     * liveOr so the check is scoped to this node's own open dialog (#217).
      */
     function boundIdentityValidator(v, _opt) {
+      var connId = RED.mavlink.liveOr(this, '#node-input-connection', this.connection, '');
+      // No Connection resolved yet — its own required ring owns that.
+      if (RED.mavlink.isBlank(connId) || connId === '_ADD_' || !RED.nodes.node(connId)) return true;
+      var options = RED.mavlink.identityOptionsFor(connId);
+      // Single-identity Connection: field hidden, value ignored — never ring.
+      if (options.length <= 1) return true;
+      // Multi-identity: a bound identity must be chosen.
       if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required';
       if (!RED.nodes.node(v)) return 'references a missing Identity';
-      var connId = RED.mavlink.liveOr(this, '#node-input-connection', this.connection, '');
-      if (RED.mavlink.isBlank(connId) || connId === '_ADD_' || !RED.nodes.node(connId)) return true;
-      var bound = RED.mavlink.identityOptionsFor(connId).some(function (o) { return o.id === v; });
-      if (!bound) return 'is not bound to the selected Connection — bind it there or pick a bound Identity';
+      if (!options.some(function (o) { return o.id === v; })) {
+        return 'is not bound to the selected Connection — bind it there or pick a bound Identity';
+      }
       return true;
     }
 
@@ -40,7 +47,7 @@
       defaults: {
         name:       { value: '' },
         connection: { value: '', type: 'mavlink-connection', required: true },
-        identity:   { value: '', type: 'mavlink-local-identity', required: true, validate: boundIdentityValidator },
+        identity:   { value: '', type: 'mavlink-local-identity', validate: boundIdentityValidator },
         ttlS:       { value: 5, validate: positiveSecondsValidator },
       },
       inputs: 1,
@@ -57,17 +64,35 @@
       oneditprepare: function () {
         var node = this;
         RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
-        // Identity offers only the identities bound to the selected Connection
-        // — the same scoped select command and fanout use — so the editor
-        // never presents an unbindable pick (§0: offer viable choices, do not
-        // offer a wrong one and then red-ring it). No role filter: health
-        // asserts any bound identity, gcs included. When the Connection carries
-        // exactly one identity it is auto-selected, so the field does not ask a
-        // question that has a single answer. Re-fill when the Connection changes.
-        RED.mavlink.refreshIdentitySelect(node);
-        $('#node-input-connection').on('change', function () {
-          RED.mavlink.refreshIdentitySelect(node);
-        });
+        // The Identity is a choice only when the Connection carries more than
+        // one identity. A single-identity Connection has exactly one — its
+        // Local Identity — so the field is hidden and the runtime asserts that
+        // identity; showing a field with a single answer, then red-ringing a
+        // stale pick, is the anti-pattern §0 forbids. When there is a choice,
+        // the field is a connection-scoped select — the same one command and
+        // fanout use — that only ever offers bound identities (no role filter:
+        // health asserts any bound identity, gcs included). Re-evaluate on
+        // every Connection change.
+        function refreshIdentityRow() {
+          var connId = $('#node-input-connection').val() || '';
+          var options = RED.mavlink.identityOptionsFor(connId);
+          if (options.length <= 1) {
+            $('#row-health-identity').hide();
+          } else {
+            $('#row-health-identity').show();
+            RED.mavlink.refreshIdentitySelect(node);
+          }
+        }
+        refreshIdentityRow();
+        $('#node-input-connection').on('change', refreshIdentityRow);
+      },
+      oneditsave: function () {
+        // A single-identity Connection hides the field; store blank so nothing
+        // stale is kept and the runtime resolves the sole Local Identity.
+        var connId = $('#node-input-connection').val() || '';
+        if (RED.mavlink.identityOptionsFor(connId).length <= 1) {
+          this.identity = '';
+        }
       },
     });
   }());
@@ -82,7 +107,7 @@
     <label for="node-input-connection"><i class="fa fa-plug"></i> Connection</label>
     <input type="text" id="node-input-connection">
   </div>
-  <div class="form-row">
+  <div class="form-row" id="row-health-identity">
     <label for="node-input-identity"><i class="fa fa-id-card"></i> Identity</label>
     <select id="node-input-identity"></select>
   </div>
