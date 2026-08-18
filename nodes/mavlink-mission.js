@@ -325,7 +325,7 @@ function buildPlan(operation, missionType, target, items) {
  * @returns {object[]}
  */
 function resolveItems(config, payload) {
-  if (Array.isArray(payload.items)) return payload.items;
+  if (payload.items !== undefined && payload.items !== null) return payload.items;
   if (config.items.trim()) return JSON.parse(config.items);
   return undefined;
 }

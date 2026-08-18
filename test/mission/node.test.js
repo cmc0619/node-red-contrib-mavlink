@@ -392,6 +392,44 @@ test('upload end-to-end: items from msg.payload.items reach the vehicle and succ
   assert.equal(conn.sent[0].message.fields.count, 1);
 });
 
+test('a present non-array payload.items does not fall back to configured items', async () => {
+  const conn = new StubConnection();
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'upload',
+    connection: 'conn',
+    delivery: 'build',
+    dialect: 'common',
+    firmware: 'ardupilot',
+    missionType: 'mission',
+    items: JSON.stringify([{ frame: 3, command: 16, x: 1, y: 2, z: 3 }]),
+  });
+  const { outputs, err } = await runInput(node, { payload: { items: 'not-an-array' } });
+  assert.ok(err, 'a present non-array items value does not become the configured list');
+  assert.ok(
+    !outputs.some((ports) => ports[0] && ports[0].payload && ports[0].payload.messages
+      && ports[0].payload.messages[0].fields.count === 1),
+    'configured one-item list does not ride in their place'
+  );
+});
+
+test('null payload.items stays unset and the configured list rides', async () => {
+  const conn = new StubConnection();
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'upload',
+    connection: 'conn',
+    delivery: 'build',
+    dialect: 'common',
+    firmware: 'ardupilot',
+    missionType: 'mission',
+    items: JSON.stringify([{ frame: 3, command: 16, x: 1, y: 2, z: 3 }]),
+  });
+  const { outputs, err } = await runInput(node, { payload: { items: null } });
+  assert.equal(err, undefined);
+  assert.equal(outputs[0][0].payload.messages[0].fields.count, 1);
+});
+
 test('an omitted items field over blank config does not invent COUNT 0', async () => {
   // Blank config means "items come from the payload". No items key is not
   // an empty list — synthesizing [] would erase the vehicle plan and report
