@@ -254,9 +254,7 @@ test('coordKinds raw/dege7 params are never ×1e7-scaled on a global frame', () 
 
 test('NaN in param5/6 stays non-finite — no silent null island (§9)', () => {
   // LONG's NaN means "leave unchanged"; int32 cannot express it, and coercing
-  // to 0 would aim a global-frame command at 0,0. It rides out non-finite
-  // instead, and lib/connection/wire.js refuses it at the one choke point
-  // every outbound message crosses (test/connection/wire-nonfinite.test.js).
+  // to 0 would aim a global-frame command at 0,0. It rides out non-finite.
   assert.ok(Number.isNaN(longToIntFields([0, 0, 0, 0, NaN, 149, 50]).x));
   assert.ok(Number.isNaN(longToIntFields([0, 0, 0, 0, -35, NaN, 50]).y));
   // Kind-independent: NaN flags are equally meaningless.

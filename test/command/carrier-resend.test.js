@@ -300,12 +300,9 @@ test('INT + non-location command: XML kinds keep param5 raw on the wire', async 
   assert.equal(sent[1].result, 'accepted');
 });
 
-test('INT + NaN lat/lon builds non-finite — the wire is what refuses it', async () => {
+test('INT + NaN lat/lon builds non-finite — never coerced to null island', async () => {
   // int32 cannot express NaN. The driver does not coerce it to 0 (null
-  // island) and does not refuse it either: it builds what it was handed, and
-  // the real Connection.send serializes before enqueueing, so
-  // lib/connection/wire.js throws synchronously into this node's error path
-  // (test/connection/wire-nonfinite.test.js covers that half).
+  // island) and does not refuse it either: it builds what it was handed.
   const { node, conn } = deploy(
     [MAV_RESULT.ACCEPTED],
     {

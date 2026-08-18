@@ -317,8 +317,8 @@ module.exports = function registerMavlinkMove(RED) {
           case 'stream': {
             // Blank keeps the library default; the editor's number validator owns
             // the rest (§14: a finite-number check on operator input is a guardrail).
-            const rateHz = numberOr(payload.rateHz, numberOr(config.rateHz, 5));
-            const ttlMs = numberOr(payload.ttlMs, numberOr(config.ttlMs, 1000));
+            const rateHz = numberOr(payload.rateHz, numberOr(config.rateHz, undefined));
+            const ttlMs = numberOr(payload.ttlMs, numberOr(config.ttlMs, undefined));
             // One stream per (connection, target) (#176): a second node
             // streaming to the same vehicle would alternate contradictory
             // setpoints — the vehicle oscillates while both nodes report
