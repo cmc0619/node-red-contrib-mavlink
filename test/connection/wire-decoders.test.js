@@ -167,7 +167,7 @@ test('an UNKNOWN_<id> frame surfaces but does not earn eviction standing', () =>
     },
     { sysid: 7, compid: 1, seq: 0 }
   );
-  const ep = (n) => ({ address: '10.0.0.' + n, port: 14550 });
+  const ep = (n) => ({ address: `10.0.0.${n}`, port: 14550 });
   const t = 4_000_000;
 
   // The frame reaches the flow — that is the whole point of the feature.
