@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 40 Transition events",
     "disabled": false,
-    "info": "Fly ArduPilot sysid 1 and watch the flight-dynamic transition events land in a State feed: mode-changed on GUIDED, armed-changed on arm, home-changed when the EKF sets home, landed-changed on takeoff (EXTENDED_SYS_STATE is streamed explicitly — this SITL does not send it unasked).",
+    "info": "Fly ArduPilot sysid 1 and watch the flight-dynamic transition events land in a State feed: mode-changed on GUIDED, armed-changed on arm, landed-changed on takeoff (EXTENDED_SYS_STATE is streamed explicitly — this SITL does not send it unasked).",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl40-tab",
     "name": "Flight-dynamic transition events",
-    "info": "Chain: GUIDED (confirm) → 2 s settle → Arm (confirm) → SET_MESSAGE_INTERVAL for EXTENDED_SYS_STATE (245) at 2 Hz → Takeoff 10 m (complete).\n\nGUIDED ACK is not armable-yet: ARM in the same tick returns FAILED (4) on Copter-4.7.0; a short delay lets the mode apply. Prep leaves STABILIZE so Set GUIDED is a real mode-changed edge.\n\nThe State feed subscribes to only the six transition events — armed-changed, mode-changed, landed-changed, gps-fix-changed, home-changed, sensor-health-changed — so the debug pane shows edges, not traffic. Each record carries sysid/compid plus from/to (sensor-health-changed adds the flipped-bit mask as changed).\n\nFirst observation is not a transition: the feed stays quiet until a held value actually changes, so expect nothing at connect and a burst around mode/arm/takeoff.\n\nConnection: bind 0.0.0.0:14550 → remote 127.0.0.1:14551, sysid 1.",
+    "info": "Chain: GUIDED (confirm) → 2 s settle → Arm (confirm) → SET_MESSAGE_INTERVAL for EXTENDED_SYS_STATE (245) at 2 Hz → 2 s settle → Takeoff 10 m (complete).\n\nGUIDED ACK is not armable-yet: ARM in the same tick returns FAILED (4) on Copter-4.7.0; a short delay lets the mode apply. Prep leaves STABILIZE so Set GUIDED is a real mode-changed edge. The second settle is the same rule on the landed axis: the interval ACK only starts the stream, so takeoff must wait for one ON_GROUND frame to land or the feed's first landed observation is already IN_AIR and no edge fires.\n\nThe State feed subscribes to only the six transition events — armed-changed, mode-changed, landed-changed, gps-fix-changed, home-changed, sensor-health-changed — so the debug pane shows edges, not traffic. Each record carries sysid/compid plus from/to (sensor-health-changed adds the flipped-bit mask as changed).\n\nFirst observation is not a transition: the feed stays quiet until a held value actually changes, so expect nothing at connect and a burst around mode/arm/takeoff.\n\nConnection: bind 0.0.0.0:14550 → remote 127.0.0.1:14551, sysid 1.",
     "x": 250,
     "y": 40,
     "wires": []
@@ -226,7 +226,7 @@
     "y": 160,
     "wires": [
       [
-        "sitl40-takeoff"
+        "sitl40-stream-settle"
       ],
       [
         "sitl40-stream-status"
@@ -234,6 +234,31 @@
     ],
     "targetSystem": "",
     "targetComponent": ""
+  },
+  {
+    "id": "sitl40-stream-settle",
+    "type": "delay",
+    "z": "sitl40-tab",
+    "name": "let landed baseline arrive",
+    "pauseType": "delay",
+    "timeout": "2",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 830,
+    "y": 220,
+    "wires": [
+      [
+        "sitl40-takeoff"
+      ]
+    ]
   },
   {
     "id": "sitl40-takeoff",
