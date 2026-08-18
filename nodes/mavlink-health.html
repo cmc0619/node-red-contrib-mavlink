@@ -1,0 +1,79 @@
+<script type="text/javascript">
+  (function () {
+    function positiveSecondsValidator(v, _opt) {
+      // Blank reds: the runtime opens the lease timer at this value as saved
+      // (§0), and Number('') is 0 — an already-expired lease, not "no default".
+      var n = RED.mavlink.isBlank(v) ? NaN : Number(v);
+      if (!Number.isFinite(n) || n <= 0) return 'must be a positive number of seconds';
+      return true;
+    }
+
+    RED.nodes.registerType('mavlink-health', {
+      category: 'mavlink',
+      color: '#6ea6d7',
+      defaults: {
+        name:       { value: '' },
+        connection: { value: '', type: 'mavlink-connection', required: true },
+        identity:   { value: '', type: 'mavlink-local-identity', required: true },
+        ttlS:       { value: 5, validate: positiveSecondsValidator },
+      },
+      inputs: 1,
+      outputs: 2,
+      outputLabels: ['continue', 'status'],
+      icon: 'font-awesome/fa-heartbeat',
+      paletteLabel: 'health',
+      label: function () {
+        return this.name || 'mavlink health';
+      },
+      labelStyle: function () {
+        return this.name ? 'node_label_italic' : '';
+      },
+      oneditprepare: function () {
+        RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
+        RED.mavlink.ensureConfigNodePicker(this, 'identity', 'mavlink-local-identity', 'node-input');
+      },
+    });
+  }());
+</script>
+
+<script type="text/html" data-template-name="mavlink-health">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-connection"><i class="fa fa-plug"></i> Connection</label>
+    <input type="text" id="node-input-connection">
+  </div>
+  <div class="form-row">
+    <label for="node-input-identity"><i class="fa fa-id-card"></i> Identity</label>
+    <input type="text" id="node-input-identity">
+  </div>
+  <div class="form-row">
+    <label for="node-input-ttlS"><i class="fa fa-clock-o"></i> Default lease (s)</label>
+    <input type="number" id="node-input-ttlS" min="1" step="1">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-health">
+  <p>Asserts an Identity's health on its Connection with an expiring lease. A faulted identity's HEARTBEAT stops going out until the fault clears — the companion-failsafe posture other GCS software reads as "this component is gone."</p>
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt>payload.health <span class="property-type">string</span></dt>
+    <dd>
+      <code>ok</code> — clear any fault and start (or renew) a lease. Send another <code>ok</code> before the lease lapses, or the Identity faults on its own.<br>
+      <code>fatal</code> — fault the Identity immediately and cancel any pending lease.<br>
+      Anything else is a no-op: nothing is asserted, nothing is sent.
+    </dd>
+    <dt class="optional">payload.ttl_s <span class="property-type">number</span></dt>
+    <dd>Lease length in seconds for an <code>ok</code> assertion. Overrides the node's default lease when present.</dd>
+  </dl>
+  <h3>Outputs</h3>
+  <ol class="node-ports">
+    <li>Continue — the original input message, fired once an <code>ok</code>/<code>fatal</code> assertion is accepted. Also fires <code>null</code> when a lease expires on its own.</li>
+    <li>Status — a record on every assertion this node makes, including a lease that expires unrenewed.</li>
+  </ol>
+  <h3>Details</h3>
+  <p>Set <code>msg.payload = false</code> to suppress the node silently.</p>
+  <p>The lease is owned by the Connection, not this node: closing or redeploying this node cancels its own subscription to expiry notices, but the Identity's fault state (and any other Health node's lease on the same Identity) is unaffected.</p>
+</script>

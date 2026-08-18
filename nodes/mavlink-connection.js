@@ -12,7 +12,8 @@
  * and Local Identity config nodes, and hands a plain snapshot to the
  * {@link Connection} runtime in `lib/connection`, which owns every piece of
  * behaviour. Palette nodes reach the runtime through `node.subscribe`,
- * `node.send`, `node.peerTable`, and `node.vehicle`.
+ * `node.send`, `node.peerTable`, `node.vehicle`, `node.assertHealth`, and
+ * `node.onHealthExpired`.
  *
  * References are captured at construction and released in `close`; the config
  * nodes are never re-resolved during teardown (§7).
@@ -55,6 +56,13 @@ module.exports = function registerMavlinkConnection(RED) {
       };
       node.resolveSourceIds = () => null;
       node.peerTable = new PeerTable({});
+      node.assertHealth = () => {
+        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: a health assertion on a disabled link is an operational failure at assertion time
+        throw new Error(
+          'mavlink-connection: connection disabled — enable it in the connection config and redeploy'
+        );
+      };
+      node.onHealthExpired = () => () => {};
       node.on('close', (done) => done());
       return;
     }
@@ -146,6 +154,12 @@ module.exports = function registerMavlinkConnection(RED) {
     node.subscribe = (filter, handler) => node.connection.subscribe(filter, handler);
     node.send = (message, options) => node.connection.send(message, options);
     node.resolveSourceIds = (identityId) => node.connection.resolveSourceIds(identityId);
+    node.assertHealth = (identityId, healthy, ttlMs) =>
+      node.connection.assertHealth(identityId, healthy, ttlMs);
+    node.onHealthExpired = (handler) => {
+      node.connection.on('health-expired', handler);
+      return () => node.connection.off('health-expired', handler);
+    };
     Object.defineProperty(node, 'peerTable', { get: () => node.connection.peerTable });
 
     applyStatus(node, STATE.CONNECTING, signing.acceptInvalid);

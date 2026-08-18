@@ -47,9 +47,9 @@
      * pre-fills blank fields; an explicitly customized value is never rewritten.
      */
     var ROLE_PRESETS = {
-      gcs:       { sysid: 255, compid: 190, heartbeatType: 'MAV_TYPE_GCS',               healthDriven: false },
-      companion: { sysid: null, compid: null, heartbeatType: 'MAV_TYPE_ONBOARD_CONTROLLER', healthDriven: true },
-      custom:    { sysid: 255, compid: 190, heartbeatType: 'MAV_TYPE_GENERIC',            healthDriven: false }
+      gcs:       { sysid: 255, compid: 190, heartbeatType: 'MAV_TYPE_GCS' },
+      companion: { sysid: null, compid: null, heartbeatType: 'MAV_TYPE_ONBOARD_CONTROLLER' },
+      custom:    { sysid: 255, compid: 190, heartbeatType: 'MAV_TYPE_GENERIC' }
     };
 
     RED.nodes.registerType('mavlink-local-identity', {
