@@ -1016,13 +1016,16 @@ const { RECONNECT_BASE_MS, RECONNECT_CAP_MS } = require('../../lib/connection/ru
  *   which always succeeds) reject before one succeeds
  * @param {boolean} [options.failFirstOpen]  the deploy-time open itself fails,
  *   emitting a transport error first the way a real bind failure does
+ * @param {boolean} [options.holdRedialOpen]  redial opens hang until the test
+ *   releases them via `releaseHeldOpen()` — for close-vs-open races
  * @returns {object}
  */
-function reconnectBuild({ openFailures = 0, failFirstOpen = false } = {}) {
+function reconnectBuild({ openFailures = 0, failFirstOpen = false, holdRedialOpen = false } = {}) {
   const transports = [];
   const timeouts = [];
   const warns = [];
   const infos = [];
+  const heldOpens = [];
   let opens = 0;
   const transportFactory = () => {
     const transport = new EventEmitter();
@@ -1042,6 +1045,9 @@ function reconnectBuild({ openFailures = 0, failFirstOpen = false } = {}) {
       // find the link still down.
       if (opens > 1 && opens <= 1 + openFailures) {
         return Promise.reject(new Error('still down'));
+      }
+      if (opens > 1 && holdRedialOpen) {
+        return new Promise((resolve) => heldOpens.push(resolve));
       }
       return Promise.resolve();
     };
@@ -1097,6 +1103,7 @@ function reconnectBuild({ openFailures = 0, failFirstOpen = false } = {}) {
     infos,
     decodersCleared: () => cleared,
     redials: () => timeouts.filter((t) => t.ms !== WRITE_TIMEOUT_MS),
+    releaseHeldOpen: () => heldOpens.shift()(),
   };
 }
 
@@ -1181,6 +1188,66 @@ test('close during the backoff wait cancels the redial — redeploy wins over re
   assert.equal(redial.cleared, true, 'the pending redial is disarmed');
   assert.equal(connection.getState(), STATE.CLOSED);
   assert.equal(transports.length, 1, 'nothing dials after teardown');
+});
+
+test('close during an in-flight redial open still wins — the late success cannot resurrect the link', async () => {
+  // The backoff-wait race is pinned above; this is the other window the
+  // implementation codes for (Sourcery): close() lands while a redial's
+  // open() is already in flight, and the open then *succeeds* — after the
+  // operator tore the connection down.
+  const { connection, transports, redials, releaseHeldOpen, timers } = reconnectBuild({
+    holdRedialOpen: true,
+  });
+  await connection.start();
+  transports[0].emit('error', new Error('link down'));
+
+  redials()[0].fn(); // _attemptReconnect starts; its open() now hangs
+  assert.equal(transports.length, 2, 'the redial dialed a fresh transport');
+
+  let done = false;
+  connection.close(() => { done = true; });
+  assert.equal(done, true);
+
+  releaseHeldOpen(); // the open finally succeeds — after close won
+  await delay(0);
+
+  assert.equal(connection.getState(), STATE.CLOSED, 'the late open cannot leave CLOSED');
+  assert.equal(transports[1].closed, true, 'the freshly-opened transport is closed, not leaked');
+  assert.equal(redials().length, 1, 'no further redial is armed after teardown');
+  assert.equal(timers.active(), 0, 'heartbeats and sweep stay down');
+  assert.equal(transports[1].sent.length, 0, 'nothing pumps on the resurrected socket');
+});
+
+test('an error while a redial open() settles does not let the stale continuation declare recovery', async () => {
+  // CodeRabbit (#334): open() can resolve and the transport error in the same
+  // tick, before the awaited continuation runs. _onTransportError then nulls
+  // this._transport and arms the next redial — so the continuation must
+  // recognise it has been superseded. Without the identity check it would
+  // reset the backoff, declare CONNECTED, and restart heartbeats whose first
+  // tick pumps into a null transport: a TypeError inside a timer callback,
+  // the §2 process-kill.
+  const { connection, transports, redials, releaseHeldOpen, timers } = reconnectBuild({
+    holdRedialOpen: true,
+  });
+  await connection.start();
+  const heartbeatsDown = () => timers.active();
+  transports[0].emit('error', new Error('link down'));
+  const downTimers = heartbeatsDown();
+
+  redials()[0].fn(); // attempt starts; its open() hangs
+  const inFlight = transports[1];
+  inFlight.emit('error', new Error('died while opening')); // lands mid-open
+
+  assert.equal(redials().length, 2, 'the mid-open error armed the next redial');
+  assert.equal(redials()[1].ms, RECONNECT_BASE_MS, 'backoff kept growing — ceiling doubled to 2s, half-jitter floor 1s');
+
+  releaseHeldOpen(); // the doomed open() then resolves anyway
+  await delay(0);
+
+  assert.equal(connection.getState(), STATE.RECONNECTING, 'the stale continuation cannot declare CONNECTED');
+  assert.equal(inFlight.closed, true, 'the superseded transport is closed, not leaked');
+  assert.equal(timers.active(), downTimers, 'heartbeats stay down — recovery belongs to the armed redial');
+  connection.close();
 });
 
 test('a transport that never opened does not enter the redial loop — deploy failures stay loud', async () => {
