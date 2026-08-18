@@ -8,8 +8,7 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Added
 
-- **Five payload verbs from the reference implementations.** The payload node
-  gains the verbs `-ai`/`-kimi` carried that final did not: camera **zoom**
+- **Five new payload verbs.** The payload node gains: camera **zoom**
   (`SET_CAMERA_ZOOM`, 531) and **focus** (`SET_CAMERA_FOCUS`, 532) — both were
   declined pre-1.0 and are now first-class, type an enum select defaulting to
   RANGE; a new **relay** topic with **set** (`DO_SET_RELAY`, 181) and
