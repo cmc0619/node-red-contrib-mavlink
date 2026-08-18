@@ -1871,20 +1871,31 @@ Rules across all three:
 
 ### Payload topics
 
-Camera: photo, stop photo, start video, stop video, set mode, trigger by distance.
+Camera: photo, stop photo, start video, stop video, set mode, zoom, focus, trigger by distance.
 Stop photo (`IMAGE_STOP_CAPTURE`, 2001) exists because photo exposes `count` and an explicit
 0 starts a continuous capture the node could otherwise never stop (#259); trigger by distance
 carries its own off switch — distance 0 — which the help documents rather than growing a verb.
-The rest of the camera surface (zoom, focus, tracking, storage) is declined pre-1.0: the
-dialect ships the ids and the Command node's advanced tier reaches them, which is the escape
-hatch until a verb earns its keep.
-Gimbal: aim, set mode, ROI set/clear — and aim has three paths
+Zoom (`SET_CAMERA_ZOOM`, 531) and focus (`SET_CAMERA_FOCUS`, 532) are first-class verbs: both
+were declined pre-1.0 as "reach them through the Command node's advanced tier", but the
+reference implementations (`-ai`, `-kimi`) both carry them and the owner ruled parity — a
+zoom/focus that needs the raw-command escape hatch is a verb that has earned its keep. Type is
+a `CAMERA_ZOOM_TYPE` / `SET_FOCUS_TYPE` enum the dialect renders as a select, defaulting to
+RANGE (a 0..100 level); the value is a plain number. Tracking and storage stay declined pre-1.0
+— the dialect ships the ids and the Command node's advanced tier still reaches them.
+Gimbal: aim, set mode, ROI set/clear — and aim has four paths
 (`DO_MOUNT_CONTROL` for legacy gimbals, `GIMBAL_MANAGER_SET_PITCHYAW` for fire-and-forget
-manager aiming, and `DO_GIMBAL_MANAGER_PITCHYAW` (1000) when the aim should confirm — the
-command form acks, the message form cannot, #257) chosen per verb inside the topic, not as a
-node-level setting. Manager discovery, status and configure stay unshipped (#257 remains open
-for them). Servo: set, repeat. Gripper, winch
-and parachute: operate.
+manager aiming, `DO_GIMBAL_MANAGER_PITCHYAW` (1000) when the aim should confirm — the
+command form acks, the message form cannot, #257 — and `GIMBAL_MANAGER_SET_ATTITUDE` (282) when
+the aim needs roll as well as pitch/yaw) chosen per verb inside the topic, not as a
+node-level setting. The attitude path takes roll/pitch/yaw in degrees and derives the `q`
+quaternion the wire carries — the operator never types a quaternion — with the angular-velocity
+triple defaulting to the NaN "ignore" sentinel so a static attitude is not read as a commanded
+zero rate (the issue-#87 reasoning the pitch/yaw paths already follow). It is a message, so it
+is unconfirmed, like the `SET_PITCHYAW` message path. Manager discovery, status and configure
+stay unshipped (#257 remains open for them). Servo: set, repeat. Relay: set, repeat — a servo
+drives an angle and a relay switches a circuit, separate `MAV_CMD`s (`DO_SET_RELAY` 181 /
+`DO_REPEAT_RELAY` 182) and separate devices, so relay is its own topic mirroring servo's two
+verbs rather than a servo verb. Gripper, winch and parachute: operate.
 
 A topic is a device on the airframe, always. Gripper, winch and parachute are three separate
 `MAV_TYPE`s upstream (48 / 42 / 37) with nothing grouping them, so each is its own topic rather
