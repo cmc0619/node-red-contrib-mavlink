@@ -116,6 +116,18 @@ config-node shapes and message contracts may still change without a major bump.
   `BTNn_FUNCTION`), not protocol. If upstream ever annotates the field, the
   upgrade path is compiled enum names over these generic labels.
 
+### Changed
+
+- **The In node's badge names the message, nothing else.** The
+  `<count> <MESSAGE>` badge dropped its delivered counter: at seven digits the
+  count was 8 of the badge's 24 characters and actively truncated the name —
+  the only half that told you anything. With the counter gone, the latched
+  trailing write that existed to land the badge on the "true total" had no
+  subject, so the whole flush-timer machinery went with it: a write suppressed
+  by the four-per-second throttle is now simply dropped, and the badge path
+  schedules no timers at all. The throttle itself is unchanged (#219's
+  regression pin still holds).
+
 ### Fixed
 
 - **Move never fills in a value you did not give it.** Blank fields used to
