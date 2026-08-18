@@ -222,8 +222,17 @@ module.exports = function registerMavlinkCommand(RED) {
       if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return;
       if (isBlank(payload.mode)) return;
       const modeParams = setModeParams(payload.mode, modeContext(resolution));
+      // A resolved mode is one indivisible answer, so an explicit number wins
+      // over the *whole* of it, never half. PX4's answer is a pair — param2
+      // main_mode, param3 sub_mode — and filling one side from the name while
+      // the flow supplied the other commands a mode nobody asked for:
+      // `{ mode: 'Hold', 2: 5 }` would send main 5 with Hold's sub 3, a
+      // combination that maps to no mode at all and fails silently as a
+      // wrong one (Gitar, #346). If any index the resolution would write is
+      // already supplied, the name selects nothing — including param1's bit,
+      // because a flow spelling out custom-mode numbers owns base_mode too.
+      if (Object.keys(modeParams).some((idx) => !isBlank(payload[idx]))) return;
       for (const [idx, value] of Object.entries(modeParams)) {
-        if (!isBlank(payload[idx])) continue;
         userParams[idx] = value;
       }
       userParams[1] = userParams[1] === undefined
