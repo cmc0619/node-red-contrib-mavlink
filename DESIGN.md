@@ -4260,6 +4260,26 @@ slug names (Lucy, peer-table) remain the durable identity.
 *Check:* `sitl/lib/suite-schedule.js`, `sitl/run-example-suite.js`,
 `examples/sitl/README.md`, `node --test test/sitl/suite-schedule.test.js`.
 
+**SITL 40 passes; the flow's own timing needs no further margin (2026-08-18).**
+*Wrong belief:* example 40 had never passed, and the gap between the
+`SET_MESSAGE_INTERVAL` ACK and takeoff was a race that would keep
+`landed-changed` from firing — the ACK only starts the stream, so a copter
+already climbing when frame one lands gives the feed an `IN_AIR` baseline and
+no edge.
+*Fact:* `--only 40` PASSED at `f86acde` (owner rig report). The ON_GROUND frame
+does land before liftoff at 2 Hz, so the race does not bite; the three required
+edges (`armed-changed`, `mode-changed`, `landed-changed`) all fired. A 2 s delay
+inserted between the interval ACK and takeoff was reverted for that reason, and
+because it is not free: ArduCopter's idle-armed auto-disarm (`DISARM_DELAY`,
+10 s default) runs during exactly that window, so padding it spends real budget
+to insure a failure measurement says does not occur. Recorded because the only
+prior §14 datum was the `1d9cd1f` FAIL, and reasoning from that alone concluded
+— wrongly — that feature 3's example was unproven.
+*Not expected, by design:* `home-changed`. `HOME_POSITION` is not streamed; it
+is published when home is set (at arming), so the feed's first sight of it is a
+baseline, not an edge. It stays subscribed; the verdict never required it.
+*Check:* `node sitl/run-example-suite.js --only 40`.
+
 **ArduCopter ARM in the same tick as GUIDED ACK is FAILED (2026-08-18).**
 *Wrong belief:* example 40's ARM `resultCode: 4` after a successful Set GUIDED was
 a bad param array, a stolen `:14550` vehicle snapshot, or EKF not ready

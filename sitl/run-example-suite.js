@@ -168,14 +168,12 @@ const PROFILE = {
     prep: 'ap-guided-arm-stabilize-1',
     notes:
       'Feed subscribes only the six *-changed events; GUIDED→settle→arm→EXTENDED_SYS_STATE ' +
-      'interval→settle→takeoff drives mode-changed, armed-changed, landed-changed. ' +
+      'interval→takeoff drives mode-changed, armed-changed, landed-changed. ' +
       'home-changed is subscribed but not expected: HOME_POSITION is published once at ' +
       'arming, so the feed sees it first as a baseline, not an edge. ' +
       'Prep leaves STABILIZE so the flow GUIDED is a real edge. ARM is delayed 2 s after ' +
-      'GUIDED ACK — same-tick ARM returns FAILED (4) on Copter-4.7.0. Takeoff is delayed ' +
-      '2 s after the interval ACK: the ACK only starts the stream, so without it the ' +
-      'feed can meet EXTENDED_SYS_STATE already IN_AIR and landed-changed never fires. ' +
-      'First observation is not a transition, so a quiet connect phase is expected, not a FAIL.',
+      'GUIDED ACK — same-tick ARM returns FAILED (4) on Copter-4.7.0. First observation ' +
+      'is not a transition, so a quiet connect phase is expected, not a FAIL.',
   },
   '04-param-defs-live': {
     restart: 'none',
