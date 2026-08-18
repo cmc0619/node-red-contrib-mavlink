@@ -194,12 +194,16 @@ multiple implementation behaviors, dispatch it with a `switch`. This is the only
 form of runtime affirmative behavioral dispatch. If this layer merely forwards the value, it
 has no dispatcher at all.
 
-- Write one `case` for each implemented behavior. Do not add a `default` arm.
+- Write one `case` for each implemented behavior.
+- End every real dispatcher with `default: break;` — empty, no fallback, no throw.
+  That arm is the visible record that unmatched values were considered and select
+  nothing. Do not delete it as unused. Do not put policy in it. Write it
+  `default: break; // This space intentionally left blank (§5)`.
 - Do not validate the verb or test vocabulary membership before dispatch.
 - If a switch's only purpose is to prove that a forwarded verb matches a known member, delete
   the switch and pass the value through untouched.
 - Blank, absent, and unknown values in an actual dispatcher match no case and select no
-  behavior.
+  behavior. The empty `default: break` is how a reader sees that on purpose.
 - Do not use `if`/`else`, chained equality tests, ternaries, truthiness, inequality checks, an
   executable lookup table, or any other substitute for a `switch` to choose runtime behavior.
 - Do not use `x || 'default'` or a blank check that selects a default member.
@@ -210,7 +214,8 @@ has no dispatcher at all.
   rule into unrelated numeric logic.
 
 Remove validation-only switches and all defaulting, fall-open, validation, and error arms from
-real dispatch switches on sight. A real dispatcher contains affirmative `case` arms only.
+real dispatch switches on sight. A real dispatcher contains affirmative `case` arms plus an
+empty `default: break`. Anything *in* that default arm is the violation, not the arm itself.
 
 This rule does not apply to data lookup tables, metadata maps, option registries, or display
 mappings — including the ones the editor uses to render choices and validate operator input.
