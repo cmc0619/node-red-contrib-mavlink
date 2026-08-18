@@ -109,9 +109,12 @@ authority.
 - Commit `AGENTS.md` and `MAVLINK.md` directly to `main`, in their own documented commit,
   rather than carrying them in a code PR. If a branch already touched them, do not rewrite
   history merely to move them.
-- Agents open PRs as drafts and do not merge them. An agent may mark a specific PR ready or
-  merge it only when the repository owner explicitly requests that action. Permission is not
-  implied by green checks, approval, “finish,” or a previous instruction for another PR.
+- Agents open PRs as drafts. Creating a non-draft PR is never allowed; a hook may
+  deny that. Marking a PR ready, or merging it, is the owner's call. When the
+  owner asks the agent to mark one ready or merge one, that ask **is** the call —
+  execute it. A hook cannot see the ask, so it must not deny ready or merge.
+  Permission is not implied by green checks, approval, “finish,” or a previous
+  instruction for another PR.
 - Before every push, run tests and lint, then review the diff with a critical eye toward the
   integrity of this architecture. Reject runtime guardrails outside the `mavlink-in` wire
   boundary, speculative code, duplicated behavior, and new helpers when an existing function

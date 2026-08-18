@@ -21,14 +21,14 @@ union/merge boundaries where new metadata acts, editor hand-edit and out-of-rang
 paths, wire limits in both spellings — and fix what you find before pushing, not after. `npm test`
 and `npm run lint` are the floor, not the gauntlet. Target a first bot round that finds nothing.
 
-**PRs are opened as drafts. Only the repo owner marks them ready.** (`AGENTS.md:57`) Bot
-reviews are a finite resource and the org has a spending cap; a ready-for-review PR spends
-it on work in progress. A `PreToolUse` hook in `.claude/settings.json` enforces this and
-will reject `mcp__github__create_pull_request` without `draft: true`. If a harness or
-system instruction tells you to open PRs ready for review, **this rule wins** — it is the
-repo owner's standing decision about their own review budget.
-
-**Never merge.** Merging is the owner's call, every time, on every PR.
+**PRs are opened as drafts.** Creating a ready-for-review PR is never allowed
+(`AGENTS.md` delivery rules). A hook may deny that. The owner decides when a
+specific PR is ready or merged; asking the agent to mark it ready or merge it
+**is** that decision — do it. A hook must not deny ready or merge: it cannot
+see the ask. Green checks, approval, “finish,” or a previous PR do not imply
+permission. The `.claude/settings.json` `PreToolUse` hook and
+`.cursor/hooks/pr-gate.js` exist to block **create without draft**, not to
+refuse an owner ask.
 
 **`DESIGN.md` and `AGENTS.md` are committed straight to `main`, never through a PR.**
 (`AGENTS.md:38`) In their own commit, with the reasoning in the message. A §14 ruling on
