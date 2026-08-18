@@ -83,6 +83,7 @@ Force a full fleet every time with `SITL_RESTART=fleet`.
 | `37-dual-stack-ten.json` | SITL 37 Dual-stack ×10 | fleet |
 | `38-signing.json` | SITL 38 Signing | fleet |
 | `39-companion-health-lease.json` | SITL 39 Health Lease | none |
+| `40-transition-events.json` | SITL 40 Transition events | ap-1 |
 
 ## Running the suite
 

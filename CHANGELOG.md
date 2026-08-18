@@ -8,6 +8,18 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Added
 
+- **The peer table announces flight-dynamic transitions.** Six new State feed
+  events — `armed-changed`, `mode-changed`, `landed-changed`, `gps-fix-changed`,
+  `home-changed`, `sensor-health-changed` — fire when a held value actually
+  changes, each carrying sysid/compid and from/to (`sensor-health-changed` adds
+  the flipped-bit mask as `changed`; `home-changed` reports canonical
+  degrees/metres). First observation is not a transition: nothing fires while
+  the table is still filling in, so a feed subscribed to edges stays quiet at
+  connect. Landed state comes from `EXTENDED_SYS_STATE`, which the table now
+  ingests as its own aged section; the rest are computed from messages it
+  already held. Pure observation — events never gate or modify anything — and
+  opt-in: the editor's default event selection is unchanged.
+
 - **Connections recover dropped links.** A transport that opened and later
   failed — serial device unplugged, TCP peer restarting, socket error, wedged
   write — redials itself from the bound config on a jittered exponential

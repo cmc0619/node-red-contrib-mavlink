@@ -66,7 +66,10 @@ curved path is either many setpoints from a Function node, `DO_ORBIT`, or a miss
 
 **State** `mode`: `feed` (edge events) or snapshot (input-triggered). Feed `events`:
 `peer-new`, `component-new`, `heartbeat`, `stale`, `expired`, `endpoint-added`,
-`primary-changed`, `multi-endpoint`, `profile-mismatch`, `statustext`.
+`primary-changed`, `multi-endpoint`, `profile-mismatch`, `statustext`, plus the
+flight-dynamic transitions `armed-changed`, `mode-changed`, `landed-changed`,
+`gps-fix-changed`, `home-changed`, `sensor-health-changed` (each carries
+sysid/compid and from/to; first observation is not a transition).
 
 **In** filters: `message`, `sysid`, `compid`, `changedOnly`, `rateLimit` (Hz).
 
@@ -826,6 +829,17 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
   (`{health:'ok'}`, `{health:'fatal'}`), 2× `debug`.
 - **Key config:** bind `14540`→`14541`; Docker service `ap-companion-20`.
 
+### sitl/40 — Flight transition events
+
+- **File:** `examples/sitl/40-transition-events.json` · **Tab:** `SITL 40 Transition events`
+- **Story:** A State feed subscribed to only the six `*-changed` events while a flight
+  chain (GUIDED → arm → `EXTENDED_SYS_STATE` interval → takeoff) drives `mode-changed`,
+  `armed-changed`, `home-changed`, and `landed-changed`. Edges only — no heartbeat
+  traffic — and nothing fires at connect, because first observation is not a transition.
+- **Nodes:** identity, vehicle, `connection`, `state` (feed), `command` ×4, `debug`.
+- **Config/launch:** AP sysid 1 on 14550→14551; `restart: ap-1`; EXTENDED_SYS_STATE (245)
+  must be requested via `set_message_interval` — this SITL does not send it unasked.
+
 ---
 
 ## 3. `examples/sitl/README.md` outline
@@ -838,7 +852,7 @@ The folder README is shipped — keep it aligned with the table in §2 and
 2. **The rig (§13)** — five ArduPilot at sysids 1–5, five PX4 at 11–15, separate
    connections; companions 20/21; payload 31.
 3. **Docker lab** — `cd sitl && docker compose --profile sitl up -d --build`.
-4. **Suite order / selective restart** — numbered 01–39 by `PROFILE.restart` phase.
+4. **Suite order / selective restart** — numbered 01–40 by `PROFILE.restart` phase.
 5. **Signing** — sitl/38 documents the dry-run procedure. Off by default elsewhere.
 6. **Safety** — SITL only; never point these at a real vehicle without understanding each
    step.

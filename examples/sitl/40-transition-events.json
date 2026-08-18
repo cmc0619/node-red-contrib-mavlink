@@ -1,0 +1,323 @@
+[
+  {
+    "id": "sitl40-tab",
+    "type": "tab",
+    "label": "SITL 40 Transition events",
+    "disabled": false,
+    "info": "Fly ArduPilot sysid 1 and watch the flight-dynamic transition events land in a State feed: mode-changed on GUIDED, armed-changed on arm, home-changed when the EKF sets home, landed-changed on takeoff (EXTENDED_SYS_STATE is streamed explicitly — this SITL does not send it unasked).",
+    "env": []
+  },
+  {
+    "id": "sitl40-comment",
+    "type": "comment",
+    "z": "sitl40-tab",
+    "name": "Flight-dynamic transition events",
+    "info": "Chain: GUIDED (confirm) → Arm (confirm) → SET_MESSAGE_INTERVAL for EXTENDED_SYS_STATE (245) at 2 Hz → Takeoff 10 m (complete).\n\nThe State feed subscribes to only the six transition events — armed-changed, mode-changed, landed-changed, gps-fix-changed, home-changed, sensor-health-changed — so the debug pane shows edges, not traffic. Each record carries sysid/compid plus from/to (sensor-health-changed adds the flipped-bit mask as changed).\n\nFirst observation is not a transition: the feed stays quiet until a held value actually changes, so expect nothing at connect and a burst around mode/arm/takeoff.\n\nConnection: bind 0.0.0.0:14550 → remote 127.0.0.1:14551, sysid 1.",
+    "x": 250,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl40-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl40-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
+  },
+  {
+    "id": "sitl40-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "vehicle": "sitl40-vehicle",
+    "localIdentity": "sitl40-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl40-state-feed",
+    "type": "mavlink-state",
+    "z": "sitl40-tab",
+    "name": "Transition feed",
+    "connection": "sitl40-connection",
+    "mode": "feed",
+    "events": "armed-changed,mode-changed,landed-changed,gps-fix-changed,home-changed,sensor-health-changed",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 360,
+    "y": 400,
+    "wires": [
+      [
+        "sitl40-dbg-feed"
+      ]
+    ]
+  },
+  {
+    "id": "sitl40-dbg-feed",
+    "type": "debug",
+    "z": "sitl40-tab",
+    "name": "transition events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 590,
+    "y": 400,
+    "wires": []
+  },
+  {
+    "id": "sitl40-inject-start",
+    "type": "inject",
+    "z": "sitl40-tab",
+    "name": "Start flight",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 160,
+    "wires": [
+      [
+        "sitl40-guided"
+      ]
+    ]
+  },
+  {
+    "id": "sitl40-guided",
+    "type": "mavlink-command",
+    "z": "sitl40-tab",
+    "name": "Set GUIDED (confirm)",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl40-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":1,\"2\":4}",
+    "sendAs": "long",
+    "x": 360,
+    "y": 160,
+    "wires": [
+      [
+        "sitl40-arm"
+      ],
+      [
+        "sitl40-guided-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl40-arm",
+    "type": "mavlink-command",
+    "z": "sitl40-tab",
+    "name": "Arm (confirm)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl40-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "sendAs": "long",
+    "x": 580,
+    "y": 160,
+    "wires": [
+      [
+        "sitl40-stream-ext"
+      ],
+      [
+        "sitl40-arm-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl40-stream-ext",
+    "type": "mavlink-command",
+    "z": "sitl40-tab",
+    "name": "Stream EXTENDED_SYS_STATE 2 Hz",
+    "mode": "preset",
+    "preset": "set_message_interval",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl40-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":245,\"2\":500000}",
+    "sendAs": "long",
+    "x": 830,
+    "y": 160,
+    "wires": [
+      [
+        "sitl40-takeoff"
+      ],
+      [
+        "sitl40-stream-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl40-takeoff",
+    "type": "mavlink-command",
+    "z": "sitl40-tab",
+    "name": "Takeoff 10 m (complete)",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "complete",
+    "connection": "sitl40-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"7\":10}",
+    "sendAs": "long",
+    "x": 580,
+    "y": 280,
+    "wires": [
+      [
+        "sitl40-airborne"
+      ],
+      [
+        "sitl40-takeoff-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl40-guided-status",
+    "type": "debug",
+    "z": "sitl40-tab",
+    "name": "guided status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 360,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl40-arm-status",
+    "type": "debug",
+    "z": "sitl40-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl40-stream-status",
+    "type": "debug",
+    "z": "sitl40-tab",
+    "name": "stream status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 830,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl40-takeoff-status",
+    "type": "debug",
+    "z": "sitl40-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "sitl40-airborne",
+    "type": "debug",
+    "z": "sitl40-tab",
+    "name": "airborne",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 810,
+    "y": 280,
+    "wires": []
+  }
+]

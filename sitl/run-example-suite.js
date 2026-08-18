@@ -154,6 +154,16 @@ const PROFILE = {
     notes:
       'ok arms the 5 s lease and the companion HEARTBEAT rides; fatal (and a lapsed lease) faults the identity and the HEARTBEAT stops',
   },
+  '40-transition-events': {
+    restart: 'ap-1',
+    waitMs: 90000,
+    expect: 'armed/mode/landed transition records in the state feed',
+    prep: 'ap-guided-1',
+    notes:
+      'Feed subscribes only the six *-changed events; GUIDED→arm→EXTENDED_SYS_STATE ' +
+      'interval→takeoff drives mode-changed, armed-changed, home-changed, landed-changed. ' +
+      'First observation is not a transition, so a quiet connect phase is expected, not a FAIL.',
+  },
   '04-param-defs-live': {
     restart: 'none',
     waitMs: 20000,
