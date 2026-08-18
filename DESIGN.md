@@ -2092,6 +2092,12 @@ Fan-out is single-connection. Cross-connection fleets are out of scope for this 
 Vehicle Profile carries the firmware field: PX4, ArduPilot, or custom. It affects:
 
 - **Flight modes** — entirely different tables, and custom mode is a firmware-specific bitfield.
+  Name resolution is a ladder: the vehicle-published `AVAILABLE_MODES` list (msgid 435, via
+  `MAV_CMD_REQUEST_MESSAGE` 512) first, then shipped tables (ArduPilot dialect `*_MODE` enums;
+  PX4 baked table). Both lab stacks answer requests for 435 (measured 2026-08-18, `MAVLINK.md`).
+  PX4 streams `CURRENT_MODE` (436); ArduPilot Copter-4.7.0 does not. PX4's published
+  `custom_mode` is the HEARTBEAT-packed value — `DO_SET_MODE` param2 is still the unpacked
+  main_mode on this SIH (`MAVLINK.md` / existing §14).
 - **Mission types** — as above.
 - **Parameter encoding** — `PARAM_SET` / `PARAM_VALUE` carry typed values in a float slot.
   Encoding is resolved as: explicit `msg.payload.paramEncoding` (`bytewise` | `c-cast`) →
@@ -2211,7 +2217,10 @@ a percentage would only reward testing the parts that were never going to break.
 
 - **Completion tiers** — `IN_PROGRESS` followed by `ACCEPTED` on takeoff, and the timeout path
   when a vehicle accepts a takeoff and never climbs.
-- **Mode tables** per stack, and `DO_SET_MODE` custom mode values.
+- **Mode tables** per stack, and `DO_SET_MODE` custom mode values. `AVAILABLE_MODES` (435) /
+  `CURRENT_MODE` (436) were measured 2026-08-18 (`MAVLINK.md`): both lab stacks answer
+  requests for 435; only PX4 streams 436. The PX4 *command* encoding split (param2
+  main_mode vs HEARTBEAT pack) is unchanged.
 - **Parameter int/float union** on PX4 specifically.
 - **Mission, fence, and rally** per firmware, request-format handling, and a malformed upload
   failing rather than degrading into a clear.
@@ -4874,3 +4883,15 @@ disarms the vehicle by default when that stops being updated. So ceasing to tran
 stop rather than an abandonment, and no sender-side TTL needs inventing (§9 ruling 5).
 *Check:* `GCS_MAVLINK_Sub::handle_manual_control_axes` upstream; the z-neutral is the line to
 look at.
+
+---
+
+**Mode-name resolution is a ladder: vehicle `AVAILABLE_MODES` first, shipped tables second
+(2026-08-18).**
+*Wrong belief:* the standard-modes protocol is PX4-only, so ArduPilot resolves solely from
+shipped dialect enums.
+*Fact:* both lab stacks answer `REQUEST_MESSAGE` 512 `param1=435`. Rung 1 is real on both;
+the tables are the fallback. Dump shape, `CURRENT_MODE` (436) mute-on-AP, and every
+published `custom_mode` hex live in `MAVLINK.md` — that is the protocol record; this
+entry is the toolkit decision that follows from it.
+*Check:* `MAVLINK.md` entry "Both lab stacks answer AVAILABLE_MODES".
