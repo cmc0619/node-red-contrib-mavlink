@@ -192,3 +192,28 @@ test('cap pressure keeps a never-validated first-frame partial over junk', () =>
 
   assert.equal(wire.decode(full.subarray(6), ep(1), t + 3).length, 1);
 });
+
+test('a msgid the bound dialect does not carry surfaces as UNKNOWN_<id>, not silence', () => {
+  // A vehicle speaking a newer dialect than the bound profile used to vanish
+  // frame by frame — the one clue that diagnoses the mismatch (the id) was
+  // dropped before anything could show it. The raw payload rides so the frame
+  // is inspectable; a known frame in the same stream decodes as always.
+  const minimal = createWire({ bundle: loadBundled('minimal') });
+  const common = createWire({ bundle: loadBundled('common') });
+  const paramValue = common.serialize(
+    {
+      name: 'PARAM_VALUE',
+      fields: { param_id: 'X', param_value: 1, param_type: 9, param_count: 1, param_index: 0 },
+    },
+    { sysid: 7, compid: 1, seq: 0 }
+  );
+
+  const frames = minimal.decode(Buffer.concat([paramValue, heartbeatFrame(minimal)]), EP_A);
+
+  assert.equal(frames.length, 2, 'both frames surface');
+  assert.equal(frames[0].name, 'UNKNOWN_22');
+  assert.equal(frames[0].sysid, 7);
+  assert.equal(frames[0].fields.msgid, 22);
+  assert.ok(Buffer.isBuffer(frames[0].fields.payload), 'the raw payload rides');
+  assert.equal(frames[1].name, 'HEARTBEAT', 'known frames are unaffected');
+});

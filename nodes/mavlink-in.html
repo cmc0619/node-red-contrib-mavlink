@@ -253,7 +253,7 @@
   <h3>Outputs</h3>
   <dl class="message-properties">
     <dt>topic <span class="property-type">string</span></dt>
-    <dd>Message name, e.g. <code>HEARTBEAT</code>.</dd>
+    <dd>Message name, e.g. <code>HEARTBEAT</code>. A message id the bound Vehicle Profile's dialect does not carry arrives as <code>UNKNOWN_&lt;id&gt;</code> with <code>payload = {msgid, payload}</code> (raw bytes) — usually a sign the vehicle speaks a newer or different dialect than the profile. Such frames cannot be CRC-checked (the checksum seed lives in the message definition), so treat their contents as diagnostic.</dd>
     <dt>payload <span class="property-type">object</span></dt>
     <dd>Decoded field values keyed by field name (snake_case).</dd>
     <dt>sysid <span class="property-type">number</span></dt>
