@@ -1385,6 +1385,12 @@ test('close() disarms pending health leases — no fault, no emit after teardown
 
   assert.equal(lease.cleared, true, 'teardown disarms the countdown');
   assert.deepEqual(expired, [], 'nothing expires after close');
-  connection.assertHealth('gcs', true, 4000);
-  assert.equal(leases().length, 1, 'an assertion racing teardown arms nothing on a closed link');
+  // A silent return here would let the asserting node report `healthy` for a
+  // lease that was never armed — the refusal is what keeps that report honest.
+  assert.throws(
+    () => connection.assertHealth('gcs', true, 4000),
+    /closed connection/,
+    'an assertion racing teardown refuses loud instead of arming nothing'
+  );
+  assert.equal(leases().length, 1, 'and no timer was armed on the closed link');
 });

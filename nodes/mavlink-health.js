@@ -69,7 +69,11 @@ module.exports = function registerMavlinkHealth(RED) {
       }
 
       try {
-        const payload = msg.payload ?? {};
+        // No `?? {}`: the health verb lives only on the payload — there is no
+        // configured fallback verb, so a missing payload is absence, not an
+        // empty selection, and synthesizing `{}` would turn it into a silent
+        // no-op. It craters into failInput instead; absence is never invented.
+        const payload = msg.payload;
         // Affirmative dispatch (§5): a health value naming neither member
         // selects no behavior — nothing asserted, nothing sent, nothing
         // reported, the same unmatched-tier contract mavlink-param and
