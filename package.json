@@ -77,6 +77,7 @@
       "mavlink-connection": "nodes/mavlink-connection.js",
       "mavlink-in": "nodes/mavlink-in.js",
       "mavlink-out": "nodes/mavlink-out.js",
+      "mavlink-health": "nodes/mavlink-health.js",
       "mavlink-build": "nodes/mavlink-build.js",
       "mavlink-command": "nodes/mavlink-command.js",
       "mavlink-move": "nodes/mavlink-move.js",

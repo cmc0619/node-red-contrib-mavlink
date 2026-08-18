@@ -322,3 +322,90 @@ test('27/30 read the unified vocabulary — and \'succeeded\' stays banned', () 
     assert.equal(run(key, reposition('succeeded', 'accepted', 0)).status, 'FAIL');
   }
 });
+
+test('39 requires healthy, lease-expired, and faulted — command-shaped goods do not PASS', () => {
+  const profile = PROFILE['39-companion-health-lease'];
+  assert.ok(profile, 'profile 39 exists');
+  assert.equal(profile.injectGapMs, 6000, 'gap must outlast the 5 s lease');
+  const row = (result) => ({
+    tag: 'debug:health status',
+    result,
+    excerpt: `result: '${result}'`,
+    detail: null,
+    resultCode: null,
+  });
+  const accepted = {
+    tag: 'debug:health continue',
+    result: 'accepted',
+    excerpt: "result: 'accepted'",
+    detail: null,
+    resultCode: null,
+  };
+  assert.equal(
+    verdictFrom(profile, { debug: [accepted], errors: [] }, '').status,
+    'FAIL',
+    'an accepted-shaped record is not the lease story'
+  );
+  assert.equal(
+    verdictFrom(profile, { debug: [row('healthy'), row('faulted')], errors: [] }, '').status,
+    'FAIL',
+    'fatal-only path skips the advertised lapse'
+  );
+  const pass = verdictFrom(
+    profile,
+    { debug: [row('healthy'), row('lease-expired'), row('faulted')], errors: [] },
+    ''
+  );
+  assert.equal(pass.status, 'PASS');
+  assert.equal(isSpecializedPass(pass), true);
+});
+
+test('40 requires armed/mode/landed feed events — command accepteds do not PASS', () => {
+  const profile = PROFILE['40-transition-events'];
+  assert.ok(profile, 'profile 40 exists');
+  assert.equal(
+    profile.prep,
+    'ap-guided-arm-stabilize-1',
+    'must prove GUIDED-armable then return to STABILIZE; ap-guided-1 would hide mode-changed'
+  );
+  const armAck = {
+    tag: 'debug:arm status',
+    result: 'accepted',
+    excerpt: "result: 'accepted'",
+    detail: null,
+    resultCode: 0,
+  };
+  assert.equal(
+    verdictFrom(profile, { debug: [armAck], errors: [] }, '').status,
+    'FAIL',
+    'arm accepted alone is the #267 fiction'
+  );
+  const feed = (event) => ({
+    tag: 'debug:transition events',
+    result: null,
+    excerpt: `{ kind: 'transition',\n  event: '${event}',\n  sysid: 1,\n  compid: 1 }`,
+    detail: null,
+    resultCode: null,
+  });
+  const incomplete = verdictFrom(
+    profile,
+    { debug: [armAck, feed('armed-changed'), feed('mode-changed')], errors: [] },
+    ''
+  );
+  assert.equal(incomplete.status, 'FAIL');
+  const pass = verdictFrom(
+    profile,
+    {
+      debug: [
+        armAck,
+        feed('armed-changed'),
+        feed('mode-changed'),
+        feed('landed-changed'),
+      ],
+      errors: [],
+    },
+    ''
+  );
+  assert.equal(pass.status, 'PASS');
+  assert.equal(isSpecializedPass(pass), true);
+});

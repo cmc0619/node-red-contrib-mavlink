@@ -4260,6 +4260,39 @@ slug names (Lucy, peer-table) remain the durable identity.
 *Check:* `sitl/lib/suite-schedule.js`, `sitl/run-example-suite.js`,
 `examples/sitl/README.md`, `node --test test/sitl/suite-schedule.test.js`.
 
+**ArduCopter ARM in the same tick as GUIDED ACK is FAILED (2026-08-18).**
+*Wrong belief:* example 40's ARM `resultCode: 4` after a successful Set GUIDED was
+a bad param array, a stolen `:14550` vehicle snapshot, or EKF not ready
+(`ap-arm-ready-1` had just proved armable).
+*Fact:* the command node sent `COMPONENT_ARM_DISARM` `[1,0,0,0,0,0,0]` and the
+vehicle answered FAILED. Two stacked causes, both measured:
+1. ARM riding the GUIDED ACK in the same few milliseconds is FAILED; a ~1 s
+   gap succeeds on a warm vehicle.
+2. `ap-arm-ready-1` only proves STABILIZE-armable. After a cold restart, GUIDED
+   ARM still needs the position estimate `ap-guided-1` waits for. Example 20
+   never hit this because prep left the vehicle *in* GUIDED. Example 40's prep
+   is therefore `ap-guided-arm-stabilize-1` (GUIDED arm-ready, then STABILIZE)
+   plus a 2 s delay between GUIDED and ARM.
+*Check:* `examples/sitl/40-transition-events.json` (`sitl40-guided-settle`);
+`sitl/run-example-suite.js` (`ap-guided-arm-stabilize-1`);
+`node sitl/run-example-suite.js --only 40`.
+
+**Omitted action-node `identity` must not become the override `"undefined"` (2026-08-18).**
+*Wrong belief:* example 40's Set GUIDED crash (`Cannot read properties of undefined
+(reading 'sysid')`) was a missing vehicle snapshot after `ap-arm-ready-1` bound
+`:14550`, or a Connection that had not yet learned a peer.
+*Fact:* `resolveDeliveryContext` did `String(config.identity)`. Admin API deploy
+does not materialize the editor default `identity: ''` (§14 above), so omitted
+stays `undefined`, `String(undefined)` is the override id `"undefined"`, and
+`Connection.send` looks that id up, gets nothing, and throws on `identity.sysid`.
+`resolveIdentity` treats only `null` / `undefined` / `''` as "use the Connection
+default" — the literal `"undefined"` is an override. Measured on PR 340 head
+`1d9cd1f` (`--only 39,40`): 39 PASS; 40 FAIL at Set GUIDED before any
+transition event. Empty-string identity is the editor contract; coerce a missing
+value to `''`, and serialize `"identity": ""` on the example.
+*Check:* `node --test test/addressing/delivery-context.test.js
+test/sitl/example-json-contracts.test.js`; `node sitl/run-example-suite.js --only 40`.
+
 **Admin-API SITL deploy does not materialize editor defaults (2026-08-11).**
 *Wrong belief:* omitting `timeout` on a `mavlink-param` confirm/collect node is
 fine because the editor default is 10 s; selective-restart congestion caused

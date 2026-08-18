@@ -147,6 +147,32 @@ const PROFILE = {
     notes:
       'Lab passphrase hunter11 injected via Admin API credentials; harness SETUP_SIGNING on companion AP sysid 20',
   },
+  '39-companion-health-lease': {
+    restart: 'none',
+    waitMs: 20000,
+    expect: 'healthy then faulted records on companion 20',
+    // Default 1.5 s gap would fire fatal before the 5 s lease lapses, so the
+    // advertised lease-expired path never runs (Codex, #340).
+    injectGapMs: 6000,
+    notes:
+      'ok arms the 5 s lease; the harness waits past TTL so lease-expired fires, then fatal',
+  },
+  '40-transition-events': {
+    restart: 'ap-1',
+    waitMs: 90000,
+    expect: 'armed/mode/landed transition records in the state feed',
+    // Prove GUIDED-armable, then STABILIZE: ap-guided-1 would hide
+    // mode-changed (first observation is not a transition). STABILIZE-only
+    // arm-ready is not enough — ARM after Set GUIDED returns FAILED (4) until
+    // GUIDED has a position estimate (Codex, #340).
+    prep: 'ap-guided-arm-stabilize-1',
+    notes:
+      'Feed subscribes only the six *-changed events; GUIDED→settle→arm→EXTENDED_SYS_STATE ' +
+      'interval→takeoff drives mode-changed, armed-changed, home-changed, landed-changed. ' +
+      'Prep leaves STABILIZE so the flow GUIDED is a real edge. ARM is delayed 2 s after ' +
+      'GUIDED ACK — same-tick ARM returns FAILED (4) on Copter-4.7.0. First observation ' +
+      'is not a transition, so a quiet connect phase is expected, not a FAIL.',
+  },
   '04-param-defs-live': {
     restart: 'none',
     waitMs: 20000,
@@ -985,6 +1011,43 @@ function verdictFrom(profile, summary, log) {
       };
     }
   }
+  if (/healthy then faulted/i.test(expect)) {
+    // Status records spell result: 'healthy' | 'lease-expired' | 'faulted'.
+    // The generic tail treats 'faulted' as bad (/fail/) and 'healthy' as
+    // neither good nor bad, so 39 cannot PASS there even when the story ran.
+    const healthy = summary.debug.some((d) => d.result === 'healthy');
+    const expired = summary.debug.some((d) => d.result === 'lease-expired');
+    const faulted = summary.debug.some((d) => d.result === 'faulted');
+    if (healthy && expired && faulted) {
+      return {
+        status: 'PASS',
+        reason: 'health lease: healthy, lease-expired, then faulted',
+      };
+    }
+    return {
+      status: 'FAIL',
+      reason: `health lease incomplete: healthy=${healthy} expired=${expired} faulted=${faulted}`,
+    };
+  }
+  if (/armed\/mode\/landed transition/i.test(expect)) {
+    // Feed debug is payload-only — no result field — so key on event names
+    // in the excerpt. Command accepteds must not PASS this example (#267 class).
+    const seen = (pattern) =>
+      summary.debug.some((d) => pattern.test(d.excerpt || '')) || pattern.test(log || '');
+    const armed = seen(/event:\s*'armed-changed'/);
+    const mode = seen(/event:\s*'mode-changed'/);
+    const landed = seen(/event:\s*'landed-changed'/);
+    if (armed && mode && landed) {
+      return {
+        status: 'PASS',
+        reason: 'state feed: armed-changed, mode-changed, landed-changed',
+      };
+    }
+    return {
+      status: 'FAIL',
+      reason: `transition feed incomplete: armed=${armed} mode=${mode} landed=${landed}`,
+    };
+  }
   if (/WPNAV_SPEED echo timeout|unknown .*echo timeout/i.test(expect)) {
     // Negative path: timed-out is the success — but only after a known-param
     // confirm proves AP-1 is reachable (dead peer would also echo-timeout).
@@ -1342,6 +1405,47 @@ async function setApGuided(sysid = 1) {
   );
 }
 
+/**
+ * Prove AP can arm in GUIDED, then return to STABILIZE.
+ *
+ * `ap-arm-ready-1` only proves STABILIZE-armable. Example 40 then Set GUIDED
+ * and ARM — Copter-4.7.0 answers FAILED (4) until GUIDED has a position
+ * estimate. `ap-guided-1` leaves the vehicle in GUIDED, which hides
+ * mode-changed (first observation is not a transition). This prep is both.
+ *
+ * @param {number} [sysid]
+ */
+async function waitApGuidedArmReadyStabilize(sysid = 1) {
+  await setApGuided(sysid);
+  console.log(`  returning AP-${sysid} to STABILIZE so example GUIDED is a mode edge…`);
+  runApControlScript(
+    `
+      const t = { sysid: ${sysid}, compid: 1 };
+      const deadline = Date.now() + 20000;
+      const compOf = () => conn.peerTable.getComponent(${sysid}, 1);
+      while (!compOf()?.primaryEndpoint && Date.now() < deadline) await sleep(200);
+      // The arm-ready probe's force-disarm is fire-and-forget (armReadySource
+      // sleeps 800 ms, never confirms) — one lost datagram would hand the
+      // example an armed vehicle and erase its armed-changed edge. Confirm
+      // disarmed here, retrying the disarm alongside the mode flip.
+      while (Date.now() < deadline) {
+        const comp = compOf();
+        if (comp?.flightMode === 0 && comp.armed === false) break;
+        const command = comp?.armed
+          ? buildCommandLong(400, ${sysid}, 1, [0, 21196, 0, 0, 0, 0, 0], 0)
+          : buildCommandLong(176, ${sysid}, 1, [1, 0, 0, 0, 0, 0, 0], 0);
+        conn.send(command, { band: BAND.CONTROL, target: t });
+        await sleep(500);
+      }
+      const final = compOf();
+      if (final?.flightMode !== 0 || final.armed !== false) {
+        throw new Error('AP-${sysid} did not return disarmed to STABILIZE after GUIDED arm-ready');
+      }
+    `,
+    30000
+  );
+}
+
 function applyPx4LabHelpers(containers = PX4_VEHICLE_CONTAINERS) {
   // Parallel param poke — each SIH instance needs its own socket.
   const inner =
@@ -1389,6 +1493,12 @@ async function restartVehicleFleet(containers = VEHICLE_CONTAINERS) {
 async function prep(kind) {
   if (kind === 'ap-guided-1') {
     await setApGuided(1);
+  }
+  if (kind === 'ap-guided-arm-stabilize-1') {
+    await waitApGuidedArmReadyStabilize(1);
+  }
+  if (kind === 'ap-arm-ready-1') {
+    await waitApArmReady([1]);
   }
   if (kind === 'ap-arm-ready-fleet') {
     await waitApArmReady([1, 2, 3, 4, 5]);

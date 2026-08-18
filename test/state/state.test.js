@@ -55,3 +55,20 @@ test('State feed emits transition records and live statustext records', () => {
     ]
   );
 });
+
+test('State feed delivers a selected flight-dynamic transition and filters an unselected one', () => {
+  const table = new EventEmitter();
+  const records = [];
+  const feed = createStateFeed(table, { events: ['armed-changed'] }, (record) => {
+    records.push(record);
+  });
+
+  table.emit('armed-changed', { sysid: 1, compid: 1, from: false, to: true });
+  table.emit('mode-changed', { sysid: 1, compid: 1, from: 0, to: 4 });
+  feed.close();
+
+  assert.deepEqual(
+    records.map((r) => [r.kind, r.event, r.sysid, r.compid, r.from, r.to]),
+    [['transition', 'armed-changed', 1, 1, false, true]]
+  );
+});

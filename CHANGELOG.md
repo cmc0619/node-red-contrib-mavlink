@@ -8,6 +8,18 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Added
 
+- **The peer table announces flight-dynamic transitions.** Six new State feed
+  events — `armed-changed`, `mode-changed`, `landed-changed`, `gps-fix-changed`,
+  `home-changed`, `sensor-health-changed` — fire when a held value actually
+  changes, each carrying sysid/compid and from/to (`sensor-health-changed` adds
+  the flipped-bit mask as `changed`; `home-changed` reports canonical
+  degrees/metres). First observation is not a transition: nothing fires while
+  the table is still filling in, so a feed subscribed to edges stays quiet at
+  connect. Landed state comes from `EXTENDED_SYS_STATE`, which the table now
+  ingests as its own aged section; the rest are computed from messages it
+  already held. Pure observation — events never gate or modify anything — and
+  opt-in: the editor's default event selection is unchanged.
+
 - **Connections recover dropped links.** A transport that opened and later
   failed — serial device unplugged, TCP peer restarting, socket error, wedged
   write — redials itself from the bound config on a jittered exponential
@@ -116,7 +128,31 @@ config-node shapes and message contracts may still change without a major bump.
   `BTNn_FUNCTION`), not protocol. If upstream ever annotates the field, the
   upgrade path is compiled enum names over these generic labels.
 
+- **`mavlink-health`: flow-asserted health with a TTL lease.** A flow can now
+  vouch for an identity's health instead of the heartbeat running as a blind
+  timer. `msg.payload = {health:'ok', ttl_s}` clears any fault and promises
+  healthy for the lease length (the node's default when `ttl_s` is absent);
+  renew before it lapses, or the Connection faults the identity on its own and
+  reports `lease-expired` on the node's status output — the companion-failsafe
+  posture, where a flow that has gone quiet reads as unhealthy rather than
+  "still fine". `{health:'fatal'}` faults immediately and cancels the pending
+  lease; a later `ok` resumes. A faulted identity's HEARTBEAT stops until the
+  fault clears, which is the point: the vehicle's own companion-loss handling
+  is the failsafe. The lease lives on the Connection, so redeploying the
+  health node never clears a fault it did not own. The identity presets'
+  `healthDriven` flag is gone — nothing ever read it, and this node is what it
+  was reserved for.
+
 ### Fixed
+
+- **Admin-deployed action nodes no longer send from identity `"undefined"`.**
+  `resolveDeliveryContext` coerced a missing `identity` with `String()`, which
+  is the override id `"undefined"` — Connection.send then threw on
+  `identity.sysid` (SITL 40 Set GUIDED). Omitted now means the editor default
+  (no override). Example 40 serializes `"identity": ""`.
+- **SITL 40 waits 2 s after GUIDED before ARM.** Copter-4.7.0 answers FAILED
+  (4) when ARM rides the GUIDED ACK in the same tick; example 20 hid the race
+  because prep already sat in GUIDED.
 
 - **A fan-out param set on ArduPilot no longer reports `unconfirmed` for a
   write that worked.** The replicator's echo matcher required the vehicle's

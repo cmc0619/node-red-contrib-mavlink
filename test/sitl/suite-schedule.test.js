@@ -57,7 +57,7 @@ test('example files are numbered 01–N matching suite run order', () => {
     .filter((f) => /^\d+-.*\.json$/.test(f))
     .sort();
   assert.equal(files[0], '01-px4-param-union.json');
-  assert.equal(files[files.length - 1], '38-signing.json');
+  assert.equal(files[files.length - 1], '40-transition-events.json');
   // Phase boundary: last none/tcp before first ap takeoff
   assert.ok(files.indexOf('19-tcp-connection.json') < files.indexOf('20-completion-takeoff.json'));
   assert.ok(files.indexOf('27-move-reposition-carrier.json') < files.indexOf('28-temporarily-rejected.json'));

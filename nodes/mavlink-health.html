@@ -1,0 +1,99 @@
+<script type="text/javascript">
+  (function () {
+    function positiveSecondsValidator(v, _opt) {
+      // Blank reds: the runtime opens the lease timer at this value as saved
+      // (§0), and Number('') is 0 — an already-expired lease, not "no default".
+      var n = RED.mavlink.isBlank(v) ? NaN : Number(v);
+      if (!Number.isFinite(n) || n <= 0) return 'must be a positive number of seconds';
+      return true;
+    }
+
+    /**
+     * The Identity must be bound to the selected Connection: a lease on an
+     * unbound identity faults an id no heartbeat scheduler reads — a green
+     * "healthy" badge over a no-op, the silent-false-success shape §0 sends
+     * to the editor. Declaring `validate` on a config-node reference replaces
+     * Node-RED's built-in existence check, so the first half restates it.
+     * The connection is read live through liveOr so the check is scoped to
+     * this node's own open dialog (#217); with no Connection chosen the
+     * membership half passes — that field's own required ring reds it.
+     */
+    function boundIdentityValidator(v, _opt) {
+      if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required';
+      if (!RED.nodes.node(v)) return 'references a missing Identity';
+      var connId = RED.mavlink.liveOr(this, '#node-input-connection', this.connection, '');
+      if (RED.mavlink.isBlank(connId) || connId === '_ADD_' || !RED.nodes.node(connId)) return true;
+      var bound = RED.mavlink.identityOptionsFor(connId).some(function (o) { return o.id === v; });
+      if (!bound) return 'is not bound to the selected Connection — bind it there or pick a bound Identity';
+      return true;
+    }
+
+    RED.nodes.registerType('mavlink-health', {
+      category: 'mavlink',
+      color: '#6ea6d7',
+      defaults: {
+        name:       { value: '' },
+        connection: { value: '', type: 'mavlink-connection', required: true },
+        identity:   { value: '', type: 'mavlink-local-identity', required: true, validate: boundIdentityValidator },
+        ttlS:       { value: 5, validate: positiveSecondsValidator },
+      },
+      inputs: 1,
+      outputs: 2,
+      outputLabels: ['continue', 'status'],
+      icon: 'font-awesome/fa-heartbeat',
+      paletteLabel: 'health',
+      label: function () {
+        return this.name || 'mavlink health';
+      },
+      labelStyle: function () {
+        return this.name ? 'node_label_italic' : '';
+      },
+      oneditprepare: function () {
+        RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
+        RED.mavlink.ensureConfigNodePicker(this, 'identity', 'mavlink-local-identity', 'node-input');
+      },
+    });
+  }());
+</script>
+
+<script type="text/html" data-template-name="mavlink-health">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-connection"><i class="fa fa-plug"></i> Connection</label>
+    <input type="text" id="node-input-connection">
+  </div>
+  <div class="form-row">
+    <label for="node-input-identity"><i class="fa fa-id-card"></i> Identity</label>
+    <input type="text" id="node-input-identity">
+  </div>
+  <div class="form-row">
+    <label for="node-input-ttlS"><i class="fa fa-clock-o"></i> Default lease (s)</label>
+    <input type="number" id="node-input-ttlS" min="1" placeholder="5">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-health">
+  <p>Asserts an Identity's health on its Connection with an expiring lease. A faulted identity's HEARTBEAT stops going out until the fault clears — the companion-failsafe posture other GCS software reads as "this component is gone."</p>
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt>payload.health <span class="property-type">string</span></dt>
+    <dd>
+      <code>ok</code> — clear any fault and start (or renew) a lease. Send another <code>ok</code> before the lease lapses, or the Identity faults on its own.<br>
+      <code>fatal</code> — fault the Identity immediately and cancel any pending lease.<br>
+      Anything else is a no-op: nothing is asserted, nothing is sent.
+    </dd>
+    <dt class="optional">payload.ttl_s <span class="property-type">number</span></dt>
+    <dd>Lease length in seconds for an <code>ok</code> assertion. Overrides the node's default lease when present.</dd>
+  </dl>
+  <h3>Outputs</h3>
+  <ol class="node-ports">
+    <li>Continue — the original input message, fired once an <code>ok</code>/<code>fatal</code> assertion is accepted. Nothing rides here when a lease expires on its own.</li>
+    <li>Status — a record on every accepted assertion and on a lease that expires unrenewed. <code>result</code> is <code>healthy</code> (with <code>ttlS</code>), <code>faulted</code>, <code>lease-expired</code>, or <code>failed</code> (a crashed input, with <code>detail</code>).</li>
+  </ol>
+  <h3>Details</h3>
+  <p>Set <code>msg.payload = false</code> to suppress the node silently.</p>
+  <p>The lease is owned by the Connection, keyed on the Identity — one promise per identity, last assertion wins. Closing or redeploying this node cancels its subscription to expiry notices and does not cancel the Connection's lease or the Identity's fault state.</p>
+</script>

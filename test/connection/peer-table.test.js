@@ -328,6 +328,108 @@ test('projected sentinels match the seed dialect invalid markers', () => {
   assert.equal(invalid('BATTERY_STATUS', 'current_battery'), '-1');
 });
 
+test('armed-changed fires on the armed bit flipping, not on first sight', () => {
+  const table = new PeerTable({ now: () => 0 });
+  const events = [];
+  table.on('armed-changed', (e) => events.push(e));
+
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 128 + 1, custom_mode: 4 }), EP1);
+  assert.deepEqual(events, [], 'first observation is not a transition');
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 1, custom_mode: 4 }), EP1);
+  assert.deepEqual(events, [{ sysid: 1, compid: 1, from: true, to: false }]);
+});
+
+test('mode-changed fires on a custom_mode change, not on first sight', () => {
+  const table = new PeerTable({ now: () => 0 });
+  const events = [];
+  table.on('mode-changed', (e) => events.push(e));
+
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 1, custom_mode: 0 }), EP1);
+  assert.deepEqual(events, [], 'first observation is not a transition');
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 1, custom_mode: 4 }), EP1);
+  assert.deepEqual(events, [{ sysid: 1, compid: 1, from: 0, to: 4 }]);
+});
+
+test('landed-changed fires on an EXTENDED_SYS_STATE landed_state change, with a section age', () => {
+  const table = new PeerTable({ now: () => 0 });
+  const events = [];
+  table.on('landed-changed', (e) => events.push(e));
+
+  const extState = (landed) => ({
+    name: 'EXTENDED_SYS_STATE',
+    sysid: 1,
+    compid: 1,
+    fields: { vtol_state: 0, landed_state: landed },
+  });
+  table.update(extState(1), EP1); // MAV_LANDED_STATE_ON_GROUND
+  assert.deepEqual(events, [], 'first observation is not a transition');
+  table.update(extState(2), EP1); // MAV_LANDED_STATE_IN_AIR
+  assert.deepEqual(events, [{ sysid: 1, compid: 1, from: 1, to: 2 }]);
+  assert.equal(table.getComponent(1, 1).sections.landed.lastSeen, 0);
+});
+
+test('gps-fix-changed fires on a fix_type change, not on first sight', () => {
+  const table = new PeerTable({ now: () => 0 });
+  const events = [];
+  table.on('gps-fix-changed', (e) => events.push(e));
+
+  table.update(
+    { name: 'GPS_RAW_INT', sysid: 1, compid: 1, fields: { fix_type: 3, satellites_visible: 10 } },
+    EP1
+  );
+  assert.deepEqual(events, [], 'first observation is not a transition');
+  table.update(
+    { name: 'GPS_RAW_INT', sysid: 1, compid: 1, fields: { fix_type: 4, satellites_visible: 10 } },
+    EP1
+  );
+  assert.deepEqual(events, [{ sysid: 1, compid: 1, from: 3, to: 4 }]);
+});
+
+test('home-changed fires when home moves, in canonical units; a re-sent home is silent', () => {
+  const table = new PeerTable({ now: () => 0 });
+  const events = [];
+  table.on('home-changed', (e) => events.push(e));
+
+  const home = (lat) => ({
+    name: 'HOME_POSITION',
+    sysid: 1,
+    compid: 1,
+    fields: { latitude: lat, longitude: 1491652374, altitude: 584000 },
+  });
+  table.update(home(-353632621), EP1);
+  assert.deepEqual(events, [], 'first observation is not a transition');
+  table.update(home(-353632621), EP1);
+  assert.deepEqual(events, [], 'an unchanged home is not a transition');
+  table.update(home(-353632521), EP1);
+  assert.deepEqual(events, [
+    {
+      sysid: 1,
+      compid: 1,
+      from: { lat: -35.3632621, lon: 149.1652374, alt: 584 },
+      to: { lat: -35.3632521, lon: 149.1652374, alt: 584 },
+    },
+  ]);
+});
+
+test('sensor-health-changed carries from/to words and the flipped-bit mask', () => {
+  const table = new PeerTable({ now: () => 0 });
+  const events = [];
+  table.on('sensor-health-changed', (e) => events.push(e));
+
+  const sysStatus = (health) => ({
+    name: 'SYS_STATUS',
+    sysid: 1,
+    compid: 1,
+    fields: { onboard_control_sensors_health: health, voltage_battery: 12600, battery_remaining: 90 },
+  });
+  table.update(sysStatus(0x8000_0021), EP1);
+  assert.deepEqual(events, [], 'first observation is not a transition');
+  table.update(sysStatus(0x8000_0023), EP1);
+  assert.deepEqual(events, [
+    { sysid: 1, compid: 1, from: 0x8000_0021, to: 0x8000_0023, changed: 0x2 },
+  ]);
+});
+
 test('snapshot is plain JSON-serializable data', () => {
   const table = new PeerTable({ now: () => 0 });
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 128 }), EP1);
