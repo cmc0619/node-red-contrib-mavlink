@@ -87,3 +87,14 @@ test('multi-identity Connection with a blank pick falls back to the Local Identi
   node._input({ payload: { health: 'ok' } });
   assert.equal(conn._asserts[0].id, 'comp');
 });
+
+test('a saved id the Connection does not bind falls back to the Local Identity', () => {
+  // Membership, not an additionalIdentities count: a Connection with an entry
+  // in additionalIdentities but a stale/unbound saved pick still resolves to
+  // the Local Identity, so runtime and editor agree on what "bound" means and
+  // an unheartbeated id never reaches assertHealth (Gitar #351).
+  const conn = makeConnection({ localIdentity: 'comp', additionalIdentities: ['dangling'] });
+  const node = build({ identity: 'loose' }, conn);
+  node._input({ payload: { health: 'ok' } });
+  assert.equal(conn._asserts[0].id, 'comp', 'stale unbound pick ignored, Local Identity asserted');
+});

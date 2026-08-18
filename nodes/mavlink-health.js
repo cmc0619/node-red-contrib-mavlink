@@ -25,7 +25,7 @@ const {
   applyActionStatus,
   failInput,
 } = require('../lib/delivery');
-const { applyConnectionStatus, isBlank } = require('../lib/addressing');
+const { applyConnectionStatus } = require('../lib/addressing');
 
 module.exports = function registerMavlinkHealth(RED) {
   /**
@@ -38,20 +38,20 @@ module.exports = function registerMavlinkHealth(RED) {
     const connectionNode = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, true, connectionNode);
 
-    // Which identity's health this asserts. The editor offers a choice only
-    // when the Connection carries more than one identity; a single-identity
-    // Connection hides the field, so the identity is resolved from the
-    // Connection's shape — its sole identity is always its Local Identity. A
-    // multi-identity Connection uses the saved pick, falling back to the Local
-    // Identity when blank (§0 presence-fallback). Resolving from the
-    // Connection rather than trusting a possibly-stale saved id is deliberate:
-    // the field is hidden and unvalidated in the single case, so a leftover
-    // value must not reach assertHealth and fault an id the scheduler never
-    // heartbeats — the silent-"healthy"-over-a-no-op this node exists to avoid.
-    const additionalIdentities = connectionNode.additionalIdentities || [];
-    const identityId = additionalIdentities.length === 0 || isBlank(config.identity)
-      ? connectionNode.localIdentity
-      : config.identity;
+    // Which identity's health this asserts. Resolved from the Connection's own
+    // identity ids by membership, not by trusting the saved value: the saved
+    // pick is used only when it is genuinely one of the Connection's bound
+    // identities, else it falls back to the required Local Identity. The editor
+    // hides this field — and does not ring — for a single-identity Connection,
+    // so the runtime owns the guard: a blank, leftover, or hand-edited id the
+    // Connection does not heartbeat must not reach assertHealth and report
+    // healthy over a no-op (§0 silent-false-success). Membership (not a raw
+    // additionalIdentities count) is what keeps this decision aligned with the
+    // editor's own bound-identity set — the divergence Gitar flagged (#351).
+    const boundIds = [connectionNode.localIdentity].concat(connectionNode.additionalIdentities || []);
+    const identityId = boundIds.indexOf(config.identity) !== -1
+      ? config.identity
+      : connectionNode.localIdentity;
 
     // The editor owns the default and the positive-number ring — just convert
     // it. msg.payload.ttl_s overrides by presence (§0 presence-fallback).
