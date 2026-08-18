@@ -166,9 +166,10 @@ const PROFILE = {
     // mode-changed could never appear (Codex, #340).
     prep: 'ap-arm-ready-1',
     notes:
-      'Feed subscribes only the six *-changed events; GUIDED→arm→EXTENDED_SYS_STATE ' +
+      'Feed subscribes only the six *-changed events; GUIDED→settle→arm→EXTENDED_SYS_STATE ' +
       'interval→takeoff drives mode-changed, armed-changed, home-changed, landed-changed. ' +
-      'Prep leaves STABILIZE so the flow GUIDED is a real edge. First observation ' +
+      'Prep leaves STABILIZE so the flow GUIDED is a real edge. ARM is delayed 2 s after ' +
+      'GUIDED ACK — same-tick ARM returns FAILED (4) on Copter-4.7.0. First observation ' +
       'is not a transition, so a quiet connect phase is expected, not a FAIL.',
   },
   '04-param-defs-live': {

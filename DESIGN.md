@@ -4251,6 +4251,20 @@ slug names (Lucy, peer-table) remain the durable identity.
 *Check:* `sitl/lib/suite-schedule.js`, `sitl/run-example-suite.js`,
 `examples/sitl/README.md`, `node --test test/sitl/suite-schedule.test.js`.
 
+**ArduCopter ARM in the same tick as GUIDED ACK is FAILED (2026-08-18).**
+*Wrong belief:* example 40's ARM `resultCode: 4` after a successful Set GUIDED was
+a bad param array, a stolen `:14550` vehicle snapshot, or EKF not ready
+(`ap-arm-ready-1` had just proved armable).
+*Fact:* the command node sent `COMPONENT_ARM_DISARM` `[1,0,0,0,0,0,0]` and the
+vehicle answered FAILED. The same sequence on a raw Connection succeeds if ARM
+is delayed ~1 s after `DO_SET_MODE` GUIDED, and fails when ARM rides the GUIDED
+ACK in the same few milliseconds. Example 20 never hit this: `ap-guided-1`
+leaves the vehicle *in* GUIDED, so its Set GUIDED is a no-edge and ARM is not
+racing a mode change. Example 40 must leave STABILIZE (so `mode-changed`
+fires) and therefore needs a 2 s delay between GUIDED and ARM.
+*Check:* `examples/sitl/40-transition-events.json` (`sitl40-guided-settle`);
+`node sitl/run-example-suite.js --only 40`.
+
 **Omitted action-node `identity` must not become the override `"undefined"` (2026-08-18).**
 *Wrong belief:* example 40's Set GUIDED crash (`Cannot read properties of undefined
 (reading 'sysid')`) was a missing vehicle snapshot after `ap-arm-ready-1` bound
