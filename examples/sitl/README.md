@@ -36,6 +36,7 @@ need reset (`PROFILE.restart` in `sitl/run-example-suite.js`):
 | 28–30 | `px4-1` | `nrc-px4-11` only |
 | 31–35 | `ap-fleet` | AP 1–5 |
 | 36–38 | `fleet` | all 13 vehicles |
+| 39 | `none` | no docker restart |
 
 Force a full fleet every time with `SITL_RESTART=fleet`.
 
@@ -81,6 +82,7 @@ Force a full fleet every time with `SITL_RESTART=fleet`.
 | `36-mode-tables.json` | SITL 36 Mode tables | fleet |
 | `37-dual-stack-ten.json` | SITL 37 Dual-stack ×10 | fleet |
 | `38-signing.json` | SITL 38 Signing | fleet |
+| `39-companion-health-lease.json` | SITL 39 Health Lease | none |
 
 ## Running the suite
 

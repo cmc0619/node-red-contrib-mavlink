@@ -1,0 +1,169 @@
+[
+  {
+    "id": "sitl39-tab",
+    "type": "tab",
+    "label": "SITL 39 Health Lease",
+    "disabled": false,
+    "info": "Companion health assertion with a 5 s TTL lease on sysid 20, compid 191. Assert ok arms/renews the lease and the companion HEARTBEAT rides; silence past the TTL or an explicit fatal faults the identity and the HEARTBEAT stops — the vehicle's companion-loss behavior is the point. Lab ports bind 14540→14541.",
+    "env": []
+  },
+  {
+    "id": "sitl39-comment",
+    "type": "comment",
+    "z": "sitl39-tab",
+    "name": "Companion health lease",
+    "info": "mavlink-health asserts the companion identity's health on the Connection. {health:'ok'} clears any fault and opens (or renews) the 5 s lease — keep sending ok before it lapses, or the identity faults on its own and its HEARTBEAT stops. {health:'fatal'} faults immediately and cancels the pending lease; a later ok resumes. Watch the debug outputs: status carries healthy / faulted / lease-expired records. Prefer Docker lab: see sitl/README.md.",
+    "x": 220,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl39-identity",
+    "type": "mavlink-local-identity",
+    "name": "Companion identity",
+    "role": "companion",
+    "sourceSystemId": 20,
+    "sourceComponentId": 191,
+    "heartbeatType": "MAV_TYPE_ONBOARD_CONTROLLER",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl39-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "Vehicle profile",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 20,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
+  },
+  {
+    "id": "sitl39-connection",
+    "type": "mavlink-connection",
+    "name": "UDP companion 20",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14540,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14541,
+    "vehicle": "sitl39-vehicle",
+    "localIdentity": "sitl39-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl39-inject-ok",
+    "type": "inject",
+    "z": "sitl39-tab",
+    "name": "Assert ok (5 s lease)",
+    "props": [
+      {
+        "p": "payload",
+        "v": "{\"health\":\"ok\"}",
+        "vt": "json"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 160,
+    "wires": [
+      [
+        "sitl39-health"
+      ]
+    ]
+  },
+  {
+    "id": "sitl39-inject-fatal",
+    "type": "inject",
+    "z": "sitl39-tab",
+    "name": "Assert fatal",
+    "props": [
+      {
+        "p": "payload",
+        "v": "{\"health\":\"fatal\"}",
+        "vt": "json"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 220,
+    "wires": [
+      [
+        "sitl39-health"
+      ]
+    ]
+  },
+  {
+    "id": "sitl39-health",
+    "type": "mavlink-health",
+    "z": "sitl39-tab",
+    "name": "Companion health",
+    "connection": "sitl39-connection",
+    "identity": "sitl39-identity",
+    "ttlS": 5,
+    "x": 380,
+    "y": 190,
+    "wires": [
+      [
+        "sitl39-debug-continue"
+      ],
+      [
+        "sitl39-debug-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl39-debug-continue",
+    "type": "debug",
+    "z": "sitl39-tab",
+    "name": "health continue",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 610,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "sitl39-debug-status",
+    "type": "debug",
+    "z": "sitl39-tab",
+    "name": "health status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 610,
+    "y": 220,
+    "wires": []
+  }
+]

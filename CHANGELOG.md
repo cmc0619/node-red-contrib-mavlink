@@ -116,6 +116,21 @@ config-node shapes and message contracts may still change without a major bump.
   `BTNn_FUNCTION`), not protocol. If upstream ever annotates the field, the
   upgrade path is compiled enum names over these generic labels.
 
+- **`mavlink-health`: flow-asserted health with a TTL lease.** A flow can now
+  vouch for an identity's health instead of the heartbeat running as a blind
+  timer. `msg.payload = {health:'ok', ttl_s}` clears any fault and promises
+  healthy for the lease length (the node's default when `ttl_s` is absent);
+  renew before it lapses, or the Connection faults the identity on its own and
+  reports `lease-expired` on the node's status output — the companion-failsafe
+  posture, where a flow that has gone quiet reads as unhealthy rather than
+  "still fine". `{health:'fatal'}` faults immediately and cancels the pending
+  lease; a later `ok` resumes. A faulted identity's HEARTBEAT stops until the
+  fault clears, which is the point: the vehicle's own companion-loss handling
+  is the failsafe. The lease lives on the Connection, so redeploying the
+  health node never clears a fault it did not own. The identity presets'
+  `healthDriven` flag is gone — nothing ever read it, and this node is what it
+  was reserved for.
+
 ### Fixed
 
 - **A fan-out param set on ArduPilot no longer reports `unconfirmed` for a

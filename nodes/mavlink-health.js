@@ -45,8 +45,9 @@ module.exports = function registerMavlinkHealth(RED) {
 
     // Subscribed eagerly, like mavlink-in's message subscriptions, so a
     // lease expiring between inputs still reaches this node's own status and
-    // output — the same "no connection" badge covers a missing reference,
-    // so there is nothing further to report here.
+    // output. With either reference unresolved there is nothing to filter
+    // against: the Connection wears the "no connection" badge above, and the
+    // first input craters into failInput on the dangling reference.
     let unsubscribeExpired = () => {};
     if (connectionNode && identityNode) {
       unsubscribeExpired = connectionNode.onHealthExpired(({ identityId }) => {
@@ -68,7 +69,7 @@ module.exports = function registerMavlinkHealth(RED) {
       }
 
       try {
-        const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
+        const payload = msg.payload ?? {};
         // Affirmative dispatch (§5): a health value naming neither member
         // selects no behavior — nothing asserted, nothing sent, nothing
         // reported, the same unmatched-tier contract mavlink-param and

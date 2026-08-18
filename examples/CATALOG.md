@@ -490,6 +490,7 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 | 28–30 | `px4-1` | `nrc-px4-11` only |
 | 31–35 | `ap-fleet` | AP 1–5 |
 | 36–38 | `fleet` | all 13 vehicles |
+| 39 | `none` | no docker restart |
 
 ### 01–19 — `restart: none` (params / missions / companions / payload)
 
@@ -814,6 +815,17 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
   `debug`.
 - **Config/launch:** matching key on the SITL side; `restart: fleet`.
 
+### sitl/39 — Companion health lease
+
+- **File:** `examples/sitl/39-companion-health-lease.json` · **Tab:** `SITL 39 Health Lease`
+- **Story:** `mavlink-health` on the companion identity (sysid 20 / compid 191) with a 5 s
+  TTL lease. Assert `ok` arms/renews the lease and the companion HEARTBEAT rides; silence
+  past the TTL or an explicit `fatal` faults the identity and stops the HEARTBEAT — the
+  vehicle's companion-loss behavior is the point.
+- **Nodes:** companion identity, vehicle, `connection`, `health` (5 s lease), 2× `inject`
+  (`{health:'ok'}`, `{health:'fatal'}`), 2× `debug`.
+- **Key config:** bind `14540`→`14541`; Docker service `ap-companion-20`.
+
 ---
 
 ## 3. `examples/sitl/README.md` outline
@@ -826,7 +838,7 @@ The folder README is shipped — keep it aligned with the table in §2 and
 2. **The rig (§13)** — five ArduPilot at sysids 1–5, five PX4 at 11–15, separate
    connections; companions 20/21; payload 31.
 3. **Docker lab** — `cd sitl && docker compose --profile sitl up -d --build`.
-4. **Suite order / selective restart** — numbered 01–38 by `PROFILE.restart` phase.
+4. **Suite order / selective restart** — numbered 01–39 by `PROFILE.restart` phase.
 5. **Signing** — sitl/38 documents the dry-run procedure. Off by default elsewhere.
 6. **Safety** — SITL only; never point these at a real vehicle without understanding each
    step.

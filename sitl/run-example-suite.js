@@ -147,6 +147,13 @@ const PROFILE = {
     notes:
       'Lab passphrase hunter11 injected via Admin API credentials; harness SETUP_SIGNING on companion AP sysid 20',
   },
+  '39-companion-health-lease': {
+    restart: 'none',
+    waitMs: 20000,
+    expect: 'healthy then faulted records on companion 20',
+    notes:
+      'ok arms the 5 s lease and the companion HEARTBEAT rides; fatal (and a lapsed lease) faults the identity and the HEARTBEAT stops',
+  },
   '04-param-defs-live': {
     restart: 'none',
     waitMs: 20000,

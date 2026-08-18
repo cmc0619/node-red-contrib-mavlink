@@ -1276,3 +1276,115 @@ test('a transport that never opened does not enter the redial loop — deploy fa
   assert.equal(connection.getState(), STATE.ERROR, 'pre-establishment errors stay terminal (§2)');
   assert.equal(redials().length, 0, 'no redial is ever armed for a config that never worked');
 });
+
+// ── health leases: flow-asserted health with an expiring countdown ───────────
+
+/**
+ * Lease harness: a transport whose writes complete synchronously (so emitted
+ * heartbeats are countable in `sent`), captured one-shot timers fired by hand,
+ * and a controllable clock so heartbeat ticks clear the per-identity rate gate.
+ * `leases()` excludes write timers by their module bound — lease TTLs in these
+ * tests deliberately avoid WRITE_TIMEOUT_MS.
+ *
+ * @returns {{connection: Connection, clock: object, leases: Function,
+ *   heartbeatsSent: Function}}
+ */
+function healthBuild() {
+  const sent = [];
+  const timeouts = [];
+  const clock = fakeClock(1000);
+  const timers = fakeTimers();
+  const transportFactory = () => {
+    const t = new EventEmitter();
+    t.mode = 'udp';
+    t.open = async () => {};
+    t.close = (cb) => cb && cb();
+    t.send = (buffer, _endpoint, cb) => {
+      sent.push(buffer);
+      cb();
+    };
+    return t;
+  };
+  const { connection } = build(
+    {},
+    {
+      transportFactory,
+      now: clock.now,
+      setInterval: timers.setInterval,
+      clearInterval: timers.clearInterval,
+      setTimeout: (fn, ms) => {
+        const handle = { fn, ms, cleared: false, unref() {} };
+        timeouts.push(handle);
+        return handle;
+      },
+      clearTimeout: (handle) => {
+        if (handle) handle.cleared = true;
+      },
+    }
+  );
+  return {
+    connection,
+    clock,
+    leases: () => timeouts.filter((t) => t.ms !== WRITE_TIMEOUT_MS),
+    heartbeatsSent: () =>
+      sent.filter((b) => JSON.parse(b.toString()).name === 'HEARTBEAT').length,
+  };
+}
+
+test('health lease lifecycle: ok arms, renewal replaces, expiry faults and emits, fatal cancels, a later ok resumes', async () => {
+  const { connection, clock, leases, heartbeatsSent } = healthBuild();
+  await connection.start();
+  const expired = [];
+  connection.on('health-expired', (e) => expired.push(e.identityId));
+
+  connection.assertHealth('gcs', true, 4000);
+  assert.equal(leases().length, 1, 'ok arms one countdown');
+  assert.equal(leases()[0].ms, 4000);
+
+  connection.assertHealth('gcs', true, 4000);
+  const [first, second] = leases();
+  assert.equal(first.cleared, true, 'renewal disarms the replaced countdown');
+  assert.equal(second.cleared, false);
+  assert.deepEqual(expired, [], 'a renewed lease never expires');
+
+  connection.heartbeats.tick();
+  assert.equal(heartbeatsSent(), 1, 'a leased identity heartbeats');
+
+  second.fn(); // the flow went quiet — the countdown fires
+  assert.deepEqual(expired, ['gcs'], 'the lapse emits health-expired');
+  clock.advance(1000);
+  connection.heartbeats.tick();
+  assert.equal(heartbeatsSent(), 1, 'a lapsed lease suppresses the heartbeat');
+
+  connection.assertHealth('gcs', true, 3000);
+  const renewed = leases().find((t) => t.ms === 3000);
+  assert.equal(renewed.cleared, false, 'a later ok opens a fresh countdown');
+  clock.advance(1000);
+  connection.heartbeats.tick();
+  assert.equal(heartbeatsSent(), 2, 'the later ok clears the fault and the heartbeat resumes');
+
+  connection.assertHealth('gcs', false, 0);
+  assert.equal(renewed.cleared, true, 'fatal drops the pending countdown');
+  clock.advance(1000);
+  connection.heartbeats.tick();
+  assert.equal(heartbeatsSent(), 2, 'fatal suppresses the heartbeat immediately');
+  assert.deepEqual(expired, ['gcs'], 'explicit assertions never emit — only the timer path does');
+
+  connection.close();
+});
+
+test('close() disarms pending health leases — no fault, no emit after teardown', async () => {
+  const { connection, leases } = healthBuild();
+  await connection.start();
+  const expired = [];
+  connection.on('health-expired', (e) => expired.push(e));
+
+  connection.assertHealth('gcs', true, 4000);
+  const [lease] = leases();
+  connection.close();
+
+  assert.equal(lease.cleared, true, 'teardown disarms the countdown');
+  assert.deepEqual(expired, [], 'nothing expires after close');
+  connection.assertHealth('gcs', true, 4000);
+  assert.equal(leases().length, 1, 'an assertion racing teardown arms nothing on a closed link');
+});
