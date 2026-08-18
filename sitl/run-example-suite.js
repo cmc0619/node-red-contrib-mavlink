@@ -161,10 +161,11 @@ const PROFILE = {
     restart: 'ap-1',
     waitMs: 90000,
     expect: 'armed/mode/landed transition records in the state feed',
-    // Arm-ready without GUIDED: ap-guided-1 would make the flow's first
-    // Set GUIDED a no-edge (first observation is not a transition), so
-    // mode-changed could never appear (Codex, #340).
-    prep: 'ap-arm-ready-1',
+    // Prove GUIDED-armable, then STABILIZE: ap-guided-1 would hide
+    // mode-changed (first observation is not a transition). STABILIZE-only
+    // arm-ready is not enough — ARM after Set GUIDED returns FAILED (4) until
+    // GUIDED has a position estimate (Codex, #340).
+    prep: 'ap-guided-arm-stabilize-1',
     notes:
       'Feed subscribes only the six *-changed events; GUIDED→settle→arm→EXTENDED_SYS_STATE ' +
       'interval→takeoff drives mode-changed, armed-changed, home-changed, landed-changed. ' +
@@ -1404,6 +1405,38 @@ async function setApGuided(sysid = 1) {
   );
 }
 
+/**
+ * Prove AP can arm in GUIDED, then return to STABILIZE.
+ *
+ * `ap-arm-ready-1` only proves STABILIZE-armable. Example 40 then Set GUIDED
+ * and ARM — Copter-4.7.0 answers FAILED (4) until GUIDED has a position
+ * estimate. `ap-guided-1` leaves the vehicle in GUIDED, which hides
+ * mode-changed (first observation is not a transition). This prep is both.
+ *
+ * @param {number} [sysid]
+ */
+async function waitApGuidedArmReadyStabilize(sysid = 1) {
+  await setApGuided(sysid);
+  console.log(`  returning AP-${sysid} to STABILIZE so example GUIDED is a mode edge…`);
+  runApControlScript(
+    `
+      const t = { sysid: ${sysid}, compid: 1 };
+      const deadline = Date.now() + 20000;
+      const compOf = () => conn.peerTable.getComponent(${sysid}, 1);
+      while (!compOf()?.primaryEndpoint && Date.now() < deadline) await sleep(200);
+      while (Date.now() < deadline) {
+        if (compOf()?.flightMode === 0) break;
+        conn.send(buildCommandLong(176, ${sysid}, 1, [1, 0, 0, 0, 0, 0, 0], 0), { band: BAND.CONTROL, target: t });
+        await sleep(500);
+      }
+      if (compOf()?.flightMode !== 0) {
+        throw new Error('AP-${sysid} did not return to STABILIZE after GUIDED arm-ready');
+      }
+    `,
+    30000
+  );
+}
+
 function applyPx4LabHelpers(containers = PX4_VEHICLE_CONTAINERS) {
   // Parallel param poke — each SIH instance needs its own socket.
   const inner =
@@ -1451,6 +1484,9 @@ async function restartVehicleFleet(containers = VEHICLE_CONTAINERS) {
 async function prep(kind) {
   if (kind === 'ap-guided-1') {
     await setApGuided(1);
+  }
+  if (kind === 'ap-guided-arm-stabilize-1') {
+    await waitApGuidedArmReadyStabilize(1);
   }
   if (kind === 'ap-arm-ready-1') {
     await waitApArmReady([1]);

@@ -363,7 +363,11 @@ test('39 requires healthy, lease-expired, and faulted — command-shaped goods d
 test('40 requires armed/mode/landed feed events — command accepteds do not PASS', () => {
   const profile = PROFILE['40-transition-events'];
   assert.ok(profile, 'profile 40 exists');
-  assert.equal(profile.prep, 'ap-arm-ready-1', 'GUIDED prep would hide mode-changed');
+  assert.equal(
+    profile.prep,
+    'ap-guided-arm-stabilize-1',
+    'must prove GUIDED-armable then return to STABILIZE; ap-guided-1 would hide mode-changed'
+  );
   const armAck = {
     tag: 'debug:arm status',
     result: 'accepted',

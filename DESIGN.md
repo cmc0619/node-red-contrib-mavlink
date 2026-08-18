@@ -4256,13 +4256,16 @@ slug names (Lucy, peer-table) remain the durable identity.
 a bad param array, a stolen `:14550` vehicle snapshot, or EKF not ready
 (`ap-arm-ready-1` had just proved armable).
 *Fact:* the command node sent `COMPONENT_ARM_DISARM` `[1,0,0,0,0,0,0]` and the
-vehicle answered FAILED. The same sequence on a raw Connection succeeds if ARM
-is delayed ~1 s after `DO_SET_MODE` GUIDED, and fails when ARM rides the GUIDED
-ACK in the same few milliseconds. Example 20 never hit this: `ap-guided-1`
-leaves the vehicle *in* GUIDED, so its Set GUIDED is a no-edge and ARM is not
-racing a mode change. Example 40 must leave STABILIZE (so `mode-changed`
-fires) and therefore needs a 2 s delay between GUIDED and ARM.
+vehicle answered FAILED. Two stacked causes, both measured:
+1. ARM riding the GUIDED ACK in the same few milliseconds is FAILED; a ~1 s
+   gap succeeds on a warm vehicle.
+2. `ap-arm-ready-1` only proves STABILIZE-armable. After a cold restart, GUIDED
+   ARM still needs the position estimate `ap-guided-1` waits for. Example 20
+   never hit this because prep left the vehicle *in* GUIDED. Example 40's prep
+   is therefore `ap-guided-arm-stabilize-1` (GUIDED arm-ready, then STABILIZE)
+   plus a 2 s delay between GUIDED and ARM.
 *Check:* `examples/sitl/40-transition-events.json` (`sitl40-guided-settle`);
+`sitl/run-example-suite.js` (`ap-guided-arm-stabilize-1`);
 `node sitl/run-example-suite.js --only 40`.
 
 **Omitted action-node `identity` must not become the override `"undefined"` (2026-08-18).**
