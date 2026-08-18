@@ -1030,12 +1030,11 @@ function verdictFrom(profile, summary, log) {
   if (/armed\/mode\/landed transition/i.test(expect)) {
     // Feed debug is payload-only — no result field — so key on event names
     // in the excerpt. Command accepteds must not PASS this example (#267 class).
-    const seen = (name) =>
-      summary.debug.some((d) => new RegExp(`event:\\s*'${name}'`).test(d.excerpt || ''))
-      || new RegExp(`event:\\s*'${name}'`).test(log || '');
-    const armed = seen('armed-changed');
-    const mode = seen('mode-changed');
-    const landed = seen('landed-changed');
+    const seen = (pattern) =>
+      summary.debug.some((d) => pattern.test(d.excerpt || '')) || pattern.test(log || '');
+    const armed = seen(/event:\s*'armed-changed'/);
+    const mode = seen(/event:\s*'mode-changed'/);
+    const landed = seen(/event:\s*'landed-changed'/);
     if (armed && mode && landed) {
       return {
         status: 'PASS',
