@@ -150,6 +150,9 @@ config-node shapes and message contracts may still change without a major bump.
   is the override id `"undefined"` — Connection.send then threw on
   `identity.sysid` (SITL 40 Set GUIDED). Omitted now means the editor default
   (no override). Example 40 serializes `"identity": ""`.
+- **SITL 40 waits 2 s after GUIDED before ARM.** Copter-4.7.0 answers FAILED
+  (4) when ARM rides the GUIDED ACK in the same tick; example 20 hid the race
+  because prep already sat in GUIDED.
 
 - **A fan-out param set on ArduPilot no longer reports `unconfirmed` for a
   write that worked.** The replicator's echo matcher required the vehicle's
