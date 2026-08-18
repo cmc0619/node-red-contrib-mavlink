@@ -6,6 +6,14 @@ config-node shapes and message contracts may still change without a major bump.
 
 ## [Unreleased]
 
+### Changed
+
+- **Examples 14 / 28 / 29 are one peer-table story.** `examples/14-peer-events.json`
+  now fans a State snapshot and a full-event State feed to debug panes *and*
+  Dashboard 2.0 tables (optional `@flowfuse/node-red-dashboard`). Former
+  `28-peer-table-inspector` and `29-peer-table-dashboard` are deleted; SITL
+  numbering is untouched.
+
 ### Added
 
 - **Five new payload verbs.** The payload node gains: camera **zoom**
