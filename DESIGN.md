@@ -3379,8 +3379,10 @@ ArduPilot's integer slot is **c-cast** (`1` → `0x3F800000`, `9` → `0x4110000
 with PX4 control returning bytewise `0x00000001` for the same capture method. Tolerance still
 follows the wire: a float32-quantized / c-cast echo needs float32-precision comparison; a
 bytewise integer echo (PX4) must compare exactly.
-*Check:* `/opt/cursor/artifacts/ap-param-wire-capture.json` (2026-08-18),
-`node --test test/param/param.test.js`, and the 2026-08-13 c-cast fidelity entry below.
+*Check:* `node --test test/param/param.test.js`, and the 2026-08-13 c-cast fidelity entry
+below. To re-measure: set an AP integer parameter to `1` and print the echoed `param_value`
+as raw float32 bits — `0x3F800000` is c-cast, `0x00000001` bytewise — with the same read
+against a PX4 INT32 parameter as the method control, which must show `0x00000001`.
 
 **The raw codec does no unit conversion — degE7 scaling belongs only to the typed surfaces.**
 This entry replaces one that argued the opposite ("degE7 encode must be value-blind: degrees
@@ -4627,13 +4629,22 @@ PX4 `COM_FLIGHT_UUID` as method control:
 | Mislabeled set | **ignored** | T2 re-read still `0x3F800000` / 1.0 |
 | Capture valid | **yes** | T5 PX4 echo `0x00000001` |
 
-So `matchesParamEchoWire`'s type-equality check against the *sent* type fires on ArduPilot
+So `matchesParamEchoWire`'s type-equality check against the *sent* type fired on ArduPilot
 integer params with **no storage failure to catch** — a REAL32-configured set stores fine
-(Q3) but the echo type is INT32 ≠ REAL32, producing false unconfirmed. The gate should be
-encoding-aware / compare against the echo's own type (already the decode key), not assume
-"REAL32 for everything" on AP.
-*Check:* `/opt/cursor/artifacts/ap-param-wire-report.md`,
-`/opt/cursor/artifacts/ap-param-wire-capture.json`; retire example-13 bytewise claim above.
+(Q3) but the echo type is INT32 ≠ REAL32, producing false unconfirmed. **Fixed 2026-08-18:**
+the check is now conditioned on the resolved encoding, and the condition is written as "not
+proven c-cast" rather than "is bytewise" so an unresolved encoding keeps the gate instead of
+dropping it (§0 — the fallback is the strict direction).
+
+Not "compare against the echo's own type": that matcher compares a *sent frame* to an *echo
+frame*, so comparing the echo against itself is vacuously true and would delete the check for
+PX4 too — where it is the only thing standing between a bytewise garbage store and a
+confirmed success. The two cases are bit-identical on the wire; only the encoding separates
+them, which is why the encoding is passed in rather than inferred from the frames.
+
+*Check:* `examples/sitl/12-param-fanout-set.json` is the live regression — an AP fan-out set
+of `ARMING_OPTIONS` (INT32) declaring REAL32, which must report five *accepted*; five
+*unconfirmed* is the gate returning. Retire the example-13 bytewise claim above.
 
 The sharp end is not the loss, it is that the loss reports success. `matchesParamEcho` applies
 float32 tolerance whenever the wire is not bytewise-int (correctly — a c-cast value really did
