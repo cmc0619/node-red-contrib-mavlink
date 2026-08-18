@@ -1264,6 +1264,7 @@ test('an error while a redial open() settles does not let the stale continuation
 
   assert.equal(connection.getState(), STATE.RECONNECTING, 'the stale continuation cannot declare CONNECTED');
   assert.equal(inFlight.closed, true, 'the superseded transport is closed, not leaked');
+  assert.equal(redials()[1].cleared, false, 'the replacement redial remains armed — recovery has an owner');
   assert.equal(timers.active(), downTimers, 'heartbeats stay down — recovery belongs to the armed redial');
   connection.close();
 });
