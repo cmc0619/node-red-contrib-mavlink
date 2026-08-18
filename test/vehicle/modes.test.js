@@ -100,3 +100,15 @@ test('an unresolved number is undefined — outputs omit the name, keep the numb
   assert.equal(modeNameFor(4, { firmware: 'custom' }), undefined);
   assert.equal(modeNameFor(4, { firmware: 'ardupilot', vehicleFamily: 'unknown', bundle: AP_BUNDLE }), undefined);
 });
+
+test('an absent mode is undefined, not mode 0 — Number(null) must not name STABILIZE', () => {
+  // A component with only an AVAILABLE_MODES cache and no HEARTBEAT yet has
+  // flightMode null. Number(null) is 0, and 0 is COPTER_MODE_STABILIZE, so an
+  // unguarded lookup reports a resolved name for a mode that was never
+  // observed — the §0 false-success shape (#346 review). null and undefined
+  // stay undefined; only a real 0 names STABILIZE.
+  const apCopter = { firmware: 'ardupilot', vehicleFamily: 'copter', bundle: AP_BUNDLE };
+  assert.equal(modeNameFor(null, apCopter), undefined);
+  assert.equal(modeNameFor(undefined, apCopter), undefined);
+  assert.equal(modeNameFor(0, apCopter), 'STABILIZE');
+});
