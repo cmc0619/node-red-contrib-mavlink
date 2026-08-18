@@ -8,6 +8,18 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Added
 
+- **Five new payload verbs.** The payload node gains: camera **zoom**
+  (`SET_CAMERA_ZOOM`, 531) and **focus** (`SET_CAMERA_FOCUS`, 532) — both were
+  declined pre-1.0 and are now first-class, type an enum select defaulting to
+  RANGE; a new **relay** topic with **set** (`DO_SET_RELAY`, 181) and
+  **repeat** (`DO_REPEAT_RELAY`, 182), mirroring servo's two verbs because a
+  relay is a distinct device; and a fourth gimbal-aim path,
+  `GIMBAL_MANAGER_SET_ATTITUDE` (282), that adds roll to the pitch/yaw-only
+  paths — enter roll/pitch/yaw in degrees and the recipe derives the wire's
+  `q` quaternion, the angular-velocity triple NaN-defaulted to the "ignore"
+  sentinel (issue-#87 parity). All ride the existing recipe engine: fields,
+  labels, units and enums come from the dialect, so the editor form is
+  generated, not hand-drawn. See DESIGN.md § "Payload topics".
 - **Flight modes have names end-to-end.** One resolution ladder
   (`lib/vehicle/modes.js`), both directions: the vehicle's own
   `AVAILABLE_MODES` table — cached per peer component, requested explicitly

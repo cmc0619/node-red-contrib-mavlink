@@ -140,6 +140,8 @@
       { value: 'start-video', label: 'Start video' },
       { value: 'stop-video', label: 'Stop video' },
       { value: 'set-mode', label: 'Set mode' },
+      { value: 'zoom', label: 'Zoom' },
+      { value: 'focus', label: 'Focus' },
       { value: 'trigger-distance', label: 'Trigger by distance' }
     ],
     gimbal: [
@@ -149,6 +151,10 @@
       { value: 'roi-clear', label: 'ROI clear' }
     ],
     servo: [
+      { value: 'set', label: 'Set' },
+      { value: 'repeat', label: 'Repeat' }
+    ],
+    relay: [
       { value: 'set', label: 'Set' },
       { value: 'repeat', label: 'Repeat' }
     ],
@@ -185,7 +191,10 @@
   };
 
   RED.mavlink.payloadVerbIgnoresCarrier = function (topic, verb, path) {
-    return topic === 'gimbal' && verb === 'aim' && (path || 'legacy') === 'manager';
+    // The two message-kind aim paths carry no MAV_CMD, so COMMAND_INT/LONG is
+    // meaningless for them: manager pitch/yaw and the attitude quaternion.
+    var p = path || 'legacy';
+    return topic === 'gimbal' && verb === 'aim' && (p === 'manager' || p === 'attitude');
   };
 
   /**
