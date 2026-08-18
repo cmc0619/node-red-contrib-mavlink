@@ -25,7 +25,8 @@
     "sourceSystemId": 20,
     "sourceComponentId": 191,
     "heartbeatType": "MAV_TYPE_ONBOARD_CONTROLLER",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "sitl39-vehicle",

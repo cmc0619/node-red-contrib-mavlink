@@ -95,5 +95,5 @@
   </ol>
   <h3>Details</h3>
   <p>Set <code>msg.payload = false</code> to suppress the node silently.</p>
-  <p>The lease is owned by the Connection, not this node: closing or redeploying this node cancels its own subscription to expiry notices, but the Identity's fault state (and any other Health node's lease on the same Identity) is unaffected.</p>
+  <p>The lease is owned by the Connection, keyed on the Identity — one promise per identity, last assertion wins. Closing or redeploying this node cancels its subscription to expiry notices and does not cancel the Connection's lease or the Identity's fault state.</p>
 </script>

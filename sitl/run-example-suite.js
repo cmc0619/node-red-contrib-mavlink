@@ -151,18 +151,25 @@ const PROFILE = {
     restart: 'none',
     waitMs: 20000,
     expect: 'healthy then faulted records on companion 20',
+    // Default 1.5 s gap would fire fatal before the 5 s lease lapses, so the
+    // advertised lease-expired path never runs (Codex, #340).
+    injectGapMs: 6000,
     notes:
-      'ok arms the 5 s lease and the companion HEARTBEAT rides; fatal (and a lapsed lease) faults the identity and the HEARTBEAT stops',
+      'ok arms the 5 s lease; the harness waits past TTL so lease-expired fires, then fatal',
   },
   '40-transition-events': {
     restart: 'ap-1',
     waitMs: 90000,
     expect: 'armed/mode/landed transition records in the state feed',
-    prep: 'ap-guided-1',
+    // Arm-ready without GUIDED: ap-guided-1 would make the flow's first
+    // Set GUIDED a no-edge (first observation is not a transition), so
+    // mode-changed could never appear (Codex, #340).
+    prep: 'ap-arm-ready-1',
     notes:
       'Feed subscribes only the six *-changed events; GUIDED→arm→EXTENDED_SYS_STATE ' +
       'interval→takeoff drives mode-changed, armed-changed, home-changed, landed-changed. ' +
-      'First observation is not a transition, so a quiet connect phase is expected, not a FAIL.',
+      'Prep leaves STABILIZE so the flow GUIDED is a real edge. First observation ' +
+      'is not a transition, so a quiet connect phase is expected, not a FAIL.',
   },
   '04-param-defs-live': {
     restart: 'none',
@@ -1002,6 +1009,44 @@ function verdictFrom(profile, summary, log) {
       };
     }
   }
+  if (/healthy then faulted/i.test(expect)) {
+    // Status records spell result: 'healthy' | 'lease-expired' | 'faulted'.
+    // The generic tail treats 'faulted' as bad (/fail/) and 'healthy' as
+    // neither good nor bad, so 39 cannot PASS there even when the story ran.
+    const healthy = summary.debug.some((d) => d.result === 'healthy');
+    const expired = summary.debug.some((d) => d.result === 'lease-expired');
+    const faulted = summary.debug.some((d) => d.result === 'faulted');
+    if (healthy && expired && faulted) {
+      return {
+        status: 'PASS',
+        reason: 'health lease: healthy, lease-expired, then faulted',
+      };
+    }
+    return {
+      status: 'FAIL',
+      reason: `health lease incomplete: healthy=${healthy} expired=${expired} faulted=${faulted}`,
+    };
+  }
+  if (/armed\/mode\/landed transition/i.test(expect)) {
+    // Feed debug is payload-only — no result field — so key on event names
+    // in the excerpt. Command accepteds must not PASS this example (#267 class).
+    const seen = (name) =>
+      summary.debug.some((d) => new RegExp(`event:\\s*'${name}'`).test(d.excerpt || ''))
+      || new RegExp(`event:\\s*'${name}'`).test(log || '');
+    const armed = seen('armed-changed');
+    const mode = seen('mode-changed');
+    const landed = seen('landed-changed');
+    if (armed && mode && landed) {
+      return {
+        status: 'PASS',
+        reason: 'state feed: armed-changed, mode-changed, landed-changed',
+      };
+    }
+    return {
+      status: 'FAIL',
+      reason: `transition feed incomplete: armed=${armed} mode=${mode} landed=${landed}`,
+    };
+  }
   if (/WPNAV_SPEED echo timeout|unknown .*echo timeout/i.test(expect)) {
     // Negative path: timed-out is the success — but only after a known-param
     // confirm proves AP-1 is reachable (dead peer would also echo-timeout).
@@ -1406,6 +1451,9 @@ async function restartVehicleFleet(containers = VEHICLE_CONTAINERS) {
 async function prep(kind) {
   if (kind === 'ap-guided-1') {
     await setApGuided(1);
+  }
+  if (kind === 'ap-arm-ready-1') {
+    await waitApArmReady([1]);
   }
   if (kind === 'ap-arm-ready-fleet') {
     await waitApArmReady([1, 2, 3, 4, 5]);

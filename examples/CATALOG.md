@@ -834,7 +834,8 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 - **File:** `examples/sitl/40-transition-events.json` · **Tab:** `SITL 40 Transition events`
 - **Story:** A State feed subscribed to only the six `*-changed` events while a flight
   chain (GUIDED → arm → `EXTENDED_SYS_STATE` interval → takeoff) drives `mode-changed`,
-  `armed-changed`, `home-changed`, and `landed-changed`. Edges only — no heartbeat
+  `armed-changed`, `home-changed`, and `landed-changed`. Prep is arm-ready without
+  GUIDED so the flow's Set GUIDED is a real edge. Edges only — no heartbeat
   traffic — and nothing fires at connect, because first observation is not a transition.
 - **Nodes:** identity, vehicle, `connection`, `state` (feed), `command` ×4, `debug`.
 - **Config/launch:** AP sysid 1 on 14550→14551; `restart: ap-1`; EXTENDED_SYS_STATE (245)
