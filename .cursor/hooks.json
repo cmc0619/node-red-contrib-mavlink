@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "node .cursor/hooks/github-events.js",
+        "timeout": 20
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "node .cursor/hooks/github-events.js",
+        "timeout": 20
+      }
+    ]
+  }
+}
