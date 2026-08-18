@@ -297,6 +297,76 @@
   };
 
   /**
+   * PX4 flight-mode table, editor-side copy of `lib/vehicle/modes.js`
+   * `PX4_MODES` — browser HTML cannot require() the Node module. Pinned
+   * against that table by drift test; the measurement provenance (PX4 1.18
+   * SIH, 2026-08-18) and the omitted rows are documented there, once.
+   */
+  RED.mavlink.PX4_MODES = [
+    { name: 'Manual', main: 1, sub: 0 },
+    { name: 'Altitude', main: 2, sub: 0 },
+    { name: 'Position', main: 3, sub: 0 },
+    { name: 'Orbit', main: 3, sub: 1 },
+    { name: 'Position Slow', main: 3, sub: 2 },
+    { name: 'Acro', main: 5, sub: 0 },
+    { name: 'Offboard', main: 6, sub: 0 },
+    { name: 'Stabilized', main: 7, sub: 0 },
+    { name: 'Termination', main: 10, sub: 0 },
+    { name: 'Altitude Cruise', main: 11, sub: 0 },
+    { name: 'Land', main: 4, sub: 2 },
+    { name: 'Hold', main: 4, sub: 3 },
+    { name: 'Safe Recovery', main: 4, sub: 4 },
+    { name: 'Return Home', main: 4, sub: 5 },
+    { name: 'Mission', main: 4, sub: 6 },
+    { name: 'Follow Target', main: 4, sub: 8 },
+    { name: 'Precision Landing', main: 4, sub: 9 },
+    { name: 'VTOL Takeoff', main: 4, sub: 10 },
+    { name: 'Guided Course', main: 4, sub: 19 },
+  ];
+
+  /**
+   * PX4 custom_mode packing (main_mode byte 2, sub_mode byte 3 of the
+   * uint32). Arithmetic mirrors the lib module so the pair drift-tests as
+   * one; the packed word is the dropdown's unique option value, while the
+   * saved config carries the decomposed pair the wire wants (param2 main,
+   * param3 sub — DESIGN.md §14).
+   */
+  RED.mavlink.px4PackCustomMode = function (main, sub) {
+    return Number(main) * 65536 + Number(sub) * 16777216;
+  };
+  RED.mavlink.px4MainMode = function (customMode) {
+    return Math.floor(Number(customMode) / 65536) % 256;
+  };
+  RED.mavlink.px4SubMode = function (customMode) {
+    return Math.floor(Number(customMode) / 16777216) % 256;
+  };
+
+  /**
+   * The PX4 mode entries for a command param, or null when the param is not
+   * DO_SET_MODE's `custom_mode` or the bound profile is not PX4 firmware —
+   * the same curated gate as {@link RED.mavlink.customModeEnum}, answering
+   * local entries instead of a dialect enum name because PX4 modes live in
+   * PX4 source, not in any dialect. Entry values are the packed custom_mode
+   * (unique per mode; AUTO sub-modes share a main).
+   *
+   * @param {string|number} commandId
+   * @param {string|number} paramIndex
+   * @returns {?Array<{name: string, value: number, label: string}>}
+   */
+  RED.mavlink.px4ModeEntries = function (commandId, paramIndex) {
+    if (Number(commandId) !== DO_SET_MODE || Number(paramIndex) !== 2) return null;
+    const target = RED.mavlink.resolveCatalogTarget();
+    if (target.firmware !== 'px4') return null;
+    return RED.mavlink.PX4_MODES.map(function (row) {
+      return {
+        name: row.name,
+        value: RED.mavlink.px4PackCustomMode(row.main, row.sub),
+        label: `${row.name} (main ${row.main}${row.sub ? `, sub ${row.sub}` : ''})`,
+      };
+    });
+  };
+
+  /**
    * Command params that are booleans in everything but their XML: no `enum=`,
    * just a magic number the description explains in prose. Keyed
    * `<commandId>:<paramIndex>`.

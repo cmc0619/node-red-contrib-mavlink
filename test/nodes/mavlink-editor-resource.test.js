@@ -1077,6 +1077,52 @@ test('PARAM_TYPE_OPTIONS omits the widths the codec cannot encode', () => {
   assert.equal(names[0], 'MAV_PARAM_TYPE_REAL32', 'the field default leads the list');
 });
 
+// ── PX4 mode table — drift pin against lib/vehicle/modes.js ──────────────────
+
+test('PX4_MODES mirrors the lib table row-for-row, packing included', () => {
+  const { RED } = loadResource();
+  const lib = require('../../lib/vehicle/modes');
+  // The editor copy exists only because browser HTML cannot require() the
+  // Node module (the MISSION_FENCE_COMMANDS mirror precedent). Same rows,
+  // same numbers — and the packing arithmetic must agree, or the dropdown
+  // would save a pair the ladder decodes differently.
+  assert.deepEqual(plain(RED.mavlink.PX4_MODES), plain(lib.PX4_MODES));
+  for (const row of lib.PX4_MODES) {
+    assert.equal(
+      RED.mavlink.px4PackCustomMode(row.main, row.sub),
+      lib.px4CustomMode(row.main, row.sub),
+      `${row.name}: packed word`
+    );
+  }
+  assert.equal(RED.mavlink.px4MainMode(0x03040000), 4);
+  assert.equal(RED.mavlink.px4SubMode(0x03040000), 3);
+});
+
+test('px4ModeEntries answers only for DO_SET_MODE param2 on a PX4 profile', () => {
+  const px4 = loadResource(
+    { '#node-input-connection': 'conn-1' },
+    {
+      'conn-1': { vehicle: { id: 'veh-1' } },
+      'veh-1': { dialect: 'common', firmware: 'px4' },
+    }
+  ).RED;
+  const entries = px4.mavlink.px4ModeEntries(176, 2);
+  assert.ok(entries && entries.length, 'PX4 profile gets local entries');
+  assert.equal(plain(entries.find((e) => e.name === 'Position').value), 0x00030000);
+  assert.equal(px4.mavlink.px4ModeEntries(176, 1), null, 'param1 is base_mode');
+  assert.equal(px4.mavlink.px4ModeEntries(400, 2), null, 'other commands keep their fields');
+
+  const ap = loadResource(
+    { '#node-input-connection': 'conn-1' },
+    {
+      'conn-1': { vehicle: { id: 'veh-1' } },
+      'veh-1': { dialect: 'ardupilotmega', firmware: 'ardupilot', vehicleFamily: 'copter' },
+    }
+  ).RED;
+  assert.equal(ap.mavlink.px4ModeEntries(176, 2), null, 'AP keeps the dialect enum path');
+  assert.equal(ap.mavlink.customModeEnum(176, 2), 'COPTER_MODE', 'AP behavior unchanged');
+});
+
 // ── isBlank / liveOr / toggleRow / fillEnumSelect precedence ─────────────────
 
 test('isBlank is one spelling of "nothing was entered"', () => {

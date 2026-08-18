@@ -175,6 +175,16 @@ const PROFILE = {
       'GUIDED ACK — same-tick ARM returns FAILED (4) on Copter-4.7.0. First observation ' +
       'is not a transition, so a quiet connect phase is expected, not a FAIL.',
   },
+  '41-mode-names': {
+    restart: 'fleet',
+    waitMs: 30000,
+    expect: 'AP + PX4 mode set by name; mode-changed carries fromName/toName',
+    prep: 'px4-mode-ready',
+    notes:
+      'REQUEST_MESSAGE(435) on both stacks: Copter-4.7.0 answers one AVAILABLE_MODES frame ' +
+      'per requested index (a function node walks 1..number_modes); PX4 bursts the full ' +
+      'list from one param2=0 request. A mute stack still resolves via the shipped tables.',
+  },
   '04-param-defs-live': {
     restart: 'none',
     waitMs: 20000,

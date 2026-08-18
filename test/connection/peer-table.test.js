@@ -439,3 +439,35 @@ test('snapshot is plain JSON-serializable data', () => {
   assert.equal(snap[0].components[0].armed, true);
   assert.equal(snap[0].components[0].endpoints[0].primary, true);
 });
+
+test('AVAILABLE_MODES entries are cached incrementally and the mode ladder reads them', () => {
+  const { modeNameFor, modeNumberFor } = require('../../lib/vehicle/modes');
+  const table = new PeerTable({ now: () => 0 });
+  const events = [];
+  for (const name of ['mode-changed', 'armed-changed']) table.on(name, (e) => events.push(e));
+
+  // Two of 25 announced modes — the cache never waits for completeness, and
+  // a re-sent index overwrites in place rather than duplicating.
+  const frame = (fields) => ({ name: 'AVAILABLE_MODES', sysid: 1, compid: 1, fields });
+  table.update(frame({
+    number_modes: 25, mode_index: 5, standard_mode: 0, custom_mode: 4,
+    properties: 0, mode_name: 'Guided  ',
+  }), EP1);
+  table.update(frame({
+    number_modes: 25, mode_index: 6, standard_mode: 0, custom_mode: 6, properties: 0, mode_name: 'RTL',
+  }), EP1);
+  table.update(frame({
+    number_modes: 25, mode_index: 5, standard_mode: 0, custom_mode: 4,
+    properties: 0, mode_name: 'Guided',
+  }), EP1);
+
+  const component = table.getComponent(1, 1);
+  assert.equal(component.modes.size, 2);
+  assert.deepEqual(component.modes.get(5), {
+    modeIndex: 5, numberModes: 25, standardMode: 0, customMode: 4, properties: 0, name: 'Guided',
+  });
+  assert.equal(modeNameFor(4, { component }), 'Guided');
+  assert.equal(modeNumberFor('rtl', { component }), 6);
+  // A capability cache, not a transition source: no feed event fired.
+  assert.deepEqual(events, []);
+});

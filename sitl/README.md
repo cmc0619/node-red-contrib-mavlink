@@ -80,6 +80,7 @@ Node-RED on the host. Flight logs mount under `sitl/logs/<service>/`.
 |--------|--------|
 | Most `examples/sitl/01–27` AP paths | AP fleet (or single) on `14550/14551` |
 | `examples/sitl/37-dual-stack-ten.json` | Full GCS fleets 1–5 and 11–15 |
+| `examples/sitl/41-mode-names.json` | AP 1 on `14550/14551` + PX4 11 on `14560/14561` |
 | `examples/sitl/05-companion-ap.json` | Companion AP sysid 20 on `14540/14541` |
 | `examples/sitl/06-companion-px4.json` | Companion PX4 sysid 21 on `14542/14543` |
 

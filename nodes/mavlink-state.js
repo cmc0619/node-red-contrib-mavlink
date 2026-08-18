@@ -1,7 +1,7 @@
 'use strict';
 
 const { createStateFeed, snapshotPeers } = require('../lib/state');
-const { firstDefined, applyConnectionStatus } = require('../lib/addressing');
+const { firstDefined, applyConnectionStatus, dialectFromConnection } = require('../lib/addressing');
 const {
   makeStatusRecord,
   applyActionStatus,
@@ -16,12 +16,25 @@ module.exports = function registerMavlinkState(RED) {
     const connectionNode = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, true, connectionNode);
 
+    // Mode-name resolution context (lib/vehicle/modes.js): the bound profile's
+    // firmware/family plus its compiled bundle. A disabled Connection carries
+    // no vehicle snapshot — and an empty peer table that will never hold a
+    // mode to name — so no context is built and outputs stay numbers-only.
+    // An unresolvable Connection keeps its badge above and its per-input
+    // failure path; this read must not turn it into a deploy crash.
+    const vehicle = connectionNode && connectionNode.vehicle;
+    const modes = vehicle && {
+      firmware: vehicle.firmware,
+      vehicleFamily: vehicle.vehicleFamily,
+      bundle: dialectFromConnection(RED, connectionNode),
+    };
+
     let feed = null;
     if (config.mode === 'feed') {
       // The editor saves events as a comma-joined string from a members-only
       // multi-select; an empty selection means the full default set.
       const events = config.events.split(',').map((s) => s.trim()).filter(Boolean);
-      feed = createStateFeed(connectionNode.peerTable, { events }, (record) => {
+      feed = createStateFeed(connectionNode.peerTable, { events, modes }, (record) => {
         node.send([{ payload: record }]);
       });
       node.status({ fill: 'grey', shape: 'ring', text: 'listening' });
@@ -40,7 +53,7 @@ module.exports = function registerMavlinkState(RED) {
             // than being swallowed by `||` and treated as unset.
             sysid: firstDefined(payload.sysid, config.targetSystem),
             compid: firstDefined(payload.compid, config.targetComponent),
-          });
+          }, modes);
           applyActionStatus(node, 'ok', `${peers.length} peer(s)`);
           send([
             { payload: peers },

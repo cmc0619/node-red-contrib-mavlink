@@ -1,0 +1,538 @@
+[
+  {
+    "id": "sitl41-tab",
+    "type": "tab",
+    "label": "SITL 41 Mode names",
+    "disabled": false,
+    "info": "Flight-mode names end-to-end: request AVAILABLE_MODES (message 435 — in the bundled seed, absent from older common.xml revisions) on ArduPilot sysid 1 and PX4 sysid 11, then set a mode BY NAME on each (msg.payload.mode) and watch mode-changed records carry fromName/toName. AVAILABLE_MODES support varies by firmware version (Copter-4.7.0 and PX4 1.18 both answer; older AP may not) — a mute stack still resolves via the shipped tables, which is the ladder working, not a failure.",
+    "env": []
+  },
+  {
+    "id": "sitl41-comment",
+    "type": "comment",
+    "z": "sitl41-tab",
+    "name": "Mode names end-to-end",
+    "info": "AP chain: request AVAILABLE_MODES with param2=0 — Copter-4.7.0 answers ONE frame of number_modes (measured 2026-08-18) — then a function node reads number_modes from that reply and emits the remaining per-index requests. PX4 bursts its full list from the single param2=0 request. Both requests prove the ACK; the walk itself rides delivery=send.\n\nSet mode by name: msg.payload.mode = 'GUIDED' on AP resolves through the vehicle-published cache (or the dialect's COPTER_MODE table before the cache fills); 'Position' on PX4 resolves into the decomposed main/sub pair PX4's DO_SET_MODE wants (DESIGN.md §14). The state feeds subscribe mode-changed only: each record keeps the raw from/to numbers and adds fromName/toName when the ladder resolves them.\n\nConnections: AP bind 0.0.0.0:14550 → 127.0.0.1:14551 (sysid 1); PX4 bind 0.0.0.0:14560 → 127.0.0.1:14561 (sysid 11).",
+    "x": 220,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl41-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl41-vehicle-ap",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
+  },
+  {
+    "id": "sitl41-vehicle-px4",
+    "type": "mavlink-vehicle",
+    "name": "PX4 sysid 11",
+    "vehicleFamily": "copter",
+    "firmware": "px4",
+    "dialect": "common",
+    "defaultTargetSystem": 11,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
+  },
+  {
+    "id": "sitl41-connection-ap",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "vehicle": "sitl41-vehicle-ap",
+    "localIdentity": "sitl41-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl41-connection-px4",
+    "type": "mavlink-connection",
+    "name": "UDP PX4 SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14560,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14561,
+    "vehicle": "sitl41-vehicle-px4",
+    "localIdentity": "sitl41-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl41-inject-ap",
+    "type": "inject",
+    "z": "sitl41-tab",
+    "name": "Start AP",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 140,
+    "wires": [
+      [
+        "sitl41-request-ap"
+      ]
+    ]
+  },
+  {
+    "id": "sitl41-request-ap",
+    "type": "mavlink-command",
+    "z": "sitl41-tab",
+    "name": "Request AVAILABLE_MODES (AP)",
+    "mode": "preset",
+    "preset": "request_message",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl41-connection-ap",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":435,\"2\":0}",
+    "sendAs": "long",
+    "x": 350,
+    "y": 140,
+    "wires": [
+      [
+        "sitl41-guided-payload"
+      ],
+      [
+        "sitl41-request-ap-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl41-in-modes-ap",
+    "type": "mavlink-in",
+    "z": "sitl41-tab",
+    "name": "AVAILABLE_MODES (AP)",
+    "connection": "sitl41-connection-ap",
+    "messages": [
+      "AVAILABLE_MODES"
+    ],
+    "sysid": "",
+    "compid": "",
+    "changedOnly": false,
+    "rateLimit": "",
+    "x": 150,
+    "y": 220,
+    "wires": [
+      [
+        "sitl41-walk"
+      ]
+    ]
+  },
+  {
+    "id": "sitl41-walk",
+    "type": "function",
+    "z": "sitl41-tab",
+    "name": "walk remaining mode indices",
+    "func": "// Copter-4.7.0 answers one AVAILABLE_MODES frame per request (measured\n// 2026-08-18); PX4 bursts the full list unasked. Read number_modes from the\n// first reply and request every other index once — never again after that.\nif (context.get('walked')) return null;\ncontext.set('walked', true);\nconst total = Number(msg.payload.number_modes);\nconst got = Number(msg.payload.mode_index);\nconst out = [];\nfor (let i = 1; i <= total; i++) {\n  if (i === got) continue;\n  out.push({ payload: { 1: 435, 2: i } });\n}\nreturn [out];",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 220,
+    "wires": [
+      [
+        "sitl41-request-walk"
+      ]
+    ]
+  },
+  {
+    "id": "sitl41-request-walk",
+    "type": "mavlink-command",
+    "z": "sitl41-tab",
+    "name": "Request mode index (send)",
+    "mode": "preset",
+    "preset": "request_message",
+    "advancedCommand": "",
+    "delivery": "send",
+    "connection": "sitl41-connection-ap",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "sendAs": "long",
+    "x": 640,
+    "y": 220,
+    "wires": [
+      [],
+      []
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl41-guided-payload",
+    "type": "function",
+    "z": "sitl41-tab",
+    "name": "mode: GUIDED",
+    "func": "msg.payload = { mode: 'GUIDED' };\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 580,
+    "y": 140,
+    "wires": [
+      [
+        "sitl41-setmode-ap"
+      ]
+    ]
+  },
+  {
+    "id": "sitl41-setmode-ap",
+    "type": "mavlink-command",
+    "z": "sitl41-tab",
+    "name": "Set mode by name (AP)",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl41-connection-ap",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "sendAs": "long",
+    "x": 800,
+    "y": 140,
+    "wires": [
+      [
+        "sitl41-ap-done"
+      ],
+      [
+        "sitl41-ap-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl41-inject-px4",
+    "type": "inject",
+    "z": "sitl41-tab",
+    "name": "Start PX4",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 340,
+    "wires": [
+      [
+        "sitl41-request-px4"
+      ]
+    ]
+  },
+  {
+    "id": "sitl41-request-px4",
+    "type": "mavlink-command",
+    "z": "sitl41-tab",
+    "name": "Request AVAILABLE_MODES (PX4)",
+    "mode": "preset",
+    "preset": "request_message",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl41-connection-px4",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":435,\"2\":0}",
+    "sendAs": "long",
+    "x": 360,
+    "y": 340,
+    "wires": [
+      [
+        "sitl41-position-payload"
+      ],
+      [
+        "sitl41-request-px4-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl41-position-payload",
+    "type": "function",
+    "z": "sitl41-tab",
+    "name": "mode: Position",
+    "func": "msg.payload = { mode: 'Position' };\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 590,
+    "y": 340,
+    "wires": [
+      [
+        "sitl41-setmode-px4"
+      ]
+    ]
+  },
+  {
+    "id": "sitl41-setmode-px4",
+    "type": "mavlink-command",
+    "z": "sitl41-tab",
+    "name": "Set mode by name (PX4)",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl41-connection-px4",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "sendAs": "long",
+    "x": 810,
+    "y": 340,
+    "wires": [
+      [
+        "sitl41-px4-done"
+      ],
+      [
+        "sitl41-px4-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl41-state-ap",
+    "type": "mavlink-state",
+    "z": "sitl41-tab",
+    "name": "AP mode-changed",
+    "connection": "sitl41-connection-ap",
+    "mode": "feed",
+    "events": "mode-changed",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 150,
+    "y": 440,
+    "wires": [
+      [
+        "sitl41-dbg-feed-ap"
+      ]
+    ]
+  },
+  {
+    "id": "sitl41-state-px4",
+    "type": "mavlink-state",
+    "z": "sitl41-tab",
+    "name": "PX4 mode-changed",
+    "connection": "sitl41-connection-px4",
+    "mode": "feed",
+    "events": "mode-changed",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 150,
+    "y": 500,
+    "wires": [
+      [
+        "sitl41-dbg-feed-px4"
+      ]
+    ]
+  },
+  {
+    "id": "sitl41-dbg-feed-ap",
+    "type": "debug",
+    "z": "sitl41-tab",
+    "name": "ap mode-changed",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 380,
+    "y": 440,
+    "wires": []
+  },
+  {
+    "id": "sitl41-dbg-feed-px4",
+    "type": "debug",
+    "z": "sitl41-tab",
+    "name": "px4 mode-changed",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 380,
+    "y": 500,
+    "wires": []
+  },
+  {
+    "id": "sitl41-request-ap-status",
+    "type": "debug",
+    "z": "sitl41-tab",
+    "name": "ap request status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 350,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "sitl41-ap-status",
+    "type": "debug",
+    "z": "sitl41-tab",
+    "name": "ap mode status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 800,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "sitl41-ap-done",
+    "type": "debug",
+    "z": "sitl41-tab",
+    "name": "ap mode done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1000,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "sitl41-request-px4-status",
+    "type": "debug",
+    "z": "sitl41-tab",
+    "name": "px4 request status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 360,
+    "y": 380,
+    "wires": []
+  },
+  {
+    "id": "sitl41-px4-status",
+    "type": "debug",
+    "z": "sitl41-tab",
+    "name": "px4 mode status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 810,
+    "y": 380,
+    "wires": []
+  },
+  {
+    "id": "sitl41-px4-done",
+    "type": "debug",
+    "z": "sitl41-tab",
+    "name": "px4 mode done",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1010,
+    "y": 340,
+    "wires": []
+  }
+]

@@ -65,6 +65,42 @@ test('Build tier with carrier int: output 0 carries a COMMAND_INT with config fr
   assert.equal(sent[1].result, 'built');
 });
 
+test('Build tier: payload.mode resolves through the AP profile into param2', async () => {
+  const { loadBundled } = require('../../lib/metadata');
+  const vehicle = {
+    defaultTargetSystem: 1,
+    defaultTargetComponent: 1,
+    firmware: 'ardupilot',
+    vehicleFamily: 'copter',
+    getDialect: () => loadBundled('ardupilotmega'),
+  };
+  const RED = redStub({ veh: vehicle });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: '{}',
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'set_mode',
+    delivery: 'build',
+    dialect: '__vehicle',
+    vehicle: 'veh',
+  });
+
+  let sent;
+  node.emit('input', { payload: { mode: 'GUIDED' } }, (m) => { sent = m; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.fields.param2, 4, 'COPTER_MODE_GUIDED');
+  assert.equal(sent[0].payload.fields.param1, 1, 'custom-mode-enabled bit set');
+
+  // An unknown name builds NaN — the loud tail, nothing invented (§5).
+  let bad;
+  node.emit('input', { payload: { mode: 'WARP_9' } }, (m) => { bad = m; }, () => {});
+  await tick();
+  assert.equal(Number.isNaN(bad[0].payload.fields.param2), true);
+});
+
 test('Safety preset refuses a truthy-but-non-boolean confirmation token', async () => {
   const conn = connStub();
   const RED = redStub({ conn });
