@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": ".cursor/hooks/pr-gate.js",
+        "matcher": "ManagePullRequest",
+        "failClosed": true,
+        "timeout": 10
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": ".cursor/hooks/pr-gate.js",
+        "failClosed": true,
+        "timeout": 10
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/pr-gate.js",
+        "matcher": "gh pr ",
+        "failClosed": true,
+        "timeout": 10
+      }
+    ]
+  }
+}
