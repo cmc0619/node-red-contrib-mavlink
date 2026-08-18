@@ -40,6 +40,19 @@ test('mavlink-param confirm/collect nodes serialize timeout (Admin-API deploy)',
   );
 });
 
+test('sitl 40 command nodes serialize identity (Admin-API deploy)', () => {
+  // Editor default is identity: ''. String(undefined) becomes the override
+  // id "undefined" and Connection.send throws on identity.sysid (SITL 40).
+  const nodes = JSON.parse(
+    fs.readFileSync(path.join(SITL_DIR, '40-transition-events.json'), 'utf8')
+  );
+  const missing = nodes
+    .filter((n) => n.type === 'mavlink-command')
+    .filter((n) => n.identity == null)
+    .map((n) => n.name || n.id);
+  assert.deepEqual(missing, [], 'omitted identity → String(undefined) override crater');
+});
+
 test('mavlink-vehicle profiles serialize dialectRevision (Admin-API deploy)', () => {
   // Editor default is dialectRevision: 'seed' (required). Admin deploy does not
   // materialize omitted defaults — blank revision fails resolveDialect and

@@ -145,6 +145,12 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Fixed
 
+- **Admin-deployed action nodes no longer send from identity `"undefined"`.**
+  `resolveDeliveryContext` coerced a missing `identity` with `String()`, which
+  is the override id `"undefined"` — Connection.send then threw on
+  `identity.sysid` (SITL 40 Set GUIDED). Omitted now means the editor default
+  (no override). Example 40 serializes `"identity": ""`.
+
 - **A fan-out param set on ArduPilot no longer reports `unconfirmed` for a
   write that worked.** The replicator's echo matcher required the vehicle's
   echoed `param_type` to equal the one we sent. SITL wire capture (2026-08-18,

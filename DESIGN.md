@@ -4251,6 +4251,22 @@ slug names (Lucy, peer-table) remain the durable identity.
 *Check:* `sitl/lib/suite-schedule.js`, `sitl/run-example-suite.js`,
 `examples/sitl/README.md`, `node --test test/sitl/suite-schedule.test.js`.
 
+**Omitted action-node `identity` must not become the override `"undefined"` (2026-08-18).**
+*Wrong belief:* example 40's Set GUIDED crash (`Cannot read properties of undefined
+(reading 'sysid')`) was a missing vehicle snapshot after `ap-arm-ready-1` bound
+`:14550`, or a Connection that had not yet learned a peer.
+*Fact:* `resolveDeliveryContext` did `String(config.identity)`. Admin API deploy
+does not materialize the editor default `identity: ''` (§14 above), so omitted
+stays `undefined`, `String(undefined)` is the override id `"undefined"`, and
+`Connection.send` looks that id up, gets nothing, and throws on `identity.sysid`.
+`resolveIdentity` treats only `null` / `undefined` / `''` as "use the Connection
+default" — the literal `"undefined"` is an override. Measured on PR 340 head
+`1d9cd1f` (`--only 39,40`): 39 PASS; 40 FAIL at Set GUIDED before any
+transition event. Empty-string identity is the editor contract; coerce a missing
+value to `''`, and serialize `"identity": ""` on the example.
+*Check:* `node --test test/addressing/delivery-context.test.js
+test/sitl/example-json-contracts.test.js`; `node sitl/run-example-suite.js --only 40`.
+
 **Admin-API SITL deploy does not materialize editor defaults (2026-08-11).**
 *Wrong belief:* omitting `timeout` on a `mavlink-param` confirm/collect node is
 fine because the editor default is 10 s; selective-restart congestion caused
