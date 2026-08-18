@@ -255,3 +255,106 @@ test('message-kind verbs ignore the carrier entirely', () => {
   assert.equal(built.confirmation, 'none');
   assert.equal(built.message.name, 'GIMBAL_MANAGER_SET_PITCHYAW');
 });
+
+test('relay set and repeat map to DO_SET_RELAY / DO_REPEAT_RELAY', () => {
+  const set = buildPayloadMessage({
+    carrier: 'long',
+    topic: 'relay',
+    verb: 'set',
+    target: { sysid: 1, compid: 1 },
+    values: { instance: 2, setting: 1 },
+  });
+  assert.equal(set.confirmation, 'command_ack');
+  assert.equal(set.message.fields.command, 181); // DO_SET_RELAY
+  assert.equal(set.message.fields.param1, 2);
+  assert.equal(set.message.fields.param2, 1);
+
+  const repeat = buildPayloadMessage({
+    carrier: 'long',
+    topic: 'relay',
+    verb: 'repeat',
+    target: { sysid: 1, compid: 1 },
+    values: { instance: 0, count: 3, period: 2 },
+  });
+  assert.equal(repeat.message.fields.command, 182); // DO_REPEAT_RELAY
+  assert.equal(repeat.message.fields.param2, 3);
+  assert.equal(repeat.message.fields.param3, 2);
+});
+
+test('relay set defaults setting to off (0) when the field is blank', () => {
+  const built = buildPayloadMessage({
+    carrier: 'long',
+    topic: 'relay',
+    verb: 'set',
+    target: { sysid: 1, compid: 1 },
+    values: {},
+  });
+  assert.equal(built.message.fields.param1, 0, 'instance defaults to 0');
+  assert.equal(built.message.fields.param2, 0, 'setting defaults to off');
+});
+
+test('camera zoom and focus map to SET_CAMERA_ZOOM / SET_CAMERA_FOCUS with the RANGE default', () => {
+  const zoom = buildPayloadMessage({
+    carrier: 'long',
+    topic: 'camera',
+    verb: 'zoom',
+    target: { sysid: 1, compid: 100 },
+    values: { zoom: 60 },
+  });
+  assert.equal(zoom.message.fields.command, 531); // SET_CAMERA_ZOOM
+  assert.equal(zoom.message.fields.param1, 2, 'zoom type defaults to RANGE (2)');
+  assert.equal(zoom.message.fields.param2, 60);
+
+  const focus = buildPayloadMessage({
+    carrier: 'long',
+    topic: 'camera',
+    verb: 'focus',
+    target: { sysid: 1, compid: 100 },
+    values: { focusType: 4, focus: 0 },
+  });
+  assert.equal(focus.message.fields.command, 532); // SET_CAMERA_FOCUS
+  assert.equal(focus.message.fields.param1, 4, 'focus type honours an explicit AUTO (4)');
+});
+
+test('gimbal attitude aim builds GIMBAL_MANAGER_SET_ATTITUDE with a computed quaternion (unconfirmed)', () => {
+  const built = buildPayloadMessage({
+    topic: 'gimbal',
+    verb: 'aim',
+    path: 'attitude',
+    target: { sysid: 1, compid: 154 },
+    // Roll only, 180°: a clean quaternion [0, 1, 0, 0] the operator never types.
+    values: { roll: 180, pitch: 0, yaw: 0 },
+  });
+  assert.equal(built.confirmation, 'none', 'the attitude message carries no ack');
+  assert.equal(built.message.name, 'GIMBAL_MANAGER_SET_ATTITUDE');
+  const q = built.message.fields.q.map((n) => Math.round(n * 1e6) / 1e6);
+  assert.deepEqual(q, [0, 1, 0, 0]);
+});
+
+test('gimbal attitude aim identity: blank angles are the [1,0,0,0] quaternion', () => {
+  const built = buildPayloadMessage({
+    topic: 'gimbal',
+    verb: 'aim',
+    path: 'attitude',
+    target: { sysid: 1, compid: 154 },
+    values: {},
+  });
+  assert.deepEqual(built.message.fields.q, [1, 0, 0, 0], 'no rotation from blank roll/pitch/yaw');
+});
+
+test('gimbal attitude aim NaN-s the angular-velocity triple, not zero-rate (issue #87 parity)', () => {
+  // A static attitude must not also command a zero angular velocity, which some
+  // firmwares read as "hold zero rate" and drop — the same reasoning the
+  // pitch/yaw manager paths follow. The rates default to NaN, the dialect's
+  // documented "ignore" sentinel.
+  const built = buildPayloadMessage({
+    topic: 'gimbal',
+    verb: 'aim',
+    path: 'attitude',
+    target: { sysid: 1, compid: 154 },
+    values: { pitch: 20 },
+  });
+  assert.ok(Number.isNaN(built.message.fields.angular_velocity_x), 'roll rate NaN');
+  assert.ok(Number.isNaN(built.message.fields.angular_velocity_y), 'pitch rate NaN');
+  assert.ok(Number.isNaN(built.message.fields.angular_velocity_z), 'yaw rate NaN');
+});

@@ -75,13 +75,18 @@ test('editor catalog includes every lib/payload verb value', () => {
   }
 });
 
-test('gimbal path picker offers all three aim paths, including the acked command form (#257)', () => {
+test('gimbal path picker offers every aim path, including the acked command form (#257) and full attitude', () => {
   assert.match(payloadHtml, /<option value="legacy">DO_MOUNT_CONTROL<\/option>/);
   assert.match(payloadHtml, /<option value="manager">GIMBAL_MANAGER_SET_PITCHYAW<\/option>/);
   assert.match(
     payloadHtml,
     /<option value="manager-cmd">DO_GIMBAL_MANAGER_PITCHYAW \(acked\)<\/option>/,
     'the command form acks where the message form cannot'
+  );
+  assert.match(
+    payloadHtml,
+    /<option value="attitude">GIMBAL_MANAGER_SET_ATTITUDE \(roll\/pitch\/yaw\)<\/option>/,
+    'the fourth path adds roll to the pitch/yaw-only paths'
   );
 });
 

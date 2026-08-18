@@ -12,9 +12,10 @@ const {
 
 /** Verbs accepted by buildPayloadMessage per topic (gimbal aim uses legacy path). */
 const KNOWN_VERBS = {
-  camera: ['photo', 'stop-photo', 'start-video', 'stop-video', 'set-mode', 'trigger-distance'],
+  camera: ['photo', 'stop-photo', 'start-video', 'stop-video', 'set-mode', 'zoom', 'focus', 'trigger-distance'],
   gimbal: ['aim', 'set-mode', 'roi-set', 'roi-clear'],
   servo: ['set', 'repeat'],
+  relay: ['set', 'repeat'],
   gripper: ['operate'],
   winch: ['operate'],
   parachute: ['operate'],
