@@ -8,6 +8,19 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Added
 
+- **Connections recover dropped links.** A transport that opened and later
+  failed — serial device unplugged, TCP peer restarting, socket error, wedged
+  write — redials itself from the bound config on a jittered exponential
+  backoff (inside 1 s at first, doubling to a 30 s ceiling, forever; redeploy
+  always wins because close cancels the pending attempt). The Connection badge
+  shows a yellow `reconnecting` ring while the loop runs; heartbeats stop for
+  the outage and resume with the link; sends accepted during the outage drain
+  on recovery under the band queue's own ageing rules; and the peer table
+  keeps sweeping so "vehicle lost" still fires on a dead link. Deploy-time
+  behavior is unchanged: a transport that never once opened stays a loud
+  terminal `error` — retrying a config that never worked would bury an editor
+  mistake (wrong port, missing device) under an eternally yellow badge.
+
 - **Move's primitive roster: Turn, Speed, and Offset-from-here.** The node's
   charter moved from "`SET_POSITION_TARGET_*`" to *where the vehicle goes and
   how it moves* (`DESIGN.md` §3, §9 "Move primitive roster"), and the roster is

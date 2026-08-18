@@ -600,25 +600,28 @@ test('a transport error stops heartbeats but keeps the peer sweep alive (#93)', 
     { logger: { warn() {}, info() {}, error() {} } }
   );
   await connection.start();
+  // Learned while the link was up — the outage must not forget it, and the
+  // sweep must still expire it. (Learned before the error because reconnect
+  // detaches the dead transport; nothing arrives through it afterwards.)
+  introducePeer(dg);
   const running = timers.active();
   assert.ok(running >= 2, 'heartbeat and sweep timers run while connected');
 
   dg.sockets[0].emit('error', new Error('boom'));
 
-  assert.equal(connection.getState(), STATE.ERROR);
+  assert.equal(connection.getState(), STATE.RECONNECTING);
   assert.equal(
     timers.active(),
     running - 1,
     'only the heartbeat scheduler stops — the sweep must keep driving '
-      + 'stale/expired transitions, which mavlink-state consumes after ERROR'
+      + 'stale/expired transitions, which mavlink-state consumes while the link is down'
   );
   // The "vehicle lost" signal still fires on a dead link: sweeping past
   // expireMs must still transition and emit for a known peer.
-  introducePeer(dg);
   const events = [];
   connection.peerTable.on('expired', (e) => events.push(e));
   connection.peerTable.sweep(Date.now() + 60000);
-  assert.equal(events.length, 1, 'expiry still emits after transport ERROR');
+  assert.equal(events.length, 1, 'expiry still emits while the transport is down');
   connection.close();
 });
 
@@ -911,12 +914,20 @@ test('a stuck transport write faults the link within the documented bound (#244)
 
   timer.fn(); // the write never completed — the bound expires
 
-  assert.equal(connection.getState(), STATE.ERROR, 'the wedge surfaces as the existing fault state');
+  assert.equal(
+    connection.getState(),
+    STATE.RECONNECTING,
+    'the wedge faults the link into the recovery loop'
+  );
   assert.equal(transportErrors.length, 1);
   assert.equal(transportErrors[0].code, 'WRITE_TIMEOUT');
   assert.ok(
     errors.some((m) => /timed out after 5000ms/.test(m)),
     'the log names the timeout and rides the existing transport-error path'
+  );
+  assert.ok(
+    timeouts.some((t) => t.ms !== WRITE_TIMEOUT_MS && !t.cleared),
+    'a redial timer is armed for the wedged link'
   );
   connection.close();
 });
@@ -936,7 +947,7 @@ test('a late completion callback after expiry is inert (#244)', async () => {
   writeCallbacks[0]();
 
   assert.equal(sent.length, 1, 'a late completion must not restart the pump into a faulted link');
-  assert.equal(connection.getState(), STATE.ERROR, 'the fault is not un-declared');
+  assert.equal(connection.getState(), STATE.RECONNECTING, 'the fault is not un-declared');
   assert.equal(errors.length, errorCount, 'no second fault, no double bookkeeping');
   connection.close();
 });
@@ -961,7 +972,7 @@ test('heartbeats fail with the wedged link — the fault stops the scheduler (#2
   // Deliberate: heartbeats ride the same queue as everything else, so a wedged
   // link stops them via the same fault → heartbeats.stop() path a socket error
   // takes (#93); going quiet is the signal every other participant reads, and
-  // recovery is a redeploy like any other terminal transport ERROR.
+  // they resume only when the redial loop actually restores the link.
   const { connection, timeouts, timers } = hangingWriteBuild();
   await connection.start();
   const running = timers.active();
@@ -988,4 +999,186 @@ test('close() disarms a pending write timer (#244)', async () => {
 
   assert.equal(timer.cleared, true, 'teardown must not leave a timer that flips CLOSED to ERROR');
   assert.equal(connection.getState(), STATE.CLOSED);
+});
+
+// ── link recovery: a dropped link redials itself with jittered backoff ───────
+
+const { EventEmitter } = require('node:events');
+const { RECONNECT_BASE_MS, RECONNECT_CAP_MS } = require('../../lib/connection/runtime');
+
+/**
+ * A deterministic reconnect harness: stub transports from an injected factory
+ * (newest last in `transports`), captured timeouts fired by hand, and
+ * `random: () => 0` so every backoff delay sits at its ceiling/2 floor.
+ *
+ * @param {object} [options]
+ * @param {number} [options.openFailures]  how many opens (after the first,
+ *   which always succeeds) reject before one succeeds
+ * @param {boolean} [options.failFirstOpen]  the deploy-time open itself fails,
+ *   emitting a transport error first the way a real bind failure does
+ * @returns {object}
+ */
+function reconnectBuild({ openFailures = 0, failFirstOpen = false } = {}) {
+  const transports = [];
+  const timeouts = [];
+  const warns = [];
+  const infos = [];
+  let opens = 0;
+  const transportFactory = () => {
+    const transport = new EventEmitter();
+    transport.mode = 'udp';
+    transport.sent = [];
+    transport.closed = false;
+    transport.open = () => {
+      opens += 1;
+      if (opens === 1 && failFirstOpen) {
+        // A real bind failure (EADDRINUSE, missing device) emits the transport
+        // error event and rejects the open — mimic both.
+        const err = new Error('EADDRINUSE');
+        transport.emit('error', err);
+        return Promise.reject(err);
+      }
+      // The first open is the deploy-time one; the next `openFailures` redials
+      // find the link still down.
+      if (opens > 1 && opens <= 1 + openFailures) {
+        return Promise.reject(new Error('still down'));
+      }
+      return Promise.resolve();
+    };
+    transport.send = (buffer, endpoint, callback) => {
+      transport.sent.push(buffer);
+      callback();
+    };
+    transport.close = (callback) => {
+      transport.closed = true;
+      if (callback) callback();
+    };
+    transports.push(transport);
+    return transport;
+  };
+  const timers = fakeTimers();
+  let cleared = 0;
+  const wire = fakeWire();
+  wire.clearDecoders = () => { cleared += 1; };
+  const connection = new Connection(
+    {
+      transport: { mode: 'udp', bindAddress: '0.0.0.0', bindPort: 14550 },
+      vehicle: { targetSystem: 1, targetComponent: 1, autopilot: 3 },
+      identities: [GCS],
+      defaultIdentityId: 'gcs',
+      boundIdentityIds: ['gcs'],
+      signing: { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
+      heartbeat: { intervalMs: 1000, staleMs: 5000, expireMs: 15000 },
+    },
+    {
+      transportFactory,
+      wire,
+      resolveIdentity,
+      setInterval: timers.setInterval,
+      clearInterval: timers.clearInterval,
+      setTimeout: (fn, ms) => {
+        const handle = { fn, ms, cleared: false, unref() {} };
+        timeouts.push(handle);
+        return handle;
+      },
+      clearTimeout: (handle) => {
+        if (handle) handle.cleared = true;
+      },
+      random: () => 0,
+      logger: { warn: (m) => warns.push(m), info: (m) => infos.push(m), error() {} },
+    }
+  );
+  return {
+    connection,
+    transports,
+    timeouts,
+    timers,
+    warns,
+    infos,
+    decodersCleared: () => cleared,
+    redials: () => timeouts.filter((t) => t.ms !== WRITE_TIMEOUT_MS),
+  };
+}
+
+test('a dropped link redials itself and resumes the full runtime', async () => {
+  const { connection, transports, timers, decodersCleared, redials } = reconnectBuild();
+  await connection.start();
+  const running = timers.active();
+
+  transports[0].emit('error', new Error('link down'));
+
+  assert.equal(connection.getState(), STATE.RECONNECTING);
+  assert.equal(transports[0].closed, true, 'the dead transport is released, not leaked');
+  assert.equal(decodersCleared(), 1, 'stream decoders reset — a reconnected peer must not inherit a dead stream’s partial frame');
+  const [redial] = redials();
+  assert.equal(redial.ms, RECONNECT_BASE_MS / 2, 'random()=0 pins the first delay at its ceiling/2 floor');
+
+  // Queued during the outage: the send is accepted, held by the band queue.
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
+  assert.equal(transports.length, 1, 'nothing dialed before the timer fires');
+
+  redial.fn();
+  await delay(0); // let the open() promise settle
+
+  assert.equal(connection.getState(), STATE.CONNECTED);
+  assert.equal(transports.length, 2, 'recovery dialed a fresh transport from the same bound config');
+  assert.equal(timers.active(), running, 'heartbeats restart with the link');
+  assert.equal(transports[1].sent.length, 1, 'the outage’s queued item drains on the recovered link');
+  connection.close();
+});
+
+test('failed redials back off exponentially to the cap, and success resets the schedule', async () => {
+  const { connection, transports, warns, redials } = reconnectBuild({ openFailures: 6 });
+  await connection.start();
+
+  transports[0].emit('error', new Error('link down'));
+  // Six failed opens then one success: fire each redial as it is armed.
+  for (let i = 0; i < 7; i++) {
+    const pending = redials().filter((t) => !t.fired);
+    assert.equal(pending.length, 1, 'exactly one redial in flight at a time');
+    pending[0].fired = true;
+    pending[0].fn();
+    await delay(0);
+  }
+
+  assert.equal(connection.getState(), STATE.CONNECTED);
+  assert.deepEqual(
+    redials().map((t) => t.ms),
+    [500, 1000, 2000, 4000, 8000, 15000, 15000],
+    'ceilings double from RECONNECT_BASE_MS and clamp at RECONNECT_CAP_MS (half-jitter floor with random()=0)'
+  );
+  assert.equal(RECONNECT_CAP_MS, 30_000, 'the cap stays order-of-tens-of-seconds');
+
+  // A later drop starts the schedule over: the counter reset on success.
+  transports[transports.length - 1].emit('error', new Error('down again'));
+  const again = redials()[redials().length - 1];
+  assert.equal(again.ms, RECONNECT_BASE_MS / 2, 'backoff resets after a successful recovery');
+  assert.ok(
+    warns.some((m) => /reconnecting in 500ms \(attempt 1\)/.test(m)),
+    'the log names the delay and the attempt'
+  );
+  connection.close();
+});
+
+test('close during the backoff wait cancels the redial — redeploy wins over recovery', async () => {
+  const { connection, transports, redials } = reconnectBuild();
+  await connection.start();
+  transports[0].emit('error', new Error('link down'));
+  const [redial] = redials();
+
+  let done = false;
+  connection.close(() => { done = true; });
+
+  assert.equal(done, true);
+  assert.equal(redial.cleared, true, 'the pending redial is disarmed');
+  assert.equal(connection.getState(), STATE.CLOSED);
+  assert.equal(transports.length, 1, 'nothing dials after teardown');
+});
+
+test('a transport that never opened does not enter the redial loop — deploy failures stay loud', async () => {
+  const { connection, redials } = reconnectBuild({ failFirstOpen: true });
+
+  await assert.rejects(() => connection.start(), /EADDRINUSE/);
+  assert.equal(connection.getState(), STATE.ERROR, 'pre-establishment errors stay terminal (§2)');
+  assert.equal(redials().length, 0, 'no redial is ever armed for a config that never worked');
 });
