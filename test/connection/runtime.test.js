@@ -1113,7 +1113,8 @@ test('a dropped link redials itself and resumes the full runtime', async () => {
   const [redial] = redials();
   assert.equal(redial.ms, RECONNECT_BASE_MS / 2, 'random()=0 pins the first delay at its ceiling/2 floor');
 
-  // Queued during the outage: the send is accepted, held by the band queue.
+  // Accepted during the outage: enqueued, and its ack waiter would have
+  // reported timed-out long before the link returns.
   connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
   assert.equal(transports.length, 1, 'nothing dialed before the timer fires');
 
@@ -1123,7 +1124,14 @@ test('a dropped link redials itself and resumes the full runtime', async () => {
   assert.equal(connection.getState(), STATE.CONNECTED);
   assert.equal(transports.length, 2, 'recovery dialed a fresh transport from the same bound config');
   assert.equal(timers.active(), running, 'heartbeats restart with the link');
-  assert.equal(transports[1].sent.length, 1, 'the outage’s queued item drains on the recovered link');
+  // Owner ruling (2026-08-18): recovery resumes live traffic, never stale
+  // intent. The queue's ageing only ever *promotes* items — nothing expires —
+  // so without this clear an arm/goto accepted during an hour-long outage
+  // would drive the vehicle on return, after its sender was already told it
+  // failed.
+  assert.equal(transports[1].sent.length, 0, 'nothing queued against the dead link replays');
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
+  assert.equal(transports[1].sent.length, 1, 'live traffic flows the moment the link is back');
   connection.close();
 });
 

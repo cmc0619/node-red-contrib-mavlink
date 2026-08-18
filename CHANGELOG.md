@@ -14,9 +14,12 @@ config-node shapes and message contracts may still change without a major bump.
   backoff (inside 1 s at first, doubling to a 30 s ceiling, forever; redeploy
   always wins because close cancels the pending attempt). The Connection badge
   shows a yellow `reconnecting` ring while the loop runs; heartbeats stop for
-  the outage and resume with the link; sends accepted during the outage drain
-  on recovery under the band queue's own ageing rules; and the peer table
-  keeps sweeping so "vehicle lost" still fires on a dead link. Deploy-time
+  the outage and resume with the link; and the peer table keeps sweeping so
+  "vehicle lost" still fires on a dead link. Recovery resumes *live* traffic
+  only: anything queued against the dead link is dropped at the moment the
+  link returns, because its sender was already told it failed (ack waiters
+  time out in seconds) — a vehicle must not act on an hour-old command whose
+  flow reported `timed-out` an hour ago. Deploy-time
   behavior is unchanged: a transport that never once opened stays a loud
   terminal `error` — retrying a config that never worked would bury an editor
   mistake (wrong port, missing device) under an eternally yellow badge.
