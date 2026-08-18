@@ -118,9 +118,9 @@ module.exports = function registerMavlinkMission(RED) {
       const maxRetries = numberOr(config.maxRetries, undefined);
 
       // Upload item source: msg.payload.items overrides configured items.
-      // Family, emptiness, and broadcast are editor red rings. A payload that
-      // arrives empty, wrong-family, or addressed at sysid 0 rides — COUNT 0
-      // is the wire's erase, and the vehicle's MISSION_ACK is the judge.
+      // Family and broadcast are editor red rings. An explicit payload `[]`
+      // rides — COUNT 0 is the wire erase. An omitted items field over blank
+      // config does not become `[]`.
       const uploadItems = operation === OPERATION.UPLOAD
         ? resolveItems(config, payload)
         : [];
@@ -326,7 +326,8 @@ function buildPlan(operation, missionType, target, items) {
  */
 function resolveItems(config, payload) {
   if (Array.isArray(payload.items)) return payload.items;
-  return config.items.trim() ? JSON.parse(config.items) : [];
+  if (config.items.trim()) return JSON.parse(config.items);
+  return undefined;
 }
 
 /**

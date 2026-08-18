@@ -392,6 +392,19 @@ test('upload end-to-end: items from msg.payload.items reach the vehicle and succ
   assert.equal(conn.sent[0].message.fields.count, 1);
 });
 
+test('an omitted items field over blank config does not invent COUNT 0', async () => {
+  // Blank config means "items come from the payload". No items key is not
+  // an empty list — synthesizing [] would erase the vehicle plan and report
+  // the ACK as success.
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  const Node = loadNode(conn);
+  const node = new Node({ operation: 'upload', connection: 'conn', delivery: 'confirm', missionType: 'mission', items: '' });
+  const res = await runInput(node, { payload: {} });
+  assert.ok(res.err, 'omitted items fails loud');
+  assert.equal(conn.sent.length, 0, 'nothing goes on the wire');
+});
+
 test('an empty upload sends MISSION_COUNT 0 — the wire erase, not a driver refusal', async () => {
   // Configured [] is an editor red ring. A payload that resolves to [] is
   // trusted input: COUNT 0 is what pymavlink sends.
