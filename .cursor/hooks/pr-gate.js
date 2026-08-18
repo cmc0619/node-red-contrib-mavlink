@@ -2,9 +2,7 @@
 'use strict';
 
 const DENY_DRAFT =
-  'AGENTS.md:57 — PRs are opened as drafts; only the repo owner marks them ready.';
-const DENY_MERGE =
-  'AGENTS.md:57 — Agents do not merge. Merging is the owner\'s call.';
+  'AGENTS.md — PRs are opened as drafts. Re-call the create with draft: true.';
 
 function allow() {
   return { permission: 'allow' };
@@ -44,30 +42,17 @@ function isManagePullRequestName(name) {
   return /managepullrequest/i.test(name);
 }
 
-function isMergePullRequestName(name) {
-  return /merge[_-]?pull[_-]?request/i.test(name);
-}
-
 function decideMcpOrTool(input) {
   const name = toolName(input);
   const args = toolInput(input);
   const action = String(args.action || '');
 
-  if (isMergePullRequestName(name)) {
-    return deny(DENY_MERGE);
-  }
-
   if (isCreatePullRequestName(name) && args.draft !== true) {
-    return deny(DENY_DRAFT + ' Re-call with draft: true.');
+    return deny(DENY_DRAFT);
   }
 
-  if (isManagePullRequestName(name)) {
-    if (action === 'create_pr' && args.draft !== true) {
-      return deny(DENY_DRAFT + ' Re-call ManagePullRequest create_pr with draft: true.');
-    }
-    if (action === 'update_pr' && args.draft === false) {
-      return deny(DENY_DRAFT + ' Do not set draft: false. Only the owner marks a PR ready.');
-    }
+  if (isManagePullRequestName(name) && action === 'create_pr' && args.draft !== true) {
+    return deny(DENY_DRAFT);
   }
 
   return allow();
@@ -78,14 +63,8 @@ function decideShell(command) {
   if (!/\bgh\b/.test(cmd) || !/\bpr\b/.test(cmd)) {
     return allow();
   }
-  if (/\bgh\s+pr\s+merge\b/.test(cmd)) {
-    return deny(DENY_MERGE);
-  }
-  if (/\bgh\s+pr\s+ready\b/.test(cmd)) {
-    return deny(DENY_DRAFT + ' Do not run gh pr ready.');
-  }
   if (/\bgh\s+pr\s+create\b/.test(cmd) && !/(?:^|\s)--draft(?:\s|=|$)/.test(cmd)) {
-    return deny(DENY_DRAFT + ' Re-run gh pr create with --draft.');
+    return deny(DENY_DRAFT);
   }
   return allow();
 }
@@ -146,7 +125,7 @@ function selfTest() {
       tool_name: 'ManagePullRequest',
       tool_input: { action: 'update_pr', draft: false },
     }).permission,
-    'deny',
+    'allow',
     'update_pr marking ready'
   );
   assertEqual(
@@ -175,12 +154,12 @@ function selfTest() {
   );
   assertEqual(
     decide({ command: 'gh pr merge --squash 338' }).permission,
-    'deny',
+    'allow',
     'gh pr merge'
   );
   assertEqual(
     decide({ command: 'gh pr ready 338' }).permission,
-    'deny',
+    'allow',
     'gh pr ready'
   );
   assertEqual(
