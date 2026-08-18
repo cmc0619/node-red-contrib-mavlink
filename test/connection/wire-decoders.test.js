@@ -13,6 +13,7 @@ const { createWire, DEFAULT_MAX_DECODERS } = require('../../lib/connection/wire'
 
 const EP_A = { address: '10.0.0.1', port: 14550 };
 const EP_B = { address: '10.0.0.2', port: 14551 };
+const SIGNING_KEY = Buffer.alloc(32, 7);
 
 function heartbeatFrame(wire) {
   return wire.serialize(
@@ -252,7 +253,45 @@ test('a msgid the bound dialect does not carry surfaces as UNKNOWN_<id>, not sil
   assert.equal(frames.length, 2, 'both frames surface');
   assert.equal(frames[0].name, 'UNKNOWN_22');
   assert.equal(frames[0].sysid, 7);
+  assert.equal(frames[0].compid, 1);
   assert.equal(frames[0].fields.msgid, 22);
-  assert.ok(Buffer.isBuffer(frames[0].fields.payload), 'the raw payload rides');
+  // Byte-for-byte against the wire, not just "is a Buffer": node-mavlink
+  // hands out a fixed 255-byte payload buffer, so an untrimmed frame passes
+  // an isBuffer check while carrying 230 bytes of padding the sender never
+  // sent (CodeRabbit #344). The v2 header's length byte is the wire length.
+  assert.deepEqual(
+    frames[0].fields.payload,
+    paramValue.subarray(10, 10 + paramValue[1]),
+    'the payload is exactly the bytes that arrived'
+  );
   assert.equal(frames[1].name, 'HEARTBEAT', 'known frames are unaffected');
+});
+
+test('a signed UNKNOWN_<id> frame carries its signature verdict like any other', () => {
+  // The signature block is framing, not payload semantics — it verifies
+  // without the message definition, so an unknown id is exactly as signable
+  // as a known one. If the verdict did not ride, requireSigned would read a
+  // properly signed unknown frame as unsigned and drop it (CodeRabbit #344).
+  const minimal = createWire({ bundle: loadBundled('minimal'), key: SIGNING_KEY });
+  const common = createWire({ bundle: loadBundled('common') });
+  const signed = common.serialize(
+    {
+      name: 'PARAM_VALUE',
+      fields: { param_id: 'X', param_value: 1, param_type: 9, param_count: 1, param_index: 0 },
+    },
+    { sysid: 7, compid: 1, seq: 0, sign: true, linkId: 3, key: SIGNING_KEY, timestamp: 1_234_567 }
+  );
+
+  const [frame] = minimal.decode(signed, EP_A);
+
+  assert.equal(frame.name, 'UNKNOWN_22');
+  assert.equal(frame.signaturePresent, true);
+  assert.equal(frame.signatureValid, true, 'the HMAC verifies without the definition');
+  assert.equal(frame.linkId, 3);
+  assert.equal(frame.timestamp, 1_234_567);
+  assert.deepEqual(
+    frame.fields.payload,
+    signed.subarray(10, 10 + signed[1]),
+    'the signature block is not mistaken for payload'
+  );
 });

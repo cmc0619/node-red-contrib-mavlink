@@ -8,7 +8,7 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Added
 
-- **An unknown message id is a message, not silence.** A msgid the bound
+- **An unknown message id is a message, not silence.** A msgid that the bound
   dialect does not carry used to vanish inside the frame splitter — the one
   clue that diagnoses a dialect mismatch, dropped before anything could show
   it. It now surfaces as an <code>UNKNOWN_&lt;id&gt;</code> frame carrying the
