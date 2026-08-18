@@ -36,8 +36,24 @@ module.exports = function registerMavlinkHealth(RED) {
     const node = this;
 
     const connectionNode = RED.nodes.getNode(config.connection);
-    const identityNode = RED.nodes.getNode(config.identity);
     applyConnectionStatus(node, true, connectionNode);
+
+    // Which identity's health this asserts. Resolved from the Connection's own
+    // identity ids, not by trusting the saved value: the saved pick is used
+    // only when it is both listed among the Connection's bound identities and
+    // an identity node that actually exists — otherwise it falls back to the
+    // required Local Identity. The editor hides this field — and does not ring
+    // — for a single-identity Connection, so the runtime owns the guard: a
+    // blank, leftover, or hand-edited id the Connection does not heartbeat must
+    // not reach assertHealth and report healthy over a no-op (§0
+    // silent-false-success). Membership plus existence is exactly the
+    // bound-and-existing set the editor's identityOptionsFor builds, so runtime
+    // and editor cannot disagree on what "bound" means (Gitar/CodeRabbit #351)
+    // — a dangling id listed in additionalIdentities is excluded by both.
+    const boundIds = [connectionNode.localIdentity].concat(connectionNode.additionalIdentities || []);
+    const identityId = boundIds.indexOf(config.identity) !== -1 && RED.nodes.getNode(config.identity)
+      ? config.identity
+      : connectionNode.localIdentity;
 
     // The editor owns the default and the positive-number ring — just convert
     // it. msg.payload.ttl_s overrides by presence (§0 presence-fallback).
@@ -45,12 +61,12 @@ module.exports = function registerMavlinkHealth(RED) {
 
     // Subscribed eagerly, like mavlink-in's message subscriptions, so a
     // lease expiring between inputs still reaches this node's own status and
-    // output. Both references are editor-required, so the runtime trusts them
-    // (§0) the way mavlink-state's feed does — a disabled Connection still
-    // answers with its stub, and a hand-edited dangling reference craters
+    // output. The Connection reference is editor-required, so the runtime
+    // trusts it (§0) the way mavlink-state's feed does — a disabled Connection
+    // still answers with its stub, and a hand-edited dangling reference craters
     // here at construction rather than deferring the failure.
-    const unsubscribeExpired = connectionNode.onHealthExpired(({ identityId }) => {
-      if (identityId !== identityNode.id) return;
+    const unsubscribeExpired = connectionNode.onHealthExpired(({ identityId: expiredId }) => {
+      if (expiredId !== identityId) return;
       applyActionStatus(node, 'error', 'lease expired');
       node.send([null, makeStatusRecord({
         node: 'mavlink-health',
@@ -79,23 +95,23 @@ module.exports = function registerMavlinkHealth(RED) {
         switch (payload.health) {
           case 'ok': {
             const ttlS = payload.ttl_s ?? defaultTtlS;
-            connectionNode.assertHealth(identityNode.id, true, Number(ttlS) * 1000);
+            connectionNode.assertHealth(identityId, true, Number(ttlS) * 1000);
             applyActionStatus(node, 'ok', `healthy (${ttlS}s lease)`);
             send([msg, makeStatusRecord({
               node: 'mavlink-health',
               result: 'healthy',
-              identity: identityNode.id,
+              identity: identityId,
               ttlS: Number(ttlS),
             })]);
             break;
           }
           case 'fatal': {
-            connectionNode.assertHealth(identityNode.id, false, 0);
+            connectionNode.assertHealth(identityId, false, 0);
             applyActionStatus(node, 'error', 'faulted');
             send([msg, makeStatusRecord({
               node: 'mavlink-health',
               result: 'faulted',
-              identity: identityNode.id,
+              identity: identityId,
             })]);
             break;
           }

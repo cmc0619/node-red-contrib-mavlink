@@ -76,7 +76,7 @@ function assertChangeHandlerContains(html, binder, needle, msg) {
  *   installed artifact so the packaged test stays self-consistent)
  * @returns {object} the registered `defaults`
  */
-function loadNodeDefaults(nodeName, nodeLookup = {}, opts = {}) {
+function loadNodeType(nodeName, nodeLookup = {}, opts = {}) {
   const dom = opts.dom || {};
   const editStack = opts.editStack || [];
   const root = opts.root || path.join(__dirname, '..', '..');
@@ -166,7 +166,20 @@ function loadNodeDefaults(nodeName, nodeLookup = {}, opts = {}) {
   vm.runInNewContext(script, context);
 
   assert.ok(registered[nodeName], `${nodeName} must call registerType`);
-  return registered[nodeName].defaults;
+  return registered[nodeName];
 }
 
-module.exports = { assertChangeHandlerContains, loadNodeDefaults };
+/**
+ * The registered `defaults` object — the common case. Thin wrapper over
+ * {@link loadNodeType} for tests that only assert on the property descriptors.
+ *
+ * @param {string} nodeName
+ * @param {object} [nodeLookup]
+ * @param {object} [opts]
+ * @returns {object}
+ */
+function loadNodeDefaults(nodeName, nodeLookup = {}, opts = {}) {
+  return loadNodeType(nodeName, nodeLookup, opts).defaults;
+}
+
+module.exports = { assertChangeHandlerContains, loadNodeDefaults, loadNodeType };
