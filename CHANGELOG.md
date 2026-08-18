@@ -24,6 +24,20 @@ config-node shapes and message contracts may still change without a major bump.
   terminal `error` — retrying a config that never worked would bury an editor
   mistake (wrong port, missing device) under an eternally yellow badge.
 
+- **Param sets type themselves: Auto reads the type from the vehicle.** The
+  Set dropdown's new default, *Auto (read from vehicle)*, sends a
+  `PARAM_REQUEST_READ` first and encodes the `PARAM_SET` with the type the
+  vehicle's own `PARAM_VALUE` names — operators never need to know a
+  parameter's `MAV_PARAM_TYPE` again, and a wrong guess can no longer
+  silently mis-encode the value (#222's rule intact: the type never resolves
+  to a guess; the vehicle's answer is not a guess). An explicit type — config
+  or `msg.payload.paramType` — skips the read and is used as given. The read
+  gets one attempt inside the configured timeout; silence times out loud
+  (`type-read timeout`), and a reply naming no usable type fails the set loud
+  naming the parameter. Auto needs a vehicle to ask, so the editor reds it on
+  the Build tier, and the catalog still narrows the dropdown to the published
+  type when the firmware documents one.
+
 - **Move's primitive roster: Turn, Speed, and Offset-from-here.** The node's
   charter moved from "`SET_POSITION_TARGET_*`" to *where the vehicle goes and
   how it moves* (`DESIGN.md` §3, §9 "Move primitive roster"), and the roster is

@@ -27,6 +27,7 @@
 const {
   buildParamMessage,
   createParamListCollector,
+  isKnownParamType,
   matchesParamEcho,
   matchesParamReadReply,
 } = require('../lib/param');
@@ -283,14 +284,14 @@ module.exports = function registerMavlinkParam(RED) {
           connectionNode: connNode,
         });
 
-        const message = buildParamMessage(request);
-
         // Affirmative dispatch on the tier (§5): a token the editor's delivery
         // ring cannot save (mavlink-param.html) matches no case, so nothing
-        // reaches the wire and the input completes as a no-op.
+        // reaches the wire and the input completes as a no-op. The message is
+        // built per arm, not up front: an auto-typed set has nothing to encode
+        // with until the vehicle answers (readTypeThenSet below).
         switch (delivery) {
           case 'build':
-            completeBuild(node, send, message);
+            completeBuild(node, send, buildParamMessage(request));
             break;
           case 'send':
           case 'confirm':
@@ -306,8 +307,87 @@ module.exports = function registerMavlinkParam(RED) {
         done();
         return;
 
-        /** Send the message and, on a waiting tier, arm its transaction. */
+        /**
+         * The wire tiers' entry: an auto-typed set asks the vehicle for its
+         * type first; everything else builds and goes straight out.
+         */
         function wireTier() {
+          if (request.action === 'set' && autoParamType(request.paramType)) {
+            readTypeThenSet();
+            return;
+          }
+          runWire(buildParamMessage(request));
+        }
+
+        /**
+         * Read-before-set (owner-selected parity feature): the parameter's
+         * type is the vehicle's fact, not operator intent, so with none given
+         * the node asks the authority — a PARAM_REQUEST_READ whose PARAM_VALUE
+         * reply names the type — and only then encodes the set. #222's rule
+         * holds: the type still never resolves to a guess; the vehicle's own
+         * answer is not a guess. One read attempt inside the configured
+         * timeout (like the confirm-tier read); a reply that names no usable
+         * type, or none at all, fails the set loud naming the parameter.
+         */
+        function readTypeThenSet() {
+          const readRequest = { action: 'read', target: request.target, paramId: request.paramId };
+          connNode.send(buildParamMessage(readRequest), {
+            band: BAND.CONTROL,
+            target: request.target,
+            identityId,
+          });
+          applyActionStatus(node, 'sending', `type of ${request.paramId}…`);
+          send([null, statusRecord('progress', `reading type of ${request.paramId}`)]);
+
+          const echoFilter = { message: 'PARAM_VALUE', sysid: request.target.sysid, trustedOnly: true };
+          if (request.target.compid) echoFilter.compid = request.target.compid;
+
+          clearPending(true);
+          const myGen = ++generation;
+
+          /** Settle the read leg if it has not been superseded. */
+          function settleRead(fn) {
+            if (!pending || pending.gen !== myGen) return;
+            const finishDone = pending.done;
+            clearPending(false);
+            fn(finishDone);
+          }
+
+          const unsubscribe = connNode.subscribe(echoFilter, (decoded) => {
+            if (!pending || pending.gen !== myGen) return;
+            if (!matchesParamReadReply(readRequest, decoded)) return;
+            const reported = decoded.fields.param_type;
+            settleRead((finishDone) => {
+              if (!isKnownParamType(reported)) {
+                // The authority answered and named nothing to encode with
+                // (0 / an unknown code) — operational failure, reported loud
+                // (§0 rule 3), never a fallback guess (#222).
+                failInput(node, send, new Error(
+                  `mavlink-param: vehicle reported no usable type for ${request.paramId} (param_type ${reported})`
+                ), finishDone);
+                return;
+              }
+              request.paramType = Number(reported);
+              // `done` and `finishDone` are the same input's completion —
+              // runWire finishes it through its own paths.
+              runWire(buildParamMessage(request));
+            });
+          });
+
+          pending = {
+            unsubscribe,
+            timer: setTimeout(() => {
+              settleRead((finishDone) =>
+                timeoutResult(node, send, 'type-read timeout', finishDone));
+            }, timeoutMs),
+            inactivityTimer: null,
+            done,
+            gen: myGen,
+          };
+        }
+
+        /** Send the message and, on a waiting tier, arm its transaction. */
+        function runWire(message) {
           connNode.send(message, {
             band: request.action === 'request-list' ? BAND.BULK : BAND.CONTROL,
             target: request.target,
@@ -516,13 +596,29 @@ function requestFrom(config, payload, { target, profile, connectionNode }) {
     // the library's -1 default. Absent (undefined) is left for the library.
     paramIndex: firstDefined(payload.paramIndex, config.paramIndex),
     value: payload.value !== undefined ? payload.value : config.value,
-    // No REAL32 fallback: an absent type resolves to nothing, never to a
-    // guess — guessing the type silently mis-encodes the value (#222).
+    // No REAL32 fallback: a type never resolves to a guess — guessing silently
+    // mis-encodes the value (#222). 'auto' (the editor default) and absent
+    // both mean "ask the vehicle": the wire tiers read the type from the
+    // authority before encoding (readTypeThenSet); Build has no vehicle to
+    // ask, so the editor reds auto there.
     paramType: payload.paramType || config.paramType,
     firmware,
     encoding,
     capabilities,
   };
+}
+
+/**
+ * True when the type asks the vehicle for the answer: the editor's 'auto'
+ * option, or nothing at all. An explicit type — name or number — wins and is
+ * used as given.
+ *
+ * @param {*} value  resolved request.paramType
+ * @returns {boolean}
+ */
+function autoParamType(value) {
+  return value === undefined || value === null
+    || String(value).trim() === '' || value === 'auto';
 }
 
 /**

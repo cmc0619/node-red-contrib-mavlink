@@ -121,7 +121,19 @@
           return true;
         },
       },
-      paramType: { value: 'MAV_PARAM_TYPE_REAL32' },
+      paramType: {
+        value: 'auto',
+        validate: function (v) {
+          // Auto is answered by the vehicle at set time (the wire tiers read
+          // the type before encoding). Build has no vehicle to ask, so a
+          // built PARAM_SET needs a concrete type — red here, at deploy.
+          if (v !== 'auto') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-action', this && this.action, 'read') !== 'set') {
+            return true;
+          }
+          return RED.mavlink.liveOr(this, '#node-input-delivery', this && this.delivery, 'build') !== 'build';
+        },
+      },
       timeout: { value: '', validate: RED.validators.number(true) }
     },
     RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
@@ -583,16 +595,19 @@
         // saves and the runtime reads. `saved` is passed explicitly so the
         // narrowed list does not get the previous pick appended back as a
         // missing option.
+        // Unpublished offers Auto first: the wire tiers read the type from the
+        // vehicle at set time, which is exactly the case where the catalog has
+        // no answer. A published type needs no Auto — the firmware already said.
         RED.mavlink.fillEnumSelect(
           $type,
           published
             ? RED.mavlink.PARAM_TYPE_OPTIONS.filter(function (o) { return o.name === def.type; })
-            : RED.mavlink.PARAM_TYPE_OPTIONS,
+            : [{ name: 'auto', label: 'Auto (read from vehicle)' }].concat(RED.mavlink.PARAM_TYPE_OPTIONS),
           { valueKey: 'name', saved: published ? def.type : $type.val(), triggerChange: false }
         );
         $type.attr('title', published
           ? 'Published by the firmware for this parameter.'
-          : 'This firmware publishes no type for its parameters — pick the one the parameter actually stores.');
+          : 'This firmware publishes no type for its parameters — Auto reads it from the vehicle at set time, or pick the one the parameter actually stores.');
 
         refreshValueField(def);
       }
@@ -852,7 +867,8 @@
       // Once, not per redraw: refreshVisibility runs on every field change, and
       // refilling there would reset a Type the definition had narrowed to its
       // one published option.
-      RED.mavlink.fillEnumSelect($('#node-input-paramType'), RED.mavlink.PARAM_TYPE_OPTIONS,
+      RED.mavlink.fillEnumSelect($('#node-input-paramType'),
+        [{ name: 'auto', label: 'Auto (read from vehicle)' }].concat(RED.mavlink.PARAM_TYPE_OPTIONS),
         { valueKey: 'name', saved: node.paramType, triggerChange: false });
       // Node-RED has already filled the hidden field from the saved property;
       // the radios are ours to check off it.
@@ -994,7 +1010,12 @@
   <p><b>The action decides which fields exist.</b> Each is a different message
   and they carry different things: <i>Read one</i> sends
   <code>PARAM_REQUEST_READ</code>, which names the parameter and nothing else;
-  <i>Set one</i> sends <code>PARAM_SET</code>, which adds a value and a type;
+  <i>Set one</i> sends <code>PARAM_SET</code>, which adds a value and a type.
+  The Type's default, <i>Auto (read from vehicle)</i>, asks the vehicle for the
+  parameter's own type first — a <code>PARAM_REQUEST_READ</code> whose reply
+  names it — and only then encodes the set, so a wrong guess can never
+  mis-encode the value. Auto needs a vehicle to ask: on the Build tier the
+  editor requires a concrete type instead;
   <i>Request list</i> sends <code>PARAM_REQUEST_LIST</code>, which carries only
   the target. So Value and Type appear only for a set, and a list request asks
   for no parameter at all.</p>

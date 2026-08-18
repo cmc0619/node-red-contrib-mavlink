@@ -65,9 +65,10 @@ test('mavlink-param reuses its deploy-resolved Connection during input delivery'
 });
 
 test('a set with no paramType resolves no MAV_PARAM_TYPE rather than guessing REAL32', () => {
-  // Guessing REAL32 silently mis-encodes an INT32 parameter. The editor always
-  // saves a type (`paramType`, default MAV_PARAM_TYPE_REAL32), so an absent
-  // one is drift — and drift resolves to nothing, never to a guess.
+  // Guessing REAL32 silently mis-encodes an INT32 parameter (#222). The wire
+  // tiers answer an absent/auto type by reading the vehicle (read-before-set);
+  // at the build layer an absent type still resolves to nothing, never to a
+  // guess.
   const { buildParamMessage } = require('../../lib/param');
   assert.equal(
     buildParamMessage({
@@ -991,3 +992,157 @@ function redStub(nodesById) {
     },
   };
 }
+
+// ── read-before-set: an Auto type asks the vehicle (owner-selected parity) ───
+
+test('an auto-typed confirm set reads the type from the vehicle, then sets with it', () => {
+  const conn = connStubFull();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'confirm',
+    action: 'set',
+    paramType: 'auto',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 1,
+  });
+
+  const outs = [];
+  let err;
+  node.emit('input', { payload: { paramId: 'BAT_N_CELLS', value: 3 } },
+    (m) => outs.push(m), (e) => { err = e; });
+
+  assert.equal(conn.sent.length, 1, 'nothing but the read is on the wire yet');
+  assert.equal(conn.sent[0].message.name, 'PARAM_REQUEST_READ');
+  assert.equal(conn.sent[0].message.fields.param_id, 'BAT_N_CELLS');
+
+  // The authority answers with its own type: INT32 (6).
+  conn.inject({ name: 'PARAM_VALUE', sysid: 6, compid: 1, fields: { param_id: 'BAT_N_CELLS', param_value: 4, param_count: 10, param_index: 2, param_type: 6 } });
+
+  assert.equal(conn.sent.length, 2, 'the set follows the answer');
+  assert.equal(conn.sent[1].message.name, 'PARAM_SET');
+  assert.equal(conn.sent[1].message.fields.param_type, 6, 'encoded with the vehicle’s type, never a guess (#222)');
+
+  conn.inject({ name: 'PARAM_VALUE', sysid: 6, compid: 1, fields: { param_id: 'BAT_N_CELLS', param_value: 3, param_count: 10, param_index: 2, param_type: 6 } });
+
+  const terminal = outs[outs.length - 1];
+  assert.equal(terminal[1].result, 'succeeded');
+  assert.equal(terminal[1].detail, 'echo-confirmed');
+  assert.equal(err, undefined);
+  node.emit('close', () => {});
+});
+
+test('an auto-typed fire-and-forget set reads first too, then reports sent', () => {
+  const conn = connStubFull();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'send',
+    action: 'set',
+    paramType: 'auto',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 1,
+  });
+
+  const outs = [];
+  let err;
+  node.emit('input', { payload: { paramId: 'FOO', value: 7 } },
+    (m) => outs.push(m), (e) => { err = e; });
+
+  assert.equal(conn.sent[0].message.name, 'PARAM_REQUEST_READ');
+  conn.inject({ name: 'PARAM_VALUE', sysid: 6, compid: 1, fields: { param_id: 'FOO', param_value: 1, param_count: 1, param_index: 0, param_type: 2 } });
+
+  assert.equal(conn.sent.length, 2);
+  assert.equal(conn.sent[1].message.name, 'PARAM_SET');
+  assert.equal(conn.sent[1].message.fields.param_type, 2);
+  const terminal = outs[outs.length - 1];
+  assert.equal(terminal[1].result, 'succeeded');
+  assert.equal(terminal[1].detail, 'sent');
+  assert.equal(err, undefined);
+  assert.equal(conn.activeCount(), 0, 'the fire-and-forget set holds no subscription open');
+  node.emit('close', () => {});
+});
+
+test('an explicit payload type wins over Auto — no read, straight to the set', () => {
+  const conn = connStubFull();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'send',
+    action: 'set',
+    paramType: 'auto',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 1,
+  });
+
+  node.emit('input', { payload: { paramId: 'FOO', value: 7, paramType: 'MAV_PARAM_TYPE_UINT8' } },
+    () => {}, () => {});
+
+  assert.equal(conn.sent.length, 1);
+  assert.equal(conn.sent[0].message.name, 'PARAM_SET', 'an explicit type asks the vehicle nothing');
+  assert.equal(conn.sent[0].message.fields.param_type, 1);
+  node.emit('close', () => {});
+});
+
+test('a reply naming no usable type fails the set loud — never a fallback guess', () => {
+  const conn = connStubFull();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'confirm',
+    action: 'set',
+    paramType: 'auto',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 1,
+  });
+
+  let err;
+  node.emit('input', { payload: { paramId: 'FOO', value: 7 } }, () => {}, (e) => { err = e; });
+
+  // param_type 0: "the frame did not tell us".
+  conn.inject({ name: 'PARAM_VALUE', sysid: 6, compid: 1, fields: { param_id: 'FOO', param_value: 1, param_count: 1, param_index: 0, param_type: 0 } });
+
+  assert.ok(err, 'the set fails loud');
+  assert.match(err.message, /no usable type for FOO/);
+  assert.equal(conn.sent.length, 1, 'no PARAM_SET was encoded from a guess');
+  node.emit('close', () => {});
+});
+
+test('type-read silence times out loud, and no PARAM_SET follows', () => {
+  const conn = connStubFull();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'confirm',
+    action: 'set',
+    paramType: 'auto',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 1,
+    timeout: 5, // ms — fire quickly for the test
+  });
+
+  return new Promise((resolve) => {
+    const outs = [];
+    node.emit('input', { payload: { paramId: 'FOO', value: 7 } },
+      (m) => outs.push(m),
+      (e) => {
+        const terminal = outs[outs.length - 1];
+        assert.equal(terminal[1].result, 'timed-out');
+        assert.equal(terminal[1].detail, 'type-read timeout');
+        assert.ok(e, 'done carries the error');
+        assert.equal(conn.sent.length, 1, 'only the read went out');
+        assert.equal(conn.activeCount(), 0, 'the read subscription is released');
+        resolve();
+      });
+  });
+});
