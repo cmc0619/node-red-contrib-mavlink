@@ -45,21 +45,19 @@ module.exports = function registerMavlinkHealth(RED) {
 
     // Subscribed eagerly, like mavlink-in's message subscriptions, so a
     // lease expiring between inputs still reaches this node's own status and
-    // output. With either reference unresolved there is nothing to filter
-    // against: the Connection wears the "no connection" badge above, and the
-    // first input craters into failInput on the dangling reference.
-    let unsubscribeExpired = () => {};
-    if (connectionNode && identityNode) {
-      unsubscribeExpired = connectionNode.onHealthExpired(({ identityId }) => {
-        if (identityId !== identityNode.id) return;
-        applyActionStatus(node, 'error', 'lease expired');
-        node.send([null, makeStatusRecord({
-          node: 'mavlink-health',
-          result: 'lease-expired',
-          identity: identityId,
-        })]);
-      });
-    }
+    // output. Both references are editor-required, so the runtime trusts them
+    // (§0) the way mavlink-state's feed does — a disabled Connection still
+    // answers with its stub, and a hand-edited dangling reference craters
+    // here at construction rather than deferring the failure.
+    const unsubscribeExpired = connectionNode.onHealthExpired(({ identityId }) => {
+      if (identityId !== identityNode.id) return;
+      applyActionStatus(node, 'error', 'lease expired');
+      node.send([null, makeStatusRecord({
+        node: 'mavlink-health',
+        result: 'lease-expired',
+        identity: identityId,
+      })]);
+    });
 
     node.on('input', (msg, send, done) => {
       // §9 suppress: msg.payload === false → silent no-op.
