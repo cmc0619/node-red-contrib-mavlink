@@ -118,6 +118,14 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Changed
 
+- **A published param type is stated, not offered.** When the definition
+  catalog documents a parameter's `MAV_PARAM_TYPE`, the Set dialog used to
+  narrow the Type dropdown to that one option — a pulldown with one choice.
+  The row now displays the published type as text ("INT32 (6) — published by
+  the firmware") and hides the select, which stays in the DOM holding the
+  value because it is still the field Node-RED saves. An undocumented
+  parameter gets the full dropdown back, exactly as before.
+
 - **The In node's badge names the message, nothing else.** The
   `<count> <MESSAGE>` badge dropped its delivered counter: at seven digits the
   count was 8 of the badge's 24 characters and actively truncated the name —

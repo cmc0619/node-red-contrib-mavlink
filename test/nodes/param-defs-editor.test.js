@@ -729,12 +729,21 @@ test('a published type is the only type on offer; an unpublished one leaves the 
   assert.equal($type.options.length, 1, 'and nothing else can be picked');
   assert.match($type.attrs.title, /Published by the firmware/);
 
+  // A pulldown with one choice is not a choice (owner ruling): the published
+  // type is *stated*, and the select — still the field Node-RED saves — hides.
+  const $display = element('#mav-param-type-display');
+  assert.equal($type.visible, false, 'the one-choice select is hidden');
+  assert.equal($display.visible, true, 'the published type is displayed instead');
+  assert.match($display.text(), /INT32 \(6\) — published by the firmware/);
+
   // A parameter whose firmware publishes nothing gets the full list back —
-  // narrowing must not be one-way.
+  // narrowing must not be one-way, and the choice returns as a choice.
   element('#node-input-paramId').val('ATC_RAT_RLL_P');
   context.refreshInfoForTest();
   assert.ok($type.options.length > 1, 'the choice returns');
   assert.match($type.attrs.title, /publishes no type/);
+  assert.equal($type.visible, true, 'the select is a select again');
+  assert.equal($display.visible, false, 'the display steps aside');
 });
 
 test('the Type select ships empty and is filled from the shared table', () => {
