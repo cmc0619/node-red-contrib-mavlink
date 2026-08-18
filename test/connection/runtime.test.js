@@ -1175,6 +1175,24 @@ test('failed redials back off exponentially to the cap, and success resets the s
   connection.close();
 });
 
+test('a late error from the detached dead transport is silenced, not fatal', async () => {
+  // Codex (#334): removeAllListeners() would strip the corpse's only 'error'
+  // listener while its socket is still closing — and all three wrappers keep
+  // forwarding underlying errors, so the next one would throw from an
+  // unheard EventEmitter 'error' and take Node-RED with it (§2).
+  const { connection, transports, redials } = reconnectBuild();
+  await connection.start();
+  transports[0].emit('error', new Error('link down'));
+  assert.equal(redials().length, 1);
+
+  // The corpse coughs again mid-close. Without the sink this line throws.
+  transports[0].emit('error', new Error('late ECONNRESET'));
+
+  assert.equal(redials().length, 1, 'the late error neither crashes nor double-schedules');
+  assert.equal(connection.getState(), STATE.RECONNECTING);
+  connection.close();
+});
+
 test('close during the backoff wait cancels the redial — redeploy wins over recovery', async () => {
   const { connection, transports, redials } = reconnectBuild();
   await connection.start();
