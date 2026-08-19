@@ -27,7 +27,6 @@ const {
   makeStatusRecord,
   applyActionStatus,
   failInput,
-  failAction,
 } = require('../lib/delivery');
 
 module.exports = function registerMavlinkMove(RED) {
@@ -158,7 +157,7 @@ module.exports = function registerMavlinkMove(RED) {
         // nothing having confirmed it. Same word, same meaning, same machinery.
         applyActionStatus(node, 'error', `${label} unconfirmed`);
         send([null, statusRecord('unconfirmed', outcome.detail, { ...shared, confirmedBy: 'none' })]);
-        failAction(done);
+        done();
         return;
       }
       // Terminal ack — the MAV_RESULT name IS the result ('denied',
@@ -167,7 +166,7 @@ module.exports = function registerMavlinkMove(RED) {
       // AckWaiter outcome. One vocabulary, no translation layer to drift.
       applyActionStatus(node, 'error', `${label} ${outcome.result}`);
       send([null, statusRecord(outcome.result, outcome.detail, { ...shared, confirmedBy: 'ack' })]);
-      failAction(done);
+      done();
     }
 
     /**

@@ -98,11 +98,7 @@ module.exports = function registerMavlinkFanout(RED) {
             ? [{ payload: aggregate }, aggregate]
             : [null, aggregate]);
         }
-        if (!aggregate.success && !quietEmpty(aggregate)) {
-          delivery.failAction(done);
-        } else {
-          done();
-        }
+        done();
       } catch (err) {
         delivery.failInput(node, send, err, done);
       }

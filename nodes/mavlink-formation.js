@@ -127,11 +127,7 @@ module.exports = function registerMavlinkFormation(RED) {
         send(aggregate.continue
           ? [{ payload: aggregate }, aggregate]
           : [null, aggregate]);
-        if (!aggregate.success) {
-          delivery.failAction(done);
-        } else {
-          done();
-        }
+        done();
       } catch (err) {
         delivery.failInput(node, send, err, done);
       }
