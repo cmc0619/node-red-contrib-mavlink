@@ -108,7 +108,7 @@ const PROFILE = {
   '31-fanout-sequential-five': {
     restart: 'ap-fleet',
     waitMs: 25000,
-    expect: 'dry-run then live sequential arm ×5',
+    expect: 'preview then live sequential arm ×5',
     // delivery=confirm: the first DENIED fails the aggregate, so every one of
     // the five has to be armable before the example runs.
     prep: 'ap-arm-ready-fleet',
@@ -1131,7 +1131,7 @@ function verdictFrom(profile, summary, log) {
     /fail|timed-out|unconfirmed|error|denied/i.test(r)
   );
   const good = results.filter((r) =>
-    /accepted|succeeded|success|dry_run|ok/i.test(r)
+    /accepted|succeeded|success|built|ok/i.test(r)
   );
 
   if (good.length && !bad.length && !summary.errors.length) {

@@ -96,6 +96,12 @@ test('build+list with no connection emits one retargeted message per member on o
     'one retargeted message per member'
   );
   assert.equal(sent[0][0].payload.name, 'COMMAND_LONG');
+  // Build previews, so it wears the yellow preview badge (§6) — not the green
+  // 'ok' of a real send — keyed on the tier, since the aggregate result is
+  // 'succeeded' either way.
+  assert.equal(node._status.fill, 'yellow', 'Build tier shows the preview badge');
+  assert.equal(node._status.shape, 'dot');
+  assert.match(node._status.text, /preview/);
 });
 
 test('a payload that is not a built message craters through done(err) — no build-tier guardrail', async () => {

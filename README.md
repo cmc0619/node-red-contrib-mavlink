@@ -56,7 +56,7 @@ which ships in the package too.
 | `02-arm-takeoff-chain.json` | Command arm (confirm) chained to takeoff (await completion) |
 | `03-param-read-set.json` | Param read (MAV_SYSID) and set (FS_GCS_ENABLE) as separate injects |
 | `04-mission-upload-download.json` | Mission upload then download |
-| `05-fanout-arm.json` | Fan-out sequential arm — dry-run then live |
+| `05-fanout-arm.json` | Fan-out sequential arm — preview then live |
 | `10-sunday-stroll.json` | A full flight: arm, takeoff, waypoints, return |
 | `24-formation-nudge.json` | Formation node moving a group as one |
 | `27-safety-estop.json` | Flight termination behind a confirmation gate |

@@ -57,7 +57,6 @@ module.exports = function registerMavlinkFanout(RED) {
           // starts and the aggregate comes back undefined (handled below).
           mode: opts.executionMode || config.executionMode,
           delivery: effectiveDelivery,
-          dryRun: opts.dryRun !== undefined ? !!opts.dryRun : !!config.dryRun,
           intervalMs: numberOption(opts, config, 'intervalMs'),
           timeoutMs: numberOption(opts, config, 'timeoutMs'),
           maxRetries: numberOption(opts, config, 'maxRetries'),
@@ -79,7 +78,7 @@ module.exports = function registerMavlinkFanout(RED) {
           return;
         }
 
-        applyAggregateStatus(node, aggregate);
+        applyAggregateStatus(node, aggregate, effectiveDelivery);
         // Output 1 carries the aggregate status record at the message root.
         // On Build delivery output 0 carries the product — one message per
         // member, ready for mavlink-out — matching every other Build tier
@@ -99,7 +98,7 @@ module.exports = function registerMavlinkFanout(RED) {
             ? [{ payload: aggregate }, aggregate]
             : [null, aggregate]);
         }
-        if (!aggregate.success && aggregate.result !== 'dry_run' && !quietEmpty(aggregate)) {
+        if (!aggregate.success && !quietEmpty(aggregate)) {
           delivery.failAction(done);
         } else {
           done();
@@ -183,8 +182,14 @@ function quietEmpty(aggregate) {
   return aggregate.result === 'empty' && aggregate.selection === 'filter';
 }
 
-function applyAggregateStatus(node, aggregate) {
-  if (aggregate.result === 'dry_run') {
+function applyAggregateStatus(node, aggregate, tier) {
+  // Build tier previews the fan-out — every member message constructed, none
+  // sent — so it wears the yellow preview badge (§6), the same as every other
+  // action node's Build (mavlink-command, mavlink-mission). The aggregate
+  // result is 'succeeded' either way (all members built), so the tier is the
+  // signal, not the result. Guarded on success so an empty selection still
+  // falls through to the grey 0-matched badge below.
+  if (tier === 'build' && aggregate.success) {
     delivery.applyActionStatus(node, 'preview', `${aggregate.count} preview`);
   } else if (aggregate.success) {
     delivery.applyActionStatus(node, 'ok', `${aggregate.count} succeeded`);
