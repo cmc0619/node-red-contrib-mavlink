@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl07-tab",
     "name": "Good upload → verify → invalid upload → verify unchanged",
-    "info": "1. Upload a valid two-waypoint mission via msg.payload.items.\n2. Download to confirm.\n3. Upload a bad plan via msg.payload.items with command 99999 — mission validation rejects it before transfer.\n4. Download again — item count and commands must match step 2.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551.",
+    "info": "1. Upload a valid two-waypoint mission via msg.payload.items.\n2. Download to confirm.\n3. Upload a bad plan via msg.payload.items with command 99999 (a uint16 overflow, max 65535) — it fails loud at the wire's range guard, so the transfer never lands.\n4. Download again — item count and commands must match step 2.\n\nLaunch (single ArduCopter sysid 1):\n  sim_vehicle.py -v ArduCopter --out=udp:127.0.0.1:14550\n\nConnection: bind 0.0.0.0:14550, remote 127.0.0.1:14551.",
     "x": 280,
     "y": 40,
     "wires": []

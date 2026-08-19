@@ -537,12 +537,22 @@ function verdictFrom(profile, summary, log) {
     const goodMission = summary.debug.some((d) =>
       d.result === 'succeeded' && /mavlink-mission/.test(d.excerpt)
     );
-    const validationFailure = summary.debug.some((d) =>
-      d.result === 'failed' && /phase:\s*'validate'/.test(d.excerpt)
+    // The bad plan's command 99999 is a uint16 overflow (max 65535). It is not
+    // "rejected before transfer": it reaches the wire and the uint16 range guard
+    // throws, so the bad upload fails loud at phase:'error'/'built' — the mission
+    // node has no 'validate' phase, so the old phase:'validate' match never fired
+    // and 03 fell through to a false PARTIAL. Match the real fail-loud shape: a
+    // failed upload. The good upload and both downloads succeed, so the only
+    // failed upload is the bad one.
+    const badUploadFailed = summary.debug.some((d) =>
+      d.result === 'failed' && /operation:\s*'upload'/.test(d.excerpt)
     );
+    // Plan intact: a download still reports the two good items (the bad item
+    // never landed). Either download satisfies this — the bad upload cannot have
+    // grown the stored plan.
     const planSurvives = /operation:\s*'download'[\s\S]*result:\s*'succeeded'[\s\S]*count:\s*2/i.test(log);
-    if (goodMission && validationFailure && planSurvives) {
-      return { status: 'PASS', reason: 'good mission survived expected validation failure' };
+    if (goodMission && badUploadFailed && planSurvives) {
+      return { status: 'PASS', reason: 'good mission ok; bad upload failed loud; plan intact (count 2)' };
     }
   }
   // SITL 02: AP mission + fence + rally must succeed; PX4 fence must fail gated.
