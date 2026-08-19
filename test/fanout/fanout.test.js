@@ -295,19 +295,19 @@ test('aggregation continues only when every selected member succeeds', async () 
   assert.equal(partial.members.find((m) => m.sysid === 2).result, 'failed');
 });
 
-test('dry run expands members and retargets messages without sending', async () => {
+test('the build tier expands members and retargets messages without sending', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
   const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     mode: 'sequential',
-    delivery: 'send',
-    dryRun: true,
+    delivery: 'build',
   });
 
-  assert.equal(result.result, 'dry_run');
+  assert.equal(result.result, 'succeeded');
   assert.equal(result.success, true);
+  assert.ok(result.members.every((m) => m.result === 'built'), 'every member is built, not sent');
   assert.equal(connection.sends.length, 0);
   assert.deepEqual(result.members.map((m) => m.message.fields.target_system), [1, 2]);
 });
@@ -653,7 +653,7 @@ test('one-shot setpoint runs hold nothing: a stream may start right after (#245)
   release();
 });
 
-test('the lock guards the wire: build tier and dry run pass while it is held (#245)', async () => {
+test('the build tier passes while the lock is held (#245)', async () => {
   const connection = connectionStub([peer(1)], { id: 'conn-A' });
   const release = streamLocks.acquire('conn-A', { sysid: 1, compid: 1 });
   try {
@@ -664,14 +664,6 @@ test('the lock guards the wire: build tier and dry run pass while it is held (#2
       delivery: 'build',
     });
     assert.equal(built.success, true);
-    const preview = await executeFanout({ selection: { mode: 'all' },
-      connection,
-      message: builtSetpoint(),
-      mode: 'sequential',
-      delivery: 'send',
-      dryRun: true,
-    });
-    assert.equal(preview.result, 'dry_run');
     assert.equal(connection.sends.length, 0);
   } finally {
     release();
