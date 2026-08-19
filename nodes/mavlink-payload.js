@@ -23,6 +23,7 @@ const {
   makeStatusRecord,
   applyActionStatus,
   failInput,
+  failAction,
 } = require('../lib/delivery');
 const { loadMetadata } = require('../lib/metadata/load');
 const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
@@ -108,7 +109,7 @@ module.exports = function registerMavlinkPayload(RED) {
         }
 
         const carrierChosen = payload.sendAs || config.sendAs;
-        const built = buildFor(carrierChosen);
+        const builtCmd = buildFor(carrierChosen);
 
         /**
          * Send a command-backed verb and wait for its COMMAND_ACK, resending once
@@ -191,21 +192,21 @@ module.exports = function registerMavlinkPayload(RED) {
         // `.send` / `.subscribe` like any other absent config node.
         switch (delivery) {
           case 'build':
-            completeBuild(node, send, built);
+            completeBuild(node, send, builtCmd);
             break;
           case 'confirm':
             // Wait for the COMMAND_ACK so a DENIED / TEMPORARILY_REJECTED /
             // timeout can halt the chain (§9). Gimbal-manager setpoints carry
             // no acknowledgement, so they fall through and send unconfirmed.
-            if (built.confirmation === 'command_ack') {
-              awaitAck(built, carrierChosen);
+            if (builtCmd.confirmation === 'command_ack') {
+              awaitAck(builtCmd, carrierChosen);
               return;
             }
             // falls through
           case 'send': {
-            connectionNode.send(built.message, { band: BAND.CONTROL, target, identityId });
-            const detail = built.confirmation === 'command_ack' ? 'sent' : 'sent (unconfirmed)';
-            completeResult(node, send, 'succeeded', detail, built);
+            connectionNode.send(builtCmd.message, { band: BAND.CONTROL, target, identityId });
+            const detail = builtCmd.confirmation === 'command_ack' ? 'sent' : 'sent (unconfirmed)';
+            completeResult(node, send, 'succeeded', detail, builtCmd);
             break;
           }
           default: break; // This space intentionally left blank (§5)
@@ -348,7 +349,7 @@ function failAck(node, send, built, outcome, msg, done) {
       elapsed: outcome.elapsed,
     }),
   ]);
-  done(new Error(`mavlink-payload: ${built.message.name} ${outcome.result}`));
+  failAction(done);
 }
 
 function completeBuild(node, send, built) {

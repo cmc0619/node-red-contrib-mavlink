@@ -128,7 +128,7 @@ module.exports = function registerMavlinkFormation(RED) {
           ? [{ payload: aggregate }, aggregate]
           : [null, aggregate]);
         if (!aggregate.success) {
-          done(new Error(`mavlink-formation: ${aggregate.result}${aggregate.detail ? ` — ${aggregate.detail}` : ''}`));
+          delivery.failAction(done);
         } else {
           done();
         }
