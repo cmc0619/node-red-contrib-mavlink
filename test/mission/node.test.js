@@ -198,7 +198,10 @@ test('an unknown payload.missionType rides as given — never resolved to 0, nev
     maxRetries: 0,
   });
   const res = await runInput(clearNode, { payload: { missionType: 'bogus' } });
-  assert.ok(res.err, 'the transfer fails loud');
+  assert.equal(res.err, undefined, 'action failure completes via badge + output 1, not done(err)');
+  const terminal = res.outputs[res.outputs.length - 1];
+  assert.equal(terminal[0], null);
+  assert.notEqual(terminal[1].result, 'succeeded');
   assert.equal(conn.sentNames()[0], 'MISSION_CLEAR_ALL');
   assert.equal(conn.sent[0].message.fields.mission_type, 'bogus', 'present and as-given, never absent');
 });
@@ -439,7 +442,10 @@ test('an omitted items field over blank config does not invent COUNT 0', async (
   const Node = loadNode(conn);
   const node = new Node({ operation: 'upload', connection: 'conn', delivery: 'confirm', missionType: 'mission', items: '' });
   const res = await runInput(node, { payload: {} });
-  assert.ok(res.err, 'omitted items fails loud');
+  assert.equal(res.err, undefined, 'action failure completes via badge + output 1, not done(err)');
+  const terminal = res.outputs[res.outputs.length - 1];
+  assert.equal(terminal[0], null);
+  assert.notEqual(terminal[1].result, 'succeeded');
   assert.equal(conn.sent.length, 0, 'nothing goes on the wire');
 });
 

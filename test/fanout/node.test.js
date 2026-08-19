@@ -38,12 +38,11 @@ test("a hand-edited delivery typo sends nothing through the node", async () => {
     intervalMs: 0,
   });
   let sent;
-  const err = await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; }).then(
-    () => null,
-    (e) => e
-  );
-  assert.ok(err, 'the unmatched tier craters into done(err)');
+  await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; });
   assert.equal(sent[0], null);
+  assert.equal(sent[1].success, false);
+  assert.equal(sent[1].result, 'failed');
+  assert.equal(node._status.fill, 'red');
   assert.equal(connection.sends.length, 0, 'nothing left the wire under the mis-resolved tier');
 });
 
@@ -200,20 +199,16 @@ test('mavlink-fanout node gates DO_FLIGHTTERMINATION on msg.confirmed / node con
   // No confirmation anywhere → refused, nothing sent.
   const gated = new Node({ executionMode: 'sequential', selectionMode: 'all', connection: 'conn', delivery: 'send' });
   let sent;
-  const err = await emitInput(
+  await emitInput(
     gated,
     { payload: builtCommand({ fields: { command: 185, param1: 1 } }) },
     (m) => { sent = m; }
-  ).then(
-    () => null,
-    (e) => e
   );
-  assert.ok(err, 'refused safety command is passed to done(err)');
-  assert.strictEqual(err.message, 'Action failed');
-  assert.ok(sent, 'status output is emitted before done(err)');
+  assert.ok(sent, 'status output is emitted before done()');
   assert.equal(sent[0], null);
   assert.equal(sent[1].result, 'refused');
   assert.match(sent[1].detail, /confirm/i);
+  assert.equal(gated._status.fill, 'red', 'refused safety command shows red badge');
 
   // msg.confirmed === true clears the gate.
   const conn2 = connectionStub([peer(1)]);
@@ -271,10 +266,7 @@ test('an empty list or empty fleet stays loud — someone was named and nobody a
     intervalMs: 0,
   });
   let listSent;
-  const listErr = await emitInput(listNode, { payload: builtCommand() }, (m) => { listSent = m; })
-    .then(() => null, (e) => e);
-  assert.ok(listErr, 'list-empty is passed to done(err)');
-  assert.strictEqual(listErr.message, 'Action failed');
+  await emitInput(listNode, { payload: builtCommand() }, (m) => { listSent = m; });
   assert.equal(listSent[1].result, 'empty');
   assert.equal(listNode._status.fill, 'red');
 
@@ -288,10 +280,7 @@ test('an empty list or empty fleet stays loud — someone was named and nobody a
     selectionMode: 'all',
     intervalMs: 0,
   });
-  const allErr = await emitInput(allNode, { payload: builtCommand() }, () => {})
-    .then(() => null, (e) => e);
-  assert.ok(allErr, 'all-empty is passed to done(err)');
-  assert.strictEqual(allErr.message, 'Action failed');
+  await emitInput(allNode, { payload: builtCommand() }, () => {});
   assert.equal(allNode._status.fill, 'red');
 });
 

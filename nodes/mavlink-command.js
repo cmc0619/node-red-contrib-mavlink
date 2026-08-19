@@ -72,7 +72,6 @@ const {
   shouldSuppress,
   applyActionStatus,
   failInput,
-  failAction,
 } = require('../lib/delivery');
 const { BAND } = require('../lib/connection/bands');
 
@@ -342,7 +341,7 @@ module.exports = function registerMavlinkCommand(RED) {
         });
         applyActionStatus(node, 'error', `confirm ${displayName}`);
         emitStatus(rec, send, false);
-        failAction(done);
+        done();
         return;
       }
 
@@ -535,7 +534,7 @@ module.exports = function registerMavlinkCommand(RED) {
             });
             applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
             emitStatus(rec, send, false);
-            failAction(done);
+            done();
             return;
           }
         } else if (wanted) {
@@ -554,7 +553,7 @@ module.exports = function registerMavlinkCommand(RED) {
           });
           applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
           emitStatus(rec, send, false);
-          failAction(done);
+          done();
           return;
         }
 
@@ -619,7 +618,7 @@ module.exports = function registerMavlinkCommand(RED) {
           applyActionStatus(node, 'error', `timeout ${displayName}`);
           const cont = unconfirmedContinue;
           emitStatus(rec, send, cont, cont ? rec : undefined);
-          failAction(done);
+          done();
           return;
         }
 
@@ -693,7 +692,7 @@ module.exports = function registerMavlinkCommand(RED) {
               });
               applyActionStatus(node, 'error', `${displayName} timeout`);
               emitStatus(rec, send, false);
-              failAction(done);
+              done();
               return;
             }
             done();
@@ -730,7 +729,7 @@ module.exports = function registerMavlinkCommand(RED) {
         });
         applyActionStatus(node, 'error', `${displayName} ${ackOutcome.result}`);
         emitStatus(rec, send, false);
-        failAction(done);
+        done();
       }
     }
 

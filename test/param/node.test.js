@@ -657,7 +657,7 @@ test('confirm set re-sends PARAM_SET on echo silence and reports attempts', asyn
   assert.equal(terminal[1].result, 'timed-out');
   assert.equal(terminal[1].detail, 'echo timeout');
   assert.equal(terminal[1].attempts, 3, 'attempts in the terminal record');
-  assert.ok(doneErr instanceof Error, 'timeout still fails through done');
+  assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
   assert.equal(conn.activeCount(), 0, 'subscription torn down');
 });
 
@@ -771,7 +771,7 @@ test('read+confirm times out honestly when no reply arrives', async () => {
   assert.equal(result[0], null);
   assert.equal(result[1].result, 'timed-out');
   assert.equal(result[1].detail, 'read timeout');
-  assert.ok(doneErr instanceof Error);
+  assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
 });
 
 /* ---------- collect-tier loss recovery (#242) ---------- */
@@ -883,7 +883,7 @@ test('collect refill is bounded; the overall timeout stays the terminal authorit
   assert.equal(terminal[0], null);
   assert.equal(terminal[1].result, 'timed-out');
   assert.equal(terminal[1].detail, 'list timeout');
-  assert.ok(doneErr instanceof Error);
+  assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
   assert.equal(conn.activeCount(), 0, 'subscription and timers torn down');
 });
 

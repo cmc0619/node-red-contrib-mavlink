@@ -46,7 +46,6 @@ const {
   shouldSuppress,
   applyActionStatus,
   failInput,
-  failAction,
 } = require('../lib/delivery');
 const {
   resolveDeliveryContext,
@@ -559,7 +558,7 @@ function completeResult(node, send, result, detail, payload, extra) {
 function timeoutResult(node, send, detail, done, extra) {
   applyActionStatus(node, 'error', detail);
   send([null, statusRecord('timed-out', detail, extra)]);
-  failAction(done);
+  done();
 }
 
 /**

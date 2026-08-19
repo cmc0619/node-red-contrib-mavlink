@@ -30,7 +30,6 @@ const {
   shouldSuppress,
   applyActionStatus,
   failInput,
-  failAction,
 } = require('../lib/delivery');
 const { BAND } = require('../lib/connection/bands');
 const {
@@ -197,7 +196,7 @@ module.exports = function registerMavlinkMission(RED) {
           });
           applyActionStatus(node, 'error', `${missionTypeKey} busy`);
           send([null, rec]);
-          failAction(done);
+          done();
           return;
         }
 
@@ -240,7 +239,7 @@ module.exports = function registerMavlinkMission(RED) {
             } else {
               applyActionStatus(node, 'error', `${operation} ${outcome.result}`);
               send([null, rec]);
-              failAction(done);
+              done();
             }
           })
           .catch((err) => {
