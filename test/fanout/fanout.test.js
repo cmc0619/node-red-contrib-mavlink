@@ -265,6 +265,22 @@ test('broadcast sends one autopilot-pinned packet with target_system zero', asyn
   assert.equal(connection.sends[0].message.fields.target_component, 1);
 });
 
+test('the build tier on broadcast previews the target_system-0 packet without sending', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  const result = await executeFanout({ selection: { mode: 'all' },
+    connection,
+    message: builtCommand(),
+    mode: 'broadcast',
+    delivery: 'build',
+  });
+
+  assert.equal(result.result, 'succeeded');
+  assert.ok(result.members.every((m) => m.result === 'built'), 'every member is built, not sent');
+  assert.equal(result.message.fields.target_system, 0, 'the previewed packet is the broadcast one');
+  assert.equal(connection.sends.length, 0);
+});
+
 test('bands follow the message kind: setpoints stream, commands ride control', async () => {
   const connection = connectionStub([peer(1)]);
   await executeFanout({ mode: 'sequential', selection: { mode: 'all' }, connection, message: builtSetpoint(), delivery: 'send' });
