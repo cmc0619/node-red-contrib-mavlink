@@ -100,7 +100,7 @@ module.exports = function registerMavlinkFanout(RED) {
             : [null, aggregate]);
         }
         if (!aggregate.success && aggregate.result !== 'dry_run' && !quietEmpty(aggregate)) {
-          done(new Error(`mavlink-fanout: ${aggregate.result}`));
+          delivery.failAction(done);
         } else {
           done();
         }

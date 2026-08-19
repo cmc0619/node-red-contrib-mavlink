@@ -72,6 +72,7 @@ const {
   shouldSuppress,
   applyActionStatus,
   failInput,
+  failAction,
 } = require('../lib/delivery');
 const { BAND } = require('../lib/connection/bands');
 
@@ -326,10 +327,6 @@ module.exports = function registerMavlinkCommand(RED) {
         });
       }
 
-      function failDone(detail) {
-        done(new Error(`mavlink-command: ${detail}`));
-      }
-
       // ── Safety preset confirmation check ──────────────────────────────────
       // Runs before Build as well as send tiers: a built Flight Termination
       // envelope on output 0 can be forwarded straight to mavlink-out, so the
@@ -345,7 +342,7 @@ module.exports = function registerMavlinkCommand(RED) {
         });
         applyActionStatus(node, 'error', `confirm ${displayName}`);
         emitStatus(rec, send, false);
-        failDone('safety command blocked — set msg.confirmed = true');
+        failAction(done);
         return;
       }
 
@@ -538,7 +535,7 @@ module.exports = function registerMavlinkCommand(RED) {
             });
             applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
             emitStatus(rec, send, false);
-            failDone(rec.detail);
+            failAction(done);
             return;
           }
         } else if (wanted) {
@@ -557,7 +554,7 @@ module.exports = function registerMavlinkCommand(RED) {
           });
           applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
           emitStatus(rec, send, false);
-          failDone(rec.detail);
+          failAction(done);
           return;
         }
 
@@ -622,7 +619,7 @@ module.exports = function registerMavlinkCommand(RED) {
           applyActionStatus(node, 'error', `timeout ${displayName}`);
           const cont = unconfirmedContinue;
           emitStatus(rec, send, cont, cont ? rec : undefined);
-          failDone(`${displayName} timed out`);
+          failAction(done);
           return;
         }
 
@@ -696,7 +693,7 @@ module.exports = function registerMavlinkCommand(RED) {
               });
               applyActionStatus(node, 'error', `${displayName} timeout`);
               emitStatus(rec, send, false);
-              failDone(`${displayName} completion timeout`);
+              failAction(done);
               return;
             }
             done();
@@ -733,7 +730,7 @@ module.exports = function registerMavlinkCommand(RED) {
         });
         applyActionStatus(node, 'error', `${displayName} ${ackOutcome.result}`);
         emitStatus(rec, send, false);
-        failDone(`${displayName} ${ackOutcome.result}`);
+        failAction(done);
       }
     }
 

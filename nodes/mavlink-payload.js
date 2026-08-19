@@ -23,6 +23,7 @@ const {
   makeStatusRecord,
   applyActionStatus,
   failInput,
+  failAction,
 } = require('../lib/delivery');
 const { loadMetadata } = require('../lib/metadata/load');
 const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
@@ -348,7 +349,7 @@ function failAck(node, send, built, outcome, msg, done) {
       elapsed: outcome.elapsed,
     }),
   ]);
-  done(new Error(`mavlink-payload: ${built.message.name} ${outcome.result}`));
+  failAction(done);
 }
 
 function completeBuild(node, send, built) {
