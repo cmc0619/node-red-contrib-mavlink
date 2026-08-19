@@ -203,7 +203,7 @@ test('mavlink-fanout node gates DO_FLIGHTTERMINATION on msg.confirmed / node con
     (e) => e
   );
   assert.ok(err, 'refused safety command is passed to done(err)');
-  assert.match(err.message, /Action failed/);
+  assert.strictEqual(err.message, 'Action failed');
   assert.ok(sent, 'status output is emitted before done(err)');
   assert.equal(sent[0], null);
   assert.equal(sent[1].result, 'refused');
@@ -268,7 +268,7 @@ test('an empty list or empty fleet stays loud — someone was named and nobody a
   const listErr = await emitInput(listNode, { payload: builtCommand() }, (m) => { listSent = m; })
     .then(() => null, (e) => e);
   assert.ok(listErr, 'list-empty is passed to done(err)');
-  assert.match(listErr.message, /Action failed/);
+  assert.strictEqual(listErr.message, 'Action failed');
   assert.equal(listSent[1].result, 'empty');
   assert.equal(listNode._status.fill, 'red');
 
@@ -285,7 +285,7 @@ test('an empty list or empty fleet stays loud — someone was named and nobody a
   const allErr = await emitInput(allNode, { payload: builtCommand() }, () => {})
     .then(() => null, (e) => e);
   assert.ok(allErr, 'all-empty is passed to done(err)');
-  assert.match(allErr.message, /Action failed/);
+  assert.strictEqual(allErr.message, 'Action failed');
   assert.equal(allNode._status.fill, 'red');
 });
 
