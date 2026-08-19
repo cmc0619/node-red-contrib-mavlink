@@ -574,7 +574,7 @@ kinds of node. Do not mix them.
 |---|---|
 | transaction open | blue dot, text ending in an ellipsis (`sending ARM…`) |
 | completed | green dot naming what completed (`ARM accepted`) |
-| dry run or preview | yellow dot with a count |
+| preview (Build tier) | yellow dot with a count |
 | refused from outside | red ring |
 
 **Red means someone outside this node said no** (ruled 2026-08-12). That is the whole meaning,
@@ -2006,8 +2006,8 @@ are one-shots: on the wire tiers a member whose lock is held is refused fail-clo
 (sequential refuses that member and continues, per the continue doctrine; broadcast cannot exclude
 the locked vehicle from the packet, so one held lock refuses the whole broadcast). One-shots hold
 nothing themselves — a hold needs a lifetime and a one-shot has none, and a stream starting *after*
-a one-shot supersedes it exactly as a Move handover setpoint supersedes its predecessor. Build and
-dry-run tiers do not consult the lock: it guards sends.
+a one-shot supersedes it exactly as a Move handover setpoint supersedes its predecessor. The Build
+tier does not consult the lock: it guards sends.
 
 **Concurrency.** Sequential fan-out dispatches up to `concurrency` members at once (default 1 —
 strictly sequential, the historical cadence). Where it earns its keep is the confirm tier: at
@@ -2047,8 +2047,11 @@ the command on everything already commanded.
 the aggregate either way, with per-vehicle detail — a partial failure must never look like
 success.
 
-**Dry run** is a checkbox orthogonal to Delivery: expand the group, build every message, emit
-the preview, send nothing.
+**Preview is the Build tier, not a separate toggle** (removed 2026-08-19). A dry-run checkbox
+once sat orthogonal to Delivery; it expanded the group, built every message, and sent nothing —
+which is precisely what Build already does (§ "Delivery tiers"). The only difference was a
+cosmetic `dry_run` result label over Build's `built`, so it was two ways to spell one tier. To
+preview a fan-out, set Delivery to Build.
 
 **Broadcast** sets `target_system = 0` so one packet reaches every vehicle on the link at once —
 no pacing, no expiry window, and real simultaneity instead of sends spread over seconds. Where
