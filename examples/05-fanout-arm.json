@@ -246,8 +246,7 @@
       [
         "ex05-live-status"
       ]
-    ],
-    "confirm": true
+    ]
   },
   {
     "id": "ex05-dry-status",

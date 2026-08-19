@@ -89,6 +89,7 @@ test('formationTargets places a line east-west of the anchor by the flat-earth d
     shape: 'line',
     spacing: 10,
     anchor: { lat: 47.397742, lon: 8.545594, alt: 30 },
+    headingDeg: 0,
     sysids: [1, 2, 3],
   });
   const dLon = 1.32709215145987e-4;
@@ -144,6 +145,7 @@ test('sphere formationTargets vary altitude from the anchor', () => {
     shape: 'sphere',
     spacing: 12,
     anchor: { lat: -35.363262, lon: 149.165237, alt: 40 },
+    headingDeg: 0,
     sysids: [1, 2, 3, 4, 5],
   });
   assert.equal(targets[0].alt, 40, 'slot 0 stays on the anchor');
@@ -194,6 +196,7 @@ test('formationTargets dedupes and sorts sysids, coercing numeric strings', () =
     shape: 'line',
     spacing: 10,
     anchor: { lat: 47.397742, lon: 8.545594, alt: 30 },
+    headingDeg: 0,
     sysids: ['5', 3, 5],
   });
   assert.deepEqual(targets.map((t) => t.sysid), [3, 5]);
@@ -204,11 +207,11 @@ test('anchor coordinates are coerced, not refused — the editor owns the boxes'
   // (mavlink-formation.html lat/lon/alt), and are the leader's own reported
   // position otherwise. Here they coerce: a blank is Number('') and rides.
   const at0 = formationTargets({
-    shape: 'line', spacing: 10, anchor: { lat: '', lon: 8, alt: 30 }, sysids: [1],
+    shape: 'line', spacing: 10, anchor: { lat: '', lon: 8, alt: 30 }, headingDeg: 0, sysids: [1],
   });
   assert.equal(at0[0].lat, 0, 'a blank latitude is the coercion, not a substituted place');
   const noAlt = formationTargets({
-    shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: undefined }, sysids: [1],
+    shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: undefined }, headingDeg: 0, sysids: [1],
   });
   assert.ok(Number.isNaN(noAlt[0].alt), 'an absent altitude stays absent, never sea level');
 });
