@@ -19,6 +19,8 @@ const {
   makeStatusRecord,
   shouldSuppress,
   capBadge,
+  failAction,
+  failInput,
 } = require('../../lib/delivery');
 
 // ---------------------------------------------------------------------------
@@ -48,6 +50,33 @@ test('makeStatusRecord: two calls produce independent objects', () => {
   assert.equal(a.result, 'a');
   assert.equal(b.result, 'b');
   assert.notEqual(a, b);
+});
+
+// ---------------------------------------------------------------------------
+// failAction / failInput — the two terminal-failure paths (§9)
+// ---------------------------------------------------------------------------
+
+test('failAction: constant message and a stack collapsed to its header line', () => {
+  let caught;
+  failAction((err) => { caught = err; });
+  assert.ok(caught instanceof Error, 'still an Error, so Catch fires');
+  assert.equal(caught.message, 'Action failed');
+  // Node-RED's debug renders err.stack verbatim; collapsing it to the header
+  // keeps the driver's own call frames out of the sidebar (the rich outcome is
+  // on output 1, the node type + hover name say which node).
+  assert.equal(caught.stack, 'Error: Action failed');
+  assert.ok(!/\n\s+at /.test(caught.stack), 'no driver frames leak to the sidebar');
+});
+
+test('failInput: passes the real error through with its stack intact (the loud crash path)', () => {
+  const node = { type: 'mavlink-command', status() {} };
+  const sent = [];
+  let doneErr;
+  const original = new Error('boom');
+  failInput(node, (m) => sent.push(m), original, (e) => { doneErr = e; });
+  assert.equal(doneErr, original, 'the original error reaches done() unchanged');
+  assert.ok(/\n\s+at /.test(doneErr.stack), 'a real stack is retained on the crash path');
+  assert.equal(sent[0][1].result, 'failed', 'and the record still lands on output 1');
 });
 
 // ---------------------------------------------------------------------------
