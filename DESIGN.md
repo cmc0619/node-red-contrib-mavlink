@@ -139,9 +139,10 @@ keyed `address:port` (capped 100, junk-first then LRU eviction; TCP clears on
 
 ## 14.19 – 14.23 Parameter definitions (metadata)
 
-**14.19 ArduPilot publishes parameter definitions; PX4 does not.** ✔
+**14.19 ArduPilot publishes a live-update URL for parameter definitions; PX4 does not.** ✔
 `https://autotest.ardupilot.org/Parameters/<Vehicle>/apm.pdef.json` answers (HTTP 200
-re-checked 2026-08-19). PX4 has no equivalent, so nothing is baked in to rot.
+re-checked 2026-08-19). PX4 has no equivalent URL — its 1836 definitions ship only in
+the compiled seed (see 14.22), so there is no hardcoded PX4 URL to rot.
 
 **14.20 The pdef URL is an update source, not a read path or cache key.** ✔
 Ordinary reads are local-only from a holding file keyed by Vehicle Profile ID. Only the
