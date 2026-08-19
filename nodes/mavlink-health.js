@@ -38,20 +38,13 @@ module.exports = function registerMavlinkHealth(RED) {
     const connectionNode = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, true, connectionNode);
 
-    // Which identity's health this asserts. Resolved from the Connection's own
-    // identity ids, not by trusting the saved value: the saved pick is used
-    // only when it is both listed among the Connection's bound identities and
-    // an identity node that actually exists — otherwise it falls back to the
-    // required Local Identity. The editor hides this field — and does not ring
-    // — for a single-identity Connection, so the runtime owns the guard: a
-    // blank, leftover, or hand-edited id the Connection does not heartbeat must
-    // not reach assertHealth and report healthy over a no-op (§0
-    // silent-false-success). Membership plus existence is exactly the
-    // bound-and-existing set the editor's identityOptionsFor builds, so runtime
-    // and editor cannot disagree on what "bound" means (Gitar/CodeRabbit #351)
-    // — a dangling id listed in additionalIdentities is excluded by both.
-    const boundIds = [connectionNode.localIdentity].concat(connectionNode.additionalIdentities || []);
-    const identityId = boundIds.indexOf(config.identity) !== -1 && RED.nodes.getNode(config.identity)
+    // Which identity's health this asserts. Blank config (the editor writes
+    // blank for a single-identity Connection whose field is hidden) means the
+    // Connection's Local Identity — the same absent-override rule
+    // resolveIdentity uses for outbound sends. A non-blank saved pick rides as
+    // given. assertHealth refuses an id this Connection does not heartbeat, so
+    // a hand-edited unbound pick is loud rather than a silent healthy no-op.
+    const identityId = config.identity !== undefined && config.identity !== null && config.identity !== ''
       ? config.identity
       : connectionNode.localIdentity;
 

@@ -149,44 +149,39 @@ module.exports = function registerMavlinkFormation(RED) {
  * Anchor precedence: `msg.payload.anchor` ({lat, lon, alt}), else the
  * configured fixed anchor, else the configured leader's live position from the
  * peer table. A leader with no position, or with no relative altitude, is a
- * refusal — never a default: 0,0 is null island and altitude 0 commands a
- * descent to home level.
+ * live telemetry miss (rule 3) — never a default: 0,0 is null island and
+ * altitude 0 commands a descent to home level.
  *
  * Heading precedence: `msg.payload.headingDeg`, else config, else (leader
- * anchor only) the leader's reported heading. An unknown heading falls back to
- * 0 (pattern faces north) rather than refusing: unlike a defaulted coordinate
- * or altitude, any heading yields a geometrically valid, fully separated
- * formation — the value orients the pattern, it cannot collapse it (§2:
- * refusals are for inputs whose default is silently dangerous). A present
- * payload heading is trusted input like every other: Number() coercion, never
- * a refusal.
+ * anchor only) the leader's reported heading. An unknown heading stays
+ * unknown — 0 would face the pattern north without anyone asking. A present
+ * payload heading is trusted input like every other: Number() coercion.
  *
- * Pitch follows the same payload-then-config rule via {@link resolvePitch}
- * (default 0 = level). Pitch tumbles the pattern around body +Y; it is not
- * taken from telemetry.
+ * Pitch follows the same payload-then-config rule via {@link resolvePitch}.
+ * Pitch tumbles the pattern around body +Y; it is not taken from telemetry.
  *
  * @param {object} config node config
  * @param {object} payload msg.payload
  * @param {{snapshot: Function}} peerTable connection peer table
- * @returns {{anchor: {lat: *, lon: *, alt: *}, headingDeg: number}}
+ * @returns {{anchor: {lat: *, lon: *, alt: *}, headingDeg: *}}
  */
 function resolveAnchor(config, payload, peerTable) {
   // Payload heading wins over config; blank means "not set" (null). The peer
   // table projects a leader's telemetry heading to a finite number or null.
   let heading = !isBlank(payload.headingDeg)
     ? Number(payload.headingDeg)
-    : isBlank(config.headingDeg) ? null : Number(config.headingDeg);
+    : isBlank(config.headingDeg) ? NaN : Number(config.headingDeg);
 
   // A payload anchor overrides the configured mode outright.
   if (payload.anchor) {
-    return { anchor: payload.anchor, headingDeg: heading ?? 0 };
+    return { anchor: payload.anchor, headingDeg: heading };
   }
 
   switch (config.anchorMode) {
     case 'fixed':
       return {
         anchor: { lat: config.lat, lon: config.lon, alt: config.alt },
-        headingDeg: heading ?? 0,
+        headingDeg: heading,
       };
     case 'leader': {
       const sysid = Number(config.leader);
@@ -196,19 +191,18 @@ function resolveAnchor(config, payload, peerTable) {
       if (!position) {
         // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: no GLOBAL_POSITION_INT seen yet is a live telemetry state, not an input
         throw new Error(`mavlink-formation: leader ${config.leader} has no reported position `
-          + '(no GLOBAL_POSITION_INT seen) — refusing to anchor the formation on unknown coordinates');
+          + '(no GLOBAL_POSITION_INT seen)');
       }
       // Targets ride MAV_FRAME_GLOBAL_RELATIVE_ALT, where a defaulted 0 commands
       // a descent to home level.
       if (!Number.isFinite(position.relativeAlt)) {
         // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: no relative altitude reported yet is a live telemetry state, not an input
-        throw new Error(`mavlink-formation: leader ${config.leader} reports no relative altitude — `
-          + 'refusing to default the formation altitude');
+        throw new Error(`mavlink-formation: leader ${config.leader} reports no relative altitude`);
       }
-      if (heading === null) heading = position.heading; // may still be null (wire sentinel)
+      if (!Number.isFinite(heading) && position.heading != null) heading = position.heading;
       return {
         anchor: { lat: position.lat, lon: position.lon, alt: position.relativeAlt },
-        headingDeg: heading ?? 0,
+        headingDeg: heading,
       };
     }
     default: break; // This space intentionally left blank (§5)

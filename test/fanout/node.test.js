@@ -186,42 +186,21 @@ test('config.identity is used as identityId when the wrapper does not override',
     'config.identity must reach connection.send options as identityId');
 });
 
-test('mavlink-fanout node gates DO_FLIGHTTERMINATION on msg.confirmed / node confirm (§10)', async () => {
-  const RED = redStub({ conn: connectionStub([peer(1)]) });
+test('mavlink-fanout packs DO_FLIGHTTERMINATION without a confirm gate', async () => {
+  const conn = connectionStub([peer(1)]);
+  const RED = redStub({ conn });
   require('../../nodes/mavlink-fanout')(RED);
-  const Node = RED.nodes.types['mavlink-fanout'];
-
-  // No confirmation anywhere → refused, nothing sent.
-  const gated = new Node({ executionMode: 'sequential', selectionMode: 'all', connection: 'conn', delivery: 'send' });
-  let sent;
-  const err = await emitInput(
-    gated,
-    { payload: builtCommand({ fields: { command: 185, param1: 1 } }) },
-    (m) => { sent = m; }
-  ).then(
-    () => null,
-    (e) => e
-  );
-  assert.ok(err, 'refused safety command is passed to done(err)');
-  assert.match(err.message, /mavlink-fanout: refused/);
-  assert.ok(sent, 'status output is emitted before done(err)');
-  assert.equal(sent[0], null);
-  assert.equal(sent[1].result, 'refused');
-  assert.match(sent[1].detail, /confirm/i);
-
-  // msg.confirmed === true clears the gate.
-  const conn2 = connectionStub([peer(1)]);
-  const RED2 = redStub({ conn: conn2 });
-  require('../../nodes/mavlink-fanout')(RED2);
-  const okNode = new (RED2.nodes.types['mavlink-fanout'])({ executionMode: 'sequential',
-    selectionMode: 'all', connection: 'conn', delivery: 'send',
+  const node = new (RED.nodes.types['mavlink-fanout'])({
+    executionMode: 'sequential',
+    selectionMode: 'all',
+    connection: 'conn',
+    delivery: 'send',
   });
-  await emitInput(okNode, {
+  await emitInput(node, {
     payload: builtCommand({ fields: { command: 185, param1: 1 } }),
-    confirmed: true,
   }, () => {});
-  assert.equal(conn2.sends.length, 1);
-  assert.equal(conn2.sends[0].message.fields.command, 185);
+  assert.equal(conn.sends.length, 1);
+  assert.equal(conn.sends[0].message.fields.command, 185);
 });
 
 test('a filter matching zero vehicles reports quietly — empty aggregate, no error (#226)', async () => {

@@ -64,7 +64,6 @@ module.exports = function registerMavlinkFanout(RED) {
           concurrency: numberOption(opts, config, 'concurrency'),
           stopOnError: opts.stopOnError !== undefined ? !!opts.stopOnError : !!config.stopOnError,
           identityId: opts.identityId || config.identity,
-          confirmed: msg.confirmed === true || config.confirm === true,
         }));
 
         // Two ways there is nothing to report. A redeploy cancelled us: the
