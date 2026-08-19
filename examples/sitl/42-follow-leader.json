@@ -1,0 +1,640 @@
+[
+  {
+    "id": "sitl42-tab",
+    "type": "tab",
+    "label": "SITL 42 Follow leader",
+    "disabled": false,
+    "info": "Flow-level follow-leader on ArduPilot sysids 1–5: fly the fleet, move leader sysid 1 sixty metres north, and let a 1 Hz position gate re-anchor a wedge of followers (2–5) on the leader's live position (mavlink-formation anchorMode=leader). A State-feed watchdog holds the loop on leader link loss and resumes on heartbeat.",
+    "env": []
+  },
+  {
+    "id": "sitl42-comment",
+    "type": "comment",
+    "z": "sitl42-tab",
+    "name": "Follow-leader: move leader, wedge chases",
+    "info": "Prerequisite: fleet arm-ready (harness prep ap-arm-ready-fleet).\n\nFlight chain: GUIDED ×5 → arm ×5 → takeoff 30 m ×5 → climb settle → stream GLOBAL_POSITION_INT (33) at 2 Hz on sysid 1 → move the LEADER 60 m north (single-member formation, fixed anchor).\n\nFollow loop (live from deploy): In (leader position, 1 Hz) → minMove gate (15 m horizontal) → Formation anchorMode=leader re-anchors followers 2–5 in a 10 m wedge — one confirmed DO_REPOSITION fan-out per accepted update. The gate seeds its baseline on the first fix WITHOUT firing: re-anchors are movement-driven, never stream-start-driven.\n\nWatchdog: State feed (stale/expired/peer-new/heartbeat) holds the loop while the leader link is stale/expired — followers keep their last commanded positions — and auto-resumes on heartbeat.\n\nVerdict: `leader move status` succeeded (count 1) AND a `reanchor status` aggregate succeeded with count: 4.",
+    "x": 320,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl42-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
+  },
+  {
+    "id": "sitl42-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduPilot fleet",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
+  },
+  {
+    "id": "sitl42-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot 5×SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "vehicle": "sitl42-vehicle",
+    "localIdentity": "sitl42-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl42-inject",
+    "type": "inject",
+    "z": "sitl42-tab",
+    "name": "Fly, move leader, follow",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 180,
+    "wires": [
+      [
+        "sitl42-guided-build"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-guided-build",
+    "type": "mavlink-command",
+    "z": "sitl42-tab",
+    "name": "GUIDED ×5 (build)",
+    "mode": "preset",
+    "preset": "set_mode",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "sendAs": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"1\":1,\"2\":4}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 290,
+    "y": 180,
+    "wires": [
+      [
+        "sitl42-guided"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "sitl42-guided",
+    "type": "mavlink-fanout",
+    "z": "sitl42-tab",
+    "name": "GUIDED ×5",
+    "connection": "sitl42-connection",
+    "selectionMode": "list",
+    "members": [
+      {
+        "sysid": 1
+      },
+      {
+        "sysid": 2
+      },
+      {
+        "sysid": 3
+      },
+      {
+        "sysid": 4
+      },
+      {
+        "sysid": 5
+      }
+    ],
+    "vehicleType": "",
+    "firmwareFilter": "",
+    "armedFilter": "",
+    "executionMode": "sequential",
+    "intervalMs": 200,
+    "delivery": "confirm",
+    "timeoutMs": "10000",
+    "maxRetries": "3",
+    "x": 450,
+    "y": 180,
+    "wires": [
+      [
+        "sitl42-arm-build"
+      ],
+      [
+        "sitl42-guided-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-arm-build",
+    "type": "mavlink-command",
+    "z": "sitl42-tab",
+    "name": "Arm ×5 (build)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "sendAs": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 580,
+    "y": 180,
+    "wires": [
+      [
+        "sitl42-arm"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "sitl42-arm",
+    "type": "mavlink-fanout",
+    "z": "sitl42-tab",
+    "name": "Arm ×5",
+    "connection": "sitl42-connection",
+    "selectionMode": "list",
+    "members": [
+      {
+        "sysid": 1
+      },
+      {
+        "sysid": 2
+      },
+      {
+        "sysid": 3
+      },
+      {
+        "sysid": 4
+      },
+      {
+        "sysid": 5
+      }
+    ],
+    "vehicleType": "",
+    "firmwareFilter": "",
+    "armedFilter": "",
+    "executionMode": "sequential",
+    "intervalMs": 200,
+    "delivery": "confirm",
+    "timeoutMs": "10000",
+    "maxRetries": "3",
+    "x": 740,
+    "y": 180,
+    "wires": [
+      [
+        "sitl42-takeoff-build"
+      ],
+      [
+        "sitl42-arm-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-takeoff-build",
+    "type": "mavlink-command",
+    "z": "sitl42-tab",
+    "name": "Takeoff 30 m ×5 (build)",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "build",
+    "connection": "",
+    "dialect": "common",
+    "sendAs": "long",
+    "timeout": "10000",
+    "maxRetries": "0",
+    "unconfirmedContinue": false,
+    "completionTimeout": "120000",
+    "params": "{\"7\":30}",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 900,
+    "y": 180,
+    "wires": [
+      [
+        "sitl42-takeoff"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "sitl42-takeoff",
+    "type": "mavlink-fanout",
+    "z": "sitl42-tab",
+    "name": "Takeoff 30 m ×5",
+    "connection": "sitl42-connection",
+    "selectionMode": "list",
+    "members": [
+      {
+        "sysid": 1
+      },
+      {
+        "sysid": 2
+      },
+      {
+        "sysid": 3
+      },
+      {
+        "sysid": 4
+      },
+      {
+        "sysid": 5
+      }
+    ],
+    "vehicleType": "",
+    "firmwareFilter": "",
+    "armedFilter": "",
+    "executionMode": "sequential",
+    "intervalMs": 200,
+    "delivery": "confirm",
+    "timeoutMs": "10000",
+    "maxRetries": "3",
+    "x": 1080,
+    "y": 180,
+    "wires": [
+      [
+        "sitl42-climb"
+      ],
+      [
+        "sitl42-takeoff-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-climb",
+    "type": "delay",
+    "z": "sitl42-tab",
+    "name": "climb settle",
+    "pauseType": "delay",
+    "timeout": "12",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 1250,
+    "y": 180,
+    "wires": [
+      [
+        "sitl42-stream"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-stream",
+    "type": "mavlink-command",
+    "z": "sitl42-tab",
+    "name": "Stream leader position 2 Hz",
+    "mode": "preset",
+    "preset": "set_message_interval",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl42-connection",
+    "identity": "",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"1\":33,\"2\":500000}",
+    "sendAs": "long",
+    "x": 1430,
+    "y": 180,
+    "wires": [
+      [
+        "sitl42-stream-settle"
+      ],
+      [
+        "sitl42-stream-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl42-stream-settle",
+    "type": "delay",
+    "z": "sitl42-tab",
+    "name": "stream settle",
+    "pauseType": "delay",
+    "timeout": "2",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 1630,
+    "y": 180,
+    "wires": [
+      [
+        "sitl42-leader-move"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-leader-move",
+    "type": "mavlink-formation",
+    "z": "sitl42-tab",
+    "name": "Move leader 60 m north",
+    "connection": "sitl42-connection",
+    "shape": "line",
+    "spacing": 10,
+    "sysids": "1",
+    "anchorMode": "fixed",
+    "leader": "",
+    "lat": -35.362723,
+    "lon": 149.165237,
+    "alt": 30,
+    "headingDeg": 0,
+    "pitchDeg": 0,
+    "delivery": "confirm",
+    "intervalMs": 200,
+    "timeoutMs": 10000,
+    "x": 1810,
+    "y": 180,
+    "wires": [
+      [],
+      [
+        "sitl42-leader-move-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-in-leader",
+    "type": "mavlink-in",
+    "z": "sitl42-tab",
+    "name": "Leader position (1 Hz)",
+    "connection": "sitl42-connection",
+    "messages": [
+      "GLOBAL_POSITION_INT"
+    ],
+    "sysid": "1",
+    "compid": "",
+    "showUnknown": false,
+    "changedOnly": false,
+    "changedFields": "",
+    "fieldName": "",
+    "fieldValue": "",
+    "rateLimit": "GLOBAL_POSITION_INT=1",
+    "x": 190,
+    "y": 420,
+    "wires": [
+      [
+        "sitl42-fn-gate"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-fn-gate",
+    "type": "function",
+    "z": "sitl42-tab",
+    "name": "minMove gate + hold check",
+    "func": "// The 1 Hz update gate lives upstream (In node rateLimit). This is the\n// minMove jitter gate plus the leader-loss hold: pass an update only when\n// the leader moved at least MIN_MOVE_M (horizontal) since the last accepted\n// fix, and hold everything while the watchdog has the leader flagged lost.\n// The first fix seeds the baseline WITHOUT firing — a re-anchor is triggered\n// by leader movement, never by the stream starting.\nconst MIN_MOVE_M = 15;\nconst state = flow.get('followLeader') || { halted: true, last: null };\n\nif (state.halted) {\n  node.status({ fill: 'yellow', shape: 'ring', text: 'held — leader link not confirmed' });\n  return null;\n}\n\n// GLOBAL_POSITION_INT wire units: lat/lon are degE7 integers.\nconst pos = { lat: Number(msg.payload.lat) / 1e7, lon: Number(msg.payload.lon) / 1e7 };\n\nif (!state.last) {\n  state.last = pos;\n  flow.set('followLeader', state);\n  node.status({ fill: 'grey', shape: 'dot', text: 'baseline seeded — waiting for movement' });\n  return null;\n}\n\nconst toRad = (d) => d * Math.PI / 180;\nconst x = toRad(pos.lon - state.last.lon) * Math.cos(toRad((pos.lat + state.last.lat) / 2));\nconst y = toRad(pos.lat - state.last.lat);\nconst moved = Math.sqrt(x * x + y * y) * 6371000; // equirectangular, fine at formation scale\nif (moved < MIN_MOVE_M) {\n  node.status({ fill: 'grey', shape: 'dot', text: `moved ${moved.toFixed(1)} m < ${MIN_MOVE_M} m — holding` });\n  return null;\n}\n\nstate.last = pos;\nflow.set('followLeader', state);\nnode.status({ fill: 'green', shape: 'dot', text: `leader moved ${moved.toFixed(1)} m — re-anchoring` });\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 420,
+    "wires": [
+      [
+        "sitl42-reanchor"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-reanchor",
+    "type": "mavlink-formation",
+    "z": "sitl42-tab",
+    "name": "Re-anchor wedge on leader",
+    "connection": "sitl42-connection",
+    "shape": "wedge",
+    "spacing": 10,
+    "sysids": "2,3,4,5",
+    "anchorMode": "leader",
+    "leader": "1",
+    "lat": -35.363262,
+    "lon": 149.165237,
+    "alt": 30,
+    "headingDeg": "",
+    "pitchDeg": 0,
+    "delivery": "confirm",
+    "intervalMs": 100,
+    "timeoutMs": 5000,
+    "x": 780,
+    "y": 420,
+    "wires": [
+      [],
+      [
+        "sitl42-reanchor-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-watchdog",
+    "type": "mavlink-state",
+    "z": "sitl42-tab",
+    "name": "Leader watchdog (feed)",
+    "connection": "sitl42-connection",
+    "mode": "feed",
+    "events": "stale,expired,peer-new,heartbeat",
+    "targetSystem": "",
+    "targetComponent": "",
+    "x": 200,
+    "y": 540,
+    "wires": [
+      [
+        "sitl42-fn-watchdog"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "sitl42-fn-watchdog",
+    "type": "function",
+    "z": "sitl42-tab",
+    "name": "leader lost = hold, back = resume",
+    "func": "// Watchdog: a stale/expired leader holds the loop (followers keep their\n// last commanded positions — hold-on-loss; no successor promotion in flow\n// form). A fresh heartbeat (or re-added peer) from the leader auto-resumes\n// and re-seeds the gate baseline on the next position update.\n// Keep LEADER in sync with the In node's sysid filter and Formation's leader.\nconst LEADER = 1;\nconst state = flow.get('followLeader') || { halted: true, last: null };\nconst rec = msg.payload || {};\n\nif (Number(rec.sysid) !== LEADER) return null;\n\nif (rec.event === 'stale' || rec.event === 'expired') {\n  state.halted = true;\n  flow.set('followLeader', state);\n  node.status({ fill: 'red', shape: 'ring', text: `leader ${rec.event} — following held` });\n  return { payload: { held: true, reason: rec.event, leader: LEADER, at: rec.at } };\n}\n\nif ((rec.event === 'heartbeat' || rec.event === 'peer-new') && state.halted) {\n  state.halted = false;\n  state.last = null;\n  flow.set('followLeader', state);\n  node.status({ fill: 'green', shape: 'dot', text: 'leader back — resuming' });\n  return { payload: { held: false, resumed: true, leader: LEADER, at: rec.at } };\n}\n\nreturn null;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 500,
+    "y": 540,
+    "wires": [
+      [
+        "sitl42-watchdog-events"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-guided-status",
+    "type": "debug",
+    "z": "sitl42-tab",
+    "name": "guided status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 450,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "sitl42-arm-status",
+    "type": "debug",
+    "z": "sitl42-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 740,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "sitl42-takeoff-status",
+    "type": "debug",
+    "z": "sitl42-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1080,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "sitl42-stream-status",
+    "type": "debug",
+    "z": "sitl42-tab",
+    "name": "stream status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1430,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "sitl42-leader-move-status",
+    "type": "debug",
+    "z": "sitl42-tab",
+    "name": "leader move status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1820,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "sitl42-reanchor-status",
+    "type": "debug",
+    "z": "sitl42-tab",
+    "name": "reanchor status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1090,
+    "y": 420,
+    "wires": []
+  },
+  {
+    "id": "sitl42-watchdog-events",
+    "type": "debug",
+    "z": "sitl42-tab",
+    "name": "watchdog events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 810,
+    "y": 540,
+    "wires": []
+  }
+]
