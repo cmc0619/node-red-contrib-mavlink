@@ -159,26 +159,18 @@
 
         $components.on('change', syncComponentsHidden);
 
+        var AP_PDEF_BASE = 'https://autotest.ardupilot.org/Parameters/';
+
         function paramDefsUrlFor(firmware, family) {
           if (firmware === 'px4') return PX4_PARAM_URL;
-          if (firmware === 'ardupilot') {
-            var doc = ARDUPILOT_VEHICLE_DOC[family];
-            if (doc) return 'https://autotest.ardupilot.org/Parameters/' + doc + '/apm.pdef.json';
-          }
-          return '';
+          var doc = firmware === 'ardupilot' && ARDUPILOT_VEHICLE_DOC[family];
+          return doc ? AP_PDEF_BASE + doc + '/apm.pdef.json' : '';
         }
-
-        var allKnownUrls = Object.keys(ARDUPILOT_VEHICLE_DOC).reduce(function (s, k) {
-          s[paramDefsUrlFor('ardupilot', k)] = true;
-          return s;
-        }, {});
-        allKnownUrls[PX4_PARAM_URL] = true;
 
         function suggestParamDefsUrl() {
           var current = $paramDefsUrl.val().trim();
-          if (current && !allKnownUrls[current]) return;
-          var url = paramDefsUrlFor($firmware.val(), $vehicleFamily.val());
-          $paramDefsUrl.val(url);
+          if (current && current.indexOf(AP_PDEF_BASE) !== 0 && current !== PX4_PARAM_URL) return;
+          $paramDefsUrl.val(paramDefsUrlFor($firmware.val(), $vehicleFamily.val()));
         }
 
         $firmware.on('change', function () {
