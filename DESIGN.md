@@ -148,10 +148,11 @@ and an ArduPilot profile whose vehicle family is `unknown` has no per-document U
 (`scripts/generate-param-seed.js`) fetches the known sources at build time; the shipped
 seed carries them all (see 14.22). At runtime the Vehicle Profile editor pre-fills
 `paramDefsUrl` only when a URL is known (named ArduPilot document or PX4); the operator
-can override that pre-fill for a different source. When none is known the URL row is not
-shown. Clicking Update fetches from whichever URL is in the field.
+can override that pre-fill for a different source. When none is known the field stays
+blank rather than inventing one. Clicking Update fetches from whichever URL is in the
+field.
 *Check:* `params-active.json` lists every source URL and count; change
-firmware/vehicle in the editor and watch the URL field appear, update, or hide.
+firmware/vehicle in the editor and watch the URL field update (or clear).
 
 **14.20 The pdef URL is an update source, not a read path or cache key.** ✔
 Ordinary reads are local-only from a holding file keyed by Vehicle Profile ID. Only the
