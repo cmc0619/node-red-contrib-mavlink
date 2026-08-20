@@ -142,7 +142,7 @@ test('leader without a finite relative altitude is refused (altitude must not de
   assert.equal(connection.sends.length, 0);
 });
 
-test('unknown leader heading defaults the pattern to north (0), documented safe default', async () => {
+test('unknown leader heading stays unknown — north is not invented', async () => {
   const leader = peer(7, { position: { lat: 47.4, lon: 8.5, alt: 430, relativeAlt: 30, heading: null } });
   const connection = connectionStub([peer(1), peer(2), leader]);
   const RED = redStub({ conn: connection });
@@ -160,9 +160,9 @@ test('unknown leader heading defaults the pattern to north (0), documented safe 
 
   await emitInput(node, { payload: {} }, () => {});
 
-  const bySysid = Object.fromEntries(connection.sends.map((s) => [s.message.fields.target_system, s.message.fields]));
-  assert.equal(bySysid[2].x, e7(47.4), 'heading 0: the line stays on the anchor latitude');
-  assert.ok(bySysid[2].y > e7(8.5), 'heading 0: slot 1 is due east');
+  assert.equal(connection.sends.length, 2);
+  assert.ok(connection.sends.every((s) => Number.isNaN(s.message.fields.x)),
+    'NaN heading produces NaN geometry, not a silent north-facing line');
 });
 
 test('a blank fixed anchor altitude rides as the coercion — the editor is the guard', async () => {

@@ -128,7 +128,6 @@ module.exports = function registerMavlinkCommand(RED) {
     const displayName = preset ? preset.name : `#${commandId}`;
     const noAutoRetry = preset ? preset.noAutoRetry : false;
     const completionKey = preset ? preset.completionKey : null;
-    const requiresConfirmation = preset ? preset.requiresConfirmation : false;
 
     const connNode = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, config.delivery !== 'build', connNode);
@@ -324,25 +323,6 @@ module.exports = function registerMavlinkCommand(RED) {
           target,
           ...fields,
         });
-      }
-
-      // ── Safety preset confirmation check ──────────────────────────────────
-      // Runs before Build as well as send tiers: a built Flight Termination
-      // envelope on output 0 can be forwarded straight to mavlink-out, so the
-      // gate must block construction without an explicit boolean confirm
-      // (§9 safety — requiresConfirmation presets).
-      // Truthy tokens like the string "false" or 1 must NOT pass.
-      if (requiresConfirmation && msg.confirmed !== true) {
-        const rec = makeRecord({
-          result: 'unconfirmed',
-          confirmedBy: 'none',
-          elapsed: Date.now() - startMs,
-          detail: 'safety command requires msg.confirmed = true',
-        });
-        applyActionStatus(node, 'error', `confirm ${displayName}`);
-        emitStatus(rec, send, false);
-        done();
-        return;
       }
 
       // Frame for the COMMAND_INT carrier (§9 "Coordinate frames"): shared

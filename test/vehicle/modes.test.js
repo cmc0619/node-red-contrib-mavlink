@@ -93,6 +93,8 @@ test('an unresolved name is NaN — loud at the wire, never 0 and never undefine
   const params = setModeParams('WARP_9', { firmware: 'px4' });
   assert.equal(Number.isNaN(params[2]), true);
   assert.equal(Number.isNaN(params[3]), true);
+  // custom matches no packing case — no ArduPilot-shaped param2 invented.
+  assert.deepEqual(setModeParams('GUIDED', { firmware: 'custom' }), {});
 });
 
 test('an unresolved number is undefined — outputs omit the name, keep the number', () => {

@@ -2,7 +2,7 @@
 
 /**
  * mavlink-command node tests (DESIGN.md §9). Covers the review findings:
- *   - safety confirmation requires a strict boolean true (not a truthy token)
+ *   - safety presets pack and send without a confirm gate (operator chose the preset)
  *   - the status record is emitted as the top-level message on output 1
  *   - the Build tier reports a 'built' status record on output 1
  *   - the async input handler contains throws/rejections as a terminal status
@@ -142,33 +142,7 @@ test('Build tier: an explicit custom-mode param suppresses the whole named pair'
   assert.notEqual(mixed[0].payload.fields.param3, 3, "the name's sub_mode must not ride along");
 });
 
-test('Safety preset refuses a truthy-but-non-boolean confirmation token', async () => {
-  const conn = connStub();
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({
-    params: '{}',
-    sendAs: 'long',
-    mode: 'preset',
-    preset: 'flight_termination',
-    delivery: 'confirm',
-    connection: 'conn',
-    targetSystem: '1',
-    targetComponent: '1',
-  });
-
-  let sent;
-  // The string "false" is truthy — it must NOT arm a safety command.
-  node.emit('input', { payload: { 1: 1 }, confirmed: 'false' }, (m) => { sent = m; }, () => {});
-  await tick();
-
-  assert.equal(sent[0], null, 'output 0 must not fire');
-  assert.equal(sent[1].result, 'unconfirmed');
-  assert.equal(conn.sent.length, 0, 'nothing is sent to the vehicle');
-});
-
-test('Safety preset Build tier also requires msg.confirmed === true', async () => {
+test('Safety preset Build tier packs Flight Termination without a confirm gate', async () => {
   const conn = connStub();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-command')(RED);
@@ -188,11 +162,11 @@ test('Safety preset Build tier also requires msg.confirmed === true', async () =
   node.emit('input', { payload: { 1: 1 } }, (m) => { sent = m; }, () => {});
   await tick();
 
-  assert.equal(sent[0], null, 'build must not emit an unconfirmed safety command');
-  assert.equal(sent[1].result, 'unconfirmed');
+  assert.equal(sent[1].result, 'built');
+  assert.equal(sent[0].payload.fields.command, 185);
 });
 
-test('Safety preset with confirmed === true proceeds to send the command', async () => {
+test('Safety preset Send tier packs Flight Termination without a confirm gate', async () => {
   const conn = connStub();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-command')(RED);
@@ -202,17 +176,16 @@ test('Safety preset with confirmed === true proceeds to send the command', async
     sendAs: 'long',
     mode: 'preset',
     preset: 'flight_termination',
-    delivery: 'confirm',
+    delivery: 'send',
     connection: 'conn',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '2000',
   });
 
-  node.emit('input', { payload: { 1: 1 }, confirmed: true }, () => {}, () => {});
+  node.emit('input', { payload: { 1: 1 } }, () => {}, () => {});
   await tick();
 
-  assert.equal(conn.sent.length, 1, 'boolean true arms the command');
+  assert.equal(conn.sent.length, 1, 'selecting the preset is enough to send');
   assert.equal(conn.sent[0].message.fields.command, 185);
 
   node.emit('close', () => {});
