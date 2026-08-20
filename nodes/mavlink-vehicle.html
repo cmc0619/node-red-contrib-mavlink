@@ -168,9 +168,12 @@
         }
 
         function suggestParamDefsUrl() {
+          var fw = $firmware.val();
+          var url = paramDefsUrlFor(fw, $vehicleFamily.val());
+          $('#mav-param-defs-section').toggle(url !== '');
           var current = $paramDefsUrl.val().trim();
           if (current && current.indexOf(AP_PDEF_BASE) !== 0 && current !== PX4_PARAM_URL) return;
-          $paramDefsUrl.val(paramDefsUrlFor($firmware.val(), $vehicleFamily.val()));
+          $paramDefsUrl.val(url);
         }
 
         $firmware.on('change', function () {
@@ -399,6 +402,7 @@
       <button id="mav-dialect-rebuild" class="red-ui-button">Rebuild dialect</button>
     </div>
     <div class="form-tips" id="mav-catalog-status" style="min-height:1em;"></div>
+    <div id="mav-param-defs-section">
     <div class="form-row">
       <label for="node-config-input-paramDefsUrl">Param defs URL</label>
       <input type="text" id="node-config-input-paramDefsUrl" style="width:55%;" placeholder="parameter metadata URL">
@@ -408,6 +412,7 @@
     <div class="form-tips">
       Pre-filled from firmware and vehicle; override for a custom source. Used only by Update,
       which downloads definitions into this profile's local holding file.
+    </div>
     </div>
   </div>
   <script type="text/javascript">
