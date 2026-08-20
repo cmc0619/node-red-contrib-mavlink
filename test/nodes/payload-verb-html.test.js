@@ -118,11 +118,10 @@ test('payload rows are generated, with dialect labels, units and real ceilings',
   // Recipe order, not alphabetical: gimbal roi-set reads lat, lon, alt.
   assert.match(payloadHtml, /var keys = Object\.keys\(fields\);/);
   assert.ok(!/Object\.keys\(fields\)\.sort\(\)/.test(payloadHtml));
-  // Numbers stay blank when unset; a pulldown has to land on something, so it
-  // takes the recipe default. Either way buildPayloadMessage resolves a blank
-  // slot to that same default, so the wire is identical.
-  assert.match(payloadHtml, /\.val\(blank \? '' : stashed\)/, 'numbers stay blank when unset');
-  assert.match(payloadHtml, /var saved = blank[\s\S]{0,140}meta\.default/, 'enums take the recipe default');
+  // Numbers initialize to the recipe default when unset so a save stores an
+  // explicit value; pulldowns do the same. The driver does not invent defaults.
+  assert.match(payloadHtml, /\.val\(saved\)/, 'numbers take the recipe default when unset');
+  assert.match(payloadHtml, /var saved = blank[\s\S]{0,140}meta\.default/, 'unset controls take the recipe default');
   assert.match(
     payloadHtml,
     /sel\.topic === 'gimbal' && sel\.verb === 'aim'/,
