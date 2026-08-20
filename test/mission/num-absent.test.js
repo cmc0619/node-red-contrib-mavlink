@@ -30,3 +30,25 @@ test('blank mission numeric strings stay unset — Number("") must not invent 0'
   assert.equal(legacy.fields.y, undefined);
   assert.equal(legacy.fields.z, null);
 });
+
+test('blank mission frame does not invent GLOBAL scaling for x/y', () => {
+  // Number('')/Number(null) are 0 (GLOBAL). Scaling must not run on a blank frame.
+  const blank = buildItemInt(
+    { frame: '', command: 16, x: 47.4, y: 8.5, z: 10 },
+    TARGET,
+    0,
+    0
+  );
+  assert.equal(blank.fields.frame, '');
+  assert.equal(blank.fields.x, 47.4, 'degrees stay unscaled when frame is blank');
+  assert.equal(blank.fields.y, 8.5);
+  const nullFrame = buildItemInt(
+    { frame: null, command: 16, x: 1.5, y: 2.5 },
+    TARGET,
+    0,
+    0
+  );
+  assert.equal(nullFrame.fields.frame, null);
+  assert.equal(nullFrame.fields.x, 1.5);
+  assert.equal(nullFrame.fields.y, 2.5);
+});

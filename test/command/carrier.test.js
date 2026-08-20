@@ -70,6 +70,16 @@ test('resolveFrame treats whitespace-only as blank — does not invent GLOBAL (0
   assert.equal(resolveFrame(3, ' '), 3);
 });
 
+test('longToIntFields blank x/y stay unset — Number("") must not invent 0', () => {
+  const empty = longToIntFields([0, 0, 0, 0, '', '   ', 10], { frame: 3 });
+  assert.equal(empty.x, undefined);
+  assert.equal(empty.y, undefined);
+  assert.equal(empty.z, 10);
+  const keptNull = longToIntFields([0, 0, 0, 0, null, 1, 0], { frame: 3 });
+  assert.equal(keptNull.x, null);
+  assert.equal(keptNull.y, 10000000);
+});
+
 test('longToIntFields scales every degrees value — no pass-through heuristic', () => {
   // Whole-degree coordinates are ordinary operator input and must scale like
   // any other degrees value; the old |v| > 180 pass-through is gone (§9).
