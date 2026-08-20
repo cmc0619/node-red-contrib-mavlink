@@ -1,11 +1,9 @@
 'use strict';
 
 /**
- * Measurement pin (§14.55/14.56): Buffer.write*Int* and class-default ints
- * turn non-finite / omitted / blank values into 0 on the wire. The driver does
- * not invent a refusal for that silence (§0) — GIGO; the editor owns
- * completeness. This file pins the mechanism so it is not re-wrapped in a
- * helpful driver throw.
+ * Pack-time bag check (§14.55/14.56): core scalar ints must be spoken and
+ * finite on `message.fields` or serialize throws `invalid packet`. Spoken 0
+ * is fine. Extensions and floats are not checked.
  */
 
 const test = require('node:test');
@@ -36,14 +34,12 @@ function localNed(fields) {
 
 const ctx = { sysid: 255, compid: 190, seq: 0 };
 
-test('a NaN target_system serializes as 0 — Buffer does not refuse (§0 GIGO)', () => {
-  const frame = wire.serialize(localNed({ target_system: NaN }), ctx);
-  assert.equal(wire.decode(frame)[0].fields.target_system, 0);
+test('a NaN target_system refuses — invalid packet', () => {
+  assert.throws(() => wire.serialize(localNed({ target_system: NaN }), ctx), /invalid packet/);
 });
 
-test('a string target_system that coerces to NaN serializes as 0', () => {
-  const frame = wire.serialize(localNed({ target_system: 'abc' }), ctx);
-  assert.equal(wire.decode(frame)[0].fields.target_system, 0);
+test('a string target_system that coerces to NaN refuses', () => {
+  assert.throws(() => wire.serialize(localNed({ target_system: 'abc' }), ctx), /invalid packet/);
 });
 
 test('a numeric string target_system still serializes — Number("7") is finite', () => {
@@ -51,16 +47,26 @@ test('a numeric string target_system still serializes — Number("7") is finite'
   assert.equal(wire.decode(frame)[0].fields.target_system, 7);
 });
 
-test('an omitted integer field keeps the class default 0', () => {
-  const { target_system: _drop, ...fields } = localNed({}).fields;
-  const frame = wire.serialize({ name: 'SET_POSITION_TARGET_LOCAL_NED', fields }, ctx);
+test('spoken target_system 0 serializes as 0 — intentional zero is fine', () => {
+  const frame = wire.serialize(localNed({ target_system: 0 }), ctx);
   assert.equal(wire.decode(frame)[0].fields.target_system, 0);
 });
 
-test('a present-but-blank integer field serializes as 0', () => {
+test('an omitted integer field refuses — invalid packet', () => {
+  const { target_system: _drop, ...fields } = localNed({}).fields;
+  assert.throws(
+    () => wire.serialize({ name: 'SET_POSITION_TARGET_LOCAL_NED', fields }, ctx),
+    /invalid packet/
+  );
+});
+
+test('a present-but-blank integer field refuses', () => {
   for (const blank of ['', '   ', null]) {
-    const frame = wire.serialize(localNed({ target_system: blank }), ctx);
-    assert.equal(wire.decode(frame)[0].fields.target_system, 0, `blank ${JSON.stringify(blank)}`);
+    assert.throws(
+      () => wire.serialize(localNed({ target_system: blank }), ctx),
+      /invalid packet/,
+      `blank ${JSON.stringify(blank)}`
+    );
   }
 });
 
@@ -83,7 +89,7 @@ test('integer ARRAY fields still serialize', () => {
   assert.equal(wire.decode(frame)[0].fields.satellite_prn[0], 1);
 });
 
-test('omitted MAVLink 2 extension integers decode as 0 (§14.65)', () => {
+test('omitted MAVLink 2 extension integers stay layout 0 (§14.65)', () => {
   const frame = wire.serialize(
     { name: 'COMMAND_ACK', fields: { command: 400, result: 0 } },
     { sysid: 1, compid: 1, seq: 0 }
@@ -109,11 +115,10 @@ test('a NaN float field still serializes — NaN floats are legal MAVLink', () =
   assert.ok(Number.isNaN(decoded.fields.x));
 });
 
-test('COMMAND_INT: a garbage MAV_FRAME token becomes NaN on the bag and 0 on the wire', () => {
+test('COMMAND_INT: a garbage MAV_FRAME token refuses at pack', () => {
   const message = buildCommandInt(192, 1, 1, [0, 0, 0, 0, 47.398, 8.545, 10], { frame: 'garbage' });
   assert.ok(Number.isNaN(message.fields.frame), 'unresolved frame is NaN, not a guessed member');
-  const frame = wire.serialize(message, ctx);
-  assert.equal(wire.decode(frame)[0].fields.frame, 0);
+  assert.throws(() => wire.serialize(message, ctx), /invalid packet/);
 });
 
 test('COMMAND_LONG: frame carries no wire field — param5/6 stay raw decimal degrees', () => {
