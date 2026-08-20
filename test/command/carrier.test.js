@@ -29,12 +29,14 @@ const {
 } = require('../../lib/command');
 
 test('longToIntFields maps params, scales global lat/lon to degE7, keeps z float', () => {
-  const int = longToIntFields([1, 2, 3, 4, 47.1234567, -122.5, 100.5]);
+  const int = longToIntFields([1, 2, 3, 4, 47.1234567, -122.5, 100.5], {
+    frame: DEFAULT_FRAME,
+  });
   assert.equal(int.param1, 1);
   assert.equal(int.param2, 2);
   assert.equal(int.param3, 3);
   assert.equal(int.param4, 4);
-  // Default frame is a global frame → x/y scaled by 1e7.
+  // Global frame → x/y scaled by 1e7.
   assert.equal(int.x, 471234567);
   assert.equal(int.y, -1225000000);
   // z is float altitude, untouched.
@@ -44,29 +46,26 @@ test('longToIntFields maps params, scales global lat/lon to degE7, keeps z float
   assert.equal(int.autocontinue, 0);
 });
 
-test('the default COMMAND_INT frame is 3, the only one ArduPilot takes (#89)', () => {
-  // Pinned to the literal, not to DEFAULT_FRAME — asserting a constant equals
-  // itself is what let this sit at GLOBAL (0) while every test passed.
-  //
-  // ArduCopter/GCS_MAVLink_Copter.cpp, handle_MAV_CMD_NAV_TAKEOFF:
-  //     if (packet.frame != MAV_FRAME_GLOBAL_RELATIVE_ALT) {
-  //         return MAV_RESULT_DENIED;
-  //     }
-  // A strict equality, so 0 is DENIED — and DENIED (4) is not one of the ack
-  // codes that arm the carrier swap (7, 8), so there is no retry behind it.
+test('omitted COMMAND_INT frame is not invented — DEFAULT_FRAME is documentation only (#89)', () => {
+  // Pinned to the literal: ArduCopter only accepts GLOBAL_RELATIVE_ALT (3) for
+  // takeoff. The editor must save that frame explicitly; the driver does not
+  // invent it when omitted (§0).
   assert.equal(DEFAULT_FRAME, 3);
-
-  // 6 means the same altitude reference but fails that check on its value.
   assert.notEqual(DEFAULT_FRAME, 6, 'GLOBAL_RELATIVE_ALT_INT is not a substitute');
 
-  const int = buildCommandInt(22, 1, 1, [0, 0, 0, 0, 47.1234567, -122.5, 100.5]);
-  assert.equal(int.fields.frame, 3, 'a takeoff built with no frame is accepted as-is');
+  const omitted = longToIntFields([0, 0, 0, 0, 47.1234567, -122.5, 100.5]);
+  assert.ok(Number.isNaN(omitted.frame), 'blank/omitted frame stays NaN');
+
+  const int = buildCommandInt(22, 1, 1, [0, 0, 0, 0, 47.1234567, -122.5, 100.5], {
+    frame: DEFAULT_FRAME,
+  });
+  assert.equal(int.fields.frame, 3, 'an explicit relative-alt frame rides');
 });
 
 test('longToIntFields scales every degrees value — no pass-through heuristic', () => {
   // Whole-degree coordinates are ordinary operator input and must scale like
   // any other degrees value; the old |v| > 180 pass-through is gone (§9).
-  const int = longToIntFields([0, 0, 0, 0, -35, 149, 50]);
+  const int = longToIntFields([0, 0, 0, 0, -35, 149, 50], { frame: DEFAULT_FRAME });
   assert.equal(int.x, -350000000);
   assert.equal(int.y, 1490000000);
 });
@@ -255,14 +254,15 @@ test('coordKinds raw/dege7 params are never ×1e7-scaled on a global frame', () 
 test('NaN in param5/6 stays non-finite — no silent null island (§9)', () => {
   // LONG's NaN means "leave unchanged"; int32 cannot express it, and coercing
   // to 0 would aim a global-frame command at 0,0. It rides out non-finite.
-  assert.ok(Number.isNaN(longToIntFields([0, 0, 0, 0, NaN, 149, 50]).x));
-  assert.ok(Number.isNaN(longToIntFields([0, 0, 0, 0, -35, NaN, 50]).y));
+  const frame = { frame: DEFAULT_FRAME };
+  assert.ok(Number.isNaN(longToIntFields([0, 0, 0, 0, NaN, 149, 50], frame).x));
+  assert.ok(Number.isNaN(longToIntFields([0, 0, 0, 0, -35, NaN, 50], frame).y));
   // Kind-independent: NaN flags are equally meaningless.
   assert.ok(Number.isNaN(
-    longToIntFields([0, 0, 0, 0, NaN, 0, 0], { coordKinds: { 5: 'raw', 6: 'raw' } }).x
+    longToIntFields([0, 0, 0, 0, NaN, 0, 0], { ...frame, coordKinds: { 5: 'raw', 6: 'raw' } }).x
   ));
   // NaN stays legal where the wire is float: param1–4 and z.
-  const ok = longToIntFields([NaN, 0, 0, 0, -35, 149, NaN]);
+  const ok = longToIntFields([NaN, 0, 0, 0, -35, 149, NaN], frame);
   assert.ok(Number.isNaN(ok.param1));
   assert.ok(Number.isNaN(ok.z));
 });

@@ -90,6 +90,7 @@ function deploy(ackResults, config = {}) {
     targetComponent: '1',
     timeout: '1000',
     values: { servo: 8, pwm: 1600 },
+    frame: '3',
     ...config,
   });
   const warnings = [];
@@ -130,6 +131,7 @@ test('INT_ONLY on a LONG-carrier verb resends as COMMAND_INT', async () => {
       topic: 'gimbal',
       verb: 'roi-set',
       sendAs: 'long',
+      frame: '3',
       values: { lat: 47.397742, lon: 8.545594, alt: 30 },
     }
   );

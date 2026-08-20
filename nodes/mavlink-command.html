@@ -306,10 +306,11 @@
       },
       delivery:          { value: 'confirm', validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'complete']) },
       sendAs:            { value: 'int', validate: RED.mavlink.oneOf(['int', 'long']) },
-      // Closed vocabulary: the frame select's own options (blank = the carrier
-      // module's documented default). Other frames ride msg.mavFrame at
-      // runtime; a hand-edited config value the dialog cannot save reds here.
-      frame:             { value: '', validate: RED.mavlink.oneOf(['', '0', '3', '10', '1']) },
+      // Closed vocabulary: the frame select's own options. Relative alt (3) is
+      // the editor default — saved explicitly; the driver does not invent it.
+      // Other frames ride msg.mavFrame at runtime; a hand-edited config value
+      // the dialog cannot save reds here.
+      frame:             { value: '3', validate: RED.mavlink.oneOf(['0', '3', '10', '1']) },
       identity:          { value: '' },
       // A statically configured broadcast (0) on an ack-confirmed tier is a
       // cross-field static requirement, so it reds at deploy rather than on
@@ -1110,9 +1111,8 @@
   <div class="form-row" id="row-cmd-frame" style="display:none">
     <label for="node-input-frame" style="width:120px">Frame</label>
     <select id="node-input-frame" style="width:280px">
-      <option value="">Global, relative alt (default)</option>
+      <option value="3">Global, relative alt (default)</option>
       <option value="0">Global, absolute alt (AMSL)</option>
-      <option value="3">Global, relative alt</option>
       <option value="10">Global, terrain alt</option>
       <option value="1">Local NED (metres)</option>
     </select>
