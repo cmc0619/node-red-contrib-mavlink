@@ -2,9 +2,9 @@
 
 /**
  * Health editor: the Identity is a choice only when the Connection carries
- * more than one identity. A single-identity Connection hides the field (its
- * sole identity is its Local Identity, which the runtime asserts) and never
- * red-rings — even a stale saved pick is ignored. A multi-identity Connection
+ * more than one identity. A single-identity Connection hides the field and
+ * oneditsave stores blank (the runtime then asserts the Local Identity) and
+ * never red-rings — even a leftover saved pick. A multi-identity Connection
  * shows the same connection-scoped select command/fanout use, offering only
  * bound identities, with the validator kept as the hand-edit backstop.
  */

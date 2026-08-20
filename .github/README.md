@@ -98,7 +98,7 @@ entries appear under the package examples folder).
 | `02-arm-takeoff-chain.json` | Command arm (confirm) chained to takeoff (await completion) |
 | `03-param-read-set.json` | Param read (MAV_SYSID) and set (FS_GCS_ENABLE) as separate injects |
 | `04-mission-upload-download.json` | Mission upload then download |
-| `05-fanout-arm.json` | Fan-out sequential arm — dry-run then live |
+| `05-fanout-arm.json` | Fan-out sequential arm — preview then live |
 | `sitl/20-completion-takeoff.json` | Arm + completion-tier takeoff against ArduPilot Copter SITL |
 | `sitl/31-fanout-sequential-five.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
 | `sitl/04-param-defs-live.json` | Param read, set, and list — with live definition catalog |

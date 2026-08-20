@@ -19,10 +19,12 @@
     /**
      * A choice of Identity exists only when the Connection carries more than
      * one. A single-identity Connection has exactly one — its Local Identity —
-     * so the editor hides the field (see oneditprepare) and the runtime asserts
-     * that identity; whatever is stored here is ignored, so it must never ring,
-     * even for a stale saved value from before the field was hidden. That is
-     * the first branch: with the Connection resolved to a single identity, pass.
+     * so the editor hides the field (see oneditprepare) and oneditsave stores
+     * blank — the runtime then asserts the Connection's Local Identity.
+     * Whatever leftover is still stored here is ignored by the validator, so
+     * it must never ring, even for a stale saved value from before the field
+     * was hidden. That is the first branch: with the Connection resolved to a
+     * single identity, pass.
      *
      * When the Connection does carry additionals, a bound pick is required. The
      * field is then a connection-scoped select that only offers bound
@@ -73,9 +75,9 @@
         RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
         // The Identity is a choice only when the Connection carries more than
         // one identity. A single-identity Connection has exactly one — its
-        // Local Identity — so the field is hidden and the runtime asserts that
-        // identity; showing a field with a single answer, then red-ringing a
-        // stale pick, is the anti-pattern §0 forbids. When there is a choice,
+        // Local Identity — so the field is hidden and oneditsave stores blank.
+        // Showing a field with a single answer, then red-ringing a stale pick,
+        // is the anti-pattern §0 forbids. When there is a choice,
         // the field is a connection-scoped select — the same one command and
         // fanout use — that only ever offers bound identities (no role filter:
         // health asserts any bound identity, gcs included). Re-evaluate on

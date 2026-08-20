@@ -108,7 +108,7 @@ const PROFILE = {
   '31-fanout-sequential-five': {
     restart: 'ap-fleet',
     waitMs: 25000,
-    expect: 'dry-run then live sequential arm ×5',
+    expect: 'preview then live sequential arm ×5',
     // delivery=confirm: the first DENIED fails the aggregate, so every one of
     // the five has to be armable before the example runs.
     prep: 'ap-arm-ready-fleet',
@@ -889,6 +889,31 @@ function verdictFrom(profile, summary, log) {
     }
     return { status: 'FAIL', reason: 'PARAM_SET fan-out succeeded×5 status not observed' };
   }
+  if (/preview then live sequential arm/i.test(expect)) {
+    // Two documented phases: a Build-tier preview of all five (built, nothing
+    // sent) then a live sequential confirm arm of all five. Both aggregates read
+    // result:'succeeded', so the generic 'good' filter would PASS on either one
+    // alone — require both, each carrying the ×5 count, since fan-out silently
+    // drops absent peers and a 3/5 fleet still reports succeeded.
+    const fiveOn = (re) => summary.debug.some(
+      (d) =>
+        re.test(d.tag) &&
+        d.result === 'succeeded' &&
+        /count:\s*5\b/.test(d.excerpt || '')
+    );
+    const previewFive = fiveOn(/preview status/i);
+    const liveFive = fiveOn(/live status/i);
+    if (previewFive && liveFive) {
+      return { status: 'PASS', reason: 'Build preview ×5 then live sequential arm ×5' };
+    }
+    if (previewFive || liveFive) {
+      return {
+        status: 'PARTIAL',
+        reason: `phases incomplete: preview×5=${previewFive} live×5=${liveFive}`,
+      };
+    }
+    return { status: 'FAIL', reason: 'neither the five-member preview nor the live arm observed' };
+  }
   if (/PX4 request-list collect/i.test(expect)) {
     const listOk = summary.debug.some(
       (d) => /list status/i.test(d.tag) && d.result === 'succeeded'
@@ -1131,7 +1156,7 @@ function verdictFrom(profile, summary, log) {
     /fail|timed-out|unconfirmed|error|denied/i.test(r)
   );
   const good = results.filter((r) =>
-    /accepted|succeeded|success|dry_run|ok/i.test(r)
+    /accepted|succeeded|success|built|ok/i.test(r)
   );
 
   if (good.length && !bad.length && !summary.errors.length) {

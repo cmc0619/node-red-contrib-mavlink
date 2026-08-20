@@ -112,13 +112,13 @@ test('classifyMessage infers confirmation and band from the message name', () =>
   );
 });
 
-test('a payload that is not a built message craters — no build-tier guardrail', async () => {
+test('a payload that is not a built message craters — no build-tier guardrail', () => {
   const connection = connectionStub([peer(1)]);
   // No shape guard: a malformed payload reads `.name`/`.fields` off a non-object
   // or a message with no fields and craters (TypeError), rather than a curated
   // "wire a Build node" refusal.
   for (const bad of [null, 42, 'arm', {}, { name: 'COMMAND_LONG' }]) {
-    await assert.rejects(
+    assert.throws(
       () => executeFanout({ mode: 'sequential', selection: { mode: 'all' }, connection, message: bad, delivery: 'send' })
     );
   }
@@ -265,6 +265,22 @@ test('broadcast sends one autopilot-pinned packet with target_system zero', asyn
   assert.equal(connection.sends[0].message.fields.target_component, 1);
 });
 
+test('the build tier on broadcast previews the target_system-0 packet without sending', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  const result = await executeFanout({ selection: { mode: 'all' },
+    connection,
+    message: builtCommand(),
+    mode: 'broadcast',
+    delivery: 'build',
+  });
+
+  assert.equal(result.result, 'succeeded');
+  assert.ok(result.members.every((m) => m.result === 'built'), 'every member is built, not sent');
+  assert.equal(result.message.fields.target_system, 0, 'the previewed packet is the broadcast one');
+  assert.equal(connection.sends.length, 0);
+});
+
 test('bands follow the message kind: setpoints stream, commands ride control', async () => {
   const connection = connectionStub([peer(1)]);
   await executeFanout({ mode: 'sequential', selection: { mode: 'all' }, connection, message: builtSetpoint(), delivery: 'send' });
@@ -295,19 +311,19 @@ test('aggregation continues only when every selected member succeeds', async () 
   assert.equal(partial.members.find((m) => m.sysid === 2).result, 'failed');
 });
 
-test('dry run expands members and retargets messages without sending', async () => {
+test('the build tier expands members and retargets messages without sending', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
   const result = await executeFanout({ selection: { mode: 'all' },
     connection,
     message: builtCommand(),
     mode: 'sequential',
-    delivery: 'send',
-    dryRun: true,
+    delivery: 'build',
   });
 
-  assert.equal(result.result, 'dry_run');
+  assert.equal(result.result, 'succeeded');
   assert.equal(result.success, true);
+  assert.ok(result.members.every((m) => m.result === 'built'), 'every member is built, not sent');
   assert.equal(connection.sends.length, 0);
   assert.deepEqual(result.members.map((m) => m.message.fields.target_system), [1, 2]);
 });
@@ -433,115 +449,31 @@ test('PARAM_SET is sequential-only — a broadcast set makes the echoes a storm 
   assert.equal(connection.sends.length, 0);
 });
 
-// ── Safety gate (§10) ─────────────────────────────────────────────────────────
-
-test('DO_FLIGHTTERMINATION is refused without confirmation and runs with it (§10)', async () => {
+test('DO_FLIGHTTERMINATION fans out without a confirm gate', async () => {
   const message = builtCommand({ fields: { command: 185, param1: 1 } });
-
-  const refused = await executeFanout({ selection: { mode: 'all' },
-    connection: connectionStub([peer(1)]),
+  const connection = connectionStub([peer(1)]);
+  const result = await executeFanout({ selection: { mode: 'all' },
+    connection,
     message,
     mode: 'sequential',
     delivery: 'send',
   });
-  assert.equal(refused.result, 'refused');
-  assert.match(refused.detail, /confirm/i);
-
-  const confirmedConnection = connectionStub([peer(1)]);
-  const confirmed = await executeFanout({ selection: { mode: 'all' },
-    connection: confirmedConnection,
-    message,
-    mode: 'sequential',
-    delivery: 'send',
-    confirmed: true,
-  });
-  assert.equal(confirmed.success, true);
-  assert.equal(confirmedConnection.sends[0].message.fields.command, 185);
+  assert.equal(result.success, true);
+  assert.equal(connection.sends[0].message.fields.command, 185);
 });
 
-test('the safety gate covers COMMAND_INT and broadcast too (§10)', async () => {
-  const refused = await executeFanout({ selection: { mode: 'all' },
-    connection: connectionStub([peer(1)]),
-    message: builtCommand({ name: 'COMMAND_INT', fields: { command: 185, param1: 1 } }),
-    mode: 'broadcast',
-    delivery: 'send',
-  });
-  assert.equal(refused.result, 'refused');
-  assert.match(refused.detail, /confirm/i);
-});
-
-test('a broadcast position setpoint requires explicit confirmation (§10, #245)', async () => {
-  // type_mask 3576 uses the position triplet (bits 1+2+4 clear) and ignores
-  // velocity/accel/yaw — every vehicle on the link converges on one point.
+test('a broadcast position setpoint packs without a confirm gate', async () => {
   const positionMask = 3576;
-  const refusedConnection = connectionStub([peer(1), peer(2)]);
-  const refused = await executeFanout({ selection: { mode: 'all' },
-    connection: refusedConnection,
+  const connection = connectionStub([peer(1), peer(2)]);
+  const result = await executeFanout({ selection: { mode: 'all' },
+    connection,
     message: builtSetpoint({ fields: { type_mask: positionMask, x: 10, y: 5, z: -20, vx: 0 } }),
     mode: 'broadcast',
     delivery: 'send',
   });
-  assert.equal(refused.result, 'refused');
-  assert.match(refused.detail, /converges every vehicle/);
-  assert.match(refused.detail, /confirm/i);
-  assert.equal(refusedConnection.sends.length, 0);
-
-  const confirmedConnection = connectionStub([peer(1), peer(2)]);
-  const confirmed = await executeFanout({ selection: { mode: 'all' },
-    connection: confirmedConnection,
-    message: builtSetpoint({ fields: { type_mask: positionMask, x: 10, y: 5, z: -20, vx: 0 } }),
-    mode: 'broadcast',
-    delivery: 'send',
-    confirmed: true,
-  });
-  assert.equal(confirmed.success, true);
-  assert.equal(confirmedConnection.sends.length, 1);
-  assert.equal(confirmedConnection.sends[0].message.fields.target_system, 0);
-});
-
-test('the broadcast position gate reads the wire mask: velocity exempt, both carriers, fail closed (#245)', async () => {
-  // builtSetpoint's default mask (3527) ignores all three position bits —
-  // fleet momentum, not convergence, so it broadcasts ungated.
-  const velocityConnection = connectionStub([peer(1), peer(2)]);
-  const velocity = await executeFanout({ selection: { mode: 'all' },
-    connection: velocityConnection,
-    message: builtSetpoint(),
-    mode: 'broadcast',
-    delivery: 'send',
-  });
-  assert.equal(velocity.success, true);
-  assert.equal(velocityConnection.sends.length, 1);
-
-  // SET_POSITION_TARGET_GLOBAL_INT is the other position carrier.
-  const globalInt = await executeFanout({ selection: { mode: 'all' },
-    connection: connectionStub([peer(1)]),
-    message: builtSetpoint({ name: 'SET_POSITION_TARGET_GLOBAL_INT', fields: { type_mask: 3576 } }),
-    mode: 'broadcast',
-    delivery: 'send',
-  });
-  assert.equal(globalInt.result, 'refused');
-
-  // An unreadable mask cannot prove the position axes are ignored — gated.
-  const unreadable = await executeFanout({ selection: { mode: 'all' },
-    connection: connectionStub([peer(1)]),
-    message: builtSetpoint({ fields: { type_mask: undefined } }),
-    mode: 'broadcast',
-    delivery: 'send',
-  });
-  assert.equal(unreadable.result, 'refused');
-
-  // SET_ATTITUDE_TARGET's type_mask bits mean body rates, not position — no
-  // coordinate to converge on, so it stays outside the gate.
-  const attitude = await executeFanout({ selection: { mode: 'all' },
-    connection: connectionStub([peer(1)]),
-    message: {
-      name: 'SET_ATTITUDE_TARGET',
-      fields: { target_system: 0, target_component: 0, type_mask: 0, q: [1, 0, 0, 0], thrust: 0.5 },
-    },
-    mode: 'broadcast',
-    delivery: 'send',
-  });
-  assert.equal(attitude.success, true);
+  assert.equal(result.success, true);
+  assert.equal(connection.sends.length, 1);
+  assert.equal(connection.sends[0].message.fields.target_system, 0);
 });
 
 test('sequential position setpoints are not confirm-gated — the hazard is broadcast convergence (#245)', async () => {
@@ -653,7 +585,7 @@ test('one-shot setpoint runs hold nothing: a stream may start right after (#245)
   release();
 });
 
-test('the lock guards the wire: build tier and dry run pass while it is held (#245)', async () => {
+test('the build tier passes while the lock is held (#245)', async () => {
   const connection = connectionStub([peer(1)], { id: 'conn-A' });
   const release = streamLocks.acquire('conn-A', { sysid: 1, compid: 1 });
   try {
@@ -664,14 +596,6 @@ test('the lock guards the wire: build tier and dry run pass while it is held (#2
       delivery: 'build',
     });
     assert.equal(built.success, true);
-    const preview = await executeFanout({ selection: { mode: 'all' },
-      connection,
-      message: builtSetpoint(),
-      mode: 'sequential',
-      delivery: 'send',
-      dryRun: true,
-    });
-    assert.equal(preview.result, 'dry_run');
     assert.equal(connection.sends.length, 0);
   } finally {
     release();

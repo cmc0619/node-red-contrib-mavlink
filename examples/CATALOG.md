@@ -78,7 +78,7 @@ the built `{name, fields}` message per member. `selectionMode`: `all` \| `list`
 (`members` rows `{sysid, north?, east?, up?, patch?}` — offsets in metres, patch in wire
 units) \| `filter` (`vehicleType`/`firmwareFilter`/`armedFilter`);
 `executionMode`: `sequential` (`intervalMs`, `concurrency`) \| `broadcast`
-(`target_system=0`); `dryRun` bool. Payload wrapper `{message, targets}` patches
+(`target_system=0`). Payload wrapper `{message, targets}` patches
 wire fields per member.
 
 **Firmware honesty facts used below:**
@@ -384,12 +384,12 @@ importable tab per file with shared config nodes inline.
   broadcast, showing when simultaneity beats pacing. Move carries no ack, so the fan-out
   reports per-vehicle send outcomes, not confirmations.
 - **Nodes:** config triplet, `move` (Build, `action: "steer"` world, velocity north 1 m/s) feeding 3× `fanout`
-  (dry-run; `executionMode: "sequential"` `intervalMs: 150`; `broadcast`), `inject`, `debug`.
+  (preview via Build; `executionMode: "sequential"` `intervalMs: 150`; `broadcast`), `inject`, `debug`.
 - **Key config:** selection `list` with member rows for sysids 1–5 (broadcast uses `all`); the Move
   node builds the setpoint, the fan-outs replicate it; broadcast pins `target_system=0`,
-  single-stack only. Dry-run inject shows the expanded plan first. Comment references §10
+  single-stack only. The Build-tier preview inject shows the expanded plan first. Comment references §10
   broadcast rules.
-- **Inject buttons:** **`Dry run`**, **`Nudge (sequential)`**, **`Nudge (broadcast)`**.
+- **Inject buttons:** **`Preview`**, **`Nudge (sequential)`**, **`Nudge (broadcast)`**.
 
 ### 25 — Speed & yaw choreography
 
@@ -719,7 +719,7 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 ### sitl/31 — Five-vehicle fan-out pacing
 
 - **File:** `examples/sitl/31-fanout-sequential-five.json` · **Tab:** `SITL 31 Fan-out ×5 pacing`
-- **Story:** Sequential arm across ArduPilot sysids 1–5 with 200 ms pacing, dry-run first.
+- **Story:** Sequential arm across ArduPilot sysids 1–5 with 200 ms pacing, Build-tier preview first.
 - **Nodes:** config triplet, `command` (Build, Arm) → 2× `fanout`, `inject`, `debug`.
 - **Config/launch:** five ArduCopters; `restart: ap-fleet`.
 

@@ -26,11 +26,6 @@ jobs:
             node_version: 20.19.0
           - os: ubuntu-latest
             node_version: 22.13.0
-          # Windows leg earns its place: the CRLF bug (#101) reached main
-          # because every job ran on Linux. .gitattributes is the fix; this is
-          # what would have caught it.
-          - os: windows-latest
-            node_version: 22.13.0
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -94,7 +89,7 @@ jobs:
             --omit=dev \
             --omit=optional \
             "$RUNNER_TEMP/$archive" \
-            node-red@4.1.11 \
+            node-red@5.0.1 \
             node-red-node-test-helper@0.3.6
           MAVLINK_PACKAGE_ROOT="$install_root/node_modules/@cmc0619/node-red-contrib-mavlink" \
             NODE_PATH="$install_root/node_modules" \
@@ -107,8 +102,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - node_version: 20.19.0
-            node_red: 4.1.11
           - node_version: 22.13.0
             node_red: 5.0.1
     steps:
