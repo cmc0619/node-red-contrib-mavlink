@@ -21,3 +21,12 @@ test('absent mission numeric fields pass through unset — not invented as 0', (
   assert.equal(legacy.fields.y, undefined);
   assert.equal(legacy.fields.z, undefined);
 });
+
+test('blank mission numeric strings stay unset — Number("") must not invent 0', () => {
+  const int = buildItemInt({ frame: 3, command: 16, param1: '', z: '   ' }, TARGET, 0, 0);
+  assert.equal(int.fields.param1, undefined);
+  assert.equal(int.fields.z, undefined);
+  const legacy = buildItem({ frame: 3, command: 16, y: '', z: null }, TARGET, 0, 0);
+  assert.equal(legacy.fields.y, undefined);
+  assert.equal(legacy.fields.z, null);
+});

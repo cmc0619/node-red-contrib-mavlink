@@ -26,6 +26,7 @@ const {
   scaleLatLon,
   MAV_FRAME,
   DEFAULT_FRAME,
+  resolveFrame,
 } = require('../../lib/command');
 
 test('longToIntFields maps params, scales global lat/lon to degE7, keeps z float', () => {
@@ -60,6 +61,13 @@ test('omitted COMMAND_INT frame is not invented — DEFAULT_FRAME is documentati
     frame: DEFAULT_FRAME,
   });
   assert.equal(int.fields.frame, 3, 'an explicit relative-alt frame rides');
+});
+
+test('resolveFrame treats whitespace-only as blank — does not invent GLOBAL (0)', () => {
+  assert.equal(resolveFrame(' ', undefined), undefined);
+  assert.equal(resolveFrame(undefined, '   '), undefined);
+  assert.equal(resolveFrame('', 3), 3);
+  assert.equal(resolveFrame(3, ' '), 3);
 });
 
 test('longToIntFields scales every degrees value — no pass-through heuristic', () => {
