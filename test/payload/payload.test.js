@@ -26,7 +26,9 @@ test('camera photo builds a command-backed IMAGE_START_CAPTURE payload action', 
   assert.equal(built.message.fields.param4, 7);
 });
 
-test('camera photo defaults camera id and sequence to 0 and count to 1', () => {
+test('camera photo does not invent recipe defaults for blank slots', () => {
+  // Incomplete msg values pass through as NaN; the editor owns filling
+  // cameraId/count/sequence. No silent 0/1 on the wire (§0).
   const built = buildPayloadMessage({
     carrier: 'long',
     topic: 'camera',
@@ -34,10 +36,10 @@ test('camera photo defaults camera id and sequence to 0 and count to 1', () => {
     target: { sysid: 1, compid: 1 },
     values: { interval: 2 },
   });
-  assert.equal(built.message.fields.param1, 0);
+  assert.ok(Number.isNaN(built.message.fields.param1), 'blank cameraId');
   assert.equal(built.message.fields.param2, 2);
-  assert.equal(built.message.fields.param3, 1);
-  assert.equal(built.message.fields.param4, 0);
+  assert.ok(Number.isNaN(built.message.fields.param3), 'blank count');
+  assert.ok(Number.isNaN(built.message.fields.param4), 'blank sequence');
 });
 
 test('camera stop-photo builds IMAGE_STOP_CAPTURE with command-ack confirmation (#259)', () => {
@@ -60,7 +62,7 @@ test('camera stop-photo builds IMAGE_STOP_CAPTURE with command-ack confirmation 
     assert.equal(built.message.fields[slot], 0, `${slot} stays reserved-zero`);
   }
 
-  // Camera id defaults to 0 (all cameras).
+  // Blank camera id is incomplete — not invented as 0.
   const blank = buildPayloadMessage({
     carrier: 'long',
     topic: 'camera',
@@ -68,7 +70,7 @@ test('camera stop-photo builds IMAGE_STOP_CAPTURE with command-ack confirmation 
     target: { sysid: 1, compid: 1 },
     values: {},
   });
-  assert.equal(blank.message.fields.param1, 0);
+  assert.ok(Number.isNaN(blank.message.fields.param1), 'blank cameraId');
 });
 
 test('gimbal manager aim uses the message path and declares no confirmation', () => {
@@ -78,7 +80,9 @@ test('gimbal manager aim uses the message path and declares no confirmation', ()
     verb: 'aim',
     path: 'manager',
     target: { sysid: 2, compid: 154 },
-    values: { pitch: -15, yaw: 90, pitchRate: 2, yawRate: 3 },
+    values: {
+      flags: 0, gimbalDeviceId: 0, pitch: -15, yaw: 90, pitchRate: 2, yawRate: 3,
+    },
   });
 
   assert.equal(built.confirmation, 'none');
@@ -175,8 +179,8 @@ test('gimbal manager-cmd aim keeps the message path\'s NaN-rate convention (issu
   // left blank (or omitted) must command NaN rates ("axis not rate
   // controlled"), never a literal zero rate.
   for (const values of [
-    { pitch: -45, yaw: 90, pitchRate: '', yawRate: '' },
-    { pitch: -45, yaw: 90 },
+    { pitch: -45, yaw: 90, pitchRate: '', yawRate: '', flags: 0, gimbalDeviceId: 0 },
+    { pitch: -45, yaw: 90, flags: 0, gimbalDeviceId: 0 },
   ]) {
     const built = buildPayloadMessage({
       carrier: 'long',
@@ -191,8 +195,8 @@ test('gimbal manager-cmd aim keeps the message path\'s NaN-rate convention (issu
     assert.equal(f.param2, 90);
     assert.ok(Number.isNaN(f.param3), 'blank pitch rate must be NaN, not 0');
     assert.ok(Number.isNaN(f.param4), 'blank yaw rate must be NaN, not 0');
-    assert.equal(f.param5, 0, 'flags default to 0');
-    assert.equal(f.param7, 0, 'gimbal device id defaults to 0 (primary)');
+    assert.equal(f.param5, 0);
+    assert.equal(f.param7, 0);
   }
 });
 
@@ -250,7 +254,7 @@ test('message-kind verbs ignore the carrier entirely', () => {
     verb: 'aim',
     path: 'manager',
     target: { sysid: 1, compid: 154 },
-    values: { pitch: -10, yaw: 45 },
+    values: { flags: 0, gimbalDeviceId: 0, pitch: -10, yaw: 45 },
   });
   assert.equal(built.confirmation, 'none');
   assert.equal(built.message.name, 'GIMBAL_MANAGER_SET_PITCHYAW');
@@ -281,7 +285,7 @@ test('relay set and repeat map to DO_SET_RELAY / DO_REPEAT_RELAY', () => {
   assert.equal(repeat.message.fields.param3, 2);
 });
 
-test('relay set defaults setting to off (0) when the field is blank', () => {
+test('relay set does not invent 0 for blank instance/setting', () => {
   const built = buildPayloadMessage({
     carrier: 'long',
     topic: 'relay',
@@ -289,8 +293,8 @@ test('relay set defaults setting to off (0) when the field is blank', () => {
     target: { sysid: 1, compid: 1 },
     values: {},
   });
-  assert.equal(built.message.fields.param1, 0, 'instance defaults to 0');
-  assert.equal(built.message.fields.param2, 0, 'setting defaults to off');
+  assert.ok(Number.isNaN(built.message.fields.param1), 'blank instance');
+  assert.ok(Number.isNaN(built.message.fields.param2), 'blank setting');
 });
 
 test('camera zoom and focus map to SET_CAMERA_ZOOM / SET_CAMERA_FOCUS with the RANGE default', () => {
@@ -299,10 +303,10 @@ test('camera zoom and focus map to SET_CAMERA_ZOOM / SET_CAMERA_FOCUS with the R
     topic: 'camera',
     verb: 'zoom',
     target: { sysid: 1, compid: 100 },
-    values: { zoom: 60 },
+    values: { zoomType: 2, zoom: 60, cameraId: 0 },
   });
   assert.equal(zoom.message.fields.command, 531); // SET_CAMERA_ZOOM
-  assert.equal(zoom.message.fields.param1, 2, 'zoom type defaults to RANGE (2)');
+  assert.equal(zoom.message.fields.param1, 2, 'zoom type RANGE (2) when supplied');
   assert.equal(zoom.message.fields.param2, 60);
 
   const focus = buildPayloadMessage({
@@ -331,7 +335,7 @@ test('gimbal attitude aim builds GIMBAL_MANAGER_SET_ATTITUDE with a computed qua
   assert.deepEqual(q, [0, 1, 0, 0]);
 });
 
-test('gimbal attitude aim identity: blank angles are the [1,0,0,0] quaternion', () => {
+test('gimbal attitude aim does not invent identity for blank angles', () => {
   const built = buildPayloadMessage({
     topic: 'gimbal',
     verb: 'aim',
@@ -339,7 +343,7 @@ test('gimbal attitude aim identity: blank angles are the [1,0,0,0] quaternion', 
     target: { sysid: 1, compid: 154 },
     values: {},
   });
-  assert.deepEqual(built.message.fields.q, [1, 0, 0, 0], 'no rotation from blank roll/pitch/yaw');
+  assert.ok(built.message.fields.q.every((n) => Number.isNaN(n)), 'blank euler → NaN quat');
 });
 
 test('gimbal attitude aim NaN-s the angular-velocity triple, not zero-rate (issue #87 parity)', () => {

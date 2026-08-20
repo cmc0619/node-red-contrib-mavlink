@@ -24,7 +24,7 @@ test('the attitude quaternion serializes and round-trips, NaN rates and all', ()
     verb: 'aim',
     path: 'attitude',
     target: { sysid: 1, compid: 154 },
-    values: { roll: 0, pitch: -30, yaw: 90 },
+    values: { flags: 0, gimbalDeviceId: 0, roll: 0, pitch: -30, yaw: 90 },
   });
   assert.equal(built.message.name, 'GIMBAL_MANAGER_SET_ATTITUDE');
 
