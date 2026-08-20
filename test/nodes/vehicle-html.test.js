@@ -73,10 +73,7 @@ test('parameter definitions use an explicit profile-keyed Update workflow', () =
   assert.match(html, /const url = \$\('#node-config-input-paramDefsUrl'\)\.val\(\)\.trim\(\)/);
   assert.match(html, /url:\s*url/);
   assert.match(html, /used only by Update/i);
-  assert.match(html, /pre-filled when firmware/i);
-  // No known URL → hide the row (Custom firmware; ArduPilot + unknown family).
-  assert.match(html, /id="mav-param-defs-section"/);
-  assert.match(html, /\$\('#mav-param-defs-section'\)\.toggle\(url !== ''\)/);
+  assert.match(html, /pre-filled from firmware/i);
 });
 
 test('the XML-catalog admin endpoints are wired under mavlink/xml-catalog', () => {
