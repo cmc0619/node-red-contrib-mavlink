@@ -1394,3 +1394,14 @@ test('close() disarms pending health leases — no fault, no emit after teardown
   );
   assert.equal(leases().length, 1, 'and no timer was armed on the closed link');
 });
+
+test('assertHealth on an unbound identity is loud — no healthy no-op', async () => {
+  const { connection } = healthBuild();
+  await connection.start();
+  assert.throws(
+    () => connection.assertHealth('loose', true, 4000),
+    /not bound/,
+    'a lease on an id this Connection does not heartbeat would report healthy over a no-op'
+  );
+  connection.close();
+});

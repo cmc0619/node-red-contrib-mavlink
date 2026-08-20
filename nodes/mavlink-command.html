@@ -266,7 +266,8 @@
 
   // Presets with completion conditions — determines if "await completion" is shown.
   const HAS_COMPLETION = new Set(['arm', 'disarm', 'takeoff', 'land', 'rtl', 'set_mode']);
-  // Safety presets that require msg.confirmed.
+  // Safety presets: the notice is the editor's warning. Selecting the
+  // preset is the operator's choice — the driver packs and sends it.
   const REQUIRES_CONFIRM = new Set(['flight_termination']);
 
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
@@ -1051,7 +1052,7 @@
   <div class="form-row" id="row-safety-notice"
        style="display:none;background:#fff3cd;border:1px solid #ffc107;padding:6px 10px;border-radius:3px">
     <i class="fa fa-warning" style="color:#e67e22"></i>
-    <strong>Safety command</strong> — set <code>msg.confirmed = true</code> to allow sending.
+    <strong>Safety command</strong> — this preset sends Flight Termination.
   </div>
 
   <hr style="margin:8px 0">
@@ -1176,8 +1177,6 @@
       custom-mode-enabled bit; an explicit numeric payload param still wins.
       A name nothing resolves rides as NaN and fails loudly at the wire.
     </dd>
-    <dt class="optional">confirmed <span class="property-type">boolean</span></dt>
-    <dd>Must be <code>true</code> for Safety presets (e.g. Flight Termination).</dd>
     <dt class="optional">mavFrame <span class="property-type">number</span></dt>
     <dd>Per-message MAV_FRAME override for the COMMAND_INT carrier; takes
         precedence over the configured Frame.</dd>

@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "27 Safety e-stop",
     "disabled": false,
-    "info": "Emergency force-disarm and flight termination, each gated.",
+    "info": "Emergency force-disarm and flight termination.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex27-tab",
     "name": "Safety e-stop",
-    "info": "⚠ Force disarm uses COMPONENT_ARM_DISARM param2=21196 (Emergency band, never coalesced). ⚠⚠ Flight termination requires msg.confirmed=true. Bind 14550→14551.",
+    "info": "⚠ Force disarm uses COMPONENT_ARM_DISARM param2=21196 (Emergency band, never coalesced). ⚠⚠ Flight termination sends MAV_CMD_DO_FLIGHTTERMINATION. Bind 14550→14551.",
     "x": 180,
     "y": 40,
     "wires": []
@@ -116,15 +116,10 @@
     "id": "ex27-inject-flight-term",
     "type": "inject",
     "z": "ex27-tab",
-    "name": "⚠⚠ Flight termination (confirm)",
+    "name": "⚠⚠ Flight termination",
     "props": [
       {
         "p": "payload"
-      },
-      {
-        "p": "confirmed",
-        "v": "true",
-        "vt": "bool"
       }
     ],
     "repeat": "",
