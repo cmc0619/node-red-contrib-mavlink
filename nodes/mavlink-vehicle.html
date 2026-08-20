@@ -38,6 +38,14 @@
         const $status = $('#mav-catalog-status');
         const $paramDefsStatus = $('#mav-param-defs-status');
         const FIRMWARE_DIALECT = { ardupilot: 'ardupilotmega', px4: 'development', custom: 'common' };
+        const $vehicleFamily = $('#node-config-input-vehicleFamily');
+        const $paramDefsUrl = $('#node-config-input-paramDefsUrl');
+        const ARDUPILOT_VEHICLE_DOC = {
+          copter: 'ArduCopter', plane: 'ArduPlane', rover: 'Rover',
+          boat: 'Rover', sub: 'ArduSub', blimp: 'Blimp',
+          'antenna-tracker': 'AntennaTracker',
+        };
+        const PX4_PARAM_URL = 'https://artifacts.px4.io/Firmware/_general/parameters.xml';
         let library = [];
 
         function dialectRow(name) {
@@ -151,13 +159,34 @@
 
         $components.on('change', syncComponentsHidden);
 
+        var AP_PDEF_BASE = 'https://autotest.ardupilot.org/Parameters/';
+
+        function paramDefsUrlFor(firmware, family) {
+          if (firmware === 'px4') return PX4_PARAM_URL;
+          var doc = firmware === 'ardupilot' && ARDUPILOT_VEHICLE_DOC[family];
+          return doc ? AP_PDEF_BASE + doc + '/apm.pdef.json' : '';
+        }
+
+        function suggestParamDefsUrl() {
+          var current = $paramDefsUrl.val().trim();
+          if (current && current.indexOf(AP_PDEF_BASE) !== 0 && current !== PX4_PARAM_URL) return;
+          $paramDefsUrl.val(paramDefsUrlFor($firmware.val(), $vehicleFamily.val()));
+        }
+
         $firmware.on('change', function () {
           const want = FIRMWARE_DIALECT[$firmware.val()];
           if (want && $dialect.find('option[value="' + want + '"]').length) {
             $dialect.val(want);
             populateRevisions('seed');
           }
+          suggestParamDefsUrl();
         });
+
+        $vehicleFamily.on('change', function () {
+          suggestParamDefsUrl();
+        });
+
+        suggestParamDefsUrl();
 
         $('#mav-catalog-update').on('click', function (e) {
           e.preventDefault();
@@ -372,13 +401,13 @@
     <div class="form-tips" id="mav-catalog-status" style="min-height:1em;"></div>
     <div class="form-row">
       <label for="node-config-input-paramDefsUrl">Param defs URL</label>
-      <input type="text" id="node-config-input-paramDefsUrl" style="width:55%;" placeholder="(optional) parameter metadata URL">
+      <input type="text" id="node-config-input-paramDefsUrl" style="width:55%;" placeholder="parameter metadata URL">
       <button id="mav-param-defs-update" class="red-ui-button">Update</button>
     </div>
     <div class="form-tips" id="mav-param-defs-status" style="min-height:1em;"></div>
     <div class="form-tips">
-      This URL is optional and is used only by Update. Update downloads definitions into
-      this Vehicle Profile's local holding file. A profile without downloaded definitions still works.
+      Pre-filled from firmware and vehicle; override for a custom source. Used only by Update,
+      which downloads definitions into this profile's local holding file.
     </div>
   </div>
   <script type="text/javascript">
@@ -418,6 +447,6 @@
     <li><b>Firmware</b> — ArduPilot, PX4, or custom (suggests a dialect).</li>
     <li><b>Target SysID / CompID</b> — defaults blank palette fields inherit on wire tiers.</li>
     <li><b>Dialect / Version</b> — Advanced: seed or a downloaded snapshot date.</li>
-    <li><b>Param defs URL</b> — optional; used only when you click Update to refresh this profile's local definitions.</li>
+    <li><b>Param defs URL</b> — pre-filled from firmware and vehicle; used when you click Update to refresh this profile's local definitions.</li>
   </ul>
 </script>

@@ -196,7 +196,7 @@ module.exports = function registerMavlinkMission(RED) {
           });
           applyActionStatus(node, 'error', `${missionTypeKey} busy`);
           send([null, rec]);
-          done(new Error(`mavlink-mission: ${rec.reason}`));
+          done();
           return;
         }
 
@@ -239,8 +239,7 @@ module.exports = function registerMavlinkMission(RED) {
             } else {
               applyActionStatus(node, 'error', `${operation} ${outcome.result}`);
               send([null, rec]);
-              const detail = `${operation} ${outcome.result}${outcome.reason ? `: ${outcome.reason}` : ''}`;
-              done(new Error(`mavlink-mission: ${detail}`));
+              done();
             }
           })
           .catch((err) => {

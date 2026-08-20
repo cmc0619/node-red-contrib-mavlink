@@ -2,7 +2,7 @@
 
 /**
  * mavlink-command node tests (DESIGN.md §9). Covers the review findings:
- *   - safety confirmation requires a strict boolean true (not a truthy token)
+ *   - safety presets pack and send without a confirm gate (operator chose the preset)
  *   - the status record is emitted as the top-level message on output 1
  *   - the Build tier reports a 'built' status record on output 1
  *   - the async input handler contains throws/rejections as a terminal status
@@ -704,7 +704,7 @@ test('silent ACK windows re-send a LONG with incremented confirmation, badge tel
   assert.equal(output[1].confirmedBy, 'none');
   assert.equal(output[1].retries, 3);
   assert.equal(output[1].detail, 'no terminal COMMAND_ACK received within timeout');
-  assert.ok(doneErr instanceof Error, 'the timeout still fails through Catch');
+  assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
   node.emit('close', () => {});
 });
 
@@ -777,7 +777,7 @@ test('Advanced mode sends once on a silent window — a raw MAV_CMD id never opt
   assert.equal(output[0], null, 'output 0 must not fire');
   assert.equal(output[1].result, 'unconfirmed');
   assert.equal(output[1].retries, 0);
-  assert.ok(doneErr instanceof Error, 'the timeout still fails through Catch');
+  assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
   node.emit('close', () => {});
 });
 

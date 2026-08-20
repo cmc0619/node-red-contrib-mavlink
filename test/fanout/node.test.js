@@ -38,12 +38,11 @@ test("a hand-edited delivery typo sends nothing through the node", async () => {
     intervalMs: 0,
   });
   let sent;
-  const err = await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; }).then(
-    () => null,
-    (e) => e
-  );
-  assert.ok(err, 'the unmatched tier craters into done(err)');
+  await emitInput(node, { payload: builtCommand() }, (m) => { sent = m; });
   assert.equal(sent[0], null);
+  assert.equal(sent[1].success, false);
+  assert.equal(sent[1].result, 'failed');
+  assert.equal(node._status.fill, 'red');
   assert.equal(connection.sends.length, 0, 'nothing left the wire under the mis-resolved tier');
 });
 
@@ -96,6 +95,12 @@ test('build+list with no connection emits one retargeted message per member on o
     'one retargeted message per member'
   );
   assert.equal(sent[0][0].payload.name, 'COMMAND_LONG');
+  // Build previews, so it wears the yellow preview badge (§6) — not the green
+  // 'ok' of a real send — keyed on the tier, since the aggregate result is
+  // 'succeeded' either way.
+  assert.equal(node._status.fill, 'yellow', 'Build tier shows the preview badge');
+  assert.equal(node._status.shape, 'dot');
+  assert.match(node._status.text, /preview/);
 });
 
 test('a payload that is not a built message craters through done(err) — no build-tier guardrail', async () => {
@@ -244,10 +249,7 @@ test('an empty list or empty fleet stays loud — someone was named and nobody a
     intervalMs: 0,
   });
   let listSent;
-  const listErr = await emitInput(listNode, { payload: builtCommand() }, (m) => { listSent = m; })
-    .then(() => null, (e) => e);
-  assert.ok(listErr, 'list-empty is passed to done(err)');
-  assert.match(listErr.message, /mavlink-fanout: empty/);
+  await emitInput(listNode, { payload: builtCommand() }, (m) => { listSent = m; });
   assert.equal(listSent[1].result, 'empty');
   assert.equal(listNode._status.fill, 'red');
 
@@ -261,10 +263,7 @@ test('an empty list or empty fleet stays loud — someone was named and nobody a
     selectionMode: 'all',
     intervalMs: 0,
   });
-  const allErr = await emitInput(allNode, { payload: builtCommand() }, () => {})
-    .then(() => null, (e) => e);
-  assert.ok(allErr, 'all-empty is passed to done(err)');
-  assert.match(allErr.message, /mavlink-fanout: empty/);
+  await emitInput(allNode, { payload: builtCommand() }, () => {});
   assert.equal(allNode._status.fill, 'red');
 });
 

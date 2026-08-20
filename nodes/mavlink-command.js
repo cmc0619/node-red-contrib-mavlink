@@ -325,10 +325,6 @@ module.exports = function registerMavlinkCommand(RED) {
         });
       }
 
-      function failDone(detail) {
-        done(new Error(`mavlink-command: ${detail}`));
-      }
-
       // Frame for the COMMAND_INT carrier (§9 "Coordinate frames"): shared
       // precedence chain — msg.mavFrame beats node config, blank falls to the
       // carrier module's documented default (GLOBAL_RELATIVE_ALT, §14). The
@@ -518,7 +514,7 @@ module.exports = function registerMavlinkCommand(RED) {
             });
             applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
             emitStatus(rec, send, false);
-            failDone(rec.detail);
+            done();
             return;
           }
         } else if (wanted) {
@@ -537,7 +533,7 @@ module.exports = function registerMavlinkCommand(RED) {
           });
           applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
           emitStatus(rec, send, false);
-          failDone(rec.detail);
+          done();
           return;
         }
 
@@ -602,7 +598,7 @@ module.exports = function registerMavlinkCommand(RED) {
           applyActionStatus(node, 'error', `timeout ${displayName}`);
           const cont = unconfirmedContinue;
           emitStatus(rec, send, cont, cont ? rec : undefined);
-          failDone(`${displayName} timed out`);
+          done();
           return;
         }
 
@@ -676,7 +672,7 @@ module.exports = function registerMavlinkCommand(RED) {
               });
               applyActionStatus(node, 'error', `${displayName} timeout`);
               emitStatus(rec, send, false);
-              failDone(`${displayName} completion timeout`);
+              done();
               return;
             }
             done();
@@ -713,7 +709,7 @@ module.exports = function registerMavlinkCommand(RED) {
         });
         applyActionStatus(node, 'error', `${displayName} ${ackOutcome.result}`);
         emitStatus(rec, send, false);
-        failDone(`${displayName} ${ackOutcome.result}`);
+        done();
       }
     }
 

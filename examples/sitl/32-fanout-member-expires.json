@@ -159,7 +159,6 @@
     "armedFilter": "",
     "executionMode": "sequential",
     "intervalMs": 1000,
-    "dryRun": false,
     "delivery": "confirm",
     "maxRetries": 3,
     "x": 390,

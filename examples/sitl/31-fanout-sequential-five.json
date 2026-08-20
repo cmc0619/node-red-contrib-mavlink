@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 31 Fan-out ×5 pacing",
     "disabled": false,
-    "info": "Sequential arm across five ArduPilot SITL instances (sysids 1–5) on one connection with 200 ms inter-vehicle pacing. Dry-run verifies fan-out targets before the live run commits. Demonstrates multi-vehicle peer table use, queue pacing, and fan-out partial-failure handling.",
+    "info": "Sequential arm across five ArduPilot SITL instances (sysids 1–5) on one connection with 200 ms inter-vehicle pacing. A Build-tier preview verifies fan-out targets before the live run commits. Demonstrates multi-vehicle peer table use, queue pacing, and fan-out partial-failure handling.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex07-tab",
     "name": "Five-vehicle sequential arm on ArduPilot connection (DESIGN.md §13 rig)",
-    "info": "The DESIGN.md testing rig runs five ArduPilot SITL instances at sysids 1–5 and five PX4 at 11–15 on separate connections.\n\nThis flow targets the ArduPilot connection only. Start five Copter SITL processes:\n  for i in 1 2 3 4 5; do\n    sim_vehicle.py -v ArduCopter -I $((i-1)) --sysid $i \\\n      --out udp:127.0.0.1:14550 &\n  done\n\nBind the connection to 0.0.0.0:14550 and set remotePort to 14551 (ArduPilot SITL\nbroadcasts HEARTBEAT to all registered outputs so all five sysids appear on the peer\ntable after the first heartbeat window).\n\nDry-run output: a list of { sysid, result: 'dry-run' } records with no actual sends.\nLive output 0: one continue message per successfully commanded vehicle, in order.\nLive output 1: one status record per vehicle whether it succeeded or failed.",
+    "info": "The DESIGN.md testing rig runs five ArduPilot SITL instances at sysids 1–5 and five PX4 at 11–15 on separate connections.\n\nThis flow targets the ArduPilot connection only. Start five Copter SITL processes:\n  for i in 1 2 3 4 5; do\n    sim_vehicle.py -v ArduCopter -I $((i-1)) --sysid $i \\\n      --out udp:127.0.0.1:14550 &\n  done\n\nBind the connection to 0.0.0.0:14550 and set remotePort to 14551 (ArduPilot SITL\nbroadcasts HEARTBEAT to all registered outputs so all five sysids appear on the peer\ntable after the first heartbeat window).\n\nPreview output: the built plan (aggregate result 'built') with no actual sends.\nLive output 0: one continue message per successfully commanded vehicle, in order.\nLive output 1: one status record per vehicle whether it succeeded or failed.",
     "x": 290,
     "y": 40,
     "wires": []
@@ -63,7 +63,7 @@
     "id": "ex07-inject-dry",
     "type": "inject",
     "z": "ex07-tab",
-    "name": "Dry run",
+    "name": "Preview",
     "props": [
       {
         "p": "payload"
@@ -88,7 +88,7 @@
     "id": "ex07-fanout-dry-build",
     "type": "mavlink-command",
     "z": "ex07-tab",
-    "name": "Arm (dry run) (build)",
+    "name": "Arm (preview) (build)",
     "mode": "preset",
     "preset": "arm",
     "advancedCommand": "",
@@ -116,7 +116,7 @@
     "id": "ex07-fanout-dry",
     "type": "mavlink-fanout",
     "z": "ex07-tab",
-    "name": "Arm (dry run)",
+    "name": "Arm (preview)",
     "connection": "ex07-connection",
     "selectionMode": "list",
     "members": [
@@ -141,8 +141,7 @@
     "armedFilter": "",
     "executionMode": "sequential",
     "intervalMs": 200,
-    "dryRun": true,
-    "delivery": "send",
+    "delivery": "build",
     "maxRetries": 0,
     "x": 320,
     "y": 160,
@@ -237,7 +236,6 @@
     "armedFilter": "",
     "executionMode": "sequential",
     "intervalMs": 200,
-    "dryRun": false,
     "delivery": "confirm",
     "maxRetries": 3,
     "x": 330,
@@ -256,7 +254,7 @@
     "id": "ex07-dry-result",
     "type": "debug",
     "z": "ex07-tab",
-    "name": "dry continue",
+    "name": "preview continue",
     "active": true,
     "tosidebar": true,
     "console": false,
@@ -273,7 +271,7 @@
     "id": "ex07-dry-status",
     "type": "debug",
     "z": "ex07-tab",
-    "name": "dry status",
+    "name": "preview status",
     "active": true,
     "tosidebar": true,
     "console": false,

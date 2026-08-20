@@ -73,7 +73,7 @@ test('parameter definitions use an explicit profile-keyed Update workflow', () =
   assert.match(html, /const url = \$\('#node-config-input-paramDefsUrl'\)\.val\(\)\.trim\(\)/);
   assert.match(html, /url:\s*url/);
   assert.match(html, /used only by Update/i);
-  assert.match(html, /without downloaded definitions/i);
+  assert.match(html, /pre-filled from firmware/i);
 });
 
 test('the XML-catalog admin endpoints are wired under mavlink/xml-catalog', () => {

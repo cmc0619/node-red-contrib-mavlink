@@ -558,7 +558,7 @@ function completeResult(node, send, result, detail, payload, extra) {
 function timeoutResult(node, send, detail, done, extra) {
   applyActionStatus(node, 'error', detail);
   send([null, statusRecord('timed-out', detail, extra)]);
-  done(new Error(`mavlink-param: ${detail}`));
+  done();
 }
 
 /**

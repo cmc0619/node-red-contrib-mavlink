@@ -112,7 +112,6 @@
           return Number.isInteger(n) && n >= 1;
         },
       },
-      dryRun: { value: false },
       stopOnError: { value: false },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
       timeoutMs: {
@@ -298,7 +297,6 @@
   <div class="form-row"><label for="node-input-executionMode">Execution</label><select id="node-input-executionMode"><option value="sequential">Sequential</option><option value="broadcast">Broadcast</option></select></div>
   <div class="form-row" id="row-fanout-interval"><label for="node-input-intervalMs">Interval ms</label><input type="number" id="node-input-intervalMs" min="0"></div>
   <div class="form-row" id="row-fanout-concurrency"><label for="node-input-concurrency">Concurrency</label><input type="number" id="node-input-concurrency" min="1" style="width:80px"> <span class="form-tips">confirm waits in flight at once; 1 = strictly sequential</span></div>
-  <div class="form-row"><label for="node-input-dryRun">Dry run</label><input type="checkbox" id="node-input-dryRun" style="display:inline-block;width:auto;"></div>
   <div class="form-row" id="row-fanout-stopOnError"><label for="node-input-stopOnError">Stop on error</label><input type="checkbox" id="node-input-stopOnError" style="display:inline-block;width:auto;"> <span class="form-tips">halt remaining members after the first failure; they report skipped</span></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
   <div class="form-row" id="row-fanout-timeout"><label for="node-input-timeoutMs">Timeout ms</label><input type="number" id="node-input-timeoutMs" min="1"></div>
