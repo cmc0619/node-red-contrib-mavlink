@@ -139,10 +139,14 @@ keyed `address:port` (capped 100, junk-first then LRU eviction; TCP clears on
 
 ## 14.19 – 14.23 Parameter definitions (metadata)
 
-**14.19 ArduPilot publishes a live-update URL for parameter definitions; PX4 does not.** ✔
-`https://autotest.ardupilot.org/Parameters/<Vehicle>/apm.pdef.json` answers (HTTP 200
-re-checked 2026-08-19). PX4 has no equivalent URL — its 1836 definitions ship only in
-the compiled seed (see 14.22), so there is no hardcoded PX4 URL to rot.
+**14.19 Both firmwares publish parameter definitions at known URLs; neither URL is baked into the runtime.** ✔
+ArduPilot: `https://autotest.ardupilot.org/Parameters/<Vehicle>/apm.pdef.json` (HTTP 200
+re-checked 2026-08-19). PX4: `https://artifacts.px4.io/Firmware/_general/parameters.xml`
+(same check). The seed generator (`scripts/generate-param-seed.js`) fetches both at build
+time; the shipped seed carries them all (see 14.22). At runtime the Vehicle Profile's
+`paramDefsUrl` field starts empty — the user pastes whichever URL matches their stack and
+clicks Update. No URL is hardcoded in the runtime, so none can rot.
+*Check:* `params-active.json` lists every source URL and count.
 
 **14.20 The pdef URL is an update source, not a read path or cache key.** ✔
 Ordinary reads are local-only from a holding file keyed by Vehicle Profile ID. Only the
