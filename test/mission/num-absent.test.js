@@ -8,8 +8,7 @@ const { buildItemInt, buildItem } = require('../../lib/mission');
 const TARGET = { sysid: 1, compid: 1 };
 
 test('absent mission numeric fields pass through unset — not invented as 0', () => {
-  // Incomplete item fields stay undefined so packing can choke at the wire
-  // poison-init — not silent null-island zeros (§0).
+  // Incomplete item fields stay undefined in the builder — do not invent 0 (§0).
   const int = buildItemInt({ frame: 3, command: 16 }, TARGET, 0, 0);
   assert.equal(int.fields.param1, undefined);
   assert.equal(int.fields.param2, undefined);
