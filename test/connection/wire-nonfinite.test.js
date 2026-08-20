@@ -25,7 +25,10 @@ test('a string target_system that coerces to NaN refuses, not just a bare NaN', 
     () => wire.serialize(
       {
         name: 'SET_POSITION_TARGET_LOCAL_NED',
-        fields: { target_system: 'abc', target_component: 1, coordinate_frame: 1, type_mask: 3527, x: 0, y: 0, z: 0 },
+        fields: {
+          time_boot_ms: 0, target_system: 'abc', target_component: 1,
+          coordinate_frame: 1, type_mask: 3527, x: 0, y: 0, z: 0,
+        },
       },
       { sysid: 255, compid: 190, seq: 0 }
     ),
@@ -37,7 +40,10 @@ test('a numeric string target_system still serializes — Number("7") is finite'
   const frame = wire.serialize(
     {
       name: 'SET_POSITION_TARGET_LOCAL_NED',
-      fields: { target_system: '7', target_component: 1, coordinate_frame: 1, type_mask: 3527, x: 0, y: 0, z: 0 },
+      fields: {
+        time_boot_ms: 0, target_system: '7', target_component: 1,
+        coordinate_frame: 1, type_mask: 3527, x: 0, y: 0, z: 0,
+      },
     },
     { sysid: 255, compid: 190, seq: 0 }
   );
@@ -68,16 +74,48 @@ test('integer ARRAY fields are exempt from the finite guard — Number([..]) is 
   assert.equal(wire.decode(frame)[0].fields.satellite_prn[0], 1);
 });
 
+test('an omitted integer field refuses — class default 0 is poisoned before assign', () => {
+  // Closest Node analogue of pymavlink refusing None: paint ints NaN at init so
+  // an absent key cannot ride Buffer's silent 0 (§14). Other core ints are
+  // present so the throw names the omitted one.
+  assert.throws(
+    () => wire.serialize(
+      {
+        name: 'SET_POSITION_TARGET_LOCAL_NED',
+        fields: {
+          time_boot_ms: 0, target_component: 1, coordinate_frame: 1,
+          type_mask: 3527, x: 0, y: 0, z: 0,
+        },
+      },
+      { sysid: 255, compid: 190, seq: 0 }
+    ),
+    /field 'target_system' is NaN; an integer field must be finite/
+  );
+});
+
+test('omitted MAVLink 2 extension integers stay class 0 — not poisoned (§14.65)', () => {
+  // COMMAND_ACK progress/result_param2/targets are extensions. Trailing
+  // truncation means "absent" is 0 on the wire; poison would break partial acks.
+  const frame = wire.serialize(
+    { name: 'COMMAND_ACK', fields: { command: 400, result: 0 } },
+    { sysid: 1, compid: 1, seq: 0 }
+  );
+  const decoded = wire.decode(frame)[0];
+  assert.equal(decoded.fields.command, 400);
+  assert.equal(decoded.fields.progress, 0);
+  assert.equal(decoded.fields.result_param2, 0);
+});
+
 test('a present-but-blank integer field refuses — Number("") and Number(null) are a finite 0', () => {
-  // Blank is speaking emptily, absent is not speaking: '' and null would ride
-  // the same silent path to broadcast-0 the NaN guard exists to block, while
-  // an absent field legitimately fills 0 by fixed-layout design.
   for (const blank of ['', '   ', null]) {
     assert.throws(
       () => wire.serialize(
         {
           name: 'SET_POSITION_TARGET_LOCAL_NED',
-          fields: { target_system: blank, target_component: 1, coordinate_frame: 1, type_mask: 3527, x: 0, y: 0, z: 0 },
+          fields: {
+            time_boot_ms: 0, target_system: blank, target_component: 1,
+            coordinate_frame: 1, type_mask: 3527, x: 0, y: 0, z: 0,
+          },
         },
         { sysid: 255, compid: 190, seq: 0 }
       ),
@@ -101,7 +139,10 @@ test('a NaN float field still serializes — NaN floats are legal MAVLink', () =
   const frame = wire.serialize(
     {
       name: 'SET_POSITION_TARGET_LOCAL_NED',
-      fields: { target_system: 1, target_component: 1, coordinate_frame: 1, type_mask: 3527, x: NaN, y: NaN, z: NaN },
+      fields: {
+        time_boot_ms: 0, target_system: 1, target_component: 1,
+        coordinate_frame: 1, type_mask: 3527, x: NaN, y: NaN, z: NaN,
+      },
     },
     { sysid: 255, compid: 190, seq: 0 }
   );

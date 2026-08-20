@@ -27,7 +27,7 @@ test('camera photo builds a command-backed IMAGE_START_CAPTURE payload action', 
 });
 
 test('camera photo does not invent recipe defaults for blank slots', () => {
-  // Incomplete msg values pass through as NaN; the editor owns filling
+  // Incomplete msg values stay unset; the editor owns filling
   // cameraId/count/sequence. No silent 0/1 on the wire (§0).
   const built = buildPayloadMessage({
     carrier: 'long',
@@ -36,7 +36,7 @@ test('camera photo does not invent recipe defaults for blank slots', () => {
     target: { sysid: 1, compid: 1 },
     values: { interval: 2 },
   });
-  assert.ok(Number.isNaN(built.message.fields.param1), 'blank cameraId');
+  assert.ok(Number.isNaN(built.message.fields.param1), 'blank cameraId → Number(undefined) on LONG');
   assert.equal(built.message.fields.param2, 2);
   assert.ok(Number.isNaN(built.message.fields.param3), 'blank count');
   assert.ok(Number.isNaN(built.message.fields.param4), 'blank sequence');

@@ -47,14 +47,14 @@ test('longToIntFields maps params, scales global lat/lon to degE7, keeps z float
 });
 
 test('omitted COMMAND_INT frame is not invented — DEFAULT_FRAME is documentation only (#89)', () => {
-  // Pinned to the literal: ArduCopter only accepts GLOBAL_RELATIVE_ALT (3) for
-  // takeoff. The editor must save that frame explicitly; the driver does not
-  // invent it when omitted (§0).
+  // Pinned to the literal: ArduPilot Copter only accepts GLOBAL_RELATIVE_ALT (3)
+  // for takeoff. The editor must save that frame explicitly; the driver does not
+  // invent it when omitted (§0). Unset frame stays unset; wire poison-init refuses.
   assert.equal(DEFAULT_FRAME, 3);
   assert.notEqual(DEFAULT_FRAME, 6, 'GLOBAL_RELATIVE_ALT_INT is not a substitute');
 
   const omitted = longToIntFields([0, 0, 0, 0, 47.1234567, -122.5, 100.5]);
-  assert.ok(Number.isNaN(omitted.frame), 'blank/omitted frame stays NaN');
+  assert.equal(omitted.frame, undefined, 'blank/omitted frame stays unset');
 
   const int = buildCommandInt(22, 1, 1, [0, 0, 0, 0, 47.1234567, -122.5, 100.5], {
     frame: DEFAULT_FRAME,

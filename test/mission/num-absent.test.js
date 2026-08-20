@@ -7,18 +7,18 @@ const { buildItemInt, buildItem } = require('../../lib/mission');
 
 const TARGET = { sysid: 1, compid: 1 };
 
-test('absent mission numeric fields are not invented as 0', () => {
-  // Incomplete item fields pass through as NaN so packing/send can choke —
-  // not silent null-island zeros (§0).
+test('absent mission numeric fields pass through unset — not invented as 0', () => {
+  // Incomplete item fields stay undefined so packing can choke at the wire
+  // poison-init — not silent null-island zeros (§0).
   const int = buildItemInt({ frame: 3, command: 16 }, TARGET, 0, 0);
-  assert.ok(Number.isNaN(int.fields.param1));
-  assert.ok(Number.isNaN(int.fields.param2));
-  assert.ok(Number.isNaN(int.fields.z));
-  assert.ok(Number.isNaN(int.fields.x));
-  assert.ok(Number.isNaN(int.fields.y));
+  assert.equal(int.fields.param1, undefined);
+  assert.equal(int.fields.param2, undefined);
+  assert.equal(int.fields.z, undefined);
+  assert.equal(int.fields.x, undefined);
+  assert.equal(int.fields.y, undefined);
 
   const legacy = buildItem({ frame: 3, command: 16, x: 1 }, TARGET, 0, 0);
   assert.equal(legacy.fields.x, 1);
-  assert.ok(Number.isNaN(legacy.fields.y));
-  assert.ok(Number.isNaN(legacy.fields.z));
+  assert.equal(legacy.fields.y, undefined);
+  assert.equal(legacy.fields.z, undefined);
 });

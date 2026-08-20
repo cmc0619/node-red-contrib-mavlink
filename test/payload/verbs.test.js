@@ -106,8 +106,8 @@ test('shared field keys map to colliding enum families, so a stashed id must not
 });
 
 test('gimbal roi-set does not invent 0 for a blank coordinate (#88)', () => {
-  // Incomplete msg values ride as NaN; the editor requires lat/lon/alt.
-  // An invented 0 would be silent null-island / equator (§0).
+  // Incomplete msg values stay unset through the recipe; LONG Number() yields
+  // NaN (float). Invented 0 would be silent equator (§0).
   const base = {
     topic: 'gimbal',
     verb: 'roi-set',
