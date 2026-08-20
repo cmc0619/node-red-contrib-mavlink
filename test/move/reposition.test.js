@@ -27,7 +27,7 @@ test('reposition coerces the frame it is handed and never substitutes one', () =
   // not coerce rides non-finite rather than being replaced with a legal number.
   assert.equal(buildRepositionMessage(input({ frame: 0 })).fields.frame, 0);
   assert.equal(buildRepositionMessage(input({ frame: 7 })).fields.frame, 7);
-  for (const frame of [undefined, 'WARP']) {
+  for (const frame of [undefined, 'WARP', '', '   ']) {
     const message = buildRepositionMessage(input({ frame }));
     assert.ok(!Number.isFinite(message.fields.frame), `frame ${JSON.stringify(frame)} stays unresolved`);
   }

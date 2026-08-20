@@ -22,4 +22,5 @@ test('valueFrom prefers payload, treats empty config as unset', () => {
   assert.equal(valueFrom({ yaw: 9 }, { yaw: 1 }, 'yaw'), 9);
   assert.equal(valueFrom({}, { yaw: 1 }, 'yaw'), 1);
   assert.equal(valueFrom({}, { yaw: '' }, 'yaw'), undefined);
+  assert.equal(valueFrom({}, { yaw: '   ' }, 'yaw'), undefined);
 });
