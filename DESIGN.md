@@ -392,25 +392,20 @@ snapshot. Blank editor sysid/compid means "inherit"; an explicit 1 means exactly
 **14.55 `Buffer` already range-checks integers — and has three silent cases.** ✔ (probe re-run)
 `writeUInt8(300)` throws `ERR_OUT_OF_RANGE`; do not re-implement. The silent cases:
 `writeUInt8(undefined|null)` writes 0, `writeFloatLE('abc')` writes NaN.
-Also: `new Clazz()` from node-mavlink defaults every integer property to `0`, so an
-*omitted* field that never reaches `assignFields` still serializes as 0 — the same
-silent path. Pymavlink has no analogue: generated constructors require the fields,
-and `struct.pack` refuses `None`. Closest Node fix: after `new Clazz()`, poison-init
-core (non-extension) integers to `NaN`, then assign, then refuse any core int still
-blank/non-finite before serialize (`wire.js`). MAVLink 2 extension integers keep
-class `0` — trailing truncation already means "absent ≡ 0" on the wire (14.65).
+Also: `new Clazz()` defaults every integer property to `0`, so an *omitted* field
+that never reaches `assignFields` still serializes as 0 — the same silent path.
+That silence is **not** a library refusal. §0 step 1 is only for refusals the
+wire/library actually makes; “surface the refusal Buffer should have made” is
+forbidden (§9). Do not poison-init or throw helpful errors in `wire.js`. Completeness
+belongs in the editor. Builders must not invent substitute ints/frames for blanks.
 
-**14.56 A non-finite value on an integer field serializes as 0 — the broadcast address.** ✔ 🧪 (2026-08-06; poison-init 2026-08-20)
+**14.56 A non-finite value on an integer field serializes as 0 — the broadcast address.** ✔ 🧪 (2026-08-06; §0 ruling 2026-08-20)
 `Buffer.write*Int*` range comparisons are *falsely passed* by `NaN` (both `> max` and
-`< min` are false), so a NaN target hit the wire as `target_system 0`. The send path
-never crosses `lib/codec`. Refusal is one choke every outbound message crosses:
-`wire.js` poison-inits core integers, `assignFields` refuses blank/non-finite when
-speaking, and a post-assign assert refuses leftover poison from omitted keys.
-Builders pass blanks through unset — they must not invent `0`, recipe defaults, or
-a frame — so incomplete `msg` fails loud at serialize (status output 1 via
-`failInput`), not as a silent broadcast. Floats are untouched — NaN is legal
-MAVLink ("field not used").
-*Check:* `node --test test/connection/wire-nonfinite.test.js`.
+`< min` are false), so a NaN target hits the wire as `target_system 0`. Measured
+fact; not a warrant for a driver guard. GIGO: the driver packs and sends. Floats
+are untouched — NaN is legal MAVLink ("field not used").
+*Check:* `node --test test/connection/wire-nonfinite.test.js` (pins the silent-0
+mechanism; does not assert a driver refusal).
 
 **14.57 Packet sequence numbers cannot deduplicate across links.** 📖 (spec)
 Each channel keeps its own counter. Surface the two-links-vs-two-vehicles condition;
