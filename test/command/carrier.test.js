@@ -80,6 +80,35 @@ test('longToIntFields blank x/y stay unset — Number("") must not invent 0', ()
   assert.equal(keptNull.y, 10000000);
 });
 
+test('longToIntFields blank param1–4/z stay unset — Number("") must not invent 0', () => {
+  const blank = longToIntFields(['', '   ', null, undefined, 1, 2, ''], { frame: 3 });
+  assert.equal(blank.param1, undefined);
+  assert.equal(blank.param2, undefined);
+  assert.equal(blank.param3, null);
+  assert.equal(blank.param4, undefined);
+  assert.equal(blank.z, undefined);
+  assert.equal(blank.x, 10000000);
+  assert.equal(blank.y, 20000000);
+});
+
+test('intFieldsToLong blank frame does not invent GLOBAL unscale', () => {
+  // Wire-shaped degE7 ints must not be divided by 1e7 when frame is blank.
+  const back = intFieldsToLong({
+    frame: '',
+    param1: 1,
+    param2: 2,
+    param3: 3,
+    param4: 4,
+    x: 471234567,
+    y: -1225000000,
+    z: 100,
+  });
+  assert.equal(back[4], 471234567);
+  assert.equal(back[5], -1225000000);
+  const nullFrame = intFieldsToLong({ frame: null, x: 10000000, y: 0, z: 0 });
+  assert.equal(nullFrame[4], 10000000);
+});
+
 test('longToIntFields scales every degrees value — no pass-through heuristic', () => {
   // Whole-degree coordinates are ordinary operator input and must scale like
   // any other degrees value; the old |v| > 180 pass-through is gone (§9).
