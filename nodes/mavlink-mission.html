@@ -194,8 +194,10 @@
       });
       $('#node-input-firmware').on('change', repopulateTypes);
       $op.on('change', refreshRows);
+      // populateDialectSelect pins the saved dialect, then always fires the
+      // dialect change handler — that one firing is the open's CompID load
+      // (trigger-only, as in Build). A second explicit load fetched it twice.
       RED.mavlink.populateDialectSelect($('#node-input-dialect'), { saved: node.dialect || '' });
-      RED.mavlink.reloadTargetCompId(node);
 
       /* Initial state. */
       RED.mavlink.refreshIdentitySelect(node);

@@ -46,6 +46,14 @@
    * @param {function({commands:Array, enums:Object, dialect:string}):void} cb
    */
   function loadCommandsCatalog(cb) {
+    // One fetch per catalog target: every handler that moves the target nulls
+    // _currentCmdCatalog first, so a warm catalog is current — without this,
+    // tips + params refreshed as two fetches of the same catalog. An errored
+    // catalog is never served warm; the next caller retries the fetch.
+    if (_currentCmdCatalog && !_currentCmdCatalog.error) {
+      cb(_currentCmdCatalog);
+      return;
+    }
     RED.mavlink.loadCatalog('/mavlink/command/commands', _cmdCatalog, function (catalog) {
       _currentCmdCatalog = catalog;
       cb(catalog);
@@ -625,7 +633,14 @@
       let presetMessagesCatalog = null;
 
       const $dialect = $('#node-input-dialect');
+      // populateDialectSelect re-fires change with the value it already
+      // pinned; a same-value fire must not drop warm catalogs and refetch
+      // them all — on open that doubled every fetch this dialog makes.
+      let lastDialect = String(node.dialect || '');
       $dialect.on('change', function () {
+        const dialect = String($dialect.val() || '');
+        if (dialect === lastDialect) return;
+        lastDialect = dialect;
         presetMessagesCatalog = null;
         _currentCmdCatalog = null;
         refreshVisibility();

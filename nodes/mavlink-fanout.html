@@ -178,13 +178,17 @@
         $members.editableList('addItem', member);
       });
 
-      var _msgCatalog = { seq: 0 };
+      var _typeSeq = 0;
       function refreshVehicleTypeOptions() {
         // MAV_TYPE options come from the connection's profile catalog; without
         // a connection the filter cannot resolve at runtime anyway, so an
-        // unfilled dropdown is honest, not broken.
-        RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, function (catalog) {
-          if (!catalog) return;
+        // unfilled dropdown is honest, not broken. Name-filtered enums fetch:
+        // the full Build message catalog carried every message and enum table
+        // just to read this one. isBuild:false — Fan-out has no dialect row,
+        // so even Build delivery resolves through the Connection.
+        var seq = ++_typeSeq;
+        RED.mavlink.loadEnumsCatalog(['MAV_TYPE'], function (catalog) {
+          if (seq !== _typeSeq) return;
           var sel = $('#node-input-vehicleType');
           RED.mavlink.fillEnumSelect(sel, (catalog.enums && catalog.enums.MAV_TYPE) || [], {
             saved: node.vehicleType,
@@ -194,7 +198,7 @@
             titleNamespace: 'mavTypeTip',
             triggerChange: false
           });
-        }, { isBuild: false, listKey: 'messages' });
+        }, null, { isBuild: false });
       }
 
       /**

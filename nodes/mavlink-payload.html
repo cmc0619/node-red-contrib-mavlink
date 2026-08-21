@@ -358,8 +358,9 @@
 
       RED.mavlink.refreshVerbOptions({ saved: node.verb });
       refreshVisibility();
-      refreshFields();
-      reloadCompIds();
+      // Field tips + CompID load once, via the dialect change that
+      // populateDialectSelect always fires after pinning the saved dialect
+      // (trigger-only, as in Build) — explicit calls here fetched both twice.
     }
 
     RED.nodes.registerType('mavlink-payload', {

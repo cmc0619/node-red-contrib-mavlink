@@ -708,10 +708,14 @@
    * the enum-names filter.
    *
    * @param {string[]|string} [names]  optional enum table filter for /mavlink/enums
+   * @param {{isBuild?: boolean}} [opts]  resolveCatalogTarget override (Fan-out
+   *   has a Build delivery but no dialect row, so it always resolves by wire)
    * @returns {Object<string, string>}
    */
-  function currentEnumQuery(names) {
-    const target = RED.mavlink.resolveCatalogTarget();
+  function currentEnumQuery(names, opts) {
+    const target = RED.mavlink.resolveCatalogTarget(
+      opts && typeof opts.isBuild === 'boolean' ? { isBuild: opts.isBuild } : undefined
+    );
     let query = null;
     if (!target.isBuild) {
       // Config-node dialogs (Vehicle Profile): dialect lives on the config
@@ -945,13 +949,14 @@
    * @param {string[]|string} names  extra enum table names to include
    * @param {function(object):void} cb
    * @param {{cancelled?: boolean}} [token]
-   * @param {{dialect?: string}} [opts]  explicit dialect when the dialog has no
-   *   Connection / Vehicle / Dialect row (Local Identity — uses `common` for
-   *   MAV_TYPE / MAV_COMPONENT / MAV_AUTOPILOT)
+   * @param {{dialect?: string, isBuild?: boolean}} [opts]  explicit dialect when
+   *   the dialog has no Connection / Vehicle / Dialect row (Local Identity —
+   *   uses `common` for MAV_TYPE / MAV_COMPONENT / MAV_AUTOPILOT); `isBuild`
+   *   overrides tier detection, same as loadCatalog's option
    */
   RED.mavlink.loadEnumsCatalog = function (names, cb, token, opts) {
     opts = opts || {};
-    const query = currentEnumQuery(names);
+    const query = currentEnumQuery(names, opts);
     if (!query.dialect && !query.vehicle && opts.dialect) {
       query.dialect = opts.dialect;
       addEnumNames(query, names);

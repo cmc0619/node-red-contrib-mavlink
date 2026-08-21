@@ -545,9 +545,19 @@
         RED.mavlink.toggleRow('#row-paramType', action === 'set' && !decorative);
       }
 
+      /**
+       * The definition the last refreshParamInfo rendered from. Everything the
+       * render shows derives from the definition (plus fields with their own
+       * handlers), never from the raw id text — so a keystroke that resolves
+       * the same definition (usually none, mid-typing) can skip the rebuild
+       * of the Type and Value selects instead of redoing it per keypress.
+       */
+      var _infoDef;
+
       function refreshParamInfo() {
         var id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
         var def = _paramDefs[id];
+        _infoDef = def;
 
         // Hover text, not a row. Description, unit and range are reference —
         // read once when picking the parameter, then in the way for every
@@ -805,12 +815,21 @@
         refreshVisibility();
       });
 
-      // Pin/populate dialect BEFORE the first enum catalog fetch so Build-tier
-      // currentCatalogQuery sees the saved dialect (not an empty select).
+      // populateDialectSelect pins the saved dialect synchronously (Build-tier
+      // currentCatalogQuery must see it, 14.33), then always fires the dialect
+      // change handler — that one firing is the open's defs + CompID load, the
+      // same trigger-only shape Build uses. A second explicit load here
+      // fetched both catalogs twice per open.
       RED.mavlink.populateDialectSelect($('#node-input-dialect'), { saved: node.dialect || '' });
-      RED.mavlink.reloadTargetCompId(node);
 
-      $('#node-input-paramId').on('input change', refreshParamInfo);
+      $('#node-input-paramId').on('input change', function () {
+        // Same read refreshParamInfo opens with; equal definition = equal
+        // render, so only a keystroke that lands on (or leaves) a definition
+        // rebuilds the selects. The results panel below still updates.
+        var id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
+        if (_paramDefs[id] === _infoDef) return;
+        refreshParamInfo();
+      });
       $('#node-input-paramId').on('input focus', function () {
         renderParamResults($('#node-input-paramId').val());
       });
@@ -895,7 +914,6 @@
         ($('#node-input-lookup').val() || 'name') + '"]').prop('checked', true);
       applyActionRows();
       refreshVisibility();
-      loadParamDefs();
     }
   });
 </script>

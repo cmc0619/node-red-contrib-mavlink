@@ -54,10 +54,16 @@ test('vehicleType is a MAV_TYPE select loaded from the shared catalog (§6)', ()
   );
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/,
-    'dialect enum catalog uses shared loadCatalog'
+    /RED\.mavlink\.loadEnumsCatalog\(\['MAV_TYPE'\]/,
+    'MAV_TYPE loads via the name-filtered enums fetch, not the full message catalog'
+  );
+  assert.doesNotMatch(
+    html,
+    /\/mavlink\/build\/messages/,
+    'the full Build message catalog must not be fetched for one enum table'
   );
   assert.match(html, /enums\.MAV_TYPE/, 'MAV_TYPE table is read from the catalog');
+  assert.match(html, /isBuild:\s*false/, 'resolution stays wire-side — Fan-out has no dialect row');
   assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'options are built via shared fillEnumSelect');
   assert.match(html, /Any type/, 'empty selection means any vehicle type');
   assert.match(html, /saved:\s*node\.vehicleType/, 'the saved MAV_TYPE is offered');
@@ -71,8 +77,8 @@ test('firmware filter is a small select (ArduPilot/PX4/custom)', () => {
   assert.match(html, /<option value="custom">Custom<\/option>/);
 });
 
-test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)', () => {
-  assert.match(html, /RED\.mavlink\.loadCatalog\(/, 'catalog fetches use shared loadCatalog');
+test('admin catalog fetches go through the shared loaders (httpAdminRoot-safe)', () => {
+  assert.match(html, /RED\.mavlink\.loadEnumsCatalog\(/, 'catalog fetches use the shared enums loader');
   assert.ok(
     !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
     'bare absolute /mavlink getJSON paths must be gone'
