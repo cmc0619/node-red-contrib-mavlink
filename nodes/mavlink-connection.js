@@ -82,8 +82,6 @@ module.exports = function registerMavlinkConnection(RED) {
       targetComponent: defaults.defaultTargetComponent,
       firmware: defaults.firmware,
       vehicleFamily: defaults.vehicleFamily,
-      dialect: defaults.dialect,
-      autopilot: autopilotForFirmware(defaults.firmware),
     });
 
     // localIdentity is a required reference and additionalIdentities is the
@@ -149,7 +147,6 @@ module.exports = function registerMavlinkConnection(RED) {
     }
 
     node.connection.on('state', (state) => applyStatus(node, state, signing.acceptInvalid));
-    node.connection.on('transport-error', () => {});
     node.connection.on('rejected', makeRejectedHandler(node, signing));
 
     node.subscribe = (filter, handler) => node.connection.subscribe(filter, handler);

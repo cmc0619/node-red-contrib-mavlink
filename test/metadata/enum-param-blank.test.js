@@ -18,6 +18,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const metadata = require('../../lib/metadata');
+const { isFalseTrueEnum } = require('../../lib/metadata/naming');
 
 /** Params that render a plain pulldown: enum-backed, not hidden, not a bitmask,
  *  not FALSE/TRUE (those are checkboxes). */
@@ -29,7 +30,7 @@ function blankableParams(catalog) {
       if (param.hidden || !param.enum || param.bitmask) continue;
       const entries = catalog.enums[param.enum];
       if (!entries || !entries.length) continue;
-      if (metadata.isFalseTrueEnum(entries)) continue;
+      if (isFalseTrueEnum(entries)) continue;
       const key = `${command.name}:${param.index}`;
       if (seen.has(key)) continue;
       seen.add(key);

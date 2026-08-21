@@ -518,13 +518,7 @@
         function buildMessageDropdown(catalog) {
           _currentMsgCatalog = catalog;
           var sel = $('#node-input-messageName');
-          var current = sel.is('select') ? sel.val() : null;
-          var prefer = current || node.messageName || 'HEARTBEAT';
-          if (!sel.is('select')) {
-            var $select = $('<select id="node-input-messageName" style="width:70%"></select>');
-            sel.replaceWith($select);
-            sel = $select;
-          }
+          var prefer = sel.val() || node.messageName || 'HEARTBEAT';
           // Tip sync and the field-form rebuild must use different change
           // namespaces — fillEnumSelect's bindSelectTitleSync does
           // off('change.' + ns), which would erase the renderer if both used

@@ -4,15 +4,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  listCommandsForDialect,
   listCommandsCatalog,
   catalogFromBundle,
   loadBundled,
   resolveBundledDialect,
   commandLabel,
   isHiddenParam,
-  enumOptionLabel,
 } = require('../../lib/metadata');
+const { enumOptionLabel } = require('../../lib/metadata/commands-list');
 
 test('commandLabel shows the full command name and value in parentheses (§6)', () => {
   assert.equal(commandLabel('MAV_CMD_NAV_TAKEOFF', 22), 'MAV_CMD_NAV_TAKEOFF (22)');
@@ -77,12 +76,6 @@ test('seed carries common.xml command-param enum= links (no hints.js overlay)', 
   const changeSpeed = bundle.commands.MAV_CMD_DO_CHANGE_SPEED;
   const speedType = changeSpeed.params.find((p) => Number(p.index) === 1);
   assert.equal(speedType && speedType.enum, 'SPEED_TYPE');
-});
-
-test('listCommandsForDialect returns the commands array from the catalog', () => {
-  const list = listCommandsForDialect('ardupilotmega');
-  assert.ok(list.length > 50);
-  assert.ok(list.find((c) => c.value === 22));
 });
 
 test('catalogFromBundle works for any DialectBundle (custom profiles inclusive)', () => {
