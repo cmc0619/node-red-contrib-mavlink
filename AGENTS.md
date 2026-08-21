@@ -121,6 +121,13 @@ authority.
   already owns the behavior. At minimum also check generated seeds, union/merge boundaries,
   editor round-trips, signed and unsigned wire limits, and recursive examples. Verify commands
   by exit status.
+- Review findings are answered in batches, never per-finding. Hold fixes locally until every
+  bot in the round has reported and gone quiet, then push one validated response. A push while
+  a review is mid-flight, or for a nitpick alone, is churn against the metered cap — it is how
+  the cap gets burned down to a rate limit. **The stop hook's commit-and-push nag yields to
+  this batching**: commit locally if the hook demands it, but the push waits for the round to
+  complete. (Owner standing order, 2026-08-21, after a six-push PR drained the CodeRabbit
+  allowance.)
 - After review starts, use event triggers or periodic timers; never block or busy-poll. Gather
   all open findings into one plan. For each, state the concrete problem, the smallest fix, and
   whether it is applied or declined under this file's rules. Applied and declined are not equally
