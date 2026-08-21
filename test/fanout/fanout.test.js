@@ -1032,6 +1032,77 @@ test('pinning never invents target_component on a system-only message', async ()
   assert.equal('target_component' in fields, false, 'a declared-field-only message stays that shape');
 });
 
+test('a member whose launch rejects is recorded failed, never dropped from the aggregate (§9)', async () => {
+  // executeMember guards its dispatch arms with its own try/catch, but the
+  // member-message build before them reads runtime payload input and can
+  // throw. Swallowed by the launch loop's allSettled, that rejection left a
+  // hole in the records: the member vanished from the aggregate and the run
+  // reported success — §2's phantom success, on a fleet surface.
+  const connection = connectionStub([peer(1), peer(2)]);
+
+  const result = await executeFanout({ selection: { mode: 'all' },
+    connection,
+    message: commandThrowingOnSpread(2),
+    mode: 'sequential',
+    delivery: 'send',
+    concurrency: 2,
+    intervalMs: 0,
+  });
+
+  assert.equal(result.success, false, 'a vanished member must not aggregate as success (§2)');
+  assert.equal(result.members.length, 2, 'the failed member is a record, not a hole');
+  const failed = result.members.find((m) => m.sysid === 2);
+  assert.equal(failed.result, 'failed');
+  assert.match(failed.detail, /saturated/, 'the thrown reason survives into the record');
+  assert.equal(result.members.find((m) => m.sysid === 1).result, 'sent');
+});
+
+test('a launch rejection carrying no Error still records the member failed (§2)', async () => {
+  // A payload getter can throw any value. A null reason must not crash the
+  // recording arm itself — that would resurrect the very hole the arm closes,
+  // and a one-member run would aggregate as success over an empty record set.
+  const connection = connectionStub([peer(1)]);
+
+  const result = await executeFanout({ selection: { mode: 'all' },
+    connection,
+    message: commandThrowingOnSpread(1, null),
+    mode: 'sequential',
+    delivery: 'send',
+    concurrency: 2,
+    intervalMs: 0,
+  });
+
+  assert.equal(result.success, false, 'a null-reason crater must not report success');
+  assert.equal(result.members.length, 1, 'the member is a record, not a hole');
+  assert.equal(result.members[0].result, 'failed');
+  assert.equal(result.members[0].detail, 'null', 'the reason is written down, not dereferenced');
+});
+
+test('stop-on-error still fires when the failure is a launch rejection (concurrency > 1)', async () => {
+  // The dropped record was also invisible to anyFailed(), so stop-on-error
+  // never halted later launches after a rejected member.
+  const connection = connectionStub([peer(1), peer(2), peer(3)]);
+
+  const result = await executeFanout({ selection: { mode: 'all' },
+    connection,
+    message: commandThrowingOnSpread(2),
+    mode: 'sequential',
+    delivery: 'send',
+    concurrency: 2,
+    intervalMs: 0,
+    stopOnError: true,
+  });
+
+  assert.equal(result.success, false);
+  assert.deepEqual(
+    connection.sends.map((s) => s.message.fields.target_system),
+    [1],
+    'member 3 is never dispatched after member 2\'s launch rejects'
+  );
+  assert.equal(result.members.find((m) => m.sysid === 2).result, 'failed');
+  assert.equal(result.members.find((m) => m.sysid === 3).result, 'skipped');
+});
+
 test('without stop-on-error every member is still attempted (the §10 default)', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(3)], { failSysids: new Set([1]) });
 
@@ -1368,6 +1439,84 @@ test('cancel settles a broadcast confirm instead of blocking on its timeout (Cod
   assert.equal(unsubscribed, 1, 'the COMMAND_ACK subscription is released');
 });
 
+test('a settled param-echo confirm leaves no abort listener on the run signal', async () => {
+  // The signal is the run's, shared by every member: a listener left behind
+  // per member settled by echo or timeout accumulates across a fleet run —
+  // Node warns at ten, and every dead closure pins its member's message
+  // until the run ends.
+  const handlers = [];
+  const connection = {
+    peerTable: peerTableStub([peer(1), peer(2), peer(3)]),
+    sends: [],
+    send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
+    resolveSourceIds: () => null,
+    subscribe(filter, handler) {
+      handlers.push(handler);
+      return () => {};
+    },
+  };
+  const deliver = (decoded) => handlers.splice(0).forEach((h) => h(decoded));
+  const signal = countingSignal();
+
+  const run = executeFanout({ selection: { mode: 'all' },
+    connection,
+    signal,
+    message: builtParamSet(),
+    mode: 'sequential',
+    delivery: 'confirm',
+    timeoutMs: 60000,
+    intervalMs: 0,
+  });
+
+  // Echo each member in turn — every settle rides the normal path, the
+  // signal never aborts.
+  for (const sysid of [1, 2, 3]) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    deliver({ sysid, compid: 1, name: 'PARAM_VALUE', fields: { param_id: 'FOO', param_value: 7, param_type: 9 } });
+  }
+  const result = await run;
+
+  assert.equal(result.success, true, 'every member echo-confirmed');
+  assert.equal(signal.adds, 3, 'one abort listener per member');
+  assert.equal(signal.live(), 0, 'every settle removed its own listener');
+});
+
+test('a settled broadcast confirm leaves no abort listener on the run signal', async () => {
+  // Same shape for confirmBroadcast's single hand-rolled wait: settling by
+  // the last ack (or the timeout) must detach the handler it registered.
+  const handlers = [];
+  const connection = {
+    peerTable: peerTableStub([peer(1), peer(2)]),
+    sends: [],
+    send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
+    resolveSourceIds: () => null,
+    subscribe(filter, handler) {
+      handlers.push(handler);
+      return () => {};
+    },
+  };
+  const deliver = (decoded) => handlers.slice().forEach((h) => h(decoded));
+  const signal = countingSignal();
+
+  const run = executeFanout({ selection: { mode: 'all' },
+    connection,
+    signal,
+    message: builtCommand(),
+    mode: 'broadcast',
+    delivery: 'confirm',
+    timeoutMs: 60000,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 0 } });
+  deliver({ sysid: 2, compid: 1, fields: { command: 400, result: 0 } });
+  const result = await run;
+
+  assert.equal(result.success, true);
+  assert.equal(signal.adds, 1, 'broadcast registers one listener for the whole wait');
+  assert.equal(signal.live(), 0, 'settling by ack removed it');
+});
+
 // Fires only the AckWaiter's 1 s retry back-off (on a microtask); every other
 // timer — the ack timeout — never fires, same shape as the command node's
 // retry harness.
@@ -1442,6 +1591,51 @@ function builtSetpoint(overrides = {}) {
       x: 0, y: 0, z: 0, vx: 1, vy: 0, vz: 0, afx: 0, afy: 0, afz: 0,
       yaw: 0, yaw_rate: 0,
       ...(overrides.fields || {}),
+    },
+  };
+}
+
+// A COMMAND_LONG whose fields object throws on its Nth spread. `retarget`
+// spreads the built message's fields exactly once per member, in launch
+// order, so member N's executeMember rejects before its own try/catch — the
+// only rejection surface the launch loop can see. Built runtime payload is
+// exactly this trusted-not-vetted input (§0).
+function commandThrowingOnSpread(memberOrdinal, reason = new Error('control band saturated')) {
+  let spreads = 0;
+  const fields = {
+    target_system: 0,
+    target_component: 0,
+    command: 400,
+    confirmation: 0,
+    param1: 0, param3: 0, param4: 0, param5: 0, param6: 0, param7: 0,
+  };
+  Object.defineProperty(fields, 'param2', {
+    enumerable: true,
+    get() {
+      spreads += 1;
+      if (spreads === memberOrdinal) throw reason;
+      return 0;
+    },
+  });
+  return { name: 'COMMAND_LONG', fields };
+}
+
+// A stand-in AbortSignal that counts listener adds and holds the live set:
+// AbortSignal exposes no portable listener count, and the leak under test is
+// precisely a listener that never comes off. The runtime only reads
+// `aborted` and the listener pair; these runs never abort.
+function countingSignal() {
+  const listeners = new Set();
+  return {
+    aborted: false,
+    adds: 0,
+    live() { return listeners.size; },
+    addEventListener(type, fn) {
+      this.adds += 1;
+      listeners.add(fn);
+    },
+    removeEventListener(type, fn) {
+      listeners.delete(fn);
     },
   };
 }

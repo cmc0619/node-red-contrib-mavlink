@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { loadNodeDefaults } = require('./html-assert');
+const { loadNodeDefaults, loadNodeType } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-connection.html'),
@@ -137,7 +137,7 @@ test('Connection editor offers UDP, TCP, and serial without “not yet” stubs'
   assert.match(html, /node-config-input-baudRate/, 'baud field is present');
   assert.match(
     html,
-    /serialPath:[\s\S]*validate:[\s\S]*mode !== 'serial'[\s\S]*trim\(\)\.length > 0/,
+    /serialPath:[\s\S]*validate:[\s\S]*mode !== 'serial'[\s\S]*!RED\.mavlink\.isBlank\(v\)/,
     'serial path is required in serial mode'
   );
 });
@@ -306,6 +306,113 @@ test('link id is a wire byte; peer-freshness overrides are blank or positive', (
       />= 1/
     );
   }
+});
+
+test('mode gates read through liveOr — a foreign dialog cannot poison them (#217)', () => {
+  // Source pin, scoped to the defaults block: oneditprepare's bare reads are
+  // legitimate (its own dialog is open by definition), a validator's are not —
+  // the config-save cascade validates closed nodes while somebody else's tray
+  // is on top, and `live || saved` is the banned truthiness shape besides.
+  const defaultsSrc = html.slice(html.indexOf('defaults:'), html.indexOf('credentials:'));
+  assert.ok(
+    !defaultsSrc.includes("$('#node-config-input-mode')"),
+    'no validator may read the live mode field bare'
+  );
+  const liveOrCalls = defaultsSrc.match(
+    /RED\.mavlink\.liveOr\(this,\s*'#node-config-input-mode',\s*this\.mode,\s*'udp'\)/g
+  ) || [];
+  assert.equal(
+    liveOrCalls.length, 7,
+    'all seven mode-gated validators (bindHost/bindPort/remoteHost/remotePort/'
+      + 'broadcastPort/serialPath/baudRate) go through the scoped liveOr'
+  );
+
+  // Behavioral: a saved serial node validated while a FOREIGN dialog shows
+  // mode=udp keeps its serial gate — the stray mode select is not this node's
+  // answer, so its hidden IP fields must not red.
+  const foreign = loadNodeDefaults('mavlink-connection', {}, {
+    dom: { '#node-config-input-mode': { val: 'udp' } },
+    editStack: [{ id: 'someone-else' }],
+  });
+  assert.equal(foreign.bindHost.validate.call({ id: 'c1', mode: 'serial' }, '', {}), true,
+    'a foreign dialog\'s mode select must not resurrect the IP-mode gate');
+  assert.equal(foreign.bindPort.validate.call({ id: 'c1', mode: 'serial' }, '', {}), true);
+  assert.equal(
+    foreign.serialPath.validate.call({ id: 'c1', mode: 'serial' }, '/dev/ttyUSB0'),
+    true
+  );
+
+  // And the live read still wins in the node's OWN dialog: switching a saved
+  // udp node to serial releases the now-hidden IP fields immediately.
+  const own = loadNodeDefaults('mavlink-connection', {}, {
+    dom: { '#node-config-input-mode': { val: 'serial' } },
+    editStack: [{ id: 'c1' }],
+  });
+  assert.equal(own.bindHost.validate.call({ id: 'c1', mode: 'udp' }, '', {}), true);
+  assert.equal(own.serialPath.validate.call({ id: 'c1', mode: 'udp' }, ''), false,
+    'and arms the serial gate the saved mode would have skipped');
+});
+
+test('signing credentials are mutually exclusive in both directions, live-aware', () => {
+  const creds = loadNodeType('mavlink-connection').credentials;
+  const key = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
+  const reason = /cannot be set alongside/;
+
+  // Two-arg forms so a returned string renders as the invalid reason (§14).
+  assert.equal(creds.signingKeyHex.validate.length, 2);
+  assert.equal(creds.signingPassphrase.validate.length, 2);
+
+  // Saved state, no dialog open (import/deploy): each side reds against the
+  // other's `has_` boolean — including the passphrase field itself, the one
+  // the operator actually touches.
+  assert.match(String(creds.signingKeyHex.validate.call(
+    { id: 'c1', credentials: { has_signingPassphrase: true } }, key, {}
+  )), reason);
+  assert.match(String(creds.signingPassphrase.validate.call(
+    { id: 'c1', credentials: { has_signingKeyHex: true } }, 'correct horse', {}
+  )), reason);
+
+  // Blank always passes (signing is optional) and a lone credential passes.
+  assert.equal(creds.signingPassphrase.validate.call({ id: 'c1', credentials: {} }, '', {}), true);
+  assert.equal(creds.signingKeyHex.validate.call({ id: 'c1', credentials: {} }, '', {}), true);
+  assert.equal(
+    creds.signingPassphrase.validate.call({ id: 'c1', credentials: {} }, 'correct horse', {}),
+    true
+  );
+  assert.equal(creds.signingKeyHex.validate.call({ id: 'c1', credentials: {} }, key, {}), true);
+  // Wire format still guards the key before exclusivity is even asked.
+  assert.match(
+    String(creds.signingKeyHex.validate.call({ id: 'c1', credentials: {} }, 'abc', {})),
+    /64 hex/
+  );
+
+  const openOwn = (dom) => loadNodeType('mavlink-connection', {}, {
+    dom, editStack: [{ id: 'c1' }],
+  }).credentials;
+
+  // Own dialog open: typing a passphrase beside a key already in the key box
+  // reds NOW, on the passphrase field — not only after save.
+  const liveKey = openOwn({ '#node-config-input-signingKeyHex': { val: key } });
+  assert.match(String(liveKey.signingPassphrase.validate.call(
+    { id: 'c1', credentials: {} }, 'correct horse', {}
+  )), reason);
+
+  // Clearing the sibling box live releases the other side over its saved
+  // ghost — the emptied box is the operator's answer (#284 lesson).
+  const clearedPassphrase = openOwn({ '#node-config-input-signingPassphrase': { val: '' } });
+  assert.equal(clearedPassphrase.signingKeyHex.validate.call(
+    { id: 'c1', credentials: { has_signingPassphrase: true } }, key, {}
+  ), true);
+
+  // A FOREIGN dialog's key box is not this node's answer (#217 scoping).
+  const foreign = loadNodeType('mavlink-connection', {}, {
+    dom: { '#node-config-input-signingKeyHex': { val: key } },
+    editStack: [{ id: 'someone-else' }],
+  }).credentials;
+  assert.equal(
+    foreign.signingPassphrase.validate.call({ id: 'c1', credentials: {} }, 'correct horse', {}),
+    true
+  );
 });
 
 test('Local Identity editor exposes heartbeatIntervalMs', () => {

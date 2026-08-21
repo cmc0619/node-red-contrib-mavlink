@@ -141,12 +141,15 @@ test('a heartbeat tick enqueues on the Liveness band and is transmitted', async 
   await connection.start();
   connection.heartbeats.tick();
   await delay(20);
-  const heartbeat = dg.sockets[0].sent
-    .map((s) => JSON.parse(s.buffer.toString()))
-    .find((f) => f.name === 'HEARTBEAT');
-  assert.ok(heartbeat);
+  const sent = dg.sockets[0].sent
+    .find((s) => JSON.parse(s.buffer.toString()).name === 'HEARTBEAT');
+  assert.ok(sent);
+  const heartbeat = JSON.parse(sent.buffer.toString());
   assert.equal(heartbeat.sysid, 255);
   assert.equal(heartbeat.compid, 190);
+  // No peer heard yet: the broadcast ladder bottoms out at the configured
+  // remote — the pre-peer path a directed fallback also rides (14.63).
+  assert.equal(sent.port, 14555, 'the configured remotePort');
   connection.close();
 });
 
@@ -779,6 +782,58 @@ test('the queue keeps draining after a broadcast fans out', async () => {
   await delay(60);
 
   assert.equal(commandDatagrams(socket).length, 4, 'both broadcasts fanned out');
+  connection.close();
+});
+
+test('a heartbeat tick is written once per learned peer primary — one frame, N datagrams', async () => {
+  // A HEARTBEAT has no target fields and is addressed to everyone, so it rides
+  // the same 14.63 ladder as a target_system 0 command: on a dialed-in star,
+  // one datagram to the configured remote reaches only that remote, and every
+  // other vehicle trips its GCS-loss failsafe.
+  const wire = fakeWire();
+  const realSerialize = wire.serialize;
+  let serializes = 0;
+  wire.serialize = (message, ctx) => {
+    serializes += 1;
+    return realSerialize(message, ctx);
+  };
+  const { connection, dg } = build({}, { wire });
+  await connection.start();
+  const socket = dg.sockets[0];
+  hearFrom(socket, [[1, 40001], [2, 40002], [3, 40003]]);
+
+  connection.heartbeats.tick();
+  await delay(40);
+
+  const sends = socket.sent.filter(
+    (s) => JSON.parse(s.buffer.toString()).name === 'HEARTBEAT'
+  );
+  assert.equal(sends.length, 3, 'one datagram per learned peer, not one to the configured remote');
+  assert.deepEqual(sends.map((s) => s.port).sort((a, b) => a - b), [40001, 40002, 40003]);
+  assert.equal(serializes, 1, 'one frame serialized — N datagrams carry one sequence number');
+  connection.close();
+});
+
+test('a learned system with no autopilot component still hears the heartbeat', async () => {
+  // The broadcast target's compid 0 is MAV_COMP_ID_ALL: a HEARTBEAT names no
+  // component, so a companion computer or second GCS — a learned system with
+  // no component 1 — is a peer like any other. A component-1-only lookup
+  // starves it, and the nonempty learned list suppresses the configured-remote
+  // fallback that would otherwise have reached it. Sysid 7's two components
+  // share one endpoint and still get a single datagram.
+  const { connection, dg } = build();
+  await connection.start();
+  const socket = dg.sockets[0];
+  hearFrom(socket, [[1, 40001], [7, 40007, 1], [7, 40007, 154], [30, 40030, 191]]);
+
+  connection.heartbeats.tick();
+  await delay(40);
+
+  const ports = socket.sent
+    .filter((s) => JSON.parse(s.buffer.toString()).name === 'HEARTBEAT')
+    .map((s) => s.port)
+    .sort((a, b) => a - b);
+  assert.deepEqual(ports, [40001, 40007, 40030]);
   connection.close();
 });
 

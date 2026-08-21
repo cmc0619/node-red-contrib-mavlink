@@ -12,6 +12,7 @@ const {
   loadBundled,
   resolveSeedFile,
   readManifest,
+  seedSources,
   setCompiledCacheDir,
   clearCompiledCache,
   seedStamp,
@@ -189,4 +190,25 @@ test('a compiled dialect is cached on disk and records the XML it came from', ()
     setCompiledCacheDir(null);
     clearCompiledCache();
   }
+});
+
+test('clearCompiledCache drops the seed memos — the next load re-reads the blob from disk', () => {
+  // The accessors hand back the memoized objects verbatim, so a re-read of
+  // the seed is observable as a new, deep-equal object.
+  const sourcesBefore = seedSources();
+  const manifestBefore = readManifest();
+  const namesBefore = knownDialects();
+  const commonBefore = loadBundled('common');
+  assert.equal(seedSources(), sourcesBefore, 'seed blob is memoized between loads');
+
+  clearCompiledCache();
+
+  const sourcesAfter = seedSources();
+  assert.notEqual(sourcesAfter, sourcesBefore, 'clear must drop the memoized seed blob');
+  assert.notEqual(readManifest(), manifestBefore, 'clear must drop the memoized manifest');
+  assert.notEqual(loadBundled('common'), commonBefore, 'clear must force a recompile');
+  // Same seed on disk, so the re-read carries identical content and the
+  // dialect list re-derives to the same set.
+  assert.deepEqual(Object.keys(sourcesAfter).sort(), Object.keys(sourcesBefore).sort());
+  assert.deepEqual(knownDialects(), namesBefore);
 });
