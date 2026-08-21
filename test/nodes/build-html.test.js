@@ -126,10 +126,13 @@ test('Build message-field bitmasks use multi-select tokens accepted by the codec
 
   assert.match(fieldRenderer, /spec\.display === ['"]bitmask['"]/, 'message field bitmasks follow field metadata');
   assert.match(fieldRenderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE enums are detected before bitmask rendering');
-  assert.match(fieldRenderer, /falseTrue \? ['"]enum['"] : \(multi \? ['"]bitmask['"] : ['"]enum['"]\)/, 'FALSE/TRUE bitmasks are tagged as enum selects');
+  assert.match(
+    fieldRenderer,
+    /if \(falseTrue\) \{\s*return RED\.mavlink\.booleanEnumInput\(/,
+    'FALSE/TRUE fields early-return to the shared checkbox (numeric 0/1 saving is pinned in mavlink-editor-resource.test.js)'
+  );
   assert.match(fieldRenderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'message field bitmasks use native multi-select');
   assert.match(fieldRenderer, /\.val\(entry\.name\)/, 'message field bitmasks save enum entry names');
-  assert.match(fieldRenderer, /\.val\(String\(entry\.value\)\)/, 'FALSE/TRUE options save numeric 0/1 values');
   assert.match(collector, /fields\[name\]\s*=\s*Array\.isArray\(raw\) \? raw/, 'collector keeps selected token array');
   assert.match(collector, /kind === ['"]enum['"]/, 'FALSE/TRUE enum select is collected through numeric enum save');
 });
