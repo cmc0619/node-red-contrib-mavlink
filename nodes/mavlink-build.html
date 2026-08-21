@@ -259,16 +259,15 @@
                 className: 'mav-field-input',
               }).attr('data-field', spec.name);
             }
-            var multi = !falseTrue && spec.display === 'bitmask';
+            var multi = spec.display === 'bitmask';
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', spec.name)
-              .attr('data-kind', falseTrue ? 'enum' : (multi ? 'bitmask' : 'enum'))
+              .attr('data-kind', multi ? 'bitmask' : 'enum')
               .attr('title', multi ? RED.mavlink.bitmaskTitle(spec.description) : (spec.description || ''));
             if (multi) sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
             else sel.append($('<option></option>').val('').text('\u2014'));
             entries.forEach(function (entry) {
               var $opt = $('<option></option>').val(entry.name).text(entry.label);
-              if (falseTrue) $opt.val(String(entry.value)).text(RED.mavlink.booleanEntryLabel(entry));
               if (entry.description) $opt.attr('title', entry.description);
               sel.append($opt);
             });
@@ -281,7 +280,7 @@
                 return String(e.value) === String(saved) || e.name === saved;
               });
               if (match) {
-                sel.val(falseTrue ? String(match.value) : match.name);
+                sel.val(match.name);
               } else {
                 // A saved value the table lacks — a dialect switch, a newer
                 // firmware's entry — must survive open-and-save, not silently

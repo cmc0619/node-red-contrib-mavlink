@@ -508,7 +508,7 @@
       const entries = enums[enumName];
       if (RED.mavlink.isFalseTrueEnum(entries)) {
         return RED.mavlink.booleanEnumInput(entries, {
-          saved: saved,
+          saved,
           title: spec.description || '',
           className: opts.className,
         }).attr(opts.attrName, opts.attrValue);
@@ -543,7 +543,7 @@
     const magic = RED.mavlink.magicBooleanValue(opts.commandId, spec.index);
     if (magic !== null) {
       return RED.mavlink.booleanEnumInput([], {
-        saved: saved,
+        saved,
         trueValue: magic,
         title: spec.description || '',
         className: opts.className,
@@ -810,7 +810,7 @@
         vehicleId: '',
         firmware: '',
         vehicleFamily: '',
-        isBuild: isBuild,
+        isBuild,
       };
     }
 
@@ -830,9 +830,9 @@
         query: query,
         dialect: dialect,
         vehicleId: vehicleId,
-        firmware: firmware,
+        firmware,
         vehicleFamily: family,
-        isBuild: isBuild,
+        isBuild,
       };
     }
 
@@ -853,7 +853,7 @@
           vehicleId: '',
           firmware: firmwareVal,
           vehicleFamily: '',
-          isBuild: isBuild,
+          isBuild,
         };
       }
       const vehicleId = read('vehicle', vehicleSelector);
@@ -1213,7 +1213,7 @@
         {
           allowEmpty: true,
           emptyLabel: opts.emptyLabel || '(profile default)',
-          saved: saved,
+          saved,
           suggest: opts.suggest,
         }
       );
