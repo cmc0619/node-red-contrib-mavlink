@@ -105,11 +105,9 @@ test('shared field keys map to colliding enum families, so a stashed id must not
   }
 });
 
-test('gimbal roi-set coerces a blank coordinate — the editor is what reds it (#88)', () => {
-  // A blank lat/lon/alt takes the slot's fallback and rides: DO_SET_ROI_LOCATION
-  // has no sentinel for an unset coordinate, so the *editor* requires all
-  // three (mavlink-payload.html `values`, REQUIRED_VALUES) and the driver
-  // sends what it is handed (§0).
+test('gimbal roi-set does not invent 0 for a blank coordinate (#88)', () => {
+  // Incomplete msg values stay unset through the recipe; LONG Number() yields
+  // NaN (float). Invented 0 would be silent equator (§0).
   const base = {
     topic: 'gimbal',
     verb: 'roi-set',
@@ -117,15 +115,14 @@ test('gimbal roi-set coerces a blank coordinate — the editor is what reds it (
     carrier: 'long',
   };
   const blank = buildPayloadMessage({ ...base, values: { lon: 8.5, alt: 30 } });
-  assert.equal(blank.message.fields.param5, 0, 'the blank slot takes the recipe fallback');
+  assert.ok(Number.isNaN(blank.message.fields.param5), 'blank lat is NaN, not 0');
   assert.equal(blank.message.fields.param6, 8.5);
 
   // The slot still carries `required` — as metadata for the dialog.
   const { PAYLOAD_RECIPES } = require('../../lib/payload');
   assert.ok(PAYLOAD_RECIPES['gimbal|roi-set|'].params[4].required);
 
-  // An explicit 0 is a real coordinate and still sends — the guard is against
-  // silence, not against the equator.
+  // An explicit 0 is a real coordinate and still sends.
   const built = buildPayloadMessage({ ...base, values: { lat: 0, lon: 0, alt: 0 } });
   assert.equal(built.message.fields.param5, 0);
   assert.equal(built.message.fields.param6, 0);
@@ -174,11 +171,9 @@ test('carrier dispatch is affirmative: only CARRIER members select a builder (§
   assert.equal(buildPayloadMessage({ ...base, carrier: 'bogus' }).message, undefined);
 });
 
-test('whitespace is blank for an ROI coordinate — it takes the fallback, not Number(\' \')', () => {
-  // Number(' ') is a finite 0, so without the shared isBlank sentinel a
-  // whitespace latitude would read as a *commanded* equator rather than an
-  // unset slot. It still reaches the wire as the fallback — the editor is
-  // what refuses it — but it must not read as a value the operator typed.
+test('whitespace is blank for an ROI coordinate — NaN, not Number(\' \') → 0', () => {
+  // Number(' ') is a finite 0, so without isBlank a whitespace latitude would
+  // read as a commanded equator. Blank must not invent 0 either.
   for (const ws of [' ', '   ', '\t']) {
     const built = buildPayloadMessage({
       topic: 'gimbal',
@@ -187,6 +182,6 @@ test('whitespace is blank for an ROI coordinate — it takes the fallback, not N
       carrier: 'long',
       values: { lat: ws, lon: 8.5, alt: 30 },
     });
-    assert.equal(built.message.fields.param5, 0, `${JSON.stringify(ws)} is blank`);
+    assert.ok(Number.isNaN(built.message.fields.param5), `${JSON.stringify(ws)} is blank`);
   }
 });

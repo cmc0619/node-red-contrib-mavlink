@@ -149,6 +149,7 @@ test('mavlink-payload confirm tier with carrier int sends COMMAND_INT without a 
     targetSystem: 7,
     targetComponent: 1,
     timeout: 2000,
+    frame: '3',
   });
 
   let sent;

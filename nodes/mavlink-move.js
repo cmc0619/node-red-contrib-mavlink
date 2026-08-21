@@ -9,7 +9,6 @@ const {
   velocityFrom,
   accelFrom,
   valueFrom,
-  COMMAND_ACTIONS,
   buildTurnMessage,
   buildSpeedMessage,
   buildAttitudeMessage,
@@ -243,24 +242,147 @@ module.exports = function registerMavlinkMove(RED) {
 
         // Action × Delivery derives the wire (§6 redesign): the operator
         // states an intent; carrier, message name, frame number, and mask are
-        // code.
+        // code. One affirmative switch on action (#316); goto nests delivery.
         const action = config.action;
 
-        // Turn and Speed are acked MAV_CMDs, not setpoints (§9 roster): the
-        // command tiers only, no Stream — a command has no streaming semantics,
-        // and the editor does not offer the tier. Neither asks a firmware
-        // question: CONDITION_YAW is an ArduPilot command that PX4 ignores, but
-        // ignoring is the vehicle's business (§9) — the dialog reds it, the
-        // driver sends it. Speed is standard on both stacks.
-        if (COMMAND_ACTIONS.has(action)) {
-          const relative = firstDefined(payload.relative, config.relative);
-          // Re-issue safety is per command (see confirmCommand). A speed change
-          // and an absolute heading are both "the state you already asked for";
-          // a relative turn is a *delta*, so a re-send after a lost ack turns
-          // the aircraft a second time.
-          const idempotent = !(action === 'turn' && relative === true);
-          const message = action === 'turn'
-            ? buildTurnMessage({
+        /**
+         * Build / stream / send a setpoint-shaped message. Shared by
+         * attitude/manual/steer and by goto+stream.
+         * @param {object|undefined} message
+         * @param {string} brakingAction  action name for the stream brake rule
+         */
+        function deliverSetpoint(message, brakingAction) {
+          switch (delivery) {
+            case 'build':
+              completeBuild(node, send, message);
+              break;
+            case 'stream': {
+              // Blank keeps the library default; the editor's number validator owns
+              // the rest (§14: a finite-number check on operator input is a guardrail).
+              const rateHz = numberOr(payload.rateHz, numberOr(config.rateHz));
+              const ttlMs = numberOr(payload.ttlMs, numberOr(config.ttlMs));
+              // One stream per (connection, target) (#176): a second node
+              // streaming to the same vehicle would alternate contradictory
+              // setpoints — the vehicle oscillates while both nodes report
+              // success. Fail closed, like the mission-transfer lock. This node
+              // replacing its own stream keeps the lock it already holds — no
+              // release/re-acquire, so no self-conflict window. A retarget
+              // acquires its new scope first: a conflict (necessarily another
+              // node's stream) refuses before the running stream is touched,
+              // like any rejected input.
+              const key = streamLocks.key(connectionNode.id, target);
+              const sameKey = key === streamKey;
+              let release = releaseStream;
+              if (!sameKey) {
+                release = streamLocks.acquire(connectionNode.id, target);
+                if (!release) {
+                  // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: another node holds the setpoint stream lock — live runtime state
+                  throw new Error(
+                    `a setpoint stream to ${target.sysid}.${target.compid} is already running on this connection — stop it first or target it from one node`
+                  );
+                }
+              }
+              const next = createMoveStream({
+                connection: connectionNode,
+                message,
+                target,
+                identityId,
+                rateHz,
+                ttlMs,
+                // Attitude and manual end by going quiet (§9 ruling 1): zero
+                // thrust is a descent and a centred stick is a command, so
+                // neither has a brake packet to synthesize. Position setpoints
+                // keep their measured zero-velocity brake.
+                braking: brakingAction !== 'attitude' && brakingAction !== 'manual',
+                // TTL expiry is the only stop the flow did not cause, so it is
+                // the only one it cannot observe: without this the node would
+                // halt the vehicle and keep reporting "streaming" forever.
+                // Async, so it uses node.send — the input that started the
+                // stream was completed long ago. The stream stopped itself, so
+                // only the bookkeeping is left: free the scope before telling
+                // the flow. A replaced stream's timer is already cleared, so
+                // this only ever fires for the stream currently in the slot.
+                onExpire: (stopMessage, brakeError) => {
+                  const sent = next.sent;
+                  stream = null;
+                  releaseStream = null;
+                  streamKey = null;
+                  release();
+                  completeExpiry(node, stopMessage, sent, brakeError);
+                },
+                // A tick send that throws is contained in the stream — it
+                // keeps cadence and retries (§ "Move setpoint matrix"). One
+                // report per failure streak, status output only: the input
+                // that started the stream completed long ago, same as expiry.
+                onSendError: (err) => {
+                  applyActionStatus(node, 'error', err.message);
+                  node.send([null, statusRecord('failed', `setpoint send failed: ${err.message}`)]);
+                },
+                // First success after a failed streak restores the badge the
+                // stream started with. No record — recovery is the absence of
+                // failure, not an event.
+                onSendRecovery: () => {
+                  applyActionStatus(node, 'ok', 'streaming');
+                },
+              });
+              // The old stream keeps running until the handover setpoint is
+              // accepted: start() sends synchronously, and a throw must leave
+              // the vehicle with the retrying stream it already had, not
+              // nothing (Codex, #240). Only a retarget's freshly acquired
+              // scope needs freeing on the way out.
+              try {
+                next.start();
+              } catch (err) {
+                if (!sameKey) release();
+                throw err;
+              }
+              // Handover after the new stream is live. Same target: no brake —
+              // the setpoint just sent is the next command (§ "Move setpoint
+              // matrix": MAVSDK/QGC never brake between consecutive targets).
+              // A retarget ends control of the OLD target, so that one brakes;
+              // a brake throw must not undo the already-running replacement
+              // (warn, like close — the lock still frees via finally).
+              if (stream) {
+                const old = stream;
+                stream = null;
+                try {
+                  old.stop({ brake: !sameKey });
+                } catch (err) {
+                  node.warn(`Move stream brake failed on retarget: ${err.message}`);
+                } finally {
+                  // No truthiness guard: stream and releaseStream are assigned
+                  // and cleared together, so inside `if (stream)` the release
+                  // always exists — and if that invariant ever broke, throwing
+                  // here beats silently stranding the old target's lock.
+                  if (!sameKey) releaseStream();
+                }
+              }
+              stream = next;
+              streamKey = key;
+              releaseStream = release;
+              completeResult(node, send, 'streaming', null, { message });
+              break;
+            }
+            case 'send':
+              // No stopStream here: `delivery` is fixed per node, so a
+              // send-delivery node can never own a stream.
+              connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
+              completeResult(node, send, 'sent', null, { message });
+              break;
+            default: break; // This space intentionally left blank (§5)
+          }
+        }
+
+        switch (action) {
+          case 'turn': {
+            // Turn is an acked MAV_CMD, not a setpoint (§9 roster): command
+            // tiers only, no Stream — the editor does not offer that tier.
+            const relative = firstDefined(payload.relative, config.relative);
+            // Re-issue safety is per command (see confirmCommand). An absolute
+            // heading is "the state you already asked for"; a relative turn is
+            // a *delta*, so a re-send after a lost ack turns the aircraft again.
+            const idempotent = relative !== true;
+            const message = buildTurnMessage({
               heading: valueFrom(payload, config, 'heading'),
               rate: valueFrom(payload, config, 'turnRate'),
               direction: valueFrom(payload, config, 'direction'),
@@ -268,167 +390,85 @@ module.exports = function registerMavlinkMove(RED) {
               // strict boolean opt-in like changeMode — never a truthy token.
               relative,
               target,
-            })
-            : buildSpeedMessage({
+            });
+            if (deliverCommand(action, message, target, identityId, connectionNode, send, done, idempotent)) return;
+            done();
+            return;
+          }
+          case 'speed': {
+            // Speed is an acked MAV_CMD on both stacks (§9 roster).
+            const message = buildSpeedMessage({
               speed: valueFrom(payload, config, 'speed'),
               throttle: valueFrom(payload, config, 'throttle'),
               speedType: firstDefined(payload.speedType, config.speedType),
               target,
             });
-          if (deliverCommand(action, message, target, identityId, connectionNode, send, done, idempotent)) return;
-          done();
-          return;
-        }
-
-        if (action === 'goto' && delivery !== 'stream') {
-          // One-shot guided goto: DO_REPOSITION as COMMAND_INT, the acked
-          // path. The altitude reference is the one frame choice that exists.
-          const message = buildRepositionMessage({
-            mode: 'position',
-            frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),
-            target,
-            position: payload.position || positionFrom(config),
-            speed: valueFrom(payload, config, 'speed'),
-            radius: valueFrom(payload, config, 'radius'),
-            yaw: valueFrom(payload, config, 'yaw'),
-            yawRate: payload.yawRate,
-            // CHANGE_MODE flies the vehicle into guided — an explicit boolean
-            // opt-in (editor checkbox, payload override), never a truthy token.
-            // Measured (§14 2026-08-12): the flag is the gate on both stacks;
-            // without it, outside GUIDED (AP) / Hold (PX4), the answer is
-            // DENIED (2).
-            changeMode: firstDefined(payload.changeMode, config.changeMode),
-          });
-          // Async on the confirm tier: the ack arrives later and the confirm
-          // flow owns done() from here.
-          // Idempotent: a re-sent goto is the same goto — the same absolute
-          // lat/lon/alt, so re-issuing lands where it was already going.
-          if (deliverCommand('reposition', message, target, identityId, connectionNode, send, done, true)) return;
-          done();
-          return;
-        }
-
-        const message = setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode);
-
-        switch (delivery) {
-          case 'build':
-            completeBuild(node, send, message);
-            break;
-          case 'stream': {
-            // Blank keeps the library default; the editor's number validator owns
-            // the rest (§14: a finite-number check on operator input is a guardrail).
-            const rateHz = numberOr(payload.rateHz, numberOr(config.rateHz, undefined));
-            const ttlMs = numberOr(payload.ttlMs, numberOr(config.ttlMs, undefined));
-            // One stream per (connection, target) (#176): a second node
-            // streaming to the same vehicle would alternate contradictory
-            // setpoints — the vehicle oscillates while both nodes report
-            // success. Fail closed, like the mission-transfer lock. This node
-            // replacing its own stream keeps the lock it already holds — no
-            // release/re-acquire, so no self-conflict window. A retarget
-            // acquires its new scope first: a conflict (necessarily another
-            // node's stream) refuses before the running stream is touched,
-            // like any rejected input.
-            const key = streamLocks.key(connectionNode.id, target);
-            const sameKey = key === streamKey;
-            let release = releaseStream;
-            if (!sameKey) {
-              release = streamLocks.acquire(connectionNode.id, target);
-              if (!release) {
-                // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: another node holds the setpoint stream lock — live runtime state
-                throw new Error(
-                  `a setpoint stream to ${target.sysid}.${target.compid} is already running on this connection — stop it first or target it from one node`
-                );
-              }
-            }
-            const next = createMoveStream({
-              connection: connectionNode,
-              message,
-              target,
-              identityId,
-              rateHz,
-              ttlMs,
-              // Attitude and manual end by going quiet (§9 ruling 1): zero
-              // thrust is a descent and a centred stick is a command, so
-              // neither has a brake packet to synthesize. Position setpoints
-              // keep their measured zero-velocity brake.
-              braking: action !== 'attitude' && action !== 'manual',
-              // TTL expiry is the only stop the flow did not cause, so it is
-              // the only one it cannot observe: without this the node would
-              // halt the vehicle and keep reporting "streaming" forever.
-              // Async, so it uses node.send — the input that started the
-              // stream was completed long ago. The stream stopped itself, so
-              // only the bookkeeping is left: free the scope before telling
-              // the flow. A replaced stream's timer is already cleared, so
-              // this only ever fires for the stream currently in the slot.
-              onExpire: (stopMessage, brakeError) => {
-                const sent = next.sent;
-                stream = null;
-                releaseStream = null;
-                streamKey = null;
-                release();
-                completeExpiry(node, stopMessage, sent, brakeError);
-              },
-              // A tick send that throws is contained in the stream — it
-              // keeps cadence and retries (§ "Move setpoint matrix"). One
-              // report per failure streak, status output only: the input
-              // that started the stream completed long ago, same as expiry.
-              onSendError: (err) => {
-                applyActionStatus(node, 'error', err.message);
-                node.send([null, statusRecord('failed', `setpoint send failed: ${err.message}`)]);
-              },
-              // First success after a failed streak restores the badge the
-              // stream started with. No record — recovery is the absence of
-              // failure, not an event.
-              onSendRecovery: () => {
-                applyActionStatus(node, 'ok', 'streaming');
-              },
-            });
-            // The old stream keeps running until the handover setpoint is
-            // accepted: start() sends synchronously, and a throw must leave
-            // the vehicle with the retrying stream it already had, not
-            // nothing (Codex, #240). Only a retarget's freshly acquired
-            // scope needs freeing on the way out.
-            try {
-              next.start();
-            } catch (err) {
-              if (!sameKey) release();
-              throw err;
-            }
-            // Handover after the new stream is live. Same target: no brake —
-            // the setpoint just sent is the next command (§ "Move setpoint
-            // matrix": MAVSDK/QGC never brake between consecutive targets).
-            // A retarget ends control of the OLD target, so that one brakes;
-            // a brake throw must not undo the already-running replacement
-            // (warn, like close — the lock still frees via finally).
-            if (stream) {
-              const old = stream;
-              stream = null;
-              try {
-                old.stop({ brake: !sameKey });
-              } catch (err) {
-                node.warn(`Move stream brake failed on retarget: ${err.message}`);
-              } finally {
-                // No truthiness guard: stream and releaseStream are assigned
-                // and cleared together, so inside `if (stream)` the release
-                // always exists — and if that invariant ever broke, throwing
-                // here beats silently stranding the old target's lock.
-                if (!sameKey) releaseStream();
-              }
-            }
-            stream = next;
-            streamKey = key;
-            releaseStream = release;
-            completeResult(node, send, 'streaming', null, { message });
-            break;
+            if (deliverCommand(action, message, target, identityId, connectionNode, send, done, true)) return;
+            done();
+            return;
           }
-          case 'send':
-            // No stopStream here: `delivery` is fixed per node, so a
-            // send-delivery node can never own a stream.
-            connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
-            completeResult(node, send, 'sent', null, { message });
-            break;
+          case 'goto': {
+            switch (delivery) {
+              case 'stream':
+                // goto + Stream: position setpoints on the global frame the
+                // altitude reference names.
+                deliverSetpoint(
+                  setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
+                  action
+                );
+                done();
+                return;
+              case 'build':
+              case 'send':
+              case 'confirm': {
+                // One-shot guided goto: DO_REPOSITION as COMMAND_INT, the acked
+                // path. The altitude reference is the one frame choice that exists.
+                const message = buildRepositionMessage({
+                  mode: 'position',
+                  frame: frameForAltRef(firstDefined(payload.altRef, config.altRef)),
+                  target,
+                  position: payload.position || positionFrom(config),
+                  speed: valueFrom(payload, config, 'speed'),
+                  radius: valueFrom(payload, config, 'radius'),
+                  yaw: valueFrom(payload, config, 'yaw'),
+                  yawRate: payload.yawRate,
+                  // CHANGE_MODE flies the vehicle into guided — an explicit boolean
+                  // opt-in (editor checkbox, payload override), never a truthy token.
+                  // Measured (§14 2026-08-12): the flag is the gate on both stacks;
+                  // without it, outside GUIDED (AP) / Hold (PX4), the answer is
+                  // DENIED (2).
+                  changeMode: firstDefined(payload.changeMode, config.changeMode),
+                });
+                // Async on the confirm tier: the ack arrives later and the confirm
+                // flow owns done() from here.
+                // Idempotent: a re-sent goto is the same goto — the same absolute
+                // lat/lon/alt, so re-issuing lands where it was already going.
+                if (deliverCommand('reposition', message, target, identityId, connectionNode, send, done, true)) return;
+                done();
+                return;
+              }
+              default: break; // This space intentionally left blank (§5)
+            }
+            done();
+            return;
+          }
+          case 'attitude':
+          case 'manual':
+          case 'steer':
+            deliverSetpoint(
+              setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
+              action
+            );
+            done();
+            return;
           default: break; // This space intentionally left blank (§5)
         }
+        // Unknown/blank action: no case selected — same deferred crater as
+        // before (undefined message through the setpoint delivery path).
+        deliverSetpoint(
+          setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
+          action
+        );
         done();
       } catch (err) {
         failInput(node, send, err, done);

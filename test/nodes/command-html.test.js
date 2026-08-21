@@ -458,18 +458,15 @@ test('frame row binds to the frame property and follows the INT carrier', () => 
   );
 });
 
-test('frame dropdown: blank names the wire default (relative alt); frame 0 reachable (#247)', () => {
-  // Blank wires the carrier module's DEFAULT_FRAME — GLOBAL_RELATIVE_ALT (3),
-  // §14 — so the label must say relative alt, and AMSL (frame 0) must be its
-  // own option rather than a claim the default never honoured.
+test('frame dropdown: relative alt (3) is the saved default; frame 0 reachable (#247)', () => {
+  // The driver no longer invents DEFAULT_FRAME for a blank — the editor saves
+  // 3 explicitly. AMSL (frame 0) remains its own option.
   const { DEFAULT_FRAME, MAV_FRAME } = require('../../lib/command/carrier');
-  assert.equal(DEFAULT_FRAME, MAV_FRAME.GLOBAL_RELATIVE_ALT, 'the blank label below pins to this default');
-  assert.match(html, /<option value="">Global, relative alt \(default\)<\/option>/);
+  assert.equal(DEFAULT_FRAME, MAV_FRAME.GLOBAL_RELATIVE_ALT);
+  assert.match(html, /frame:\s*\{\s*value:\s*'3'/);
+  assert.match(html, /<option value="3">Global, relative alt \(default\)<\/option>/);
   assert.match(html, /<option value="0">Global, absolute alt \(AMSL\)<\/option>/);
-  assert.ok(
-    !html.includes('Global, absolute alt (default)'),
-    'the old label promised AMSL while blank wired 3'
-  );
+  assert.ok(!html.includes('value="">Global, relative alt (default)'), 'blank is not a frame choice');
 });
 
 test('preset positional params are labelled degrees, not degE7 (§9 canonical units)', () => {
@@ -594,14 +591,16 @@ test('mavlink-command: an unreadable params blob reds in Advanced mode too', () 
 });
 
 test('mavlink-command: frame and compid carry their own red rings', () => {
-  // Frame is a closed-vocabulary select — the dialog's own options, blank
-  // meaning the carrier module's documented default. Other frames stay
+  // Frame is a closed-vocabulary select — the dialog's own options. Relative
+  // alt (3) is the editor default, saved explicitly. Other frames stay
   // reachable per message via msg.mavFrame. Compid is a wire uint8.
   const { frame, targetComponent } = loadNodeDefaults('mavlink-command');
 
-  for (const v of ['', '0', '3', '10', '1']) {
+  for (const v of ['0', '3', '10', '1']) {
     assert.equal(frame.validate.call({ id: 'c1' }, v, {}), true, `frame ${JSON.stringify(v)} is offered`);
   }
+  assert.match(String(frame.validate.call({ id: 'c1' }, '', {})), /must be one of/,
+    'blank is not a saved frame');
   assert.match(String(frame.validate.call({ id: 'c1' }, '2', {})), /must be one of/,
     'a frame the dialog cannot save reds');
 

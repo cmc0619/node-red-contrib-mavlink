@@ -118,11 +118,10 @@ test('payload rows are generated, with dialect labels, units and real ceilings',
   // Recipe order, not alphabetical: gimbal roi-set reads lat, lon, alt.
   assert.match(payloadHtml, /var keys = Object\.keys\(fields\);/);
   assert.ok(!/Object\.keys\(fields\)\.sort\(\)/.test(payloadHtml));
-  // Numbers stay blank when unset; a pulldown has to land on something, so it
-  // takes the recipe default. Either way buildPayloadMessage resolves a blank
-  // slot to that same default, so the wire is identical.
-  assert.match(payloadHtml, /\.val\(blank \? '' : stashed\)/, 'numbers stay blank when unset');
-  assert.match(payloadHtml, /var saved = blank[\s\S]{0,140}meta\.default/, 'enums take the recipe default');
+  // Numbers initialize to the recipe default when unset so a save stores an
+  // explicit value; pulldowns do the same. The driver does not invent defaults.
+  assert.match(payloadHtml, /\.val\(saved\)/, 'numbers take the recipe default when unset');
+  assert.match(payloadHtml, /var saved = blank[\s\S]{0,140}meta\.default/, 'unset controls take the recipe default');
   assert.match(
     payloadHtml,
     /sel\.topic === 'gimbal' && sel\.verb === 'aim'/,
@@ -312,17 +311,17 @@ test('payload frame row binds to the frame property and follows the INT carrier 
   assert.match(payloadHtml, /id="node-input-frame"/, 'frame select must bind to the frame property');
   assert.match(
     payloadHtml,
-    /frame:\s*\{ value: '' \}/,
-    'frame is declared in defaults (blank = builder default GLOBAL_RELATIVE_ALT) so the selection persists'
+    /frame:\s*\{\s*value:\s*'3'/,
+    'frame defaults to relative alt (3) — saved explicitly, not invented at pack time'
   );
   assert.match(payloadHtml, /row-payload-frame/, 'frame row id must exist');
   assert.match(payloadHtml, /\$\('#node-input-sendAs'\)\.on\('change'/, 'send-as change re-evaluates the frame row');
   // §6 hidden is not honored, both halves: the carrier choice is pinned to
-  // what is sent when its row hides, and frame clears rather than saving a
-  // stale value the operator can no longer see. One helper, so the two cannot drift.
+  // what is sent when its row hides, and frame resets to the editor default
+  // rather than saving a stale value the operator can no longer see.
   assert.match(payloadHtml, /data\.carrierMatters/);
   assert.match(payloadHtml, /if \(!matters\) \$\('#node-input-sendAs'\)\.val\('int'\);/);
-  assert.match(payloadHtml, /if \(!shown\) \$\('#node-input-frame'\)\.val\(''\);/);
+  assert.match(payloadHtml, /if \(!shown\) \$\('#node-input-frame'\)\.val\('3'\);/);
   assert.equal(
     (payloadHtml.match(/#row-payload-frame'\)\.toggle/g) || []).length,
     1,
@@ -330,18 +329,13 @@ test('payload frame row binds to the frame property and follows the INT carrier 
   );
 });
 
-test('payload frame dropdown: blank names the wire default (relative alt); frame 0 reachable (#247)', () => {
-  // Blank wires the carrier module's DEFAULT_FRAME — GLOBAL_RELATIVE_ALT (3),
-  // §14 — so the label must say relative alt, and AMSL (frame 0) must be its
-  // own option rather than a claim the default never honoured.
+test('payload frame dropdown: relative alt (3) is the saved default; frame 0 reachable (#247)', () => {
   const { DEFAULT_FRAME, MAV_FRAME } = require('../../lib/command/carrier');
-  assert.equal(DEFAULT_FRAME, MAV_FRAME.GLOBAL_RELATIVE_ALT, 'the blank label below pins to this default');
-  assert.match(payloadHtml, /<option value="">Global, relative alt \(default\)<\/option>/);
+  assert.equal(DEFAULT_FRAME, MAV_FRAME.GLOBAL_RELATIVE_ALT, 'the default label below pins to this constant');
+  assert.match(payloadHtml, /frame:\s*\{\s*value:\s*'3'/);
+  assert.match(payloadHtml, /<option value="3">Global, relative alt \(default\)<\/option>/);
   assert.match(payloadHtml, /<option value="0">Global, absolute alt \(AMSL\)<\/option>/);
-  assert.ok(
-    !payloadHtml.includes('Global, absolute alt (default)'),
-    'the old label promised AMSL while blank wired 3'
-  );
+  assert.ok(!payloadHtml.includes('value="">Global, relative alt (default)'), 'blank is not a frame choice');
 });
 
 

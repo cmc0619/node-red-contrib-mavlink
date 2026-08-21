@@ -9,6 +9,7 @@ const {
   buildParamArray,
   buildCommandInt,
   intCoordKinds,
+  DEFAULT_FRAME,
 } = require('../lib/command');
 
 /**
@@ -87,6 +88,9 @@ module.exports = function registerMavlinkFormation(RED) {
         const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
         const bundle = dialectFromConnection(RED, connectionNode);
         const message = buildCommandInt(Number(preset.commandId), 0, 0, params, {
+          // Guided reposition is relative-alt; pass the frame explicitly —
+          // the driver no longer invents it when omitted (§0).
+          frame: DEFAULT_FRAME,
           coordKinds: (bundle && intCoordKinds(bundle, Number(preset.commandId))) || undefined,
         });
         const memberTargets = targets.map((target) => ({

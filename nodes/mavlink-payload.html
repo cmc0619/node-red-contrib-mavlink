@@ -32,7 +32,7 @@
         // a succeeded build of `{ payload: undefined }` — phantom success,
         // which §0 rule 3 forbids. This red ring stops the flow reaching it.
         sendAs: { value: 'int', validate: RED.mavlink.oneOf(['int', 'long']) },
-        frame: { value: '' },
+        frame: { value: '3', validate: RED.mavlink.oneOf(['0', '3', '10', '1']) },
         timeout: { value: 10000, validate: RED.mavlink.validateAtLeast(0) },
         maxRetries: { value: 3, validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
         topic: { value: 'camera' },
@@ -90,9 +90,9 @@
           return;
         }
         if (kind === 'bitmask') {
-          // Blank, not 0, when nothing is selected: a blank slot takes the
-          // recipe default downstream, the same as every other empty control
-          // here — 0 would assert "no flags" as a deliberate choice.
+          // Blank, not 0, when nothing is selected: 0 would assert "no flags"
+          // as a deliberate choice. Recipe default is painted into the control
+          // when unset so a save persists it.
           var mask = RED.mavlink.bitmaskFromSelection($input.val());
           values[key] = mask === null ? '' : mask;
           return;
@@ -141,9 +141,8 @@
       function fieldInput(key, meta, entries) {
         var stashed = stash[key];
         var blank = stashed === undefined || stashed === null || stashed === '';
-        // A control that must land on something — a pulldown, a checkbox, a
-        // bitmask — takes the recipe default when unset. A number box does
-        // not: see below.
+        // A control that must land on something — pulldown, checkbox, bitmask,
+        // or number — takes the recipe default when unset so a save persists it.
         var saved = blank
           ? (meta.default === null || meta.default === undefined ? '' : meta.default)
           : stashed;
@@ -173,20 +172,17 @@
             RED.mavlink.fillEnumSelect($input, entries, { saved: saved });
           }
         } else {
-          // Numbers stay blank when unset. buildPayloadMessage resolves a blank
-          // slot to the recipe default, so the wire is identical either way,
-          // and an empty box does not assert a number the dialect may disagree
-          // with — three recipe defaults sit below their param's stated `min`.
+          // Numbers take the recipe default when unset so a save writes an
+          // explicit value — the driver does not invent slot defaults (§0/§6).
           //
-          // No `min` attribute for the same reason: upstream's minimums are
-          // advisory and sometimes contradict their own prose
-          // (IMAGE_START_CAPTURE sequence is min=1 with a description that says
-          // to set 0). `max` stays — the only two are cameraId=255, a real
-          // uint8 ceiling.
+          // No `min` attribute: upstream's minimums are advisory and sometimes
+          // contradict their own prose (IMAGE_START_CAPTURE sequence is min=1
+          // with a description that says to set 0). `max` stays — the only two
+          // are cameraId=255, a real uint8 ceiling.
           $input = $('<input type="number" style="width:110px">')
             .attr('step', meta.increment !== null && meta.increment !== undefined ? meta.increment : 'any')
             .attr('title', meta.description || '')
-            .val(blank ? '' : stashed);
+            .val(saved);
           if (meta.maxValue !== null && meta.maxValue !== undefined) $input.attr('max', meta.maxValue);
         }
         return $input.addClass('mav-payload-field').attr('data-field', key);
@@ -214,11 +210,11 @@
       }
 
       // §6 hidden is not honored: a control the operator cannot see must not
-      // put anything on the wire, so the frame row clears itself on the way
-      // out rather than saving whatever was left in it.
+      // put a stale choice on the wire. Reset to the editor default (3) when
+      // the row hides — blank is no longer a legal saved frame.
       function applyFrameRow(carrierShown) {
         var shown = carrierShown && $('#node-input-sendAs').val() === 'int';
-        if (!shown) $('#node-input-frame').val('');
+        if (!shown) $('#node-input-frame').val('3');
         $('#row-payload-frame').toggle(shown);
       }
 
@@ -394,7 +390,7 @@
   <div class="form-row" id="row-payload-identity"><label for="node-input-identity">Identity</label><select id="node-input-identity" style="width:70%"></select></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option></select></div>
   <div class="form-row" id="row-payload-sendAs"><label for="node-input-sendAs">Send as</label><select id="node-input-sendAs" style="width:70%"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
-  <div class="form-row" id="row-payload-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="">Global, relative alt (default)</option><option value="0">Global, absolute alt (AMSL)</option><option value="3">Global, relative alt</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
+  <div class="form-row" id="row-payload-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="3">Global, relative alt (default)</option><option value="0">Global, absolute alt (AMSL)</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
   <div class="form-row" id="row-payload-timeout"><label for="node-input-timeout">ACK timeout</label><input type="number" id="node-input-timeout" style="width:80px"> ms</div>
   <div class="form-row" id="row-payload-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
   <div class="form-row"><label for="node-input-topic">Topic</label><select id="node-input-topic"></select></div>
@@ -407,7 +403,7 @@
 
 <script type="text/html" data-help-name="mavlink-payload">
   <p>Controls camera, gimbal, servo, relay, gripper, winch and parachute payload verbs. Command-backed verbs report command acknowledgement as their confirmation mode.</p>
-  <p>A <b>Topic</b> is a device on the airframe; a <b>Verb</b> is what to do with it. Topic and verb reshape the form (§6): only the parameters for the selected verb are shown, and their labels, units, enum choices and any real ceiling come from the Vehicle's dialect rather than this page. A blank number sends that parameter's recipe default; the dialect's advisory minimums are not enforced, because upstream sometimes contradicts them in its own description text. Gripper, winch and parachute have a single verb each, so their Verb row is hidden.</p>
+  <p>A <b>Topic</b> is a device on the airframe; a <b>Verb</b> is what to do with it. Topic and verb reshape the form (§6): only the parameters for the selected verb are shown, and their labels, units, enum choices and any real ceiling come from the Vehicle's dialect rather than this page. Unset number controls initialize to that parameter's recipe default so a save stores an explicit value; the dialect's advisory minimums are not enforced, because upstream sometimes contradicts them in its own description text. Gripper, winch and parachute have a single verb each, so their Verb row is hidden.</p>
   <p>Camera photo exposes a count, and an explicit count of 0 starts a continuous capture — <b>Stop photo</b> (<code>IMAGE_STOP_CAPTURE</code>) is its off switch. Trigger by distance carries its own off switch instead: a distance of 0 stops triggering, so stopping is the same verb, not a separate one.</p>
   <p>The <b>Send as</b> field appears only when the choice is observable — a command the dialect marks as carrying a location, i.e. gimbal ROI-set. Elsewhere <code>COMMAND_INT</code> and <code>COMMAND_LONG</code> pass params 1–4 identically, so the node sends <code>COMMAND_INT</code>. Positional values — e.g. ROI latitude / longitude — are always entered in decimal degrees regardless of the Send as choice. <code>msg.payload.sendAs</code> and <code>msg.payload.mavFrame</code> override per message. Message-kind verbs (gimbal manager aiming) never ride a MAV_CMD.</p>
   <p>On <b>Build</b> delivery the Dialect picker supplies editor catalogs. Choose <i>from Vehicle Profile…</i> to use a profile dialect and target defaults; a concrete dialect has no profile target rung. On <b>Send</b> or <b>Send &amp; confirm</b> delivery a Connection is required. The Identity drives target addressing: a companion identity derives the target sysid from its airframe; the target compid remains visible and config-resolved because it addresses a payload device (camera or gimbal), not the autopilot.</p>
