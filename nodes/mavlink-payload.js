@@ -318,6 +318,19 @@ module.exports = function registerMavlinkPayload(RED) {
   RED.nodes.registerType('mavlink-payload', MavlinkPayloadNode);
 };
 
+// The outcome fields both ack records carry — one spelling so the success and
+// failure halves of the record contract cannot diverge.
+function ackFields(built, outcome) {
+  return {
+    confirmation: built.confirmation,
+    resultCode: outcome.resultCode,
+    resultParam2: outcome.resultParam2,
+    confirmedBy: outcome.confirmedBy,
+    retries: outcome.retries,
+    elapsed: outcome.elapsed,
+  };
+}
+
 function completeAck(node, send, built, outcome) {
   applyActionStatus(node, 'ok', `ack ${built.message.name}`);
   send([
@@ -325,12 +338,7 @@ function completeAck(node, send, built, outcome) {
     makeStatusRecord(node.type, {
       result: 'succeeded',
       detail: 'command-ack accepted',
-      confirmation: built.confirmation,
-      resultCode: outcome.resultCode,
-      resultParam2: outcome.resultParam2,
-      confirmedBy: outcome.confirmedBy,
-      retries: outcome.retries,
-      elapsed: outcome.elapsed,
+      ...ackFields(built, outcome),
     }),
   ]);
 }
@@ -342,12 +350,7 @@ function failAck(node, send, built, outcome, msg, done) {
     makeStatusRecord(node.type, {
       result: outcome.result,
       detail: outcome.detail,
-      confirmation: built.confirmation,
-      resultCode: outcome.resultCode,
-      resultParam2: outcome.resultParam2,
-      confirmedBy: outcome.confirmedBy,
-      retries: outcome.retries,
-      elapsed: outcome.elapsed,
+      ...ackFields(built, outcome),
     }),
   ]);
   done();

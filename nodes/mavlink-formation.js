@@ -10,6 +10,7 @@ const {
   buildCommandInt,
   intCoordKinds,
   DEFAULT_FRAME,
+  scaleLatLon,
 } = require('../lib/command');
 
 /**
@@ -95,8 +96,8 @@ module.exports = function registerMavlinkFormation(RED) {
         });
         const memberTargets = targets.map((target) => ({
           sysid: target.sysid,
-          x: Math.round(target.lat * 1e7),
-          y: Math.round(target.lon * 1e7),
+          x: scaleLatLon(target.lat),
+          y: scaleLatLon(target.lon),
           z: target.alt,
         }));
 
