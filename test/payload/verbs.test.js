@@ -4,7 +4,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  PAYLOAD_TOPICS,
   PAYLOAD_VERBS,
   buildPayloadMessage,
   fieldMetaFromBundle,
@@ -21,12 +20,12 @@ const KNOWN_VERBS = {
   parachute: ['operate'],
 };
 
-test('PAYLOAD_TOPICS lists every payload topic', () => {
-  assert.deepEqual(PAYLOAD_TOPICS, Object.keys(KNOWN_VERBS));
+test('PAYLOAD_VERBS lists every payload topic', () => {
+  assert.deepEqual(Object.keys(PAYLOAD_VERBS), Object.keys(KNOWN_VERBS));
 });
 
 test('PAYLOAD_VERBS catalog matches known verbs per topic', () => {
-  for (const topic of PAYLOAD_TOPICS) {
+  for (const topic of Object.keys(PAYLOAD_VERBS)) {
     const values = PAYLOAD_VERBS[topic].map((v) => v.value);
     const labels = PAYLOAD_VERBS[topic].map((v) => v.label);
     assert.deepEqual(values, KNOWN_VERBS[topic], `${topic} verb list drift`);
@@ -38,7 +37,7 @@ test('PAYLOAD_VERBS catalog matches known verbs per topic', () => {
 });
 
 test('every catalog verb builds without error', () => {
-  for (const topic of PAYLOAD_TOPICS) {
+  for (const topic of Object.keys(PAYLOAD_VERBS)) {
     for (const { value: verb } of PAYLOAD_VERBS[topic]) {
       const input = {
         topic,

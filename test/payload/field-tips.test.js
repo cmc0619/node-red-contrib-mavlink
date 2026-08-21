@@ -11,8 +11,6 @@ const assert = require('node:assert/strict');
 const { loadBundled } = require('../../lib/metadata');
 const {
   recipeFor,
-  descriptionForCommandParam,
-  fieldTipsFromBundle,
   fieldMetaFromBundle,
   carrierMattersFor,
   buildPayloadMessage,
@@ -27,32 +25,28 @@ test('recipeFor camera photo maps Sequence to IMAGE_START_CAPTURE param4', () =>
   assert.equal(recipe.params[3].field, 'sequence');
 });
 
-test('descriptionForCommandParam reads dialect text for IMAGE_START_CAPTURE param4', () => {
+test('fieldMetaFromBundle sources Sequence tip from dialect via the shared recipe', () => {
   const bundle = loadBundled('ardupilotmega');
-  const text = descriptionForCommandParam(bundle, MAV_CMD.IMAGE_START_CAPTURE, 4);
-  assert.match(text, /sequence/i);
+  const meta = fieldMetaFromBundle(bundle, 'camera', 'photo', '');
+  assert.ok(meta.sequence.description, 'sequence must have a dialect description');
+  assert.match(meta.sequence.description, /sequence/i);
+  assert.ok(meta.cameraId.description);
+  assert.ok(meta.interval.description);
+  assert.ok(meta.count.description);
 });
 
-test('fieldTipsFromBundle sources Sequence tip from dialect via the shared recipe', () => {
+test('fieldMetaFromBundle joins gimbal manager message field descriptions', () => {
   const bundle = loadBundled('ardupilotmega');
-  const tips = fieldTipsFromBundle(bundle, 'camera', 'photo', '');
-  assert.ok(tips.sequence, 'sequence must have a dialect description');
-  assert.match(tips.sequence, /sequence/i);
-  assert.ok(tips.cameraId);
-  assert.ok(tips.interval);
-  assert.ok(tips.count);
+  const meta = fieldMetaFromBundle(bundle, 'gimbal', 'aim', 'manager');
+  const any = Object.values(meta).some(
+    (entry) => typeof entry.description === 'string' && entry.description.length > 0
+  );
+  assert.ok(any, `expected at least one description, got ${JSON.stringify(meta)}`);
 });
 
-test('fieldTipsFromBundle joins gimbal manager message field descriptions', () => {
+test('fieldMetaFromBundle returns empty object for unknown verb', () => {
   const bundle = loadBundled('ardupilotmega');
-  const tips = fieldTipsFromBundle(bundle, 'gimbal', 'aim', 'manager');
-  const any = Object.values(tips).some((t) => typeof t === 'string' && t.length > 0);
-  assert.ok(any, `expected at least one tip, got ${JSON.stringify(tips)}`);
-});
-
-test('fieldTipsFromBundle returns empty object for unknown verb', () => {
-  const bundle = loadBundled('ardupilotmega');
-  assert.deepEqual(fieldTipsFromBundle(bundle, 'camera', 'nope', ''), {});
+  assert.deepEqual(fieldMetaFromBundle(bundle, 'camera', 'nope', ''), {});
 });
 
 test('a topic/verb pair with no recipe selects no builder', () => {
@@ -72,7 +66,7 @@ test('a topic/verb pair with no recipe selects no builder', () => {
   }
 });
 
-test('fieldTipsFromBundle omits Empty / Reserved param descriptions', () => {
+test('fieldMetaFromBundle blanks Empty / Reserved param descriptions', () => {
   const recipe = recipeFor('camera', 'photo', '');
   assert.ok(recipe && recipe.command);
   const params = recipe.params.map((slot, i) => {
@@ -97,11 +91,11 @@ test('fieldTipsFromBundle omits Empty / Reserved param descriptions', () => {
       IMAGE_START_CAPTURE: { value: recipe.command, params },
     },
   };
-  const tips = fieldTipsFromBundle(bundle, 'camera', 'photo', '');
-  assert.equal(tips.sequence, 'Capture sequence number');
-  assert.equal(tips.cameraId, undefined);
-  assert.equal(tips.count, undefined);
-  assert.equal(tips.interval, undefined);
+  const meta = fieldMetaFromBundle(bundle, 'camera', 'photo', '');
+  assert.equal(meta.sequence.description, 'Capture sequence number');
+  assert.equal(meta.cameraId.description, '');
+  assert.equal(meta.count.description, '');
+  assert.equal(meta.interval.description, '');
 });
 
 test('buildPayloadMessage and field tips share the photo recipe param order', () => {

@@ -270,8 +270,6 @@ module.exports = function registerMavlinkVehicle(RED) {
     node.dialectRevision = config.dialectRevision;
     // Component dialects, comma-joined `dialect@revision` from the editor.
     node.additionalDialects = config.additionalDialects;
-    // Optional firmware/custom parameter-definition URL (PX4 / custom stacks).
-    node.paramDefsUrl = typeof config.paramDefsUrl === 'string' ? config.paramDefsUrl.trim() : '';
 
     // Editor validateUint8(0) owns the range; runtime trusts the form.
     node.defaultTargetSystem = Number(config.defaultTargetSystem);
@@ -328,17 +326,13 @@ module.exports = function registerMavlinkVehicle(RED) {
      * Profile defaults consumed by Connection and flow nodes.
      * Contains no local identity fields.
      *
-     * @returns {{vehicleFamily: string, firmware: string, dialect: string,
-     *            dialectRevision: string, defaultTargetSystem: number,
+     * @returns {{vehicleFamily: string, firmware: string,
+     *            defaultTargetSystem: number,
      *            defaultTargetComponent: number}}
      */
     node.getDefaults = () => ({
       vehicleFamily: node.vehicleFamily,
       firmware: node.firmware,
-      dialect: node.dialect,
-      dialectRevision: node.dialectRevision,
-      additionalDialects: node.additionalDialects,
-      paramDefsUrl: node.paramDefsUrl,
       defaultTargetSystem: node.defaultTargetSystem,
       defaultTargetComponent: node.defaultTargetComponent,
     });

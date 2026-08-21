@@ -11,7 +11,6 @@
  *     unconditionally — canonical params are always degrees (§9), so there is
  *     no "already scaled" guess and no pass-through heuristic
  *   - a non-global frame leaves x/y in metres (rounded to int32)
- *   - the round trip LONG→INT→LONG recovers the original params
  */
 
 const test = require('node:test');
@@ -19,7 +18,6 @@ const assert = require('node:assert/strict');
 
 const {
   longToIntFields,
-  intFieldsToLong,
   buildCommandInt,
   buildCommandLong,
   isGlobalFrame,
@@ -91,24 +89,6 @@ test('longToIntFields blank param1–4/z stay unset — Number("") must not inve
   assert.equal(blank.y, 20000000);
 });
 
-test('intFieldsToLong blank frame does not invent GLOBAL unscale', () => {
-  // Wire-shaped degE7 ints must not be divided by 1e7 when frame is blank.
-  const back = intFieldsToLong({
-    frame: '',
-    param1: 1,
-    param2: 2,
-    param3: 3,
-    param4: 4,
-    x: 471234567,
-    y: -1225000000,
-    z: 100,
-  });
-  assert.equal(back[4], 471234567);
-  assert.equal(back[5], -1225000000);
-  const nullFrame = intFieldsToLong({ frame: null, x: 10000000, y: 0, z: 0 });
-  assert.equal(nullFrame[4], 10000000);
-});
-
 test('longToIntFields scales every degrees value — no pass-through heuristic', () => {
   // Whole-degree coordinates are ordinary operator input and must scale like
   // any other degrees value; the old |v| > 180 pass-through is gone (§9).
@@ -135,30 +115,6 @@ test('longToIntFields honours current/autocontinue overrides', () => {
   assert.equal(int.autocontinue, 1);
 });
 
-test('intFieldsToLong is the inverse of longToIntFields for a global frame', () => {
-  const params = [1, 2, 3, 4, 47.1234567, -122.5, 100];
-  const int = longToIntFields(params, { frame: MAV_FRAME.GLOBAL_RELATIVE_ALT });
-  const back = intFieldsToLong(int);
-  assert.equal(back[0], 1);
-  assert.equal(back[1], 2);
-  assert.equal(back[2], 3);
-  assert.equal(back[3], 4);
-  // degE7 → degrees; tolerate the 1e-7 rounding.
-  assert.ok(Math.abs(back[4] - 47.1234567) < 1e-6);
-  assert.ok(Math.abs(back[5] - -122.5) < 1e-6);
-  assert.equal(back[6], 100);
-});
-
-test('intFieldsToLong un-scales local-frame x/y from metres × 1e4', () => {
-  // The wire carries metres × 1e4 for a local frame (common.xml; measured
-  // against PX4 SITL, DESIGN.md §14) — so 100000 on the wire is 10 metres.
-  const back = intFieldsToLong({ frame: 1, param1: 5, x: 100000, y: -40000, z: 12 });
-  assert.equal(back[0], 5);
-  assert.equal(back[4], 10);
-  assert.equal(back[5], -4);
-  assert.equal(back[6], 12);
-});
-
 test('the exact value measured against PX4 SITL round-trips (§14)', () => {
   // PX4 decoded a LOCAL_NED x of 1234567 as 123.4567 m, so entering 123.4567 m
   // must put exactly 1234567 on the wire. Before this, 50 m was sent as `50`
@@ -168,12 +124,11 @@ test('the exact value measured against PX4 SITL round-trips (§14)', () => {
   assert.equal(int.y, -500000);
 });
 
-test('local-frame LONG→INT→LONG is lossless', () => {
-  const params = [1, 2, 3, 4, 37.5, -12.25, 8];
-  const back = intFieldsToLong(longToIntFields(params, { frame: 1 }), {});
-  assert.ok(Math.abs(back[4] - 37.5) < 1e-6);
-  assert.ok(Math.abs(back[5] - -12.25) < 1e-6);
-  assert.equal(back[6], 8);
+test('local-frame fractional metres scale exactly ×1e4', () => {
+  const int = longToIntFields([1, 2, 3, 4, 37.5, -12.25, 8], { frame: 1 });
+  assert.equal(int.x, 375000);
+  assert.equal(int.y, -122500);
+  assert.equal(int.z, 8);
 });
 
 test('MAV_FRAME_MISSION is not a local frame — x/y stay unscaled', () => {
@@ -185,7 +140,6 @@ test('MAV_FRAME_MISSION is not a local frame — x/y stay unscaled', () => {
   const int = longToIntFields([0, 0, 0, 0, 10.4, -3.6, 12], { frame: 2 });
   assert.equal(int.x, 10);
   assert.equal(int.y, -4);
-  assert.deepEqual(intFieldsToLong(int).slice(4, 6), [10, -4]);
 });
 
 test('all eight local frames scale by 1e4 — every member SITL-measured (§14)', () => {
@@ -218,9 +172,6 @@ test('non-coordinate param5/6 stay unscaled in a local frame', () => {
   const int = longToIntFields([0, 0, 0, 0, 7, 9, 0], { frame: 1, coordKinds: kinds });
   assert.equal(int.x, 7);
   assert.equal(int.y, 9);
-  const back = intFieldsToLong(int, { coordKinds: kinds });
-  assert.equal(back[4], 7);
-  assert.equal(back[5], 9);
 });
 
 test('isGlobalFrame classifies the global MAV_FRAME family', () => {
