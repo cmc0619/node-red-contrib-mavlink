@@ -872,7 +872,7 @@ hooks; nothing reached them by default. See 14.47 for the general rule.
 *Check:* `node --test test/fanout/` — cancellation tests were sabotage-verified (they
 hang on the unfixed code).
 
-## 14.116 – 14.131 SITL lab operations / editor warts
+## 14.116 – 14.130 SITL lab operations
 
 All 🧪 — lab facts, kept as recorded; cited files verified to exist.
 
@@ -949,17 +949,6 @@ deploys supply Connection signing credentials. Prep proves arm-ready *before*
 heading, GPS fix, battery, home, freshness, snapshot projection, `AUTOPILOT_VERSION`.
 The State-snapshot example must `SET_MESSAGE_INTERVAL` for `GLOBAL_POSITION_INT` before
 takeoff on this lab image.
-
-**14.131 Command `frame` reds under LONG even when the Frame row is hidden.** ✔ (lab, 2026-08-21)
-`mavlink-command` validates `frame` with `oneOf(['0','3','10','1'])` always — Send-as
-LONG only *hides* `#row-cmd-frame`, it does not skip the validator. A blank or stale
-saved frame (common on older Set Mode / Arm nodes that never opened the INT row) shows
-the red triangle (`must be one of: 0, 3, 10, 1`) while COMMAND_LONG still ACCEPTs on
-the wire. Workaround: toggle Send-as INT → LONG (or open → Done) so a legal frame is
-written, then Deploy. Proper fix when wanted: validate `frame` only when
-`sendAs === 'int'`. Pre-1.0 wart; not urgent. Related leftovers: #365.
-*Check:* hover the triangle; `nodes/mavlink-command.html` `defaults.frame` +
-`refreshFrameRow`.
 
 ---
 
