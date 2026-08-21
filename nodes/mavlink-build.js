@@ -153,9 +153,14 @@ module.exports = function registerMavlinkBuild(RED) {
 
       // A tier the `tier` select cannot save (RED.mavlink.oneOf,
       // mavlink-build.html) matches neither arm below, so nothing is emitted
-      // and nothing is sent. `tierKnown` gates the repeat timer for the same
-      // reason: an unresolved tier must not arm a loop that does nothing.
-      if (!tierKnown) return false;
+      // and nothing is sent — but a triggering input still completes: a
+      // message left hanging is worse than one that did nothing (same rule
+      // as mission/command/param). `tierKnown` gates the repeat timer for
+      // the same reason: an unresolved tier must not arm a do-nothing loop.
+      if (!tierKnown) {
+        if (done) done();
+        return false;
+      }
 
       if (!messageMeta) {
         return failRun(new Error('dialect or message unresolved — fix the node config and redeploy'));

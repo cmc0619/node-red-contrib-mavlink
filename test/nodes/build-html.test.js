@@ -16,6 +16,16 @@ const html = fs.readFileSync(
   'utf8'
 );
 
+// Slice between two source markers, loudly: a renamed marker must fail the
+// test, not shrink the slice to '' and turn its assertions vacuous.
+function sliceBetween(startMarker, endMarker) {
+  const start = html.indexOf(startMarker);
+  const end = html.indexOf(endMarker);
+  assert.notEqual(start, -1, `marker not found: ${startMarker}`);
+  assert.ok(end > start, `marker not found or out of order: ${endMarker}`);
+  return html.slice(start, end);
+}
+
 test('Build band select uses shared BAND_OPTIONS / fillBandSelect', () => {
   assert.match(html, /RED\.mavlink\.fillBandSelect\(/, 'band picker uses shared fillBandSelect');
   assert.doesNotMatch(html, /BAND_OPTIONS\s*=/, 'no local BAND_OPTIONS copy');
@@ -115,14 +125,8 @@ test('Build oneditprepare ensures standard config-node pickers', () => {
 });
 
 test('Build message-field bitmasks use multi-select tokens accepted by the codec', () => {
-  const collector = html.slice(
-    html.indexOf('function collectFieldInputsFromDom'),
-    html.indexOf('RED.nodes.registerType')
-  );
-  const fieldRenderer = html.slice(
-    html.indexOf('function fieldInput'),
-    html.indexOf('function syncSavedFieldsFromDom')
-  );
+  const collector = sliceBetween('function collectFieldInputsFromDom', 'RED.nodes.registerType');
+  const fieldRenderer = sliceBetween('function fieldInput', 'function syncSavedFieldsFromDom');
 
   assert.match(fieldRenderer, /spec\.display === ['"]bitmask['"]/, 'message field bitmasks follow field metadata');
   assert.match(fieldRenderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE enums are detected before bitmask rendering');
@@ -143,10 +147,7 @@ test('Build COMMAND_LONG/INT command params render through the shared paramContr
   // saved-value sentinel — is RED.mavlink.paramControl, proven executed in
   // mavlink-editor-resource.test.js. Build contributes only its collector
   // attributes and the one-numeric-mask fold.
-  const renderer = html.slice(
-    html.indexOf('function commandParamInput'),
-    html.indexOf('function refreshCommandParams')
-  );
+  const renderer = sliceBetween('function commandParamInput', 'function refreshCommandParams');
 
   assert.match(renderer, /RED\.mavlink\.paramControl\(spec, enums, \{/, 'the ladder lives in the shared file (14.32)');
   assert.match(renderer, /className:\s*'mav-field-input'/, 'controls carry the class the collector scrapes');
@@ -171,10 +172,7 @@ test('Build fieldInput keeps a saved enum value the table lacks (#198)', () => {
   // lacks silently deselected, and open-and-save dropped the field. The
   // message-field enum path keys options by entry NAME, so it stays local —
   // with the shared sentinel in its no-match arm.
-  const fieldRenderer = html.slice(
-    html.indexOf('function fieldInput'),
-    html.indexOf('function syncSavedFieldsFromDom')
-  );
+  const fieldRenderer = sliceBetween('function fieldInput', 'function syncSavedFieldsFromDom');
   assert.match(
     fieldRenderer,
     /RED\.mavlink\.ensureSavedEnumOption\(sel, String\(saved\)\);\s*\n\s*sel\.val\(String\(saved\)\)/,
@@ -272,20 +270,14 @@ test('build command-param pulldowns drop the blank; message fields keep it', () 
   // entry. An unset *message field* is skipped entirely by
   // lib/codec/message.js, so blank there is the only way to leave a field off
   // the wire — removing it would change what gets sent, not just what shows.
-  const commandParams = html.slice(
-    html.indexOf('function commandParamInput'),
-    html.indexOf('function refreshCommandParams')
-  );
+  const commandParams = sliceBetween('function commandParamInput', 'function refreshCommandParams');
   assert.ok(commandParams.length > 0, 'located the command-param renderer');
   assert.match(commandParams, /RED\.mavlink\.paramControl\(/, 'slice really is the renderer');
   // The no-blank rule is inside the shared builder (executed test in
   // mavlink-editor-resource.test.js); nothing here may re-add one.
   assert.ok(!/\\u2014/.test(commandParams), 'command params have no blank option');
 
-  const messageFields = html.slice(
-    html.indexOf('function fieldInput'),
-    html.indexOf('function commandParamInput')
-  );
+  const messageFields = sliceBetween('function fieldInput', 'function commandParamInput');
   assert.ok(messageFields.length > 0, 'located the message-field renderer');
   assert.match(messageFields, /spec\.display === 'bitmask'/, 'slice really is the message-field renderer');
   assert.match(messageFields, /\\u2014/, 'message fields keep blank = omit the field');

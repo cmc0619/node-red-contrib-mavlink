@@ -38,7 +38,14 @@ test('makeStatusRecord: preserves all provided fields', () => {
 
 test('makeStatusRecord: contains only node plus the provided keys', () => {
   const sr = makeStatusRecord('mavlink-out', { result: 'ok' });
-  assert.deepEqual(Object.keys(sr), ['node', 'result']);
+  assert.deepEqual(Object.keys(sr).sort(), ['node', 'result']);
+});
+
+test('makeStatusRecord: the node stamp beats a stray fields.node', () => {
+  // A record rebuilt from another record's fields must not smuggle the other
+  // node's identity — the stamp is the one owner of `node`.
+  const sr = makeStatusRecord('mavlink-formation', { result: 'ok', node: 'mavlink-fanout' });
+  assert.equal(sr.node, 'mavlink-formation');
 });
 
 test('makeStatusRecord: two calls produce independent objects', () => {
