@@ -93,7 +93,7 @@ test('mavlink-mission firmware type list follows dialect, vehicle, or connection
   assert.match(html, /function repopulateTypes/, 'repopulateTypes function present');
   assert.match(
     html,
-    /var fw = RED\.mavlink\.resolveCatalogTarget\(\)\.firmware;/,
+    /=\s*RED\.mavlink\.resolveCatalogTarget\(\)\.firmware/,
     'repopulateTypes reads the shared resolver'
   );
 });

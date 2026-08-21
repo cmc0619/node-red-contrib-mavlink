@@ -1179,8 +1179,11 @@ test('no palette node re-declares the shared param ladder or form row (14.32)', 
     // width); one that mints its own label element is a copy come back.
     const idx = src.indexOf('function formRow');
     if (idx !== -1) {
+      // Scan the whole local body (to the next top-level function or the end),
+      // not a fixed window a harmless comment could push the return out of.
+      const next = src.indexOf('function ', idx + 'function formRow'.length);
       assert.match(
-        src.slice(idx, idx + 200),
+        src.slice(idx, next === -1 ? src.length : next),
         /return RED\.mavlink\.formRow\(/,
         `${name}: formRow must delegate to the shared row builder`
       );

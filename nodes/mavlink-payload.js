@@ -122,11 +122,13 @@ module.exports = function registerMavlinkPayload(RED) {
           // The recipe rendered for the attempt in flight; a swap re-renders it
           // through buildFor, so the final attempt's shape reports the outcome.
           let built = firstBuilt;
+          // A new input supersedes the previous input's wait. The two carrier
+          // attempts below are sequential, so this runs once per input.
+          waiterSlot.cancel();
 
           /** One AckWaiter transaction for the currently rendered recipe. */
           async function runWaiter() {
             applyActionStatus(node, 'sending', `${built.message.name}…`);
-            waiterSlot.cancel();
             const waiter = new AckWaiter({
               subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
               // Only the LONG carrier has a confirmation byte; COMMAND_INT must
