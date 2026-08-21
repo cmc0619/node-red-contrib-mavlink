@@ -89,6 +89,7 @@ test('resolveCatalogTarget Build tier: a concrete dialect queries by name', () =
       vehicleId: '',
       firmware: '',
       vehicleFamily: '',
+      isBuild: true,
     }
   );
 });
@@ -97,7 +98,10 @@ test('resolveCatalogTarget Build tier: an empty dialect never invents ardupilotm
   const { RED } = loadResource({ '#node-input-dialect': '' });
   assert.deepEqual(
     plain(RED.mavlink.resolveCatalogTarget({ isBuild: true })),
-    { key: 'empty', query: null, dialect: '', vehicleId: '', firmware: '', vehicleFamily: '' }
+    {
+      key: 'empty', query: null, dialect: '', vehicleId: '', firmware: '',
+      vehicleFamily: '', isBuild: true,
+    }
   );
 });
 
@@ -115,6 +119,7 @@ test('resolveCatalogTarget Build tier: the __vehicle escape queries by profile i
       vehicleId: 'vehicle-1',
       firmware: '',
       vehicleFamily: '',
+      isBuild: true,
     }
   );
 });
@@ -123,7 +128,10 @@ test('resolveCatalogTarget Build tier: __vehicle without a profile resolves to e
   const { RED } = loadResource({ '#node-input-dialect': '__vehicle', '#node-input-vehicle': '' });
   assert.deepEqual(
     plain(RED.mavlink.resolveCatalogTarget({ isBuild: true })),
-    { key: 'empty', query: null, dialect: '', vehicleId: '', firmware: '', vehicleFamily: '' }
+    {
+      key: 'empty', query: null, dialect: '', vehicleId: '', firmware: '',
+      vehicleFamily: '', isBuild: true,
+    }
   );
 });
 
@@ -144,6 +152,7 @@ test('resolveCatalogTarget wire tier: the connection bound profile is the catalo
       vehicleId: 'vehicle-1',
       firmware: '',
       vehicleFamily: '',
+      isBuild: false,
     }
   );
 });
@@ -152,8 +161,27 @@ test('resolveCatalogTarget wire tier: no connection resolves to empty (no invent
   const { RED } = loadResource({ '#node-input-connection': '' });
   assert.deepEqual(
     plain(RED.mavlink.resolveCatalogTarget({ isBuild: false })),
-    { key: 'empty', query: null, dialect: '', vehicleId: '', firmware: '', vehicleFamily: '' }
+    {
+      key: 'empty', query: null, dialect: '', vehicleId: '', firmware: '',
+      vehicleFamily: '', isBuild: false,
+    }
   );
+});
+
+test('resolveCatalogTarget surfaces the wire profile firmware (Mission type gating)', () => {
+  // Mission's type list gates on the effective firmware and reads it straight
+  // off the resolver — including through a deployed Connection's frozen
+  // `vehicle` snapshot, which the hand-rolled resolver it replaced missed.
+  const { RED } = loadResource(
+    { '#node-input-delivery': 'confirm', '#node-input-connection': 'connection-1' },
+    {
+      'connection-1': { vehicle: { id: 'vehicle-1', targetSystem: 1 } },
+      'vehicle-1': { dialect: 'ardupilotmega', firmware: 'ardupilot', vehicleFamily: 'copter' },
+    }
+  );
+  const target = RED.mavlink.resolveCatalogTarget();
+  assert.equal(target.firmware, 'ardupilot');
+  assert.equal(target.isBuild, false);
 });
 
 test('resolveCatalogTarget: live fields and saved config resolve to the same key', () => {
@@ -950,6 +978,235 @@ test('a checkbox always writes a value — unchecked is false, not missing', () 
     0,
     'never rendered before → still false, not absent'
   );
+});
+
+// ── paramControl — the shared command-param ladder (14.32) ───────────────────
+
+/**
+ * Elements rich enough for the ladder: classes, attributes, options, and a
+ * `val()` that (like jQuery) deselects when a single-select is set to a value
+ * no option carries — the failure mode the #198 sentinel exists to prevent.
+ */
+function paramHarness() {
+  function element(tag) {
+    const attrs = {};
+    const props = {};
+    const options = [];
+    const api = {
+      tag: String(tag),
+      attrs,
+      options,
+      value: undefined,
+      addClass(c) {
+        attrs.class = ((attrs.class || '') + ' ' + c).trim();
+        return api;
+      },
+      css() { return api; },
+      attr(k, v) {
+        if (v === undefined) return attrs[k];
+        attrs[k] = String(v);
+        return api;
+      },
+      prop(k, v) {
+        if (v === undefined) return props[k];
+        props[k] = v;
+        return api;
+      },
+      is(sel) { return sel === ':checked' ? !!props.checked : false; },
+      append(child) { options.push(child); return api; },
+      val(v) {
+        if (v === undefined) return api.value;
+        if (api.tag.indexOf('<select') === 0 && !Array.isArray(v)) {
+          api.value = options.some((o) => o.value === String(v)) ? String(v) : null;
+        } else {
+          api.value = v;
+        }
+        return api;
+      },
+      text(t) {
+        if (t === undefined) return api.label;
+        api.label = String(t);
+        return api;
+      },
+      find(sel) {
+        const byValue = /^option\[value="(.*)"\]$/.exec(String(sel));
+        if (byValue) return { length: options.filter((o) => o.value === byValue[1]).length };
+        return { length: 0 };
+      },
+    };
+    return api;
+  }
+  const $ = (sel) => element(sel);
+  $.getJSON = () => ({ fail() { return this; } });
+  const context = { RED: { settings: {}, mavlink: {}, nodes: { node: () => null } }, $ };
+  vm.runInNewContext(resourceScript, context);
+  return context.RED;
+}
+
+const LADDER_ENTRIES = [
+  { name: 'MAV_MODE_A', value: 0, label: 'A (0)', description: 'first' },
+  { name: 'MAV_MODE_B', value: 4, label: 'B (4)' },
+];
+
+test('paramControl enum params: collector attributes are the caller\'s, values numeric', () => {
+  const RED = paramHarness();
+  const spec = { index: 2, enum: 'MAV_MODE', description: 'Mode' };
+
+  // Command's flavor: data-idx keyed by param index, kind "bitmask" default.
+  const cmd = RED.mavlink.paramControl(spec, { MAV_MODE: LADDER_ENTRIES }, {
+    saved: 4, className: 'param-input', attrName: 'data-idx', attrValue: spec.index,
+  });
+  assert.equal(cmd.attrs.class, 'param-input');
+  assert.equal(cmd.attrs['data-idx'], '2');
+  assert.equal(cmd.attrs['data-kind'], 'enum');
+  assert.equal(cmd.attrs.title, 'Mode');
+  assert.deepEqual(cmd.options.map((o) => [o.value, o.label]), [['0', 'A (0)'], ['4', 'B (4)']]);
+  assert.equal(cmd.options[0].attrs.title, 'first', 'entry descriptions ride as option titles');
+  assert.equal(cmd.val(), '4');
+  assert.equal(cmd.options.some((o) => o.value === ''), false, 'no blank option — unset resolves to 0 and the dialect enumerates a real 0');
+
+  // Build's flavor: data-field keyed by the wire field name.
+  const bld = RED.mavlink.paramControl(spec, { MAV_MODE: LADDER_ENTRIES }, {
+    saved: 0, className: 'mav-field-input', attrName: 'data-field', attrValue: 'param2',
+  });
+  assert.equal(bld.attrs.class, 'mav-field-input');
+  assert.equal(bld.attrs['data-field'], 'param2');
+  assert.equal(bld.val(), '0');
+});
+
+test('paramControl applies the #198 sentinel unconditionally — no caller can lose it', () => {
+  const RED = paramHarness();
+  const spec = { index: 2, enum: 'MAV_MODE' };
+  // Build's former private copy of this ladder shipped WITHOUT the sentinel: a
+  // saved value the table lacked deselected, and open-and-save rewrote the
+  // param. The shared builder appends the sentinel for every caller.
+  for (const opts of [
+    { saved: 30, className: 'param-input', attrName: 'data-idx', attrValue: 2 },
+    { saved: 30, className: 'mav-field-input', attrName: 'data-field', attrValue: 'param2', bitmaskKind: 'bitmask-mask' },
+  ]) {
+    const sel = RED.mavlink.paramControl(spec, { MAV_MODE: LADDER_ENTRIES }, opts);
+    const sentinel = sel.options.find((o) => o.value === '30');
+    assert.ok(sentinel, `${opts.attrName}: the missing saved value gets an option`);
+    assert.equal(sentinel.label, '#30 (not in dialect)');
+    assert.equal(sel.val(), '30', 'and stays selected instead of deselecting to null');
+  }
+});
+
+test('paramControl bitmask params: multi-select with the caller\'s data-kind', () => {
+  const RED = paramHarness();
+  const spec = { index: 1, enum: 'FLAGS', bitmask: true, description: 'Flags' };
+  const enums = { FLAGS: [{ name: 'F1', value: 1, label: 'F1 (1)' }, { name: 'F2', value: 4, label: 'F2 (4)' }] };
+
+  const cmd = RED.mavlink.paramControl(spec, enums, {
+    saved: 5, className: 'param-input', attrName: 'data-idx', attrValue: 1,
+  });
+  assert.equal(cmd.attrs['data-kind'], 'bitmask', 'Command scrape reads the default kind');
+  assert.equal(cmd.attrs.multiple, 'multiple');
+  assert.equal(cmd.attrs.size, '2');
+  assert.match(cmd.attrs.title, /Ctrl\/Cmd-click/);
+  assert.deepEqual(plain(cmd.val()), ['1', '4'], 'the saved mask decomposes into set flags');
+
+  const bld = RED.mavlink.paramControl(spec, enums, {
+    saved: 4, className: 'mav-field-input', attrName: 'data-field', attrValue: 'param1',
+    bitmaskKind: 'bitmask-mask',
+  });
+  assert.equal(bld.attrs['data-kind'], 'bitmask-mask', "Build's collector folds one numeric mask");
+  assert.deepEqual(plain(bld.val()), ['4']);
+});
+
+test('paramControl booleans: FALSE/TRUE enums and the audited magic value', () => {
+  const RED = paramHarness();
+  const boolEnum = { B: [{ name: 'MAV_BOOL_FALSE', value: 0 }, { name: 'MAV_BOOL_TRUE', value: 1 }] };
+
+  const cb = RED.mavlink.paramControl({ index: 2, enum: 'B' }, boolEnum, {
+    saved: 1, className: 'param-input', attrName: 'data-idx', attrValue: 2,
+  });
+  assert.equal(cb.attrs['data-kind'], 'boolean');
+  assert.equal(cb.attrs['data-true'], '1');
+  assert.equal(cb.attrs['data-idx'], '2');
+  assert.equal(cb.prop('checked'), true);
+
+  // No enum at all: ARM/DISARM param2's audited 21196, keyed by commandId.
+  const magic = RED.mavlink.paramControl({ index: 2 }, {}, {
+    saved: 21196, className: 'param-input', attrName: 'data-idx', attrValue: 2, commandId: 400,
+  });
+  assert.equal(magic.attrs['data-kind'], 'boolean');
+  assert.equal(magic.attrs['data-true'], '21196');
+  assert.equal(magic.prop('checked'), true);
+  // Without a commandId the magic table cannot match — plain number field.
+  const noCmd = RED.mavlink.paramControl({ index: 2 }, {}, {
+    className: 'param-input', attrName: 'data-idx', attrValue: 2,
+  });
+  assert.equal(noCmd.tag.indexOf('<input type="number"'), 0);
+});
+
+test('paramControl numbers carry the XML range and the enumName override wins', () => {
+  const RED = paramHarness();
+  const num = RED.mavlink.paramControl(
+    { index: 3, description: 'Alt', minValue: 0, maxValue: 100, increment: 0.5 },
+    {},
+    { saved: 7, className: 'param-input', attrName: 'data-idx', attrValue: 3 }
+  );
+  assert.equal(num.attrs.min, '0');
+  assert.equal(num.attrs.max, '100');
+  assert.equal(num.attrs.step, '0.5');
+  assert.equal(num.val(), 7);
+
+  // enumName override: the custom-mode path hands the table in from outside
+  // (spec.enum absent), and an explicit null must NOT fall back to spec.enum.
+  const overridden = RED.mavlink.paramControl({ index: 2 }, { COPTER_MODE: LADDER_ENTRIES }, {
+    saved: 4, className: 'param-input', attrName: 'data-idx', attrValue: 2,
+    enumName: 'COPTER_MODE',
+  });
+  assert.equal(overridden.attrs['data-kind'], 'enum');
+  assert.equal(overridden.val(), '4');
+  const nulled = RED.mavlink.paramControl({ index: 2, enum: 'COPTER_MODE' }, { COPTER_MODE: LADDER_ENTRIES }, {
+    className: 'param-input', attrName: 'data-idx', attrValue: 2, enumName: null,
+  });
+  assert.equal(nulled.tag.indexOf('<input type="number"'), 0, 'an explicit null override suppresses spec.enum');
+});
+
+test('no palette node re-declares the shared param ladder or form row (14.32)', () => {
+  const nodesDir = path.join(__dirname, '..', '..', 'nodes');
+  for (const name of fs.readdirSync(nodesDir).filter((f) => f.endsWith('.html'))) {
+    const src = fs.readFileSync(path.join(nodesDir, name), 'utf8');
+    assert.doesNotMatch(
+      src,
+      /function paramControl/,
+      `${name}: the command-param ladder lives once, in resources/mavlink-editor.js`
+    );
+    // A local formRow may only delegate (Build partial-applies its label
+    // width); one that mints its own label element is a copy come back.
+    const idx = src.indexOf('function formRow');
+    if (idx !== -1) {
+      // Scan the whole local body (to the next top-level function or the end),
+      // not a fixed window a harmless comment could push the return out of.
+      const next = src.indexOf('function ', idx + 'function formRow'.length);
+      assert.match(
+        src.slice(idx, next === -1 ? src.length : next),
+        /return RED\.mavlink\.formRow\(/,
+        `${name}: formRow must delegate to the shared row builder`
+      );
+    }
+  }
+});
+
+test('formRow mirrors the control title onto the label; width is the caller\'s', () => {
+  const RED = paramHarness();
+  const $ctl = RED.mavlink.paramControl({ index: 1, description: 'tip text' }, {}, {
+    className: 'param-input', attrName: 'data-idx', attrValue: 1,
+  });
+  const row = RED.mavlink.formRow('Label', $ctl);
+  assert.equal(row.tag, '<div class="form-row"></div>');
+  const [label, ctl] = row.options;
+  assert.equal(label.label, 'Label');
+  assert.equal(label.attrs.title, 'tip text', 'hovering the label shows the dialect tip');
+  assert.equal(ctl, $ctl);
+  // An untitled control leaves the label untitled (no stale tip).
+  const bare = RED.mavlink.formRow('Bare', RED.mavlink.paramControl({ index: 1 }, {}, {
+    className: 'param-input', attrName: 'data-idx', attrValue: 1,
+  }));
+  assert.equal(bare.options[0].attrs.title, undefined);
 });
 
 

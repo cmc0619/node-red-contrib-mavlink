@@ -16,6 +16,16 @@ const html = fs.readFileSync(
   'utf8'
 );
 
+// Slice between two source markers, loudly: a renamed marker must fail the
+// test, not shrink the slice to '' and turn its assertions vacuous.
+function sliceBetween(startMarker, endMarker) {
+  const start = html.indexOf(startMarker);
+  const end = html.indexOf(endMarker);
+  assert.notEqual(start, -1, `marker not found: ${startMarker}`);
+  assert.ok(end > start, `marker not found or out of order: ${endMarker}`);
+  return html.slice(start, end);
+}
+
 test('Build band select uses shared BAND_OPTIONS / fillBandSelect', () => {
   assert.match(html, /RED\.mavlink\.fillBandSelect\(/, 'band picker uses shared fillBandSelect');
   assert.doesNotMatch(html, /BAND_OPTIONS\s*=/, 'no local BAND_OPTIONS copy');
@@ -115,37 +125,59 @@ test('Build oneditprepare ensures standard config-node pickers', () => {
 });
 
 test('Build message-field bitmasks use multi-select tokens accepted by the codec', () => {
-  const collector = html.slice(
-    html.indexOf('function collectFieldInputsFromDom'),
-    html.indexOf('RED.nodes.registerType')
-  );
-  const fieldRenderer = html.slice(
-    html.indexOf('function fieldInput'),
-    html.indexOf('function syncSavedFieldsFromDom')
-  );
+  const collector = sliceBetween('function collectFieldInputsFromDom', 'RED.nodes.registerType');
+  const fieldRenderer = sliceBetween('function fieldInput', 'function syncSavedFieldsFromDom');
 
   assert.match(fieldRenderer, /spec\.display === ['"]bitmask['"]/, 'message field bitmasks follow field metadata');
   assert.match(fieldRenderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE enums are detected before bitmask rendering');
-  assert.match(fieldRenderer, /falseTrue \? ['"]enum['"] : \(multi \? ['"]bitmask['"] : ['"]enum['"]\)/, 'FALSE/TRUE bitmasks are tagged as enum selects');
+  assert.match(
+    fieldRenderer,
+    /if \(falseTrue\) \{\s*return RED\.mavlink\.booleanEnumInput\(/,
+    'FALSE/TRUE fields early-return to the shared checkbox (numeric 0/1 saving is pinned in mavlink-editor-resource.test.js)'
+  );
   assert.match(fieldRenderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'message field bitmasks use native multi-select');
   assert.match(fieldRenderer, /\.val\(entry\.name\)/, 'message field bitmasks save enum entry names');
-  assert.match(fieldRenderer, /\.val\(String\(entry\.value\)\)/, 'FALSE/TRUE options save numeric 0/1 values');
   assert.match(collector, /fields\[name\]\s*=\s*Array\.isArray\(raw\) \? raw/, 'collector keeps selected token array');
   assert.match(collector, /kind === ['"]enum['"]/, 'FALSE/TRUE enum select is collected through numeric enum save');
 });
 
-test('Build COMMAND_LONG/INT command params render bitmasks as numeric multi-select masks', () => {
-  const renderer = html.slice(
-    html.indexOf('function commandParamInput'),
-    html.indexOf('function refreshCommandParams')
-  );
+test('Build COMMAND_LONG/INT command params render through the shared paramControl', () => {
+  // The ladder itself — FALSE/TRUE checkbox, enum pulldown, bitmask
+  // multi-select, magic boolean, number with XML range, and the #198
+  // saved-value sentinel — is RED.mavlink.paramControl, proven executed in
+  // mavlink-editor-resource.test.js. Build contributes only its collector
+  // attributes and the one-numeric-mask fold.
+  const renderer = sliceBetween('function commandParamInput', 'function refreshCommandParams');
 
-  assert.match(renderer, /spec\.bitmask/, 'command param bitmask flag drives rendering');
-  assert.match(renderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE command params are detected before bitmask rendering');
-  assert.match(renderer, /data-kind['"],\s*falseTrue \? ['"]enum['"] : \(isBitmask \? ['"]bitmask-mask['"] : ['"]enum['"]\)/, 'FALSE/TRUE command bitmask params are tagged as enum selects');
-  assert.match(renderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'command bitmask params use native multi-select');
-  assert.match(renderer, /\.val\(String\(entry\.value\)\)/, 'command bitmask options carry numeric values');
+  assert.match(renderer, /RED\.mavlink\.paramControl\(spec, enums, \{/, 'the ladder lives in the shared file (14.32)');
+  assert.match(renderer, /className:\s*'mav-field-input'/, 'controls carry the class the collector scrapes');
+  assert.match(renderer, /attrName:\s*'data-field'/, 'the collector reads data-field');
+  assert.match(renderer, /attrValue:\s*key/, 'keyed by the wire field (paramN, or COMMAND_INT x/y/z)');
+  assert.match(renderer, /bitmaskKind:\s*'bitmask-mask'/, 'bitmask params fold to one numeric mask on save');
+  assert.match(
+    renderer,
+    /commandId:\s*\$\('#mav-build-command-select'\)\.val\(\)/,
+    'the magic-boolean lookup keys off the selected MAV_CMD'
+  );
+  assert.doesNotMatch(
+    renderer,
+    /isFalseTrueEnum|booleanEnumInput|selectedBitmaskValues|<select/,
+    'no local copy of the ladder (14.32)'
+  );
   assert.match(html, /kind === ['"]bitmask-mask['"]/, 'collector stores one numeric mask for command params');
+});
+
+test('Build fieldInput keeps a saved enum value the table lacks (#198)', () => {
+  // Same gap the command-param ladder had: a saved value the current dialect
+  // lacks silently deselected, and open-and-save dropped the field. The
+  // message-field enum path keys options by entry NAME, so it stays local —
+  // with the shared sentinel in its no-match arm.
+  const fieldRenderer = sliceBetween('function fieldInput', 'function syncSavedFieldsFromDom');
+  assert.match(
+    fieldRenderer,
+    /RED\.mavlink\.ensureSavedEnumOption\(sel, String\(saved\)\);\s*\n\s*sel\.val\(String\(saved\)\)/,
+    'the shared sentinel runs before the saved value is applied'
+  );
 });
 
 test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)', () => {
@@ -238,18 +270,14 @@ test('build command-param pulldowns drop the blank; message fields keep it', () 
   // entry. An unset *message field* is skipped entirely by
   // lib/codec/message.js, so blank there is the only way to leave a field off
   // the wire — removing it would change what gets sent, not just what shows.
-  const commandParams = html.slice(
-    html.indexOf('function commandParamInput'),
-    html.indexOf('function refreshCommandParams')
-  );
+  const commandParams = sliceBetween('function commandParamInput', 'function refreshCommandParams');
   assert.ok(commandParams.length > 0, 'located the command-param renderer');
-  assert.match(commandParams, /data-kind['"], falseTrue \? ['"]enum['"]/, 'slice really is the renderer');
+  assert.match(commandParams, /RED\.mavlink\.paramControl\(/, 'slice really is the renderer');
+  // The no-blank rule is inside the shared builder (executed test in
+  // mavlink-editor-resource.test.js); nothing here may re-add one.
   assert.ok(!/\\u2014/.test(commandParams), 'command params have no blank option');
 
-  const messageFields = html.slice(
-    html.indexOf('function fieldInput'),
-    html.indexOf('function commandParamInput')
-  );
+  const messageFields = sliceBetween('function fieldInput', 'function commandParamInput');
   assert.ok(messageFields.length > 0, 'located the message-field renderer');
   assert.match(messageFields, /spec\.display === 'bitmask'/, 'slice really is the message-field renderer');
   assert.match(messageFields, /\\u2014/, 'message fields keep blank = omit the field');

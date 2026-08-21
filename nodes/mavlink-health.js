@@ -61,8 +61,7 @@ module.exports = function registerMavlinkHealth(RED) {
     const unsubscribeExpired = connectionNode.onHealthExpired(({ identityId: expiredId }) => {
       if (expiredId !== identityId) return;
       applyActionStatus(node, 'error', 'lease expired');
-      node.send([null, makeStatusRecord({
-        node: 'mavlink-health',
+      node.send([null, makeStatusRecord(node.type, {
         result: 'lease-expired',
         identity: identityId,
       })]);
@@ -90,8 +89,7 @@ module.exports = function registerMavlinkHealth(RED) {
             const ttlS = payload.ttl_s ?? defaultTtlS;
             connectionNode.assertHealth(identityId, true, Number(ttlS) * 1000);
             applyActionStatus(node, 'ok', `healthy (${ttlS}s lease)`);
-            send([msg, makeStatusRecord({
-              node: 'mavlink-health',
+            send([msg, makeStatusRecord(node.type, {
               result: 'healthy',
               identity: identityId,
               ttlS: Number(ttlS),
@@ -101,8 +99,7 @@ module.exports = function registerMavlinkHealth(RED) {
           case 'fatal': {
             connectionNode.assertHealth(identityId, false, 0);
             applyActionStatus(node, 'error', 'faulted');
-            send([msg, makeStatusRecord({
-              node: 'mavlink-health',
+            send([msg, makeStatusRecord(node.type, {
               result: 'faulted',
               identity: identityId,
             })]);

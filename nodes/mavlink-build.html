@@ -205,13 +205,7 @@
         updateVisibility();
 
         function formRow(label, control) {
-          var row = $('<div class="form-row"></div>');
-          var tip = (control && control.attr) ? (control.attr('title') || '') : '';
-          var $lbl = $('<label></label>').text(label).css('width', '140px');
-          if (tip) $lbl.attr('title', tip);
-          row.append($lbl);
-          row.append(control);
-          return row;
+          return RED.mavlink.formRow(label, control, { labelWidth: '140px' });
         }
 
         function fieldLabel(spec) {
@@ -265,16 +259,15 @@
                 className: 'mav-field-input',
               }).attr('data-field', spec.name);
             }
-            var multi = !falseTrue && spec.display === 'bitmask';
+            var multi = spec.display === 'bitmask';
             var sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', spec.name)
-              .attr('data-kind', falseTrue ? 'enum' : (multi ? 'bitmask' : 'enum'))
+              .attr('data-kind', multi ? 'bitmask' : 'enum')
               .attr('title', multi ? RED.mavlink.bitmaskTitle(spec.description) : (spec.description || ''));
             if (multi) sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
             else sel.append($('<option></option>').val('').text('\u2014'));
             entries.forEach(function (entry) {
               var $opt = $('<option></option>').val(entry.name).text(entry.label);
-              if (falseTrue) $opt.val(String(entry.value)).text(RED.mavlink.booleanEntryLabel(entry));
               if (entry.description) $opt.attr('title', entry.description);
               sel.append($opt);
             });
@@ -286,7 +279,15 @@
               var match = entries.find(function (e) {
                 return String(e.value) === String(saved) || e.name === saved;
               });
-              sel.val(match ? (falseTrue ? String(match.value) : match.name) : String(saved));
+              if (match) {
+                sel.val(match.name);
+              } else {
+                // A saved value the table lacks — a dialect switch, a newer
+                // firmware's entry — must survive open-and-save, not silently
+                // deselect and drop the field on Done (Codex #198).
+                RED.mavlink.ensureSavedEnumOption(sel, String(saved));
+                sel.val(String(saved));
+              }
             }
             return sel;
           }
@@ -356,61 +357,17 @@
           if ((saved === undefined || saved === null || saved === '') && msgName === 'COMMAND_INT' && spec.index >= 5) {
             saved = savedFields['param' + spec.index];
           }
-          if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
-            var entries = enums[spec.enum];
-            var falseTrue = RED.mavlink.isFalseTrueEnum(entries);
-            if (falseTrue) {
-              return RED.mavlink.booleanEnumInput(entries, {
-                saved: saved,
-                title: spec.description || '',
-                className: 'mav-field-input',
-              }).attr('data-field', key);
-            }
-            var isBitmask = !!spec.bitmask && !falseTrue;
-            var sel = $('<select class="mav-field-input"></select>')
-              .attr('data-field', key)
-              .attr('data-kind', falseTrue ? 'enum' : (isBitmask ? 'bitmask-mask' : 'enum'))
-              .attr('title', isBitmask ? RED.mavlink.bitmaskTitle(spec.description) : (spec.description || ''));
-            // No blank option. An unset command param resolves to 0, and where
-            // 0 is a real choice the dialect already enumerates it — MAV_ROI_NONE,
-            // PARACHUTE_DISABLE, FAILURE_TYPE_OK. So blank was either a second
-            // spelling of an entry that exists, or (ACCELCAL_VEHICLE_POS, which
-            // starts at 1) a way to send a value the enum does not define.
-            // Upstream marks genuinely unused params `Empty`/`reserved`, and
-            // isHiddenParam drops those before they reach a control.
-            if (isBitmask) {
-              sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
-            }
-            entries.forEach(function (entry) {
-              var $opt = $('<option></option>').val(String(entry.value)).text(falseTrue ? RED.mavlink.booleanEntryLabel(entry) : entry.label);
-              if (entry.description) $opt.attr('title', entry.description);
-              sel.append($opt);
-            });
-            if (isBitmask) {
-              sel.val(RED.mavlink.selectedBitmaskValues(saved, entries));
-            } else if (saved !== undefined && saved !== null && saved !== '') {
-              sel.val(String(saved));
-            }
-            return sel;
-          }
-          var magic = RED.mavlink.magicBooleanValue($('#mav-build-command-select').val(), spec.index);
-          if (magic !== null) {
-            return RED.mavlink.booleanEnumInput([], {
-              saved: saved,
-              trueValue: magic,
-              title: spec.description || '',
-              className: 'mav-field-input',
-            }).attr('data-field', key);
-          }
-          var input = $('<input type="number" class="mav-field-input">')
-            .attr('data-field', key)
-            .attr('data-kind', 'number')
-            .attr('title', spec.description || '')
-            .val(saved !== undefined && saved !== null ? saved : '');
-          if (spec.minValue !== null && spec.minValue !== undefined) input.attr('min', spec.minValue);
-          if (spec.maxValue !== null && spec.maxValue !== undefined) input.attr('max', spec.maxValue);
-          if (spec.increment !== null && spec.increment !== undefined) input.attr('step', spec.increment);
-          return input;
+          // The control ladder (checkbox / pulldown / bitmask / magic boolean /
+          // number, with the #198 saved-value sentinel) is the shared builder;
+          // Build contributes its collector attributes and the mask fold.
+          return RED.mavlink.paramControl(spec, enums, {
+            saved: saved,
+            className: 'mav-field-input',
+            attrName: 'data-field',
+            attrValue: key,
+            bitmaskKind: 'bitmask-mask',
+            commandId: $('#mav-build-command-select').val(),
+          });
         }
 
         function refreshCommandParams(msgName, cmdCatalog) {

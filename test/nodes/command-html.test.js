@@ -19,6 +19,16 @@ const html = fs.readFileSync(
   'utf8'
 );
 
+// Slice between two source markers, loudly: a renamed marker must fail the
+// test, not shrink the slice to '' and turn its assertions vacuous.
+function sliceBetween(startMarker, endMarker) {
+  const start = html.indexOf(startMarker);
+  const end = html.indexOf(endMarker);
+  assert.notEqual(start, -1, `marker not found: ${startMarker}`);
+  assert.ok(end > start, `marker not found or out of order: ${endMarker}`);
+  return html.slice(start, end);
+}
+
 test('advanced command input binds to the advancedCommand property', () => {
   assert.match(html, /id="node-input-advancedCommand"/, 'input id must match the property');
   assert.ok(
@@ -50,10 +60,7 @@ test('advanced mode enumerates params from dialect metadata, not Param 1–7 (§
   assert.match(html, /spec\.enum/, 'enum-backed params become dropdowns');
   assert.match(html, /!p\.hidden/, 'reserved/Empty params are filtered out');
   // The forbidden raw grid must not be the Advanced path anymore.
-  const advancedBlock = html.slice(
-    html.indexOf("if (mode === 'advanced')"),
-    html.indexOf("const presetId = $('#node-input-preset')")
-  );
+  const advancedBlock = sliceBetween("if (mode === 'advanced')", "const presetId = $('#node-input-preset')");
   assert.ok(
     !/Param \$\{i\}/.test(advancedBlock) && !/for \(let i = 1; i <= 7/.test(advancedBlock),
     'Advanced path must not build a Param 1–7 grid'
@@ -88,10 +95,7 @@ test('Advanced mode populates commands before loading their parameter fields', (
 });
 
 test('initial preset load paints option tips before triggering the parameter refresh', () => {
-  const builder = html.slice(
-    html.indexOf('function buildPresetDropdown(groups)'),
-    html.indexOf('/**\n       * Dialect-sourced titles')
-  );
+  const builder = sliceBetween('function buildPresetDropdown(groups)', '/**\n       * Dialect-sourced titles');
   assert.match(
     builder,
     /loadCommandsCatalog\(function \(catalog\) \{[\s\S]*applyPresetOptionTips\(sel, catalog\);[\s\S]*sel\.trigger\('change'\);/
@@ -102,39 +106,55 @@ test('preset dropdown re-applies the saved selection and fires change after the 
   // The preset list loads asynchronously; the builder must re-select the saved
   // preset and trigger a change so the exposed param fields render on first
   // open rather than staying stale until the user re-picks the preset.
-  const builder = html.slice(
-    html.indexOf('function buildPresetDropdown'),
-    html.indexOf('loadPresets(buildPresetDropdown)')
-  );
+  const builder = sliceBetween('function buildPresetDropdown', 'loadPresets(buildPresetDropdown)');
   assert.match(builder, /sel\.val\(node\.preset/, 'the saved preset is re-applied');
   assert.match(builder, /sel\.trigger\(['"]change['"]\)/, 'a change event is fired after building');
 });
 
-test('advanced bitmask command params render as multi-select controls', () => {
-  const renderer = html.slice(
-    html.indexOf('function advancedParamInput'),
-    html.indexOf('function refreshParamFields')
-  );
+test('advanced params render through the shared paramControl ladder (14.32)', () => {
+  // The ladder — FALSE/TRUE checkbox, enum pulldown, bitmask multi-select
+  // (native, bitmaskTitle, boolean labels), magic boolean, number with the XML
+  // range — is RED.mavlink.paramControl, proven executed in
+  // mavlink-editor-resource.test.js. Command contributes its collector
+  // attributes and the custom-mode enum resolution.
+  const renderer = sliceBetween('function advancedParamInput', 'function presetParamInput');
 
-  assert.match(renderer, /spec\.bitmask/, 'param-level bitmask flag drives rendering');
-  assert.match(renderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE command params are detected before bitmask rendering');
-  assert.match(renderer, /data-kind['"],\s*falseTrue \? ['"]enum['"] : \(isBitmask \? ['"]bitmask['"] : ['"]enum['"]\)/, 'FALSE/TRUE bitmask params are tagged as enum selects');
-  assert.match(renderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'bitmask enum params use native multi-select');
-  assert.match(renderer, /RED\.mavlink\.booleanEntryLabel\(entry\)/, 'FALSE/TRUE command param options use boolean labels');
-  assert.match(renderer, /RED\.mavlink\.bitmaskTitle/, 'multi-select title comes from the shared helper');
+  assert.match(renderer, /RED\.mavlink\.paramControl\(spec, enums, \{/, 'one ladder, in the shared file');
+  assert.match(renderer, /className:\s*'param-input'/, 'controls carry the class the scrape reads');
+  assert.match(renderer, /attrName:\s*'data-idx'/, 'the scrape keys off data-idx');
+  assert.match(renderer, /attrValue:\s*spec\.index/);
+  assert.match(renderer, /commandId:\s*commandId/, 'the magic-boolean lookup keys off the threaded id');
+  assert.match(
+    renderer,
+    /enumName:\s*spec\.enum \|\| RED\.mavlink\.customModeEnum\(commandId, spec\.index\)/,
+    'custom-mode table resolution stays a Command concern, handed in as the override'
+  );
+  assert.doesNotMatch(
+    renderer,
+    /bitmaskKind/,
+    "no override: Command's scrape reads the default data-kind 'bitmask'"
+  );
+  assert.doesNotMatch(
+    renderer,
+    /isFalseTrueEnum|booleanEnumInput|selectedBitmaskValues/,
+    'no local copy of the ladder (14.32)'
+  );
 });
 
 test('a saved enum value the table lacks survives open-and-save (Codex #198)', () => {
-  const renderer = html.slice(
-    html.indexOf('function advancedParamInput'),
-    html.indexOf('function refreshParamFields')
-  );
   // Without the sentinel, .val(saved) on an absent option deselects, oneditsave
   // reads null, and the param resolves to 0 on the wire — a silent mode change.
+  // It is unconditional inside RED.mavlink.paramControl now (executed test in
+  // mavlink-editor-resource.test.js), so no per-node renderer can lose it
+  // again — Build's former copy of the ladder shipped without it.
+  const renderer = sliceBetween('function advancedParamInput', 'function refreshParamFields');
+  assert.match(renderer, /RED\.mavlink\.paramControl\(/, 'params render through the sentinel-applying builder');
+  // The PX4 packed-mode select recomposes the saved pair locally, so it keeps
+  // its own sentinel call for a pair the current table cannot name.
   assert.match(
     renderer,
-    /RED\.mavlink\.ensureSavedEnumOption\(sel, String\(saved\)\);\s*\n\s*sel\.val\(String\(saved\)\)/,
-    'the shared sentinel runs before the saved value is applied'
+    /RED\.mavlink\.ensureSavedEnumOption\(sel, String\(packed\)\);\s*\n\s*sel\.val\(String\(packed\)\)/,
+    'the PX4 mode select applies the sentinel before selecting the packed value'
   );
 });
 
@@ -142,10 +162,7 @@ test('advanced bitmask command params save one numeric mask value', () => {
   // The scrape is shared with the params validator, so it is read here rather
   // than inside `oneditsave` — one function, one set of typed reads, and no
   // way for Done to write a value the validator never judged.
-  const saver = html.slice(
-    html.indexOf('function scrapeParamInputs'),
-    html.indexOf('function paramValues')
-  );
+  const saver = sliceBetween('function scrapeParamInputs', 'function paramValues');
 
   assert.match(saver, /kind\s*===\s*['"]bitmask['"]/, 'save path detects bitmask controls');
   // The fold itself — multi-select normalisation and the BigInt OR — lives in
@@ -156,10 +173,7 @@ test('advanced bitmask command params save one numeric mask value', () => {
 });
 
 test('PRESET_PARAMS is curation-only — the dialect catalog is the data source', () => {
-  const table = html.slice(
-    html.indexOf('const PRESET_PARAMS = {'),
-    html.indexOf('const HAS_COMPLETION')
-  );
+  const table = sliceBetween('const PRESET_PARAMS = {', 'const HAS_COMPLETION');
 
   // The XML declares enums, units, bitmask-ness, and descriptions; the static
   // table must not duplicate them (they drift — it once said MAV_MODE where
@@ -183,14 +197,8 @@ test('PRESET_PARAMS is curation-only — the dialect catalog is the data source'
 });
 
 test('preset rows render through the Advanced catalog path', () => {
-  const presetBlock = html.slice(
-    html.indexOf("const presetId = $('#node-input-preset')"),
-    html.indexOf('// ── Safety preset notice')
-  );
-  const renderer = html.slice(
-    html.indexOf('function presetParamInput'),
-    html.indexOf('function refreshParamFields')
-  );
+  const presetBlock = sliceBetween("const presetId = $('#node-input-preset')", '// ── Safety preset notice');
+  const renderer = sliceBetween('function presetParamInput', 'function refreshParamFields');
 
   assert.ok(!/loadEnumsCatalog/.test(html), 'no separate preset enum fetch — enums ride the commands catalog');
   assert.match(html, /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/, 'message ids load via shared loadCatalog');
@@ -296,10 +304,7 @@ test('command Build dialect select uses shared helper and includes __vehicle esc
 });
 
 test('command Build visibility delegates shared rows to applyBuildTierRowVisibility', () => {
-  const vis = html.slice(
-    html.indexOf('function refreshVisibility'),
-    html.indexOf("$('#node-input-identity').on")
-  );
+  const vis = sliceBetween('function refreshVisibility', "$('#node-input-identity').on");
 
   assert.match(vis, /RED\.mavlink\.applyBuildTierRowVisibility\(\{/, 'shared visibility helper called');
   assert.match(vis, /#node-input-dialect/, 'Build visibility reads the dialect select');
@@ -480,17 +485,16 @@ test('command param enum pulldowns carry no blank option', () => {
   // An unset param resolves to 0, and where 0 means something the dialect
   // enumerates it — so blank was a second spelling of an entry that exists, or
   // (ACCELCAL_VEHICLE_POS) a value the enum never defined. See
-  // test/metadata/enum-param-blank.test.js for the numbers.
-  const renderer = html.slice(
-    html.indexOf('function advancedParamInput'),
-    html.indexOf('function presetParamInput')
-  );
+  // test/metadata/enum-param-blank.test.js for the numbers. The rule lives in
+  // the shared paramControl (executed test in mavlink-editor-resource.test.js);
+  // nothing local may re-add a blank around it.
+  const renderer = sliceBetween('function advancedParamInput', 'function presetParamInput');
+  assert.match(renderer, /RED\.mavlink\.paramControl\(/, 'params render through the shared no-blank ladder');
   assert.ok(!/\\u2014/.test(renderer), 'no em-dash placeholder option');
   assert.ok(
     !/sel\.append\(\$\('<option><\/option>'\)\.val\(''\)/.test(renderer),
     'no empty-valued option'
   );
-  assert.match(renderer, /isBitmask\) \{\s*sel\.attr\('multiple'/, 'bitmask branch keeps its multi-select');
 });
 
 test('mavlink-command: Advanced mode requires a command (§6 status ruling, 2026-08-12)', () => {

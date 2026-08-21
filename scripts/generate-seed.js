@@ -22,15 +22,22 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const zlib = require('zlib');
 const { compileXml } = require('../lib/metadata/compile');
+// GitHub fetch surface shared with the runtime catalog — one owner for the
+// definitions-dir constant, the three upstream calls, and the content hash.
+const {
+  DEFINITIONS_DIR,
+  fetchCommitInfo,
+  defaultListFiles,
+  defaultFetchFile,
+  sha256,
+} = require('../lib/metadata/xml-catalog');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SEED_DIR = path.join(REPO_ROOT, 'seed');
 /** Pointer the runtime reads to locate the dated blob. */
 const ACTIVE_FILE = path.join(SEED_DIR, 'active.json');
-const DEFINITIONS_DIR = 'message_definitions/v1.0';
 
 /**
  * @param {string} stamp
@@ -89,64 +96,6 @@ function parseArgs(argv) {
 }
 
 /**
- * @param {string} text
- * @returns {string}
- */
-function sha256(text) {
-  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
-/**
- * Pin a ref to its commit, and record when that commit landed upstream. The
- * commit date is the XML's own version date — distinct from `fetchedAt`, which
- * is only when this generator ran.
- *
- * @param {string} repo
- * @param {string} ref
- * @returns {Promise<{commit: string, commitDate: ?string}>}
- */
-async function resolveCommit(repo, ref) {
-  const res = await fetch(`https://api.github.com/repos/${repo}/commits/${ref}`, {
-    headers: { Accept: 'application/vnd.github+json' },
-  });
-  if (!res.ok) {
-    throw new Error(`Cannot resolve ${repo}@${ref} (${res.status})`);
-  }
-  const body = await res.json();
-  return { commit: body.sha, commitDate: body.commit.committer.date };
-}
-
-/**
- * @param {string} repo
- * @param {string} commit
- * @returns {Promise<string[]>}
- */
-async function listRemoteXml(repo, commit) {
-  const res = await fetch(
-    `https://api.github.com/repos/${repo}/contents/${DEFINITIONS_DIR}?ref=${commit}`,
-    { headers: { Accept: 'application/vnd.github+json' } }
-  );
-  if (!res.ok) {
-    throw new Error(`Cannot list ${DEFINITIONS_DIR} at ${repo}@${commit.slice(0, 7)} (${res.status})`);
-  }
-  const entries = await res.json();
-  return entries.filter((e) => e.type === 'file' && e.name.endsWith('.xml')).map((e) => e.name);
-}
-
-/**
- * @param {string} repo
- * @param {string} commit
- * @param {string} file
- * @returns {Promise<string>}
- */
-async function fetchRemoteFile(repo, commit, file) {
-  const url = `https://raw.githubusercontent.com/${repo}/${commit}/${DEFINITIONS_DIR}/${file}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to download ${file} (${res.status})`);
-  return res.text();
-}
-
-/**
  * @param {string} sourceDir
  * @returns {{commit: string, files: Object<string, string>}}
  */
@@ -191,11 +140,21 @@ async function collectXml(opts) {
     const { commit, commitDate, files } = loadFromSourceDir(opts.sourceDir);
     return { repo: opts.repo, ref: opts.ref, commit, commitDate, files };
   }
-  const { commit, commitDate } = await resolveCommit(opts.repo, opts.ref);
-  const names = await listRemoteXml(opts.repo, commit);
+  // The shared fetchers answer null on failure so the catalog can degrade;
+  // the generator has nothing to degrade to — an unpinnable ref or an
+  // unlistable definitions dir fails the run loudly, previous seed untouched.
+  const info = await fetchCommitInfo(opts.repo, opts.ref);
+  if (!info) {
+    throw new Error(`Cannot resolve ${opts.repo}@${opts.ref} to a commit`);
+  }
+  const { commit, commitDate } = info;
+  const names = await defaultListFiles(opts.repo, commit);
+  if (!Array.isArray(names) || names.length === 0) {
+    throw new Error(`Cannot list ${DEFINITIONS_DIR} at ${opts.repo}@${commit.slice(0, 7)}`);
+  }
   const files = {};
   for (const name of names) {
-    files[name] = await fetchRemoteFile(opts.repo, commit, name);
+    files[name] = await defaultFetchFile(opts.repo, commit, name);
   }
   return { repo: opts.repo, ref: opts.ref, commit, commitDate, files };
 }

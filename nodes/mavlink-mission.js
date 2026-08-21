@@ -147,7 +147,7 @@ module.exports = function registerMavlinkMission(RED) {
       applyActionStatus(node, 'preview', `plan ${operation} ${missionTypeKey}`);
       send([
         { payload: plan },
-        record(operation, missionTypeKey, target, {
+        record(node, operation, missionTypeKey, target, {
           result: 'succeeded',
           phase: 'built',
           messageCount: plan.messages.length,
@@ -181,7 +181,7 @@ module.exports = function registerMavlinkMission(RED) {
           onProgress: (update) => {
             send([
               null,
-              record(operation, missionTypeKey, target, { result: 'progress', ...update }),
+              record(node, operation, missionTypeKey, target, { result: 'progress', ...update }),
             ]);
           },
         });
@@ -189,7 +189,7 @@ module.exports = function registerMavlinkMission(RED) {
         // ── Lock per (connection, target, mission_type) (§9). ─────────────────
         const release = locks.acquire(connNode.id, target, missionType);
         if (!release) {
-          const rec = record(operation, missionTypeKey, target, {
+          const rec = record(node, operation, missionTypeKey, target, {
             result: 'failed',
             phase: 'locked',
             reason: `a ${missionTypeKey} transfer is already in progress for this target`,
@@ -225,7 +225,7 @@ module.exports = function registerMavlinkMission(RED) {
             if (activeByKey.get(lockKey) === machine) activeByKey.delete(lockKey);
             release();
 
-            const rec = record(operation, missionTypeKey, target, outcome);
+            const rec = record(node, operation, missionTypeKey, target, outcome);
             if (outcome.result === 'succeeded') {
               applyActionStatus(node, 'ok', successBadge(operation, missionTypeKey, outcome));
               send([{ payload: rec }, rec]);
@@ -246,7 +246,7 @@ module.exports = function registerMavlinkMission(RED) {
             if (activeByKey.get(lockKey) === machine) activeByKey.delete(lockKey);
             release();
             applyActionStatus(node, 'error', `${operation} error`);
-            send([null, record(operation, missionTypeKey, target, {
+            send([null, record(node, operation, missionTypeKey, target, {
               result: 'failed',
               phase: 'error',
               reason: err.message,
@@ -270,15 +270,15 @@ module.exports = function registerMavlinkMission(RED) {
  * Build a status record for output 1. Every record carries the operation and
  * mission type so a downstream `switch` can branch (§9).
  *
+ * @param {object} node  the emitting node (its registered type stamps the record)
  * @param {string} operation
  * @param {string} missionTypeKey
  * @param {{sysid: number, compid: number}} target
  * @param {object} fields
  * @returns {object}
  */
-function record(operation, missionTypeKey, target, fields) {
-  return makeStatusRecord({
-    node: 'mavlink-mission',
+function record(node, operation, missionTypeKey, target, fields) {
+  return makeStatusRecord(node.type, {
     operation,
     missionType: missionTypeKey,
     target,

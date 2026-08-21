@@ -23,8 +23,9 @@ const {
 // -- makeStatusRecord shape --------------------------------------------------
 
 test('makeStatusRecord returns the default plain-object shape', () => {
-  const rec = makeStatusRecord({ result: 'accepted' });
+  const rec = makeStatusRecord('mavlink-command', { result: 'accepted' });
   assert.deepEqual(rec, {
+    node: 'mavlink-command',
     result: 'accepted',
     resultCode: null,
     resultParam2: null,
@@ -39,7 +40,7 @@ test('makeStatusRecord returns the default plain-object shape', () => {
 });
 
 test('makeStatusRecord includes all required fields', () => {
-  const rec = makeStatusRecord({
+  const rec = makeStatusRecord('mavlink-command', {
     result: 'accepted',
     resultCode: MAV_RESULT.ACCEPTED,
     resultParam2: 3,
@@ -51,6 +52,7 @@ test('makeStatusRecord includes all required fields', () => {
     commandId: 400,
     detail: 'armed',
   });
+  assert.equal(rec.node, 'mavlink-command');
   assert.equal(rec.result, 'accepted');
   assert.equal(rec.resultCode, 0);
   assert.equal(rec.resultParam2, 3);
@@ -64,7 +66,7 @@ test('makeStatusRecord includes all required fields', () => {
 });
 
 test('makeStatusRecord fills defaults for optional fields', () => {
-  const rec = makeStatusRecord({ result: 'timeout' });
+  const rec = makeStatusRecord('mavlink-command', { result: 'timeout' });
   assert.equal(rec.resultCode, null);
   assert.equal(rec.confirmedBy, 'none');
   assert.equal(rec.target, null);

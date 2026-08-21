@@ -71,6 +71,15 @@ module.exports = function registerMavlinkConnection(RED) {
     const bundle = vehicleNode.getDialect();
     const defaults = vehicleNode.getDefaults();
 
+    // The addressing/firmware descriptor both vehicle shapes below derive
+    // from — built once so the public snapshot and the runtime config cannot
+    // drift apart.
+    const vehicleDescriptor = {
+      targetSystem: defaults.defaultTargetSystem,
+      targetComponent: defaults.defaultTargetComponent,
+      firmware: defaults.firmware,
+    };
+
     // Public frozen snapshot so palette nodes can inherit target defaults from
     // the Vehicle Profile without reaching into private runtime fields. `id` is
     // the profile node id: a node that needs the compiled bundle resolves the
@@ -78,9 +87,7 @@ module.exports = function registerMavlinkConnection(RED) {
     // knows bundled dialects and would break custom XML profiles.
     node.vehicle = Object.freeze({
       id: config.vehicle,
-      targetSystem: defaults.defaultTargetSystem,
-      targetComponent: defaults.defaultTargetComponent,
-      firmware: defaults.firmware,
+      ...vehicleDescriptor,
       vehicleFamily: defaults.vehicleFamily,
     });
 
@@ -117,10 +124,8 @@ module.exports = function registerMavlinkConnection(RED) {
         disabled: false,
         transport: buildTransportConfig(config),
         vehicle: {
-          targetSystem: defaults.defaultTargetSystem,
-          targetComponent: defaults.defaultTargetComponent,
+          ...vehicleDescriptor,
           bundle,
-          firmware: defaults.firmware,
           autopilot: autopilotForFirmware(defaults.firmware),
         },
         identities,

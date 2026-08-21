@@ -47,6 +47,9 @@ module.exports = function registerMavlinkFanout(RED) {
 
         const aggregate = await inFlight.track((signal) => executeFanout({
           signal,
+          // The aggregate record's `node` field names the emitting node —
+          // formation runs the same executor and stamps its own type.
+          nodeType: node.type,
           connection: effectiveConnection,
           message,
           targets: opts.targets,
