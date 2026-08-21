@@ -38,10 +38,18 @@ test('fieldMetaFromBundle sources Sequence tip from dialect via the shared recip
 test('fieldMetaFromBundle joins gimbal manager message field descriptions', () => {
   const bundle = loadBundled('ardupilotmega');
   const meta = fieldMetaFromBundle(bundle, 'gimbal', 'aim', 'manager');
-  const any = Object.values(meta).some(
-    (entry) => typeof entry.description === 'string' && entry.description.length > 0
-  );
-  assert.ok(any, `expected at least one description, got ${JSON.stringify(meta)}`);
+  const expected = {
+    flags: /gimbal manager flags/i,
+    gimbalDeviceId: /gimbal device/i,
+    pitch: /pitch angle/i,
+    pitchRate: /pitch angular rate/i,
+    yaw: /yaw angle/i,
+    yawRate: /yaw angular rate/i,
+  };
+  for (const [field, pattern] of Object.entries(expected)) {
+    assert.ok(meta[field], `expected a ${field} row`);
+    assert.match(meta[field].description, pattern, `description for ${field}`);
+  }
 });
 
 test('fieldMetaFromBundle returns empty object for unknown verb', () => {
