@@ -246,3 +246,18 @@ test('cancelling a mid-flight upload sends MISSION_ACK OPERATION_CANCELLED befor
   assert.equal(acks[0].message.fields.mission_type, MISSION_TYPE.MISSION);
   assert.equal(stub.subscriberCount(), 0, 'cancel still tears the subscription down');
 });
+
+test('the subscription filters to the upload messages — target telemetry never reaches the machine', async () => {
+  const stub = new StubConnection();
+  const machine = new MissionUpload(uploadOpts(stub, makeItems(1)));
+  const done = machine.start();
+
+  assert.ok(stub.subscriberCount() > 0, 'the transfer is subscribed');
+  // The target's telemetry stream (HEARTBEAT at frame rate) is filtered out
+  // at the subscription, not copied in and discarded by the name switch.
+  assert.equal(stub.inject({ name: 'HEARTBEAT', fields: {} }), 0);
+  assert.equal(stub.inject({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } }), 1);
+
+  machine.cancel();
+  await done;
+});

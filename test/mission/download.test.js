@@ -379,3 +379,18 @@ test('a cancel whose ack send throws (dead link) still settles cancelled — bes
 
   assert.equal(outcome.result, 'cancelled', 'a teardown-path throw never escapes cancel');
 });
+
+test('the subscription filters to the download messages — target telemetry never reaches the machine', async () => {
+  const stub = new StubConnection();
+  const machine = new MissionDownload(machineOpts(stub));
+  const done = machine.start();
+
+  assert.ok(stub.subscriberCount() > 0, 'the transfer is subscribed');
+  // The target's telemetry stream (HEARTBEAT at frame rate) is filtered out
+  // at the subscription, not copied in and discarded by the name switch.
+  assert.equal(stub.inject({ name: 'HEARTBEAT', fields: {} }), 0);
+  assert.equal(stub.inject({ name: 'MISSION_COUNT', fields: { count: 1, mission_type: 0 } }), 1);
+
+  machine.cancel();
+  await done;
+});

@@ -683,3 +683,21 @@ test('mission protocol subscription keyed on resolved target (companion sysid 42
   assert.equal(terminal[1].result, 'succeeded', 'download completes using sysid=42 response');
   assert.equal(terminal[1].target.sysid, 42);
 });
+
+test('a leftover unparseable items value on a non-upload node never parses', async () => {
+  // The editor's items validator is operation-aware: only Upload reads items,
+  // so a leftover value must not red — or crater — a Download node. The
+  // once-at-deploy parse keeps that gate.
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 0, mission_type: 0 } });
+    }
+  });
+  const Node = loadNode(conn);
+  const node = new Node({ operation: 'download', connection: 'conn', delivery: 'confirm', missionType: 'mission', items: '{not json' });
+  const { outputs, err } = await runInput(node, { payload: {} });
+  assert.equal(err, undefined);
+  assert.equal(outputs.at(-1)[1].result, 'succeeded');
+});
