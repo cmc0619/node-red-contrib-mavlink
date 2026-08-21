@@ -1517,6 +1517,69 @@ test('a settled broadcast confirm leaves no abort listener on the run signal', a
   assert.equal(signal.live(), 0, 'settling by ack removed it');
 });
 
+test('a param-echo send that throws at dispatch releases its wait immediately', async () => {
+  // The subscription, echo timer, and abort listener are armed before the
+  // send. A send that throws (Control band cap, dead link) rejects the wait
+  // into executeMember's failed record — but the three resources must come
+  // down at the throw, not sit armed for the full echo window on a member
+  // that can never confirm.
+  let unsubscribed = 0;
+  const connection = {
+    peerTable: peerTableStub([peer(1)]),
+    sends: [],
+    send() { throw new Error('control band saturated'); },
+    resolveSourceIds: () => null,
+    subscribe() { return () => { unsubscribed += 1; }; },
+  };
+  const signal = countingSignal();
+
+  const result = await executeFanout({ selection: { mode: 'all' },
+    connection,
+    signal,
+    message: builtParamSet(),
+    mode: 'sequential',
+    delivery: 'confirm',
+    timeoutMs: 60000,
+    intervalMs: 0,
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.members[0].result, 'failed');
+  assert.match(result.members[0].detail, /saturated/, 'the throw still reports through the failed record');
+  assert.equal(unsubscribed, 1, 'the echo subscription comes down at the throw, not at the timeout');
+  assert.equal(signal.live(), 0, 'the abort listener comes down with it');
+});
+
+test('a broadcast confirm send that throws at dispatch releases its wait immediately', async () => {
+  // Same shape for the broadcast wait: its rejection lands in
+  // executeBroadcast's catch (every member failed), and the single ack
+  // subscription, timer, and abort listener must not outlive the throw.
+  let unsubscribed = 0;
+  const connection = {
+    peerTable: peerTableStub([peer(1), peer(2)]),
+    sends: [],
+    send() { throw new Error('control band saturated'); },
+    resolveSourceIds: () => null,
+    subscribe() { return () => { unsubscribed += 1; }; },
+  };
+  const signal = countingSignal();
+
+  const result = await executeFanout({ selection: { mode: 'all' },
+    connection,
+    signal,
+    message: builtCommand(),
+    mode: 'broadcast',
+    delivery: 'confirm',
+    timeoutMs: 60000,
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.members.length, 2, 'every member is reported failed, none dropped');
+  assert.ok(result.members.every((m) => m.result === 'failed'));
+  assert.equal(unsubscribed, 1, 'the ack subscription comes down at the throw');
+  assert.equal(signal.live(), 0);
+});
+
 // Fires only the AckWaiter's 1 s retry back-off (on a microtask); every other
 // timer — the ack timeout — never fires, same shape as the command node's
 // retry harness.
