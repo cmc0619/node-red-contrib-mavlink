@@ -1057,6 +1057,27 @@ test('a member whose launch rejects is recorded failed, never dropped from the a
   assert.equal(result.members.find((m) => m.sysid === 1).result, 'sent');
 });
 
+test('a launch rejection carrying no Error still records the member failed (§2)', async () => {
+  // A payload getter can throw any value. A null reason must not crash the
+  // recording arm itself — that would resurrect the very hole the arm closes,
+  // and a one-member run would aggregate as success over an empty record set.
+  const connection = connectionStub([peer(1)]);
+
+  const result = await executeFanout({ selection: { mode: 'all' },
+    connection,
+    message: commandThrowingOnSpread(1, null),
+    mode: 'sequential',
+    delivery: 'send',
+    concurrency: 2,
+    intervalMs: 0,
+  });
+
+  assert.equal(result.success, false, 'a null-reason crater must not report success');
+  assert.equal(result.members.length, 1, 'the member is a record, not a hole');
+  assert.equal(result.members[0].result, 'failed');
+  assert.equal(result.members[0].detail, 'null', 'the reason is written down, not dereferenced');
+});
+
 test('stop-on-error still fires when the failure is a launch rejection (concurrency > 1)', async () => {
   // The dropped record was also invisible to anyFailed(), so stop-on-error
   // never halted later launches after a rejected member.
@@ -1579,7 +1600,7 @@ function builtSetpoint(overrides = {}) {
 // order, so member N's executeMember rejects before its own try/catch — the
 // only rejection surface the launch loop can see. Built runtime payload is
 // exactly this trusted-not-vetted input (§0).
-function commandThrowingOnSpread(memberOrdinal) {
+function commandThrowingOnSpread(memberOrdinal, reason = new Error('control band saturated')) {
   let spreads = 0;
   const fields = {
     target_system: 0,
@@ -1592,7 +1613,7 @@ function commandThrowingOnSpread(memberOrdinal) {
     enumerable: true,
     get() {
       spreads += 1;
-      if (spreads === memberOrdinal) throw new Error('control band saturated');
+      if (spreads === memberOrdinal) throw reason;
       return 0;
     },
   });
