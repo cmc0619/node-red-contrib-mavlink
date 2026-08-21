@@ -11,9 +11,7 @@
   // The runtime trusts this: a half-configured remote never deploys, so the
   // UDP send path treats any missing half as no destination and drops quietly.
   function remotePairReason(v, other) {
-    var mine = String(v == null ? '' : v).trim();
-    var theirs = String(other == null ? '' : other).trim();
-    if ((mine === '') === (theirs === '')) return true;
+    if (RED.mavlink.isBlank(v) === RED.mavlink.isBlank(other)) return true;
     return 'Remote host and port are a pair — set both or neither';
   }
 
@@ -25,7 +23,7 @@
   // then either saved spelling.
   function signingSiblingPresent(node, selector, valueKey, hasKey) {
     var $f = RED.mavlink.ownDialogField(node, selector);
-    if ($f) return String($f.val() == null ? '' : $f.val()).trim().length > 0;
+    if ($f) return !RED.mavlink.isBlank($f.val());
     var creds = node.credentials || {};
     var v = creds[valueKey];
     if (v === undefined) v = creds[hasKey];
@@ -49,13 +47,13 @@
       bindHost: { value: '0.0.0.0', validate: function (v, _opt) {
         var mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode === 'serial') return true;
-        if (String(v == null ? '' : v).trim().length > 0) return true;
+        if (!RED.mavlink.isBlank(v)) return true;
         return 'bind host is required — 0.0.0.0 means all interfaces';
       } },
       bindPort: { value: 14550, validate: function (v, opt) {
         var mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode === 'serial') return true;
-        if (String(v == null ? '' : v).trim() === '') return 'bind port is required for UDP/TCP';
+        if (RED.mavlink.isBlank(v)) return 'bind port is required for UDP/TCP';
         return RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
       } },
       // Sibling reads go through ownDialogField, not `live || saved` (the
@@ -90,7 +88,7 @@
       serialPath: { value: '', validate: function (v) {
         var mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode !== 'serial') return true;
-        return String(v == null ? '' : v).trim().length > 0;
+        return !RED.mavlink.isBlank(v);
       } },
       // The runtime opens the port at this rate as saved (§0) — the editor
       // owns the 57600 default and the positive-integer ring.
@@ -110,7 +108,7 @@
       acceptInvalid: { value: false },
       // The signature block carries the link id as one byte on the wire.
       linkId: { value: 0, validate: function (v, _opt) {
-        var n = String(v == null ? '' : v).trim() === '' ? NaN : Number(v);
+        var n = RED.mavlink.isBlank(v) ? NaN : Number(v);
         if (Number.isInteger(n) && n >= 0 && n <= 255) return true;
         return 'the signing link id is a byte — 0 to 255';
       } },
@@ -127,7 +125,7 @@
       signingPassphrase: {
         type: 'password',
         validate: function (v, _opt) {
-          if (String(v == null ? '' : v).trim() === '') return true;
+          if (RED.mavlink.isBlank(v)) return true;
           if (signingSiblingPresent(this, '#node-config-input-signingKeyHex',
             'signingKeyHex', 'has_signingKeyHex')) {
             return 'cannot be set alongside a raw key — clear one; the connection '
@@ -146,8 +144,8 @@
          * Two args so the reason renders (§14).
          */
         validate: function (v, _opt) {
-          var val = String(v == null ? '' : v).trim();
-          if (val === '') return true;
+          if (RED.mavlink.isBlank(v)) return true;
+          var val = String(v).trim();
           if (!/^[0-9a-fA-F]{64}$/.test(val)) {
             return 'must be exactly 64 hex characters (a raw 32-byte key)';
           }
