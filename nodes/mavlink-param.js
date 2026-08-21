@@ -398,7 +398,10 @@ module.exports = function registerMavlinkParam(RED) {
               if (isConfirmSet && attempt < PARAM_SET_ATTEMPTS) {
                 attempt += 1;
                 applyActionStatus(node, 'sending', `resend ${attempt}/${PARAM_SET_ATTEMPTS} ${request.paramId}\u2026`);
-                send([null, statusRecord('progress', `resend ${attempt}/${PARAM_SET_ATTEMPTS}`)]);
+                send([null, makeStatusRecord(node.type, {
+                  result: 'progress',
+                  detail: `resend ${attempt}/${PARAM_SET_ATTEMPTS}`,
+                })]);
                 try {
                   connNode.send(message, { band: BAND.CONTROL, target: request.target, identityId });
                 } catch (err) {
@@ -438,8 +441,11 @@ module.exports = function registerMavlinkParam(RED) {
               refillRounds += 1;
               const batch = missing.slice(0, PARAM_LIST_REFILL_BATCH);
               applyActionStatus(node, 'sending', `refill ${missing.length} missing\u2026`);
-              send([null, statusRecord('progress',
-                `re-requesting ${batch.length} of ${missing.length} missing`, { round: refillRounds })]);
+              send([null, makeStatusRecord(node.type, {
+                result: 'progress',
+                detail: `re-requesting ${batch.length} of ${missing.length} missing`,
+                round: refillRounds,
+              })]);
               for (const paramIndex of batch) {
                 try {
                   connNode.send(
@@ -547,26 +553,16 @@ function capabilitiesFromPeer(connectionNode, target) {
 
 function completeBuild(node, send, message) {
   applyActionStatus(node, 'ok', 'built param');
-  send([{ payload: message }, statusRecord('succeeded', 'built', { message })]);
+  send([{ payload: message }, makeStatusRecord(node.type, { result: 'succeeded', detail: 'built', message })]);
 }
 
 function completeResult(node, send, result, detail, payload, extra) {
   applyActionStatus(node, 'ok', detail);
-  send([{ payload }, statusRecord(result, detail, { payload, ...extra })]);
+  send([{ payload }, makeStatusRecord(node.type, { result, detail, payload, ...extra })]);
 }
 
 function timeoutResult(node, send, detail, done, extra) {
   applyActionStatus(node, 'error', detail);
-  send([null, statusRecord('timed-out', detail, extra)]);
+  send([null, makeStatusRecord(node.type, { result: 'timed-out', detail, ...extra })]);
   done();
-}
-
-/**
- * @param {string} result
- * @param {string} detail
- * @param {object} [extra]
- * @returns {object} status record for output 1
- */
-function statusRecord(result, detail, extra = {}) {
-  return makeStatusRecord({ node: 'mavlink-param', result, detail, ...extra });
 }

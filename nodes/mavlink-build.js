@@ -32,7 +32,6 @@
 
 const { encodeMessage } = require('../lib/codec');
 const {
-  TIER,
   makeStatusRecord,
   shouldSuppress,
   applyActionStatus,
@@ -61,7 +60,7 @@ module.exports = function registerMavlinkBuild(RED) {
     // was never transmitted, which is the degrade §9 forbids everywhere else.
     // A Send with no Connection is a misconfiguration; it says so at deploy and
     // fails loud per message. Membership is judged per-run (§14 selection-typo
-    // cluster, the Move/Mission shape): `tier === TIER.BUILD` was the only
+    // cluster, the Move/Mission shape): `tier === 'build'` was the only
     // gate, so an unknown token — a typo'd hand-edit of 'build' included —
     // fell through to the Send side and put a real frame on the wire the
     // operator asked only to construct. Blank throws too: the editor's select
@@ -71,7 +70,7 @@ module.exports = function registerMavlinkBuild(RED) {
     // refusal at the configured rate (Gitar, #310) — the exact behavior the
     // timer's messageMeta guard already promises to avoid.
     const tier = config.tier;
-    const tierKnown = tier === TIER.BUILD || tier === TIER.SEND;
+    const tierKnown = tier === 'build' || tier === 'send';
 
     // No `|| 'HEARTBEAT'`: an absent name leaves messageMeta null, which
     // badges the node invalid at deploy and fails loud on input. Building a
@@ -102,7 +101,7 @@ module.exports = function registerMavlinkBuild(RED) {
     // Null when any rung fails to resolve — badged below, refused per message.
     /** @type {import('../lib/metadata').DialectBundle|null} */
     let bundle;
-    if (tier === TIER.BUILD) {
+    if (tier === 'build') {
       if (config.dialect === '__vehicle') {
         bundle = dialectFromVehicleId(RED, config.vehicle);
       } else {
@@ -118,7 +117,7 @@ module.exports = function registerMavlinkBuild(RED) {
     // draws that as a red triangle on the node body, and the status line is for
     // external verdicts only. A wire tier whose Connection did not resolve is
     // one of those: no transport, the same badge every other sender publishes.
-    applyConnectionStatus(node, tier !== TIER.BUILD, connectionNode);
+    applyConnectionStatus(node, tier !== 'build', connectionNode);
 
     /**
      * Core action: merge fields, encode, and emit based on the tier.
@@ -138,12 +137,10 @@ module.exports = function registerMavlinkBuild(RED) {
        */
       function failRun(err, extra = {}) {
         applyActionStatus(node, 'error', err.message);
-        node.send([null, makeStatusRecord({
-          node: node.type,
+        node.send([null, makeStatusRecord(node.type, {
           result: 'failed',
           detail: err.message,
           message: messageName,
-          timestamp: Date.now(),
           ...extra,
         })]);
         if (triggerMsg) {
@@ -208,16 +205,15 @@ module.exports = function registerMavlinkBuild(RED) {
       const builtMessage = { name: messageName, fields: encodedFields };
 
       switch (tier) {
-      case TIER.BUILD: {
+      case 'build': {
         // Build tier: emit the message on output 0 for downstream processing.
         const outMsg = triggerMsg ? { ...triggerMsg } : {};
-        outMsg.payload = { message: builtMessage, messageName, tier: TIER.BUILD };
+        outMsg.payload = { message: builtMessage, messageName, tier: 'build' };
 
-        const sr = makeStatusRecord({
+        const sr = makeStatusRecord(node.type, {
           result: 'built',
           message: messageName,
-          tier: TIER.BUILD,
-          timestamp: Date.now(),
+          tier: 'build',
         });
         applyActionStatus(node, 'ok', messageName);
         node.send([outMsg, sr]);
@@ -240,7 +236,7 @@ module.exports = function registerMavlinkBuild(RED) {
       try {
         connectionNode.send(builtMessage, { band, target, identityId });
       } catch (err) {
-        return failRun(new Error(`send: ${err.message}`), { tier: TIER.SEND, band });
+        return failRun(new Error(`send: ${err.message}`), { tier: 'send', band });
       }
 
       // Track achieved rate.
@@ -257,14 +253,13 @@ module.exports = function registerMavlinkBuild(RED) {
       // upstream trigger, so it emits the fire-and-forget result instead.
       const outMsg = triggerMsg
         ? { ...triggerMsg }
-        : { payload: { result: 'sent', messageName, tier: TIER.SEND } };
+        : { payload: { result: 'sent', messageName, tier: 'send' } };
 
-      const sr = makeStatusRecord({
+      const sr = makeStatusRecord(node.type, {
         result: 'sent',
         message: messageName,
-        tier: TIER.SEND,
+        tier: 'send',
         band,
-        timestamp: now,
       });
 
       applyActionStatus(node, 'ok', repeatMs > 0

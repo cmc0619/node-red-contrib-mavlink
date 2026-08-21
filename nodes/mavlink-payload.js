@@ -8,8 +8,10 @@ const {
 const { BAND } = require('../lib/connection/bands');
 const {
   AckWaiter,
+  sendFnFor,
+  cancelSlot,
   resolveFrame,
-  carrierWantedBy,
+  runWithCarrierSwap,
   DEFAULT_TIMEOUT_MS,
   DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
@@ -53,18 +55,11 @@ module.exports = function registerMavlinkPayload(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    // At most one COMMAND_ACK wait in flight per node.
-    let activeWaiter = null;
+    // At most one COMMAND_ACK wait in flight per node (lib/command cancelSlot).
+    const waiterSlot = cancelSlot();
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
     applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
-
-    function cancelWaiter() {
-      if (activeWaiter) {
-        activeWaiter.cancel();
-        activeWaiter = null;
-      }
-    }
 
     node.on('input', (msg, send, done) => {
       try {
@@ -111,77 +106,80 @@ module.exports = function registerMavlinkPayload(RED) {
         const builtCmd = buildFor(carrierChosen);
 
         /**
-         * Send a command-backed verb and wait for its COMMAND_ACK, resending once
-         * in the other carrier if the vehicle answers COMMAND_INT_ONLY (8) or
-         * COMMAND_LONG_ONLY (7) — §9 "resend in the other form", the same rule
-         * mavlink-command follows, via the same `carrierWantedBy`.
+         * Send a command-backed verb and wait for its COMMAND_ACK under the §9
+         * wrong-carrier rule (lib/command runWithCarrierSwap) — the same owner
+         * mavlink-command runs through: at most one swap per message, and a
+         * second wrong-carrier ack (the same code again or a contradictory
+         * one) fails loud rather than ping-ponging.
          *
          * This matters more than it looks: the editor shows the Carrier control
          * only for a verb whose command carries a location (gimbal ROI-set), and
          * pins the other 13 command verbs to COMMAND_INT. An operator has no way
          * to pick LONG for those, so on a LONG-only vehicle the swap is the only
          * thing standing between them and a flat refusal.
-         *
-         * At most one swap per message. A second wrong-carrier ack — the same code
-         * again or a contradictory one — fails loud rather than ping-ponging.
          */
-        function awaitAck(built, carrierUsed, swapped) {
-          applyActionStatus(node, 'sending', `${built.message.name}…`);
-          cancelWaiter();
-          const waiter = new AckWaiter({
-            subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
-            sendFn: (confirmation) => {
+        async function awaitAck(firstBuilt) {
+          // The recipe rendered for the attempt in flight; a swap re-renders it
+          // through buildFor, so the final attempt's shape reports the outcome.
+          let built = firstBuilt;
+
+          /** One AckWaiter transaction for the currently rendered recipe. */
+          async function runWaiter() {
+            applyActionStatus(node, 'sending', `${built.message.name}…`);
+            waiterSlot.cancel();
+            const waiter = new AckWaiter({
+              subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
               // Only the LONG carrier has a confirmation byte; COMMAND_INT must
-              // not grow one on retries (§9).
-              const fields = built.message.name === 'COMMAND_LONG'
-                ? { ...built.message.fields, confirmation }
-                : built.message.fields;
-              connectionNode.send(
-                { name: built.message.name, fields },
-                { band: BAND.CONTROL, target, identityId }
+              // not grow one on retries (§9, lib/command sendFnFor).
+              sendFn: sendFnFor(connectionNode, built.message, { band: BAND.CONTROL, target, identityId }),
+              commandId: built.message.fields.command,
+              targetSystem: target.sysid,
+              targetComponent: target.compid,
+              // Ack attribution (§9): ignore an ack explicitly addressed to a
+              // different GCS on a shared link.
+              sourceIds: connectionNode.resolveSourceIds(identityId),
+              timeoutMs,
+              maxRetries,
+            });
+            waiterSlot.active = waiter;
+            try {
+              return await waiter.start();
+            } finally {
+              waiterSlot.release(waiter);
+            }
+          }
+
+          const swap = await runWithCarrierSwap({
+            carrier: carrierChosen,
+            run: (carrier) => {
+              if (carrier !== carrierChosen) built = buildFor(carrier);
+              return runWaiter();
+            },
+            onSwap: (outcome, _from, to) => {
+              node.warn(
+                `mavlink-payload: ${built.message.name} rejected as ` +
+                  `${outcome.result} — resending as COMMAND_${to.toUpperCase()} ` +
+                  '(§9 carrier swap)'
               );
             },
-            commandId: built.message.fields.command,
-            targetSystem: target.sysid,
-            targetComponent: target.compid,
-            // Ack attribution (§9): ignore an ack explicitly addressed to a
-            // different GCS on a shared link.
-            sourceIds: connectionNode.resolveSourceIds(identityId),
-            timeoutMs,
-            maxRetries,
           });
-          activeWaiter = waiter;
-          waiter
-            .start()
-            .then((outcome) => {
-              if (activeWaiter === waiter) activeWaiter = null;
-              const wanted = carrierWantedBy(outcome.resultCode);
-              if (wanted && wanted !== carrierUsed && !swapped) {
-                node.warn(
-                  `mavlink-payload: ${built.message.name} rejected as ` +
-                    `${outcome.result} — resending as COMMAND_${wanted.toUpperCase()} ` +
-                    '(§9 carrier swap)'
-                );
-                awaitAck(buildFor(wanted), wanted, true);
-                return;
-              }
-              if (outcome.result === 'cancelled') {
-                // A redeploy cancelled the wait (see the close handler). Finish
-                // quietly on a node that is going away — raising here would
-                // trip a Catch node wired for "payload failed → failsafe" on a
-                // mere deploy, the rule mavlink-mission already follows.
-                done();
-              } else if (outcome.result === 'accepted') {
-                completeAck(node, send, built, outcome);
-                done();
-              } else {
-                failAck(node, send, built, outcome, msg, done);
-              }
-            })
-            .catch((err) => {
-              if (activeWaiter === waiter) activeWaiter = null;
-              failInput(node, send, err, done);
-            });
+          const outcome = swap.outcome;
+          if (outcome.result === 'cancelled') {
+            // A redeploy cancelled the wait (see the close handler). Finish
+            // quietly on a node that is going away — raising here would
+            // trip a Catch node wired for "payload failed → failsafe" on a
+            // mere deploy, the rule mavlink-mission already follows.
+            done();
+          } else if (swap.wrongCarrier) {
+            // No carrier satisfies the vehicle — fail loud with the swap
+            // owner's verdict as the detail (§9 user requirement).
+            failAck(node, send, built, { ...outcome, detail: swap.wrongCarrier }, msg, done);
+          } else if (outcome.result === 'accepted') {
+            completeAck(node, send, built, outcome);
+            done();
+          } else {
+            failAck(node, send, built, outcome, msg, done);
+          }
         }
 
         // Affirmative dispatch on the tier (§5): a non-member matches no case,
@@ -198,7 +196,7 @@ module.exports = function registerMavlinkPayload(RED) {
             // timeout can halt the chain (§9). Gimbal-manager setpoints carry
             // no acknowledgement, so they fall through and send unconfirmed.
             if (builtCmd.confirmation === 'command_ack') {
-              awaitAck(builtCmd, carrierChosen);
+              awaitAck(builtCmd).catch((err) => failInput(node, send, err, done));
               return;
             }
             // falls through
@@ -217,7 +215,7 @@ module.exports = function registerMavlinkPayload(RED) {
     });
 
     node.on('close', (done) => {
-      cancelWaiter();
+      waiterSlot.cancel();
       done();
     });
   }
@@ -324,7 +322,9 @@ function completeAck(node, send, built, outcome) {
   applyActionStatus(node, 'ok', `ack ${built.message.name}`);
   send([
     { payload: { result: 'succeeded', message: built.message } },
-    statusRecord('succeeded', 'command-ack accepted', {
+    makeStatusRecord(node.type, {
+      result: 'succeeded',
+      detail: 'command-ack accepted',
       confirmation: built.confirmation,
       resultCode: outcome.resultCode,
       resultParam2: outcome.resultParam2,
@@ -339,7 +339,9 @@ function failAck(node, send, built, outcome, msg, done) {
   applyActionStatus(node, 'error', `${built.message.name} ${outcome.result}`);
   send([
     null,
-    statusRecord(outcome.result, outcome.detail, {
+    makeStatusRecord(node.type, {
+      result: outcome.result,
+      detail: outcome.detail,
       confirmation: built.confirmation,
       resultCode: outcome.resultCode,
       resultParam2: outcome.resultParam2,
@@ -355,7 +357,7 @@ function completeBuild(node, send, built) {
   applyActionStatus(node, 'ok', 'built payload');
   send([
     { payload: built.message },
-    statusRecord('succeeded', 'built', { confirmation: built.confirmation }),
+    makeStatusRecord(node.type, { result: 'succeeded', detail: 'built', confirmation: built.confirmation }),
   ]);
 }
 
@@ -363,10 +365,6 @@ function completeResult(node, send, result, detail, built) {
   applyActionStatus(node, 'ok', detail);
   send([
     { payload: { result, message: built.message } },
-    statusRecord(result, detail, { confirmation: built.confirmation }),
+    makeStatusRecord(node.type, { result, detail, confirmation: built.confirmation }),
   ]);
-}
-
-function statusRecord(result, detail, extra = {}) {
-  return makeStatusRecord({ node: 'mavlink-payload', result, detail, ...extra });
 }

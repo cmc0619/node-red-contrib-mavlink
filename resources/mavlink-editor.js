@@ -208,6 +208,21 @@
   };
 
   /**
+   * The dialect's boolean spellings — `TRUE` / `*_TRUE` and the FALSE twin.
+   * One private pair for the three readers (`booleanEntryLabel`,
+   * `booleanEnumInput`, `isFalseTrueEnum`); the suffix lengths were spelled
+   * out at each site and are exactly the kind of pair that drifts.
+   * @param {string} name
+   * @returns {boolean}
+   */
+  function isTrueName(name) {
+    return name === 'TRUE' || name.slice(-5) === '_TRUE';
+  }
+  function isFalseName(name) {
+    return name === 'FALSE' || name.slice(-6) === '_FALSE';
+  }
+
+  /**
    * Display label for a FALSE/TRUE enum entry (`false` / `true`); otherwise
    * the entry's catalog label or name.
    * @param {{name?: string, label?: string}} entry
@@ -215,8 +230,8 @@
    */
   RED.mavlink.booleanEntryLabel = function (entry) {
     const name = entry && entry.name ? entry.name : '';
-    if (name === 'FALSE' || name.slice(-6) === '_FALSE') return 'false';
-    if (name === 'TRUE' || name.slice(-5) === '_TRUE') return 'true';
+    if (isFalseName(name)) return 'false';
+    if (isTrueName(name)) return 'true';
     return (entry && entry.label) || name;
   };
 
@@ -244,7 +259,7 @@
       let trueEntry = null;
       for (let i = 0; i < entries.length; i++) {
         const name = entries[i] && entries[i].name ? entries[i].name : '';
-        if (name === 'TRUE' || name.slice(-5) === '_TRUE') trueEntry = entries[i];
+        if (isTrueName(name)) trueEntry = entries[i];
       }
       trueValue = trueEntry ? String(trueEntry.value) : '1';
     }
@@ -427,6 +442,125 @@
   };
 
   /**
+   * A labelled dialog form row, the shape every dynamic param/field form
+   * appends. The control's `title` (the dialect description) is mirrored onto
+   * the label so hovering either half shows it.
+   *
+   * @param {string} label
+   * @param {object} control  jQuery control
+   * @param {object} [opts]
+   * @param {string} [opts.labelWidth='120px']  Build's field form uses 140px
+   * @returns {jQuery} the `.form-row` div
+   */
+  RED.mavlink.formRow = function (label, control, opts) {
+    opts = opts || {};
+    const row = $('<div class="form-row"></div>');
+    const tip = (control && control.attr) ? (control.attr('title') || '') : '';
+    const $lbl = $('<label></label>')
+      .css({ width: opts.labelWidth || '120px', display: 'inline-block' })
+      .text(label);
+    if (tip) $lbl.attr('title', tip);
+    return row.append($lbl).append(control);
+  };
+
+  /**
+   * The input control for one MAV_CMD param, from its dialect spec — the §6
+   * ladder shared by Command (Advanced and preset rows) and Build's
+   * COMMAND_LONG/INT param form: FALSE/TRUE enum → checkbox, `enum=` →
+   * pulldown (bitmask → multi-select), audited magic boolean → checkbox,
+   * anything else → number input carrying the XML range.
+   *
+   * Enum pulldowns carry no blank option. An unset command param resolves to
+   * 0, and where 0 is a real choice the dialect already enumerates it —
+   * MAV_ROI_NONE, PARACHUTE_DISABLE, FAILURE_TYPE_OK. So blank was either a
+   * second spelling of an entry that exists, or (ACCELCAL_VEHICLE_POS, which
+   * starts at 1) a way to send a value the enum does not define. Upstream
+   * marks genuinely unused params `Empty`/`reserved`, and isHiddenParam drops
+   * those before they reach a control.
+   *
+   * A saved enum value the current table lacks — a newer firmware's mode,
+   * Blimp's reserved 30, a dialect switch — must survive open-and-save, not
+   * deselect to null and resolve to 0 on the wire (Codex #198). The sentinel
+   * is applied here, unconditionally, so no caller can lose it again: Build's
+   * former copy of this ladder shipped without it.
+   *
+   * @param {object} spec  catalog param spec (index, enum, bitmask, ranges…)
+   * @param {Object<string, Array>} enums  dialect enum tables
+   * @param {object} opts
+   * @param {*} [opts.saved]  saved wire value
+   * @param {string} opts.className  the class the caller's collector scrapes
+   * @param {string} opts.attrName   the collector's key attribute
+   *   (`data-idx` for Command, `data-field` for Build)
+   * @param {string|number} opts.attrValue  its value (param index / wire field)
+   * @param {string} [opts.bitmaskKind='bitmask']  data-kind for bitmask
+   *   selects (`bitmask-mask` where the collector folds one numeric mask)
+   * @param {string|number} [opts.commandId]  MAV_CMD id, for the audited
+   *   magic-boolean table
+   * @param {?string} [opts.enumName=spec.enum]  enum table override (Command's
+   *   custom-mode resolution rides in here; the ladder itself stays curated-free)
+   * @returns {jQuery}
+   */
+  RED.mavlink.paramControl = function (spec, enums, opts) {
+    opts = opts || {};
+    const saved = opts.saved;
+    const enumName = opts.enumName !== undefined ? opts.enumName : spec.enum;
+    if (enumName && enums[enumName] && enums[enumName].length) {
+      const entries = enums[enumName];
+      if (RED.mavlink.isFalseTrueEnum(entries)) {
+        return RED.mavlink.booleanEnumInput(entries, {
+          saved: saved,
+          title: spec.description || '',
+          className: opts.className,
+        }).attr(opts.attrName, opts.attrValue);
+      }
+      const isBitmask = !!spec.bitmask;
+      const sel = $('<select></select>')
+        .addClass(opts.className)
+        .attr(opts.attrName, opts.attrValue)
+        .attr('data-kind', isBitmask ? (opts.bitmaskKind || 'bitmask') : 'enum')
+        .attr('title', isBitmask
+          ? RED.mavlink.bitmaskTitle(spec.description)
+          : (spec.description || ''));
+      if (isBitmask) {
+        sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
+      }
+      entries.forEach(function (entry) {
+        const $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
+        if (entry.description) $opt.attr('title', entry.description);
+        sel.append($opt);
+      });
+      if (isBitmask) {
+        sel.val(RED.mavlink.selectedBitmaskValues(saved, entries));
+      } else if (saved !== undefined && saved !== null && saved !== '') {
+        RED.mavlink.ensureSavedEnumOption(sel, String(saved));
+        sel.val(String(saved));
+      }
+      return sel;
+    }
+    // No enum, but upstream models this param as a magic number that is
+    // really on/off (DESIGN.md §14). Value from the audited table; label and
+    // hover text still come from the dialect.
+    const magic = RED.mavlink.magicBooleanValue(opts.commandId, spec.index);
+    if (magic !== null) {
+      return RED.mavlink.booleanEnumInput([], {
+        saved: saved,
+        trueValue: magic,
+        title: spec.description || '',
+        className: opts.className,
+      }).attr(opts.attrName, opts.attrValue);
+    }
+    const input = $('<input type="number">')
+      .addClass(opts.className)
+      .attr(opts.attrName, opts.attrValue)
+      .attr('title', spec.description || '')
+      .val(saved !== undefined && saved !== null ? saved : '');
+    if (spec.minValue !== null && spec.minValue !== undefined) input.attr('min', spec.minValue);
+    if (spec.maxValue !== null && spec.maxValue !== undefined) input.attr('max', spec.maxValue);
+    if (spec.increment !== null && spec.increment !== undefined) input.attr('step', spec.increment);
+    return input;
+  };
+
+  /**
    * Which bitmask option values are set in `saved` (numeric mask).
    * @param {string|number|null|undefined} saved
    * @param {Array<{value: string|number}>} entries
@@ -503,8 +637,8 @@
       // Require valued objects — never synthesize 0/1 for bare name strings.
       if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string') return false;
       const name = entry.name;
-      const isFalse = name === 'FALSE' || name.slice(-6) === '_FALSE';
-      const isTrue = name === 'TRUE' || name.slice(-5) === '_TRUE';
+      const isFalse = isFalseName(name);
+      const isTrue = isTrueName(name);
       if (!isFalse && !isTrue) return false;
       // Reject null/false/'' — Number(null)===0 would falsely match FALSE=0.
       const rawValue = entry.value;
@@ -564,64 +698,35 @@
 
   /**
    * Vehicle / dialect query for admin catalog routes (enums, field-tips, …).
-   * Catalog source follows the role × tier matrix (DESIGN.md §6): on Build
-   * tier the node's own Vehicle Profile / dialect fields govern; on wire tiers
-   * the connection's bound profile governs, because that dialect is what the
-   * wire will encode. Dialogs without a delivery field keep the
-   * connection-derived behaviour.
+   *
+   * A thin remainder over {@link RED.mavlink.resolveCatalogTarget}, which owns
+   * Build-tier detection (delivery vs Build's tier field, Codex #118) and the
+   * connection → vehicle → dialect walk — the two halves this function used to
+   * re-implement and keep in sync by hand. What stays here is what the
+   * resolver has no field for: the config-node dialog branch
+   * (`#node-config-input-dialect`, a selector no palette dialog carries) and
+   * the enum-names filter.
    *
    * @param {string[]|string} [names]  optional enum table filter for /mavlink/enums
    * @returns {Object<string, string>}
    */
   function currentEnumQuery(names) {
-    const query = {};
-    // Build-tier detection must match resolveCatalogTarget: most action nodes
-    // use `#node-input-delivery`, but mavlink-build uses `#node-input-tier`.
-    // Prefer delivery when that control exists; otherwise read tier (Codex #118).
-    const mode = $('#node-input-delivery').length
-      ? valueFromSelector('#node-input-delivery')
-      : valueFromSelector('#node-input-tier');
-    const buildTier = mode === 'build';
-    if (buildTier) {
-      const buildDialect = valueFromSelector('#node-input-dialect');
-      if (buildDialect && buildDialect !== '__vehicle') {
-        query.dialect = buildDialect;
-      } else if (buildDialect === '__vehicle') {
-        const buildVehicle = valueFromSelector('#node-input-vehicle');
-        if (buildVehicle) {
-          query.vehicle = buildVehicle;
-          const buildProfile = RED.nodes.node(buildVehicle);
-          if (buildProfile && buildProfile.dialect) query.dialect = buildProfile.dialect;
-        }
+    const target = RED.mavlink.resolveCatalogTarget();
+    let query = null;
+    if (!target.isBuild) {
+      // Config-node dialogs (Vehicle Profile): dialect lives on the config
+      // form, not on a Connection. It answers before the wire-tier connection
+      // result so /mavlink/enums is not called with {} (400 after empty-query
+      // rejection); on Build tier the node's own Dialect picker governs.
+      const configDialect = valueFromSelector('#node-config-input-dialect');
+      if (configDialect && configDialect !== '__vehicle') {
+        query = { dialect: configDialect };
       }
-      if (!query.dialect && !query.vehicle) return query;
-      addEnumNames(query, names);
-      return query;
     }
-
-    // Config-node dialogs (Vehicle Profile): dialect lives on the config form,
-    // not on a Connection. Must run before the wire-tier connection branch so
-    // /mavlink/enums is not called with {} (400 after empty-query rejection).
-    const configDialect = valueFromSelector('#node-config-input-dialect');
-    if (configDialect && configDialect !== '__vehicle') {
-      query.dialect = configDialect;
-      addEnumNames(query, names);
-      return query;
+    if (!query) {
+      if (!target.query) return {};
+      query = Object.assign({}, target.query);
     }
-
-    let vehicle = '';
-    let dialect = '';
-    const connection = valueFromSelector('#node-input-connection');
-    if (connection) {
-      const conn = RED.nodes.node(connection);
-      vehicle = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
-      const connProfile = vehicle ? RED.nodes.node(vehicle) : null;
-      if (connProfile && connProfile.dialect) dialect = connProfile.dialect;
-    }
-    if (!vehicle) return query;
-
-    if (vehicle) query.vehicle = vehicle;
-    if (dialect) query.dialect = dialect;
     addEnumNames(query, names);
     return query;
   }
@@ -662,7 +767,9 @@
    * @param {boolean} [opts.isBuild]  explicit Build-tier override; when omitted
    *   the delivery/tier selector value === 'build' decides.
    * @returns {{key: string, query: object|null, dialect: string, vehicleId: string,
-   *   firmware: string, vehicleFamily: string}}
+   *   firmware: string, vehicleFamily: string, isBuild: boolean}} `isBuild`
+   *   reports which branch answered, so thin remainders (`currentEnumQuery`'s
+   *   config-dialog fallback) need not re-detect the tier.
    */
   RED.mavlink.resolveCatalogTarget = function (opts) {
     opts = opts || {};
@@ -703,6 +810,7 @@
         vehicleId: '',
         firmware: '',
         vehicleFamily: '',
+        isBuild: isBuild,
       };
     }
 
@@ -724,6 +832,7 @@
         vehicleId: vehicleId,
         firmware: firmware,
         vehicleFamily: family,
+        isBuild: isBuild,
       };
     }
 
@@ -744,6 +853,7 @@
           vehicleId: '',
           firmware: firmwareVal,
           vehicleFamily: '',
+          isBuild: isBuild,
         };
       }
       const vehicleId = read('vehicle', vehicleSelector);

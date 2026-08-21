@@ -57,8 +57,7 @@ module.exports = function registerMavlinkState(RED) {
           applyActionStatus(node, 'ok', `${peers.length} peer(s)`);
           send([
             { payload: peers },
-            makeStatusRecord({
-              node: 'mavlink-state',
+            makeStatusRecord(node.type, {
               result: 'succeeded',
               detail: 'snapshot',
               count: peers.length,

@@ -81,11 +81,10 @@ module.exports = function registerMavlinkOut(RED) {
           identityId: msg.identityId || undefined,
         });
         applyActionStatus(node, 'ok', message.name);
-        send([msg, makeStatusRecord({
+        send([msg, makeStatusRecord(node.type, {
           result: 'sent',
           message: message.name,
           band,
-          timestamp: Date.now(),
         })]);
         done();
       } catch (err) {

@@ -41,12 +41,13 @@ const {
   buildParamArray,
   mergeParams,
   AckWaiter,
+  cancelSlot,
   checkCompletion,
   waitForCompletion,
   buildCommandLong,
   buildCommandInt,
   CARRIER,
-  carrierWantedBy,
+  runWithCarrierSwap,
   intCoordKinds,
   resolveFrame,
   DEFAULT_TIMEOUT_MS,
@@ -107,9 +108,10 @@ module.exports = function registerMavlinkCommand(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    // Active transaction trackers — at most one in flight per node.
-    let _activeWaiter = null;
-    let _activeCompletion = null;
+    // Active transaction trackers — at most one in flight per node
+    // (lib/command cancelSlot).
+    const waiterSlot = cancelSlot();
+    const completionSlot = cancelSlot();
     // Bumped by close and by each new input: a run that resumes from its ack
     // await into a stale generation was swept before it could record its
     // completion handle, and must not start (or keep) a live wait.
@@ -317,7 +319,7 @@ module.exports = function registerMavlinkCommand(RED) {
       const startMs = Date.now();
 
       function makeRecord(fields) {
-        return makeStatusRecord({
+        return makeStatusRecord(node.type, {
           command: commandName,
           commandId,
           target,
@@ -410,14 +412,8 @@ module.exports = function registerMavlinkCommand(RED) {
       async function confirmTier() {
         // ── Delivery: Confirm / Complete ────────────────────────────────────
         // Cancel any in-flight waiter for this node before starting a new one.
-        if (_activeWaiter) {
-          _activeWaiter.cancel();
-          _activeWaiter = null;
-        }
-        if (_activeCompletion) {
-          _activeCompletion.cancel();
-          _activeCompletion = null;
-        }
+        waiterSlot.cancel();
+        completionSlot.cancel();
         const myGen = ++_generation;
 
         applyActionStatus(node, 'sending', `${displayName}\u2026`);
@@ -468,58 +464,34 @@ module.exports = function registerMavlinkCommand(RED) {
               );
             },
           });
-          _activeWaiter = waiter;
+          waiterSlot.active = waiter;
           try {
             return await waiter.start();
           } finally {
-            if (_activeWaiter === waiter) _activeWaiter = null;
+            waiterSlot.release(waiter);
           }
         }
 
         // First attempt is the operator's configured carrier (§9): a required
-        // choice, so the wire format is stated intent — never a guess.
-        let carrier = configuredCarrier;
-        let ackOutcome = await runWaiter(carrier);
-
-        // ── Carrier auto-resend (§9 "resend in the other form") ─────────────
-        // At most ONE swap per transaction. When the vehicle acks INT_ONLY (8) or
-        // LONG_ONLY (7) it will only accept the other carrier: warn and resend
-        // once in that form. A second wrong-carrier ack (the same code again, or
-        // a contradictory one) is failed loudly — no further silent retry.
-        const wanted = carrierWantedBy(ackOutcome.resultCode);
-        if (wanted && wanted !== carrier) {
-          const from = carrier;
-          carrier = wanted;
-          node.warn(
-            `mavlink-command: ${displayName} rejected as ` +
-              `${RESULT_NAME[ackOutcome.resultCode]} — resending as ` +
-              `COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'} (§9 carrier swap)`
-          );
-          applyActionStatus(node, 'sending', `retry ${carrier === CARRIER.INT ? 'INT' : 'LONG'} ${displayName}\u2026`);
-          ackOutcome = await runWaiter(carrier);
-
-          // Second attempt is the last: a repeated wrong-carrier ack cannot be
-          // resolved by another swap, so fail loud (§9 user requirement).
-          if (carrierWantedBy(ackOutcome.resultCode) !== null) {
-            const rec = makeRecord({
-              result: RESULT_NAME[ackOutcome.resultCode],
-              resultCode: ackOutcome.resultCode,
-              resultParam2: ackOutcome.resultParam2,
-              confirmedBy: 'ack',
-              retries: ackOutcome.retries,
-              elapsed: Date.now() - startMs,
-              detail:
-                `carrier swap ${from}\u2192${carrier} still rejected as ` +
-                `${RESULT_NAME[ackOutcome.resultCode]} — no carrier satisfies the vehicle`,
-            });
-            applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
-            emitStatus(rec, send, false);
-            done();
-            return;
-          }
-        } else if (wanted) {
-          // The vehicle asked for the carrier we already sent — a contradiction we
-          // cannot resolve by swapping. Fail loud rather than loop (§9).
+        // choice, so the wire format is stated intent — never a guess. The
+        // wrong-carrier rule — at most ONE swap per transaction, a second
+        // wrong-carrier ack failed loudly — has one owner in lib/command
+        // (runWithCarrierSwap), shared with mavlink-payload.
+        const swap = await runWithCarrierSwap({
+          carrier: configuredCarrier,
+          run: runWaiter,
+          onSwap: (outcome, _from, to) => {
+            node.warn(
+              `mavlink-command: ${displayName} rejected as ` +
+                `${RESULT_NAME[outcome.resultCode]} — resending as ` +
+                `COMMAND_${to === CARRIER.INT ? 'INT' : 'LONG'} (§9 carrier swap)`
+            );
+            applyActionStatus(node, 'sending', `retry ${to === CARRIER.INT ? 'INT' : 'LONG'} ${displayName}\u2026`);
+          },
+        });
+        const carrier = swap.carrier;
+        const ackOutcome = swap.outcome;
+        if (swap.wrongCarrier) {
           const rec = makeRecord({
             result: RESULT_NAME[ackOutcome.resultCode],
             resultCode: ackOutcome.resultCode,
@@ -527,9 +499,7 @@ module.exports = function registerMavlinkCommand(RED) {
             confirmedBy: 'ack',
             retries: ackOutcome.retries,
             elapsed: Date.now() - startMs,
-            detail:
-              `vehicle demands COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'} ` +
-              `but that carrier was already sent`,
+            detail: swap.wrongCarrier,
           });
           applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
           emitStatus(rec, send, false);
@@ -537,7 +507,7 @@ module.exports = function registerMavlinkCommand(RED) {
           return;
         }
 
-        // A redeploy cancelled the wait (close() calls _activeWaiter.cancel()).
+        // A redeploy cancelled the wait (close() cancels the waiter slot).
         // The node is being torn down, so finish quietly: emitting or raising
         // here would trip a Catch node wired for "command failed → failsafe" on
         // a mere deploy, which is the same rule mavlink-mission already follows.
@@ -617,7 +587,7 @@ module.exports = function registerMavlinkCommand(RED) {
               timeoutMs: completionTimeoutMs,
             });
             if (myGen === _generation) {
-              _activeCompletion = completionWait;
+              completionSlot.active = completionWait;
             } else {
               // The ack settled and a close or new input ran in the same
               // synchronous stack: the sweep fired before this continuation
@@ -630,7 +600,7 @@ module.exports = function registerMavlinkCommand(RED) {
             try {
               compOutcome = await completionWait.promise;
             } finally {
-              if (_activeCompletion === completionWait) _activeCompletion = null;
+              completionSlot.release(completionWait);
             }
 
             // A redeploy cancelled the wait (close() calls the completion
@@ -721,14 +691,8 @@ module.exports = function registerMavlinkCommand(RED) {
 
     node.on('close', (done) => {
       _generation += 1;
-      if (_activeWaiter) {
-        _activeWaiter.cancel();
-        _activeWaiter = null;
-      }
-      if (_activeCompletion) {
-        _activeCompletion.cancel();
-        _activeCompletion = null;
-      }
+      waiterSlot.cancel();
+      completionSlot.cancel();
       done();
     });
   }

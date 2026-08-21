@@ -118,38 +118,13 @@
       var $type = $('#node-input-missionType');
       var $op   = $('#node-input-operation');
 
-      /**
-       * Read the effective firmware from the selected tier. Build concrete
-       * dialects use the Firmware field; Build's Vehicle Profile escape and
-       * wire tiers use their bound profile.
-       */
-      function getEffectiveFirmware() {
-        var delivery = $('#node-input-delivery').val() || 'confirm';
-        if (delivery === 'build') {
-          var dialect = $('#node-input-dialect').val() || '';
-          if (dialect && dialect !== '__vehicle') return $('#node-input-firmware').val() || '';
-          if (dialect !== '__vehicle') return '';
-          var vehicleId = $('#node-input-vehicle').val() || '';
-          if (vehicleId) {
-            var v = RED.nodes.node(vehicleId);
-            if (v && v.firmware) return v.firmware;
-          }
-          return '';
-        }
-        var connectionId = $('#node-input-connection').val() || '';
-        if (connectionId) {
-          var conn = RED.nodes.node(connectionId);
-          if (conn && conn.vehicle) {
-            var vNode = RED.nodes.node(conn.vehicle);
-            if (vNode && vNode.firmware) return vNode.firmware;
-          }
-        }
-        return '';
-      }
-
       function repopulateTypes() {
         var saved = $type.val();
-        var fw = getEffectiveFirmware();
+        // Effective firmware follows the shared catalog matrix (§6): the Build
+        // Firmware field on a concrete dialect, the Build Vehicle Profile
+        // escape's profile, or the connection's bound profile on wire tiers —
+        // frozen `vehicle` snapshots included (vehicleIdFrom).
+        var fw = RED.mavlink.resolveCatalogTarget().firmware;
         var list = TYPES_BY_FIRMWARE[fw] || TYPES_BY_FIRMWARE.custom;
         $type.empty();
         list.forEach(function (entry) {

@@ -17,7 +17,7 @@ const {
   frameForReference,
   deriveSteerMode,
 } = require('../lib/move');
-const { AckWaiter } = require('../lib/command');
+const { AckWaiter, sendFnFor, cancelSlot } = require('../lib/command');
 const { DEFAULT_MAX_RESENDS } = require('../lib/command/ack');
 const { BAND } = require('../lib/connection/bands');
 const { firstDefined, numberOr, resolveDeliveryContext, applyConnectionStatus } = require('../lib/addressing');
@@ -36,8 +36,8 @@ module.exports = function registerMavlinkMove(RED) {
     let streamKey = null;
     let releaseStream = null;
     // Reposition-carrier confirm transaction — at most one in flight per node,
-    // like the Command node's waiter (§9).
-    let activeWaiter = null;
+    // like the Command node's waiter (§9, lib/command cancelSlot).
+    const waiterSlot = cancelSlot();
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
     // Resolve the Vehicle Profile once, like the Connection (guideline:
@@ -75,25 +75,15 @@ module.exports = function registerMavlinkMove(RED) {
     // failure with its MAV_RESULT name, never silence; Move does no carrier
     // swap, because DO_REPOSITION is COMMAND_INT-only by spec and ArduPilot.
     async function confirmCommand(label, message, target, identityId, connectionNode, send, done, idempotent) {
-      if (activeWaiter) {
-        activeWaiter.cancel();
-        activeWaiter = null;
-      }
+      waiterSlot.cancel();
       applyActionStatus(node, 'sending', `${label}…`);
       const waiter = new AckWaiter({
         subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
         // The LONG carrier (Turn, Speed) stamps AckWaiter's retry counter into
         // the confirmation byte on every re-send, per the encoder's own
-        // contract (lib/command/ack.js) and matching mavlink-command. This
-        // closed over the pre-built message and re-sent confirmation 0 while
-        // the path served only reposition — COMMAND_INT has no such byte, so
+        // contract (lib/command sendFnFor); COMMAND_INT has no such byte, so
         // the INT carrier still sends the message as built.
-        sendFn: (confirmation) => connectionNode.send(
-          message.name === 'COMMAND_LONG'
-            ? { ...message, fields: { ...message.fields, confirmation } }
-            : message,
-          { band: BAND.CONTROL, target, identityId }
-        ),
+        sendFn: sendFnFor(connectionNode, message, { band: BAND.CONTROL, target, identityId }),
         commandId: message.fields.command,
         targetSystem: target.sysid,
         targetComponent: target.compid,
@@ -124,12 +114,12 @@ module.exports = function registerMavlinkMove(RED) {
           applyActionStatus(node, 'sending', progress === null ? `${label}…` : `${label} ${progress}%…`);
         },
       });
-      activeWaiter = waiter;
+      waiterSlot.active = waiter;
       let outcome;
       try {
         outcome = await waiter.start();
       } finally {
-        if (activeWaiter === waiter) activeWaiter = null;
+        waiterSlot.release(waiter);
       }
       if (outcome.result === 'cancelled') {
         // A redeploy cancelled the wait (close() below): the node is being
@@ -155,7 +145,9 @@ module.exports = function registerMavlinkMove(RED) {
         // reports exactly what the Command node reports: unconfirmed, with
         // nothing having confirmed it. Same word, same meaning, same machinery.
         applyActionStatus(node, 'error', `${label} unconfirmed`);
-        send([null, statusRecord('unconfirmed', outcome.detail, { ...shared, confirmedBy: 'none' })]);
+        send([null, makeStatusRecord(node.type, {
+          result: 'unconfirmed', detail: outcome.detail, ...shared, confirmedBy: 'none',
+        })]);
         done();
         return;
       }
@@ -164,7 +156,9 @@ module.exports = function registerMavlinkMove(RED) {
       // through verbatim like mavlink-command's, because it is the same
       // AckWaiter outcome. One vocabulary, no translation layer to drift.
       applyActionStatus(node, 'error', `${label} ${outcome.result}`);
-      send([null, statusRecord(outcome.result, outcome.detail, { ...shared, confirmedBy: 'ack' })]);
+      send([null, makeStatusRecord(node.type, {
+        result: outcome.result, detail: outcome.detail, ...shared, confirmedBy: 'ack',
+      })]);
       done();
     }
 
@@ -316,7 +310,9 @@ module.exports = function registerMavlinkMove(RED) {
                 // that started the stream completed long ago, same as expiry.
                 onSendError: (err) => {
                   applyActionStatus(node, 'error', err.message);
-                  node.send([null, statusRecord('failed', `setpoint send failed: ${err.message}`)]);
+                  node.send([null, makeStatusRecord(node.type, {
+                    result: 'failed', detail: `setpoint send failed: ${err.message}`,
+                  })]);
                 },
                 // First success after a failed streak restores the badge the
                 // stream started with. No record — recovery is the absence of
@@ -478,10 +474,7 @@ module.exports = function registerMavlinkMove(RED) {
     node.on('close', (done) => {
       // An in-flight reposition confirm resolves 'cancelled' and finishes
       // quietly — a redeploy is not a failed command.
-      if (activeWaiter) {
-        activeWaiter.cancel();
-        activeWaiter = null;
-      }
+      waiterSlot.cancel();
       // Close is an end of control, so it brakes — but the brake is the last
       // thing this node ever sends, and a dead link at teardown must not stop
       // the teardown (the firmware's setpoint watchdog covers the vehicle).
@@ -593,7 +586,7 @@ function setpointFor(action, payload, config, target, vehicleAtDeploy, connectio
 
 function completeBuild(node, send, message) {
   applyActionStatus(node, 'ok', 'built move');
-  send([{ payload: message }, statusRecord('built', null, { message })]);
+  send([{ payload: message }, makeStatusRecord(node.type, { result: 'built', detail: null, message })]);
 }
 
 /**
@@ -619,7 +612,7 @@ function completeBuild(node, send, message) {
  */
 function completeResult(node, send, result, detail, fields) {
   applyActionStatus(node, 'ok', detail || result);
-  send([{ payload: { result, ...fields } }, statusRecord(result, detail, fields)]);
+  send([{ payload: { result, ...fields } }, makeStatusRecord(node.type, { result, detail, ...fields })]);
 }
 
 /**
@@ -647,11 +640,7 @@ function completeExpiry(node, message, sent, brakeError) {
   // failure rides its own field instead.
   const extra = { message, sent };
   if (brakeError) extra.brakeError = brakeError.message;
-  node.send([null, statusRecord('expired', null, extra)]);
-}
-
-function statusRecord(result, detail, extra = {}) {
-  return makeStatusRecord({ node: 'mavlink-move', result, detail, ...extra });
+  node.send([null, makeStatusRecord(node.type, { result: 'expired', detail: null, ...extra })]);
 }
 
 /**

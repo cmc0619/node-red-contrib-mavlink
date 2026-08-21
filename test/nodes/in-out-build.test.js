@@ -17,7 +17,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { TIER, shouldSuppress } = require('../../lib/delivery');
+const { shouldSuppress } = require('../../lib/delivery');
 
 // ---------------------------------------------------------------------------
 // RED stub
@@ -974,7 +974,7 @@ test('mavlink-out: unwraps Build-tier envelope from mavlink-build', () => {
   const envelope = {
     message: { name: 'HEARTBEAT', fields: { type: 6 } },
     messageName: 'HEARTBEAT',
-    tier: TIER.BUILD,
+    tier: 'build',
   };
   node._input({ payload: envelope });
 
@@ -1160,7 +1160,7 @@ test('mavlink-build Build tier: output 0 carries the built message envelope', ()
   assert.ok(out0, 'output 0 must fire');
   assert.ok(out0.payload, 'output 0 must carry a payload');
   assert.equal(out0.payload.messageName, 'HEARTBEAT');
-  assert.equal(out0.payload.tier, TIER.BUILD);
+  assert.equal(out0.payload.tier, 'build');
   assert.ok(out0.payload.message, 'payload.message must be present');
   assert.equal(out0.payload.message.name, 'HEARTBEAT');
   assert.deepEqual(out0.payload.message.fields, { type: 6, autopilot: 3 });
@@ -1540,7 +1540,7 @@ test('mavlink-build Build tier: plain dialect config loads bundled dialect witho
   const [out0, out1] = node._sends[0];
   assert.ok(out0, 'output 0 must fire');
   assert.equal(out0.payload.messageName, 'HEARTBEAT');
-  assert.equal(out0.payload.tier, TIER.BUILD);
+  assert.equal(out0.payload.tier, 'build');
   assert.ok(out0.payload.message, 'payload.message must be present');
   assert.equal(out0.payload.message.name, 'HEARTBEAT');
   assert.equal(out1.result, 'built');

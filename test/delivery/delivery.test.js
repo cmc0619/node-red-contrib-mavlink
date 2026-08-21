@@ -4,17 +4,15 @@
  * Tests for lib/delivery — the shared chain-model helpers (DESIGN.md §9).
  *
  * Coverage:
- *   - makeStatusRecord: plain object shape and field preservation
+ *   - makeStatusRecord: plain object shape, node stamping, field preservation
  *   - shouldSuppress: exact `=== false` semantics
  *   - capBadge: length capping, ellipsis, exactly-24 pass-through
- *   - TIER constants: values are stable strings
  */
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  TIER,
   BADGE_MAX,
   makeStatusRecord,
   shouldSuppress,
@@ -25,26 +23,27 @@ const {
 // makeStatusRecord
 // ---------------------------------------------------------------------------
 
-test('makeStatusRecord: returns a plain object with the provided fields', () => {
-  const sr = makeStatusRecord({ result: 'ok', reason: 'accepted' });
-  assert.deepEqual(sr, { result: 'ok', reason: 'accepted' });
+test('makeStatusRecord: returns a plain object stamping node plus the provided fields', () => {
+  const sr = makeStatusRecord('mavlink-out', { result: 'ok', reason: 'accepted' });
+  assert.deepEqual(sr, { node: 'mavlink-out', result: 'ok', reason: 'accepted' });
 });
 
 test('makeStatusRecord: preserves all provided fields', () => {
-  const sr = makeStatusRecord({ result: 'failed', reason: 'timeout', retries: 3 });
+  const sr = makeStatusRecord('mavlink-out', { result: 'failed', reason: 'timeout', retries: 3 });
+  assert.equal(sr.node, 'mavlink-out');
   assert.equal(sr.result, 'failed');
   assert.equal(sr.reason, 'timeout');
   assert.equal(sr.retries, 3);
 });
 
-test('makeStatusRecord: contains only the provided keys', () => {
-  const sr = makeStatusRecord({ result: 'ok' });
-  assert.deepEqual(Object.keys(sr), ['result']);
+test('makeStatusRecord: contains only node plus the provided keys', () => {
+  const sr = makeStatusRecord('mavlink-out', { result: 'ok' });
+  assert.deepEqual(Object.keys(sr), ['node', 'result']);
 });
 
 test('makeStatusRecord: two calls produce independent objects', () => {
-  const a = makeStatusRecord({ result: 'a' });
-  const b = makeStatusRecord({ result: 'b' });
+  const a = makeStatusRecord('mavlink-out', { result: 'a' });
+  const b = makeStatusRecord('mavlink-out', { result: 'b' });
   assert.equal(a.result, 'a');
   assert.equal(b.result, 'b');
   assert.notEqual(a, b);
@@ -108,18 +107,6 @@ test('capBadge: the last character of a capped string is the ellipsis glyph', ()
 test('capBadge: coerces non-string input via String()', () => {
   const result = capBadge(12345);
   assert.equal(result, '12345');
-});
-
-// ---------------------------------------------------------------------------
-// TIER constants
-// ---------------------------------------------------------------------------
-
-test('TIER.BUILD is the string "build"', () => {
-  assert.equal(TIER.BUILD, 'build');
-});
-
-test('TIER.SEND is the string "send"', () => {
-  assert.equal(TIER.SEND, 'send');
 });
 
 // ---------------------------------------------------------------------------

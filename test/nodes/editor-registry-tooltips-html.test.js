@@ -43,12 +43,14 @@ test('Command Advanced MAV_CMD select and enum options use catalog descriptions'
   assert.match(html, /RED\.mavlink\.fillEnumSelect\(sel,\s*catalog\.commands/);
   assert.match(html, /titleNamespace:\s*'mavCmdTip'/);
   assert.match(html, /RED\.mavlink\.bindSelectTitleSync\(sel,\s*\{\s*namespace:\s*'mavPresetTip'/);
-  assert.match(html, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
   assert.match(html, /catalogParamByIndex/);
   // Preset rows merge the whole catalog param spec (description included) and
-  // render through advancedParamInput, which titles inputs from it.
+  // render through advancedParamInput → the shared paramControl, which titles
+  // controls and their enum options from it.
   assert.match(html, /Object\.assign\(\{\}, catalogParamByIndex/);
-  assert.match(html, /spec\.description \|\| ''/);
+  assert.match(html, /RED\.mavlink\.paramControl\(spec, enums, \{/);
+  assert.match(resourceScript, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
+  assert.match(resourceScript, /RED\.mavlink\.paramControl\s*=\s*function[\s\S]*?spec\.description \|\| ''/);
 });
 
 test('In / Fan-out enum selects use shared fillEnumSelect', () => {

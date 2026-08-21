@@ -4,21 +4,6 @@
   'use strict';
 
   /**
-   * Helper: create a labelled form row.
-   * @param {string} label
-   * @param {HTMLElement} input
-   * @returns {HTMLElement}
-   */
-  function formRow(label, input) {
-    const row = $('<div class="form-row"></div>');
-    const tip = (input && input.attr) ? (input.attr('title') || '') : '';
-    const lbl = $('<label></label>').css({ width: '120px', display: 'inline-block' }).text(label);
-    if (tip) lbl.attr('title', tip);
-    row.append(lbl).append(input);
-    return row;
-  }
-
-  /**
    * Delivery options filtered by what the selected command supports.
    * @param {boolean} hasConnection  whether a connection is configured
    * @param {boolean} hasCompletion  whether the command has a completion condition
@@ -720,83 +705,29 @@
       }
 
       /**
-       * Build the input control for one Advanced param: enum= → <select>,
-       * otherwise a number field with units/range as constraints (§6).
+       * Build the input control for one Advanced param via the shared ladder
+       * (enum= → <select>, bitmask multi-select, FALSE/TRUE and magic
+       * booleans → checkbox, otherwise a number field with units/range, §6 —
+       * with the #198 saved-value sentinel applied inside the builder).
        * @param {object} spec
        * @param {Object<string, Array>} enums
        * @param {string|number} commandId  the MAV_CMD being configured
        * @returns {HTMLElement|jQuery}
        */
       function advancedParamInput(spec, enums, commandId) {
-        const saved = savedParams[spec.index];
-        // DO_SET_MODE's custom_mode carries no `enum=` — its table is chosen
-        // by airframe, not by command — so the profile names one here. Same
-        // curated-by-(command, index) shape as magicBooleanValue below, and
-        // it sits on the shared render path so Advanced mode reads the same
-        // pulldown the Set Mode preset does.
-        const enumName = spec.enum || RED.mavlink.customModeEnum(commandId, spec.index);
-        if (enumName && enums[enumName] && enums[enumName].length) {
-          const entries = enums[enumName];
-          const falseTrue = RED.mavlink.isFalseTrueEnum(entries);
-          if (falseTrue) {
-            return RED.mavlink.booleanEnumInput(entries, {
-              saved,
-              title: spec.description || '',
-              className: 'param-input',
-            }).attr('data-idx', spec.index);
-          }
-          const isBitmask = !!spec.bitmask && !falseTrue;
-          const sel = $('<select class="param-input"></select>')
-            .attr('data-idx', spec.index)
-            .attr('data-kind', falseTrue ? 'enum' : (isBitmask ? 'bitmask' : 'enum'))
-            .attr('title', isBitmask ? RED.mavlink.bitmaskTitle(spec.description) : (spec.description || ''));
-          // No blank option. An unset command param resolves to 0, and where
-          // 0 is a real choice the dialect already enumerates it — MAV_ROI_NONE,
-          // PARACHUTE_DISABLE, FAILURE_TYPE_OK. So blank was either a second
-          // spelling of an entry that exists, or (ACCELCAL_VEHICLE_POS, which
-          // starts at 1) a way to send a value the enum does not define.
-          // Upstream marks genuinely unused params `Empty`/`reserved`, and
-          // isHiddenParam drops those before they reach a control.
-          if (isBitmask) {
-            sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
-          }
-          for (const entry of entries) {
-            const $opt = $('<option></option>').val(String(entry.value)).text(falseTrue ? RED.mavlink.booleanEntryLabel(entry) : entry.label);
-            if (entry.description) $opt.attr('title', entry.description);
-            sel.append($opt);
-          }
-          if (isBitmask) {
-            sel.val(RED.mavlink.selectedBitmaskValues(saved, entries));
-          } else if (saved !== undefined && saved !== null && saved !== '') {
-            // A saved value the table lacks — a newer firmware's mode, Blimp's
-            // reserved 30, a dialect switch — must survive open-and-save, not
-            // deselect to null and resolve to 0 on the wire (Codex #198). The
-            // shared sentinel keeps it selectable until the operator changes it.
-            RED.mavlink.ensureSavedEnumOption(sel, String(saved));
-            sel.val(String(saved));
-          }
-          return sel;
-        }
-        // No enum, but upstream models this param as a magic number that is
-        // really on/off (DESIGN.md §14). Value from the audited table; label
-        // and hover text still come from the dialect.
-        const magic = RED.mavlink.magicBooleanValue(commandId, spec.index);
-        if (magic !== null) {
-          return RED.mavlink.booleanEnumInput([], {
-            saved,
-            trueValue: magic,
-            title: spec.description || '',
-            className: 'param-input',
-          }).attr('data-idx', spec.index);
-        }
-        const input = $('<input type="number" class="param-input">')
-          .attr('data-idx', spec.index)
-          .attr('title', spec.description || '')
-          .val(saved !== undefined && saved !== null ? saved : '');
-        if (spec.minValue !== null && spec.minValue !== undefined) input.attr('min', spec.minValue);
-        if (spec.maxValue !== null && spec.maxValue !== undefined) input.attr('max', spec.maxValue);
-        if (spec.increment !== null && spec.increment !== undefined) input.attr('step', spec.increment);
-        return input;
+        return RED.mavlink.paramControl(spec, enums, {
+          saved: savedParams[spec.index],
+          className: 'param-input',
+          attrName: 'data-idx',
+          attrValue: spec.index,
+          commandId: commandId,
+          // DO_SET_MODE's custom_mode carries no `enum=` — its table is chosen
+          // by airframe, not by command — so the profile names one here. Same
+          // curated-by-(command, index) shape as the magic-boolean table, and
+          // it sits on the shared render path so Advanced mode reads the same
+          // pulldown the Set Mode preset does.
+          enumName: spec.enum || RED.mavlink.customModeEnum(commandId, spec.index),
+        });
       }
 
       /**
@@ -919,7 +850,7 @@
             return;
           }
           for (const spec of visible) {
-            container.append(formRow(advancedParamLabel(spec), advancedParamInput(spec, catalog.enums || {}, cmdId)));
+            container.append(RED.mavlink.formRow(advancedParamLabel(spec), advancedParamInput(spec, catalog.enums || {}, cmdId)));
           }
           node._mavParamsRendered = true;
         } else {
@@ -966,7 +897,7 @@
             for (const spec of paramSpec) {
               // Curation keys override the catalog spec; omitted keys inherit.
               const merged = Object.assign({}, catalogParamByIndex(catalog, commandId, spec.index) || {}, spec);
-              container.append(formRow(advancedParamLabel(merged), presetParamInput(merged, catalog.enums || {}, commandId)));
+              container.append(RED.mavlink.formRow(advancedParamLabel(merged), presetParamInput(merged, catalog.enums || {}, commandId)));
             }
             node._mavParamsRendered = true;
           }

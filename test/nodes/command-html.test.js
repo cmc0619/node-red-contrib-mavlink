@@ -110,31 +110,56 @@ test('preset dropdown re-applies the saved selection and fires change after the 
   assert.match(builder, /sel\.trigger\(['"]change['"]\)/, 'a change event is fired after building');
 });
 
-test('advanced bitmask command params render as multi-select controls', () => {
+test('advanced params render through the shared paramControl ladder (14.32)', () => {
+  // The ladder — FALSE/TRUE checkbox, enum pulldown, bitmask multi-select
+  // (native, bitmaskTitle, boolean labels), magic boolean, number with the XML
+  // range — is RED.mavlink.paramControl, proven executed in
+  // mavlink-editor-resource.test.js. Command contributes its collector
+  // attributes and the custom-mode enum resolution.
   const renderer = html.slice(
     html.indexOf('function advancedParamInput'),
-    html.indexOf('function refreshParamFields')
+    html.indexOf('function presetParamInput')
   );
 
-  assert.match(renderer, /spec\.bitmask/, 'param-level bitmask flag drives rendering');
-  assert.match(renderer, /RED\.mavlink\.isFalseTrueEnum\(entries\)/, 'FALSE/TRUE command params are detected before bitmask rendering');
-  assert.match(renderer, /data-kind['"],\s*falseTrue \? ['"]enum['"] : \(isBitmask \? ['"]bitmask['"] : ['"]enum['"]\)/, 'FALSE/TRUE bitmask params are tagged as enum selects');
-  assert.match(renderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'bitmask enum params use native multi-select');
-  assert.match(renderer, /RED\.mavlink\.booleanEntryLabel\(entry\)/, 'FALSE/TRUE command param options use boolean labels');
-  assert.match(renderer, /RED\.mavlink\.bitmaskTitle/, 'multi-select title comes from the shared helper');
+  assert.match(renderer, /RED\.mavlink\.paramControl\(spec, enums, \{/, 'one ladder, in the shared file');
+  assert.match(renderer, /className:\s*'param-input'/, 'controls carry the class the scrape reads');
+  assert.match(renderer, /attrName:\s*'data-idx'/, 'the scrape keys off data-idx');
+  assert.match(renderer, /attrValue:\s*spec\.index/);
+  assert.match(renderer, /commandId:\s*commandId/, 'the magic-boolean lookup keys off the threaded id');
+  assert.match(
+    renderer,
+    /enumName:\s*spec\.enum \|\| RED\.mavlink\.customModeEnum\(commandId, spec\.index\)/,
+    'custom-mode table resolution stays a Command concern, handed in as the override'
+  );
+  assert.doesNotMatch(
+    renderer,
+    /bitmaskKind/,
+    "no override: Command's scrape reads the default data-kind 'bitmask'"
+  );
+  assert.doesNotMatch(
+    renderer,
+    /isFalseTrueEnum|booleanEnumInput|selectedBitmaskValues/,
+    'no local copy of the ladder (14.32)'
+  );
 });
 
 test('a saved enum value the table lacks survives open-and-save (Codex #198)', () => {
+  // Without the sentinel, .val(saved) on an absent option deselects, oneditsave
+  // reads null, and the param resolves to 0 on the wire — a silent mode change.
+  // It is unconditional inside RED.mavlink.paramControl now (executed test in
+  // mavlink-editor-resource.test.js), so no per-node renderer can lose it
+  // again — Build's former copy of the ladder shipped without it.
   const renderer = html.slice(
     html.indexOf('function advancedParamInput'),
     html.indexOf('function refreshParamFields')
   );
-  // Without the sentinel, .val(saved) on an absent option deselects, oneditsave
-  // reads null, and the param resolves to 0 on the wire — a silent mode change.
+  assert.match(renderer, /RED\.mavlink\.paramControl\(/, 'params render through the sentinel-applying builder');
+  // The PX4 packed-mode select recomposes the saved pair locally, so it keeps
+  // its own sentinel call for a pair the current table cannot name.
   assert.match(
     renderer,
-    /RED\.mavlink\.ensureSavedEnumOption\(sel, String\(saved\)\);\s*\n\s*sel\.val\(String\(saved\)\)/,
-    'the shared sentinel runs before the saved value is applied'
+    /RED\.mavlink\.ensureSavedEnumOption\(sel, String\(packed\)\);\s*\n\s*sel\.val\(String\(packed\)\)/,
+    'the PX4 mode select applies the sentinel before selecting the packed value'
   );
 });
 
@@ -480,17 +505,19 @@ test('command param enum pulldowns carry no blank option', () => {
   // An unset param resolves to 0, and where 0 means something the dialect
   // enumerates it — so blank was a second spelling of an entry that exists, or
   // (ACCELCAL_VEHICLE_POS) a value the enum never defined. See
-  // test/metadata/enum-param-blank.test.js for the numbers.
+  // test/metadata/enum-param-blank.test.js for the numbers. The rule lives in
+  // the shared paramControl (executed test in mavlink-editor-resource.test.js);
+  // nothing local may re-add a blank around it.
   const renderer = html.slice(
     html.indexOf('function advancedParamInput'),
     html.indexOf('function presetParamInput')
   );
+  assert.match(renderer, /RED\.mavlink\.paramControl\(/, 'params render through the shared no-blank ladder');
   assert.ok(!/\\u2014/.test(renderer), 'no em-dash placeholder option');
   assert.ok(
     !/sel\.append\(\$\('<option><\/option>'\)\.val\(''\)/.test(renderer),
     'no empty-valued option'
   );
-  assert.match(renderer, /isBitmask\) \{\s*sel\.attr\('multiple'/, 'bitmask branch keeps its multi-select');
 });
 
 test('mavlink-command: Advanced mode requires a command (§6 status ruling, 2026-08-12)', () => {

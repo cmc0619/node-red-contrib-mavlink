@@ -59,8 +59,9 @@ test('mavlink-mission Build dialect select uses shared helper with Vehicle Profi
   assert.match(html, /id="row-mission-dialect"/, 'template must have a dialect row');
   assert.match(html, /id="node-input-dialect"/, 'template must have a dialect select');
   assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
-  // Runtime firmware path still gates on the escape value (getEffectiveFirmware).
-  assert.match(html, /dialect\s*!==\s*'__vehicle'/, 'Vehicle Profile escape gates profile firmware');
+  // The __vehicle escape gating of profile firmware lives in the shared
+  // resolver (resolveCatalogTarget — mavlink-editor-resource.test.js).
+  assert.match(html, /RED\.mavlink\.resolveCatalogTarget\(\)\.firmware/, 'firmware derives from the shared resolver');
 });
 
 test('mavlink-mission Build visibility delegates shared rows to applyBuildTierRowVisibility', () => {
@@ -83,32 +84,28 @@ test('mavlink-mission Build visibility delegates shared rows to applyBuildTierRo
 });
 
 test('mavlink-mission firmware type list follows dialect, vehicle, or connection', () => {
-  // The type list repopulates using effectiveFirmware() which reads from the
-  // Build firmware select, Build Vehicle Profile escape, or wire Connection profile.
-  assert.match(html, /function getEffectiveFirmware/, 'getEffectiveFirmware function present');
+  // The type list repopulates from the shared resolver's firmware, which reads
+  // the Build Firmware select on a concrete dialect, the Build Vehicle Profile
+  // escape's profile, or the wire Connection's bound profile — tier awareness,
+  // the __vehicle escape, frozen `vehicle` snapshots, and the
+  // no-invented-firmware rule are all proven executed against
+  // resolveCatalogTarget in mavlink-editor-resource.test.js.
   assert.match(html, /function repopulateTypes/, 'repopulateTypes function present');
-  assert.match(html, /getEffectiveFirmware\(\)/, 'repopulateTypes calls getEffectiveFirmware');
+  assert.match(
+    html,
+    /var fw = RED\.mavlink\.resolveCatalogTarget\(\)\.firmware;/,
+    'repopulateTypes reads the shared resolver'
+  );
 });
 
-test('mavlink-mission getEffectiveFirmware is tier-aware', () => {
-  // Build tier reads firmware directly unless dialect is __vehicle; wire tier
-  // reads from the connection's vehicle node.
-  assert.match(html, /delivery.*===.*'build'|'build'.*===.*delivery/,
-    'firmware derivation branches on delivery tier');
-  assert.match(html, /dialect\s*!==\s*'__vehicle'/, 'Vehicle Profile escape gates profile firmware');
-  assert.match(html, /node-input-firmware.*\.val\(\)|\.val\(\).*node-input-firmware/s,
-    'firmware field consulted on concrete Build dialect');
-  assert.match(html, /node-input-vehicle.*\.val\(\)|\.val\(\).*node-input-vehicle/s,
-    'vehicle field consulted for __vehicle build tier');
-  assert.match(html, /conn\.vehicle/, 'connection vehicle consulted on wire tier');
-  // Closing brace is indented two spaces (function scope), not nested blocks.
-  const firmwareFn = /function getEffectiveFirmware\(\)\s*\{[\s\S]*?\n {2}\}/.exec(html);
-  assert.ok(firmwareFn, 'getEffectiveFirmware function body must be extractable');
-  assert.doesNotMatch(
-    firmwareFn[0],
-    /return\s+['"]ardupilot['"]/,
-    'effectiveFirmware must not invent ardupilot when no source is selected'
-  );
+test('mavlink-mission has no hand-rolled firmware resolver (14.32)', () => {
+  // getEffectiveFirmware used to re-implement the delivery→dialect/vehicle→
+  // connection walk — and read `conn.vehicle` raw, missing the frozen-snapshot
+  // shape vehicleIdFrom tolerates. The walk lives once, in the shared file.
+  assert.doesNotMatch(html, /function getEffectiveFirmware/, 'no local resolver copy');
+  assert.doesNotMatch(html, /conn\.vehicle/, 'no raw connection-vehicle read');
+  assert.doesNotMatch(html, /return\s+['"]ardupilot['"]/,
+    'firmware must not be invented when no source is selected');
 });
 
 test('mavlink-mission target sysid/compid default to empty (inherit profile)', () => {
