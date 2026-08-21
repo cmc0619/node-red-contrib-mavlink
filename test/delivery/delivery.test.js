@@ -42,11 +42,11 @@ test('makeStatusRecord: contains only node plus the provided keys', () => {
 });
 
 test('makeStatusRecord: two calls produce independent objects', () => {
-  const a = makeStatusRecord('mavlink-out', { result: 'a' });
-  const b = makeStatusRecord('mavlink-out', { result: 'b' });
-  assert.equal(a.result, 'a');
-  assert.equal(b.result, 'b');
-  assert.notEqual(a, b);
+  const first = makeStatusRecord('mavlink-out', { result: 'a' });
+  const second = makeStatusRecord('mavlink-out', { result: 'b' });
+  assert.equal(first.result, 'a');
+  assert.equal(second.result, 'b');
+  assert.notEqual(first, second);
 });
 
 // ---------------------------------------------------------------------------

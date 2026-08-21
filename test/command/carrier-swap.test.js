@@ -25,7 +25,7 @@ test('an ack with no wrong-carrier code passes through with no swap', async () =
   const runs = [];
   const result = await runWithCarrierSwap({
     carrier: CARRIER.LONG,
-    run: async (carrier) => { runs.push(carrier); return ACCEPTED; },
+    run: (carrier) => { runs.push(carrier); return ACCEPTED; },
   });
   assert.deepEqual(runs, [CARRIER.LONG]);
   assert.equal(result.swapped, false);
@@ -38,7 +38,7 @@ test('a terminal DENIED is not a swap trigger', async () => {
   const runs = [];
   const result = await runWithCarrierSwap({
     carrier: CARRIER.INT,
-    run: async (carrier) => { runs.push(carrier); return DENIED; },
+    run: (carrier) => { runs.push(carrier); return DENIED; },
   });
   assert.deepEqual(runs, [CARRIER.INT]);
   assert.equal(result.swapped, false);
@@ -50,7 +50,7 @@ test('COMMAND_INT_ONLY on a LONG send swaps exactly once and announces it', asyn
   const swaps = [];
   const result = await runWithCarrierSwap({
     carrier: CARRIER.LONG,
-    run: async (carrier) => { runs.push(carrier); return carrier === CARRIER.LONG ? WANT_INT : ACCEPTED; },
+    run: (carrier) => { runs.push(carrier); return carrier === CARRIER.LONG ? WANT_INT : ACCEPTED; },
     onSwap: (outcome, from, to) => swaps.push([outcome.resultCode, from, to]),
   });
   assert.deepEqual(runs, [CARRIER.LONG, CARRIER.INT]);
@@ -65,7 +65,7 @@ test('a demand for the carrier already sent fails loud without a re-run', async 
   const runs = [];
   const result = await runWithCarrierSwap({
     carrier: CARRIER.INT,
-    run: async (carrier) => { runs.push(carrier); return WANT_INT; },
+    run: (carrier) => { runs.push(carrier); return WANT_INT; },
     onSwap: () => assert.fail('no swap may be announced'),
   });
   assert.deepEqual(runs, [CARRIER.INT], 'exactly one send');
@@ -79,7 +79,7 @@ test('a second wrong-carrier ack after the swap fails loud — never a second sw
   const result = await runWithCarrierSwap({
     carrier: CARRIER.LONG,
     // The vehicle contradicts itself: INT_ONLY, then LONG_ONLY.
-    run: async (carrier) => { runs.push(carrier); return carrier === CARRIER.LONG ? WANT_INT : WANT_LONG; },
+    run: (carrier) => { runs.push(carrier); return carrier === CARRIER.LONG ? WANT_INT : WANT_LONG; },
   });
   assert.deepEqual(runs, [CARRIER.LONG, CARRIER.INT], 'at most one swap, two sends total');
   assert.equal(result.swapped, true);
@@ -105,6 +105,7 @@ test('cancelSlot release is identity-guarded — a stale run cannot clear a newe
   const first = { cancel: () => {} };
   const second = { cancel: () => {} };
   slot.active = first;
+  assert.equal(slot.active, first);
   slot.active = second;
   slot.release(first);
   assert.equal(slot.active, second, 'releasing the superseded entry leaves the newer one');
