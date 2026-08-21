@@ -183,6 +183,60 @@ test('a retry send that throws settles the transaction instead of escaping the t
   assert.equal(sends, 2, 'the retry was attempted');
 });
 
+test('a duplicate TEMPORARILY_REJECTED while a retry is pending schedules no second retry', async () => {
+  // Vehicles re-ack on lossy links, so a second TEMPORARILY_REJECTED can land
+  // while the back-off timer for the first is still pending. The pending retry
+  // already answers it: exactly one retry send, counted once.
+  const conn = stubConn();
+  let sends = 0;
+  const waiter = makeWaiter(conn, {
+    commandId: 400,
+    targetSystem: 1,
+    targetComponent: 1,
+    maxRetries: 3,
+    retryIntervalMs: 5,
+    sendFn: () => { sends += 1; },
+  });
+  const p = waiter.start();
+
+  conn.injectAck({ command: 400, result: MAV_RESULT.TEMPORARILY_REJECTED }, 1, 1);
+  conn.injectAck({ command: 400, result: MAV_RESULT.TEMPORARILY_REJECTED }, 1, 1);
+
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.equal(sends, 2, 'the initial send plus exactly one retry');
+
+  conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 1, 1);
+  const outcome = await p;
+  assert.equal(outcome.result, 'accepted');
+  assert.equal(outcome.retries, 1, 'one rejection cycle counted once');
+});
+
+test('cancel after duplicate TEMPORARILY_REJECTED acks leaves no timer that can send on a dead transaction', async () => {
+  // A retry timer that outlives _clearRetry's handle would fire after cancel,
+  // re-arming the timeout and sending a stray command on a settled
+  // transaction.
+  const conn = stubConn();
+  let sends = 0;
+  const waiter = makeWaiter(conn, {
+    commandId: 400,
+    targetSystem: 1,
+    targetComponent: 1,
+    maxRetries: 3,
+    retryIntervalMs: 5,
+    sendFn: () => { sends += 1; },
+  });
+  const p = waiter.start();
+
+  conn.injectAck({ command: 400, result: MAV_RESULT.TEMPORARILY_REJECTED }, 1, 1);
+  conn.injectAck({ command: 400, result: MAV_RESULT.TEMPORARILY_REJECTED }, 1, 1);
+  waiter.cancel();
+  const sendsAtCancel = sends;
+
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.equal(sends, sendsAtCancel, 'no send fires after settlement');
+  assert.equal((await p).result, 'cancelled');
+});
+
 test('an initial send that throws rejects AND cleans up — no timer or subscription outlives it (Codex, #237)', async () => {
   // Connection.send throws by design (queue overflow, disabled link). The
   // rejection is the contract; the leak was the armed timeout and ack
