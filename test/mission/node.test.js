@@ -235,6 +235,7 @@ test('an upload under a type no family answers to still builds — the vehicle j
     dialect: 'common',
     firmware: 'ardupilot',
     missionType: 'mission',
+    items: '',
   });
   const res = await runInput(node, {
     payload: { missionType: 'bogus', items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }] },
@@ -382,7 +383,7 @@ test('upload end-to-end: items from msg.payload.items reach the vehicle and succ
   });
 
   const Node = loadNode(conn);
-  const node = new Node({ operation: 'upload', connection: 'conn', delivery: 'confirm', missionType: 'mission' });
+  const node = new Node({ operation: 'upload', connection: 'conn', delivery: 'confirm', missionType: 'mission', items: '' });
   const { outputs, err } = await runInput(node, {
     payload: { items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }] },
   });

@@ -394,6 +394,10 @@
 
     oneditprepare: function () {
       const node = this;
+      // The warm-catalog cache outlives a dialog (script scope), and another
+      // Command node's dialog may have filled it for a different dialect or
+      // profile — every open starts cold; the warm path only spans this open.
+      _currentCmdCatalog = null;
       const container = $('#node-input-params-container');
 
       RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');

@@ -68,8 +68,10 @@ module.exports = function registerMavlinkFormation(RED) {
     const preset = getPreset(REPOSITION_PRESET);
     const commandId = Number(preset.commandId);
     const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
-    // Lazy like mavlink-command's coordKinds: the connection's vehicle bundle
-    // attaches at connection start, after this constructor runs.
+    // Lazy like mavlink-command's coordKinds — not because resolution can
+    // change (the profile rides the connection's deploy-frozen snapshot, so
+    // every input resolves identically) but to keep the bundle compile off
+    // the deploy path.
     let _message;
     function repositionMessage() {
       if (_message !== undefined) return _message;

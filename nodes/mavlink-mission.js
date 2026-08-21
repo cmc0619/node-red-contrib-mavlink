@@ -67,7 +67,7 @@ module.exports = function registerMavlinkMission(RED) {
     // runtime just reads it — mavlink-build's configFields pattern), and only
     // Upload reads items, so a leftover value on another operation is never
     // parsed. Blank means "items come from the payload".
-    const configItems = operation === OPERATION.UPLOAD && (config.items || '').trim()
+    const configItems = operation === OPERATION.UPLOAD && config.items.trim()
       ? JSON.parse(config.items)
       : undefined;
 

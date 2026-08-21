@@ -63,7 +63,11 @@ test('vehicleType is a MAV_TYPE select loaded from the shared catalog (§6)', ()
     'the full Build message catalog must not be fetched for one enum table'
   );
   assert.match(html, /enums\.MAV_TYPE/, 'MAV_TYPE table is read from the catalog');
-  assert.match(html, /isBuild:\s*false/, 'resolution stays wire-side — Fan-out has no dialect row');
+  assert.match(
+    html,
+    /RED\.mavlink\.loadEnumsCatalog\(\['MAV_TYPE'\][\s\S]*?null, \{ isBuild: false \}\)/,
+    'the MAV_TYPE call itself carries isBuild: false — resolution stays wire-side, Fan-out has no dialect row'
+  );
   assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'options are built via shared fillEnumSelect');
   assert.match(html, /Any type/, 'empty selection means any vehicle type');
   assert.match(html, /saved:\s*node\.vehicleType/, 'the saved MAV_TYPE is offered');

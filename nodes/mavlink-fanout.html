@@ -1,4 +1,9 @@
 <script type="text/javascript">
+  // Script scope, not per-open: a dialog's in-flight MAV_TYPE fetch can land
+  // after the dialog closed and a later one opened; the later open bumps this
+  // counter, so the stale callback fails its seq check instead of writing
+  // options into the new dialog's select.
+  var _typeSeq = 0;
   RED.nodes.registerType('mavlink-fanout', {
     category: 'mavlink',
     paletteLabel: 'fan-out',
@@ -178,7 +183,6 @@
         $members.editableList('addItem', member);
       });
 
-      var _typeSeq = 0;
       function refreshVehicleTypeOptions() {
         // MAV_TYPE options come from the connection's profile catalog; without
         // a connection the filter cannot resolve at runtime anyway, so an

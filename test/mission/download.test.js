@@ -385,7 +385,7 @@ test('the subscription filters to the download messages — target telemetry nev
   const machine = new MissionDownload(machineOpts(stub));
   const done = machine.start();
 
-  assert.ok(stub.subscriberCount() > 0, 'the transfer is subscribed');
+  assert.equal(stub.subscriberCount(), 4, 'one subscription per handled name');
   // The target's telemetry stream (HEARTBEAT at frame rate) is filtered out
   // at the subscription, not copied in and discarded by the name switch.
   assert.equal(stub.inject({ name: 'HEARTBEAT', fields: {} }), 0);
@@ -393,4 +393,5 @@ test('the subscription filters to the download messages — target telemetry nev
 
   machine.cancel();
   await done;
+  assert.equal(stub.subscriberCount(), 0, 'settlement tears every subscription down');
 });
