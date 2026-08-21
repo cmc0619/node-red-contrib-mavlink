@@ -814,6 +814,29 @@ test('a heartbeat tick is written once per learned peer primary — one frame, N
   connection.close();
 });
 
+test('a learned system with no autopilot component still hears the heartbeat', async () => {
+  // The broadcast target's compid 0 is MAV_COMP_ID_ALL: a HEARTBEAT names no
+  // component, so a companion computer or second GCS — a learned system with
+  // no component 1 — is a peer like any other. A component-1-only lookup
+  // starves it, and the nonempty learned list suppresses the configured-remote
+  // fallback that would otherwise have reached it. Sysid 7's two components
+  // share one endpoint and still get a single datagram.
+  const { connection, dg } = build();
+  await connection.start();
+  const socket = dg.sockets[0];
+  hearFrom(socket, [[1, 40001], [7, 40007, 1], [7, 40007, 154], [30, 40030, 191]]);
+
+  connection.heartbeats.tick();
+  await delay(40);
+
+  const ports = socket.sent
+    .filter((s) => JSON.parse(s.buffer.toString()).name === 'HEARTBEAT')
+    .map((s) => s.port)
+    .sort((a, b) => a - b);
+  assert.deepEqual(ports, [40001, 40007, 40030]);
+  connection.close();
+});
+
 /**
  * Swarm delivery (DESIGN.md §14 "A swarm address is delivery, not addressing").
  *
