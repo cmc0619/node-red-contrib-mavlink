@@ -62,6 +62,15 @@ module.exports = function registerMavlinkMission(RED) {
     const delivery = config.delivery;
     applyConnectionStatus(node, delivery !== 'build', connNode);
 
+    // Configured upload items are deploy-constant: parse the JSON once, not
+    // per input. The editor validates it (non-empty array or blank; the
+    // runtime just reads it — mavlink-build's configFields pattern), and only
+    // Upload reads items, so a leftover value on another operation is never
+    // parsed. Blank means "items come from the payload".
+    const configItems = operation === OPERATION.UPLOAD && config.items.trim()
+      ? JSON.parse(config.items)
+      : undefined;
+
     /**
      * In-flight machines keyed by the same lock key as {@link locks}
      * (`connection::sysid.compid::missionType`). Different types on one node
@@ -117,12 +126,13 @@ module.exports = function registerMavlinkMission(RED) {
       const timeoutMs = numberOr(config.timeout, undefined);
       const maxRetries = numberOr(config.maxRetries, undefined);
 
-      // Upload item source: msg.payload.items overrides configured items.
-      // Family and broadcast are editor red rings. An explicit payload `[]`
-      // rides — COUNT 0 is the wire erase. An omitted items field over blank
-      // config does not become `[]`.
+      // Upload item source: msg.payload.items overrides configured items —
+      // presence fallback (§5): `??`, not a truthy test. Family and broadcast
+      // are editor red rings. An explicit payload `[]` rides — COUNT 0 is the
+      // wire erase. An omitted items field over blank config does not become
+      // `[]`.
       const uploadItems = operation === OPERATION.UPLOAD
-        ? resolveItems(config, payload)
+        ? payload.items ?? configItems
         : [];
 
       // Affirmative tier dispatch (§5): each tier is a whole arm, so a
@@ -313,20 +323,6 @@ function buildPlan(operation, missionType, target, items) {
     default: break; // This space intentionally left blank (§5)
   }
   return { operation, missionType, target, messages };
-}
-
-/**
- * Resolve upload items: the payload overrides the configured JSON, which the
- * editor validates (non-empty array or blank) — the runtime just reads it.
- *
- * @param {object} config
- * @param {object} payload
- * @returns {object[]}
- */
-function resolveItems(config, payload) {
-  if (payload.items !== undefined && payload.items !== null) return payload.items;
-  if (config.items.trim()) return JSON.parse(config.items);
-  return undefined;
 }
 
 /**

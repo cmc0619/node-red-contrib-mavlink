@@ -58,6 +58,33 @@ module.exports = function registerMavlinkFormation(RED) {
     // delivery.inFlightTracker.
     const inFlight = delivery.inFlightTracker();
 
+    // Input-invariant Reposition scaffold, built once: the shared message has
+    // zeroed coordinates; the per-member lat/lon/alt are patched in as degE7
+    // x/y per input, since Fan-out patches are the raw wire surface (§10) and
+    // executeFanout never mutates its base message. Formation always builds
+    // COMMAND_INT: DO_REPOSITION is a positional command and the references
+    // carry it as COMMAND_INT only — COMMAND_LONG is not a valid carrier for
+    // it, so there is no carrier choice to make.
+    const preset = getPreset(REPOSITION_PRESET);
+    const commandId = Number(preset.commandId);
+    const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
+    // Lazy like mavlink-command's coordKinds — not because resolution can
+    // change (the profile rides the connection's deploy-frozen snapshot, so
+    // every input resolves identically) but to keep the bundle compile off
+    // the deploy path.
+    let _message;
+    function repositionMessage() {
+      if (_message !== undefined) return _message;
+      const bundle = dialectFromConnection(RED, connectionNode);
+      _message = buildCommandInt(commandId, 0, 0, params, {
+        // Guided reposition is relative-alt; pass the frame explicitly —
+        // the driver no longer invents it when omitted (§0).
+        frame: DEFAULT_FRAME,
+        coordKinds: (bundle && intCoordKinds(bundle, commandId)) || undefined,
+      });
+      return _message;
+    }
+
     node.on('input', async (msg, send, done) => {
       try {
         if (delivery.shouldSuppress(msg)) {
@@ -79,21 +106,7 @@ module.exports = function registerMavlinkFormation(RED) {
           sysids,
         });
 
-        // Build the shared Reposition message once with zeroed coordinates; the
-        // per-member lat/lon/alt are patched in as degE7 x/y below, since
-        // Fan-out patches are the raw wire surface (§10). Formation always
-        // builds COMMAND_INT: DO_REPOSITION is a positional command and the
-        // references carry it as COMMAND_INT only — COMMAND_LONG is not a valid
-        // carrier for it, so there is no carrier choice to make.
-        const preset = getPreset(REPOSITION_PRESET);
-        const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
-        const bundle = dialectFromConnection(RED, connectionNode);
-        const message = buildCommandInt(Number(preset.commandId), 0, 0, params, {
-          // Guided reposition is relative-alt; pass the frame explicitly —
-          // the driver no longer invents it when omitted (§0).
-          frame: DEFAULT_FRAME,
-          coordKinds: (bundle && intCoordKinds(bundle, Number(preset.commandId))) || undefined,
-        });
+        const message = repositionMessage();
         const memberTargets = targets.map((target) => ({
           sysid: target.sysid,
           x: scaleLatLon(target.lat),

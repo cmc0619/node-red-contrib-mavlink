@@ -235,6 +235,7 @@ test('an upload under a type no family answers to still builds — the vehicle j
     dialect: 'common',
     firmware: 'ardupilot',
     missionType: 'mission',
+    items: '',
   });
   const res = await runInput(node, {
     payload: { missionType: 'bogus', items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }] },
@@ -382,7 +383,7 @@ test('upload end-to-end: items from msg.payload.items reach the vehicle and succ
   });
 
   const Node = loadNode(conn);
-  const node = new Node({ operation: 'upload', connection: 'conn', delivery: 'confirm', missionType: 'mission' });
+  const node = new Node({ operation: 'upload', connection: 'conn', delivery: 'confirm', missionType: 'mission', items: '' });
   const { outputs, err } = await runInput(node, {
     payload: { items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }] },
   });
@@ -682,4 +683,22 @@ test('mission protocol subscription keyed on resolved target (companion sysid 42
   // The download must succeed driven by the sysid=42 response, not the sysid=1 one.
   assert.equal(terminal[1].result, 'succeeded', 'download completes using sysid=42 response');
   assert.equal(terminal[1].target.sysid, 42);
+});
+
+test('a leftover unparseable items value on a non-upload node never parses', async () => {
+  // The editor's items validator is operation-aware: only Upload reads items,
+  // so a leftover value must not red — or crater — a Download node. The
+  // once-at-deploy parse keeps that gate.
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 0, mission_type: 0 } });
+    }
+  });
+  const Node = loadNode(conn);
+  const node = new Node({ operation: 'download', connection: 'conn', delivery: 'confirm', missionType: 'mission', items: '{not json' });
+  const { outputs, err } = await runInput(node, { payload: {} });
+  assert.equal(err, undefined);
+  assert.equal(outputs.at(-1)[1].result, 'succeeded');
 });

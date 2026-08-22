@@ -68,15 +68,20 @@ class StubConnection {
    * 1 so a machine subscribed to target 1/1 receives it.
    *
    * @param {object} decoded  { name, fields, [sysid], [compid] }
+   * @returns {number} matching subscribers delivered to (mirrors
+   *   SubscriptionRegistry.dispatch)
    */
   inject(decoded) {
     const d = { sysid: 1, compid: 1, ...decoded };
+    let delivered = 0;
     for (const { filter, handler } of this._subs.slice()) {
       if (filter.message !== undefined && filter.message !== d.name) continue;
       if (filter.sysid !== undefined && filter.sysid !== d.sysid) continue;
       if (filter.compid !== undefined && filter.compid !== d.compid) continue;
       handler(d);
+      delivered += 1;
     }
+    return delivered;
   }
 
   /** @returns {string[]} names of outbound messages, in send order */

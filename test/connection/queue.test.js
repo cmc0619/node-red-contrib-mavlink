@@ -143,6 +143,78 @@ test('Liveness holds at most one outstanding per identity', () => {
   assert.equal(gcs.message.n, 2); // the second replaced the first
 });
 
+test('a Liveness replacement moves behind other identities and the replaced item never surfaces', () => {
+  const q = new OutboundQueue({ now: () => 0 });
+  const replaced = q.enqueue({ band: BAND.LIVENESS, message: { name: 'HB', n: 1 }, identityId: 'a' });
+  q.enqueue({ band: BAND.LIVENESS, message: { name: 'HB', n: 1 }, identityId: 'b' });
+  q.enqueue({ band: BAND.LIVENESS, message: { name: 'HB', n: 2 }, identityId: 'a' });
+
+  // The replacement re-enqueued at the band tail, so 'b' now dequeues first,
+  // and the replaced item is gone: the queue drains without ever yielding it.
+  const first = q.dequeue();
+  const second = q.dequeue();
+  assert.equal(first.identityId, 'b');
+  assert.equal(second.identityId, 'a');
+  assert.equal(second.message.n, 2);
+  assert.notEqual(second, replaced);
+  assert.equal(q.dequeue(), null);
+  assert.equal(q.size(), 0);
+});
+
+test('a Streaming coalesce moves behind other keys and the stale item never surfaces', () => {
+  const q = new OutboundQueue({ now: () => 0 });
+  q.enqueue({ band: BAND.STREAMING, message: { name: 'SP', v: 1 }, identityId: 'g', target: 'a' });
+  q.enqueue({ band: BAND.STREAMING, message: { name: 'SP', v: 1 }, identityId: 'g', target: 'b' });
+  q.enqueue({ band: BAND.STREAMING, message: { name: 'SP', v: 2 }, identityId: 'g', target: 'a' });
+
+  assert.deepEqual(
+    [q.dequeue().target, q.dequeue().target],
+    ['b', 'a'] // the coalesced 'a' re-enqueued at the tail
+  );
+  assert.equal(q.dequeue(), null);
+});
+
+test('Streaming overflow drops the oldest as reordered by coalescing', () => {
+  const q = new OutboundQueue({ now: () => 0, capacities: { [BAND.STREAMING]: 2 } });
+  q.enqueue({ band: BAND.STREAMING, message: msg('A1'), identityId: 'g', target: 'a' });
+  q.enqueue({ band: BAND.STREAMING, message: msg('B'), identityId: 'g', target: 'b' });
+  q.enqueue({ band: BAND.STREAMING, message: msg('A2'), identityId: 'g', target: 'a' });
+  q.enqueue({ band: BAND.STREAMING, message: msg('C'), identityId: 'g', target: 'c' });
+
+  // Coalescing moved 'a' to the tail, so 'B' was the oldest when 'C' overflowed.
+  const names = [q.dequeue().message.name, q.dequeue().message.name];
+  assert.deepEqual(names, ['A2', 'C']);
+});
+
+test('items aged to the clamp in different bands interleave by insertion order', () => {
+  const clock = fakeClock(0);
+  const q = new OutboundQueue({ now: clock.now, ageStepMs: 100 });
+  q.enqueue({ band: BAND.BULK, message: msg('bulk'), identityId: 'g' });
+  q.enqueue({ band: BAND.STREAMING, message: msg('stream'), identityId: 'g', target: '1.1' });
+  clock.set(100000); // both clamp at Control
+  q.enqueue({ band: BAND.CONTROL, message: msg('control'), identityId: 'g' });
+
+  // All three sit at effective band 2; insertion order (seq) breaks the ties.
+  const order = [];
+  let item;
+  while ((item = q.dequeue(clock.now()))) order.push(item.message.name);
+  assert.deepEqual(order, ['bulk', 'stream', 'control']);
+});
+
+test('a band stays FIFO across interleaved enqueue and dequeue', () => {
+  const q = new OutboundQueue({ now: () => 0 });
+  q.enqueue({ band: BAND.BULK, message: msg('A'), identityId: 'g' });
+  q.enqueue({ band: BAND.BULK, message: msg('B'), identityId: 'g' });
+  q.enqueue({ band: BAND.BULK, message: msg('C'), identityId: 'g' });
+  assert.equal(q.dequeue().message.name, 'A');
+  q.enqueue({ band: BAND.BULK, message: msg('D'), identityId: 'g' });
+
+  const order = [];
+  let item;
+  while ((item = q.dequeue())) order.push(item.message.name);
+  assert.deepEqual(order, ['B', 'C', 'D']);
+});
+
 test('dequeue returns the band DSCP mark and null when empty', () => {
   const q = new OutboundQueue({ now: () => 0 });
   q.enqueue({ band: BAND.EMERGENCY, message: msg('E'), identityId: 'g' });
