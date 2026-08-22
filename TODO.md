@@ -50,28 +50,3 @@ is the part most likely to eat an evening.
 broadcast *correct* on any IP topology where we have heard from the vehicles.
 A swarm address buys wire efficiency, not capability — noise at five vehicles,
 real at fifty.
-
----
-
-## Regenerate the editor screenshots
-
-All of `docs/screenshots/`, as one pass — not a file at a time. Once a live
-Node-RED and Puppeteer are up, recapturing the whole set costs barely more than
-recapturing one, and a per-file list of what is stale goes stale itself.
-
-`docs/screenshots/README.md` records the method: a live Node-RED 4 editor with
-the package installed, driven through `RED.editor.edit` via Puppeteer rather
-than a double-click. So this is re-running something known, not inventing it.
-
-Known wrong at the time of writing: `13-fanout.png` still shows a dialog titled
-**mavlink swarm** from before the rename, and the payload and command shots
-predate the generated payload form, the device topics, the checkboxes and the
-removal of blank enum options.
-
-**Why it waited.** These document a UI that was moving daily; recapturing
-mid-churn buys pictures that are stale again next week. Payload is settled now,
-which is what makes the pass worth doing.
-
-**Worth deciding once:** hand-regenerate when a dialog settles, or make the
-Puppeteer capture something CI runs. The second only pays off if the pictures
-are load-bearing for users rather than decoration in the README.
