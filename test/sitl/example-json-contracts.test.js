@@ -53,6 +53,26 @@ test('sitl 40 command nodes serialize identity (Admin-API deploy)', () => {
   assert.deepEqual(missing, [], 'omitted identity → String(undefined) override crater');
 });
 
+test('mavlink-mission upload nodes serialize items (Admin-API deploy)', () => {
+  // The constructor parses configured items once (config.items.trim(), #371's
+  // hoist) and only Upload reads them. Editor default is items: '' — blank
+  // means "items come from the payload" — but Admin deploy keeps an omitted
+  // key absent, and undefined.trim() throws at deploy (SITL 22 went PARTIAL
+  // on exactly this).
+  const missing = [];
+  for (const { file, nodes } of loadFlows()) {
+    for (const n of nodes) {
+      if (n.type !== 'mavlink-mission' || n.operation !== 'upload') continue;
+      if (n.items == null) missing.push(`${file}:${n.name || n.id}`);
+    }
+  }
+  assert.deepEqual(
+    missing,
+    [],
+    "omitted items → config.items.trim() throws in the constructor under Admin deploy"
+  );
+});
+
 test('mavlink-vehicle profiles serialize dialectRevision (Admin-API deploy)', () => {
   // Editor default is dialectRevision: 'seed' (required). Admin deploy does not
   // materialize omitted defaults — blank revision fails resolveDialect and
