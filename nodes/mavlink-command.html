@@ -29,12 +29,22 @@
   let _currentCmdCatalog = null;
   /** Messages catalog request sequence (request_message picker). */
   const _msgCatalog = { seq: 0 };
+  /** Preset list request sequence. */
+  const _presets = { seq: 0 };
+  /** Callbacks waiting on the in-flight commands fetch (null when idle). */
+  let _cmdCatalogWaiters = null;
 
   function loadPresets(cb) {
+    // Same fence as loadCatalog's: each open requests anew, outdating any
+    // request a closed dialog left in flight — whose response would otherwise
+    // rebuild the select of the dialog now open with the old node's preset.
+    const seq = ++_presets.seq;
     $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/presets'), function (data) {
+      if (seq !== _presets.seq) return;
       _currentPresetGroups = data.groups || [];
       cb(_currentPresetGroups);
     }).fail(function () {
+      if (seq !== _presets.seq) return;
       _currentPresetGroups = [];
       cb(_currentPresetGroups);
     });
@@ -54,12 +64,37 @@
       cb(_currentCmdCatalog);
       return;
     }
+    // A cold caller joins the fetch already in flight rather than starting a
+    // second one — loadCatalog's seq guard would discard the first fetch and
+    // the callback riding it (the Advanced open lost its MAV_CMD list that
+    // way whenever the presets response landed mid-flight).
+    if (_cmdCatalogWaiters) {
+      _cmdCatalogWaiters.push(cb);
+      return;
+    }
+    _cmdCatalogWaiters = [cb];
+    const waiters = _cmdCatalogWaiters;
     RED.mavlink.loadCatalog('/mavlink/command/commands', _cmdCatalog, function (catalog) {
+      // The waiters' identity is this fetch's validity: dropCommandsCatalog
+      // replaced them, so this response answers a target nobody wants.
+      if (_cmdCatalogWaiters !== waiters) return;
+      _cmdCatalogWaiters = null;
       _currentCmdCatalog = catalog;
-      cb(catalog);
+      waiters.forEach(function (fn) { fn(catalog); });
     }, {
       listKey: 'commands'
     });
+  }
+
+  /**
+   * Forget the warm commands catalog AND any fetch in flight for it — the
+   * catalog target moved (dialect/connection/tier/vehicle) or another dialog
+   * opened, so neither the cache nor the pending response speaks for what the
+   * dialog now shows.
+   */
+  function dropCommandsCatalog() {
+    _currentCmdCatalog = null;
+    _cmdCatalogWaiters = null;
   }
 
   function loadMessagesCatalog(cb) {
@@ -395,9 +430,10 @@
     oneditprepare: function () {
       const node = this;
       // The warm-catalog cache outlives a dialog (script scope), and another
-      // Command node's dialog may have filled it for a different dialect or
-      // profile — every open starts cold; the warm path only spans this open.
-      _currentCmdCatalog = null;
+      // Command node's dialog may have filled it — or left a fetch in flight
+      // for a different dialect or profile. Every open starts cold and orphans
+      // that fetch; the warm path only spans this open.
+      dropCommandsCatalog();
       const container = $('#node-input-params-container');
 
       RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
@@ -582,7 +618,7 @@
 
       $('#node-input-connection').on('change', function () {
         presetMessagesCatalog = null;
-        _currentCmdCatalog = null;
+        dropCommandsCatalog();
         refreshDelivery();
         // Connection binds a Vehicle Profile → dialect; CompID + Advanced follow it.
         RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
@@ -597,7 +633,7 @@
         // Vehicle Profile change invalidates build-tier catalogs.
         if ($('#node-input-delivery').val() === 'build') {
           presetMessagesCatalog = null;
-          _currentCmdCatalog = null;
+          dropCommandsCatalog();
           RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
           if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
           if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
@@ -610,7 +646,7 @@
         // Tier switch may change catalog source (build→vehicle, wire→connection).
         // Reload dialect data for the selected catalog source.
         presetMessagesCatalog = null;
-        _currentCmdCatalog = null;
+        dropCommandsCatalog();
         RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
         if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
@@ -646,7 +682,7 @@
         if (dialect === lastDialect) return;
         lastDialect = dialect;
         presetMessagesCatalog = null;
-        _currentCmdCatalog = null;
+        dropCommandsCatalog();
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
