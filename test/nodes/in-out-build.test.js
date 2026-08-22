@@ -1104,6 +1104,71 @@ test('mavlink-out: a disabled connection fails the send, not a phantom "sent"', 
   assert.match(node._doneErrors[0].message, /disabled/);
 });
 
+test('mavlink-out: a config with no band key (Admin-API deploy) fails the send, not a phantom "sent"', async () => {
+  // Flows deployed through the Admin API keep omitted keys absent, so
+  // `config.band` reads undefined and Number(undefined) is NaN (issue #375).
+  // The queue's §5 switch selects nothing for NaN — a real Connection is wired
+  // in so its send() guard is the thing under test, not a stub's.
+  const { Connection } = require('../../lib/connection');
+  const { mockDgram, fakeWire, fakeTimers } = require('../connection/helpers');
+  const timers = fakeTimers();
+  const connection = new Connection(
+    {
+      transport: {
+        mode: 'udp',
+        bindAddress: '0.0.0.0',
+        bindPort: 14550,
+        remoteAddress: '10.0.0.9',
+        remotePort: 14555,
+      },
+      vehicle: { targetSystem: 1, targetComponent: 1, autopilot: 3 },
+      identities: [{
+        id: 'gcs',
+        sysid: 255,
+        compid: 190,
+        heartbeatIntervalMs: 1000,
+        heartbeat: { type: 6, autopilot: 8, systemStatus: 4 },
+      }],
+      defaultIdentityId: 'gcs',
+      boundIdentityIds: ['gcs'],
+      signing: { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
+    },
+    {
+      dgram: mockDgram().module,
+      wire: fakeWire(),
+      setInterval: timers.setInterval,
+      clearInterval: timers.clearInterval,
+      resolveIdentity: () => ({ identityId: 'gcs', source: 'default' }),
+    }
+  );
+  await connection.start();
+
+  const RED = makeRED();
+  RED.nodes._register('conn-1', {
+    vehicle: Object.freeze({ id: 'v1', dialect: 'test' }),
+    subscribe() { return () => {}; },
+    // The connection node's send is a straight delegate to the runtime
+    // (nodes/mavlink-connection.js).
+    send: (message, opts) => connection.send(message, opts),
+  });
+  require('../../nodes/mavlink-out')(RED);
+  const Constructor = RED._nodeTypes['mavlink-out'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' }); // no `band` key at all
+
+  node._input({ payload: { name: 'HEARTBEAT', fields: {} } });
+
+  assert.equal(connection.queue.size(), 0, 'nothing was enqueued');
+  assert.equal(node._sends.length, 1);
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null, 'output 0 must stay silent');
+  assert.equal(out1.result, 'failed');
+  assert.notEqual(out1.result, 'sent', 'no phantom success record');
+  assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
+  assert.match(node._doneErrors[0].message, /no queue band selected/);
+  connection.close();
+});
+
 // ---------------------------------------------------------------------------
 // mavlink-build tests
 // ---------------------------------------------------------------------------
