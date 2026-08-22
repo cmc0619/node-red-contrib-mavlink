@@ -33,17 +33,18 @@ Requires Node.js 20+ and Node-RED 4.0+.
 | `mavlink-out` | Send raw or pre-built messages |
 | `mavlink-build` | Build any dialect message with delivery tiers |
 | `mavlink-command` | `MAV_CMD` presets and advanced commands |
-| `mavlink-move` | Go to (acked guided goto, `MAV_CMD_DO_REPOSITION`; streamed global setpoints on Stream) and steer (setpoints, mask derived from filled fields) |
+| `mavlink-move` | Motion: go to, steer, turn, speed, attitude, manual — acked commands or streamed setpoints per action |
 | `mavlink-param` | Read, set, or list parameters |
 | `mavlink-payload` | Camera, gimbal, servo, release |
 | `mavlink-state` | Peer table reads and transitions |
+| `mavlink-health` | Assert an identity's health with an expiring lease; a fault stops its HEARTBEAT |
 | `mavlink-mission` | Upload, download, or clear mission/fence/rally |
 | `mavlink-fanout` | Fan-out one action across selected vehicles, with optional per-member offsets |
 | `mavlink-formation` | Position a group into a geometric formation around an anchor |
 
 ## Examples
 
-Importable flows ship with the package — 22 of them, plus 35 more for a live SITL rig. In
+Importable flows ship with the package — 23 of them, plus 41 more for a live SITL rig. In
 the Node-RED editor: **Import → Examples → @cmc0619/node-red-contrib-mavlink**.
 
 A few to start with; every flow is indexed in
@@ -74,8 +75,8 @@ Before deploying against a vehicle or SITL, set each example's **Connection** en
 
 Building from a checkout, the Docker Compose SITL harness (5× ArduPilot + 5× PX4), and
 troubleshooting bind-mounted installs are covered in the
-[repository README](https://github.com/cmc0619/node-red-contrib-mavlink#readme). Those parts
-are not in this package — they only apply to a git clone.
+[repository README](https://github.com/cmc0619/node-red-contrib-mavlink/blob/main/.github/README.md).
+Those parts are not in this package — they only apply to a git clone.
 
 ## License
 
