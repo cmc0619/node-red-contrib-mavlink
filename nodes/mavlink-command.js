@@ -251,17 +251,18 @@ module.exports = function registerMavlinkCommand(RED) {
     function getParams(payload, resolution) {
       const userParams = mergeParams(config, payload);
       applyModeName(userParams, payload, resolution);
+      // Two views of one request. `wire` is what transmits — zero-filled, so a
+      // blank lat/lon becomes 0,0, a legal coordinate the vehicle will fly to;
+      // the editor is what stops that being configured (mavlink-command.html
+      // `params`), and on the payload path it is trusted and rides (AGENTS.md,
+      // input trust). `requested` keeps the holes: completion verifies what
+      // was asked for, and the wire filler is indistinguishable from a real 0
+      // there (custom_mode 0 is ArduPilot STABILIZE).
+      const requested = [1, 2, 3, 4, 5, 6, 7].map((i) => userParams[i]);
       if (preset) {
-        // buildParamArray zero-fills a blank param, so a blank lat/lon becomes
-        // 0,0 — a legal coordinate the vehicle will fly to. The editor is what
-        // stops that being configured (mavlink-command.html `params`); on the
-        // payload path it is trusted and rides (AGENTS.md, input trust).
-        return buildParamArray(preset, userParams);
+        return { wire: buildParamArray(preset, userParams), requested };
       }
-      // Advanced: build a full 7-element array from userParams, default 0.
-      return [1, 2, 3, 4, 5, 6, 7].map((i) =>
-        userParams[i] !== undefined ? userParams[i] : 0
-      );
+      return { wire: requested.map((v) => (v !== undefined ? v : 0)), requested };
     }
 
     /**
@@ -334,7 +335,7 @@ module.exports = function registerMavlinkCommand(RED) {
       // it is the frame the COMMAND_INT builder scales param5/6 by, nothing
       // more.
       const frame = resolveFrame(msg.mavFrame, config.frame);
-      const paramArray = getParams(msg.payload, { target, profile });
+      const { wire: paramArray, requested: requestedParams } = getParams(msg.payload, { target, profile });
 
       /**
        * Build the wire message for a carrier at a given confirmation counter.
@@ -533,7 +534,7 @@ module.exports = function registerMavlinkCommand(RED) {
           if (completionKey && connNode.peerTable) {
             const stateCheck = checkCompletion(
               completionKey,
-              paramArray,
+              requestedParams,
               connNode.peerTable,
               target.sysid,
               target.compid,
@@ -579,7 +580,7 @@ module.exports = function registerMavlinkCommand(RED) {
             applyActionStatus(node, 'sending', `${displayName} climbing\u2026`);
             const completionWait = waitForCompletion({
               completionKey,
-              params: paramArray,
+              params: requestedParams,
               peerTable: connNode.peerTable,
               sysid: target.sysid,
               compid: target.compid,

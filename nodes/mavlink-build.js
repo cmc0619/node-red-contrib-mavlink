@@ -79,9 +79,11 @@ module.exports = function registerMavlinkBuild(RED) {
     // The editor owns the default ('2' = Control) — just convert it.
     const defaultBand = Number(config.band);
 
-    // Default field values from node config. The editor validates this, so the
-    // runtime just reads it.
-    const configFields = JSON.parse(config.fields || '{}');
+    // Default field values from node config. The editor validates this and
+    // blesses blank ("no config-level defaults"); the blank branch spells that
+    // one state. An absent key is not blank — it craters here, blaming the
+    // malformed flow (§0).
+    const configFields = config.fields.trim() ? JSON.parse(config.fields) : {};
 
     // Repeat interval.
     const repeatMs = Number(config.repeatMs);

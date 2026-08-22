@@ -55,6 +55,19 @@ test('DO_SET_MODE completion stays pending when custom mode 0 is requested but t
   assert.equal(res.done, false);
 });
 
+test('a base-mode-only DO_SET_MODE (no custom mode requested) completes instead of timing out', () => {
+  // checkCompletion receives the *requested* params, sparse — the command
+  // node's wire array zero-fills, and a filler 0 is indistinguishable from
+  // requesting mode 0. With param 2 never supplied, the peer table cannot
+  // verify a base-only mode change; the set is taken as satisfied rather
+  // than waiting on a mode the vehicle was never asked to enter.
+  const params = [1, undefined, undefined, undefined, undefined, undefined, undefined];
+  const pt = peerWithMode(3, 1, 5);
+  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
+  assert.equal(res.done, true);
+  assert.equal(res.detail, 'mode set');
+});
+
 // ── TAKEOFF altitude datum by frame (issue #98c) ─────────────────────────────
 
 /** A peer whose GLOBAL_POSITION_INT carries distinct AMSL and relative alts. */

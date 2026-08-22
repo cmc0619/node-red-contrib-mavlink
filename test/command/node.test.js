@@ -1088,6 +1088,44 @@ test('ack settle and close in one synchronous stack cannot spawn a zombie wait (
   assert.equal(reads, 0, 'no completion polling after close');
 });
 
+test('a base-mode-only Set Mode completes at the ack — the wire zero-fill is not a request for mode 0', async () => {
+  // Completion receives the *requested* params, sparse. The wire array
+  // zero-fills a blank custom mode, and custom_mode 0 is a real mode
+  // (ArduPilot STABILIZE) — judged from the wire view, a base-only set would
+  // wait for flightMode 0 the vehicle was never asked to enter and falsely
+  // time out. With param 2 never supplied, the set completes as satisfied.
+  const conn = connStubWithInject();
+  conn.peerTable = new StubPeerTable();
+  conn.peerTable.setComponent(1, 1, { flightMode: 5 }); // any mode but 0
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: JSON.stringify({ 1: 81 }), // base_mode only; no custom mode
+    connection: 'conn',
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'set_mode',
+    delivery: 'complete',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '60000',
+    maxRetries: '0',
+  });
+
+  let output;
+  node.emit('input', { payload: {} }, (messages) => { output = messages; }, () => {});
+  await tick();
+  conn.injectAck({ command: 176, result: 0 }, 1, 1); // MAV_CMD_DO_SET_MODE
+  await tick();
+  await tick();
+
+  assert.ok(output, 'the run settled at the ack instead of polling for a mode change');
+  assert.equal(output[1].result, 'accepted');
+  assert.match(output[1].detail, /mode set/);
+  node.emit('close', () => {});
+});
+
 test('a completion already satisfied at the ack cannot emit through a same-stack close (Codex)', async () => {
   // The settle-before-cancel variant: the peer state already satisfies the
   // completion when the ACCEPTED ack arrives, so waitForCompletion() resolves

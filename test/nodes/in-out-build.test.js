@@ -1119,7 +1119,7 @@ test('mavlink-build: a resolvable config clears any stale badge at deploy', () =
   require('../../nodes/mavlink-build')(RED);
   const Constructor = RED._nodeTypes['mavlink-build'];
   const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', tier: 'build', messageName: 'HEARTBEAT' });
+  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', tier: 'build', messageName: 'HEARTBEAT', fields: '{}' });
 
   assert.deepEqual(node._status, {}, 'a good config clears rather than badges');
 });
@@ -1130,7 +1130,7 @@ test('mavlink-build: suppresses when msg.payload === false', () => {
   require('../../nodes/mavlink-build')(RED);
   const Constructor = RED._nodeTypes['mavlink-build'];
   const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', messageName: 'HEARTBEAT', tier: 'build' });
+  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', messageName: 'HEARTBEAT', tier: 'build', fields: '{}' });
 
   node._input({ payload: false });
 
