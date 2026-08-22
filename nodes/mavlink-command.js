@@ -620,7 +620,10 @@ module.exports = function registerMavlinkCommand(RED) {
                 result: 'accepted',
                 resultCode: MAV_RESULT.ACCEPTED,
                 resultParam2: ackOutcome.resultParam2,
-                confirmedBy: 'state',
+                // 'state' when the peer table confirmed; 'ack' when the
+                // condition was unverifiable and the accepted ack is the
+                // whole evidence (base-only SET_MODE).
+                confirmedBy: compOutcome.confirmedBy,
                 retries: ackOutcome.retries,
                 elapsed: Date.now() - startMs,
                 detail: compOutcome.detail,

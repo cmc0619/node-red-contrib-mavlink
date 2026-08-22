@@ -55,17 +55,38 @@ test('DO_SET_MODE completion stays pending when custom mode 0 is requested but t
   assert.equal(res.done, false);
 });
 
-test('a base-mode-only DO_SET_MODE (no custom mode requested) completes instead of timing out', () => {
+test('a base-mode-only DO_SET_MODE is unverifiable — never done, never falsely confirmed', () => {
   // checkCompletion receives the *requested* params, sparse — the command
   // node's wire array zero-fills, and a filler 0 is indistinguishable from
-  // requesting mode 0. With param 2 never supplied, the peer table cannot
-  // verify a base-only mode change; the set is taken as satisfied rather
-  // than waiting on a mode the vehicle was never asked to enter.
+  // requesting mode 0. With param 2 never supplied, state can neither
+  // confirm nor deny the set: not `done` (an ack-timeout caller reporting
+  // "accepted" off a merely-existing peer would be a false success, §0
+  // rule 3), and flagged unverifiable so the post-ack wait settles from the
+  // accepted ack instead of running into a false timeout.
   const params = [1, undefined, undefined, undefined, undefined, undefined, undefined];
   const pt = peerWithMode(3, 1, 5);
   const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
-  assert.equal(res.done, true);
-  assert.equal(res.detail, 'mode set');
+  assert.equal(res.done, false);
+  assert.equal(res.unverifiable, true);
+});
+
+test('waitForCompletion settles an unverifiable condition as success confirmed by the ack', async () => {
+  // The wait only ever runs after an ACCEPTED ack (the complete tier), so
+  // for a condition state can never speak to, the ack is the whole
+  // confirmation — attributed honestly, not as 'state'.
+  const params = [1, undefined, undefined, undefined, undefined, undefined, undefined];
+  const pt = peerWithMode(3, 1, 5);
+  const wait = waitForCompletion({
+    completionKey: COMPLETION.SET_MODE,
+    params,
+    peerTable: pt,
+    sysid: 3,
+    compid: 1,
+    timeoutMs: 50,
+  });
+  const outcome = await wait.promise;
+  assert.equal(outcome.success, true);
+  assert.equal(outcome.confirmedBy, 'ack');
 });
 
 // ── TAKEOFF altitude datum by frame (issue #98c) ─────────────────────────────

@@ -1123,6 +1123,47 @@ test('a base-mode-only Set Mode completes at the ack — the wire zero-fill is n
   assert.ok(output, 'the run settled at the ack instead of polling for a mode change');
   assert.equal(output[1].result, 'accepted');
   assert.match(output[1].detail, /mode set/);
+  assert.equal(output[1].confirmedBy, 'ack',
+    'state never spoke — the accepted ack is the whole confirmation, attributed honestly');
+  node.emit('close', () => {});
+});
+
+test('a base-mode-only Set Mode whose ack is lost stays unconfirmed — no success from a merely-existing peer (Codex)', async (t) => {
+  // The other half of the sparse-params contract: on the ACK-TIMEOUT path the
+  // peer-table check exists to prove a lost return leg ("ack timeout but
+  // armed"). A base-only set has nothing state can prove, so an existing peer
+  // is zero evidence the command ever arrived — reporting accepted there is
+  // the §0 rule 3 false success. It must fall through to unconfirmed.
+  installAckTimerHarness(t);
+  const conn = connStubWithInject();
+  conn.peerTable = new StubPeerTable();
+  conn.peerTable.setComponent(1, 1, { flightMode: 5 });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: JSON.stringify({ 1: 81 }), // base_mode only; no custom mode
+    connection: 'conn',
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'set_mode',
+    delivery: 'complete',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeout: '1000',
+    maxRetries: '0',
+  });
+
+  let output;
+  node.emit('input', { payload: {} }, (messages) => { output = messages; }, () => {});
+  // No ack ever arrives; the harness fires the ack window immediately. The
+  // harness also swallows zero-delay timers, so waits go through setImmediate.
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.ok(output, 'the timeout settled');
+  assert.equal(output[1].result, 'unconfirmed');
+  assert.equal(output[1].confirmedBy, 'none');
   node.emit('close', () => {});
 });
 
