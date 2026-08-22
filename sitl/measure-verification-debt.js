@@ -32,6 +32,13 @@ const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-vdebt-'));
 const OUT = path.join(WORK, 'verification-debt-results.json');
 const PX4_HOLD_MODE = 0x03040000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const PROBE_FILTER = process.env.VDEBT_PROBE
+  ? new Set(process.env.VDEBT_PROBE.split(',').map((s) => s.trim()))
+  : null;
+
+function wantProbe(name) {
+  return !PROBE_FILTER || PROBE_FILTER.has(name);
+}
 
 function note(results, name, ok, detail, extra) {
   const row = { name, ok, detail, ...(extra || {}) };
@@ -361,14 +368,128 @@ async function probePx4LoiterReposition(results) {
   await new Promise((resolve) => conn.close(() => resolve()));
 }
 
+async function sampleHeadingAfterReposition(conn, sysid, msg) {
+  const headings = [];
+  const unsub = conn.subscribe({}, (decoded) => {
+    if (!decoded || Number(decoded.sysid) !== Number(sysid)) return;
+    if (decoded.name === 'VFR_HUD') {
+      headings.push({ t: Date.now(), hdg: Number(decoded.fields.heading) });
+    } else if (decoded.name === 'ATTITUDE') {
+      headings.push({
+        t: Date.now(),
+        hdg: ((Number(decoded.fields.yaw) * 180) / Math.PI + 360) % 360,
+      });
+    }
+  });
+  requestTelemetry(conn, sysid);
+  const ackWait = waitCommandAck(conn, sysid, DO_REPOSITION);
+  conn.send(msg, { band: BAND.CONTROL, target: { sysid, compid: 1 } });
+  const ack = await ackWait;
+  const t0 = Date.now();
+  await sleep(20000);
+  unsub();
+  const late = headings.filter((h) => h.t >= t0 + 8000);
+  const finalHdg = late.length ? late[late.length - 1].hdg : null;
+  return { ack, finalHdg, sampleCount: late.length };
+}
+
+function headingDeltaDeg(a, b) {
+  if (a == null || b == null) return null;
+  return Math.abs((((a - b) + 540) % 360) - 180);
+}
+
+async function probeGotoHeadingAp(results) {
+  const conn = makeConn({
+    bindPort: 14550,
+    remotePort: 14550,
+    sysid: 1,
+    firmware: 'ardupilot',
+    autopilot: 3,
+    dialect: 'ardupilotmega',
+  });
+  await conn.start();
+  await sleep(2000);
+  try {
+    await apGuidedArm(conn, 1);
+    sendCmd(conn, 1, 22, [0, 0, 0, 0, 0, 0, 12]);
+    await sleep(12000);
+    const msg = buildRepositionMessage({
+      changeMode: false,
+      frame: MAV_FRAME.GLOBAL_RELATIVE_ALT,
+      target: { sysid: 1, compid: 1 },
+      position: { lat: -35.362262, lon: 149.165237, alt: 20 },
+      yaw: 90,
+    });
+    const { ack, finalHdg, sampleCount } = await sampleHeadingAfterReposition(conn, 1, msg);
+    const delta = headingDeltaDeg(finalHdg, 90);
+    const ignored = ack && ack.result === 0 && delta != null && delta > 30;
+    note(results, 'goto-heading-ap-14.108', ack && ack.result === 0,
+      ignored
+        ? `param4 yaw ignored — final hdg ${finalHdg.toFixed(1)}° (Δ90=${delta.toFixed(1)}°); completion tier does not capture heading`
+        : `ack=${ack ? ack.result : 'timeout'} hdg=${finalHdg}`,
+      { commandedYawDeg: 90, finalHdg, deltaFrom90: delta, sampleCount, ack });
+  } catch (err) {
+    note(results, 'goto-heading-ap-14.108', false, err.message);
+  }
+  await new Promise((resolve) => conn.close(() => resolve()));
+}
+
+async function probeGotoHeadingPx4(results) {
+  const prep = prepPx4LabParams();
+  note(results, 'goto-heading-px4-prep', prep.ok, prep.ok ? 'lab helpers' : prep.stderr, prep);
+  const conn = makeConn({
+    bindPort: 14560,
+    remotePort: 14560,
+    sysid: 11,
+    firmware: 'px4',
+    autopilot: 12,
+    dialect: 'common',
+  });
+  await conn.start();
+  await sleep(2000);
+  try {
+    await px4ArmClimb(conn, 11);
+    const msg = buildRepositionMessage({
+      changeMode: true,
+      frame: MAV_FRAME.GLOBAL_RELATIVE_ALT,
+      target: { sysid: 11, compid: 1 },
+      position: { lat: 47.3991, lon: 8.5456, alt: 20 },
+      yaw: 90,
+    });
+    const { ack, finalHdg, sampleCount } = await sampleHeadingAfterReposition(conn, 11, msg);
+    const delta = headingDeltaDeg(finalHdg, 90);
+    const honoured = ack && ack.result === 0 && delta != null && delta < 25;
+    note(results, 'goto-heading-px4-14.108', honoured,
+      honoured
+        ? `PX4 honoured param4 yaw — final hdg ${finalHdg.toFixed(1)}° (Δ90=${delta.toFixed(1)}°); completion tier still ack-only`
+        : `ack=${ack ? ack.result : 'timeout'} hdg=${finalHdg} Δ90=${delta}`,
+      { commandedYawDeg: 90, finalHdg, deltaFrom90: delta, sampleCount, ack });
+  } catch (err) {
+    note(results, 'goto-heading-px4-14.108', false, err.message);
+  }
+  await new Promise((resolve) => conn.close(() => resolve()));
+}
+
 async function main() {
   const results = [];
-  await probeTakeoffCompletion(results);
-  await probeYawRateNearTarget(results);
-  await probePx4LoiterReposition(results);
+  const ran = [];
+  if (wantProbe('14.79')) { ran.push('14.79-SITL'); await probeTakeoffCompletion(results); }
+  if (wantProbe('14.98.5')) { ran.push('14.98.5'); await probeYawRateNearTarget(results); }
+  if (wantProbe('14.108-loiter')) { ran.push('14.108-loiter'); await probePx4LoiterReposition(results); }
+  if (wantProbe('14.108-heading')) {
+    ran.push('14.108-heading');
+    await probeGotoHeadingAp(results);
+    await probeGotoHeadingPx4(results);
+  }
+  if (ran.length === 0) {
+    ran.push('14.79-SITL', '14.98.5', '14.108-loiter');
+    await probeTakeoffCompletion(results);
+    await probeYawRateNearTarget(results);
+    await probePx4LoiterReposition(results);
+  }
   const summary = {
     measuredAt: new Date().toISOString(),
-    probes: ['14.79-SITL', '14.98.5', '14.108-loiter'],
+    probes: ran,
   };
   const allOk = results.every((r) => r.ok);
   note(results, 'summary', allOk, 'verification-debt probes complete', summary);

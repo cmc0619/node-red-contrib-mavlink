@@ -159,6 +159,7 @@ broadcast. See `sitl/scripts/entrypoint-ap-mcast.sh` for the full brief.
 ```bash
 # 14.79-SITL, 14.98.5, 14.108-loiter — writes /tmp/nrc-vdebt-*/
 node sitl/measure-verification-debt.js
+# Single probe: VDEBT_PROBE=14.108-heading node sitl/measure-verification-debt.js
 ```
 
 ### Peer-table enrichment while airborne (§8)

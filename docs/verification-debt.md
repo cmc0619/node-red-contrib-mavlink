@@ -12,8 +12,8 @@ This is the inventory behind the **1.0.0 release posture** recorded in
 |---|---:|---|
 | Rig-only (🧪, no ✔) | **30** | SITL/lab measurements kept as recorded; code and cited tests exist in-tree but were not re-probed on 2026-08-19 |
 | Source-read (📖, no ✔) | **14** | Upstream/spec hypotheses recorded on the cited date; no matching rig row in §14 |
-| Open subclaims | **2** | Named gaps inside otherwise-settled §14 entries or on shipped editor/runtime paths |
-| **Source-read debt (reported)** | **16** | 14 header rows + 2 open subclaims (the external audit's headline number) |
+| Open subclaims | **1** | Named gaps inside otherwise-settled §14 entries or on shipped editor/runtime paths |
+| **Source-read debt (reported)** | **15** | 14 header rows + 1 open subclaim (the external audit's headline number) |
 
 **Release posture:** documented, **not blocking 1.0.0** (§14.132). Every shipped-path
 item below either has an editor withhold, is absent from the operator surface, or is
@@ -65,15 +65,14 @@ handed (§0).
 | 14.77 | COMMAND_INT x/y has no cross-fleet sentinel |
 | 14.99 | ArduPilot copter yaw is command-only |
 
-## Open subclaims (2)
+## Open subclaims (1)
 
 These are the gaps the external audit flagged on **shipped paths**. Each is named in
 §14 or the editor; none rely on silent runtime refusal.
 
 | id | §14 / path | claim | shipped mitigation |
 |---|---|---|---|
-| 14.108-heading | 14.108 | Goto resulting heading not captured | Does not affect send/refuse; completion uses ack not heading |
-| 14.95-terrain | 14.95 | Terrain frame datum honour not instrumented | **Terrain alt ref absent** from Move surface (`lib/move/action.js`) |
+| 14.95-terrain | 14.95 | Terrain frame datum honour not instrumented | **Terrain alt ref absent** from Move surface (`lib/move/action.js`) — no rig path |
 
 ## Recently closed subclaims
 
@@ -84,6 +83,7 @@ These are the gaps the external audit flagged on **shipped paths**. Each is name
 | 14.79-SITL | 2026-08-22 | Takeoff completion at home AMSL ~584 m, 10 m relative climb (`sitl/measure-verification-debt.js`) |
 | 14.98.5 | 2026-08-22 | Mid-error yaw slew ~44°/s vs 20°/s commanded — not a speed limit (`sitl/measure-verification-debt.js`) |
 | 14.108-loiter | 2026-08-22 | PX4 Hold + `changeMode=false` → DO_REPOSITION ACCEPTED (`sitl/measure-verification-debt.js`) |
+| 14.108-heading | 2026-08-22 | PX4 honours goto yaw (Δ20°); AP ignores param4; completion tier ack-only (`VDEBT_PROBE=14.108-heading`) |
 
 ## What would move the needle after 1.0.0
 

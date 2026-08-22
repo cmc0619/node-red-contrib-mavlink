@@ -55,4 +55,4 @@ Inventoried in `docs/verification-debt.md`; release posture in `DESIGN.md` §14.
 3. ~~Takeoff completion at non-zero home~~ — **done 2026-08-22** (`sitl/measure-verification-debt.js`).
 4. ~~PX4 AUTO_LOITER flag-clear on goto~~ — **done 2026-08-22** (`sitl/measure-verification-debt.js`).
 
-Remaining open subclaims (14.108-heading, 14.95-terrain) do not block operator paths.
+Remaining open subclaim: **14.95-terrain** (terrain alt ref absent from Move surface — no rig path).

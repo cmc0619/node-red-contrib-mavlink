@@ -821,8 +821,10 @@ a reposition is **ACCEPTED iff `CHANGE_MODE` (param2 bit) is set OR the vehicle 
 already in the stack's guided-capable mode** (GUIDED on ArduPilot, AUTO_LOITER/Hold on
 PX4), otherwise **DENIED (2) on both stacks**. MAVSDK's per-autopilot pre-switch is the
 same table client-side. PX4 in Hold (`0x03040000`) with `changeMode=false` → ACCEPTED
-(🧪 2026-08-22, `sitl/measure-verification-debt.js`). The 2026-08-11 run's `param4`
-was encoded in radians — units settled; resulting heading not captured.
+(🧪 2026-08-22, `sitl/measure-verification-debt.js`). Post-goto heading: PX4
+honours param4 yaw (~70° vs 90° commanded, Δ20°); ArduPilot ignores it (355° vs
+90°) — the completion tier reports ack only, not resulting heading (14.108-heading).
+The 2026-08-11 run's `param4` was encoded in radians — units settled.
 *Check:* `node sitl/measure-verification-debt.js`; one-field twins of examples 27/30.
 
 **14.109 PX4 refuses a stick-driven mode airborne without RC.** 🧪 (2026-08-12)
