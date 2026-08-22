@@ -407,6 +407,41 @@ async function probeGuidTimeout(conn, sysid, results) {
   });
 }
 
+async function probeGuidYawPark(conn, sysid, results) {
+  const { samples, unsub } = attachSampler(conn, sysid);
+  const t0 = Date.now();
+  sendMove(conn, sysid, {
+    mode: 'velocity',
+    frame: MAV_FRAME.LOCAL_NED,
+    velocity: { north: 0, east: 0, up: 0 },
+    yaw: 180,
+    yawRate: 20,
+  });
+  await sleep(6500);
+  unsub();
+  const att = samples.filter((s) => s.kind === 'att' && s.t >= t0);
+  const rates = att.map((s) => ({
+    dt: s.t - t0,
+    rateDegS: Math.abs((s.yawspeed || 0) * 180) / Math.PI,
+  }));
+  const early = rates.filter((s) => s.dt >= 800 && s.dt <= 2500);
+  const late = rates.filter((s) => s.dt >= 3800 && s.dt <= 6000);
+  const earlyMed = early.length
+    ? early.map((s) => s.rateDegS).sort((a, b) => a - b)[Math.floor(early.length / 2)]
+    : null;
+  const lateMed = late.length
+    ? late.map((s) => s.rateDegS).sort((a, b) => a - b)[Math.floor(late.length / 2)]
+    : null;
+  const parked = earlyMed != null && lateMed != null && earlyMed > 3 && lateMed < 2;
+  note(results, 'ap-guid-yaw-park', true, parked
+    ? 'one-shot yaw+rate slews then parks after ~GUID_TIMEOUT (14.98.6)'
+    : 'no clear yaw-rate park on one-shot yaw+rate', {
+    earlyMedDegS: earlyMed,
+    lateMedDegS: lateMed,
+    sampleCount: rates.length,
+  });
+}
+
 async function probeYawAndRate(conn, sysid, results, tag) {
   const { samples, unsub } = attachSampler(conn, sysid);
   const target = { sysid, compid: 1 };
@@ -647,6 +682,7 @@ async function main() {
     await probeYawOnly(ap, 1, results);
     await sleep(1000);
     await probeGuidTimeout(ap, 1, results);
+    await probeGuidYawPark(ap, 1, results);
     await sleep(1000);
     await probeYawAndRate(ap, 1, results, 'ap');
   } catch (err) {

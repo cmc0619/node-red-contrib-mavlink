@@ -143,6 +143,17 @@ node sitl/measure-offset-stream.js
 Confirms repeating offset streams walk the vehicle — validates the Stream withhold in
 the Move editor.
 
+### Swarm multicast / subnet broadcast (§14.133)
+
+```bash
+cd sitl && docker compose --profile mcast up -d --build
+# Stop fleet containers that bind :14550 first if needed.
+node sitl/measure-swarm-mcast.js   # from host — ap-mcast-41 uses network_mode: host
+```
+
+Probes group membership, broadcast arm, loopback, self-echo filter, and PX4 subnet
+broadcast. See `sitl/scripts/entrypoint-ap-mcast.sh` for the full brief.
+
 ### Peer-table enrichment while airborne (§8)
 
 ```bash

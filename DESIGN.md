@@ -717,8 +717,8 @@ alone leaves only the offboard timeout.
 5. Yaw + yaw_rate are complementary on both stacks, but **the commanded rate is not a
    speed limit**: commanded 20 °/s, measured ~60 °/s (AP) / ~11 °/s (PX4) — the error
    term dominates far from the target heading (hypothesis, unmeasured near it).
-6. `GUID_TIMEOUT` also parks the yaw mode (source-read, unmeasured): a one-shot yaw+rate
-   stops slewing after ~3 s.
+6. `GUID_TIMEOUT` also parks the yaw mode (🧪 2026-08-22): a one-shot yaw+rate stops
+   slewing after ~3 s (`node sitl/measure-move-179.js`, `ap-guid-yaw-park` probe).
 *Check:* `node sitl/measure-move-179.js` (rig).
 
 **14.99 There is no working way to yaw an ArduPilot copter with a setpoint or reposition — yaw is a command.** 🧪 📖
@@ -983,6 +983,18 @@ false success — the only promotion path for an unmeasured mechanism is a demon
 silence-or-false-success outcome (§9). Post-1.0 measurement priority is ordered in the
 inventory doc; the highest-value probe is confirming the offset-stream withhold on SITL.
 *Check:* `node scripts/inventory-verification-debt.js`; `docs/verification-debt.md`.
+
+**14.133 Swarm multicast and subnet broadcast reach real vehicles on the lab.** 🧪 (2026-08-22)
+With the driver fixes on main (loopback at OS default; bound-identity echo dropped in
+`_onFrame`), a Connection bound `0.0.0.0:14550` with swarm address `239.255.145.50`
+learns ap-mcast-41, arms it with one `target_system=0` write, and does not register
+sysid 255 as a peer. Two group members on one host hear each other. PX4 sysid 42 on the
+bridge accepts subnet broadcast (`172.18.255.255:18570` with `MAV_0_BROADCAST=1`) and
+arms from `target_system=0`. **Lab topology:** the compose bridge does not deliver
+inter-container IPv4 multicast — ap-mcast-41 needs `network_mode: host` (INSTANCE 5);
+the measurement script runs on the host. PX4 broadcast is tested from the host against
+the bridge gateway path.
+*Check:* `docker compose --profile mcast up -d`; `node sitl/measure-swarm-mcast.js`.
 
 ---
 

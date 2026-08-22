@@ -262,14 +262,18 @@ services:
   # line (mcast:239.255.145.50:14550); px4-bcast-42 is the subnet-broadcast
   # probe (PX4 joins no group — its mavlink just binds a UDP port pair
   # 14580→14581, same shape as the GCS fleet).
+  # ap-mcast-41 uses host networking: the compose bridge does not deliver
+  # inter-container IPv4 multicast (measured 2026-08-22). Host mode lets the
+  # mcast: serial link and a host-bound Connection share the group.
   ap-mcast-41:
     <<: *ap
     container_name: nrc-ap-mcast-41
     profiles: ["mcast"]
+    network_mode: host
     entrypoint: ["/bin/bash", "/usr/local/bin/entrypoint-ap-mcast.sh"]
     environment:
       SYSID: "41"
-      INSTANCE: "0"
+      INSTANCE: "5"
       MCAST_GROUP: 239.255.145.50
       MCAST_PORT: "14550"
     volumes:
