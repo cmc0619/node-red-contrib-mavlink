@@ -70,6 +70,18 @@ test('a base-mode-only DO_SET_MODE is unverifiable — never done, never falsely
   assert.equal(res.unverifiable, true);
 });
 
+test('a base-only DO_SET_MODE is unverifiable even before the peer has reported', () => {
+  // Unverifiability is a property of the request, not the table. The peer
+  // gate must not answer first: a set addressed at a compid the table never
+  // holds (0 = all components; an autopilot acking from another id) would
+  // otherwise read "peer not in table" and wait out the whole completion
+  // window after an accepted ack.
+  const params = [1, undefined, undefined, undefined, undefined, undefined, undefined];
+  const res = checkCompletion(COMPLETION.SET_MODE, params, new StubPeerTable(), 3, 0);
+  assert.equal(res.done, false);
+  assert.equal(res.unverifiable, true);
+});
+
 test('waitForCompletion settles an unverifiable condition as success confirmed by the ack', async () => {
   // The wait only ever runs after an ACCEPTED ack (the complete tier), so
   // for a condition state can never speak to, the ack is the whole
