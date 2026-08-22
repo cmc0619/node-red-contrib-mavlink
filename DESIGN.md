@@ -550,11 +550,13 @@ deliberately stays unclassified/pass-through.
 *Check:* `lib/command/carrier.js` `LOCAL_FRAMES`; probe recipe in the entry's history
 (send before reading — `px4-listener` prints the retained previous value on start).
 
-**14.79 Takeoff completion compares climb height; the takeoff param's datum is frame-dependent.** ✔ (unit-tested, not SITL-measured)
+**14.79 Takeoff completion compares climb height; the takeoff param's datum is frame-dependent.** ✔ 🧪 (unit-tested; SITL 2026-08-22)
 In an absolute frame the param is AMSL — comparing it to `relative_alt` never satisfies
 at non-zero home elevation. Completion converts absolute frames via
 `param − (alt − relative_alt)`; only the effective-INT carrier passes a frame.
-*Check:* `node --test test/command/completion.test.js`.
+AP Copter-4.7 at home AMSL ~584 m: 10 m relative takeoff completes at ~10 m
+`relative_alt` (`node sitl/measure-verification-debt.js`).
+*Check:* `node --test test/command/completion.test.js`; rig probe `takeoff-14.79-sitl`.
 
 **14.80 A `PARAM_VALUE` echo is decoded by the frame's own `param_type`; the request's type only encodes the outbound set.** 🧪 (re-measured 2026-08-18)
 ArduPilot stores by its own table type and *ignores* the wire type (a REAL32-labeled set
@@ -574,11 +576,12 @@ defaulting to c-cast (deliberately no editor red-ring — either escape can make
 correct at message time). `resolveParamEncoding` is the only place the ladder runs.
 *Check:* `node --test test/param/param.test.js test/addressing/resolve.test.js`.
 
-**14.82 A parameter's encoding is not discoverable on ArduPilot.** 🧪 (2026-08-13)
+**14.82 A parameter's encoding is not discoverable on ArduPilot.** 🧪 (2026-08-13, re-measured 2026-08-22)
 Neither stack streams `AUTOPILOT_VERSION` unsolicited; on request PX4 reports the
 bytewise bit, **ArduPilot reports neither encoding bit** (capabilities 64495). The
 capability rung can only correct a mislabeled PX4; `HEARTBEAT.autopilot` (1 Hz, free)
 subsumes the probe for every case either could fix.
+*Check:* `node sitl/measure-capabilities-299.js` (rig).
 
 **14.83 A wide bitmask does not survive c-cast — and the loss reports success.** 🧪 (2026-08-13)
 float32 carries 24 mantissa bits: what breaks is *bit span*, not magnitude (−1 and −2³¹
@@ -702,7 +705,7 @@ braking, same encoding as a velocity stream. PX4 logs "invalid" only for true al
 alone leaves only the offboard timeout.
 *Check:* `lib/move/index.js` `buildStopMessage`; `node --test test/move/move.test.js`.
 
-**14.98 Move SITL queue findings (#175/#179).** 🧪 (2026-08-08)
+**14.98 Move SITL queue findings (#175/#179).** 🧪 (2026-08-08, re-measured 2026-08-22)
 1. Stream-replace halt is invisible (~4% dip at 10 Hz) — thin null result (400 ms
    window, 4 samples/frame); enough to decline a mutate-in-place rewrite, not enough to
    rely on beyond that.
@@ -714,10 +717,11 @@ alone leaves only the offboard timeout.
 4. PX4 held OFFBOARD at 5 Hz *and* 1 Hz with lab helpers; full silence exits OFFBOARD.
    No "<2 Hz" advisory.
 5. Yaw + yaw_rate are complementary on both stacks, but **the commanded rate is not a
-   speed limit**: commanded 20 °/s, measured ~60 °/s (AP) / ~11 °/s (PX4) — the error
-   term dominates far from the target heading (hypothesis, unmeasured near it).
-6. `GUID_TIMEOUT` also parks the yaw mode (source-read, unmeasured): a one-shot yaw+rate
-   stops slewing after ~3 s.
+   speed limit**: commanded 20 °/s, measured ~60 °/s (AP) far from target and ~44 °/s
+   at mid error (15–45°) — still above the commanded cap; near target (<15°) slew drops
+   to ~0 as the vehicle arrives (🧪 2026-08-22, `sitl/measure-verification-debt.js`).
+6. `GUID_TIMEOUT` also parks the yaw mode (🧪 2026-08-22): a one-shot yaw+rate stops
+   slewing after ~3 s (`node sitl/measure-move-179.js`, `ap-guid-yaw-park` probe).
 *Check:* `node sitl/measure-move-179.js` (rig).
 
 **14.99 There is no working way to yaw an ArduPilot copter with a setpoint or reposition — yaw is a command.** 🧪 📖
@@ -735,8 +739,9 @@ every other frame returns silently. ArduCopter adds current position for 7, **8*
 (one handler branch — the 2026-08-05 measurement was right). QGC's only local-setpoint
 send is frame 7 (guided altitude change). Restored as Steer's "Offset from here"; blank
 axes are legal there and nowhere else (a zero *offset* is no movement; a zero *absolute*
-is the EKF origin). Stream is not offered — a repeating offset walks the vehicle
-(source-read, not yet measured).
+is the EKF origin). Stream is not offered — a repeating offset walks the vehicle (🧪
+2026-08-22: AP Copter-4.7, 5 Hz `LOCAL_OFFSET_NED` z=+2 m climbed ~7.3 m in 3 s;
+`node sitl/measure-offset-stream.js`).
 *Check:* `lib/move/frames.js` comment; frame-7 row of 14.94.
 
 **14.101 Which motion message an ArduPilot vehicle honours is a property of the vehicle, not the firmware.** 📖 (2026-08-14, cornerstone)
@@ -810,15 +815,17 @@ there runs the whole downstream chain again. Stops the flow itself caused (repla
 redeploy) stay silent: announce what the flow could not otherwise observe, nothing else.
 *Check:* `node --test test/move/node.test.js` — the TTL test asserts output 0 is null.
 
-**14.108 PX4 accepts a one-shot `DO_REPOSITION`; `CHANGE_MODE` is the gate on both stacks.** 🧪 (2026-08-11/12)
+**14.108 PX4 accepts a one-shot `DO_REPOSITION`; `CHANGE_MODE` is the gate on both stacks.** 🧪 (2026-08-11/12, flag-clear 2026-08-22)
 No OFFBOARD stream and no caller-side mode switch needed. Isolated one-field probes:
 a reposition is **ACCEPTED iff `CHANGE_MODE` (param2 bit) is set OR the vehicle is
 already in the stack's guided-capable mode** (GUIDED on ArduPilot, AUTO_LOITER/Hold on
 PX4), otherwise **DENIED (2) on both stacks**. MAVSDK's per-autopilot pre-switch is the
-same table client-side. One cell stays source-read (PX4 flag-clear from AUTO_LOITER).
-The 2026-08-11 run's `param4` was encoded in radians — units settled; resulting heading
-not captured.
-*Check:* re-create one-field twins of examples 27/30 on the rig.
+same table client-side. PX4 in Hold (`0x03040000`) with `changeMode=false` → ACCEPTED
+(🧪 2026-08-22, `sitl/measure-verification-debt.js`). Post-goto heading: PX4
+honours param4 yaw (~70° vs 90° commanded, Δ20°); ArduPilot ignores it (355° vs
+90°) — the completion tier reports ack only, not resulting heading (14.108-heading).
+The 2026-08-11 run's `param4` was encoded in radians — units settled.
+*Check:* `node sitl/measure-verification-debt.js`; one-field twins of examples 27/30.
 
 **14.109 PX4 refuses a stick-driven mode airborne without RC.** 🧪 (2026-08-12)
 Airborne with no RC input, `DO_SET_MODE` POSCTL answers TEMPORARILY_REJECTED forever —
@@ -981,6 +988,18 @@ false success — the only promotion path for an unmeasured mechanism is a demon
 silence-or-false-success outcome (§9). Post-1.0 measurement priority is ordered in the
 inventory doc; the highest-value probe is confirming the offset-stream withhold on SITL.
 *Check:* `node scripts/inventory-verification-debt.js`; `docs/verification-debt.md`.
+
+**14.133 Swarm multicast and subnet broadcast reach real vehicles on the lab.** 🧪 (2026-08-22)
+With the driver fixes on main (loopback at OS default; bound-identity echo dropped in
+`_onFrame`), a Connection bound `0.0.0.0:14550` with swarm address `239.255.145.50`
+learns ap-mcast-41, arms it with one `target_system=0` write, and does not register
+sysid 255 as a peer. Two group members on one host hear each other. PX4 sysid 42 on the
+bridge accepts subnet broadcast (`172.18.255.255:18570` with `MAV_0_BROADCAST=1`) and
+arms from `target_system=0`. **Lab topology:** the compose bridge does not deliver
+inter-container IPv4 multicast — ap-mcast-41 needs `network_mode: host` (INSTANCE 5);
+the measurement script runs on the host. PX4 broadcast is tested from the host against
+the bridge gateway path.
+*Check:* `docker compose --profile mcast up -d`; `node sitl/measure-swarm-mcast.js`.
 
 ---
 

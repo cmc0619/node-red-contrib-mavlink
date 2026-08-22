@@ -122,6 +122,46 @@ Probes stream-replace halt visibility, AP yaw-only, GUID_TIMEOUT one-shot brake,
 PX4 OFFBOARD rate/silence (`COM_OF_LOSS_T`), and yaw+yaw_rate on both stacks.
 Findings land in `DESIGN.md` §14 — do not commit the JSON.
 
+### Capabilities probe (#299 / §14.82)
+
+```bash
+# AP :14550 + PX4 :14560; writes /tmp/nrc-cap-299-*/capabilities-299-results.json
+node sitl/measure-capabilities-299.js
+```
+
+Passive `AUTOPILOT_VERSION` window, then `MAV_CMD_REQUEST_MESSAGE` (512) for msg 148.
+Records capability bits on both stacks.
+
+### Offset Steer stream walk (§14.100-stream)
+
+```bash
+# AP :14550 only; GUIDED+arm+takeoff then 5 Hz LOCAL_OFFSET_NED z=+2 m for 3 s.
+# Writes /tmp/nrc-offset-stream-*/offset-stream-results.json
+node sitl/measure-offset-stream.js
+```
+
+Confirms repeating offset streams walk the vehicle — validates the Stream withhold in
+the Move editor.
+
+### Swarm multicast / subnet broadcast (§14.133)
+
+```bash
+cd sitl && docker compose --profile mcast up -d --build
+# Stop fleet containers that bind :14550 first if needed.
+node sitl/measure-swarm-mcast.js   # from host — ap-mcast-41 uses network_mode: host
+```
+
+Probes group membership, broadcast arm, loopback, self-echo filter, and PX4 subnet
+broadcast. See `sitl/scripts/entrypoint-ap-mcast.sh` for the full brief.
+
+### Verification-debt queue (post-1.0)
+
+```bash
+# 14.79-SITL, 14.98.5, 14.108-loiter — writes /tmp/nrc-vdebt-*/
+node sitl/measure-verification-debt.js
+# Single probe: VDEBT_PROBE=14.108-heading node sitl/measure-verification-debt.js
+```
+
 ### Peer-table enrichment while airborne (§8)
 
 ```bash

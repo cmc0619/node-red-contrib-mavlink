@@ -19,6 +19,9 @@
 #
 # Run:   cd sitl && docker compose --profile mcast up -d --build
 # Vehicle: sysid 41, group 239.255.145.50:14550 (defaults below).
+# ap-mcast-41 uses network_mode: host — the compose bridge does not deliver
+# inter-container IPv4 multicast (measured 2026-08-22). Run measure-swarm-mcast.js
+# from the host, not from a bridge-attached container.
 #
 # What the driver does today (main, unfixed) — you are expected to hit these:
 #   1. lib/connection/transport/udp.js `_enableBroadcast` calls
@@ -94,6 +97,7 @@ echo "entrypoint-ap-mcast: sysid=${SYSID} instance=${INSTANCE} serial0=mcast:${M
 
 exec /usr/local/bin/arducopter \
   -w \
+  -S \
   -I "${INSTANCE}" \
   --model quad \
   --speedup 1 \

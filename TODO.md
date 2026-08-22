@@ -18,6 +18,11 @@ unverified against a real socket, let alone a real autopilot.
 default (on), and `_onFrame` drops frames stamped with a bound identity's
 exact `(sysid, compid)` before the peer table or any subscriber sees them.
 
+**Measured 2026-08-22** (`node sitl/measure-swarm-mcast.js`, §14.133): multicast
+group + subnet broadcast both arm a vehicle from one `target_system=0` write;
+self-echo filtered; ap-mcast-41 needs `network_mode: host` (compose bridge does
+not deliver inter-container IPv4 multicast).
+
 **What the lab needs.** The AP containers launch `udpclient:` and join no
 group, so a multicast swarm address reaches nobody today. They would need
 `--serial0 mcast:239.255.145.50:14550` — ArduPilot's SITL parser accepts
@@ -45,10 +50,9 @@ Inventoried in `docs/verification-debt.md`; release posture in `DESIGN.md` §14.
 
 **Worth measuring first** (operator-visible, cheap on the existing lab):
 
-1. Offset Steer stream walk — validate the Stream withhold (`14.100-stream`).
-2. Turn yaw-timeout subclaims — `GUID_TIMEOUT` + rate-not-limit (`14.98.5` / `14.98.6`).
-3. Takeoff completion at non-zero home — close `14.79-SITL`.
-4. PX4 AUTO_LOITER flag-clear on goto — `14.108-loiter`.
+1. ~~Offset Steer stream walk~~ — **done 2026-08-22**.
+2. ~~Turn yaw-timeout subclaims~~ — **done 2026-08-22**.
+3. ~~Takeoff completion at non-zero home~~ — **done 2026-08-22** (`sitl/measure-verification-debt.js`).
+4. ~~PX4 AUTO_LOITER flag-clear on goto~~ — **done 2026-08-22** (`sitl/measure-verification-debt.js`).
 
-Everything else in the inventory is lab-ops timing (14.116–14.130) or upstream
-packaging/spec facts that do not need a rig to stay true.
+Remaining open subclaim: **14.95-terrain** (terrain alt ref absent from Move surface — no rig path).
