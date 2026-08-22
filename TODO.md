@@ -50,14 +50,6 @@ is the part most likely to eat an evening.
 broadcast *correct* on any IP topology where we have heard from the vehicles.
 A swarm address buys wire efficiency, not capability — noise at five vehicles,
 real at fifty.
-
----
-
-## Regenerate the editor screenshots
-
-**Done (2026-08-22).** Full pass under `docs/screenshots/` including health and
-formation; see merged PR #378.
-
 ---
 
 ## Verification debt — post-1.0 measurement queue

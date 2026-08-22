@@ -73,6 +73,23 @@ test('mavlink-mission upload nodes serialize items (Admin-API deploy)', () => {
   );
 });
 
+test('mavlink-out and mavlink-build nodes serialize band (Admin-API deploy)', () => {
+  // The editor always writes band ('2') and rings membership; Admin deploy
+  // keeps an omitted key absent, so config.band would read NaN and the
+  // queue's §5 switch would select nothing — a silent no-send behind a
+  // 'sent' record (#375, declined as runtime work: the flow author owns
+  // msg.band and hand-built JSON; these shipped examples are the one
+  // hand-built JSON WE own, so the contract pins the key here instead).
+  const missing = [];
+  for (const { file, nodes } of loadFlows()) {
+    for (const n of nodes) {
+      if (n.type !== 'mavlink-out' && n.type !== 'mavlink-build') continue;
+      if (n.band == null) missing.push(`${file}:${n.name || n.id}`);
+    }
+  }
+  assert.deepEqual(missing, [], 'omitted band → NaN → the queue enqueues nothing, silently');
+});
+
 test('mavlink-vehicle profiles serialize dialectRevision (Admin-API deploy)', () => {
   // Editor default is dialectRevision: 'seed' (required). Admin deploy does not
   // materialize omitted defaults — blank revision fails resolveDialect and
