@@ -55,23 +55,22 @@ real at fifty.
 
 ## Regenerate the editor screenshots
 
-All of `docs/screenshots/`, as one pass — not a file at a time. Once a live
-Node-RED and Puppeteer are up, recapturing the whole set costs barely more than
-recapturing one, and a per-file list of what is stale goes stale itself.
+**Done (2026-08-22).** Full pass under `docs/screenshots/` including health and
+formation; see merged PR #378.
 
-`docs/screenshots/README.md` records the method: a live Node-RED 4 editor with
-the package installed, driven through `RED.editor.edit` via Puppeteer rather
-than a double-click. So this is re-running something known, not inventing it.
+---
 
-Known wrong at the time of writing: `13-fanout.png` still shows a dialog titled
-**mavlink swarm** from before the rename, and the payload and command shots
-predate the generated payload form, the device topics, the checkboxes and the
-removal of blank enum options.
+## Verification debt — post-1.0 measurement queue
 
-**Why it waited.** These document a UI that was moving daily; recapturing
-mid-churn buys pictures that are stale again next week. Payload is settled now,
-which is what makes the pass worth doing.
+Inventoried in `docs/verification-debt.md`; release posture in `DESIGN.md` §14.132
+(documented, not blocking 1.0.0). Drift check: `node scripts/inventory-verification-debt.js`.
 
-**Worth deciding once:** hand-regenerate when a dialog settles, or make the
-Puppeteer capture something CI runs. The second only pays off if the pictures
-are load-bearing for users rather than decoration in the README.
+**Worth measuring first** (operator-visible, cheap on the existing lab):
+
+1. Offset Steer stream walk — validate the Stream withhold (`14.100-stream`).
+2. Turn yaw-timeout subclaims — `GUID_TIMEOUT` + rate-not-limit (`14.98.5` / `14.98.6`).
+3. Takeoff completion at non-zero home — close `14.79-SITL`.
+4. PX4 AUTO_LOITER flag-clear on goto — `14.108-loiter`.
+
+Everything else in the inventory is lab-ops timing (14.116–14.130) or upstream
+packaging/spec facts that do not need a rig to stay true.
