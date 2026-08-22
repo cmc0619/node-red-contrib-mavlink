@@ -174,6 +174,12 @@ test('firmware and vehicle family red on membership (walled-garden sweep)', () =
   // looks nothing up, silently, so the dialog is where it reds.
   const defaults = loadNodeDefaults('mavlink-vehicle');
 
+  // `required` rides beside the ring (owner ruling, #372): Node-RED answers
+  // blank through the generic missing-required path before the validator
+  // runs; the direct validator call below still shows the ring covers blank.
+  assert.equal(defaults.firmware.required, true);
+  assert.equal(defaults.vehicleFamily.required, true);
+
   for (const v of ['ardupilot', 'px4', 'custom']) {
     assert.equal(defaults.firmware.validate.call({}, v, {}), true, v);
   }

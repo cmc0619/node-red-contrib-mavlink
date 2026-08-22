@@ -6,10 +6,13 @@
         name:                  { value: '' },
         // Both feed lookup tables (mode names, parameter metadata, frame
         // gates) keyed by exactly these members — a stray token looks nothing
-        // up, silently, so membership reds here.
-        vehicleFamily:         { value: 'unknown', validate: RED.mavlink.oneOf(
+        // up, silently, so membership reds here. `required` rides alongside
+        // (owner ruling, #372): blank then reds through the generic
+        // missing-required path before the validator runs, and any non-blank
+        // stray still gets the membership reason.
+        vehicleFamily:         { value: 'unknown', required: true, validate: RED.mavlink.oneOf(
           ['unknown', 'copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker']) },
-        firmware:              { value: 'ardupilot', validate: RED.mavlink.oneOf(['ardupilot', 'px4', 'custom']) },
+        firmware:              { value: 'ardupilot', required: true, validate: RED.mavlink.oneOf(['ardupilot', 'px4', 'custom']) },
         dialect:               { value: 'ardupilotmega', required: true },
         dialectRevision:       { value: 'seed', required: true },
         // Comma-joined `dialect@revision` picks from the Components

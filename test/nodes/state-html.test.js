@@ -88,11 +88,93 @@ test('DEFAULT_EVENTS covers every peer-table emission name', () => {
   assert.deepEqual([...DEFAULT_EVENTS], documented);
 });
 
-test('a full event selection saves as blank — the default set stays unfrozen', () => {
+/**
+ * Execute the dialog script and run `oneditprepare` for a node, over a fake
+ * DOM just deep enough for the events multi-select: `#mav-state-events-select`
+ * models a multi-select (val() answers the selected array), and writes to
+ * `#node-input-events` are captured. Chrome-only helpers are stubbed at their
+ * contract boundary.
+ *
+ * @param {object} node  saved config the dialog opens over
+ * @returns {{hiddenEvents: () => string, selectAll: (values: string[]) => void, trigger: () => void}}
+ */
+function openStateDialog(node) {
+  const select = { options: [], selected: [], handlers: [] };
+  const hidden = { value: undefined };
+  function chain() {
+    const c = {};
+    for (const k of ['empty', 'append', 'on', 'val', 'each', 'hide', 'show', 'prop', 'attr']) c[k] = () => c;
+    c.length = 0;
+    return c;
+  }
+  function $(sel) {
+    if (typeof sel === 'string' && sel.charAt(0) === '<') {
+      const el = { _val: undefined, val(v) { if (v === undefined) return el._val; el._val = v; return el; }, text() { return el; } };
+      return el;
+    }
+    if (sel === '#mav-state-events-select') {
+      return {
+        empty() { select.options = []; return this; },
+        append(opt) { select.options.push(String(opt._val)); return this; },
+        val(v) {
+          if (v === undefined) return select.selected;
+          select.selected = Array.isArray(v) ? v.map(String) : [String(v)];
+          return this;
+        },
+        on(_ev, fn) { select.handlers.push(fn); return this; },
+      };
+    }
+    if (sel === '#node-input-events') {
+      return { val(v) { if (v === undefined) return hidden.value; hidden.value = v; return this; } };
+    }
+    return chain();
+  }
+  $.getJSON = () => ({ fail() { return this; } });
+
+  const registered = {};
+  const context = {
+    RED: {
+      mavlink: {
+        oneOf: () => () => true,
+        validateUint8: () => () => true,
+        ensureConfigNodePicker() {},
+        loadEnumsCatalog() {},
+        fillCompIdSelect() {},
+      },
+      nodes: { registerType(name, def) { registered[name] = def; } },
+    },
+    $,
+    console,
+  };
+  vm.runInNewContext(script, context);
+  registered['mavlink-state'].oneditprepare.call(node);
+  return {
+    hiddenEvents: () => hidden.value,
+    selectAll: (values) => { select.selected = values.map(String); },
+    trigger: () => select.handlers.forEach((fn) => fn()),
+  };
+}
+
+test('a full event selection saves as blank — the default set stays unfrozen (executed)', () => {
   // Blank means "the full default set, whatever lib/state currently emits".
-  // Writing the explicit 16-name list on open-and-save would freeze today's
-  // list into the config, and an event lib/state grows later would silently
-  // fall out of it.
-  assert.match(html, /values\.length === STATE_EVENTS\.length \? '' :/,
-    'the sync canonicalizes a full selection to blank');
+  // Writing the explicit list on open-and-save would freeze today's names
+  // into the config, and an event lib/state grows later would silently fall
+  // out of it. Open-and-save on a blank config is the exact reported path:
+  // the builder selects everything, and the initial sync must write blank.
+  const dialog = openStateDialog({ events: '' });
+  assert.equal(dialog.hiddenEvents(), '', 'a blank config round-trips as blank');
+
+  // Explicitly selecting every event is the same set — also blank.
+  dialog.selectAll([...DEFAULT_EVENTS]);
+  dialog.trigger();
+  assert.equal(dialog.hiddenEvents(), '', 'a hand-picked full selection canonicalizes to blank');
+});
+
+test('a partial event selection saves the picked names (executed)', () => {
+  const dialog = openStateDialog({ events: 'stale,expired' });
+  assert.equal(dialog.hiddenEvents(), 'stale,expired', 'the saved picks round-trip');
+
+  dialog.selectAll(['stale']);
+  dialog.trigger();
+  assert.equal(dialog.hiddenEvents(), 'stale', 'a narrowed selection saves the pick');
 });
