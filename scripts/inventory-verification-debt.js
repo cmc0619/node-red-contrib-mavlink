@@ -25,7 +25,7 @@ const rigImplicit = entries.filter(
 );
 const readHeaders = entries.filter((e) => e.hasRead && !e.hasCheck);
 
-const OPEN_SUBCLAIMS = 7;
+const OPEN_SUBCLAIMS = 6;
 const expected = {
   rig: rigTagged.length + rigImplicit.length,
   readHeaders: readHeaders.length,
@@ -38,7 +38,7 @@ console.log('  source-read headers (📖, no ✔):', expected.readHeaders);
 console.log('  open subclaims (fixed inventory):', OPEN_SUBCLAIMS);
 console.log('  source-read reported total:', expected.readReported);
 
-const want = { rig: 29, readHeaders: 14, readReported: 21 };
+const want = { rig: 29, readHeaders: 14, readReported: 20 };
 let failed = false;
 for (const [key, value] of Object.entries(want)) {
   if (expected[key] !== value) {

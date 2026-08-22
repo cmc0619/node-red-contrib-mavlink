@@ -574,11 +574,12 @@ defaulting to c-cast (deliberately no editor red-ring — either escape can make
 correct at message time). `resolveParamEncoding` is the only place the ladder runs.
 *Check:* `node --test test/param/param.test.js test/addressing/resolve.test.js`.
 
-**14.82 A parameter's encoding is not discoverable on ArduPilot.** 🧪 (2026-08-13)
+**14.82 A parameter's encoding is not discoverable on ArduPilot.** 🧪 (2026-08-13, re-measured 2026-08-22)
 Neither stack streams `AUTOPILOT_VERSION` unsolicited; on request PX4 reports the
 bytewise bit, **ArduPilot reports neither encoding bit** (capabilities 64495). The
 capability rung can only correct a mislabeled PX4; `HEARTBEAT.autopilot` (1 Hz, free)
 subsumes the probe for every case either could fix.
+*Check:* `node sitl/measure-capabilities-299.js` (rig).
 
 **14.83 A wide bitmask does not survive c-cast — and the loss reports success.** 🧪 (2026-08-13)
 float32 carries 24 mantissa bits: what breaks is *bit span*, not magnitude (−1 and −2³¹
@@ -702,7 +703,7 @@ braking, same encoding as a velocity stream. PX4 logs "invalid" only for true al
 alone leaves only the offboard timeout.
 *Check:* `lib/move/index.js` `buildStopMessage`; `node --test test/move/move.test.js`.
 
-**14.98 Move SITL queue findings (#175/#179).** 🧪 (2026-08-08)
+**14.98 Move SITL queue findings (#175/#179).** 🧪 (2026-08-08, re-measured 2026-08-22)
 1. Stream-replace halt is invisible (~4% dip at 10 Hz) — thin null result (400 ms
    window, 4 samples/frame); enough to decline a mutate-in-place rewrite, not enough to
    rely on beyond that.
@@ -735,8 +736,9 @@ every other frame returns silently. ArduCopter adds current position for 7, **8*
 (one handler branch — the 2026-08-05 measurement was right). QGC's only local-setpoint
 send is frame 7 (guided altitude change). Restored as Steer's "Offset from here"; blank
 axes are legal there and nowhere else (a zero *offset* is no movement; a zero *absolute*
-is the EKF origin). Stream is not offered — a repeating offset walks the vehicle
-(source-read, not yet measured).
+is the EKF origin). Stream is not offered — a repeating offset walks the vehicle (🧪
+2026-08-22: AP Copter-4.7, 5 Hz `LOCAL_OFFSET_NED` z=+2 m climbed ~7.3 m in 3 s;
+`node sitl/measure-offset-stream.js`).
 *Check:* `lib/move/frames.js` comment; frame-7 row of 14.94.
 
 **14.101 Which motion message an ArduPilot vehicle honours is a property of the vehicle, not the firmware.** 📖 (2026-08-14, cornerstone)

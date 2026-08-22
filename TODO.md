@@ -67,7 +67,7 @@ Inventoried in `docs/verification-debt.md`; release posture in `DESIGN.md` §14.
 
 **Worth measuring first** (operator-visible, cheap on the existing lab):
 
-1. Offset Steer stream walk — validate the Stream withhold (`14.100-stream`).
+1. ~~Offset Steer stream walk~~ — **done 2026-08-22** (`sitl/measure-offset-stream.js`).
 2. Turn yaw-timeout subclaims — `GUID_TIMEOUT` + rate-not-limit (`14.98.5` / `14.98.6`).
 3. Takeoff completion at non-zero home — close `14.79-SITL`.
 4. PX4 AUTO_LOITER flag-clear on goto — `14.108-loiter`.
