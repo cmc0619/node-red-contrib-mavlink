@@ -966,6 +966,22 @@ provides per 14.55, then drifts). Do not re-raise without a measurement showing 
 run matters at streaming rates.
 *Check:* `lib/connection/runtime.js` `send()` (the dry run and its comment).
 
+**14.132 Verification debt is inventoried; it does not block 1.0.0.** ✔ (owner ruling, 2026-08-22)
+An external 1.0.0 readiness audit counted **29** rig-only §14 rows (🧪 without ✔ —
+fourteen tagged plus fifteen lab-ops entries 14.116–14.130) and **21** source-read
+gaps (fourteen 📖 headers without ✔ plus seven named open subclaims inside otherwise
+settled entries). The inventory is real and lives in `docs/verification-debt.md` with
+a drift script (`scripts/inventory-verification-debt.js`).
+It is **not** a release blocker because: (1) rig debt is lab-harness and
+example-timing knowledge, not missing driver validation — the runtime still sends what
+it is handed (§0); (2) every source-read gap on a shipped operator path is either
+withheld in the editor (e.g. Stream on offset Steer — 14.100), absent from the surface
+(e.g. terrain alt ref), or labelled in help as source-read; (3) none produce silent
+false success — the only promotion path for an unmeasured mechanism is a demonstrated
+silence-or-false-success outcome (§9). Post-1.0 measurement priority is ordered in the
+inventory doc; the highest-value probe is confirming the offset-stream withhold on SITL.
+*Check:* `node scripts/inventory-verification-debt.js`; `docs/verification-debt.md`.
+
 ---
 
 ## Removed from the old §14, and why
