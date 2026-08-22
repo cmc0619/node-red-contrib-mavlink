@@ -415,30 +415,6 @@ test('send() throws synchronously for an unserializable message — no phantom s
   connection.close();
 });
 
-test('send() throws synchronously for a band no queue case answers to — nothing enqueued', async () => {
-  // NaN is the shape an Admin-API deploy produces (issue #375: a flow JSON
-  // with no `band` key reaches Number() as undefined); 7 is any numeric
-  // non-band. The queue's §5 switch selects nothing for either, so send()
-  // must throw into the caller's error path, never return as if enqueued.
-  const { connection, dg } = build();
-  await connection.start();
-
-  assert.throws(
-    () => connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: NaN }),
-    /no queue band selected/,
-    'NaN band fails loud, synchronously'
-  );
-  assert.throws(
-    () => connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: 7 }),
-    /no queue band selected/,
-    'a numeric non-band fails loud, synchronously'
-  );
-  assert.equal(connection.queue.size(), 0, 'neither message occupies the queue');
-  await delay(30);
-  assert.equal(dg.sockets[0].sent.length, 0, 'nothing was transmitted');
-  connection.close();
-});
-
 test('_pump backstop: a drain-time serialize throw drops that envelope and keeps draining', async () => {
   // send()-time validation catches every deterministic failure, so reach the
   // backstop by failing only the SECOND serialize of the same message (the

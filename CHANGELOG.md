@@ -4,18 +4,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
-## [Unreleased]
-
-### Fixed
-
-- `mavlink-out` reported `sent` for a message the outbound queue had discarded.
-  A band no queue case answers to — the shape an Admin-API deploy produces when
-  the flow JSON omits the `band` key — selected no behavior at the queue's
-  switch (correct, §5) but nothing checked the enqueue return, so the node
-  announced success for a frame that never entered the queue.
-  `Connection.send()` now fails loud when enqueue selects nothing, into the
-  sender's existing error path (#375).
-
 ## [0.5.0] "Drive to final" - 2026-08-22
 
 ### Changed
