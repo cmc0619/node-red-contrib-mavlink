@@ -21,3 +21,5 @@ Captured from a live Node-RED 4 editor with `node-red-contrib-mavlink` installed
 | `11-state.png` | `mavlink-state` |
 | `12-mission.png` | `mavlink-mission` |
 | `13-fanout.png` | `mavlink-fanout` |
+| `14-health.png` | `mavlink-health` |
+| `15-formation.png` | `mavlink-formation` |
