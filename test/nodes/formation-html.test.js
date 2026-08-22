@@ -11,17 +11,18 @@ const assert = require('node:assert/strict');
 
 const { loadNodeDefaults } = require('./html-assert');
 
-test('spacing validator is the only guard: finite and > 0, blank red', () => {
+test('spacing validator is the only guard: finite and > 0, blank red — with the reason rendered', () => {
   const defaults = loadNodeDefaults('mavlink-formation');
   const validate = defaults.spacing.validate;
 
+  assert.equal(validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
   assert.equal(validate.call({}, 10), true);
   assert.equal(validate.call({}, '10'), true, 'numeric strings pass (text input)');
   assert.equal(validate.call({}, 0.5), true, 'sub-metre spacing is a legitimate distance');
-  assert.equal(validate.call({}, 0), false, '0 stacks every vehicle on one point — a commanded collision');
-  assert.equal(validate.call({}, -5), false, 'negative spacing silently mirrors the pattern');
-  assert.equal(validate.call({}, ''), false, 'blank must not silently become 0');
-  assert.equal(validate.call({}, 'abc'), false, 'non-numeric text reds');
+  assert.match(String(validate.call({}, 0)), /> 0/, '0 stacks every vehicle on one point — a commanded collision');
+  assert.match(String(validate.call({}, -5)), /> 0/, 'negative spacing silently mirrors the pattern');
+  assert.match(String(validate.call({}, '')), /> 0/, 'blank must not silently become 0');
+  assert.match(String(validate.call({}, 'abc')), /> 0/, 'non-numeric text reds');
 });
 
 test('closed vocabularies red on membership: shape, anchorMode, delivery (§5 editor half)', () => {
@@ -52,11 +53,11 @@ test('fixed-anchor lat/lon red outside the ellipsoid and on blank; other modes s
 
   assert.equal(onFixed('lat', 47.4), true);
   assert.equal(onFixed('lat', -90), true);
-  assert.equal(onFixed('lat', 91), false, 'latitude past the pole is a typo, not a position');
-  assert.equal(onFixed('lat', ''), false, 'blank must not silently become null island');
+  assert.match(String(onFixed('lat', 91)), /±90/, 'latitude past the pole is a typo, not a position');
+  assert.match(String(onFixed('lat', '')), /±90/, 'blank must not silently become null island');
   assert.equal(onFixed('lon', 179.9), true);
-  assert.equal(onFixed('lon', -181), false);
-  assert.equal(onFixed('lon', 'abc'), false);
+  assert.match(String(onFixed('lon', -181)), /±180/);
+  assert.match(String(onFixed('lon', 'abc')), /±180/);
   // A hidden field's stale value must not block the dialog in leader mode.
   assert.equal(defaults.lat.validate.call({ anchorMode: 'leader' }, 91), true);
   assert.equal(defaults.lon.validate.call({ anchorMode: 'leader' }, ''), true);
@@ -70,9 +71,9 @@ test('intervalMs requires a number >= 0 — the runtime reads a present value as
 
   assert.equal(validate.call({}, 0), true, '0 is a legitimate no-pause interval, stated explicitly');
   assert.equal(validate.call({}, 250), true);
-  assert.equal(validate.call({}, -100), false, 'negative pacing reds');
-  assert.equal(validate.call({}, ''), false, 'blank reds — it would ride as 0');
-  assert.equal(validate.call({}, 'abc'), false);
+  assert.match(String(validate.call({}, -100)), />= 0/, 'negative pacing reds');
+  assert.match(String(validate.call({}, '')), />= 0/, 'blank reds — it would ride as 0');
+  assert.match(String(validate.call({}, 'abc')), />= 0/);
 });
 
 test('timeoutMs validator requires an integer >= 1 — a saved 0 arms confirm at 0 ms', () => {
@@ -85,7 +86,7 @@ test('timeoutMs validator requires an integer >= 1 — a saved 0 arms confirm at
 
   assert.equal(validate.call({}, 1), true);
   assert.equal(validate.call({}, 10000), true);
-  assert.equal(validate.call({}, 0), false, '0 ms arms the confirm wait at 0 — red');
-  assert.equal(validate.call({}, ''), false, 'blank is rejected at deploy');
-  assert.equal(validate.call({}, 1.5), false, 'fractional milliseconds red');
+  assert.match(String(validate.call({}, 0)), />= 1/, '0 ms arms the confirm wait at 0 — red');
+  assert.match(String(validate.call({}, '')), />= 1/, 'blank is rejected at deploy');
+  assert.match(String(validate.call({}, 1.5)), />= 1/, 'fractional milliseconds red');
 });

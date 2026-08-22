@@ -7,6 +7,7 @@
 -->
 
 <script type="text/javascript">
+  (function () {
   // Remote host and port are a pair — both blank (listen-only) or both set.
   // The runtime trusts this: a half-configured remote never deploys, so the
   // UDP send path treats any missing half as no destination and drops quietly.
@@ -231,6 +232,7 @@
       this.additionalIdentities = RED.mavlink.normalizeIdentityIds(raw, primary);
     },
   });
+  })();
 </script>
 
 <script type="text/html" data-template-name="mavlink-connection">

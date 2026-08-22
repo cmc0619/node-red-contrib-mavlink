@@ -35,14 +35,26 @@
         frame: { value: '3', validate: RED.mavlink.oneOf(['0', '3', '10', '1']) },
         timeout: { value: 10000, validate: RED.mavlink.validateAtLeast(0) },
         maxRetries: { value: 3, validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
-        topic: { value: 'camera' },
-        verb: { value: 'photo' },
-        path: { value: 'legacy' },
+        // Topic and verb are the recipe key: a stray token selects no recipe,
+        // and Build would report that as a succeeded build of nothing (§0
+        // rule 3) — so membership reds here, against the shared table the
+        // dialog itself fills the selects from.
+        topic: { value: 'camera', validate: RED.mavlink.oneOf(Object.keys(RED.mavlink.PAYLOAD_VERBS)) },
+        verb: {
+          value: 'photo',
+          validate: function (v, _opt) {
+            var topic = RED.mavlink.liveOr(this, '#node-input-topic', this.topic, 'camera');
+            var verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
+            return verbs.some(function (entry) { return entry.value === v; })
+              || 'is not a ' + topic + ' verb';
+          },
+        },
+        path: { value: 'legacy', validate: RED.mavlink.oneOf(['legacy', 'manager', 'manager-cmd', 'attitude']) },
         targetSystem: {
           value: '',
           validate: RED.mavlink.validateTargetSystem(['confirm'], 'delivery', 'build'),
         },
-        targetComponent: { value: '', validate: RED.validators.number(true) },
+        targetComponent: { value: '', validate: RED.mavlink.validateUint8(0) },
         // One object, not a field per slot: rows are generated per verb, so
         // there is no #node-input-<slot> for Node-RED to read at save time.
         values: {

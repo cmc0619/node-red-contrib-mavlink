@@ -252,3 +252,30 @@ test('help documents targets patches as wire units and the mavlink-out handoff',
   assert.match(html, /message's <i>own<\/i> position/, 'offsets apply against the message\'s own position');
   assert.match(html, /overrides the configured members entirely/, 'payload.targets precedence is documented');
 });
+
+test('fan-out filter vocabularies carry rings; blank stays "Any" (walled-garden sweep)', () => {
+  const defaults = loadNodeDefaults('mavlink-fanout');
+
+  assert.equal(defaults.vehicleType.validate.call({}, '', {}), true, 'blank type is Any');
+  assert.equal(defaults.vehicleType.validate.call({}, '2', {}), true, 'a MAV_TYPE numeric value');
+  assert.match(String(defaults.vehicleType.validate.call({}, 'quad', {})), /between 0 and 255/,
+    'the select saves numbers — a stray token matches no vehicle, silently');
+
+  for (const v of ['', 'ardupilot', 'px4', 'custom']) {
+    assert.equal(defaults.firmwareFilter.validate.call({}, v, {}), true, v || 'blank');
+  }
+  assert.match(String(defaults.firmwareFilter.validate.call({}, 'betaflight', {})), /must be one of/);
+
+  for (const v of ['', 'true', 'false']) {
+    assert.equal(defaults.armedFilter.validate.call({}, v, {}), true, v || 'blank');
+  }
+  assert.match(String(defaults.armedFilter.validate.call({}, 'yes', {})), /must be one of/);
+});
+
+test('fan-out numeric validators declare two args and render reasons (§14.24)', () => {
+  const defaults = loadNodeDefaults('mavlink-fanout');
+  assert.equal(defaults.concurrency.validate.length, 2);
+  assert.match(String(defaults.concurrency.validate.call({}, 0, {})), />= 1/);
+  assert.equal(defaults.timeoutMs.validate.length, 2);
+  assert.match(String(defaults.timeoutMs.validate.call({}, 0, {})), />= 1/);
+});

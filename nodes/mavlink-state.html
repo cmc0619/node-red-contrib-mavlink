@@ -42,7 +42,10 @@
     function syncEventsHiddenFromSelect() {
       var raw = $('#mav-state-events-select').val();
       var values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-      $('#node-input-events').val(values.join(','));
+      // The full selection IS the blank default — write it as blank, so an
+      // open-and-save cannot freeze today's event list into the config (an
+      // event lib/state grows later would silently fall out of a frozen list).
+      $('#node-input-events').val(values.length === STATE_EVENTS.length ? '' : values.join(','));
     }
 
     RED.nodes.registerType('mavlink-state', {
