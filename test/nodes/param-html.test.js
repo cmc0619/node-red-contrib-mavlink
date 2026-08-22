@@ -634,3 +634,25 @@ test('the action select is pinned to the actions the driver implements', () => {
     assert.match(html, new RegExp(`oneOf\\(\\[[^\\]]*'${action}'`), `oneOf admits ${action}`);
   }
 });
+
+test('param lookup, type, timeout, and target compid carry rings (walled-garden sweep)', () => {
+  const { loadNodeDefaults } = require('./html-assert');
+  const defaults = loadNodeDefaults('mavlink-param');
+
+  assert.equal(defaults.lookup.validate.call({}, 'name', {}), true);
+  assert.equal(defaults.lookup.validate.call({}, 'index', {}), true);
+  assert.match(String(defaults.lookup.validate.call({}, 'id', {})), /must be one of/);
+
+  // The type select offers exactly the shared table's names.
+  assert.equal(defaults.paramType.validate.call({}, 'MAV_PARAM_TYPE_REAL32', {}), true);
+  assert.equal(defaults.paramType.validate.call({}, 'MAV_PARAM_TYPE_UINT8', {}), true);
+  assert.match(String(defaults.paramType.validate.call({}, 'MAV_PARAM_TYPE_STRING', {})), /must be one of/);
+
+  assert.equal(defaults.timeout.validate.call({}, '', {}), true, 'blank inherits the runtime default');
+  assert.equal(defaults.timeout.validate.call({}, '0', {}), true);
+  assert.match(String(defaults.timeout.validate.call({}, '-5', {})), />= 0/,
+    'a negative window expires before the vehicle can answer and reads as silence');
+
+  assert.equal(defaults.targetComponent.validate.call({}, '', {}), true, 'blank inherits');
+  assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 0 and 255/);
+});

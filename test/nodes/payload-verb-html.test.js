@@ -425,3 +425,26 @@ test('REQUIRED_VALUES is a drift pin, not a second vocabulary (§0 walled garden
     'the editor table has no entry the recipes do not'
   );
 });
+
+test('payload topic, verb, path, and target compid carry rings (walled-garden sweep)', () => {
+  const { loadNodeDefaults } = require('./html-assert');
+  const defaults = loadNodeDefaults('mavlink-payload');
+
+  assert.equal(defaults.topic.validate.call({}, 'camera', {}), true);
+  assert.equal(defaults.topic.validate.call({}, 'gimbal', {}), true);
+  assert.match(String(defaults.topic.validate.call({}, 'laser', {})), /must be one of/,
+    'a stray topic selects no recipe — Build would report a succeeded build of nothing');
+
+  // Verb membership is per-topic, read own-dialog-scoped (#217).
+  assert.equal(defaults.verb.validate.call({ topic: 'gimbal' }, 'aim', {}), true);
+  assert.match(String(defaults.verb.validate.call({ topic: 'camera' }, 'aim', {})), /not a camera verb/);
+  assert.match(String(defaults.verb.validate.call({ topic: 'gimbal' }, 'zoom', {})), /not a gimbal verb/);
+
+  for (const v of ['legacy', 'manager', 'manager-cmd', 'attitude']) {
+    assert.equal(defaults.path.validate.call({}, v, {}), true, v);
+  }
+  assert.match(String(defaults.path.validate.call({}, 'direct', {})), /must be one of/);
+
+  assert.equal(defaults.targetComponent.validate.call({}, '', {}), true, 'blank inherits');
+  assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 0 and 255/);
+});

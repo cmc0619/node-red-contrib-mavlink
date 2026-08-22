@@ -87,9 +87,13 @@
           return true;
         },
       },
-      vehicleType: { value: '' },
-      firmwareFilter: { value: '' },
-      armedFilter: { value: '' },
+      // Filter vocabulary rings: blank is "Any" on all three. The type select
+      // saves the MAV_TYPE numeric value, so its ring is the uint8 shape (the
+      // member set is the dialect's, which this dialog cannot enumerate at
+      // deploy); the other two are the dialog's own closed lists.
+      vehicleType: { value: '', validate: RED.mavlink.validateUint8(0) },
+      firmwareFilter: { value: '', validate: RED.mavlink.oneOf(['', 'ardupilot', 'px4', 'custom']) },
+      armedFilter: { value: '', validate: RED.mavlink.oneOf(['', 'true', 'false']) },
       executionMode: {
         value: 'sequential',
         // Membership first (§5's editor half, as on selectionMode). Then the
@@ -112,9 +116,11 @@
       },
       concurrency: {
         value: 1,
-        validate: function (v) {
+        // Two args so the reason renders (§14).
+        validate: function (v, _opt) {
           var n = Number(v);
-          return Number.isInteger(n) && n >= 1;
+          if (Number.isInteger(n) && n >= 1) return true;
+          return 'must be a whole number of in-flight members >= 1';
         },
       },
       stopOnError: { value: false },
@@ -124,10 +130,11 @@
         // RED.validators.number() accepts 0 and negatives, and the input's
         // min="1" is not enforced on save: a saved 0 arms confirmMember and
         // confirmBroadcast at 0 ms, so every member reports unconfirmed before
-        // an ack could arrive.
-        validate: function (v) {
+        // an ack could arrive. Two args so the reason renders (§14).
+        validate: function (v, _opt) {
           var n = Number(v);
-          return Number.isInteger(n) && n >= 1;
+          if (Number.isInteger(n) && n >= 1) return true;
+          return 'must be a whole number of milliseconds >= 1';
         },
       },
       maxRetries: {

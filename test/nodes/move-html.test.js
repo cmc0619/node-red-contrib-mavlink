@@ -117,7 +117,8 @@ test('mavlink-move Action surface: goto default, both actions offered, retired f
   assert.equal(loadNodeDefaults('mavlink-move').action.value, 'goto', 'action defaults to goto');
   assert.match(html, /option value="goto"/, 'goto action offered');
   assert.match(html, /option value="steer"/, 'steer action offered');
-  assert.match(html, /altRef:\s*\{\s*value:\s*'home'\s*\}/, 'altRef defaults to home (the GCS default)');
+  // Defaults-based, not a source regex: altRef grew its membership ring.
+  assert.equal(loadNodeDefaults('mavlink-move').altRef.value, 'home', 'altRef defaults to home (the GCS default)');
   // Defaults-based, not a source regex: reference grew a validator (Codex
   // #277 Body-on-Build gate) so its literal is no longer one line.
   assert.equal(loadNodeDefaults('mavlink-move').reference.value, 'world', 'reference defaults to world (works everywhere)');
@@ -1531,4 +1532,28 @@ test('mavlink-move: the thrust stick warns on ArduSub, where the -1..1 surface l
   );
   // The generic range check still applies on top.
   assert.match(String(onSub('5')), /must be -1\.\.1/, 'out of range still reds first');
+});
+
+test('move closed vocabularies and target compid carry rings (walled-garden sweep)', () => {
+  const defaults = loadNodeDefaults('mavlink-move');
+
+  for (const v of ['home', 'msl']) assert.equal(defaults.altRef.validate.call({}, v, {}), true, v);
+  assert.match(String(defaults.altRef.validate.call({}, 'terrain', {})), /must be one of/);
+
+  // Direction rides as a float param — a stray token would reach the wire as
+  // NaN, which is the dialog's to catch (14.105).
+  for (const v of ['0', '1', '-1']) assert.equal(defaults.direction.validate.call({}, v, {}), true, v);
+  assert.match(String(defaults.direction.validate.call({}, 'left', {})), /must be one of/);
+
+  for (const v of ['groundspeed', 'airspeed', 'climb', 'descent']) {
+    assert.equal(defaults.speedType.validate.call({}, v, {}), true, v);
+  }
+  assert.match(String(defaults.speedType.validate.call({}, 'warp', {})), /must be one of/);
+
+  // Membership runs before the firmware/tier gates on reference.
+  assert.match(String(defaults.reference.validate.call({ action: 'steer' }, 'sideways', {})), /must be one of/);
+
+  assert.equal(defaults.targetComponent.validate.call({}, '', {}), true, 'blank inherits');
+  assert.equal(defaults.targetComponent.validate.call({}, '190', {}), true);
+  assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 0 and 255/);
 });

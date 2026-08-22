@@ -1,4 +1,5 @@
 <script type="text/javascript">
+  (function () {
   /**
    * A field's value as the operator currently has it: the live input while
    * this node's own dialog is on top, else the saved property. Same rule as
@@ -496,8 +497,9 @@
             + 'an acceleration, or a yaw';
         },
       },
-      // Go to's one frame choice: altitude above home vs absolute MSL.
-      altRef: { value: 'home' },
+      // Go to's one frame choice: altitude above home vs absolute MSL. A
+      // stray token is a frame the builder never selects (§5's editor half).
+      altRef: { value: 'home', validate: RED.mavlink.oneOf(['home', 'msl']) },
       // Steer's axes: world = LOCAL_NED everywhere; body adapts to the bound
       // firmware (AP BODY_OFFSET_NED vs PX4 BODY_NED, §14) and fails closed
       // without one. On the wire tiers the Connection's Vehicle Profile
@@ -508,7 +510,9 @@
       // saved values; the live read is own-dialog scoped (#217).
       reference: {
         value: 'world',
-        validate: function (v, _opt) {
+        // Membership first (oneOf), then the firmware/tier gates on the
+        // members themselves.
+        validate: RED.mavlink.oneOf(['world', 'body', 'offset'], function (v, _opt) {
           var ref = RED.mavlink.liveOr(this, '#node-input-reference', v, 'world');
           // 'steer' fallback like every other action gate in this file — two of
           // these read blank as 'goto' until 2026-08-14, so a hand-edited flow
@@ -541,7 +545,7 @@
           if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery, 'build') !== 'build') return true;
           if (RED.mavlink.liveOr(this, '#node-input-dialect', this.dialect, '') === '__vehicle') return true;
           return 'Body on Build needs a firmware to adapt to — set Dialect to "from Vehicle Profile…", or use World';
-        },
+        }),
       },
       // Go to command-path params. Blank encodes the spec's no-change sentinel
       // at runtime (speed −1 = vehicle default, radius 0 = ignored, yaw NaN =
@@ -569,7 +573,9 @@
       turnRate: { value: '', validate: RED.validators.number(true) },
       // -1 ccw, 0 shortest, 1 cw — common.xml defines 0 as "shortest
       // direction", so the default is the dialect's, not one we invented.
-      direction: { value: '0' },
+      // Direction rides as a float param, so a stray token would reach the
+      // wire as NaN — the dialog's job to catch (14.105).
+      direction: { value: '0', validate: RED.mavlink.oneOf(['0', '1', '-1']) },
       // Changes what the heading number means, so a strict boolean opt-in like
       // changeMode. ArduCopter also answers FAILED for a param4 that is not
       // exactly 0 or 1.
@@ -626,7 +632,10 @@
       // the blankParams convention. -2 ("return to default") is a real value an
       // operator types, not a sentinel this node owns.
       throttle: { value: '', validate: RED.validators.number(true) },
-      speedType: { value: 'groundspeed' },
+      speedType: {
+        value: 'groundspeed',
+        validate: RED.mavlink.oneOf(['groundspeed', 'airspeed', 'climb', 'descent']),
+      },
 
       // Blank inherits the AckWaiter default (10 s), like mavlink-command.
       // Zero or negative is not a shorter wait, it is an ack timer that fires
@@ -649,7 +658,7 @@
         value: '',
         validate: RED.mavlink.validateTargetSystem(['confirm']),
       },
-      targetComponent: { value: '', validate: RED.validators.number(true) },
+      targetComponent: { value: '', validate: RED.mavlink.validateUint8(0) },
       // Steer groups are optional and default blank: filling fields IS the
       // mode — the runtime derives the type_mask from the non-blank groups and
       // builds the honest all-ignore packet for an all-blank steer (the editor
@@ -1288,6 +1297,7 @@
       refreshVisibility();
     }
   });
+  })();
 </script>
 
 <script type="text/html" data-template-name="mavlink-move">

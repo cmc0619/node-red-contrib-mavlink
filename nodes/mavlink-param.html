@@ -1,4 +1,5 @@
 <script type="text/javascript">
+  (function () {
   // Dialect + Vehicle + Firmware validators are the shared Build-tier rule
   // (§6 Firmware XOR); Param's mode field is `delivery`.
   var paramDefaults = Object.assign(
@@ -21,11 +22,11 @@
         value: '',
         validate: RED.mavlink.validateTargetSystem(['build', 'send', 'confirm', 'collect'], 'delivery', 'build'),
       },
-      targetComponent: { value: '', validate: RED.validators.number(true) },
+      targetComponent: { value: '', validate: RED.mavlink.validateUint8(0) },
       // Which way the parameter is named. The protocol has one field for this
       // -- param_index -1 means "use param_id" -- so the two are alternatives,
       // not a pair, and the dialog shows one at a time.
-      lookup: { value: 'name' },
+      lookup: { value: 'name', validate: RED.mavlink.oneOf(['name', 'index']) },
       /**
        * Required wherever the parameter is addressed by name — which is every
        * Set, and a Read that is not in Index mode. `PARAM_REQUEST_LIST` names
@@ -121,8 +122,15 @@
           return true;
         },
       },
-      paramType: { value: 'MAV_PARAM_TYPE_REAL32' },
-      timeout: { value: '', validate: RED.validators.number(true) }
+      paramType: {
+        value: 'MAV_PARAM_TYPE_REAL32',
+        // The select offers exactly the shared table's names (valueKey 'name').
+        validate: RED.mavlink.oneOf(RED.mavlink.PARAM_TYPE_OPTIONS.map(function (o) { return o.name; })),
+      },
+      // Blank inherits the runtime's documented default; a present value is a
+      // wait window, and a negative one expires before the vehicle can answer
+      // and reads as vehicle silence.
+      timeout: { value: '', validate: RED.mavlink.validateAtLeast(0) }
     },
     RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
   );
@@ -916,6 +924,7 @@
       refreshVisibility();
     }
   });
+  })();
 </script>
 
 <script type="text/html" data-template-name="mavlink-param">

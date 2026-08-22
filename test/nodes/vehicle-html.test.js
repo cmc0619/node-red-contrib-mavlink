@@ -168,3 +168,20 @@ test('CompID options load after the dialect select is populated', () => {
   assert.match(prepare, /\$dialect\.on\('change'[\s\S]{0,200}reloadCompIds\(\)/);
   assert.match(prepare, /\$revision\.on\('change', reloadCompIds\)/);
 });
+
+test('firmware and vehicle family red on membership (walled-garden sweep)', () => {
+  // Both feed lookup tables keyed by exactly these members; a stray token
+  // looks nothing up, silently, so the dialog is where it reds.
+  const defaults = loadNodeDefaults('mavlink-vehicle');
+
+  for (const v of ['ardupilot', 'px4', 'custom']) {
+    assert.equal(defaults.firmware.validate.call({}, v, {}), true, v);
+  }
+  assert.match(String(defaults.firmware.validate.call({}, 'betaflight', {})), /must be one of/);
+  assert.match(String(defaults.firmware.validate.call({}, '', {})), /must be one of/, 'blank firmware reds');
+
+  for (const v of ['unknown', 'copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker']) {
+    assert.equal(defaults.vehicleFamily.validate.call({}, v, {}), true, v);
+  }
+  assert.match(String(defaults.vehicleFamily.validate.call({}, 'submarine', {})), /must be one of/);
+});

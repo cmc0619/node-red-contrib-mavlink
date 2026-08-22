@@ -4,8 +4,12 @@
       category: 'config',
       defaults: {
         name:                  { value: '' },
-        vehicleFamily:         { value: 'unknown', required: true },
-        firmware:              { value: 'ardupilot', required: true },
+        // Both feed lookup tables (mode names, parameter metadata, frame
+        // gates) keyed by exactly these members — a stray token looks nothing
+        // up, silently, so membership reds here.
+        vehicleFamily:         { value: 'unknown', validate: RED.mavlink.oneOf(
+          ['unknown', 'copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker']) },
+        firmware:              { value: 'ardupilot', validate: RED.mavlink.oneOf(['ardupilot', 'px4', 'custom']) },
         dialect:               { value: 'ardupilotmega', required: true },
         dialectRevision:       { value: 'seed', required: true },
         // Comma-joined `dialect@revision` picks from the Components
@@ -30,6 +34,23 @@
       },
       oneditprepare: function () {
         const node = this;
+
+        // Advanced-section disclosure. Bound here, not in a <script> nested
+        // inside the edit template — template scripts only run because jQuery's
+        // html() injection happens to execute them, which is not a Node-RED
+        // contract.
+        $('#node-mav-advanced-toggle').on('click', function (e) {
+          e.preventDefault();
+          const $adv = $('.mav-advanced');
+          const $icon = $(this).find('i');
+          if ($adv.is(':visible')) {
+            $adv.hide();
+            $icon.removeClass('fa-caret-down').addClass('fa-caret-right');
+          } else {
+            $adv.show();
+            $icon.removeClass('fa-caret-right').addClass('fa-caret-down');
+          }
+        });
 
         const $dialect = $('#node-config-input-dialect');
         const $revision = $('#node-config-input-dialectRevision');
@@ -417,22 +438,6 @@
     </div>
     </div>
   </div>
-  <script type="text/javascript">
-    (function () {
-      $('#node-mav-advanced-toggle').on('click', function (e) {
-        e.preventDefault();
-        var $adv = $('.mav-advanced');
-        var $icon = $(this).find('i');
-        if ($adv.is(':visible')) {
-          $adv.hide();
-          $icon.removeClass('fa-caret-down').addClass('fa-caret-right');
-        } else {
-          $adv.show();
-          $icon.removeClass('fa-caret-right').addClass('fa-caret-down');
-        }
-      });
-    })();
-  </script>
 </script>
 
 <script type="text/html" data-help-name="mavlink-vehicle">
