@@ -9,11 +9,12 @@ config-node shapes and message contracts may still change without a major bump.
 ### Fixed
 
 - `mavlink-out` reported `sent` for a message the outbound queue had discarded.
-  A flow deployed through the Admin API with no `band` key hands the queue a
-  band that matches none of its cases; the queue correctly selects no behavior
-  (§5), but nothing checked the enqueue return, so the node announced success
-  for a frame that never entered the queue. `Connection.send()` now fails loud
-  when enqueue selects nothing, into the sender's existing error path (#375).
+  A band no queue case answers to — the shape an Admin-API deploy produces when
+  the flow JSON omits the `band` key — selected no behavior at the queue's
+  switch (correct, §5) but nothing checked the enqueue return, so the node
+  announced success for a frame that never entered the queue.
+  `Connection.send()` now fails loud when enqueue selects nothing, into the
+  sender's existing error path (#375).
 
 ## [0.5.0] "Drive to final" - 2026-08-22
 
