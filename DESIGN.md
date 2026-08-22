@@ -999,6 +999,10 @@ arms from `target_system=0`. **Lab topology:** the compose bridge does not deliv
 inter-container IPv4 multicast — ap-mcast-41 needs `network_mode: host` (INSTANCE 5);
 the measurement script runs on the host. PX4 broadcast is tested from the host against
 the bridge gateway path.
+**Verdict: the Swarm address ships as-is (keep, 2026-08-22).** All five entrypoint-brief
+probes passed on the first measured run; delivery works in both directions. The
+multicast-interface option stays deferred until a multihomed host actually misroutes
+(the lab trap was container topology, not the driver).
 *Check:* `docker compose --profile mcast up -d`; `node sitl/measure-swarm-mcast.js`.
 
 ---
