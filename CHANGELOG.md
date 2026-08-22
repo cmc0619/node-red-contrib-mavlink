@@ -4,6 +4,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [Unreleased]
+
+### Fixed
+
+- **Multicast loopback is no longer forced off on swarm links.** The UDP
+  transport turned loopback off when joining a multicast group, which broke
+  the main reason ArduPilot's `mcast:` exists — several tools on one host
+  sharing a link: a locally-run SITL and Node-RED could never hear each
+  other. The socket now keeps the OS default (on).
+- **Our own echoed frames are no longer treated as peer traffic.** With
+  loopback on, a swarm link returns every frame this connection transmits.
+  Inbound frames stamped with one of the connection's own identities are now
+  dropped silently, so the GCS never registers itself as a vehicle and In
+  nodes never see their own commands echoed back. A companion sharing our
+  system id under a different component id still counts as a real peer.
+
 ## [0.5.0] "Drive to final" - 2026-08-22
 
 ### Changed

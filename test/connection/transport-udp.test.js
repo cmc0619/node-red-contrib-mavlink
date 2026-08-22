@@ -37,9 +37,10 @@ test('a multicast group is joined, not broadcast-flagged', async () => {
 
   assert.deepEqual(socket.memberships, ['239.255.145.50'], 'the group must be joined to receive it');
   assert.equal(socket.broadcastFlag, null, 'SO_BROADCAST is meaningless for multicast');
-  // We send to the group we joined; left on, every frame we transmit comes
-  // straight back and the peer table learns our own GCS as a vehicle.
-  assert.equal(socket.multicastLoopback, false, 'loopback off, or we hear ourselves');
+  // Loopback stays at the OS default (on): ArduPilot's `mcast:` exists so
+  // several tools on one host share a link, and the runtime filters our own
+  // echoed frames by bound identity instead.
+  assert.equal(socket.multicastLoopback, null, 'the transport must not touch multicast loopback');
 });
 
 test('a broadcast address sets SO_BROADCAST and joins nothing', async () => {
