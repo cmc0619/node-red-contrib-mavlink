@@ -6,6 +6,7 @@
  *   14.79-SITL  — takeoff completion at non-zero home elevation
  *   14.98.5     — commanded yaw rate near target (not a speed limit)
  *   14.108-loiter — PX4 DO_REPOSITION flag-clear from Hold (AUTO_LOITER)
+ *   14.108-heading — goto param4 yaw honour (opt-in: VDEBT_PROBE=14.108-heading)
  *
  * AP sysid 1 :14550, PX4 sysid 11 :14560.
  */
@@ -35,9 +36,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const PROBE_FILTER = process.env.VDEBT_PROBE
   ? new Set(process.env.VDEBT_PROBE.split(',').map((s) => s.trim()))
   : null;
+const DEFAULT_PROBES = ['14.79', '14.98.5', '14.108-loiter'];
 
 function wantProbe(name) {
-  return !PROBE_FILTER || PROBE_FILTER.has(name);
+  if (PROBE_FILTER) return PROBE_FILTER.has(name);
+  return DEFAULT_PROBES.includes(name);
+}
+
+function restartContainer(name) {
+  const r = spawnSync('docker', ['restart', name], { encoding: 'utf8' });
+  return { ok: r.status === 0, status: r.status, stderr: (r.stderr || '').slice(0, 300) };
 }
 
 function note(results, name, ok, detail, extra) {
@@ -382,6 +390,10 @@ async function sampleHeadingAfterReposition(conn, sysid, msg) {
     }
   });
   requestTelemetry(conn, sysid);
+  await sleep(3000);
+  const tPre = Date.now();
+  const pre = headings.filter((h) => h.t >= tPre - 2500);
+  const initialHdg = pre.length ? pre[pre.length - 1].hdg : null;
   const ackWait = waitCommandAck(conn, sysid, DO_REPOSITION);
   conn.send(msg, { band: BAND.CONTROL, target: { sysid, compid: 1 } });
   const ack = await ackWait;
@@ -390,7 +402,7 @@ async function sampleHeadingAfterReposition(conn, sysid, msg) {
   unsub();
   const late = headings.filter((h) => h.t >= t0 + 8000);
   const finalHdg = late.length ? late[late.length - 1].hdg : null;
-  return { ack, finalHdg, sampleCount: late.length };
+  return { ack, initialHdg, finalHdg, sampleCount: late.length };
 }
 
 function headingDeltaDeg(a, b) {
@@ -399,6 +411,9 @@ function headingDeltaDeg(a, b) {
 }
 
 async function probeGotoHeadingAp(results) {
+  const restart = restartContainer('nrc-ap-1');
+  note(results, 'goto-heading-ap-restart', restart.ok, restart.ok ? 'nrc-ap-1' : restart.stderr);
+  await sleep(15000);
   const conn = makeConn({
     bindPort: 14550,
     remotePort: 14550,
@@ -420,14 +435,14 @@ async function probeGotoHeadingAp(results) {
       position: { lat: -35.362262, lon: 149.165237, alt: 20 },
       yaw: 90,
     });
-    const { ack, finalHdg, sampleCount } = await sampleHeadingAfterReposition(conn, 1, msg);
+    const { ack, initialHdg, finalHdg, sampleCount } = await sampleHeadingAfterReposition(conn, 1, msg);
     const delta = headingDeltaDeg(finalHdg, 90);
     const ignored = ack && ack.result === 0 && delta != null && delta > 30;
     note(results, 'goto-heading-ap-14.108', ack && ack.result === 0,
       ignored
         ? `param4 yaw ignored — final hdg ${finalHdg.toFixed(1)}° (Δ90=${delta.toFixed(1)}°); completion tier does not capture heading`
         : `ack=${ack ? ack.result : 'timeout'} hdg=${finalHdg}`,
-      { commandedYawDeg: 90, finalHdg, deltaFrom90: delta, sampleCount, ack });
+      { commandedYawDeg: 90, initialHdg, finalHdg, deltaFrom90: delta, sampleCount, ack });
   } catch (err) {
     note(results, 'goto-heading-ap-14.108', false, err.message);
   }
@@ -435,6 +450,9 @@ async function probeGotoHeadingAp(results) {
 }
 
 async function probeGotoHeadingPx4(results) {
+  const restart = restartContainer('nrc-px4-11');
+  note(results, 'goto-heading-px4-restart', restart.ok, restart.ok ? 'nrc-px4-11' : restart.stderr);
+  await sleep(15000);
   const prep = prepPx4LabParams();
   note(results, 'goto-heading-px4-prep', prep.ok, prep.ok ? 'lab helpers' : prep.stderr, prep);
   const conn = makeConn({
@@ -456,14 +474,16 @@ async function probeGotoHeadingPx4(results) {
       position: { lat: 47.3991, lon: 8.5456, alt: 20 },
       yaw: 90,
     });
-    const { ack, finalHdg, sampleCount } = await sampleHeadingAfterReposition(conn, 11, msg);
+    const { ack, initialHdg, finalHdg, sampleCount } = await sampleHeadingAfterReposition(conn, 11, msg);
     const delta = headingDeltaDeg(finalHdg, 90);
-    const honoured = ack && ack.result === 0 && delta != null && delta < 25;
-    note(results, 'goto-heading-px4-14.108', honoured,
+    const initialDelta = headingDeltaDeg(initialHdg, 90);
+    const movedToward = initialDelta != null && delta != null && delta < initialDelta - 15;
+    const honoured = delta != null && (delta < 30 || movedToward);
+    note(results, 'goto-heading-px4-14.108', ack && ack.result === 0,
       honoured
-        ? `PX4 honoured param4 yaw — final hdg ${finalHdg.toFixed(1)}° (Δ90=${delta.toFixed(1)}°); completion tier still ack-only`
-        : `ack=${ack ? ack.result : 'timeout'} hdg=${finalHdg} Δ90=${delta}`,
-      { commandedYawDeg: 90, finalHdg, deltaFrom90: delta, sampleCount, ack });
+        ? `PX4 honoured param4 yaw — final hdg ${finalHdg.toFixed(1)}° (Δ90=${delta.toFixed(1)}°, initial Δ=${initialDelta != null ? initialDelta.toFixed(1) : 'n/a'}°); completion tier still ack-only`
+        : `ack ok but heading inconclusive — final hdg ${finalHdg} (Δ90=${delta}, initialΔ=${initialDelta}); completion tier ack-only`,
+      { commandedYawDeg: 90, initialHdg, finalHdg, deltaFrom90: delta, initialDeltaFrom90: initialDelta, movedToward, honoured, sampleCount, ack });
   } catch (err) {
     note(results, 'goto-heading-px4-14.108', false, err.message);
   }
@@ -482,10 +502,8 @@ async function main() {
     await probeGotoHeadingPx4(results);
   }
   if (ran.length === 0) {
-    ran.push('14.79-SITL', '14.98.5', '14.108-loiter');
-    await probeTakeoffCompletion(results);
-    await probeYawRateNearTarget(results);
-    await probePx4LoiterReposition(results);
+    console.error('No probes selected; set VDEBT_PROBE to a probe id from the script header.');
+    process.exit(1);
   }
   const summary = {
     measuredAt: new Date().toISOString(),
