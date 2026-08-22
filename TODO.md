@@ -50,3 +50,19 @@ is the part most likely to eat an evening.
 broadcast *correct* on any IP topology where we have heard from the vehicles.
 A swarm address buys wire efficiency, not capability — noise at five vehicles,
 real at fifty.
+---
+
+## Verification debt — post-1.0 measurement queue
+
+Inventoried in `docs/verification-debt.md`; release posture in `DESIGN.md` §14.132
+(documented, not blocking 1.0.0). Drift check: `node scripts/inventory-verification-debt.js`.
+
+**Worth measuring first** (operator-visible, cheap on the existing lab):
+
+1. Offset Steer stream walk — validate the Stream withhold (`14.100-stream`).
+2. Turn yaw-timeout subclaims — `GUID_TIMEOUT` + rate-not-limit (`14.98.5` / `14.98.6`).
+3. Takeoff completion at non-zero home — close `14.79-SITL`.
+4. PX4 AUTO_LOITER flag-clear on goto — `14.108-loiter`.
+
+Everything else in the inventory is lab-ops timing (14.116–14.130) or upstream
+packaging/spec facts that do not need a rig to stay true.
