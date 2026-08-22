@@ -950,6 +950,22 @@ heading, GPS fix, battery, home, freshness, snapshot projection, `AUTOPILOT_VERS
 The State-snapshot example must `SET_MESSAGE_INTERVAL` for `GLOBAL_POSITION_INT` before
 takeoff on this lab image.
 
+## 14.131 Send path
+
+**14.131 Every send serializes twice — validation dry run plus pump serialize — and stays that way.** ✔ (owner ruling, 2026-08-22)
+`send()` dry-runs `serialize` (seq 0, unsigned, buffer discarded) so an unencodable
+message — a name absent from the bound dialect, a field `Buffer.write*` range-rejects —
+throws synchronously into the sending node's error path instead of dropping later in
+`_pump()` behind a phantom green `sent`. The pump serialize is the real one: seq is
+assigned in wire order at dequeue, and on signed links it sits inside the CRC'd + signed
+region, so a cached dry-run buffer cannot be patched without redoing most of the encode.
+Cost is microseconds per frame (per-message field metadata is precomputed, #371).
+Declined: collapsing to one serialize (moves the failure past `send()`'s return — phantom
+success), and a standalone cheap validator (re-implements the range coverage Buffer
+provides per 14.55, then drifts). Do not re-raise without a measurement showing the dry
+run matters at streaming rates.
+*Check:* `lib/connection/runtime.js` `send()` (the dry run and its comment).
+
 ---
 
 ## Removed from the old §14, and why
