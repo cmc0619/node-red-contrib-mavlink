@@ -87,3 +87,12 @@ test('DEFAULT_EVENTS covers every peer-table emission name', () => {
   const documented = [...header[1].matchAll(/`([^`]+)`/g)].map((m) => m[1]);
   assert.deepEqual([...DEFAULT_EVENTS], documented);
 });
+
+test('a full event selection saves as blank — the default set stays unfrozen', () => {
+  // Blank means "the full default set, whatever lib/state currently emits".
+  // Writing the explicit 16-name list on open-and-save would freeze today's
+  // list into the config, and an event lib/state grows later would silently
+  // fall out of it.
+  assert.match(html, /values\.length === STATE_EVENTS\.length \? '' :/,
+    'the sync canonicalizes a full selection to blank');
+});
