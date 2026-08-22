@@ -12,8 +12,8 @@ This is the inventory behind the **1.0.0 release posture** recorded in
 |---|---:|---|
 | Rig-only (🧪, no ✔) | **29** | SITL/lab measurements kept as recorded; code and cited tests exist in-tree but were not re-probed on 2026-08-19 |
 | Source-read (📖, no ✔) | **14** | Upstream/spec hypotheses recorded on the cited date; no matching rig row in §14 |
-| Open subclaims | **7** | Named gaps inside otherwise-settled §14 entries or on shipped editor/runtime paths |
-| **Source-read debt (reported)** | **21** | 14 header rows + 7 open subclaims (the external audit's headline number) |
+| Open subclaims | **6** | Named gaps inside otherwise-settled §14 entries or on shipped editor/runtime paths |
+| **Source-read debt (reported)** | **20** | 14 header rows + 6 open subclaims (the external audit's headline number) |
 
 **Release posture:** documented, **not blocking 1.0.0** (§14.132). Every shipped-path
 item below either has an editor withhold, is absent from the operator surface, or is
@@ -63,14 +63,13 @@ handed (§0).
 | 14.77 | COMMAND_INT x/y has no cross-fleet sentinel |
 | 14.99 | ArduPilot copter yaw is command-only |
 
-## Open subclaims (7)
+## Open subclaims (6)
 
 These are the gaps the external audit flagged on **shipped paths**. Each is named in
 §14 or the editor; none rely on silent runtime refusal.
 
 | id | §14 / path | claim | shipped mitigation |
 |---|---|---|---|
-| 14.100-stream | 14.100, `mavlink-move` help + `refreshDeliveryOptions` | Repeating offset stream walks the vehicle | **Stream withheld** when `reference === 'offset'`; help states why |
 | 14.98.6 | 14.98.6 | `GUID_TIMEOUT` parks yaw after ~3 s | Turn is command-tier; documented in §14.98 |
 | 14.98.5 | 14.98.5 | Commanded yaw rate is not a speed limit near target | Documented; no editor promise of rate limiting |
 | 14.108-loiter | 14.108 | PX4 flag-clear from AUTO_LOITER | `changeMode` opt-in on Go to; measured gate on both stacks |
@@ -78,13 +77,18 @@ These are the gaps the external audit flagged on **shipped paths**. Each is name
 | 14.79-SITL | 14.79 | Takeoff completion not SITL-measured | **Unit-tested** (`test/command/completion.test.js`); frame datum rule explicit |
 | 14.95-terrain | 14.95 | Terrain frame datum honour not instrumented | **Terrain alt ref absent** from Move surface (`lib/move/action.js`) |
 
+## Recently closed subclaims
+
+| id | measured | result |
+|---|---|---|
+| 14.100-stream | 2026-08-22 | AP Copter-4.7: 5 Hz `LOCAL_OFFSET_NED` z=+2 m climbed ~7.3 m in 3 s — Stream withhold validated (`sitl/measure-offset-stream.js`) |
+
 ## What would move the needle after 1.0.0
 
 Priority if measurement budget appears — ordered by operator-visible uncertainty, not
 by count:
 
-1. **Offset stream walk** (14.100-stream) — confirm the withhold reason on AP Copter
-   at rate; cheap SITL probe, validates editor policy.
+1. ~~**Offset stream walk** (14.100-stream)~~ — **done 2026-08-22** (`sitl/measure-offset-stream.js`).
 2. **14.98 yaw subclaims** — GUID_TIMEOUT + rate-vs-limit near target; informs Turn
    help text only.
 3. **14.79 takeoff completion** — one SITL climb at non-zero home elevation; closes the
