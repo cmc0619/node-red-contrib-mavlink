@@ -1,10 +1,9 @@
 name: Refresh MAVLink seed
 
-# Weekly auto-refresh of the stamped seed blob from upstream XML.
-# Also runnable by hand from the Actions tab.
+# On-demand refresh of the stamped seed blob from upstream XML, committed
+# straight to the branch it runs on — gated on the full test suite passing
+# against the fresh seed, so an upstream XML change cannot land main red.
 on:
-  schedule:
-    - cron: '17 6 * * 1' # Mondays 06:17 UTC
   workflow_dispatch:
     inputs:
       ref:
@@ -14,7 +13,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   refresh:
@@ -38,17 +36,17 @@ jobs:
           MAVLINK_REF: ${{ inputs.ref || 'master' }}
         run: node scripts/generate-seed.js --repo mavlink/mavlink --ref "$MAVLINK_REF"
 
-      - name: Open PR when the seed changed
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
-        with:
-          commit-message: 'chore(seed): refresh MAVLink dialect seed'
-          title: 'chore(seed): refresh MAVLink dialect seed'
-          body: |
-            Automated refresh of the stamped seed blob from `mavlink/mavlink`.
+      - name: Test against the fresh seed
+        run: npm test
 
-            Files: `seed/active.json` + `seed/mavlink-YYYY-MM-DD-<sha>.seed.gz`
-            (older stamped blobs are removed by the generator).
-          branch: chore/refresh-mavlink-seed
-          delete-branch: true
-          add-paths: |
-            seed/
+      - name: Commit the refreshed seed
+        run: |
+          if [ -z "$(git status --porcelain -- seed/)" ]; then
+            echo "Seed unchanged — nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add seed/
+          git commit -m 'chore(seed): refresh MAVLink dialect seed'
+          git push

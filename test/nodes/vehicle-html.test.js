@@ -46,17 +46,34 @@ test('seed refresh workflow passes dispatch ref via env (no shell interpolation)
   );
 });
 
-test('seed refresh workflow pins third-party actions by commit SHA', () => {
+test('seed refresh workflow pins actions by commit SHA', () => {
   const yml = fs.readFileSync(
     path.join(__dirname, '..', '..', '.github', 'workflows', 'refresh-mavlink-seed.yml'),
     'utf8'
   );
   assert.match(yml, /uses:\s*actions\/checkout@[0-9a-f]{40}/);
   assert.match(yml, /uses:\s*actions\/setup-node@[0-9a-f]{40}/);
-  assert.match(yml, /uses:\s*peter-evans\/create-pull-request@[0-9a-f]{40}/);
   assert.ok(!/uses:\s*actions\/checkout@v\d/.test(yml));
   assert.ok(!/uses:\s*actions\/setup-node@v\d/.test(yml));
-  assert.ok(!/uses:\s*peter-evans\/create-pull-request@v\d/.test(yml));
+});
+
+test('seed refresh is button-only and commits straight to the branch, behind the suite', () => {
+  // Owner ruling (2026-08-22): no weekly cron — the seed reaches users at
+  // release time, so refresh is a release-checklist button press. The commit
+  // is direct (Actions cannot open PRs on this repo) and must sit AFTER the
+  // test run, so a seed that breaks a pinned enum/command fact never lands.
+  const yml = fs.readFileSync(
+    path.join(__dirname, '..', '..', '.github', 'workflows', 'refresh-mavlink-seed.yml'),
+    'utf8'
+  );
+  assert.ok(!/schedule:|cron:/.test(yml), 'no scheduled refresh');
+  assert.match(yml, /workflow_dispatch:/, 'the button stays');
+  assert.ok(!/create-pull-request/.test(yml), 'no PR-creating action');
+  assert.ok(!/pull-requests:\s*write/.test(yml), 'no PR permission either');
+  const testStep = yml.indexOf('run: npm test');
+  const pushStep = yml.indexOf('git push');
+  assert.ok(testStep !== -1 && pushStep !== -1 && testStep < pushStep,
+    'the suite gates the push');
 });
 
 test('paramDefsUrl is persisted and shown as an input', () => {
