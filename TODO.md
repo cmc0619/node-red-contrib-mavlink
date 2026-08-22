@@ -50,10 +50,9 @@ Inventoried in `docs/verification-debt.md`; release posture in `DESIGN.md` §14.
 
 **Worth measuring first** (operator-visible, cheap on the existing lab):
 
-1. ~~Offset Steer stream walk~~ — **done 2026-08-22** (`sitl/measure-offset-stream.js`).
-2. Turn yaw-timeout subclaims — ~~`GUID_TIMEOUT` parks yaw (14.98.6)~~ **done 2026-08-22**; rate-not-limit near target (`14.98.5`) remains.
-3. Takeoff completion at non-zero home — close `14.79-SITL`.
-4. PX4 AUTO_LOITER flag-clear on goto — `14.108-loiter`.
+1. ~~Offset Steer stream walk~~ — **done 2026-08-22**.
+2. ~~Turn yaw-timeout subclaims~~ — **done 2026-08-22**.
+3. ~~Takeoff completion at non-zero home~~ — **done 2026-08-22** (`sitl/measure-verification-debt.js`).
+4. ~~PX4 AUTO_LOITER flag-clear on goto~~ — **done 2026-08-22** (`sitl/measure-verification-debt.js`).
 
-Everything else in the inventory is lab-ops timing (14.116–14.130) or upstream
-packaging/spec facts that do not need a rig to stay true.
+Remaining open subclaims (14.108-heading, 14.95-terrain) do not block operator paths.

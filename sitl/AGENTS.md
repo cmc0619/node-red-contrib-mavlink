@@ -154,6 +154,13 @@ node sitl/measure-swarm-mcast.js   # from host — ap-mcast-41 uses network_mode
 Probes group membership, broadcast arm, loopback, self-echo filter, and PX4 subnet
 broadcast. See `sitl/scripts/entrypoint-ap-mcast.sh` for the full brief.
 
+### Verification-debt queue (post-1.0)
+
+```bash
+# 14.79-SITL, 14.98.5, 14.108-loiter — writes /tmp/nrc-vdebt-*/
+node sitl/measure-verification-debt.js
+```
+
 ### Peer-table enrichment while airborne (§8)
 
 ```bash

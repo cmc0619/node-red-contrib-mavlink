@@ -12,8 +12,8 @@ This is the inventory behind the **1.0.0 release posture** recorded in
 |---|---:|---|
 | Rig-only (🧪, no ✔) | **30** | SITL/lab measurements kept as recorded; code and cited tests exist in-tree but were not re-probed on 2026-08-19 |
 | Source-read (📖, no ✔) | **14** | Upstream/spec hypotheses recorded on the cited date; no matching rig row in §14 |
-| Open subclaims | **5** | Named gaps inside otherwise-settled §14 entries or on shipped editor/runtime paths |
-| **Source-read debt (reported)** | **19** | 14 header rows + 5 open subclaims (the external audit's headline number) |
+| Open subclaims | **2** | Named gaps inside otherwise-settled §14 entries or on shipped editor/runtime paths |
+| **Source-read debt (reported)** | **16** | 14 header rows + 2 open subclaims (the external audit's headline number) |
 
 **Release posture:** documented, **not blocking 1.0.0** (§14.132). Every shipped-path
 item below either has an editor withhold, is absent from the operator surface, or is
@@ -65,17 +65,14 @@ handed (§0).
 | 14.77 | COMMAND_INT x/y has no cross-fleet sentinel |
 | 14.99 | ArduPilot copter yaw is command-only |
 
-## Open subclaims (5)
+## Open subclaims (2)
 
 These are the gaps the external audit flagged on **shipped paths**. Each is named in
 §14 or the editor; none rely on silent runtime refusal.
 
 | id | §14 / path | claim | shipped mitigation |
 |---|---|---|---|
-| 14.98.5 | 14.98.5 | Commanded yaw rate is not a speed limit near target | Documented; no editor promise of rate limiting |
-| 14.108-loiter | 14.108 | PX4 flag-clear from AUTO_LOITER | `changeMode` opt-in on Go to; measured gate on both stacks |
 | 14.108-heading | 14.108 | Goto resulting heading not captured | Does not affect send/refuse; completion uses ack not heading |
-| 14.79-SITL | 14.79 | Takeoff completion not SITL-measured | **Unit-tested** (`test/command/completion.test.js`); frame datum rule explicit |
 | 14.95-terrain | 14.95 | Terrain frame datum honour not instrumented | **Terrain alt ref absent** from Move surface (`lib/move/action.js`) |
 
 ## Recently closed subclaims
@@ -84,18 +81,19 @@ These are the gaps the external audit flagged on **shipped paths**. Each is name
 |---|---|---|
 | 14.100-stream | 2026-08-22 | AP Copter-4.7: 5 Hz `LOCAL_OFFSET_NED` z=+2 m climbed ~7.3 m in 3 s — Stream withhold validated (`sitl/measure-offset-stream.js`) |
 | 14.98.6 | 2026-08-22 | One-shot yaw+rate parks after ~GUID_TIMEOUT (`sitl/measure-move-179.js` `ap-guid-yaw-park`) |
+| 14.79-SITL | 2026-08-22 | Takeoff completion at home AMSL ~584 m, 10 m relative climb (`sitl/measure-verification-debt.js`) |
+| 14.98.5 | 2026-08-22 | Mid-error yaw slew ~44°/s vs 20°/s commanded — not a speed limit (`sitl/measure-verification-debt.js`) |
+| 14.108-loiter | 2026-08-22 | PX4 Hold + `changeMode=false` → DO_REPOSITION ACCEPTED (`sitl/measure-verification-debt.js`) |
 
 ## What would move the needle after 1.0.0
 
 Priority if measurement budget appears — ordered by operator-visible uncertainty, not
 by count:
 
-1. ~~**Offset stream walk** (14.100-stream)~~ — **done 2026-08-22** (`sitl/measure-offset-stream.js`).
-2. **14.98 yaw subclaims** — GUID_TIMEOUT + rate-vs-limit near target; informs Turn
-   help text only.
-3. **14.79 takeoff completion** — one SITL climb at non-zero home elevation; closes the
-   last command-completion rig gap.
-4. **14.108 PX4 AUTO_LOITER flag-clear** — one-field twin on the lab SIH.
+1. ~~**Offset stream walk** (14.100-stream)~~ — **done 2026-08-22**.
+2. ~~**14.98 yaw subclaims**~~ — **done 2026-08-22** (GUID_TIMEOUT park + rate-not-limit).
+3. ~~**14.79 takeoff completion**~~ — **done 2026-08-22**.
+4. ~~**14.108 PX4 AUTO_LOITER flag-clear**~~ — **done 2026-08-22**.
 5. **Lab ops 14.116–14.130** — re-run when the SITL image or AP binary bumps; not
    user-runtime debt.
 

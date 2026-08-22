@@ -550,11 +550,13 @@ deliberately stays unclassified/pass-through.
 *Check:* `lib/command/carrier.js` `LOCAL_FRAMES`; probe recipe in the entry's history
 (send before reading — `px4-listener` prints the retained previous value on start).
 
-**14.79 Takeoff completion compares climb height; the takeoff param's datum is frame-dependent.** ✔ (unit-tested, not SITL-measured)
+**14.79 Takeoff completion compares climb height; the takeoff param's datum is frame-dependent.** ✔ 🧪 (unit-tested; SITL 2026-08-22)
 In an absolute frame the param is AMSL — comparing it to `relative_alt` never satisfies
 at non-zero home elevation. Completion converts absolute frames via
 `param − (alt − relative_alt)`; only the effective-INT carrier passes a frame.
-*Check:* `node --test test/command/completion.test.js`.
+AP Copter-4.7 at home AMSL ~584 m: 10 m relative takeoff completes at ~10 m
+`relative_alt` (`node sitl/measure-verification-debt.js`).
+*Check:* `node --test test/command/completion.test.js`; rig probe `takeoff-14.79-sitl`.
 
 **14.80 A `PARAM_VALUE` echo is decoded by the frame's own `param_type`; the request's type only encodes the outbound set.** 🧪 (re-measured 2026-08-18)
 ArduPilot stores by its own table type and *ignores* the wire type (a REAL32-labeled set
@@ -715,8 +717,9 @@ alone leaves only the offboard timeout.
 4. PX4 held OFFBOARD at 5 Hz *and* 1 Hz with lab helpers; full silence exits OFFBOARD.
    No "<2 Hz" advisory.
 5. Yaw + yaw_rate are complementary on both stacks, but **the commanded rate is not a
-   speed limit**: commanded 20 °/s, measured ~60 °/s (AP) / ~11 °/s (PX4) — the error
-   term dominates far from the target heading (hypothesis, unmeasured near it).
+   speed limit**: commanded 20 °/s, measured ~60 °/s (AP) far from target and ~44 °/s
+   at mid error (15–45°) — still above the commanded cap; near target (<15°) slew drops
+   to ~0 as the vehicle arrives (🧪 2026-08-22, `sitl/measure-verification-debt.js`).
 6. `GUID_TIMEOUT` also parks the yaw mode (🧪 2026-08-22): a one-shot yaw+rate stops
    slewing after ~3 s (`node sitl/measure-move-179.js`, `ap-guid-yaw-park` probe).
 *Check:* `node sitl/measure-move-179.js` (rig).
@@ -812,15 +815,15 @@ there runs the whole downstream chain again. Stops the flow itself caused (repla
 redeploy) stay silent: announce what the flow could not otherwise observe, nothing else.
 *Check:* `node --test test/move/node.test.js` — the TTL test asserts output 0 is null.
 
-**14.108 PX4 accepts a one-shot `DO_REPOSITION`; `CHANGE_MODE` is the gate on both stacks.** 🧪 (2026-08-11/12)
+**14.108 PX4 accepts a one-shot `DO_REPOSITION`; `CHANGE_MODE` is the gate on both stacks.** 🧪 (2026-08-11/12, flag-clear 2026-08-22)
 No OFFBOARD stream and no caller-side mode switch needed. Isolated one-field probes:
 a reposition is **ACCEPTED iff `CHANGE_MODE` (param2 bit) is set OR the vehicle is
 already in the stack's guided-capable mode** (GUIDED on ArduPilot, AUTO_LOITER/Hold on
 PX4), otherwise **DENIED (2) on both stacks**. MAVSDK's per-autopilot pre-switch is the
-same table client-side. One cell stays source-read (PX4 flag-clear from AUTO_LOITER).
-The 2026-08-11 run's `param4` was encoded in radians — units settled; resulting heading
-not captured.
-*Check:* re-create one-field twins of examples 27/30 on the rig.
+same table client-side. PX4 in Hold (`0x03040000`) with `changeMode=false` → ACCEPTED
+(🧪 2026-08-22, `sitl/measure-verification-debt.js`). The 2026-08-11 run's `param4`
+was encoded in radians — units settled; resulting heading not captured.
+*Check:* `node sitl/measure-verification-debt.js`; one-field twins of examples 27/30.
 
 **14.109 PX4 refuses a stick-driven mode airborne without RC.** 🧪 (2026-08-12)
 Airborne with no RC input, `DO_SET_MODE` POSCTL answers TEMPORARILY_REJECTED forever —
