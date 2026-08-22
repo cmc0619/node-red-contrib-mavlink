@@ -49,7 +49,7 @@ services:
   # Otherwise Docker creates root-owned bind sources and the unprivileged
   # sitl/px4 users cannot write DataFlash / ulogs.
   prepare-logs:
-    profiles: ["sitl"]
+    profiles: ["sitl", "mcast"]
     image: busybox:1.36
     container_name: nrc-prepare-logs
     user: "0:0"
@@ -63,7 +63,8 @@ services:
         for d in ap-1 ap-2 ap-3 ap-4 ap-5 \
                  px4-11 px4-12 px4-13 px4-14 px4-15 \
                  ap-companion-20 px4-companion-21 \
-                 ap-payload-31; do
+                 ap-payload-31 \
+                 ap-mcast-41 px4-bcast-42; do
           mkdir -p "/logs/$$d"
         done
         chmod -R a+rwX /logs
@@ -249,6 +250,45 @@ services:
       OUT_PORT: "14542"
     volumes:
       - ./logs/px4-companion-21:/logs
+      - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
+      - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
+      - ./params/px4-logging.env:/params/px4-logging.env:ro
+
+  # ---------------------------------------------------------------------------
+  # Swarm-delivery test vehicles (profile "mcast") — NOT part of the sitl fleet.
+  # The full test brief lives in scripts/entrypoint-ap-mcast.sh; a tester picks
+  # that file up, runs `docker compose --profile mcast up -d --build`, measures,
+  # and posts a sitl-results issue. ap-mcast-41 is a two-way multicast party
+  # line (mcast:239.255.145.50:14550); px4-bcast-42 is the subnet-broadcast
+  # probe (PX4 joins no group — its mavlink just binds a UDP port pair
+  # 14580→14581, same shape as the GCS fleet).
+  ap-mcast-41:
+    <<: *ap
+    container_name: nrc-ap-mcast-41
+    profiles: ["mcast"]
+    entrypoint: ["/bin/bash", "/usr/local/bin/entrypoint-ap-mcast.sh"]
+    environment:
+      SYSID: "41"
+      INSTANCE: "0"
+      MCAST_GROUP: 239.255.145.50
+      MCAST_PORT: "14550"
+    volumes:
+      - ./logs/ap-mcast-41:/logs
+      - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./params/copter.parm:/params/copter.parm:ro
+      - ./scripts/entrypoint-ap-mcast.sh:/usr/local/bin/entrypoint-ap-mcast.sh:ro
+
+  px4-bcast-42:
+    <<: *px4
+    container_name: nrc-px4-bcast-42
+    profiles: ["mcast"]
+    environment:
+      <<: *px4-env
+      SYSID: "42"
+      INSTANCE: "0"
+      OUT_PORT: "14580"
+    volumes:
+      - ./logs/px4-bcast-42:/logs
       - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
       - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro

@@ -905,6 +905,43 @@ test('a swarm address works before any peer is heard', async () => {
   assert.equal(sends[0].address, '239.255.145.50', 'not the configured remote');
 });
 
+test('a frame stamped with a bound identity is our own echo — dropped before the peer table', async () => {
+  // Multicast loopback returns our own transmissions: with loopback at the OS
+  // default, every frame we write to the group comes straight back. A
+  // component does not treat its own frames as peer traffic.
+  const { connection, dg } = build();
+  await connection.start();
+  const received = [];
+  connection.subscribe(null, (m) => received.push(m));
+
+  dg.sockets[0].receive(
+    frameBuffer({ name: 'COMMAND_LONG', sysid: 255, compid: 190, fields: { command: 400 } }),
+    { address: '239.255.145.50', port: 14550 }
+  );
+
+  assert.equal(received.length, 0, 'our own echo never reaches a subscriber');
+  assert.equal(connection.peerTable.getComponent(255, 190), undefined, 'and never becomes a peer');
+  connection.close();
+});
+
+test('a companion sharing our sysid under another compid is a real peer, not an echo', async () => {
+  // The filter is the exact (sysid, compid) pair — same-system components are
+  // ordinary MAVLink neighbours and must keep flowing.
+  const { connection, dg } = build();
+  await connection.start();
+  const received = [];
+  connection.subscribe(null, (m) => received.push(m));
+
+  dg.sockets[0].receive(
+    frameBuffer({ name: 'HEARTBEAT', sysid: 255, compid: 191, fields: { type: 6, autopilot: 8, base_mode: 0, custom_mode: 0, system_status: 4 } }),
+    { address: '10.0.0.5', port: 14550 }
+  );
+
+  assert.equal(received.length, 1, 'same sysid, different compid still dispatches');
+  assert.ok(connection.peerTable.getComponent(255, 191), 'and enters the peer table');
+  connection.close();
+});
+
 // ── issue #244: per-write timeout on the outbound pump ───────────────────────
 
 const { WRITE_TIMEOUT_MS } = require('../../lib/connection/runtime');

@@ -14,23 +14,9 @@ The Swarm address landed in "Speaking to the swarm" (#137) with unit tests
 against a mock `dgram` and nothing else. Multicast and broadcast are both
 unverified against a real socket, let alone a real autopilot.
 
-**Two things are wrong before the lab can even try.**
-
-*Loopback is off, and it should not be.* `_enableBroadcast` calls
-`setMulticastLoopback(false)` so we do not hear our own transmissions. That
-breaks the main use case: ArduPilot's `mcast:` exists precisely so several
-tools on one host can share a SITL link, and with loopback off a locally-run
-SITL and Node-RED never hear each other. It does not even solve what it was
-for — a socket bound to `0.0.0.0:14550` receives its own subnet broadcasts
-too, and there is no `IP_BROADCAST_LOOP` to turn off.
-
-*Nothing filters our own frames.* `runtime.js`'s `_onFrame` puts every
-accepted frame into `peerTable.update()` and dispatches it. Once loopback is
-on, our GCS registers as peer sysid 255 and an In node subscribed to
-`COMMAND_LONG` sees our own commands echoed. The fix is to ignore inbound
-frames whose `(sysid, compid)` matches a bound identity — a component should
-not treat its own transmissions as peer traffic. Only reachable on
-multicast/broadcast loopback; no other path echoes us.
+**The two driver defects are fixed:** multicast loopback stays at the OS
+default (on), and `_onFrame` drops frames stamped with a bound identity's
+exact `(sysid, compid)` before the peer table or any subscriber sees them.
 
 **What the lab needs.** The AP containers launch `udpclient:` and join no
 group, so a multicast swarm address reaches nobody today. They would need
@@ -50,14 +36,6 @@ is the part most likely to eat an evening.
 broadcast *correct* on any IP topology where we have heard from the vehicles.
 A swarm address buys wire efficiency, not capability — noise at five vehicles,
 real at fifty.
-
----
-
-## Regenerate the editor screenshots
-
-**Done (2026-08-22).** Full pass under `docs/screenshots/` including health and
-formation; see merged PR #378.
-
 ---
 
 ## Verification debt — post-1.0 measurement queue
