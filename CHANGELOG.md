@@ -17,9 +17,9 @@ config-node shapes and message contracts may still change without a major bump.
   whenever it is triggered**, so a flow that leaned on a missing
   `msg.confirmed` to hold it back no longer has that brake — gate it with the
   trigger instead (an inject you press, a `switch` upstream, `payload:false`
-  to suppress). The editor still shows the Safety notice on the preset, and a
-  broadcast position setpoint is still the one that converges a fleet on one
-  coordinate. `msg.confirmed` is now inert on every node, and a saved Fan-out
+  to suppress). The editor Safety notice went with it — the preset name says
+  what Flight Termination does — and a broadcast position setpoint is still
+  the one that converges a fleet on one coordinate. `msg.confirmed` is now inert on every node, and a saved Fan-out
   `confirm` value is ignored.
 
 - **The `profile-mismatch` peer event.** When a vehicle's HEARTBEAT declared a

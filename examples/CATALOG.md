@@ -431,11 +431,11 @@ importable tab per file with shared config nodes inline.
 - **Tab label:** `27 Safety e-stop`
 - **Story:** The two loud-and-final safety actions: an emergency force-disarm
   (`COMPONENT_ARM_DISARM` param2 = 21196, band 0 Emergency) and `DO_FLIGHTTERMINATION`.
-  Pressing the inject is the decision — there is no runtime confirmation gate (§14.134);
-  the editor's Safety notice is the warning. Demonstrates the Safety preset group and the
-  emergency queue band.
+  Pressing the inject is the decision — there is no runtime confirmation gate and no
+  editor notice (§14.134). Demonstrates the Safety preset group and the emergency queue
+  band.
 - **Nodes:** config triplet, `command` `disarm` (advanced/force with param2=21196),
-  `command` `flight_termination` (Safety preset — editor notice, no gate), `inject`,
+  `command` `flight_termination` (Safety preset), `inject`,
   `debug`.
 - **Key config:** force-disarm uses `disarm` preset with `params {"2":21196}`;
   flight_termination sends `params {"1":1}`. Comment: these
