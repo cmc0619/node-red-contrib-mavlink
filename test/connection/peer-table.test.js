@@ -182,28 +182,6 @@ test('markPrimaryFailed never reselects a previously failed endpoint', () => {
   assert.equal(table.getComponent(1, 1).endpoints.size, 0);
 });
 
-test('a HEARTBEAT contradicting the bound profile emits profile-mismatch once', () => {
-  const table = new PeerTable({ now: () => 0, profileAutopilot: 3 }); // ArduPilot profile
-  const mismatches = [];
-  table.on('profile-mismatch', (e) => mismatches.push({ declared: e.declared, profile: e.profile }));
-
-  table.update(heartbeat({ type: 2, autopilot: 12, base_mode: 0 }), EP1); // PX4 heartbeat
-  table.update(heartbeat({ type: 2, autopilot: 12, base_mode: 0 }), EP1); // again — no re-emit
-
-  assert.deepEqual(mismatches, [{ declared: 12, profile: 3 }]);
-  assert.equal(table.getComponent(1, 1).mismatch, true);
-});
-
-test('a GCS/companion heartbeat (autopilot INVALID) is not a mismatch', () => {
-  const table = new PeerTable({ now: () => 0, profileAutopilot: 3 });
-  let fired = false;
-  table.on('profile-mismatch', () => {
-    fired = true;
-  });
-  table.update(heartbeat({ type: 6, autopilot: 8, base_mode: 0 }), EP1); // MAV_AUTOPILOT_INVALID
-  assert.equal(fired, false);
-});
-
 test('snapshot projects position into canonical units, hdg sentinel to null', () => {
   const table = new PeerTable({ now: () => 0 });
   table.update(

@@ -10,7 +10,6 @@
       'endpoint-added',
       'primary-changed',
       'multi-endpoint',
-      'profile-mismatch',
       'statustext',
       'armed-changed',
       'mode-changed',
@@ -37,6 +36,22 @@
         $select.append($('<option></option>').val(name).text(name));
       }
       $select.val(saved.length ? saved : STATE_EVENTS);
+    }
+
+    // Canonicalizing on save writes the current selection back over the saved
+    // value:
+    // a full selection becomes blank, so an event lib/state grows later is not
+    // frozen out of an old config. That is only safe when every saved name is
+    // still offered. A name the list does not carry selects nothing, and
+    // writing that empty selection means blank — which is *every* event — so a
+    // node picked down to one event would silently subscribe to all of them
+    // and lose its red ring. Such a value rides untouched on both the open and
+    // the save path; a real re-pick is written by the change handler as the
+    // operator makes it.
+    function savedEventsAllOffered(node) {
+      return parseSavedEvents(node.events).every(function (name) {
+        return STATE_EVENTS.indexOf(name) !== -1;
+      });
     }
 
     function syncEventsHiddenFromSelect() {
@@ -85,7 +100,6 @@
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
         buildEventsMultiSelect(node);
         $('#mav-state-events-select').on('change', syncEventsHiddenFromSelect);
-        syncEventsHiddenFromSelect();
         var enumLoadToken = { cancelled: false };
         node._mavEnumLoadToken = enumLoadToken;
         RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
@@ -98,7 +112,7 @@
       },
       oneditsave: function () {
         if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
-        syncEventsHiddenFromSelect();
+        if (savedEventsAllOffered(this)) syncEventsHiddenFromSelect();
       },
       oneditcancel: function () {
         if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;

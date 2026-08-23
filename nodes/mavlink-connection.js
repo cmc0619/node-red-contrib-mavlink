@@ -21,7 +21,6 @@
 
 const { Connection, STATE, PeerTable } = require('../lib/connection');
 const { resolveIdentity } = require('../lib/identity');
-const { autopilotForFirmware } = require('../lib/vehicle');
 const { capBadge } = require('../lib/delivery');
 const { numberOr } = require('../lib/addressing');
 
@@ -126,7 +125,6 @@ module.exports = function registerMavlinkConnection(RED) {
         vehicle: {
           ...vehicleDescriptor,
           bundle,
-          autopilot: autopilotForFirmware(defaults.firmware),
         },
         identities,
         defaultIdentityId: config.localIdentity,

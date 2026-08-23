@@ -164,7 +164,7 @@
     "name": "Peer events",
     "connection": "sitl24-connection",
     "mode": "feed",
-    "events": "peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,multi-endpoint,profile-mismatch,statustext",
+    "events": "peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,multi-endpoint,statustext",
     "targetSystem": "",
     "targetComponent": "",
     "x": 390,
