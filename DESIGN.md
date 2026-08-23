@@ -1014,14 +1014,17 @@ recorded a policy no owner asked for: an agent built the gate, wrote it into the
 and later agents — and the review bots reading the spec — treated the record as gospel;
 it even survived 14.93 as a supposed special case. Ruled: wiring the message is the
 decision, for every command. The runtime gate, the `msg.confirmed` escape, and Fan-out's
-Confirm checkbox are gone (#356). The protector that stays is the editor: a preset's
-`requiresConfirmation` now drives only the Safety notice row
-(`mavlink-command.html` `refreshSafetyNotice`), never a send refusal. The lesson is the
-register's own scope rule: a recorded *policy* is a hypothesis about owner intent until
-the owner ratifies it — only measurements are self-supporting ground truth. Do not
-re-derive a confirmation gate from `DESIGN_old.md`.
-*Check:* `rg "msg.confirmed" lib nodes` → nothing; `refreshSafetyNotice` in
-`nodes/mavlink-command.html`.
+Confirm checkbox are gone (#356). This entry first kept the editor's Safety notice as
+"the protector that stays" — but that mandate was #356's framing, not the owner's, and
+asked directly the owner cut it too (2026-08-23, #385): the preset name already says
+what Flight Termination does. What remains is the Safety opt-group heading in the
+preset picker — dropdown organization, the same as Basic — and the `requiresConfirmation`
+flag is deleted outright (duplicate of `group === 'safety'`, e41be78). The lesson is the
+register's own scope rule, which this entry managed to break while stating it: a
+recorded *policy* is a hypothesis about owner intent until the owner ratifies it — only
+measurements are self-supporting ground truth. Do not re-derive a confirmation gate, or
+the notice, from `DESIGN_old.md`.
+*Check:* `rg "msg.confirmed|safety-notice|requiresConfirmation" lib nodes` → nothing.
 
 ---
 
