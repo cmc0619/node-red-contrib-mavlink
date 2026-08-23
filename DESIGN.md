@@ -1005,6 +1005,24 @@ multicast-interface option stays deferred until a multihomed host actually misro
 (the lab trap was container topology, not the driver).
 *Check:* `docker compose --profile mcast up -d`; `node sitl/measure-swarm-mcast.js`.
 
+## 14.134 Safety confirmation
+
+**14.134 The `msg.confirmed` gate was never owner intent; 14.93 was always the whole rule.** ✔ (owner ruling, 2026-08-23)
+The old spec's "every Safety preset requires an explicit confirmation" and the fan-out
+Flight-Termination / broadcast-position-setpoint gate (`DESIGN_old.md` §"Safety", §10)
+recorded a policy no owner asked for: an agent built the gate, wrote it into the spec,
+and later agents — and the review bots reading the spec — treated the record as gospel;
+it even survived 14.93 as a supposed special case. Ruled: wiring the message is the
+decision, for every command. The runtime gate, the `msg.confirmed` escape, and Fan-out's
+Confirm checkbox are gone (#356). The protector that stays is the editor: a preset's
+`requiresConfirmation` now drives only the Safety notice row
+(`mavlink-command.html` `refreshSafetyNotice`), never a send refusal. The lesson is the
+register's own scope rule: a recorded *policy* is a hypothesis about owner intent until
+the owner ratifies it — only measurements are self-supporting ground truth. Do not
+re-derive a confirmation gate from `DESIGN_old.md`.
+*Check:* `rg "msg.confirmed" lib nodes` → nothing; `refreshSafetyNotice` in
+`nodes/mavlink-command.html`.
+
 ---
 
 ## Removed from the old §14, and why
