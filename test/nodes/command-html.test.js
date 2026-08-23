@@ -173,7 +173,7 @@ test('advanced bitmask command params save one numeric mask value', () => {
 });
 
 test('PRESET_PARAMS is curation-only — the dialect catalog is the data source', () => {
-  const table = sliceBetween('const PRESET_PARAMS = {', 'const HAS_COMPLETION');
+  const table = sliceBetween('const PRESET_PARAMS = {', 'function findPreset');
 
   // The XML declares enums, units, bitmask-ness, and descriptions; the static
   // table must not duplicate them (they drift — it once said MAV_MODE where

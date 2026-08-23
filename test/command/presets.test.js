@@ -16,7 +16,7 @@
  *   5. Presets marked noAutoRetry are not idempotent (MISSION_START,
  *      PREFLIGHT_REBOOT_SHUTDOWN).
  *   6. The Safety preset is in the safety group.
- *   7. Completion keys are present for the four commands that support them.
+ *   7. Completion keys are present for the six presets that support them.
  */
 
 const test = require('node:test');
@@ -197,6 +197,17 @@ test('Set Mode has completion key COMPLETION.SET_MODE', () => {
 
 test('Orbit has no completion key (null)', () => {
   assert.equal(getPreset('orbit').completionKey, null);
+});
+
+test('presetGroups projects completionKey — the editor gates the completion tier on it', () => {
+  // The editor offers "Send & await completion" only when the presets-API row
+  // carries a non-null completionKey; a projection that drops the field would
+  // silently retire the tier for every preset.
+  const rows = presetGroups().flatMap((g) => g.presets);
+  assert.deepEqual(
+    rows.filter((p) => p.completionKey != null).map((p) => p.id).sort(),
+    ['arm', 'disarm', 'land', 'rtl', 'set_mode', 'takeoff']
+  );
 });
 
 // ── All presets have required fields ──────────────────────────────────────
