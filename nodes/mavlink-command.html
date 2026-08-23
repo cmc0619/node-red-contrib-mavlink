@@ -292,11 +292,21 @@
       frame === 20 || frame === 21;
   }
 
-  // Presets with completion conditions — determines if "await completion" is shown.
-  const HAS_COMPLETION = new Set(['arm', 'disarm', 'takeoff', 'land', 'rtl', 'set_mode']);
-  // Safety presets: the notice is the editor's warning. Selecting the
-  // preset is the operator's choice — the driver packs and sends it.
-  const SAFETY_PRESETS = new Set(['flight_termination']);
+  /**
+   * The presets-API row for a preset id — the preset table is the single
+   * source for completion facts. Null for an unknown id or before the fetch
+   * lands; the gate then answers no, and the change buildPresetDropdown fires
+   * re-asks once the options exist.
+   * @param {?string} presetId
+   * @returns {?{id: string, name: string, commandId: number, completionKey: ?string}}
+   */
+  function findPreset(presetId) {
+    for (const g of _currentPresetGroups) {
+      const p = (g.presets || []).find((x) => x.id === presetId);
+      if (p) return p;
+    }
+    return null;
+  }
 
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
   // Command's mode field is `delivery` and it has no Firmware field.
@@ -501,7 +511,7 @@
           sel.append(og);
         }
         // Re-apply the saved selection now that the options exist, then fire a
-        // change so the param fields, delivery tiers, and safety notice render
+        // change so the param fields and delivery tiers render
         // for the saved preset. loadPresets is async on first open, so this
         // callback runs after the initial applyMode() left the dialog empty —
         // without this the exposed params stay stale until the user re-picks.
@@ -598,7 +608,7 @@
         const mode = $('#node-input-mode').val();
         let hasCompletion = false;
         if (mode === 'preset') {
-          hasCompletion = HAS_COMPLETION.has($('#node-input-preset').val());
+          hasCompletion = (findPreset($('#node-input-preset').val()) || {}).completionKey != null;
         }
 
         const curDelivery = $('#node-input-delivery').val();
@@ -970,20 +980,9 @@
         }
       }
 
-      // ── Safety preset notice ───────────────────────────────────────────────
-      function refreshSafetyNotice() {
-        const presetId = $('#node-input-preset').val();
-        const isSafety = SAFETY_PRESETS.has(presetId) && $('#node-input-mode').val() !== 'advanced';
-        $('#row-safety-notice')[isSafety ? 'show' : 'hide']();
-      }
-
-      $('#node-input-preset').on('change', refreshSafetyNotice);
-      $('#node-input-mode').on('change', refreshSafetyNotice);
-
       // ── Initial state ──────────────────────────────────────────────────────
       RED.mavlink.refreshIdentitySelect(node);
       applyMode(node.mode || 'preset');
-      refreshSafetyNotice();
       refreshCompletionRow();
       refreshVisibility();
     },
@@ -1033,13 +1032,6 @@
   <div class="form-row" id="row-advanced" style="display:none">
     <label for="node-input-advancedCommand" style="width:120px">MAV_CMD</label>
     <select id="node-input-advancedCommand" style="width:280px"></select>
-  </div>
-
-  <!-- Safety notice for presets that require confirmation -->
-  <div class="form-row" id="row-safety-notice"
-       style="display:none;background:#fff3cd;border:1px solid #ffc107;padding:6px 10px;border-radius:3px">
-    <i class="fa fa-warning" style="color:#e67e22"></i>
-    <strong>Safety command</strong> — this preset sends Flight Termination.
   </div>
 
   <hr style="margin:8px 0">

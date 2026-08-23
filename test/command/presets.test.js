@@ -16,7 +16,7 @@
  *   5. Presets marked noAutoRetry are not idempotent (MISSION_START,
  *      PREFLIGHT_REBOOT_SHUTDOWN).
  *   6. The Safety preset is in the safety group.
- *   7. Completion keys are present for the four commands that support them.
+ *   7. Completion keys are present for the six presets that support them.
  */
 
 const test = require('node:test');
@@ -197,6 +197,23 @@ test('Set Mode has completion key COMPLETION.SET_MODE', () => {
 
 test('Orbit has no completion key (null)', () => {
   assert.equal(getPreset('orbit').completionKey, null);
+});
+
+test('presetGroups projects completionKey — the editor gates the completion tier on it', () => {
+  // The editor offers "Send & await completion" only when the presets-API row
+  // carries a non-null completionKey; a projection that drops the field would
+  // silently retire the tier for every preset.
+  const rows = presetGroups().flatMap((g) => g.presets);
+  // Every row owns the field (null included), and the id → key mapping is
+  // pinned whole: swapped keys would pass an ids-only check while the
+  // completion machinery watched the wrong vehicle state. RTL completes as a
+  // landing, so it shares 'land'.
+  assert.ok(rows.every((p) => 'completionKey' in p), 'every projected row carries the field');
+  assert.deepEqual(
+    Object.fromEntries(rows.filter((p) => p.completionKey != null)
+      .map((p) => [p.id, p.completionKey])),
+    { arm: 'arm', disarm: 'disarm', set_mode: 'set_mode', takeoff: 'takeoff', land: 'land', rtl: 'land' }
+  );
 });
 
 // ── All presets have required fields ──────────────────────────────────────

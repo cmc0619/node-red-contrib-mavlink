@@ -173,7 +173,7 @@ test('advanced bitmask command params save one numeric mask value', () => {
 });
 
 test('PRESET_PARAMS is curation-only — the dialect catalog is the data source', () => {
-  const table = sliceBetween('const PRESET_PARAMS = {', 'const HAS_COMPLETION');
+  const table = sliceBetween('const PRESET_PARAMS = {', 'function findPreset');
 
   // The XML declares enums, units, bitmask-ness, and descriptions; the static
   // table must not duplicate them (they drift — it once said MAV_MODE where
@@ -197,7 +197,7 @@ test('PRESET_PARAMS is curation-only — the dialect catalog is the data source'
 });
 
 test('preset rows render through the Advanced catalog path', () => {
-  const presetBlock = sliceBetween("const presetId = $('#node-input-preset')", '// ── Safety preset notice');
+  const presetBlock = sliceBetween("const presetId = $('#node-input-preset')", '// ── Initial state');
   const renderer = sliceBetween('function presetParamInput', 'function refreshParamFields');
 
   assert.ok(!/loadEnumsCatalog/.test(html), 'no separate preset enum fetch — enums ride the commands catalog');
