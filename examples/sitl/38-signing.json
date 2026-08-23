@@ -91,7 +91,7 @@
     "name": "Peer feed",
     "connection": "sitl12-connection-signed",
     "mode": "feed",
-    "events": "peer-new,profile-mismatch",
+    "events": "peer-new",
     "targetSystem": "",
     "targetComponent": "",
     "x": 600,

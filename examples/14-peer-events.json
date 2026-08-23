@@ -125,7 +125,7 @@
     "type": "comment",
     "z": "ex14-tab",
     "name": "Peer table \u2014 debug + dashboard",
-    "info": "The peer table is Connection-owned and built entirely from received traffic \u2014 nothing here is configured. Fields stay null until a message carrying them arrives.\n\nSnapshot path: every 2s (or Snapshot now / sysid 1) \u2192 State snapshot \u2192 raw debug, a readable layout debug, and a Dashboard table (replace).\n\nFeed path: State feed (all peer-table events, including the flight-dynamic *-changed edges) \u2192 events debug and a rolling Dashboard log (append, capped at 200).\n\nDebug panes work with core Node-RED alone. For /dashboard/peers:\n\n    npm i @flowfuse/node-red-dashboard\n\nSITL bind 127.0.0.1:14550 \u2192 14551. Tip: point a PX4 vehicle at an ArduPilot-profile connection to see profile-mismatch.\n\nAbsorbs former examples 28 (inspector) and 29 (dashboard-only).",
+    "info": "The peer table is Connection-owned and built entirely from received traffic \u2014 nothing here is configured. Fields stay null until a message carrying them arrives.\n\nSnapshot path: every 2s (or Snapshot now / sysid 1) \u2192 State snapshot \u2192 raw debug, a readable layout debug, and a Dashboard table (replace).\n\nFeed path: State feed (all peer-table events, including the flight-dynamic *-changed edges) \u2192 events debug and a rolling Dashboard log (append, capped at 200).\n\nDebug panes work with core Node-RED alone. For /dashboard/peers:\n\n    npm i @flowfuse/node-red-dashboard\n\nSITL bind 127.0.0.1:14550 \u2192 14551.\n\nAbsorbs former examples 28 (inspector) and 29 (dashboard-only).",
     "x": 220,
     "y": 40,
     "wires": []
@@ -335,7 +335,7 @@
     "name": "every table event",
     "connection": "ex14-connection",
     "mode": "feed",
-    "events": "peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,multi-endpoint,profile-mismatch,statustext,armed-changed,mode-changed,landed-changed,gps-fix-changed,home-changed,sensor-health-changed",
+    "events": "peer-new,component-new,heartbeat,stale,expired,endpoint-added,primary-changed,multi-endpoint,statustext,armed-changed,mode-changed,landed-changed,gps-fix-changed,home-changed,sensor-health-changed",
     "targetSystem": "",
     "targetComponent": "",
     "x": 420,

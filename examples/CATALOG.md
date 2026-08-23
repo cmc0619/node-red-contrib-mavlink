@@ -66,7 +66,7 @@ curved path is either many setpoints from a Function node, `DO_ORBIT`, or a miss
 
 **State** `mode`: `feed` (edge events) or snapshot (input-triggered). Feed `events`:
 `peer-new`, `component-new`, `heartbeat`, `stale`, `expired`, `endpoint-added`,
-`primary-changed`, `multi-endpoint`, `profile-mismatch`, `statustext`, plus the
+`primary-changed`, `multi-endpoint`, `statustext`, plus the
 flight-dynamic transitions `armed-changed`, `mode-changed`, `landed-changed`,
 `gps-fix-changed`, `home-changed`, `sensor-health-changed` (each carries
 sysid/compid and from/to; first observation is not a transition).
@@ -222,8 +222,7 @@ importable tab per file with shared config nodes inline.
   `mode-changed` / `landed-changed` / `gps-fix-changed` / `home-changed` /
   `sensor-health-changed`). Both tables run `autocols: true`. Enum labels in the Function
   nodes are display-only — the wire carries numbers and the dialect catalog is the
-  authority. Tip: point a PX4 vehicle at an ArduPilot-profile connection to see
-  `profile-mismatch`.
+  authority.
 - **Inject buttons:** **`every 2s`** (fires once 3 s after deploy, then repeats),
   **`Snapshot now`**, **`Snapshot sysid 1 only`** (`payload:{sysid:1}`).
 

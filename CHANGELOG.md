@@ -6,6 +6,17 @@ config-node shapes and message contracts may still change without a major bump.
 
 ## [Unreleased]
 
+### Removed
+
+- **The `profile-mismatch` peer event.** When a vehicle's HEARTBEAT declared a
+  different autopilot than the bound Vehicle Profile, the peer table raised an
+  advisory event. It changed nothing, corrected nothing, and arrived after the
+  profile was already deployed — the operator could not act on it without a
+  redeploy they would reach anyway. A saved State node that still lists
+  `profile-mismatch` in its Events picks now reds in the editor — reopen it and
+  re-pick (pre-1.0: no alias, no migration). Every other peer event, and the
+  `autopilot` each component already reports in a snapshot, is unchanged.
+
 ### Fixed
 
 - **Multicast loopback is no longer forced off on swarm links.** The UDP
