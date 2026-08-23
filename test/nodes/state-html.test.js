@@ -46,6 +46,27 @@ test('events save as a comma-joined string for the runtime node property', () =>
   assert.match(html, /raw\.split\(','\)/, 'saved comma string is parsed back into selections');
 });
 
+test('a saved pick the list no longer offers is preserved, not widened (executed)', () => {
+  // The removal of an event from the palette leaves saved flows naming it.
+  // Such a pick selects nothing in the multi-select; canonicalizing that empty
+  // selection would write blank — and blank is the *full* default set — so
+  // merely opening a red node would widen its feed from one event to all of
+  // them and clear the ring on save. The value must ride until the operator
+  // picks. (Codex P1, #383.)
+  const dialog = openStateDialog({ events: 'profile-mismatch' });
+  assert.equal(dialog.hiddenEvents(), 'profile-mismatch', 'the illegal value is untouched');
+  assert.notEqual(dialog.hiddenEvents(), '', 'blank would mean every event');
+
+  // A mixed value is equally untouched — one unknown name protects the rest.
+  const mixed = openStateDialog({ events: 'stale,profile-mismatch' });
+  assert.equal(mixed.hiddenEvents(), 'stale,profile-mismatch');
+
+  // Picking anything is the operator's re-pick and writes normally.
+  dialog.selectAll(['stale']);
+  dialog.trigger();
+  assert.equal(dialog.hiddenEvents(), 'stale');
+});
+
 test('mode is a closed vocabulary — the select offers exactly snapshot and feed', () => {
   const { mode } = loadNodeDefaults('mavlink-state');
   assert.equal(mode.validate.call({}, 'snapshot', {}), true);
@@ -118,7 +139,11 @@ function openStateDialog(node) {
         append(opt) { select.options.push(String(opt._val)); return this; },
         val(v) {
           if (v === undefined) return select.selected;
-          select.selected = Array.isArray(v) ? v.map(String) : [String(v)];
+          // Real jQuery selects only values the element actually offers; a
+          // name with no <option> silently selects nothing. Modelling that is
+          // what makes a removed-event config reproduce here at all.
+          const want = Array.isArray(v) ? v.map(String) : [String(v)];
+          select.selected = want.filter((name) => select.options.indexOf(name) !== -1);
           return this;
         },
         on(_ev, fn) { select.handlers.push(fn); return this; },
@@ -147,6 +172,9 @@ function openStateDialog(node) {
     console,
   };
   vm.runInNewContext(script, context);
+  // Node-RED fills #node-input-<property> from the saved node before
+  // oneditprepare runs; model that so a preserved value is observable.
+  hidden.value = node.events;
   registered['mavlink-state'].oneditprepare.call(node);
   return {
     hiddenEvents: () => hidden.value,

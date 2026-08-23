@@ -84,7 +84,17 @@
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
         buildEventsMultiSelect(node);
         $('#mav-state-events-select').on('change', syncEventsHiddenFromSelect);
-        syncEventsHiddenFromSelect();
+        // Canonicalize on open, but only a value every option can round-trip:
+        // an explicit full list becomes blank so an event lib/state grows later
+        // is not frozen out. A saved pick the list no longer offers selects
+        // nothing, and syncing *that* writes blank — which means every event —
+        // silently widening a red node's feed and clearing its ring on save.
+        // Such a value rides untouched until the operator picks.
+        if (parseSavedEvents(node.events).every(function (name) {
+          return STATE_EVENTS.indexOf(name) !== -1;
+        })) {
+          syncEventsHiddenFromSelect();
+        }
         var enumLoadToken = { cancelled: false };
         node._mavEnumLoadToken = enumLoadToken;
         RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
