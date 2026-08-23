@@ -8,6 +8,20 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Removed
 
+- **The `msg.confirmed` safety gate.** Flight Termination
+  (`DO_FLIGHTTERMINATION`) and broadcast position setpoints used to refuse to
+  send unless the message carried `msg.confirmed === true` — or, on Fan-out,
+  the node's Confirm checkbox was ticked. The gate, the escape hatch, and the
+  checkbox are all gone: wiring the message is the decision, the same rule
+  Mission Clear has followed since 0.4.0. **Flight Termination now sends
+  whenever it is triggered**, so a flow that leaned on a missing
+  `msg.confirmed` to hold it back no longer has that brake — gate it with the
+  trigger instead (an inject you press, a `switch` upstream, `payload:false`
+  to suppress). The editor still shows the Safety notice on the preset, and a
+  broadcast position setpoint is still the one that converges a fleet on one
+  coordinate. `msg.confirmed` is now inert on every node, and a saved Fan-out
+  `confirm` value is ignored.
+
 - **The `profile-mismatch` peer event.** When a vehicle's HEARTBEAT declared a
   different autopilot than the bound Vehicle Profile, the peer table raised an
   advisory event. It changed nothing, corrected nothing, and arrived after the

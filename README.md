@@ -60,7 +60,7 @@ which ships in the package too.
 | `05-fanout-arm.json` | Fan-out sequential arm — preview then live |
 | `10-sunday-stroll.json` | A full flight: arm, takeoff, waypoints, return |
 | `24-formation-nudge.json` | Formation node moving a group as one |
-| `27-safety-estop.json` | Flight termination behind a confirmation gate |
+| `27-safety-estop.json` | Emergency force-disarm and flight termination |
 | `sitl/20-completion-takeoff.json` | Arm + completion-tier takeoff against ArduPilot Copter SITL |
 | `sitl/31-fanout-sequential-five.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
 | `sitl/04-param-defs-live.json` | Param read, set, and list — with live definition catalog |

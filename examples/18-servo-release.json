@@ -321,11 +321,6 @@
     "props": [
       {
         "p": "payload"
-      },
-      {
-        "p": "confirmed",
-        "v": "true",
-        "vt": "bool"
       }
     ],
     "repeat": "",

@@ -283,8 +283,9 @@ importable tab per file with shared config nodes inline.
   release `winch`, release `parachute`; `inject`; `debug`.
 - **Key config:** servo set `values {servo:9,pwm:1900}`; repeat `values
   {servo:9,pwm:1900,count:3,period:1}`; gripper `values {instance:1,action:1}`; winch
-  `values {instance:1,action:1,length:2,rate:0.5}`; parachute gated behind a confirm
-  inject + comment (it is a real release). All `delivery: "confirm"` (command-backed).
+  `values {instance:1,action:1,length:2,rate:0.5}`; parachute sits behind its own ⚠ inject
+  + comment (it is a real release — pressing it is the decision, there is no gate).
+  All `delivery: "confirm"` (command-backed).
 - **Inject buttons:** **`Servo 1900`**, **`Servo pulse ×3`**, **`Gripper release`**,
   **`Winch out 2 m`**, **`⚠ Parachute (armed test only)`**.
 
@@ -428,18 +429,19 @@ importable tab per file with shared config nodes inline.
 
 - **File:** `examples/27-safety-estop.json`
 - **Tab label:** `27 Safety e-stop`
-- **Story:** The two loud-and-final safety actions, each gated: an emergency force-disarm
-  (`COMPONENT_ARM_DISARM` param2 = 21196, band 0 Emergency) and `DO_FLIGHTTERMINATION`,
-  which the node refuses to send without explicit confirmation. Demonstrates the Safety
-  preset group and the emergency queue band.
+- **Story:** The two loud-and-final safety actions: an emergency force-disarm
+  (`COMPONENT_ARM_DISARM` param2 = 21196, band 0 Emergency) and `DO_FLIGHTTERMINATION`.
+  Pressing the inject is the decision — there is no runtime confirmation gate (§14.134);
+  the editor's Safety notice is the warning. Demonstrates the Safety preset group and the
+  emergency queue band.
 - **Nodes:** config triplet, `command` `disarm` (advanced/force with param2=21196),
-  `command` `flight_termination` (`requiresConfirmation`), `inject` (confirm payloads),
+  `command` `flight_termination` (Safety preset — editor notice, no gate), `inject`,
   `debug`.
 - **Key config:** force-disarm uses `disarm` preset with `params {"2":21196}`;
-  flight_termination inject carries `{confirmed:true}` and `params {"1":1}`. Comment: these
+  flight_termination sends `params {"1":1}`. Comment: these
   never auto-continue a chain and force-disarm rides the Emergency band that is never
   coalesced or dropped (§7).
-- **Inject buttons:** **`⚠ Force disarm (21196)`**, **`⚠⚠ Flight termination (confirm)`**.
+- **Inject buttons:** **`⚠ Force disarm (21196)`**, **`⚠⚠ Flight termination`**.
 
 ---
 
