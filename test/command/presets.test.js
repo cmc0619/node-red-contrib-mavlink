@@ -204,9 +204,15 @@ test('presetGroups projects completionKey — the editor gates the completion ti
   // carries a non-null completionKey; a projection that drops the field would
   // silently retire the tier for every preset.
   const rows = presetGroups().flatMap((g) => g.presets);
+  // Every row owns the field (null included), and the id → key mapping is
+  // pinned whole: swapped keys would pass an ids-only check while the
+  // completion machinery watched the wrong vehicle state. RTL completes as a
+  // landing, so it shares 'land'.
+  assert.ok(rows.every((p) => 'completionKey' in p), 'every projected row carries the field');
   assert.deepEqual(
-    rows.filter((p) => p.completionKey != null).map((p) => p.id).sort(),
-    ['arm', 'disarm', 'land', 'rtl', 'set_mode', 'takeoff']
+    Object.fromEntries(rows.filter((p) => p.completionKey != null)
+      .map((p) => [p.id, p.completionKey])),
+    { arm: 'arm', disarm: 'disarm', set_mode: 'set_mode', takeoff: 'takeoff', land: 'land', rtl: 'land' }
   );
 });
 
