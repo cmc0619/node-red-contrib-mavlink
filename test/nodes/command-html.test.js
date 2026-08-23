@@ -197,7 +197,7 @@ test('PRESET_PARAMS is curation-only — the dialect catalog is the data source'
 });
 
 test('preset rows render through the Advanced catalog path', () => {
-  const presetBlock = sliceBetween("const presetId = $('#node-input-preset')", '// ── Safety preset notice');
+  const presetBlock = sliceBetween("const presetId = $('#node-input-preset')", '// ── Initial state');
   const renderer = sliceBetween('function presetParamInput', 'function refreshParamFields');
 
   assert.ok(!/loadEnumsCatalog/.test(html), 'no separate preset enum fetch — enums ride the commands catalog');
