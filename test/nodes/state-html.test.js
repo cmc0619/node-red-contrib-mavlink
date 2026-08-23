@@ -61,10 +61,33 @@ test('a saved pick the list no longer offers is preserved, not widened (executed
   const mixed = openStateDialog({ events: 'stale,profile-mismatch' });
   assert.equal(mixed.hiddenEvents(), 'stale,profile-mismatch');
 
-  // Picking anything is the operator's re-pick and writes normally.
+  // Clicking Done without touching the control is the path that actually
+  // persists, and it must not widen either (Codex P1, #383).
+  const untouched = openStateDialog({ events: 'profile-mismatch' });
+  untouched.save();
+  assert.equal(untouched.hiddenEvents(), 'profile-mismatch', 'save leaves it alone');
+  assert.notEqual(untouched.hiddenEvents(), '', 'blank would mean every event');
+
+  // Picking anything is the operator's re-pick: the change handler writes it,
+  // and saving keeps it.
   dialog.selectAll(['stale']);
   dialog.trigger();
   assert.equal(dialog.hiddenEvents(), 'stale');
+  dialog.save();
+  assert.equal(dialog.hiddenEvents(), 'stale', 're-pick survives the save hook');
+});
+
+test('a legal events value still canonicalizes on save', () => {
+  // The guard must not cost the canonicalization it protects: an explicit full
+  // list becomes blank so an event lib/state grows later is not frozen out.
+  const full = openStateDialog({ events: DEFAULT_EVENTS.join(',') });
+  full.save();
+  assert.equal(full.hiddenEvents(), '', 'a full explicit list canonicalizes to blank');
+
+  const partial = openStateDialog({ events: 'stale,expired' });
+  partial.selectAll(['stale']);
+  partial.save();
+  assert.equal(partial.hiddenEvents(), 'stale', 'a narrowed pick is written on save');
 });
 
 test('mode is a closed vocabulary — the select offers exactly snapshot and feed', () => {
@@ -180,6 +203,9 @@ function openStateDialog(node) {
     hiddenEvents: () => hidden.value,
     selectAll: (values) => { select.selected = values.map(String); },
     trigger: () => select.handlers.forEach((fn) => fn()),
+    // Clicking Done. Node-RED runs this before it reads the input fields back
+    // into the node, so the hook still sees the previously saved value.
+    save: () => registered['mavlink-state'].oneditsave.call(node),
   };
 }
 
