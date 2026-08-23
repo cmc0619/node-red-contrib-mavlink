@@ -296,7 +296,7 @@
   const HAS_COMPLETION = new Set(['arm', 'disarm', 'takeoff', 'land', 'rtl', 'set_mode']);
   // Safety presets: the notice is the editor's warning. Selecting the
   // preset is the operator's choice — the driver packs and sends it.
-  const REQUIRES_CONFIRM = new Set(['flight_termination']);
+  const SAFETY_PRESETS = new Set(['flight_termination']);
 
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
   // Command's mode field is `delivery` and it has no Firmware field.
@@ -973,7 +973,7 @@
       // ── Safety preset notice ───────────────────────────────────────────────
       function refreshSafetyNotice() {
         const presetId = $('#node-input-preset').val();
-        const isSafety = REQUIRES_CONFIRM.has(presetId) && $('#node-input-mode').val() !== 'advanced';
+        const isSafety = SAFETY_PRESETS.has(presetId) && $('#node-input-mode').val() !== 'advanced';
         $('#row-safety-notice')[isSafety ? 'show' : 'hide']();
       }
 

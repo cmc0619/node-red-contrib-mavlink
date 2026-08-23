@@ -21,8 +21,6 @@
  *
  * Guards (§9 "What triggers an action node"):
  *   msg.payload === false → suppress
- * Clear carries no confirmation gate: selecting the Clear operation in the
- * editor IS the confirmation (owner ruling, 2026-08-13).
  */
 
 const {

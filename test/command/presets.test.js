@@ -15,7 +15,7 @@
  *      commandId (115).
  *   5. Presets marked noAutoRetry are not idempotent (MISSION_START,
  *      PREFLIGHT_REBOOT_SHUTDOWN).
- *   6. Safety presets carry requiresConfirmation.
+ *   6. The Safety preset is in the safety group.
  *   7. Completion keys are present for the four commands that support them.
  */
 
@@ -152,14 +152,14 @@ test('Arm has noAutoRetry=false (idempotent)', () => {
   assert.equal(getPreset('arm').noAutoRetry, false);
 });
 
-// ── Safety / requiresConfirmation ─────────────────────────────────────────
+// ── Safety group ───────────────────────────────────────────────────────────
 
-test('Flight Termination requires confirmation', () => {
-  assert.equal(getPreset('flight_termination').requiresConfirmation, true);
+test('Flight Termination is the Safety group', () => {
+  assert.equal(getPreset('flight_termination').group, 'safety');
 });
 
-test('Arm does not require confirmation', () => {
-  assert.equal(getPreset('arm').requiresConfirmation, false);
+test('Arm is not in the Safety group', () => {
+  assert.equal(getPreset('arm').group, 'basic');
 });
 
 // ── Completion keys ────────────────────────────────────────────────────────
@@ -210,7 +210,6 @@ test('every preset has the required shape fields', () => {
     assert.ok(typeof p.commandId === 'number', `${p.id}: commandId`);
     assert.ok(typeof p.pinnedParams === 'object', `${p.id}: pinnedParams`);
     assert.ok(Array.isArray(p.exposedParams), `${p.id}: exposedParams`);
-    assert.ok(typeof p.requiresConfirmation === 'boolean', `${p.id}: requiresConfirmation`);
     assert.ok(typeof p.noAutoRetry === 'boolean', `${p.id}: noAutoRetry`);
     assert.ok(p.completionKey === null || typeof p.completionKey === 'string',
       `${p.id}: completionKey`);
