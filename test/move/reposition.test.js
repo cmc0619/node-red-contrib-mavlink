@@ -22,10 +22,12 @@ function input(overrides = {}) {
 
 
 test('reposition coerces the frame it is handed and never substitutes one', () => {
-  // The Action surface derives GLOBAL (0) or GLOBAL_RELATIVE_ALT (3) for this
-  // carrier; the editor is what keeps a local frame off it. A frame that does
-  // not coerce rides non-finite rather than being replaced with a legal number.
+  // The Action surface derives GLOBAL (0), GLOBAL_RELATIVE_ALT (3) or
+  // GLOBAL_TERRAIN_ALT (10) for this carrier; the editor is what keeps a local
+  // frame off it. A frame that does not coerce rides non-finite rather than
+  // being replaced with a legal number.
   assert.equal(buildRepositionMessage(input({ frame: 0 })).fields.frame, 0);
+  assert.equal(buildRepositionMessage(input({ frame: 10 })).fields.frame, 10);
   assert.equal(buildRepositionMessage(input({ frame: 7 })).fields.frame, 7);
   for (const frame of [undefined, 'WARP', '', '   ']) {
     const message = buildRepositionMessage(input({ frame }));

@@ -323,6 +323,31 @@ test('27/30 read the unified vocabulary — and \'succeeded\' stays banned', () 
   }
 });
 
+test('42 passes on both honest terrain-goto outcomes — only silence fails', () => {
+  // The subject is the frame riding the wire, not the vehicle's terrain
+  // database: ACCEPTED (terrain data present) and a terminal refusal (none)
+  // are both correct under the pymavlink-posture ruling, so both PASS.
+  // What must never pass is silence — an unconfirmed wait or no record at
+  // all measured nothing, and the arm's accepted must not decide (the
+  // example-31 lesson: the generic tail never judges this one).
+  const goto42 = (result, detail, resultCode) => ({
+    tag: 'debug:terrain goto status', result, detail, resultCode, excerpt: '',
+  });
+  const arm = { tag: 'debug:arm status', result: 'accepted', detail: null, resultCode: 0, excerpt: '' };
+  const run = (record) =>
+    verdictFrom(PROFILE['42-terrain-goto'], { debug: record ? [arm, record] : [arm], errors: [] }, '');
+
+  assert.equal(run(goto42('accepted', null, 0)).status, 'PASS');
+  assert.match(run(goto42('accepted', null, 0)).reason, /vehicle has terrain data/);
+  assert.equal(run(goto42('denied', null, 2)).status, 'PASS');
+  assert.match(run(goto42('denied', null, 2)).reason, /refused .no terrain data./);
+  // A node-side failure record is loud too — the answer surfaced.
+  assert.equal(run(goto42('failed', 'connection closed', null)).status, 'PASS');
+  // Silence: a lost ack carries no resultCode, and no record measured nothing.
+  assert.equal(run(goto42('unconfirmed', 'ack timeout', null)).status, 'FAIL');
+  assert.equal(run(null).status, 'FAIL', 'no record at all');
+});
+
 test('39 requires healthy, lease-expired, and faulted — command-shaped goods do not PASS', () => {
   const profile = PROFILE['39-companion-health-lease'];
   assert.ok(profile, 'profile 39 exists');
