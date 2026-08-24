@@ -19,7 +19,7 @@ const assert = require('node:assert/strict');
 
 /** The offered surface, verbatim from the editor (nodes/mavlink-move.html). */
 const OFFERED = {
-  goto: { deliveries: ['build', 'send', 'confirm', 'stream'], variants: ['home', 'msl'] },
+  goto: { deliveries: ['build', 'send', 'confirm', 'stream'], variants: ['home', 'msl', 'terrain'] },
   steer: { deliveries: ['build', 'send', 'stream'], variants: ['world', 'body', 'offset'] },
   // The acked motion commands (§9 roster). No Stream — a MAV_CMD has no
   // streaming semantics — and no frame variant, so the variant axis carries

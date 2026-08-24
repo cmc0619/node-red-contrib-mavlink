@@ -811,6 +811,19 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 - **Config/launch:** AP sysid 1 on 14550→14551; `restart: ap-1`; EXTENDED_SYS_STATE (245)
   must be requested via `set_message_interval` — this SITL does not send it unasked.
 
+### sitl/42 — Terrain-frame goto (AP)
+
+- **File:** `examples/sitl/42-terrain-goto.json` · **Tab:** `SITL 42 Terrain goto`
+- **Story:** Move's goto with the terrain altitude reference against ArduCopter sysid 1:
+  arm → takeoff 10 m → goto a modest offset from home at 15 m above the ground under the
+  target, `DO_REPOSITION` with `MAV_FRAME_GLOBAL_TERRAIN_ALT` (10). We only pack the
+  frame — the vehicle resolves the height from its own terrain data. Both honest
+  outcomes pass: accepted when the SITL has terrain data, a loud DENIED/FAILED when it
+  has none; only silence fails.
+- **Nodes:** config triplet, `command` prep, `move` (`action: "goto"`,
+  `altRef: "terrain"`, confirm), `inject`, `debug`.
+- **Config/launch:** `restart: ap-1`.
+
 ---
 
 ## 3. `examples/sitl/README.md` outline

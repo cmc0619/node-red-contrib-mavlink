@@ -438,7 +438,7 @@ test('mavlink-move speaks one canonical vocabulary and labels the body reference
   assert.doesNotMatch(html, /local-position|local-velocity|global-position/, 'no legacy mode names');
   assert.doesNotMatch(html, /setpoint \(stream|reposition \(guided/i, 'no carrier option labels');
   assert.match(html, /isBody \? 'Metres forward' : 'Metres north'/, 'body reference relabels north to forward');
-  assert.match(html, /altRef === 'msl' \? 'Metres alt \(MSL\)' : 'Metres alt \(above home\)'/, 'alt label follows the altitude reference');
+  assert.match(html, /altRef === 'msl' \? 'Metres alt \(MSL\)'[\s\S]{0,20}: altRef === 'terrain' \? 'Metres alt \(above terrain\)' : 'Metres alt \(above home\)'/, 'alt label follows the altitude reference');
 });
 
 test('mavlink-move has one labeled row per parameter, not dual local/global rows', () => {
@@ -879,6 +879,55 @@ test('mavlink-move: Offset reds on a PX4 profile rather than being silently rewr
     String(verdict({ reference: 'body', delivery: 'build', dialect: 'common' })),
     /Body on Build needs a firmware/,
     'body on Build with a concrete dialect still reds'
+  );
+});
+
+test('mavlink-move: terrain altRef reds on a PX4 profile rather than being silently rewritten', () => {
+  // Terrain frames are ArduPilot's in practice — PX4's support is patchy. The
+  // dropdown withholds the option on a named non-ArduPilot firmware
+  // (refreshAltRefOptions), and a node that already holds it keeps it and
+  // reds here with the reason (§9 ruling 6 — withhold, never rewrite).
+  const lookup = {
+    connPx4: { vehicle: 'vehPx4' },
+    vehPx4: { firmware: 'px4', dialect: 'common' },
+    connAp: { vehicle: 'vehAp' },
+    vehAp: { firmware: 'ardupilot', dialect: 'ardupilotmega' },
+  };
+  const { altRef } = loadNodeDefaults('mavlink-move', lookup);
+  const verdict = (over) => altRef.validate.call(
+    Object.assign({ id: 'm1', action: 'goto' }, over), over.altRef, {}
+  );
+
+  assert.match(
+    String(verdict({ altRef: 'terrain', delivery: 'send', connection: 'connPx4' })),
+    /ArduPilot frame/,
+    'terrain on a PX4 profile reds with the reason'
+  );
+  assert.equal(
+    verdict({ altRef: 'terrain', delivery: 'send', connection: 'connAp' }),
+    true,
+    'terrain on ArduPilot is the whole point'
+  );
+  // No profile gates nothing: hiding requires knowledge.
+  assert.equal(
+    verdict({ altRef: 'terrain', delivery: 'build', dialect: 'common' }),
+    true,
+    'terrain with no firmware knowledge is offered'
+  );
+  // The saved altRef is a Go to field; other actions never read it.
+  assert.equal(
+    verdict({ action: 'steer', altRef: 'terrain', delivery: 'send', connection: 'connPx4' }),
+    true,
+    'the altitude reference is a Go to field'
+  );
+  // The dropdown half: the rebuilt list withholds terrain per firmware, and
+  // the static markup offers it so the two copies cannot drift.
+  assert.match(html, /var ALTREF_OPTIONS = \[/, 'the altRef list is rebuilt per firmware');
+  assert.match(html, /<option value="terrain">/, 'terrain is offered in the static markup');
+  assert.match(
+    html,
+    /return value === 'terrain' && Boolean\(firmware\) && firmware !== 'ardupilot';/,
+    'terrain alone is withheld, and only on a named non-ArduPilot firmware'
   );
 });
 
@@ -1537,8 +1586,8 @@ test('mavlink-move: the thrust stick warns on ArduSub, where the -1..1 surface l
 test('move closed vocabularies and target compid carry rings (walled-garden sweep)', () => {
   const defaults = loadNodeDefaults('mavlink-move');
 
-  for (const v of ['home', 'msl']) assert.equal(defaults.altRef.validate.call({}, v, {}), true, v);
-  assert.match(String(defaults.altRef.validate.call({}, 'terrain', {})), /must be one of/);
+  for (const v of ['home', 'msl', 'terrain']) assert.equal(defaults.altRef.validate.call({}, v, {}), true, v);
+  assert.match(String(defaults.altRef.validate.call({}, 'agl', {})), /must be one of/);
 
   // Direction rides as a float param — a stray token would reach the wire as
   // NaN, which is the dialog's to catch (14.105).

@@ -81,6 +81,31 @@ test('a frame the Action surface never derives rides as non-finite, never as a s
 
 
 
+test('frameForAltRef: the three altitude references pin their global frames', () => {
+  const { frameForAltRef } = require('../../lib/move');
+  assert.equal(frameForAltRef('home'), 3, 'home is GLOBAL_RELATIVE_ALT');
+  assert.equal(frameForAltRef('msl'), 0, 'msl is GLOBAL');
+  // Terrain is the pymavlink posture (owner ruling, 2026-08-23): pack
+  // GLOBAL_TERRAIN_ALT and nothing else — the vehicle resolves the height
+  // from its own terrain data, and one without any refuses loudly.
+  assert.equal(frameForAltRef('terrain'), 10, 'terrain is GLOBAL_TERRAIN_ALT');
+  assert.ok(!Number.isFinite(frameForAltRef('agl')), 'a stray token selects no frame');
+});
+
+test('a terrain-frame goto setpoint rides the global carrier as the *_INT twin (10 → 11)', () => {
+  // Same rule as 0 → 5 and 3 → 6: the wire number is code — PX4 main
+  // exact-matches 5/6/11 and every current stack accepts the twins.
+  const message = buildMoveMessage({
+    mode: 'position',
+    frame: 10,
+    target: { sysid: 3, compid: 1 },
+    position: { lat: 47.397742, lon: 8.545594, alt: 15 },
+    timeBootMs: 42,
+  });
+  assert.equal(message.name, 'SET_POSITION_TARGET_GLOBAL_INT');
+  assert.equal(message.fields.coordinate_frame, 11);
+});
+
 test('frameForReference: offset is LOCAL_OFFSET_NED on every stack and asks no firmware question', () => {
   const { frameForReference } = require('../../lib/move');
   // Unlike body, frame 7 is one number everywhere — the firmware question is

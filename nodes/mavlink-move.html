@@ -497,9 +497,26 @@
             + 'an acceleration, or a yaw';
         },
       },
-      // Go to's one frame choice: altitude above home vs absolute MSL. A
-      // stray token is a frame the builder never selects (§5's editor half).
-      altRef: { value: 'home', validate: RED.mavlink.oneOf(['home', 'msl']) },
+      // Go to's one frame choice: altitude above home, absolute MSL, or above
+      // terrain. A stray token is a frame the builder never selects (§5's
+      // editor half). Terrain is ArduPilot's in practice — PX4's support is
+      // patchy — so the dropdown withholds it on a named non-ArduPilot
+      // firmware, and a node that already holds it keeps it and reds here
+      // (§9 ruling 6: withhold, never rewrite). No profile gates nothing:
+      // hiding requires knowledge.
+      altRef: {
+        value: 'home',
+        validate: RED.mavlink.oneOf(['home', 'msl', 'terrain'], function (v, _opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-altRef', v, 'home') !== 'terrain') return true;
+          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'goto') return true;
+          var firmware = RED.mavlink.resolveCatalogTarget({ source: this }).firmware;
+          if (firmware && firmware !== 'ardupilot') {
+            return 'Above terrain is an ArduPilot frame (GLOBAL_TERRAIN_ALT) and this profile is '
+              + firmware + ' — use Above home or Absolute (MSL)';
+          }
+          return true;
+        }),
+      },
       // Steer's axes: world = LOCAL_NED everywhere; body adapts to the bound
       // firmware (AP BODY_OFFSET_NED vs PX4 BODY_NED, §14) and fails closed
       // without one. On the wire tiers the Connection's Vehicle Profile
@@ -896,6 +913,17 @@
         ['offset', 'Offset from here (relative)']
       ];
 
+      // Go to's altitude-reference list, rebuilt per firmware the same way the
+      // reference list is. Terrain (GLOBAL_TERRAIN_ALT) is ArduPilot's in
+      // practice — PX4's support is patchy — so it is withheld on a named
+      // non-ArduPilot firmware; a saved value survives and the altRef
+      // validator supplies the reason (§9 ruling 6).
+      var ALTREF_OPTIONS = [
+        ['home', 'Above home'],
+        ['msl', 'Absolute (MSL)'],
+        ['terrain', 'Above terrain (ArduPilot)']
+      ];
+
       // Rows applyCompanionTargetVisibility owns; `show` reports them, the
       // toggle loop leaves them alone.
       var HELPER_ROWS = ['targetSystem', 'targetComponent'];
@@ -949,6 +977,25 @@
           withhold: function (value) {
             if (value === 'offset') return firmware === 'px4';
             return firmware === 'ardupilot' && gate.family === 'plane';
+          }
+        });
+      }
+
+      /**
+       * Rebuild Go to's altitude-reference list: terrain is withheld on a
+       * named non-ArduPilot firmware. No profile withholds nothing — hiding
+       * requires knowledge — and a saved terrain survives and reds instead.
+       *
+       * @returns {string} the reference now selected
+       */
+      function refreshAltRefOptions() {
+        var firmware = RED.mavlink.resolveCatalogTarget().firmware;
+        return RED.mavlink.refreshOptionSelect({
+          select: '#node-input-altRef',
+          options: ALTREF_OPTIONS,
+          saved: node.altRef,
+          withhold: function (value) {
+            return value === 'terrain' && Boolean(firmware) && firmware !== 'ardupilot';
           }
         });
       }
@@ -1186,7 +1233,7 @@
         var isCommandPath = isGoto && !isStream;
         var isBody = !isGoto && reference === 'body';
         var isOffset = !isGoto && reference === 'offset';
-        var altRef = $('#node-input-altRef').val() || 'home';
+        var altRef = refreshAltRefOptions() || 'home';
         var tgt = RED.mavlink.applyCompanionTargetVisibility({
           isBuild: isBuild,
           identityId: isWire ? $('#node-input-identity').val() : '',
@@ -1252,7 +1299,8 @@
         $('#label-move-vEast').text(isBody ? 'Right m/s' : 'East m/s');
         $('#label-move-aNorth').text(isBody ? 'Accel forward' : 'Accel north');
         $('#label-move-aEast').text(isBody ? 'Accel right' : 'Accel east');
-        $('#label-move-alt').text(altRef === 'msl' ? 'Metres alt (MSL)' : 'Metres alt (above home)');
+        $('#label-move-alt').text(altRef === 'msl' ? 'Metres alt (MSL)'
+          : altRef === 'terrain' ? 'Metres alt (above terrain)' : 'Metres alt (above home)');
       }
 
       // Clearing a group clears its fields before the repaint, so the form and
@@ -1319,6 +1367,7 @@
   <div class="form-row" id="row-move-altRef"><label for="node-input-altRef">Altitude reference</label><select id="node-input-altRef" style="width:70%">
     <option value="home">Above home</option>
     <option value="msl">Absolute (MSL)</option>
+    <option value="terrain">Above terrain (ArduPilot)</option>
   </select></div>
   <div class="form-row" id="row-move-lat"><label for="node-input-lat">Degrees lat</label><input type="text" id="node-input-lat" step="any" style="width:120px"> deg</div>
   <div class="form-row" id="row-move-lon"><label for="node-input-lon">Degrees lon</label><input type="text" id="node-input-lon" step="any" style="width:120px"> deg</div>
@@ -1394,7 +1443,7 @@
 
 <script type="text/html" data-help-name="mavlink-move">
   <p>Builds or sends vehicle movement commands. The operator picks an intent — <b>Action</b> × <b>Delivery</b> — and the wire message, frame number, and type_mask follow as code; you never enter a bitmask. Vertical inputs — altitude, climb, vertical acceleration — are entered up-positive everywhere; the node flips them once to MAVLink NED down-positive values. Yaw and yaw rate are entered in degrees (deg, deg/s) and converted exactly once to the radians on the wire.</p>
-  <p><b>Go to</b> is the one-shot GCS-style guided goto. On Build, Send, and Send &amp; confirm it rides <code>MAV_CMD_DO_REPOSITION</code> as <code>COMMAND_INT</code> — the acked command path; on Stream it rides <code>SET_POSITION_TARGET_GLOBAL_INT</code> at rate, the same intent streamed. The <b>Altitude reference</b> is the only frame choice: <i>Above home</i> (frame 3) or <i>Absolute (MSL)</i> (frame 0). Latitude/longitude are entered in degrees; yaw is entered in degrees and converted once to the radians the dialect declares for DO_REPOSITION. Blank optional params send the spec's no-change sentinels, matching what QGC and MAVSDK transmit: blank <b>Ground speed</b> → −1 (vehicle default), blank <b>Loiter radius</b> → 0 (ignored, planes), blank <b>Yaw</b> → NaN (keep the current heading mode; an explicit 0 commands north). Ground speed, Loiter radius, and Change mode are command-path params — they hide on Stream delivery, and the runtime refuses their payload overrides on a streamed setpoint.</p>
+  <p><b>Go to</b> is the one-shot GCS-style guided goto. On Build, Send, and Send &amp; confirm it rides <code>MAV_CMD_DO_REPOSITION</code> as <code>COMMAND_INT</code> — the acked command path; on Stream it rides <code>SET_POSITION_TARGET_GLOBAL_INT</code> at rate, the same intent streamed. The <b>Altitude reference</b> is the only frame choice: <i>Above home</i> (frame 3), <i>Absolute (MSL)</i> (frame 0), or <i>Above terrain</i> (frame 10). Above terrain means height above the ground at the target, resolved by the vehicle from its own terrain data; it is ArduPilot only, and a vehicle without terrain data refuses the command. Latitude/longitude are entered in degrees; yaw is entered in degrees and converted once to the radians the dialect declares for DO_REPOSITION. Blank optional params send the spec's no-change sentinels, matching what QGC and MAVSDK transmit: blank <b>Ground speed</b> → −1 (vehicle default), blank <b>Loiter radius</b> → 0 (ignored, planes), blank <b>Yaw</b> → NaN (keep the current heading mode; an explicit 0 commands north). Ground speed, Loiter radius, and Change mode are command-path params — they hide on Stream delivery, and the runtime refuses their payload overrides on a streamed setpoint.</p>
   <p><b>Change mode</b> (Advanced) sets MAV_DO_REPOSITION_FLAGS_CHANGE_MODE, and the flag is the gate on both stacks (measured, §14 2026-08-12): the goto is accepted iff the flag is set or the vehicle is already in GUIDED (ArduPilot) / Hold (PX4), else it answers denied (2). It flies the vehicle into guided mode — a mode change, and therefore an explicit opt-in (checkbox, or boolean <code>msg.payload.changeMode</code>).</p>
   <p>On <b>Send &amp; confirm</b> delivery (Go to, Turn and Speed — setpoints carry no acknowledgement) the node waits for the terminal COMMAND_ACK and reports it in the same vocabulary as <b>mavlink-command</b>: output 0 fires on <code>ACCEPTED</code> with an <code>accepted</code> record carrying <code>resultCode</code> 0; every other terminal result fails on output 1 with its MAV_RESULT name as the result — <code>denied</code>, <code>command_int_only</code>, <code>command_unsupported_mav_frame</code>, … — and its code, and a missing ack reports <code>unconfirmed</code> (§9: a missing ack is not a failure). The result IS the discriminator — branch on it with a switch. <code>TEMPORARILY_REJECTED</code> retries with back-off before failing. <b>ACK timeout</b> (blank = 10 s) bounds the wait. Every ack-confirmed record also carries the ack's <code>resultParam2</code> (command-specific detail, often the reason for a denial), and while the vehicle answers <code>IN_PROGRESS</code> the status badge shows the progress it reports. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use Send or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
   <p><b>Steer</b> sends <code>SET_POSITION_TARGET_LOCAL_NED</code> setpoints — the streaming/offboard path, fire-and-forget. The <b>Reference</b> picks the axes: <i>World (Local NED)</i> works on every firmware; <i>Body</i> adapts to the bound Vehicle Profile's firmware, because the two stacks read different body frames (measured, §14): ArduPilot reads BODY_OFFSET_NED (9) as the body-axis offset, while PX4 ignores 9 and reads BODY_NED (8) — and PX4 discards position in body frames, so body setpoints on PX4 carry velocity only. Without a firmware the body reference refuses rather than guess — a wrong frame number is silently dropped by the vehicle. Body labels read forward/right.</p>
@@ -1410,6 +1459,6 @@
   <p>Action and delivery reshape the form (§6): only the parameters for the selection are shown, and the Delivery options themselves follow the action — setpoints cannot confirm, so Send &amp; confirm is offered on the acked actions — Go to, Turn and Speed — only. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
   <p>Output 0 continues only on success, once per input, and the result word IS the outcome, one meaning per word: <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — confirm tier only). Output 1 carries the status record for every outcome.</p>
   <p>On <b>Stream</b> delivery a running stream ends three ways. When the <b>TTL</b> elapses the node sends the zero-velocity brake and reports on output 1 with <code>result: "expired"</code> and <code>sent</code> (setpoints handed to the connection — the streaming link may coalesce under backpressure, so this counts sends, not wire deliveries) — switch on <code>result === "expired"</code> to run whatever follows a timed move; deliberately not on output 0, since that port is a trigger and the stream's start already fired it. If the expiry brake send itself fails, <code>result</code> stays <code>"expired"</code> and the failure rides a <code>brakeError</code> field. An input of <code>{action: "stop"}</code> halts the stream, sends the brake, and completes like any input — output 0 fires once, and the status record carries <code>result: "stopped"</code> with <code>sent</code>; a stop with nothing streaming completes with <code>detail: "no stream"</code>, and the action is refused on Build and Send delivery. A <b>new input</b> replaces the stream as a direct handover — no brake between consecutive targets, matching GCS practice; retargeting a different vehicle brakes the abandoned target once the new stream is live. A redeploy closes the node and brakes. A stream that keeps running through send failures reports once per failure streak on output 1 and never quits on its own — the firmware's setpoint watchdog is the failsafe on a dead link.</p>
-  <p><code>msg.payload</code> overrides speak the action-shaped vocabulary: <code>altRef</code> (<code>"home"</code>/<code>"msl"</code>, Go to), <code>reference</code> (<code>"world"</code>/<code>"body"</code>, Steer), <code>position</code> (<code>{lat, lon, alt}</code> on Go to, <code>{north, east, up}</code> on Steer), <code>velocity</code> and <code>accel</code> (<code>{north, east, up}</code>, Steer), <code>yaw</code>, <code>yawRate</code>, <code>speed</code>, <code>radius</code>, <code>changeMode</code> (boolean, Go to command path), <code>target</code> (<code>{sysid, compid}</code>), <code>rateHz</code> and <code>ttlMs</code> (Stream), <code>timeBootMs</code>, and <code>action: "stop"</code>. <code>msg.payload === false</code> suppresses the input silently (§9).</p>
+  <p><code>msg.payload</code> overrides speak the action-shaped vocabulary: <code>altRef</code> (<code>"home"</code>/<code>"msl"</code>/<code>"terrain"</code>, Go to), <code>reference</code> (<code>"world"</code>/<code>"body"</code>, Steer), <code>position</code> (<code>{lat, lon, alt}</code> on Go to, <code>{north, east, up}</code> on Steer), <code>velocity</code> and <code>accel</code> (<code>{north, east, up}</code>, Steer), <code>yaw</code>, <code>yawRate</code>, <code>speed</code>, <code>radius</code>, <code>changeMode</code> (boolean, Go to command path), <code>target</code> (<code>{sysid, compid}</code>), <code>rateHz</code> and <code>ttlMs</code> (Stream), <code>timeBootMs</code>, and <code>action: "stop"</code>. <code>msg.payload === false</code> suppresses the input silently (§9).</p>
   <p>On <b>Build</b> delivery the Dialect dropdown selects the bundled dialect used for catalogs; choose <i>from Vehicle Profile…</i> to inherit dialect and target defaults from a Vehicle Profile. On <b>Send</b>, <b>Send &amp; confirm</b>, or <b>Stream</b> delivery a Connection is required and the Identity determines addressing: a companion identity derives the target sysid from its airframe and pins compid to 1 (the autopilot).</p>
 </script>

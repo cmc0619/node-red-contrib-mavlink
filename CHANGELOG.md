@@ -6,6 +6,16 @@ config-node shapes and message contracts may still change without a major bump.
 
 ## [Unreleased]
 
+### Added
+
+- **Go to can aim at a height above the ground under the target.** The Move
+  node's goto grows a third altitude reference, *Above terrain*, beside above
+  home and MSL — `MAV_FRAME_GLOBAL_TERRAIN_ALT` (10) on the command path, its
+  wire twin (11) on the streamed setpoint. We only pack the frame: the vehicle
+  resolves the height from its own terrain data, and a vehicle without terrain
+  data refuses the command loudly — we do not serve terrain tiles. ArduPilot
+  only in practice; the editor withholds the option on a PX4 profile.
+
 ### Removed
 
 - **The `msg.confirmed` safety gate.** Flight Termination

@@ -185,6 +185,17 @@ const PROFILE = {
       'per requested index (a function node walks 1..number_modes); PX4 bursts the full ' +
       'list from one param2=0 request. A mute stack still resolves via the shipped tables.',
   },
+  '42-terrain-goto': {
+    restart: 'ap-1',
+    waitMs: 55000,
+    expect: 'terrain-frame goto: accepted, or refused loud without terrain data',
+    prep: 'ap-guided-1',
+    notes:
+      'Move goto with altRef=terrain — GLOBAL_TERRAIN_ALT (10) on DO_REPOSITION, same chain as 27 ' +
+      'with the frame as the only variable. The lab terrain-data state is unmeasured: ACCEPTED and ' +
+      'a DENIED/FAILED refusal are both correct under the pymavlink-posture ruling (2026-08-23) — ' +
+      'the vehicle resolves the height itself and refuses loudly without data. Only silence FAILs.',
+  },
   '04-param-defs-live': {
     restart: 'none',
     waitMs: 20000,
@@ -651,6 +662,35 @@ function verdictFrom(profile, summary, log) {
     // this branch existed to avoid. Safe mid-poll — waitUntilReady early-exits
     // on specialized PASS only, so this keeps polling and the deadline decides.
     return { status: 'FAIL', reason: 'INT goto never settled — not measured' };
+  }
+  if (/terrain-frame goto/i.test(expect)) {
+    // 42's subject is the frame riding the wire, not the vehicle's terrain
+    // database: an ACCEPTED ack and a terminal refusal (no terrain data in
+    // the lab) are both the ruling's correct loud outcome, so both PASS —
+    // the generic accepted/succeeded tail must never decide this one (the
+    // example-31 lesson). Key on the goto's own record; only silence FAILs.
+    const record = summary.debug.find((d) => /terrain goto status/i.test(d.tag) && d.result);
+    if (!record) {
+      return { status: 'FAIL', reason: 'terrain goto never settled — not measured' };
+    }
+    if (record.result === 'accepted') {
+      return { status: 'PASS', reason: 'terrain goto accepted — vehicle has terrain data' };
+    }
+    // resultCode is the proof a COMMAND_ACK actually arrived (summarizeBlocks):
+    // a node-side 'failed' (connection closed, encode throw) spells the same
+    // result with no code and never measured the terrain frame at all —
+    // passing it would green the example on a dead link (CodeRabbit, #387).
+    // Number.isFinite covers null and a record with the key missing alike.
+    if (Number.isFinite(record.resultCode)) {
+      return {
+        status: 'PASS',
+        reason: `terrain goto ${record.result} — vehicle refused (no terrain data); the frame rode the wire and the answer came back loud`,
+      };
+    }
+    return {
+      status: 'FAIL',
+      reason: `terrain goto ${record.result} — no vehicle answer (no resultCode): a node-side failure or lost ack measures nothing`,
+    };
   }
   if (/carrier=reposition|Move reposition/i.test(expect)) {
     // #267 again, one carrier over: 27/30 send the same goto through

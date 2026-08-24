@@ -1,0 +1,280 @@
+[
+  {
+    "id": "sitl42-tab",
+    "type": "tab",
+    "label": "SITL 42 Terrain goto",
+    "disabled": false,
+    "info": "Move's goto with altRef=terrain against ArduCopter sysid 1: the third altitude reference packs MAV_FRAME_GLOBAL_TERRAIN_ALT (10) on the DO_REPOSITION carrier and nothing else — the vehicle resolves height-above-terrain from its own terrain data (pymavlink posture, owner ruling 2026-08-23). Both honest outcomes PASS: ACCEPTED when the SITL has terrain data, DENIED/FAILED when it has none — the frame rode the wire and the answer came back loud. Only silence fails.",
+    "env": []
+  },
+  {
+    "id": "sitl42-comment",
+    "type": "comment",
+    "z": "sitl42-tab",
+    "name": "Move goto, altRef=terrain — frame 10 rides the wire",
+    "info": "Flow: Arm (COMMAND_LONG) -> Takeoff 10 m (COMMAND_LONG) -> delay -> Move goto, Send & confirm (COMMAND_INT / DO_REPOSITION, altitude above terrain = GLOBAL_TERRAIN_ALT 10, 15 m, modest offset from home).\n\nPrerequisite: ArduCopter in GUIDED before the chain fires (harness prep ap-guided-1). CHANGE_MODE off, same as SITL 27 — the frame is the only variable against that run.\n\nWhat this run measures (§14): the terrain frame reaches the vehicle and the vehicle's own answer surfaces on output 1. The lab's terrain-data state is unmeasured, so ACCEPTED (terrain data present) and a loud refusal (none) are BOTH correct driver behavior under the ruling — we serve no tiles and check nothing."
+  },
+  {
+    "id": "sitl42-identity",
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+  },
+  {
+    "id": "sitl42-vehicle",
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "paramDefsUrl": "",
+    "dialectRevision": "seed"
+  },
+  {
+    "id": "sitl42-connection",
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot SITL",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "vehicle": "sitl42-vehicle",
+    "localIdentity": "sitl42-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "requireSigned": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "",
+    "expireMs": "",
+    "disabled": false
+  },
+  {
+    "id": "sitl42-inject",
+    "type": "inject",
+    "z": "sitl42-tab",
+    "name": "Arm + takeoff + terrain goto",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 160,
+    "wires": [
+      [
+        "sitl42-arm"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-arm",
+    "type": "mavlink-command",
+    "z": "sitl42-tab",
+    "name": "Arm (confirm ACK)",
+    "mode": "preset",
+    "preset": "arm",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl42-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{}",
+    "sendAs": "long",
+    "frame": "",
+    "x": 420,
+    "y": 160,
+    "wires": [
+      [
+        "sitl42-takeoff"
+      ],
+      [
+        "sitl42-arm-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl42-takeoff",
+    "type": "mavlink-command",
+    "z": "sitl42-tab",
+    "name": "Takeoff 10 m (confirm ACK)",
+    "mode": "preset",
+    "preset": "takeoff",
+    "advancedCommand": "",
+    "delivery": "confirm",
+    "connection": "sitl42-connection",
+    "timeout": "10000",
+    "maxRetries": "3",
+    "unconfirmedContinue": false,
+    "completionTimeout": "30000",
+    "params": "{\"7\":10}",
+    "sendAs": "long",
+    "frame": "",
+    "x": 660,
+    "y": 160,
+    "wires": [
+      [
+        "sitl42-climb"
+      ],
+      [
+        "sitl42-takeoff-status"
+      ]
+    ],
+    "targetSystem": "",
+    "targetComponent": ""
+  },
+  {
+    "id": "sitl42-climb",
+    "type": "delay",
+    "z": "sitl42-tab",
+    "name": "let the climb finish",
+    "pauseType": "delay",
+    "timeout": "8",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 890,
+    "y": 160,
+    "wires": [
+      [
+        "sitl42-goto"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-goto",
+    "type": "mavlink-move",
+    "z": "sitl42-tab",
+    "name": "Terrain goto (Send & confirm)",
+    "identity": "",
+    "connection": "sitl42-connection",
+    "delivery": "confirm",
+    "action": "goto",
+    "altRef": "terrain",
+    "speed": "",
+    "radius": "",
+    "changeMode": false,
+    "ackTimeout": "",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "north": "",
+    "east": "",
+    "up": "",
+    "vNorth": "",
+    "vEast": "",
+    "vUp": "",
+    "aNorth": "",
+    "aEast": "",
+    "aUp": "",
+    "lat": -35.3610,
+    "lon": 149.1640,
+    "alt": 15,
+    "yaw": "",
+    "yawRate": "",
+    "rateHz": 5,
+    "ttlMs": 3000,
+    "x": 1140,
+    "y": 160,
+    "wires": [
+      [
+        "sitl42-success"
+      ],
+      [
+        "sitl42-goto-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl42-arm-status",
+    "type": "debug",
+    "z": "sitl42-tab",
+    "name": "arm status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 420,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl42-takeoff-status",
+    "type": "debug",
+    "z": "sitl42-tab",
+    "name": "takeoff status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 660,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl42-goto-status",
+    "type": "debug",
+    "z": "sitl42-tab",
+    "name": "terrain goto status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1140,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl42-success",
+    "type": "debug",
+    "z": "sitl42-tab",
+    "name": "terrain goto accepted",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1400,
+    "y": 160,
+    "wires": []
+  }
+]
