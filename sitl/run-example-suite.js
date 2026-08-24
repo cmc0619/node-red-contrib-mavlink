@@ -681,10 +681,20 @@ function verdictFrom(profile, summary, log) {
     // result with no code and never measured the terrain frame at all —
     // passing it would green the example on a dead link (CodeRabbit, #387).
     // Number.isFinite covers null and a record with the key missing alike.
+    // And the ack must be a refusal *about terrain*: 'denied'/'failed' are the
+    // no-terrain-data answers, while 'unsupported', 'command_unsupported_mav_frame',
+    // 'command_int_only', … reject the frame or carrier itself — the very
+    // defect this example exists to catch (Codex, #387).
     if (Number.isFinite(record.resultCode)) {
+      if (record.result === 'denied' || record.result === 'failed') {
+        return {
+          status: 'PASS',
+          reason: `terrain goto ${record.result} — vehicle refused (no terrain data); the frame rode the wire and the answer came back loud`,
+        };
+      }
       return {
-        status: 'PASS',
-        reason: `terrain goto ${record.result} — vehicle refused (no terrain data); the frame rode the wire and the answer came back loud`,
+        status: 'FAIL',
+        reason: `terrain goto ${record.result} — the vehicle rejected the command or frame, not the terrain: that is the defect, not a terrain answer`,
       };
     }
     return {

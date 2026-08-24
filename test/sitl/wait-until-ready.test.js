@@ -343,6 +343,12 @@ test('42 passes on both honest terrain-goto outcomes — only silence fails', ()
   assert.match(run(goto42('denied', null, 2)).reason, /refused .no terrain data./);
   // A vehicle FAILED ack carries its code — that is a terrain answer.
   assert.equal(run(goto42('failed', 'terrain data unavailable', 4)).status, 'PASS');
+  // An answered rejection of the frame or carrier is the defect the example
+  // exists to catch, not a terrain answer — never PASS it (Codex, #387).
+  assert.equal(run(goto42('unsupported', null, 3)).status, 'FAIL');
+  assert.match(run(goto42('unsupported', null, 3)).reason, /rejected the command or frame/);
+  assert.equal(run(goto42('command_unsupported_mav_frame', null, 9)).status, 'FAIL');
+  assert.equal(run(goto42('temporarily_rejected', null, 1)).status, 'FAIL');
   // A node-side failure spells 'failed' with no code: the frame never reached
   // a vehicle, so nothing was measured (CodeRabbit, #387).
   assert.equal(run(goto42('failed', 'connection closed', null)).status, 'FAIL');
