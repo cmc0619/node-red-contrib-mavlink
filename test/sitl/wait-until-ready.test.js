@@ -341,8 +341,11 @@ test('42 passes on both honest terrain-goto outcomes — only silence fails', ()
   assert.match(run(goto42('accepted', null, 0)).reason, /vehicle has terrain data/);
   assert.equal(run(goto42('denied', null, 2)).status, 'PASS');
   assert.match(run(goto42('denied', null, 2)).reason, /refused .no terrain data./);
-  // A node-side failure record is loud too — the answer surfaced.
-  assert.equal(run(goto42('failed', 'connection closed', null)).status, 'PASS');
+  // A vehicle FAILED ack carries its code — that is a terrain answer.
+  assert.equal(run(goto42('failed', 'terrain data unavailable', 4)).status, 'PASS');
+  // A node-side failure spells 'failed' with no code: the frame never reached
+  // a vehicle, so nothing was measured (CodeRabbit, #387).
+  assert.equal(run(goto42('failed', 'connection closed', null)).status, 'FAIL');
   // Silence: a lost ack carries no resultCode, and no record measured nothing.
   assert.equal(run(goto42('unconfirmed', 'ack timeout', null)).status, 'FAIL');
   assert.equal(run(null).status, 'FAIL', 'no record at all');

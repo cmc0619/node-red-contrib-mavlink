@@ -676,9 +676,12 @@ function verdictFrom(profile, summary, log) {
     if (record.result === 'accepted') {
       return { status: 'PASS', reason: 'terrain goto accepted — vehicle has terrain data' };
     }
-    // A terminal MAV_RESULT carries its resultCode; a node-side failure record
-    // ('failed') is loud too. Both surfaced an answer for the terrain frame.
-    if (record.resultCode !== null || record.result === 'failed') {
+    // resultCode is the proof a COMMAND_ACK actually arrived (summarizeBlocks):
+    // a node-side 'failed' (connection closed, encode throw) spells the same
+    // result with no code and never measured the terrain frame at all —
+    // passing it would green the example on a dead link (CodeRabbit, #387).
+    // Number.isFinite covers null and a record with the key missing alike.
+    if (Number.isFinite(record.resultCode)) {
       return {
         status: 'PASS',
         reason: `terrain goto ${record.result} — vehicle refused (no terrain data); the frame rode the wire and the answer came back loud`,
@@ -686,7 +689,7 @@ function verdictFrom(profile, summary, log) {
     }
     return {
       status: 'FAIL',
-      reason: `terrain goto ${record.result} — no terminal result or error surfaced`,
+      reason: `terrain goto ${record.result} — no vehicle answer (no resultCode): a node-side failure or lost ack measures nothing`,
     };
   }
   if (/carrier=reposition|Move reposition/i.test(expect)) {
