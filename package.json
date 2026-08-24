@@ -1,10 +1,10 @@
 {
   "name": "@cmc0619/node-red-contrib-mavlink",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publishConfig": {
     "access": "public"
   },
-  "description": "MAVLink toolkit for Node-RED \u2014 GCS and companion roles, one node set.",
+  "description": "MAVLink toolkit for Node-RED — GCS and companion roles, one node set.",
   "license": "MIT",
   "repository": {
     "type": "git",
