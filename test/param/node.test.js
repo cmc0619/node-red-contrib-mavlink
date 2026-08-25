@@ -108,6 +108,70 @@ test('a set with a blank value sends the coercion, not a refusal — the editor 
   assert.equal(conn.sent[0].message.fields.param_value, 0);
 });
 
+test('a set whose encoding ladder resolves nothing settles failed before the wire (§4/§9)', () => {
+  // Custom firmware, no capability bits, no override: bytewise and c-cast
+  // disagree on how an integer rides the PARAM_VALUE float, so there is no
+  // direction to fall to — and none is invented for a value the operator
+  // actually supplied (§4). The report point settles the failed record;
+  // nothing is sent, so nothing waits on an echo.
+  const conn = connStubFull({ vehicle: { targetSystem: 6, targetComponent: 1, firmware: 'custom' } });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'confirm',
+    action: 'set',
+    paramType: 'MAV_PARAM_TYPE_INT32',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 1,
+  });
+
+  let out;
+  let err;
+  node.emit('input', { payload: { paramId: 'FOO', value: 3 } }, (m) => { out = m; }, (e) => { err = e; });
+  node.emit('close', () => {});
+
+  assert.equal(conn.sent.length, 0, 'nothing reached the wire');
+  assert.equal(out[0], null, 'the continue port stays quiet');
+  assert.equal(out[1].result, 'failed');
+  assert.equal(out[1].detail, 'no param encoding resolves — set paramEncoding or use a named firmware');
+  assert.ok(err instanceof Error, 'fails loud for Catch');
+});
+
+test('a bogus paramEncoding override settles the same failed record as an empty ladder', () => {
+  // The override rides the ladder verbatim (first rung), so 'bogus' resolves
+  // 'bogus' — neither encoding. Same report-point refusal, keyed on the
+  // resolved encoding, never on the value.
+  const conn = connStubFull();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-param')(RED);
+  const Node = RED.nodes.types['mavlink-param'];
+  const node = new Node({
+    delivery: 'send',
+    action: 'set',
+    paramType: 'MAV_PARAM_TYPE_INT32',
+    connection: 'conn',
+    targetSystem: 6,
+    targetComponent: 1,
+  });
+
+  let out;
+  let err;
+  node.emit(
+    'input',
+    { payload: { paramId: 'FOO', value: 3, paramEncoding: 'bogus' } },
+    (m) => { out = m; },
+    (e) => { err = e; }
+  );
+
+  assert.equal(conn.sent.length, 0, 'nothing reached the wire');
+  assert.equal(out[0], null, 'the continue port stays quiet');
+  assert.equal(out[1].result, 'failed');
+  assert.equal(out[1].detail, 'no param encoding resolves — set paramEncoding or use a named firmware');
+  assert.ok(err instanceof Error, 'fails loud for Catch');
+});
+
 test('a broadcast target still sends — the editor is what reds it', () => {
   // No vehicle answers as sysid 0, so every Param action would wait forever
   // for a reply. That pair is a *configured* one the editor reds at deploy
