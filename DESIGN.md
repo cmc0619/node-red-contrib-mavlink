@@ -570,11 +570,22 @@ reproduce. Tolerance follows the wire: float32 precision for c-cast, exact for b
 
 **14.81 Param encoding resolves override → capability bits → named firmware; never invented.** ✔
 Explicit `msg.payload.paramEncoding` wins; then `PARAM_ENCODE_BYTEWISE`/`_C_CAST`
-capability bits; then named firmware (PX4 → bytewise, else c-cast). A present-but-invalid
-override rejects; an empty ladder throws; `custom` firmware refuses rather than
-defaulting to c-cast (deliberately no editor red-ring — either escape can make it
-correct at message time). `resolveParamEncoding` is the only place the ladder runs.
-*Check:* `node --test test/param/param.test.js test/addressing/resolve.test.js`.
+capability bits; then named firmware (px4 → bytewise, ardupilot → c-cast); anything
+else resolves nothing. Truth-up + ruling (2026-08-25, #389): this entry claimed an
+invalid override "rejects" and an empty ladder "throws" — neither was true. The
+override rode the first rung verbatim, and both shapes encoded an invented NaN
+that ArduPilot casts and stores silently while the node reported `sent`. §4 names
+that exactly: NaN in `param_value` is a legal value the caller did not choose. The
+wire-sentinel NaN precedents (formation heading, DO_SET_MODE param2) do not
+transfer — there NaN is the dialect's own "not used" word; `param_value` *is* the
+request. Ruled: a set whose ladder resolves nothing settles `failed` at the report
+point ("no param encoding resolves — set paramEncoding or use a named firmware"),
+nothing on the wire, every tier. The value is never inspected — an operator's own
+NaN value still rides (§0). Deliberately no editor red-ring: the capability rung
+cannot exist before runtime. `resolveParamEncoding` is the only place the ladder
+runs; the node resolves a set once and the builder and echo matcher short-circuit
+on that resolution.
+*Check:* `node --test test/param/param.test.js test/param/node.test.js`.
 
 **14.82 A parameter's encoding is not discoverable on ArduPilot.** 🧪 (2026-08-13, re-measured 2026-08-22)
 Neither stack streams `AUTOPILOT_VERSION` unsolicited; on request PX4 reports the
