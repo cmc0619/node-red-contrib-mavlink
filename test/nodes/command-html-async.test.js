@@ -55,7 +55,7 @@ const COMMANDS_CATALOG = {
  * mavlink-command script, a per-selector element registry standing in for the
  * dialog DOM, and a queue of captured getJSON requests the test resolves.
  */
-function makeHarness() {
+function makeHarness(vehicleProfile) {
   const requests = [];
   let registry = new Map();
 
@@ -166,7 +166,7 @@ function makeHarness() {
 
   const nodeLookup = {
     'conn-1': { vehicle: 'veh-1' },
-    'veh-1': { dialect: 'common' },
+    'veh-1': Object.assign({ dialect: 'common' }, vehicleProfile),
   };
   const registered = {};
   const context = {
@@ -191,6 +191,9 @@ function makeHarness() {
   // Chrome-only helpers, stubbed at their contract boundary. The catalog
   // machinery under test (loadCatalog, resolveCatalogTarget, adminApiUrl,
   // populateDialectSelect, fillEnumSelect) stays real.
+  // The two param-render boundaries record what they were handed: the seed a
+  // control was built with is the whole subject of the slot-collision tests.
+  const rendered = { params: [], rows: [] };
   Object.assign(context.RED.mavlink, {
     ensureConfigNodePicker() {},
     reloadTargetCompId() {},
@@ -198,8 +201,14 @@ function makeHarness() {
     applyBuildTierRowVisibility() {},
     applyCompanionTargetVisibility() {},
     bindSelectTitleSync() {},
-    paramControl: () => $('<input></input>'),
-    formRow: () => $('<div></div>'),
+    paramControl: (spec, enums, opts) => {
+      rendered.params.push({ index: Number(opts.attrValue), saved: opts.saved });
+      return $('<input></input>');
+    },
+    formRow: (label, control) => {
+      rendered.rows.push({ label, control });
+      return $('<div></div>');
+    },
   });
 
   const start = html.indexOf('<script type="text/javascript">');
@@ -228,8 +237,11 @@ function makeHarness() {
   }
 
   const forUrl = (fragment) => requests.filter((r) => r.url.includes(fragment));
+  /** Drain the controls rendered since the last take — one entry per field. */
+  const takeParams = () => rendered.params.splice(0, rendered.params.length);
+  const takeRows = () => rendered.rows.splice(0, rendered.rows.length);
 
-  return { $, openDialog, forUrl };
+  return { $, openDialog, forUrl, takeParams, takeRows };
 }
 
 function commandNode(over) {
@@ -281,4 +293,141 @@ test('an Advanced open shares one in-flight catalog fetch — the MAV_CMD dropdo
   assert.equal(sel.val(), '400', 'the saved MAV_CMD is selected from the filled dropdown');
   assert.equal(h.forUrl('/mavlink/command/commands').length, 1,
     'concurrent cold callers share one fetch');
+});
+
+/**
+ * Slot collision: the saved `params` blob is keyed by slot number, and a slot
+ * number means whatever the selected command says it means — param 5 is a
+ * latitude on Set Home and something else entirely on the next command. The
+ * dialog therefore seeds a form from the blob only while it is painting the
+ * command it was opened on; once the operator picks another command (or the
+ * other mode) the seeds are dropped and every later render starts empty,
+ * including a render of the command that was saved.
+ */
+const SLOT_PRESETS = [{
+  group: 'flight',
+  presets: [
+    { id: 'takeoff', name: 'Takeoff', commandId: 22 },
+    { id: 'set_home', name: 'Set Home', commandId: 179 },
+    { id: 'set_mode', name: 'Set Mode', commandId: 176 },
+  ],
+}];
+
+const SLOT_CATALOG = {
+  commands: [
+    { value: 22, name: 'MAV_CMD_NAV_TAKEOFF', params: [
+      { index: 1, label: 'Pitch' },
+      { index: 7, label: 'Altitude' },
+    ] },
+    { value: 179, name: 'MAV_CMD_DO_SET_HOME', params: [
+      { index: 1, label: 'Use Current' },
+      { index: 5, label: 'Latitude' },
+      { index: 6, label: 'Longitude' },
+      { index: 7, label: 'Altitude' },
+    ] },
+    { value: 176, name: 'MAV_CMD_DO_SET_MODE', params: [
+      { index: 1, label: 'Mode' },
+      { index: 2, label: 'Custom Mode' },
+    ] },
+  ],
+  enums: {},
+  dialect: 'common',
+};
+
+/** Open, then release both catalogs, leaving the saved command painted. */
+function openWithCatalogs(h, node) {
+  h.openDialog(node);
+  h.forUrl('/mavlink/command/presets').forEach((req) => req.ok({ groups: SLOT_PRESETS }));
+  h.forUrl('/mavlink/command/commands').forEach((req) => req.ok(SLOT_CATALOG));
+}
+
+const seeds = (fields) => fields.map((f) => f.saved);
+/**
+ * The fields left on screen. `refreshParamFields` repaints the whole form, and
+ * an Advanced repaint runs twice — `buildAdvancedDropdown`'s fill re-fires
+ * `change` (which renders) and `refreshAdvancedCommands` renders again behind
+ * it — so the last `count` controls are the ones the operator is looking at.
+ */
+const onScreen = (fields, count) => fields.slice(-count);
+
+test('preset params seed the command they were saved under', () => {
+  const h = makeHarness();
+  openWithCatalogs(h, commandNode({ preset: 'takeoff', params: '{"1":15,"7":30}' }));
+
+  assert.deepEqual(h.takeParams(), [{ index: 1, saved: 15 }, { index: 7, saved: 30 }],
+    'the saved blob fills the form of the preset the node was saved with');
+});
+
+test('switching preset renders empty fields, and switching back leaves them empty', () => {
+  const h = makeHarness();
+  openWithCatalogs(h, commandNode({ preset: 'takeoff', params: '{"1":15,"7":30}' }));
+  h.takeParams();
+
+  // Set Home exposes param 5/6 as a coordinate; Takeoff's 15 and 30 were a
+  // pitch and an altitude. Carrying them over is how a lat/lon appears that
+  // the operator never typed.
+  h.$('#node-input-preset').val('set_home').trigger('change');
+  const setHome = h.takeParams();
+  assert.deepEqual(setHome.map((f) => f.index), [1, 5, 6, 7], 'Set Home rendered its own slots');
+  assert.deepEqual(seeds(setHome), [undefined, undefined, undefined, undefined],
+    'no slot carries a value typed under Takeoff');
+
+  h.$('#node-input-preset').val('takeoff').trigger('change');
+  assert.deepEqual(h.takeParams(), [{ index: 1, saved: undefined }, { index: 7, saved: undefined }],
+    'the values are gone for good once the command changed — coming back does not restore them');
+});
+
+test('switching mode drops the seeds too — the same slots, a different command', () => {
+  const h = makeHarness();
+  openWithCatalogs(h, commandNode({
+    mode: 'preset', preset: 'takeoff', advancedCommand: '179', params: '{"1":15,"7":30}',
+  }));
+  h.takeParams();
+
+  h.$('#node-input-mode').val('advanced').trigger('change');
+  assert.deepEqual(seeds(onScreen(h.takeParams(), 4)), [undefined, undefined, undefined, undefined],
+    'the Advanced form for another MAV_CMD starts empty');
+});
+
+test('an Advanced open seeds its saved MAV_CMD, and a different one starts empty', () => {
+  const h = makeHarness();
+  h.openDialog(commandNode({
+    mode: 'advanced', advancedCommand: '22', params: '{"1":15,"7":30}',
+  }));
+  h.forUrl('/mavlink/command/commands').forEach((req) => req.ok(SLOT_CATALOG));
+  assert.deepEqual(onScreen(h.takeParams(), 2), [{ index: 1, saved: 15 }, { index: 7, saved: 30 }],
+    'the dropdown fill is the dialog painting its own config, not a command change');
+
+  // The preset list lands late and its builder fires a change at the preset
+  // select. That is the dialog painting too — it must not wipe the seeds.
+  h.forUrl('/mavlink/command/presets').forEach((req) => req.ok({ groups: SLOT_PRESETS }));
+  assert.deepEqual(onScreen(h.takeParams(), 2), [{ index: 1, saved: 15 }, { index: 7, saved: 30 }],
+    'a late preset response re-renders the same command with its values intact');
+
+  h.$('#node-input-advancedCommand').val('179').trigger('change');
+  assert.deepEqual(seeds(onScreen(h.takeParams(), 4)), [undefined, undefined, undefined, undefined],
+    'the newly picked MAV_CMD renders empty slots');
+
+  h.$('#node-input-advancedCommand').val('22').trigger('change');
+  assert.deepEqual(seeds(onScreen(h.takeParams(), 2)), [undefined, undefined],
+    'and the original command stays empty');
+});
+
+test('the PX4 DO_SET_MODE pair follows the same rule', () => {
+  const HOLD = 4 * 65536 + 3 * 16777216; // main 4, sub 3 — the packed option value
+  const px4Select = (rows) => rows
+    .map((r) => r.control)
+    .find((c) => c.attr && c.attr('data-kind') === 'px4mode');
+
+  const h = makeHarness({ firmware: 'px4' });
+  openWithCatalogs(h, commandNode({ preset: 'set_mode', params: '{"1":1,"2":4,"3":3}' }));
+
+  assert.equal(px4Select(h.takeRows()).val(), String(HOLD),
+    'the saved main/sub pair recomposes into the mode dropdown');
+
+  h.$('#node-input-preset').val('takeoff').trigger('change');
+  h.takeRows();
+  h.$('#node-input-preset').val('set_mode').trigger('change');
+  assert.equal(px4Select(h.takeRows()).val(), null,
+    'param 2 and 3 are dropped with every other slot — the pair is not recomposed');
 });

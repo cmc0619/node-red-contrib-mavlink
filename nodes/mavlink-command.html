@@ -498,6 +498,7 @@
       }
 
       $('#node-input-mode').on('change', function () {
+        forgetSavedParams();
         applyMode($(this).val());
       });
 
@@ -520,7 +521,7 @@
         sel.val(node.preset || 'arm');
         loadCommandsCatalog(function (catalog) {
           applyPresetOptionTips(sel, catalog);
-          sel.trigger('change');
+          paintSelection(function () { sel.trigger('change'); });
         });
       }
 
@@ -572,6 +573,7 @@
       loadPresets(buildPresetDropdown);
 
       $('#node-input-preset').on('change', function () {
+        forgetSavedParams();
         refreshParamFields();
         refreshDelivery();
       });
@@ -582,12 +584,14 @@
         const sel = $('#node-input-advancedCommand');
         // preferLive: a Connection change mid-dialog must not snap the MAV_CMD
         // back to the pre-edit value.
-        RED.mavlink.fillEnumSelect(sel, catalog.commands || [], {
-          saved: node.advancedCommand,
-          preferLive: true,
-          allowEmpty: true,
-          emptyLabel: '\u2014 select MAV_CMD \u2014',
-          titleNamespace: 'mavCmdTip'
+        paintSelection(function () {
+          RED.mavlink.fillEnumSelect(sel, catalog.commands || [], {
+            saved: node.advancedCommand,
+            preferLive: true,
+            allowEmpty: true,
+            emptyLabel: '\u2014 select MAV_CMD \u2014',
+            titleNamespace: 'mavCmdTip'
+          });
         });
       }
 
@@ -600,6 +604,7 @@
       }
 
       $('#node-input-advancedCommand').on('change', function () {
+        forgetSavedParams();
         refreshParamFields();
         refreshDelivery();
       });
@@ -680,8 +685,37 @@
       refreshFrameRow();
 
       // ── Param fields ───────────────────────────────────────────────────────
+      // Seeds for the rendered form, and only for the command they were typed
+      // under. The blob is keyed by slot number, and a slot means whatever the
+      // selected command says it means: slot 5 is Set Home's latitude and
+      // DO_SET_ACTUATOR's actuator-5 setting, so 47.6 typed as a coordinate
+      // reads there as a servo command 47 times past full deflection. Picking
+      // another command, or the other mode, drops the seeds; every render
+      // after that starts empty, which is the whole signal — a filled field is
+      // one the operator filled for the command in front of them. `oneditsave`
+      // scrapes what is on screen, so Done then saves {} rather than the
+      // migrated numbers.
       let savedParams = {};
       try { savedParams = JSON.parse(node.params || '{}'); } catch (_e) {}
+
+      /**
+       * Paint a saved selection into a command select. The fill fires `change`
+       * (fillEnumSelect must, or a pre-fill red ring sticks — §6), and so does
+       * the preset builder once its options exist; that is the dialog reading
+       * the config it was opened on, not the operator picking a command, so
+       * the seeds survive it.
+       */
+      let paintingSelection = false;
+      function paintSelection(fn) {
+        paintingSelection = true;
+        try { fn(); } finally { paintingSelection = false; }
+      }
+
+      /** Drop the seeds: they belong to a command other than the one now selected. */
+      function forgetSavedParams() {
+        if (paintingSelection) return;
+        savedParams = {};
+      }
       let presetMessagesCatalog = null;
 
       const $dialect = $('#node-input-dialect');
