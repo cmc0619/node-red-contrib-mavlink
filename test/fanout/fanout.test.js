@@ -786,9 +786,12 @@ test('a non-finite offset rides to the wire instead of collapsing to the base co
   // arrive as "no offset": that is a base-coordinate send reported as success
   // (§0 rule 3). What the value meets after that is the surface's business —
   // an INT surface puts it on a core integer field, where lib/connection/
-  // wire.js judges finiteness and refuses the frame; the COMMAND_LONG pin
-  // below rides it out as the NaN float MAVLink allows (§14.65). Neither is
-  // the defect; silently becoming 0 was.
+  // wire.js judges finiteness and refuses the frame. The COMMAND_LONG pin
+  // below is the louder half: NaN param5/6 is the cross-fleet "keep current
+  // position" (§14.77), so there the offset reaches the vehicle as an
+  // instruction to hold. The editor cannot save either shape — every member
+  // axis is validated finite (nodes/mavlink-fanout.html) — so both arrive
+  // only by hand-edited flow or payload patch.
   const connection = connectionStub([peer(1)]);
 
   await executeFanout({ selection: { mode: 'all' },
@@ -810,10 +813,12 @@ test('a non-finite offset rides to the wire instead of collapsing to the base co
 
 test('a non-finite offset rides the COMMAND_LONG float surface too', async () => {
   // COMMAND_LONG carries lat/lon on param5/param6 as float degrees, and the
-  // serializer judges finiteness on core *integer* fields only — a NaN float
-  // is legal MAVLink (§14.65) and reaches the vehicle. Pinned because the
-  // guarantee this pair makes is about the offset never becoming 0, not about
-  // where it stops (Gitar, #390).
+  // serializer judges finiteness on core *integer* fields only, so the NaN
+  // reaches the vehicle — and there it is not noise: NaN param5/6 is how the
+  // fleet says "keep current position" (§14.77). Pinned because that is the
+  // most consequential thing a non-finite offset can do, and because the
+  // guarantee this pair makes is about the offset never silently becoming 0,
+  // not about where it stops (Gitar, #390).
   const connection = connectionStub([peer(1)]);
 
   await executeFanout({ selection: { mode: 'all' },
