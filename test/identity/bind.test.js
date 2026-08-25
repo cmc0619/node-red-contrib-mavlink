@@ -1,14 +1,13 @@
 'use strict';
 
 /**
- * Companion sysid binding (DESIGN.md §7): bindVehicleSysid, releaseVehicleSysid,
- * applyVehicleSysid.
+ * Companion sysid binding (DESIGN.md §7): bindVehicleSysid, releaseVehicleSysid.
  */
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { bindVehicleSysid, releaseVehicleSysid, applyVehicleSysid } = require('../../lib/identity');
+const { bindVehicleSysid, releaseVehicleSysid } = require('../../lib/identity');
 
 /* ---------- bindVehicleSysid ---------- */
 
@@ -78,26 +77,4 @@ test('releasing a non-existent sourceId is a no-op', () => {
   const claims = new Map();
   const remaining = releaseVehicleSysid(claims, 'never-bound');
   assert.equal(remaining, null);
-});
-
-/* ---------- applyVehicleSysid ---------- */
-
-test('applyVehicleSysid: companion identity → sysid replaced', () => {
-  const identity = { sysid: null, compid: 191, derivesSysidFromVehicle: true };
-  const result = applyVehicleSysid(identity, 5);
-  assert.equal(result.sysid, 5);
-  assert.equal(result.compid, 191);
-});
-
-test('applyVehicleSysid: non-companion → sysid unchanged', () => {
-  const identity = { sysid: 255, compid: 190, derivesSysidFromVehicle: false };
-  const result = applyVehicleSysid(identity, 5);
-  assert.equal(result.sysid, 255);
-  assert.equal(result.compid, 190);
-});
-
-test('applyVehicleSysid does not mutate the original', () => {
-  const identity = { sysid: null, compid: 191, derivesSysidFromVehicle: true };
-  applyVehicleSysid(identity, 3);
-  assert.equal(identity.sysid, null);
 });

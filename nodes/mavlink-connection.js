@@ -12,8 +12,8 @@
  * and Local Identity config nodes, and hands a plain snapshot to the
  * {@link Connection} runtime in `lib/connection`, which owns every piece of
  * behaviour. Palette nodes reach the runtime through `node.subscribe`,
- * `node.send`, `node.peerTable`, `node.vehicle`, `node.assertHealth`, and
- * `node.onHealthExpired`.
+ * `node.send`, `node.peerTable`, `node.vehicle`, `node.assertHealth`,
+ * `node.onHealthExpired`, and `node.crcFailureCount`.
  *
  * References are captured at construction and released in `close`; the config
  * nodes are never re-resolved during teardown (§7).
@@ -62,6 +62,7 @@ module.exports = function registerMavlinkConnection(RED) {
         );
       };
       node.onHealthExpired = () => () => {};
+      node.crcFailureCount = () => 0;
       node.on('close', (done) => done());
       return;
     }
@@ -161,6 +162,7 @@ module.exports = function registerMavlinkConnection(RED) {
       node.connection.on('health-expired', handler);
       return () => node.connection.off('health-expired', handler);
     };
+    node.crcFailureCount = () => node.connection.crcFailureCount();
     Object.defineProperty(node, 'peerTable', { get: () => node.connection.peerTable });
 
     applyStatus(node, STATE.CONNECTING, signing.acceptInvalid);
