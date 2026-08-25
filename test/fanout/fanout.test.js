@@ -781,6 +781,30 @@ test('an east offset scales through cos(lat), not the latitude divisor', async (
     `10 m east at 47° is ~1318 degE7 (898 / cos 47°), got ${dLon}`);
 });
 
+test('a non-finite offset rides to the wire instead of collapsing to the base coordinate', async () => {
+  // An offset the operator asked for and the arithmetic cannot honour must not
+  // arrive as "no offset": that is a base-coordinate send reported as success
+  // (§0 rule 3). The non-finite value carries through to the integer field,
+  // where lib/connection/wire.js judges finiteness and refuses it loudly.
+  const connection = connectionStub([peer(1)]);
+
+  await executeFanout({ selection: { mode: 'all' },
+    connection,
+    message: {
+      name: 'COMMAND_INT',
+      fields: { target_system: 0, target_component: 0, command: 192, frame: 6, x: 470000000, y: 80000000, z: 30 },
+    },
+    members: [{ sysid: 1, north: NaN, east: 10 }],
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  const fields = connection.sends[0].message.fields;
+  assert.ok(Number.isNaN(fields.x), 'a NaN northing stays NaN on the latitude field');
+  assert.notEqual(fields.x, 470000000, 'never the unoffset base latitude');
+});
+
 test('offsets patch no coordinate on a frame whose metre scale is not measured', async () => {
   // Local-frame INT x/y are metres ×1e4 (§14-measured), so the degE7 path
   // would turn a commanded 10 m into ~9 cm; a body frame re-aims "north"
