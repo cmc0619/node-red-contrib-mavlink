@@ -498,10 +498,10 @@ test('command param enum pulldowns carry no blank option', () => {
 });
 
 test('mavlink-command: Advanced mode requires a command (§6 status ruling, 2026-08-12)', () => {
-  // Advanced mode's command is the whole message; blank resolves to null and
-  // would build MAV_CMD(null). The runtime's deploy badge for that is gone, so
-  // the editor owns it — and only in Advanced, since preset mode never reads
-  // the field.
+  // Advanced mode's command is the whole message; blank resolves to 0 and
+  // would build and send MAV_CMD(0). The runtime's deploy badge for that is
+  // gone, so the editor owns it — and only in Advanced, since preset mode
+  // never reads the field.
   const { advancedCommand } = loadNodeDefaults('mavlink-command');
   assert.match(
     String(advancedCommand.validate.call({ mode: 'advanced' }, '', {})),
@@ -803,10 +803,11 @@ test('mavlink-command: PRESET_PARAMS covers exactly the presets the dropdown off
   assert.deepEqual(fromEditor, offered, 'every offered preset has a row, and no row outlives its preset');
 });
 
-test('mavlink-command: an unknown preset reds instead of sending MAV_CMD(null)', () => {
+test('mavlink-command: an unknown preset reds instead of resolving no command', () => {
   // The dropdown cannot produce one; a hand-edited flow can. The runtime
-  // trusts what it is handed and sends `command: null`, reporting success —
-  // so this is the only layer that can tell a typo from a command.
+  // trusts what it is handed — the wire tiers refuse the unresolved command
+  // loud at serialize and Build selects no behavior (§5) — so this is the
+  // only layer that can red a typo before it runs.
   const { preset } = loadNodeDefaults('mavlink-command');
   const verdict = (over) => preset.validate.call(
     Object.assign({ id: 'c1', mode: 'preset' }, over), over.preset, {}

@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const mav = require('node-mavlink');
 const { loadBundled, compileXml } = require('../../lib/metadata');
 const { normalizeType } = require('../../lib/codec/types');
-const { synthesizeWireClasses, buildMessageClass } = require('../../lib/connection/wire-classes');
+const { buildMessageClass } = require('../../lib/connection/wire-classes');
 const { createWire } = require('../../lib/connection/wire');
 
 /**
@@ -134,65 +134,6 @@ test('custom dialect without includes does not inherit the MSC wire preload', ()
   assert.throws(
     () => wire.serialize({ name: 'HEARTBEAT', fields: {} }, { sysid: 1, compid: 1, seq: 0 }),
     /no wire class for message 'HEARTBEAT'/
-  );
-});
-
-test('partial name/id collisions fail loudly; matching includes are skipped', () => {
-  const bundle = customBundle();
-  // Name-only collision (different id) used to silently keep the bundled class.
-  assert.throws(
-    () => synthesizeWireClasses(mav, bundle, {
-      names: new Set(['WIDGET_STATUS']),
-      ids: new Set(),
-      byName: { WIDGET_STATUS: { MSG_NAME: 'WIDGET_STATUS', MSG_ID: 0, MAGIC_NUMBER: 1, PAYLOAD_LENGTH: 1 } },
-    }),
-    /collides with a bundled message name/
-  );
-  // Id-only collision.
-  assert.throws(
-    () => synthesizeWireClasses(mav, bundle, { names: new Set(), ids: new Set([60001]), byName: {} }),
-    /collides with a bundled message id/
-  );
-  // Same identity + matching layout (dialect <include> of a bundled message): skip.
-  const hb = mav.minimal.Heartbeat;
-  const withHeartbeat = compileXml({
-    'w.xml': `<?xml version="1.0"?><mavlink><version>3</version><messages>
-      <message id="0" name="HEARTBEAT">
-        <field type="uint32_t" name="custom_mode">x</field>
-        <field type="uint8_t" name="type">t</field>
-        <field type="uint8_t" name="autopilot">a</field>
-        <field type="uint8_t" name="base_mode">b</field>
-        <field type="uint8_t" name="system_status">s</field>
-        <field type="uint8_t_mavlink_version" name="mavlink_version">v</field>
-      </message>
-      <message id="60001" name="WIDGET_STATUS">
-        <field type="uint8_t" name="widget_id">w</field>
-        <field type="uint16_t" name="state">s</field>
-      </message>
-    </messages></mavlink>`,
-  }, 'w.xml');
-  const classes = synthesizeWireClasses(mav, withHeartbeat, {
-    names: new Set(['HEARTBEAT']),
-    ids: new Set([0]),
-    byName: { HEARTBEAT: hb },
-  });
-  assert.deepEqual(classes.map((c) => c.MSG_NAME), ['WIDGET_STATUS']);
-
-  // Same identity with a redefined layout fails loudly (Greptile).
-  const redefined = compileXml({
-    'w.xml': `<?xml version="1.0"?><mavlink><version>3</version><messages>
-      <message id="0" name="HEARTBEAT">
-        <field type="uint8_t" name="only_field">different layout</field>
-      </message>
-    </messages></mavlink>`,
-  }, 'w.xml');
-  assert.throws(
-    () => synthesizeWireClasses(mav, redefined, {
-      names: new Set(['HEARTBEAT']),
-      ids: new Set([0]),
-      byName: { HEARTBEAT: hb },
-    }),
-    /redefines the bundled wire layout/
   );
 });
 

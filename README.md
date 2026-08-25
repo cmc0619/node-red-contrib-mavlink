@@ -35,7 +35,7 @@ Requires Node.js 20+ and Node-RED 4.0+.
 | `mavlink-command` | `MAV_CMD` presets and advanced commands |
 | `mavlink-move` | Motion: go to, steer, turn, speed, attitude, manual — acked commands or streamed setpoints per action |
 | `mavlink-param` | Read, set, or list parameters |
-| `mavlink-payload` | Camera, gimbal, servo, release |
+| `mavlink-payload` | Camera, gimbal, servo, gripper, winch, parachute, relay |
 | `mavlink-state` | Peer table reads and transitions |
 | `mavlink-health` | Assert an identity's health with an expiring lease; a fault stops its HEARTBEAT |
 | `mavlink-mission` | Upload, download, or clear mission/fence/rally |

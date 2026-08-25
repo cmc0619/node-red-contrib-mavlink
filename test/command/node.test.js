@@ -626,11 +626,12 @@ test('blank Command maxRetries keeps three temporary-rejection retries', async (
   node.emit('close', () => {});
 });
 
-test('a hand-edited garbage Command mode resolves no command — nothing is built', async () => {
+test('a hand-edited garbage Command mode resolves no command, and Build selects no behavior', async () => {
   // Only Preset and Advanced are modes. A token the editor cannot save
   // (`mode` carries RED.mavlink.oneOf) matches neither, so no preset and no
-  // command id resolve, and the message craters at the wire's own guard
-  // rather than silently building the preset branch.
+  // command id resolve. Build must not report 'built' over a message that
+  // never resolved a command (§0 rule 3): nothing is emitted, no status
+  // record, and the input still completes.
   const conn = connStubWithInject();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-command')(RED);
@@ -647,10 +648,42 @@ test('a hand-edited garbage Command mode resolves no command — nothing is buil
   });
 
   let sent;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  let doneErr = 'not-called';
+  node.emit('input', { payload: null }, (m) => { sent = m; }, (err) => { doneErr = err; });
   await Promise.resolve();
 
-  assert.ok(Number.isNaN(sent[0].payload.fields.command), 'no command id was resolved');
+  assert.equal(sent, undefined, 'no behavior selected — no phantom built record');
+  assert.equal(doneErr, undefined, 'the input completes quietly');
+  assert.equal(conn.sent.length, 0, 'nothing reached the wire');
+});
+
+test('a hand-edited unknown preset on the Build tier emits nothing', async () => {
+  // `getPreset` returns undefined and `resolveCommandId` yields null; the
+  // wire tiers refuse that loud at serialize, and Build selects no behavior —
+  // never a 'built' record over MAV_CMD(null). The editor's preset ring is
+  // the deploy-time guard.
+  const conn = connStubWithInject();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: '{}',
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'bogus',
+    delivery: 'build',
+    connection: 'conn',
+    targetSystem: '1',
+    targetComponent: '1',
+  });
+
+  let sent;
+  let doneErr = 'not-called';
+  node.emit('input', { payload: null }, (m) => { sent = m; }, (err) => { doneErr = err; });
+  await Promise.resolve();
+
+  assert.equal(sent, undefined, 'no behavior selected — no phantom built record');
+  assert.equal(doneErr, undefined, 'the input completes quietly');
   assert.equal(conn.sent.length, 0, 'nothing reached the wire');
 });
 
@@ -843,19 +876,6 @@ test('a Delivery token the editor cannot save runs no tier at all (§5)', async 
     assert.equal(doneCalls, 1, 'the input is still completed');
     assert.equal(err, undefined, 'a no-op is not a failure');
   }
-});
-
-test('an unlisted preset resolves no command id rather than a guess', async () => {
-  const RED = redStub({});
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({ params: '{}', sendAs: 'long', mode: 'preset', preset: 'arrrm', delivery: 'build' });
-
-  let output;
-  node.emit('input', { payload: null }, (m) => { output = m; }, () => {});
-  await new Promise((resolve) => setImmediate(resolve));
-
-  assert.equal(output[0].payload.fields.command, null, 'MAV_CMD is unresolved, not invented');
 });
 
 test('Advanced mode never reads preset — an unset preset field does not refuse', async () => {
@@ -1077,13 +1097,13 @@ test('ack settle and close in one synchronous stack cannot spawn a zombie wait (
   assert.equal(doneErr, undefined, 'the stale run finishes quietly');
   assert.equal(emitted, false, 'nothing is emitted onto the closed node');
 
-  // The wait must be dead: checkCompletion reads peerTable._peers, so count
-  // reads through a proxy and confirm no zombie keeps polling after close.
-  // The window must exceed DEFAULT_POLL_MS (500 ms): the node does not pass
-  // pollMs, so a leaked interval first fires at 500 ms (CodeRabbit, #236).
+  // The wait must be dead: checkCompletion reads peerTable.getComponent, so
+  // count calls through a wrapper and confirm no zombie keeps polling after
+  // close. The window must exceed DEFAULT_POLL_MS (500 ms): the node does not
+  // pass pollMs, so a leaked interval first fires at 500 ms (CodeRabbit, #236).
   let reads = 0;
-  const realPeers = conn.peerTable._peers;
-  Object.defineProperty(conn.peerTable, '_peers', { get() { reads += 1; return realPeers; } });
+  const realGetComponent = conn.peerTable.getComponent.bind(conn.peerTable);
+  conn.peerTable.getComponent = (...args) => { reads += 1; return realGetComponent(...args); };
   await new Promise((resolve) => setTimeout(resolve, 550));
   assert.equal(reads, 0, 'no completion polling after close');
 });

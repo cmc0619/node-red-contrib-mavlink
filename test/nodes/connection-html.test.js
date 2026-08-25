@@ -415,6 +415,47 @@ test('signing credentials are mutually exclusive in both directions, live-aware'
   );
 });
 
+test('Sign outbound reds at deploy when checked with no signing credential', () => {
+  const defaults = loadNodeDefaults('mavlink-connection');
+  const key = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
+  const reason = /passphrase or raw key/;
+
+  // Two-arg form so a returned string renders as the invalid reason (§14).
+  assert.equal(defaults.signOutbound.validate.length, 2);
+
+  // Unchecked always passes — signing is optional.
+  assert.equal(defaults.signOutbound.validate.call({ id: 'c1', credentials: {} }, false, {}), true);
+  // Checked with both credential boxes blank is the start()-doomed deploy.
+  assert.match(
+    String(defaults.signOutbound.validate.call({ id: 'c1', credentials: {} }, true, {})),
+    reason
+  );
+  // Either saved credential satisfies it — saved passwords surface as `has_*`.
+  assert.equal(defaults.signOutbound.validate.call(
+    { id: 'c1', credentials: { has_signingPassphrase: true } }, true, {}
+  ), true);
+  assert.equal(defaults.signOutbound.validate.call(
+    { id: 'c1', credentials: { has_signingKeyHex: true } }, true, {}
+  ), true);
+
+  // Own dialog open: a key typed but not yet saved already counts.
+  const own = loadNodeDefaults('mavlink-connection', {}, {
+    dom: { '#node-config-input-signingKeyHex': { val: key } },
+    editStack: [{ id: 'c1' }],
+  });
+  assert.equal(own.signOutbound.validate.call({ id: 'c1', credentials: {} }, true, {}), true);
+
+  // An emptied credential box is the operator's answer over its saved ghost
+  // (#284 lesson) — checked signing reds the moment its last key is cleared.
+  const cleared = loadNodeDefaults('mavlink-connection', {}, {
+    dom: { '#node-config-input-signingPassphrase': { val: '' } },
+    editStack: [{ id: 'c1' }],
+  });
+  assert.match(String(cleared.signOutbound.validate.call(
+    { id: 'c1', credentials: { has_signingPassphrase: true } }, true, {}
+  )), reason);
+});
+
 test('Local Identity editor exposes heartbeatIntervalMs', () => {
   assert.match(
     identityHtml,
