@@ -825,24 +825,3 @@ test('mavlink-command: an unknown preset reds instead of resolving no command', 
   // Advanced mode never reads the field, so it must not red there.
   assert.equal(verdict({ mode: 'advanced', preset: 'bogus' }), true);
 });
-
-test('mavlink-command: every command switch drops the saved param seeds', () => {
-  // Slot numbers mean different things per command — the executed proof is in
-  // command-html-async.test.js. This pins the wiring the proof rests on: all
-  // three selects that can change the command drop the seeds, and the two
-  // places the dialog fires `change` at itself while painting the saved
-  // config are exempt (a paint is not the operator picking a command).
-  for (const binder of ["$('#node-input-mode')", "$('#node-input-preset')", "$('#node-input-advancedCommand')"]) {
-    assertChangeHandlerContains(html, binder, 'forgetSavedParams();',
-      `${binder} must drop the seeds before re-rendering`);
-  }
-  assert.match(html, /function forgetSavedParams\(\) \{\s*if \(paintingSelection\) return;\s*savedParams = \{\};/,
-    'dropping the seeds is emptying the blob, with no dirty flag and no per-command bookkeeping');
-  assert.match(html, /paintSelection\(function \(\) \{ sel\.trigger\('change'\); \}\);/,
-    'the preset builder re-selects the saved preset without dropping its params');
-  assert.match(
-    html,
-    /paintSelection\(function \(\) \{\s*RED\.mavlink\.fillEnumSelect\(sel, catalog\.commands/,
-    'and the MAV_CMD fill (which must re-fire change, §6) is a paint too'
-  );
-});

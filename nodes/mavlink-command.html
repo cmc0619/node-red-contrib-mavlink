@@ -521,7 +521,9 @@
         sel.val(node.preset || 'arm');
         loadCommandsCatalog(function (catalog) {
           applyPresetOptionTips(sel, catalog);
-          paintSelection(function () { sel.trigger('change'); });
+          paintingSelection = true;
+          sel.trigger('change');
+          paintingSelection = false;
         });
       }
 
@@ -584,15 +586,15 @@
         const sel = $('#node-input-advancedCommand');
         // preferLive: a Connection change mid-dialog must not snap the MAV_CMD
         // back to the pre-edit value.
-        paintSelection(function () {
-          RED.mavlink.fillEnumSelect(sel, catalog.commands || [], {
-            saved: node.advancedCommand,
-            preferLive: true,
-            allowEmpty: true,
-            emptyLabel: '\u2014 select MAV_CMD \u2014',
-            titleNamespace: 'mavCmdTip'
-          });
+        paintingSelection = true;
+        RED.mavlink.fillEnumSelect(sel, catalog.commands || [], {
+          saved: node.advancedCommand,
+          preferLive: true,
+          allowEmpty: true,
+          emptyLabel: '\u2014 select MAV_CMD \u2014',
+          titleNamespace: 'mavCmdTip'
         });
+        paintingSelection = false;
       }
 
       function refreshAdvancedCommands() {
@@ -698,18 +700,12 @@
       let savedParams = {};
       try { savedParams = JSON.parse(node.params || '{}'); } catch (_e) {}
 
-      /**
-       * Paint a saved selection into a command select. The fill fires `change`
-       * (fillEnumSelect must, or a pre-fill red ring sticks — §6), and so does
-       * the preset builder once its options exist; that is the dialog reading
-       * the config it was opened on, not the operator picking a command, so
-       * the seeds survive it.
-       */
+      // Painting a saved selection fires `change` on the command select —
+      // fillEnumSelect must (or a pre-fill red ring sticks, §6), and the preset
+      // builder does once its options exist. That is the dialog reading the
+      // config it was opened on, not the operator picking a command, so the two
+      // paint sites raise this and the seeds survive them.
       let paintingSelection = false;
-      function paintSelection(fn) {
-        paintingSelection = true;
-        try { fn(); } finally { paintingSelection = false; }
-      }
 
       /** Drop the seeds: they belong to a command other than the one now selected. */
       function forgetSavedParams() {
