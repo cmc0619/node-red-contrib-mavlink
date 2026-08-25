@@ -254,5 +254,14 @@ test('unoffered: an unknown delivery tier matches no case, so nothing is sent', 
   assert.equal(conn.sends.length, 0, 'nothing reached the wire');
 });
 
+test('unoffered: an unknown action matches no case, so nothing is built or sent', async () => {
+  const config = { ...configFor('steer', 'build', 'world'), action: 'seter' };
+  const { out, err, node, conn } = await drive(config);
+  node.emit('close', () => {});
+  assert.equal(err, undefined, 'the input completes without failing');
+  assert.equal(out, undefined, 'no action ran, so no outcome was reported');
+  assert.equal(conn.sends.length, 0, 'nothing reached the wire');
+});
+
 // ── Re-issue safety is per command, not per carrier ──────────────────────────
 

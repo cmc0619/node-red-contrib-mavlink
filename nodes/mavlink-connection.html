@@ -104,7 +104,18 @@
       vehicle: { value: '', type: 'mavlink-vehicle', required: true },
       localIdentity: { value: '', type: 'mavlink-local-identity', required: true },
       additionalIdentities: { value: [] },
-      signOutbound: { value: false },
+      // Sign outbound needs a key to sign with (§7): checked with both
+      // credential boxes blank is a deploy that cannot start, so it reds here.
+      // The sibling reads follow the exclusivity ring's saved/live resolution.
+      // Two args so the reason renders (§14).
+      signOutbound: { value: false, validate: function (v, _opt) {
+        if (v !== true && v !== 'true') return true;
+        if (signingSiblingPresent(this, '#node-config-input-signingPassphrase',
+          'signingPassphrase', 'has_signingPassphrase')) return true;
+        if (signingSiblingPresent(this, '#node-config-input-signingKeyHex',
+          'signingKeyHex', 'has_signingKeyHex')) return true;
+        return 'requires a signing passphrase or raw key';
+      } },
       requireSigned: { value: false },
       acceptInvalid: { value: false },
       // The signature block carries the link id as one byte on the wire.

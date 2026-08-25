@@ -156,3 +156,13 @@ test('a component dialect that collides on a msgid fails loud naming both', () =
     /Message id 180 is claimed by both/
   );
 });
+
+test("a component token without '@' keeps the whole dialect name and fails on the blank revision", () => {
+  // Hand-edited past the editor's dialect@revision ring: the parse must not
+  // mangle the token — the loud failure downstream names the missing revision,
+  // not a dialect with its last character sliced off.
+  assert.throws(
+    () => resolveDialect({ dialect: 'common', dialectRevision: 'seed', additionalDialects: 'ardupilotmega' }),
+    /snapshot ''/
+  );
+});

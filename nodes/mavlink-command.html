@@ -316,12 +316,14 @@
       mode:              { value: 'preset', validate: RED.mavlink.oneOf(['preset', 'advanced']) },
       // The dropdown cannot produce an unknown preset; a hand-edited flow can.
       // The runtime does not repair it (AGENTS.md, input trust) — `getPreset`
-      // returns undefined, `resolveCommandId` yields null, and the node builds
-      // and sends MAV_CMD(null), then reports success. A false success is a
-      // different animal from garbage-out, and this is the layer that can tell
-      // the difference: PRESET_PARAMS enumerates exactly the offered presets
-      // (drift-tested against the library), so the check is synchronous and
-      // needs no catalog fetch. Advanced mode has its own field and rule.
+      // returns undefined and `resolveCommandId` yields null. The wire tiers
+      // refuse MAV_CMD(null) loud at serialize's core-integer assert; the
+      // Build tier constructs and reports built over it — a hand-edited flow
+      // is out of warranty, and this ring is its guard. This is the only
+      // layer that can red a typo before it runs: PRESET_PARAMS enumerates
+      // exactly the offered presets (drift-tested against the library), so
+      // the check is synchronous and needs no catalog fetch. Advanced mode
+      // has its own field and rule.
       preset: {
         value: 'arm',
         validate: function (v, _opt) {
@@ -330,7 +332,7 @@
             || 'is not a preset this palette offers — pick one from the list';
         },
       },
-      // Advanced mode's command *is* the message — blank builds MAV_CMD(null)
+      // Advanced mode's command *is* the message — blank builds MAV_CMD(0)
       // and sends it. Config validity is the editor's verdict (§6), so this is
       // the only thing standing between a half-filled dialog and the wire.
       // Preset mode never reads the field, hence the conditional. Two args so
@@ -362,7 +364,7 @@
       // reds only a hand-edited flow. Blank inherits the profile default.
       targetComponent:      { value: '', validate: RED.mavlink.validateUint8(0) },
       // Blank allowed: the runtime reads '' as "use the default"
-      // (mavlink-command.js — `config.timeout === '' ? DEFAULT_TIMEOUT_MS`),
+      // (mavlink-command.js — `numberOr(config.timeout, DEFAULT_TIMEOUT_MS)`),
       // so the validator must accept it. Same shape as Mission, Move, Payload.
       timeout:           { value: '10000', validate: RED.mavlink.validateAtLeast(0) },
       maxRetries:        { value: '3', validate: RED.mavlink.validateAtLeast(0, { integer: true }) },

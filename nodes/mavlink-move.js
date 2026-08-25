@@ -459,12 +459,6 @@ module.exports = function registerMavlinkMove(RED) {
             return;
           default: break; // This space intentionally left blank (§5)
         }
-        // Unknown/blank action: no case selected — same deferred crater as
-        // before (undefined message through the setpoint delivery path).
-        deliverSetpoint(
-          setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
-          action
-        );
         done();
       } catch (err) {
         failInput(node, send, err, done);

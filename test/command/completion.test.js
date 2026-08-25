@@ -149,7 +149,7 @@ test('TAKEOFF completion stays pending on an absolute frame until the AMSL targe
 /** Peer table that counts every poll's peer lookup and never satisfies. */
 function countingPeerTable() {
   const counter = { polls: 0 };
-  counter.table = { _peers: { get() { counter.polls++; return undefined; } } };
+  counter.table = { getComponent() { counter.polls++; return undefined; } };
   return counter;
 }
 

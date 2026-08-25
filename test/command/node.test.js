@@ -1077,13 +1077,13 @@ test('ack settle and close in one synchronous stack cannot spawn a zombie wait (
   assert.equal(doneErr, undefined, 'the stale run finishes quietly');
   assert.equal(emitted, false, 'nothing is emitted onto the closed node');
 
-  // The wait must be dead: checkCompletion reads peerTable._peers, so count
-  // reads through a proxy and confirm no zombie keeps polling after close.
-  // The window must exceed DEFAULT_POLL_MS (500 ms): the node does not pass
-  // pollMs, so a leaked interval first fires at 500 ms (CodeRabbit, #236).
+  // The wait must be dead: checkCompletion reads peerTable.getComponent, so
+  // count calls through a wrapper and confirm no zombie keeps polling after
+  // close. The window must exceed DEFAULT_POLL_MS (500 ms): the node does not
+  // pass pollMs, so a leaked interval first fires at 500 ms (CodeRabbit, #236).
   let reads = 0;
-  const realPeers = conn.peerTable._peers;
-  Object.defineProperty(conn.peerTable, '_peers', { get() { reads += 1; return realPeers; } });
+  const realGetComponent = conn.peerTable.getComponent.bind(conn.peerTable);
+  conn.peerTable.getComponent = (...args) => { reads += 1; return realGetComponent(...args); };
   await new Promise((resolve) => setTimeout(resolve, 550));
   assert.equal(reads, 0, 'no completion polling after close');
 });
