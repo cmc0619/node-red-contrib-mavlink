@@ -196,6 +196,21 @@ const PROFILE = {
       'a DENIED/FAILED refusal are both correct under the pymavlink-posture ruling (2026-08-23) — ' +
       'the vehicle resolves the height itself and refuses loudly without data. Only silence FAILs.',
   },
+  '43-follow-leader': {
+    restart: 'ap-fleet',
+    waitMs: 120000,
+    expect: 'leader moves, wedge re-anchors on the leader',
+    // Five-vehicle takeoff to 30 m, then the leader flies 60 m north and the
+    // In→gate→Formation(anchorMode=leader) loop chases it. delivery=confirm on
+    // every fan-out, so the whole fleet must be armable before the run.
+    prep: 'ap-arm-ready-fleet',
+    notes:
+      'The subject is the follow loop: leader move (fixed formation, sysid 1) succeeds, then at ' +
+      'least one leader-anchored re-anchor of followers 2-5 succeeds — proof the movement-driven ' +
+      'loop fired. The 15 m minMove gate seeds its baseline on the first fix without firing, so a ' +
+      'stream that never crosses the threshold re-anchors zero times; the 60 m leader move clears ' +
+      'it by design. Setup (GUIDED/arm/takeoff \u00d75) is plumbing to get airborne and reporting.',
+  },
   '04-param-defs-live': {
     restart: 'none',
     waitMs: 20000,
@@ -701,6 +716,33 @@ function verdictFrom(profile, summary, log) {
       status: 'FAIL',
       reason: `terrain goto ${record.result} — no vehicle answer (no resultCode): a node-side failure or lost ack measures nothing`,
     };
+  }
+  if (/wedge re-anchors on the leader/i.test(expect)) {
+    // The subject is the follow loop, not the setup flight. Two formation
+    // aggregates carry it: "leader move status" (the leader flew 60 m north)
+    // and "reanchor status" (followers 2-5 re-anchored on the moved leader).
+    // Both read result:'succeeded' like every confirmed formation aggregate.
+    // A re-anchor only fires when the leader crosses the 15 m minMove gate, so
+    // observing one is the proof the movement-driven loop ran end to end — the
+    // stream arrived, the gate opened, the fan-out was accepted. The generic
+    // 'good' tail must not decide this: the takeoff aggregate also says
+    // 'succeeded' and would green a run where the loop never fired.
+    const moved = summary.debug.some(
+      (d) => /leader move status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    const reanchored = summary.debug.some(
+      (d) => /reanchor status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    if (moved && reanchored) {
+      return { status: 'PASS', reason: 'leader moved and the wedge re-anchored on it — follow loop fired' };
+    }
+    if (moved || reanchored) {
+      return {
+        status: 'PARTIAL',
+        reason: `follow loop incomplete: leaderMoved=${moved} reanchored=${reanchored}`,
+      };
+    }
+    return { status: 'FAIL', reason: 'neither the leader move nor a follower re-anchor was observed' };
   }
   if (/carrier=reposition|Move reposition/i.test(expect)) {
     // #267 again, one carrier over: 27/30 send the same goto through

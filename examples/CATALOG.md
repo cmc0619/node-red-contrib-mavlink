@@ -824,6 +824,22 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
   `altRef: "terrain"`, confirm), `inject`, `debug`.
 - **Config/launch:** `restart: ap-1`.
 
+### sitl/43 — Follow-leader wedge (AP fleet)
+
+- **File:** `examples/sitl/43-follow-leader.json` · **Tab:** `SITL 43 Follow leader`
+- **Story:** Five ArduCopters GUIDED → arm → takeoff 30 m, then the leader (sysid 1)
+  flies 60 m north and followers 2-5 chase it in a 10 m wedge. An In node streams the
+  leader's `GLOBAL_POSITION_INT` at 1 Hz through a 15 m minMove gate into a
+  `formation` with `anchorMode: "leader"` — one confirmed `DO_REPOSITION` fan-out per
+  accepted update. The gate seeds its baseline on the first fix without firing, so
+  re-anchors are movement-driven, never stream-start-driven. A State watchdog holds the
+  loop while the leader link is stale (hold-on-loss, no successor promotion) and resumes
+  on a fresh heartbeat.
+- **Nodes:** config triplet, `command` ×4, `fanout` ×3, `formation` ×2, `in`, `state`,
+  `function` ×2 (minMove gate, watchdog), `debug` ×7.
+- **Config/launch:** `restart: ap-fleet`; whole fleet must be arm-ready (`prep:
+  ap-arm-ready-fleet`) — `delivery: confirm` fails the aggregate on the first refusal.
+
 ---
 
 ## 3. `examples/sitl/README.md` outline
