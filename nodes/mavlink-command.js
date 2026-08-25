@@ -366,15 +366,6 @@ module.exports = function registerMavlinkCommand(RED) {
       // below, where `delivery === 'complete'` adds the completion poll.
       switch (delivery) {
         case 'build': {
-          // A command that never resolved (hand-edited unknown preset or
-          // mode) selects no behavior (§5): a 'built' record over
-          // MAV_CMD(null) would be a false success (§0 rule 3). The wire
-          // tiers refuse the same config loud at serialize's core-integer
-          // assert instead.
-          if (commandId === null || Number.isNaN(commandId)) {
-            done();
-            return;
-          }
           const message = buildCarrierMessage(configuredCarrier, 0);
           applyActionStatus(node, 'preview', `build ${displayName}`);
           // Output 1 reports every terminal outcome, success included (§9); a

@@ -316,13 +316,14 @@
       mode:              { value: 'preset', validate: RED.mavlink.oneOf(['preset', 'advanced']) },
       // The dropdown cannot produce an unknown preset; a hand-edited flow can.
       // The runtime does not repair it (AGENTS.md, input trust) — `getPreset`
-      // returns undefined and `resolveCommandId` yields null. On the wire
-      // tiers serialize's core-integer assert refuses MAV_CMD(null) loud; the
-      // Build tier selects no behavior (§5). Neither is a deploy-time answer,
-      // and this is the only layer that can red a typo before it runs:
-      // PRESET_PARAMS enumerates exactly the offered presets (drift-tested
-      // against the library), so the check is synchronous and needs no
-      // catalog fetch. Advanced mode has its own field and rule.
+      // returns undefined and `resolveCommandId` yields null. The wire tiers
+      // refuse MAV_CMD(null) loud at serialize's core-integer assert; the
+      // Build tier constructs and reports built over it — a hand-edited flow
+      // is out of warranty, and this ring is its guard. This is the only
+      // layer that can red a typo before it runs: PRESET_PARAMS enumerates
+      // exactly the offered presets (drift-tested against the library), so
+      // the check is synchronous and needs no catalog fetch. Advanced mode
+      // has its own field and rule.
       preset: {
         value: 'arm',
         validate: function (v, _opt) {
