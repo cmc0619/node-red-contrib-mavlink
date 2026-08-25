@@ -61,13 +61,12 @@ module.exports = function registerMavlinkState(RED) {
               result: 'succeeded',
               detail: 'snapshot',
               count: peers.length,
-              // CRC validation failures on msgids the bound dialect carries:
-              // corruption on the link, counted since deploy. Read the delta
-              // between two snapshots, not the absolute value — one corrupt
-              // frame can raise the verdict more than once (lib/connection/
-              // wire.js). A dialect mismatch is not corruption; it arrives as
-              // an UNKNOWN_<id> message and never lands here.
-              invalidPackets: connectionNode.invalidPacketCount(),
+              // Failures on msgids the bound dialect carries, counted since
+              // deploy: read the delta between two snapshots, since one
+              // corrupt frame can fail the check more than once
+              // (lib/connection/wire.js). A dialect mismatch is not
+              // corruption; it arrives as an UNKNOWN_<id> message.
+              crcFailures: connectionNode.crcFailureCount(),
             }),
           ]);
         }

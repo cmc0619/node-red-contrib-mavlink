@@ -45,10 +45,10 @@ function makeNode(config, nodesById = {}) {
   return new Node(config);
 }
 
-function conn(invalidPackets = 0) {
+function conn(crcFailures = 0) {
   const peerTable = new EventEmitter();
   peerTable.snapshot = () => [{ sysid: 1, components: [{ compid: 1 }] }];
-  return { id: 'conn', peerTable, invalidPacketCount: () => invalidPackets };
+  return { id: 'conn', peerTable, crcFailureCount: () => crcFailures };
 }
 
 /** Drive one input; resolve on done() with everything the input emitted. */
@@ -95,7 +95,7 @@ test('the snapshot status record carries the link corruption count', async () =>
     { conn: conn(4) }
   );
   const { out } = await drive(node, { payload: {} });
-  assert.equal(out[0][1].invalidPackets, 4);
+  assert.equal(out[0][1].crcFailures, 4);
   assert.equal(out[0][0].payload.length, 1, 'the peers payload on output 0 is untouched');
 });
 

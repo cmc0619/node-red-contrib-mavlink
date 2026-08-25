@@ -11,7 +11,7 @@ test('mavlink-state node emits peer table snapshots on demand', () => {
         return [{ sysid: 4, components: [{ compid: 1, armed: true }] }];
       },
     },
-    invalidPacketCount: () => 0,
+    crcFailureCount: () => 0,
   };
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-state')(RED);

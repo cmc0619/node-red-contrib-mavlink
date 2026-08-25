@@ -86,7 +86,7 @@ test('invalid-packet count reads 0 before the wire exists', () => {
   // The State node's snapshot reads this on every input, including one that
   // lands on a Connection whose start() has not built a wire yet.
   const { connection } = build();
-  assert.equal(connection.invalidPacketCount(), 0);
+  assert.equal(connection.crcFailureCount(), 0);
 });
 
 test('start binds the socket and reports connected', async () => {
