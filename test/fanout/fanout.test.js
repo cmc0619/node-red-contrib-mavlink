@@ -784,8 +784,11 @@ test('an east offset scales through cos(lat), not the latitude divisor', async (
 test('a non-finite offset rides to the wire instead of collapsing to the base coordinate', async () => {
   // An offset the operator asked for and the arithmetic cannot honour must not
   // arrive as "no offset": that is a base-coordinate send reported as success
-  // (§0 rule 3). The non-finite value carries through to the integer field,
-  // where lib/connection/wire.js judges finiteness and refuses it loudly.
+  // (§0 rule 3). What the value meets after that is the surface's business —
+  // an INT surface puts it on a core integer field, where lib/connection/
+  // wire.js judges finiteness and refuses the frame; the COMMAND_LONG pin
+  // below rides it out as the NaN float MAVLink allows (§14.65). Neither is
+  // the defect; silently becoming 0 was.
   const connection = connectionStub([peer(1)]);
 
   await executeFanout({ selection: { mode: 'all' },
@@ -803,6 +806,31 @@ test('a non-finite offset rides to the wire instead of collapsing to the base co
   const fields = connection.sends[0].message.fields;
   assert.ok(Number.isNaN(fields.x), 'a NaN northing stays NaN on the latitude field');
   assert.notEqual(fields.x, 470000000, 'never the unoffset base latitude');
+});
+
+test('a non-finite offset rides the COMMAND_LONG float surface too', async () => {
+  // COMMAND_LONG carries lat/lon on param5/param6 as float degrees, and the
+  // serializer judges finiteness on core *integer* fields only — a NaN float
+  // is legal MAVLink (§14.65) and reaches the vehicle. Pinned because the
+  // guarantee this pair makes is about the offset never becoming 0, not about
+  // where it stops (Gitar, #390).
+  const connection = connectionStub([peer(1)]);
+
+  await executeFanout({ selection: { mode: 'all' },
+    connection,
+    message: {
+      name: 'COMMAND_LONG',
+      fields: { target_system: 0, target_component: 0, command: 192, param5: 47, param6: 8, param7: 30 },
+    },
+    members: [{ sysid: 1, north: NaN, east: 10 }],
+    mode: 'sequential',
+    delivery: 'send',
+    intervalMs: 0,
+  });
+
+  const fields = connection.sends[0].message.fields;
+  assert.ok(Number.isNaN(fields.param5), 'a NaN northing stays NaN on the float latitude');
+  assert.notEqual(fields.param5, 47, 'never the unoffset base latitude');
 });
 
 test('offsets patch no coordinate on a frame whose metre scale is not measured', async () => {
