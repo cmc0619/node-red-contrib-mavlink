@@ -25,12 +25,10 @@
  */
 
 const {
-  PARAM_ENCODING,
   buildParamMessage,
   createParamListCollector,
   matchesParamEcho,
   matchesParamReadReply,
-  resolveParamEncoding,
 } = require('../lib/param');
 const {
   readParamDefs,
@@ -284,24 +282,6 @@ module.exports = function registerMavlinkParam(RED) {
           profile,
           connectionNode: connNode,
         });
-
-        // A set's encoding resolves once, here, and rides the request as the
-        // explicit override — the builder's and echo matcher's own ladders
-        // short-circuit on it (first rung), so all three read one resolution.
-        // Nothing resolving is settled at the report point (§9, owner ruling
-        // D2): encoding the value anyway would put an invented NaN on the wire
-        // for a value the operator actually supplied (§4). The value itself is
-        // never inspected — an operator's own NaN still rides (§0).
-        if (request.action === 'set') {
-          request.encoding = resolveParamEncoding(request);
-          if (
-            request.encoding !== PARAM_ENCODING.BYTEWISE &&
-            request.encoding !== PARAM_ENCODING.C_CAST
-          ) {
-            // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: the resolution depends on runtime state (payload override, live capability bits), so it settles as a failed record, not a deploy ring
-            throw new Error('no param encoding resolves — set paramEncoding or use a named firmware');
-          }
-        }
 
         const message = buildParamMessage(request);
 

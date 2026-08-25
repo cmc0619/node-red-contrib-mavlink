@@ -216,8 +216,8 @@ test('resolveParamEncoding: known firmware when capabilities absent; anything el
   // value that explicitly disables firmware-specific behaviour) all resolve to
   // no encoding at all. Bytewise and C-cast disagree on how an integer rides
   // the PARAM_VALUE float, so there is no direction to fall to — and none is
-  // invented: mavlink-param settles a failed record at the report point (§9)
-  // before a set with no resolution reaches the wire.
+  // invented: encodeParamValue matches no case and writes the float's NaN,
+  // which no echo confirms.
   for (const firmware of [undefined, 'PX4', 'apm', 'custom']) {
     assert.equal(resolveParamEncoding({ firmware }), undefined);
   }
