@@ -4,7 +4,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
-## [Unreleased]
+## [0.5.1] "Nap of the earth" - 2026-08-25
 
 ### Added
 
@@ -54,6 +54,12 @@ config-node shapes and message contracts may still change without a major bump.
   dropped silently, so the GCS never registers itself as a vehicle and In
   nodes never see their own commands echoed back. A companion sharing our
   system id under a different component id still counts as a real peer.
+- **SITL example 22 no longer craters on deploy.** Its two mission nodes
+  shipped with no `items` key at all — legal-looking, since blank means "items
+  come from the payload" — but an Admin-API deploy keeps an omitted key
+  absent, so the node's constructor read `undefined` and threw. The example now
+  serializes the editor's own default, and a contract pin requires `items` on
+  every shipped mission node so the class cannot regress again.
 
 ## [0.5.0] "Drive to final" - 2026-08-22
 
