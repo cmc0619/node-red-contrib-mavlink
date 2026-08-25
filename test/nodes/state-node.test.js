@@ -45,10 +45,10 @@ function makeNode(config, nodesById = {}) {
   return new Node(config);
 }
 
-function conn() {
+function conn(invalidPackets = 0) {
   const peerTable = new EventEmitter();
   peerTable.snapshot = () => [{ sysid: 1, components: [{ compid: 1 }] }];
-  return { id: 'conn', peerTable };
+  return { id: 'conn', peerTable, invalidPacketCount: () => invalidPackets };
 }
 
 /** Drive one input; resolve on done() with everything the input emitted. */
@@ -79,6 +79,24 @@ test('snapshot mode still answers input with the peer-table view', async () => {
   assert.equal(err, undefined);
   assert.equal(out[0][0].payload.length, 1);
   assert.equal(out[0][1].result, 'succeeded');
+});
+
+test('the snapshot status record carries the link corruption count', async () => {
+  // Corrupt frames are dropped inside the splitter, so a flow's only view of a
+  // deteriorating link is this number on output 1 — poll it and subtract.
+  const node = makeNode(
+    {
+      connection: 'conn',
+      mode: 'snapshot',
+      events: '',
+      targetSystem: '',
+      targetComponent: '',
+    },
+    { conn: conn(4) }
+  );
+  const { out } = await drive(node, { payload: {} });
+  assert.equal(out[0][1].invalidPackets, 4);
+  assert.equal(out[0][0].payload.length, 1, 'the peers payload on output 0 is untouched');
 });
 
 test('feed mode subscribes to the comma-joined events the editor saved', () => {

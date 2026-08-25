@@ -295,3 +295,38 @@ test('a signed UNKNOWN_<id> frame carries its signature verdict like any other',
     'the signature block is not mistaken for payload'
   );
 });
+
+test('a CRC-corrupt frame on a known msgid is counted; clean and UNKNOWN frames are not', () => {
+  // A failed CRC means the bytes lied, so the sysid cannot be trusted enough to
+  // build a message from — the frame is dropped inside the splitter and the
+  // tally is the only thing a flow can see. It is per wire: every endpoint on
+  // one Connection adds to the same number.
+  const minimal = createWire({ bundle: loadBundled('minimal') });
+  const common = createWire({ bundle: loadBundled('common') });
+  assert.equal(minimal.invalidPacketCount(), 0);
+
+  const full = heartbeatFrame(minimal);
+  assert.equal(minimal.decode(full, EP_A).length, 1);
+  assert.equal(minimal.invalidPacketCount(), 0, 'a frame that verifies is not corruption');
+
+  // A msgid the bound dialect does not carry is a dialect mismatch, and it
+  // already surfaces as a message — it must leave the corruption tally alone.
+  const paramValue = common.serialize(
+    {
+      name: 'PARAM_VALUE',
+      fields: { param_id: 'X', param_value: 1, param_type: 9, param_count: 1, param_index: 0 },
+    },
+    { sysid: 7, compid: 1, seq: 0 }
+  );
+  assert.equal(minimal.decode(paramValue, EP_A)[0].name, 'UNKNOWN_22');
+  assert.equal(minimal.invalidPacketCount(), 0, 'a dialect mismatch is not a bad link');
+
+  // Last byte of a HEARTBEAT frame is the high half of its checksum.
+  const corrupt = Buffer.from(full);
+  corrupt[corrupt.length - 1] ^= 0xff;
+  assert.equal(minimal.decode(corrupt, EP_A).length, 0, 'the corrupt frame is still dropped');
+  assert.equal(minimal.invalidPacketCount(), 1);
+
+  assert.equal(minimal.decode(corrupt, EP_B).length, 0);
+  assert.equal(minimal.invalidPacketCount(), 2, 'endpoints share one Connection-wide count');
+});

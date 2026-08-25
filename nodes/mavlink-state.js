@@ -61,6 +61,11 @@ module.exports = function registerMavlinkState(RED) {
               result: 'succeeded',
               detail: 'snapshot',
               count: peers.length,
+              // Frames whose CRC failed on a msgid the bound dialect carries:
+              // corruption on the link, counted since deploy. A dialect
+              // mismatch is not corruption — it arrives as an UNKNOWN_<id>
+              // message and never lands here. Two snapshots apart give a rate.
+              invalidPackets: connectionNode.invalidPacketCount(),
             }),
           ]);
         }
