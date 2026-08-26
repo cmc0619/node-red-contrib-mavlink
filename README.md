@@ -44,7 +44,7 @@ Requires Node.js 20+ and Node-RED 4.0+.
 
 ## Examples
 
-Importable flows ship with the package — 23 of them, plus 43 more for a live SITL rig. In
+Importable flows ship with the package — 24 of them, plus 43 more for a live SITL rig. In
 the Node-RED editor: **Import → Examples → @cmc0619/node-red-contrib-mavlink**.
 
 A few to start with; every flow is indexed in
@@ -61,6 +61,7 @@ which ships in the package too.
 | `10-sunday-stroll.json` | A full flight: arm, takeoff, waypoints, return |
 | `24-formation-nudge.json` | Formation node moving a group as one |
 | `27-safety-estop.json` | Emergency force-disarm and flight termination |
+| `28-log-replayer.json` | Replay a recorded telemetry capture with no vehicle or SITL — same message shape as mavlink-in |
 | `sitl/20-completion-takeoff.json` | Arm + completion-tier takeoff against ArduPilot Copter SITL |
 | `sitl/31-fanout-sequential-five.json` | Five ArduPilot SITL sysids 1–5 sequential arm with 200 ms pacing |
 | `sitl/04-param-defs-live.json` | Param read, set, and list — with live definition catalog |

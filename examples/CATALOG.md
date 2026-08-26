@@ -9,7 +9,7 @@ note from when the set was assembled — the JSON files and
 Contents:
 
 1. [Node/preset cheat-sheet](#0-cheat-sheet) — the exact strings the flows must use
-2. [Regular examples (10–27)](#1-regular-examples-1027)
+2. [Regular examples (10–28)](#1-regular-examples-1028)
 3. [SITL folder (`examples/sitl/`)](#2-sitl-folder-examplessitl) — see also [`examples/sitl/README.md`](sitl/README.md)
 4. [`examples/sitl/README.md` outline](#3-examplessitlreadmemd-outline)
 
@@ -106,10 +106,11 @@ Standard first-ArduPilot binding is **bind `127.0.0.1:14550` → remote `127.0.0
 
 ---
 
-## 1. Regular examples (10–27)
+## 1. Regular examples (10–28)
 
 Product demos that exercise every palette node. They assume *a* link (SITL or a real
-vehicle) but are not firmware pain-tests — those live in `examples/sitl/`. Prefer a single
+vehicle — 28 is the exception: it replays a recording) but are not firmware pain-tests —
+those live in `examples/sitl/`. Prefer a single
 importable tab per file with shared config nodes inline.
 
 ### 10 — Sunday Drone Stroll  ⭐
@@ -443,6 +444,29 @@ importable tab per file with shared config nodes inline.
   coalesced or dropped (§7).
 - **Inject buttons:** **`⚠ Force disarm (21196)`**, **`⚠⚠ Flight termination`**.
 
+### 28 — Telemetry log replayer (no hardware)
+
+- **File:** `examples/28-log-replayer.json`
+- **Tab label:** `28 Telemetry log replayer`
+- **Story:** Develop and debug dashboards and downstream flows with no vehicle, no SITL,
+  no link. A template node embeds a 38 s ArduCopter takeoff capture (HEARTBEAT, ATTITUDE,
+  GLOBAL_POSITION_INT, GPS_RAW_INT, SYS_STATUS, BATTERY_STATUS, STATUSTEXT) as JSONL, and a
+  small engine re-emits each line through a variable-rate delay loop in the **exact shape
+  `mavlink-in` produces** — `topic` = message name, `payload` = decoded fields, plus
+  `sysid`/`compid`/`trusted`. Wire the output junction anywhere an In node would feed and
+  the consumer cannot tell the difference. The only core-node example: no config triplet.
+- **Nodes:** `inject`, `template` (the embedded capture), `function` ×5 (parse, playback
+  control, speed, loop toggle, engine), `delay` (paces each message by the capture's own
+  timestamps ÷ speed), `junction` (replay output), `debug`. No mavlink nodes at all.
+- **Key config:** nothing to configure — Load & Play fires once on deploy. Log line format
+  is `{"t":ms,"name","sysid","compid","payload"}`; replace the template's contents with your
+  own recording (same format, e.g. a file-out capture off `mavlink-in`) to replay a real
+  flight. Honest differences from live traffic (all in the tab comment): `trusted` is
+  always false, 64-bit fields (`GPS_RAW_INT.time_usec`) arrive as numbers not BigInt (JSON
+  has none), and no Connection exists so the peer table and State events stay silent.
+- **Inject buttons:** **`▶ Load & Play`**, **`▶ Play`**, **`⏸ Pause`**, **`⏮ Restart`**,
+  **`0.5x`**/**`1x`**/**`2x`**/**`4x`**, **`🔁 Loop toggle`**.
+
 ---
 
 ## 2. SITL folder (`examples/sitl/`)
@@ -507,7 +531,7 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 ### sitl/05 — Companion ArduPilot (sysid 20)
 
 - **File:** `examples/sitl/05-companion-ap.json` · **Tab:** `SITL 05 Companion AP`
-- **Story:** Node-RED companion identity sharing sysid 20 / compid 191 on the lab companion
+- **Story:** Companion identity sharing sysid 20 / compid 191 on the lab companion
   ports.
 - **Key config:** bind `14540`→`14541`; Docker service `ap-companion-20`.
 
@@ -531,7 +555,7 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 - **File:** `examples/sitl/08-param-echo-float32.json` · **Tab:** `SITL 08 Param float32 echo`
 - **Story:** Focused REAL32 set → echo-confirm → read on AP (`LOIT_SPEED_MS`) and PX4
   (`MPC_XY_VEL_MAX`).
-- **Nodes:** dual connections, `param` set/read per stack, `inject`, `debug`.
+- **Nodes:** config triplet, `param` set/read per stack, `inject`, `debug`.
 
 ### sitl/09 — In → Build → Out
 
@@ -719,7 +743,7 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 
 ### sitl/31 — Five-vehicle fan-out pacing
 
-- **File:** `examples/sitl/31-fanout-sequential-five.json` · **Tab:** `SITL 31 Fan-out ×5 pacing`
+- **File:** `examples/sitl/31-fanout-sequential-five.json` · **Tab:** `SITL 31 Fanout ×5 pacing`
 - **Story:** Sequential arm across ArduPilot sysids 1–5 with 200 ms pacing, Build-tier preview first.
 - **Nodes:** config triplet, `command` (Build, Arm) → 2× `fanout`, `inject`, `debug`.
 - **Config/launch:** five ArduCopters; `restart: ap-fleet`.
