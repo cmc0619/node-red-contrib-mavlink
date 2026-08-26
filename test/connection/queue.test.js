@@ -161,29 +161,70 @@ test('a Liveness replacement moves behind other identities and the replaced item
   assert.equal(q.size(), 0);
 });
 
-test('a Streaming coalesce moves behind other keys and the stale item never surfaces', () => {
+test('a Streaming coalesce keeps its position and the newest value surfaces', () => {
+  // Updated for age-inheriting in-place replacement (PR ports/wire-queue-armor):
+  // a replaced slot keeps the position and age of its key's first arrival
+  // instead of re-enqueueing at the tail. The old tail-move let a producer
+  // outrunning the link reset its own age on every tick, so a continuously
+  // replaced slot never promoted toward Control and never aged out as the
+  // overflow drop candidate — a starvation hole. Liveness is unchanged:
+  // band 1 never ages, so its replacement still moves to the tail.
   const q = new OutboundQueue({ now: () => 0 });
   q.enqueue({ band: BAND.STREAMING, message: { name: 'SP', v: 1 }, identityId: 'g', target: 'a' });
   q.enqueue({ band: BAND.STREAMING, message: { name: 'SP', v: 1 }, identityId: 'g', target: 'b' });
   q.enqueue({ band: BAND.STREAMING, message: { name: 'SP', v: 2 }, identityId: 'g', target: 'a' });
 
-  assert.deepEqual(
-    [q.dequeue().target, q.dequeue().target],
-    ['b', 'a'] // the coalesced 'a' re-enqueued at the tail
-  );
+  // 'a' kept its head position; the dequeued value is the newest (v: 2),
+  // and the stale v: 1 never surfaces.
+  const first = q.dequeue();
+  assert.equal(first.target, 'a');
+  assert.equal(first.message.v, 2);
+  assert.equal(q.dequeue().target, 'b');
   assert.equal(q.dequeue(), null);
 });
 
-test('Streaming overflow drops the oldest as reordered by coalescing', () => {
+test('a coalesced Streaming replacement inherits the slot’s age and promotes on it', () => {
+  const clock = fakeClock(0);
+  const q = new OutboundQueue({ now: clock.now, ageStepMs: 100 });
+
+  q.enqueue({ band: BAND.STREAMING, message: { name: 'SP', v: 1 }, identityId: 'g', target: 'a' });
+  clock.set(100);
+  const replacement = q.enqueue({
+    band: BAND.STREAMING,
+    message: { name: 'SP', v: 2 },
+    identityId: 'g',
+    target: 'a',
+  });
+  assert.equal(replacement.enqueuedAt, 0, 'the replacement inherits the slot’s original enqueue time');
+  assert.equal(replacement.message.v, 2, 'the newest value still wins');
+  q.enqueue({ band: BAND.BULK, message: msg('laterBulk'), identityId: 'g' });
+
+  // At t=300 the streaming slot has aged three full steps off its inherited
+  // t=0 and clamps at Control; the younger bulk has aged two and sits at
+  // band 2 as well — but the slot's original seq wins the tie.
+  clock.set(300);
+  assert.equal(q.dequeue(clock.now()).message.name, 'SP', 'the aged slot promotes ahead of the later bulk item');
+  assert.equal(q.dequeue(clock.now()).message.name, 'laterBulk');
+});
+
+test('Streaming overflow drops the oldest by first arrival, unchanged by coalescing', () => {
+  // Updated for age-inheriting in-place replacement (PR ports/wire-queue-armor):
+  // coalescing no longer reorders the band, so the oldest slot is the key
+  // that arrived first — a replaced slot stays the drop candidate it was.
+  // (The previous version of this test used distinct message names for the
+  // "replacement", which never coalesced at all — the name is part of the
+  // coalescing key.)
   const q = new OutboundQueue({ now: () => 0, capacities: { [BAND.STREAMING]: 2 } });
-  q.enqueue({ band: BAND.STREAMING, message: msg('A1'), identityId: 'g', target: 'a' });
+  q.enqueue({ band: BAND.STREAMING, message: { name: 'SP', v: 1 }, identityId: 'g', target: 'a' });
   q.enqueue({ band: BAND.STREAMING, message: msg('B'), identityId: 'g', target: 'b' });
-  q.enqueue({ band: BAND.STREAMING, message: msg('A2'), identityId: 'g', target: 'a' });
+  q.enqueue({ band: BAND.STREAMING, message: { name: 'SP', v: 2 }, identityId: 'g', target: 'a' });
   q.enqueue({ band: BAND.STREAMING, message: msg('C'), identityId: 'g', target: 'c' });
 
-  // Coalescing moved 'a' to the tail, so 'B' was the oldest when 'C' overflowed.
+  // The replaced 'a' slot kept its head position, so it (carrying v: 2) was
+  // the oldest when 'C' overflowed — 'B' and 'C' survive.
+  assert.equal(q.sizeOf(BAND.STREAMING), 2);
   const names = [q.dequeue().message.name, q.dequeue().message.name];
-  assert.deepEqual(names, ['A2', 'C']);
+  assert.deepEqual(names, ['B', 'C']);
 });
 
 test('items aged to the clamp in different bands interleave by insertion order', () => {

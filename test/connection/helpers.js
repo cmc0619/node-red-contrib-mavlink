@@ -103,7 +103,9 @@ function fakeWire() {
 
 /**
  * Build an inbound datagram buffer carrying one DecodedFrame, with signing
- * fields defaulted to an unsigned frame.
+ * fields defaulted to an unsigned frame and `crcVerified` defaulted true (a
+ * known-msgid frame, which is what most runtime tests inject). Pass
+ * `crcVerified: false` to model an UNKNOWN_<id> frame.
  *
  * @param {object} frame  partial DecodedFrame ({ name, sysid, compid, fields })
  * @returns {Buffer}
@@ -115,6 +117,7 @@ function frameBuffer(frame) {
       signatureValid: false,
       linkId: null,
       timestamp: null,
+      crcVerified: true,
       fields: {},
       ...frame,
     })

@@ -51,6 +51,25 @@ test('a source sysid 0 creates no peer — no vehicle sources the broadcast id (
   assert.deepEqual(table.snapshot(), []);
 });
 
+test('a GCS-range sysid (>= 250) is tracked but its endpoint is never learned', () => {
+  // 250–255 is the GCS range: a ground station is never a destination for
+  // vehicle-directed traffic, so its frames enrich the record (a State node
+  // can show it) while endpoint recording — and with it
+  // endpointsForBroadcast eligibility — is refused.
+  const table = new PeerTable({ now: () => 0 });
+  table.update(heartbeat({ type: 6, autopilot: 8, base_mode: 0 }, 255, 190), EP1);
+  table.update(heartbeat({ type: 6, autopilot: 8, base_mode: 0 }, 250, 190), EP2);
+  assert.equal(table.size(), 2, 'GCS peers are still tracked');
+  assert.equal(table.endpointFor(255, 190), null);
+  assert.equal(table.endpointFor(250, 190), null);
+  assert.deepEqual(table.endpointsForBroadcast(0), []);
+
+  // A vehicle on the same endpoints is unaffected.
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 1, 1), EP1);
+  assert.deepEqual(table.endpointFor(1, 1), EP1);
+  assert.deepEqual(table.endpointsForBroadcast(1), [EP1]);
+});
+
 test('table is keyed by sysid with components nested underneath', () => {
   const table = new PeerTable({ now: () => 0 });
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 1, 1), EP1);
@@ -429,7 +448,7 @@ test('AVAILABLE_MODES entries are cached incrementally and the mode ladder reads
   const frame = (fields) => ({ name: 'AVAILABLE_MODES', sysid: 1, compid: 1, fields });
   table.update(frame({
     number_modes: 25, mode_index: 5, standard_mode: 0, custom_mode: 4,
-    properties: 0, mode_name: 'Guided  ',
+    properties: 0, mode_name: 'Guided\u0000\u0000',
   }), EP1);
   table.update(frame({
     number_modes: 25, mode_index: 6, standard_mode: 0, custom_mode: 6, properties: 0, mode_name: 'RTL',
