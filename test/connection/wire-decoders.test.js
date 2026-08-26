@@ -255,6 +255,7 @@ test('a msgid the bound dialect does not carry surfaces as UNKNOWN_<id>, not sil
   assert.equal(frames[0].sysid, 7);
   assert.equal(frames[0].compid, 1);
   assert.equal(frames[0].fields.msgid, 22);
+  assert.equal(frames[0].crcVerified, false, 'an unknown msgid is unverifiable by construction');
   // Byte-for-byte against the wire, not just "is a Buffer": node-mavlink
   // hands out a fixed 255-byte payload buffer, so an untrimmed frame passes
   // an isBuffer check while carrying 230 bytes of padding the sender never
@@ -265,6 +266,7 @@ test('a msgid the bound dialect does not carry surfaces as UNKNOWN_<id>, not sil
     'the payload is exactly the bytes that arrived'
   );
   assert.equal(frames[1].name, 'HEARTBEAT', 'known frames are unaffected');
+  assert.equal(frames[1].crcVerified, true, 'a known msgid whose CRC checked out');
 });
 
 test('a signed UNKNOWN_<id> frame carries its signature verdict like any other', () => {
