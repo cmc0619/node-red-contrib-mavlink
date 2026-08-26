@@ -448,7 +448,7 @@ test('AVAILABLE_MODES entries are cached incrementally and the mode ladder reads
   const frame = (fields) => ({ name: 'AVAILABLE_MODES', sysid: 1, compid: 1, fields });
   table.update(frame({
     number_modes: 25, mode_index: 5, standard_mode: 0, custom_mode: 4,
-    properties: 0, mode_name: 'Guided  ',
+    properties: 0, mode_name: 'Guided\u0000\u0000',
   }), EP1);
   table.update(frame({
     number_modes: 25, mode_index: 6, standard_mode: 0, custom_mode: 6, properties: 0, mode_name: 'RTL',
