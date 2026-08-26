@@ -134,7 +134,13 @@ test('Connection editor offers UDP, TCP, and serial without “not yet” stubs'
   assert.ok(!html.includes('(not yet)'), 'transport options must not be stubbed');
   assert.match(html, /function refreshTransportRows/, 'mode toggles transport field rows');
   assert.match(html, /node-config-input-serialPath/, 'serial path field is present');
-  assert.match(html, /node-config-input-baudRate/, 'baud field is present');
+  // A closed pulldown, not a number box: the rates are a fixed vocabulary,
+  // so the control must not accept anything the list does not offer.
+  assert.match(
+    html,
+    /<select id="node-config-input-baudRate"><\/select>/,
+    'baud field is a select, painted from SERIAL_BAUDS'
+  );
   assert.match(
     html,
     /serialPath:[\s\S]*validate:[\s\S]*mode !== 'serial'[\s\S]*!RED\.mavlink\.isBlank\(v\)/,
@@ -277,9 +283,15 @@ test('transport numeric fields carry range rings; bind host is required for IP m
   assert.equal(defaults.broadcastPort.validate.call({ id: 'c1', mode: 'serial' }, '0', {}), true);
 
   assert.equal(defaults.baudRate.validate.call({ id: 'c1', mode: 'serial' }, '57600', {}), true);
+  // Closed list: a rate off it reds, whether it is nonsense or merely a real
+  // baud the dropdown does not offer.
   assert.match(
     String(defaults.baudRate.validate.call({ id: 'c1', mode: 'serial' }, '-1', {})),
-    /positive baud/
+    /must be one of/
+  );
+  assert.match(
+    String(defaults.baudRate.validate.call({ id: 'c1', mode: 'serial' }, '1000000', {})),
+    /must be one of/
   );
   assert.equal(defaults.baudRate.validate.call({ id: 'c1', mode: 'udp' }, 'garbage', {}), true);
 });
