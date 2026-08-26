@@ -1488,11 +1488,12 @@ test('reconnect demotes learned endpoints — primacy is re-established by the f
   connection.close();
 });
 
-test('reconnect resets inbound replay memory — a clock-reset peer re-bootstraps via first contact', async () => {
-  // Without resetInbound() the pre-reconnect high-water mark would read the
-  // returning vehicle's lower timestamps as replays and lock it out. The
-  // one-minute first-contact floor (signing.js) is the replay defence while
-  // no record exists, so this re-opens no replay window wider than bootstrap.
+test('reconnect keeps inbound replay memory — a below-high-water frame is still refused', async () => {
+  // Deliberate: a reconnect does NOT clear the replay store. Clearing it would
+  // let anyone able to drop the link reset the high-water marks and then land a
+  // captured frame inside the one-minute first-contact floor. The cost is that
+  // a peer whose clock jumped backwards during the outage stays refused until
+  // its timestamps pass the old mark, which is the safer of the two failures.
   const { connection, transports, redials } = reconnectBuild({
     signing: { linkId: 0, signOutbound: false, requireSigned: true, acceptInvalid: false, hasKey: true },
   });
@@ -1529,12 +1530,12 @@ test('reconnect resets inbound replay memory — a clock-reset peer re-bootstrap
   await delay(0);
   assert.equal(connection.getState(), STATE.CONNECTED);
 
-  // Below the pre-reconnect high-water: a replay-or-out-of-order rejection
-  // before the reset, a first-contact bootstrap after it.
+  // Below the pre-reconnect high-water: refused on the far side of the redial
+  // exactly as it would have been before it, and the mark does not move.
   transports[1].emit('message', signed(t0 + 100000));
-  assert.equal(received.length, 3, 'accepted via the first-contact path, not rejected as replay');
-  assert.deepEqual(rejected, []);
-  assert.equal(connection.signing.lastInboundTimestamp(1, 1, 0), t0 + 100000);
+  assert.equal(received.length, 2, 'refused as a replay — the store survived the reconnect');
+  assert.equal(rejected.length, 1);
+  assert.equal(connection.signing.lastInboundTimestamp(1, 1, 0), t0 + 200000, 'high-water mark unmoved');
   connection.close();
 });
 
