@@ -353,6 +353,78 @@ test('require-signed drops an unsigned inbound frame and emits rejected', async 
   connection.close();
 });
 
+test('an UNKNOWN_<id> frame dispatches but records no endpoint (crcVerified gating)', async () => {
+  // An unknown msgid is CRC-unverifiable by construction, so the frame is
+  // forgeable by anyone; letting it record its sender's endpoint would point
+  // directed sends and broadcast fan-out at a spoofed address.
+  const { connection, dg } = build();
+  await connection.start();
+
+  const received = [];
+  connection.subscribe(null, (m) => received.push(m));
+  dg.sockets[0].receive(
+    frameBuffer({ name: 'UNKNOWN_22', sysid: 7, compid: 1, crcVerified: false, fields: { msgid: 22 } }),
+    { address: '10.0.0.5', port: 14550 }
+  );
+
+  assert.equal(received.length, 1, 'the frame still reaches subscribers');
+  assert.equal(received[0].name, 'UNKNOWN_22');
+  assert.equal(connection.peerTable.endpointFor(7, 1), null, 'no endpoint was learned');
+  assert.deepEqual(connection.peerTable.endpointsForBroadcast(1), [], 'no broadcast destination either');
+
+  // A subsequent CRC-verified frame from the same peer learns it as always.
+  dg.sockets[0].receive(
+    frameBuffer({ name: 'HEARTBEAT', sysid: 7, compid: 1, fields: { type: 2, autopilot: 3, base_mode: 0 } }),
+    { address: '10.0.0.5', port: 14550 }
+  );
+  assert.deepEqual(connection.peerTable.endpointFor(7, 1), { address: '10.0.0.5', port: 14550 });
+  connection.close();
+});
+
+test('an allowlisted unsigned frame under require-signed dispatches untrusted and records no endpoint', async () => {
+  const { connection, dg } = build({
+    signing: { linkId: 0, requireSigned: true, signOutbound: false, acceptInvalid: false, hasKey: false },
+  });
+  await connection.start();
+
+  const received = [];
+  connection.subscribe(null, (m) => received.push(m));
+  dg.sockets[0].receive(
+    frameBuffer({ name: 'RADIO_STATUS', sysid: 7, compid: 1, fields: {} }),
+    { address: '10.0.0.5', port: 14550 }
+  );
+
+  assert.equal(received.length, 1, 'the allowlisted frame still dispatches');
+  assert.equal(received[0].trusted, false, 'flagged untrusted (§7)');
+  assert.equal(connection.peerTable.endpointFor(7, 1), null, 'an untrusted frame teaches the table nothing');
+  assert.deepEqual(connection.peerTable.endpointsForBroadcast(1), []);
+  connection.close();
+});
+
+test('a GCS-range sysid (>= 250) never becomes a broadcast destination', async () => {
+  // 250–255 is the GCS range: a ground station heartbeat must not recruit
+  // its address into endpointsForBroadcast, or every target_system = 0 frame
+  // would be fanned out at the other GCS. (250, not the harness's own
+  // bound-identity echo at 255/190.)
+  const { connection, dg } = build();
+  await connection.start();
+
+  dg.sockets[0].receive(
+    frameBuffer({
+      name: 'HEARTBEAT',
+      sysid: 250,
+      compid: 190,
+      fields: { type: 6, autopilot: 8, base_mode: 0, custom_mode: 0, system_status: 4 },
+    }),
+    { address: '10.0.0.66', port: 14550 }
+  );
+
+  assert.equal(connection.peerTable.has(250), true, 'the GCS is still visible to mavlink-state');
+  assert.equal(connection.peerTable.endpointFor(250, 190), null, 'its endpoint is not learned');
+  assert.deepEqual(connection.peerTable.endpointsForBroadcast(0), [], 'no broadcast destination');
+  connection.close();
+});
+
 test('sign-outbound with no key fails the connection closed on start', async () => {
   const { connection } = build({
     signing: { linkId: 0, signOutbound: true, requireSigned: false, acceptInvalid: false, hasKey: false },
@@ -1104,6 +1176,7 @@ test('close() disarms a pending write timer (#244)', async () => {
 
 const { EventEmitter } = require('node:events');
 const { RECONNECT_BASE_MS, RECONNECT_CAP_MS } = require('../../lib/connection/runtime');
+const { timestampFromMs } = require('../../lib/connection/signing');
 
 /**
  * A deterministic reconnect harness: stub transports from an injected factory
@@ -1117,9 +1190,11 @@ const { RECONNECT_BASE_MS, RECONNECT_CAP_MS } = require('../../lib/connection/ru
  *   emitting a transport error first the way a real bind failure does
  * @param {boolean} [options.holdRedialOpen]  redial opens hang until the test
  *   releases them via `releaseHeldOpen()` — for close-vs-open races
+ * @param {object} [options.signing]  signing config override (reconnect
+ *   hygiene tests exercise the inbound replay store)
  * @returns {object}
  */
-function reconnectBuild({ openFailures = 0, failFirstOpen = false, holdRedialOpen = false } = {}) {
+function reconnectBuild({ openFailures = 0, failFirstOpen = false, holdRedialOpen = false, signing } = {}) {
   const transports = [];
   const timeouts = [];
   const warns = [];
@@ -1172,7 +1247,7 @@ function reconnectBuild({ openFailures = 0, failFirstOpen = false, holdRedialOpe
       identities: [GCS],
       defaultIdentityId: 'gcs',
       boundIdentityIds: ['gcs'],
-      signing: { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
+      signing: signing || { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
       heartbeat: { intervalMs: 1000, staleMs: 5000, expireMs: 15000 },
     },
     {
@@ -1374,6 +1449,93 @@ test('a transport that never opened does not enter the redial loop — deploy fa
   await assert.rejects(() => connection.start(), /EADDRINUSE/);
   assert.equal(connection.getState(), STATE.ERROR, 'pre-establishment errors stay terminal (§2)');
   assert.equal(redials().length, 0, 'no redial is ever armed for a config that never worked');
+});
+
+test('reconnect demotes learned endpoints — primacy is re-established by the first live frame', async () => {
+  // Demote-not-clear (owner-approved reconnect hygiene): the endpoint that
+  // routed before the drop belonged to the dead link, so it must not route
+  // now — but the peer record itself is history mavlink-state keeps reading.
+  const { connection, transports, redials } = reconnectBuild();
+  await connection.start();
+
+  const ep = { address: '10.0.0.5', port: 14550 };
+  const heartbeat = () => ({
+    buffer: frameBuffer({
+      name: 'HEARTBEAT',
+      sysid: 1,
+      compid: 1,
+      fields: { type: 2, autopilot: 3, base_mode: 0 },
+    }),
+    ...ep,
+  });
+  transports[0].emit('message', heartbeat());
+  assert.deepEqual(connection.peerTable.endpointFor(1, 1), ep, 'the peer was learned before the drop');
+
+  transports[0].emit('error', new Error('link down'));
+  redials()[0].fn();
+  await delay(0);
+  assert.equal(connection.getState(), STATE.CONNECTED);
+
+  assert.equal(connection.peerTable.endpointFor(1, 1), null, 'the dead link’s endpoint no longer routes');
+  assert.equal(connection.peerTable.has(1), true, 'the peer record survived — history stays for mavlink-state');
+  assert.equal(connection.peerTable.getComponent(1, 1).state, 'stale', 'demoted until live evidence returns');
+
+  // The vehicle redials from the same address; the first frame on the fresh
+  // transport re-establishes primacy from live evidence.
+  transports[1].emit('message', heartbeat());
+  assert.deepEqual(connection.peerTable.endpointFor(1, 1), ep, 'primacy re-established by the first live frame');
+  assert.equal(connection.peerTable.getComponent(1, 1).state, 'active');
+  connection.close();
+});
+
+test('reconnect resets inbound replay memory — a clock-reset peer re-bootstraps via first contact', async () => {
+  // Without resetInbound() the pre-reconnect high-water mark would read the
+  // returning vehicle's lower timestamps as replays and lock it out. The
+  // one-minute first-contact floor (signing.js) is the replay defence while
+  // no record exists, so this re-opens no replay window wider than bootstrap.
+  const { connection, transports, redials } = reconnectBuild({
+    signing: { linkId: 0, signOutbound: false, requireSigned: true, acceptInvalid: false, hasKey: true },
+  });
+  await connection.start();
+
+  const received = [];
+  const rejected = [];
+  connection.subscribe(null, (m) => received.push(m));
+  connection.on('rejected', (e) => rejected.push(e.reason));
+
+  const t0 = timestampFromMs(Date.now());
+  const signed = (timestamp) => ({
+    buffer: frameBuffer({
+      name: 'HEARTBEAT',
+      sysid: 1,
+      compid: 1,
+      signaturePresent: true,
+      signatureValid: true,
+      linkId: 0,
+      timestamp,
+      fields: { type: 2, autopilot: 3, base_mode: 0 },
+    }),
+    address: '10.0.0.5',
+    port: 14550,
+  });
+
+  transports[0].emit('message', signed(t0));
+  transports[0].emit('message', signed(t0 + 200000)); // +2 s in 10 µs units
+  assert.equal(received.length, 2);
+  assert.equal(connection.signing.lastInboundTimestamp(1, 1, 0), t0 + 200000, 'the high-water mark advanced');
+
+  transports[0].emit('error', new Error('link down'));
+  redials()[0].fn();
+  await delay(0);
+  assert.equal(connection.getState(), STATE.CONNECTED);
+
+  // Below the pre-reconnect high-water: a replay-or-out-of-order rejection
+  // before the reset, a first-contact bootstrap after it.
+  transports[1].emit('message', signed(t0 + 100000));
+  assert.equal(received.length, 3, 'accepted via the first-contact path, not rejected as replay');
+  assert.deepEqual(rejected, []);
+  assert.equal(connection.signing.lastInboundTimestamp(1, 1, 0), t0 + 100000);
+  connection.close();
 });
 
 // ── health leases: flow-asserted health with an expiring countdown ───────────
