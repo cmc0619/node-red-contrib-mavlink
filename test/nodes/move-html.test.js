@@ -395,15 +395,10 @@ test('mavlink-move Advanced section: toggle link, hidden div, the right rows ins
   }
 });
 
-test('mavlink-move Change mode tip states the measured §14 gate', () => {
-  // The flag is the gate on both stacks (measured 2026-08-12): without it,
-  // outside GUIDED (AP) / Hold (PX4), the answer is DENIED (2). The tip must
-  // say so — an operator who unticks it needs to know what refuses.
-  const tip = /id="node-input-changeMode"[\s\S]*?<\/span>/.exec(html);
-  assert.ok(tip, 'changeMode row must carry a form-tips span');
-  assert.match(tip[0], /must already be in GUIDED \(ArduPilot\) \/ Hold \(PX4\)/, 'off-state names the required modes');
-  assert.match(tip[0], /answers DENIED/, 'off-state names the refusal');
-  assert.match(tip[0], /flies itself into guided mode \(§14\)/, 'on-state names the mode change and the measurement');
+test('mavlink-move Change mode is an opt-in checkbox, defaulting off', () => {
+  // Flying the vehicle into guided mode is a mode change, so it is never the
+  // saved default. What the flag gates is stated once, in the help pane —
+  // pinned by 'help documents the goto command path and the mode-change gate'.
   assert.match(html, /changeMode:\s*\{\s*value:\s*false\s*\}/, 'changeMode defaults off');
   assert.match(html, /type="checkbox" id="node-input-changeMode"/, 'changeMode is a checkbox');
 });
