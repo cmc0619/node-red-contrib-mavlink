@@ -8,6 +8,11 @@
 
 <script type="text/javascript">
   (function () {
+  // Serial baud rates, as strings because that is what a <select> saves. A
+  // closed list, not a suggestion list: the standard rates are a fixed
+  // vocabulary, so nothing outside them needs to stay typeable.
+  var SERIAL_BAUDS = ['9600', '19200', '38400', '57600', '115200', '230400', '460800', '921600'];
+
   // Remote host and port are a pair — both blank (listen-only) or both set.
   // The runtime trusts this: a half-configured remote never deploys, so the
   // UDP send path treats any missing half as no destination and drops quietly.
@@ -92,13 +97,12 @@
         return !RED.mavlink.isBlank(v);
       } },
       // The runtime opens the port at this rate as saved (§0) — the editor
-      // owns the 57600 default and the positive-integer ring.
-      baudRate: { value: 57600, validate: function (v, _opt) {
+      // owns the 57600 default and the membership ring. Gated on serial like
+      // the path beside it: a stale value must not red a row the mode hides.
+      baudRate: { value: '57600', validate: function (v, _opt) {
         var mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode !== 'serial') return true;
-        var n = Number(v);
-        if (Number.isInteger(n) && n > 0) return true;
-        return 'must be a positive baud rate';
+        return RED.mavlink.oneOf(SERIAL_BAUDS).call(this, String(v), _opt);
       } },
       // Config-node references (§6 — everything enumerable is a dropdown).
       vehicle: { value: '', type: 'mavlink-vehicle', required: true },
@@ -179,6 +183,13 @@
       return this.name || 'MAVLink ' + mode + where;
     },
     oneditprepare: function () {
+      // Closed vocabulary, so the saved value is always one of the options.
+      var $baud = $('#node-config-input-baudRate');
+      SERIAL_BAUDS.forEach(function (baud) {
+        $('<option></option>').val(baud).text(baud).appendTo($baud);
+      });
+      $baud.val(String(this.baudRate === undefined ? '57600' : this.baudRate));
+
       RED.mavlink.ensureConfigNodePicker(this, 'vehicle', 'mavlink-vehicle', 'node-config-input');
       RED.mavlink.ensureConfigNodePicker(
         this,
@@ -303,7 +314,7 @@
   </div>
   <div class="form-row" id="row-conn-baudRate">
     <label for="node-config-input-baudRate"><i class="fa fa-tachometer"></i> Baud</label>
-    <input type="number" id="node-config-input-baudRate" placeholder="57600" step="1" />
+    <select id="node-config-input-baudRate"></select>
   </div>
 
   <hr />
