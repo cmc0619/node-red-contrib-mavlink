@@ -142,6 +142,38 @@ test('Connection editor offers UDP, TCP, and serial without “not yet” stubs'
   );
 });
 
+test('serial path is a live dropdown fed by /mavlink/serial-ports, free text preserved', () => {
+  // Behavior (fill, saved-value sentinel, select→input, refresh) is executed
+  // in connection-html-serial-ports.test.js; here the wiring is pinned.
+  assert.match(
+    html,
+    /<input type="text" id="node-config-input-serialPath"/,
+    'the bound path field stays a free-text input — the dropdown writes into it'
+  );
+  assert.match(html, /id="mav-conn-serial-ports"/, 'detected-ports select exists');
+  assert.match(html, /id="mav-conn-serial-refresh"/, 'refresh button exists');
+  assert.match(
+    html,
+    /RED\.mavlink\.adminApiUrl\('\/mavlink\/serial-ports'\)/,
+    'the fetch honours httpAdminRoot (14.31) — never a bare /mavlink path'
+  );
+  assert.match(
+    html,
+    /\(saved value\)/,
+    'a saved path absent from the enumeration keeps a sentinel option'
+  );
+  assert.match(
+    html,
+    /#row-conn-serialPath, #row-conn-serialPorts, #row-conn-baudRate'\)\.toggle\(mode === 'serial'\)/,
+    'the dropdown row follows serial mode like the path and baud rows'
+  );
+  assert.match(
+    html,
+    /\$\.getJSON\([\s\S]*?\.fail\(function \(\) \{\s*fillSerialPorts\(\[\]\)/,
+    'a failed fetch degrades to the empty list, not a stuck dialog'
+  );
+});
+
 test('remote host/port pairing: one without the other reds, both-or-neither passes', () => {
   // These drive the REAL validators — the html script evaluated whole, the
   // real RED.mavlink resource underneath — with no dialog open, which is the
