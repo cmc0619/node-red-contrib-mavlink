@@ -9,9 +9,8 @@
 <script type="text/javascript">
   (function () {
   // Serial baud rates, as strings because that is what a <select> saves. A
-  // closed list, not a suggestion list: these rates have not moved in thirty
-  // years, so there is nothing to keep typeable (owner ruling, 2026-08-25).
-  // Same eight the -kimi copy offers.
+  // closed list, not a suggestion list: the standard rates are a fixed
+  // vocabulary, so nothing outside them needs to stay typeable.
   var SERIAL_BAUDS = ['9600', '19200', '38400', '57600', '115200', '230400', '460800', '921600'];
 
   // Remote host and port are a pair — both blank (listen-only) or both set.
@@ -184,8 +183,7 @@
       return this.name || 'MAVLink ' + mode + where;
     },
     oneditprepare: function () {
-      // Closed vocabulary, so the saved value is always one of the options and
-      // there is no unknown-baud option to graft on first.
+      // Closed vocabulary, so the saved value is always one of the options.
       var $baud = $('#node-config-input-baudRate');
       SERIAL_BAUDS.forEach(function (baud) {
         $('<option></option>').val(baud).text(baud).appendTo($baud);
