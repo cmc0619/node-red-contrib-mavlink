@@ -1479,16 +1479,13 @@ test('reconnect demotes learned endpoints — primacy is re-established by the f
 
   assert.equal(connection.peerTable.endpointFor(1, 1), null, 'the dead link’s endpoint no longer routes');
   assert.equal(connection.peerTable.has(1), true, 'the peer record survived — history stays for mavlink-state');
-  // Liveness is sweep()'s call from lastSeen, which a redial does not change.
-  // Marking the component stale here would emit no transition and would hide
-  // every vehicle from selectFanoutMembers — which reads this field — until
-  // the next sweep, so an "all active vehicles" fan-out issued just after a
-  // reconnect would command nobody.
-  assert.equal(
-    connection.peerTable.getComponent(1, 1).state,
-    'active',
-    'a peer that is still heartbeating stays active across the redial'
-  );
+  // Stale until routing is relearned, and deliberately so: selectFanoutMembers
+  // reads this field, and a member with no primary endpoint resolves to a null
+  // destination that a TCP server with no reconnected client drops as a quiet
+  // TCP_NO_DESTINATION — after the send tier already recorded it `sent`. A run
+  // that matches nobody is honest; one that reports a dispatch that never left
+  // is not (§2).
+  assert.equal(connection.peerTable.getComponent(1, 1).state, 'stale', 'demoted until live evidence returns');
 
   // The vehicle redials from the same address; the first frame on the fresh
   // transport re-establishes primacy from live evidence.

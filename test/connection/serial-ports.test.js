@@ -22,7 +22,7 @@ const { listSerialPorts } = require('../../lib/connection/transport/serial');
  * @param {function(): Promise<*>} fn
  * @returns {Promise<*>}
  */
-async function withSerialPort(impl, fn) {
+function withSerialPort(impl, fn) {
   const real = Module._load;
   Module._load = function load(request, parent, isMain) {
     if (request !== 'serialport') return real(request, parent, isMain);
@@ -31,8 +31,11 @@ async function withSerialPort(impl, fn) {
     err.code = 'MODULE_NOT_FOUND';
     throw err;
   };
+  // `fn()` is returned, not awaited: awaiting here would convert a
+  // synchronous throw into a rejection inside the harness and hide which of
+  // the two the subject actually did (CodeRabbit).
   try {
-    return await fn();
+    return fn();
   } finally {
     Module._load = real;
   }
@@ -55,15 +58,48 @@ test('ports come back as the library reports them', async () => {
   assert.deepEqual(ports, listed, 'passed through untouched — the editor labels them');
 });
 
-test('a real listing failure rejects rather than throwing synchronously', async () => {
+test('a listing that throws synchronously still comes back as a rejection', async () => {
   // The route calls this and attaches handlers; a synchronous throw would
-  // skip its 500 and land in Express instead.
-  const boom = new Error('EACCES: permission denied');
+  // skip its 500 and land in Express instead. `list()` throwing outright —
+  // rather than returning a rejected promise — is the case that proves the
+  // conversion is the subject's and not the harness's.
   const call = withSerialPort(
-    { SerialPort: { list: () => Promise.reject(boom) } },
+    { SerialPort: { list() { throw new Error('EACCES: permission denied'); } } },
+    () => listSerialPorts()
+  );
+  assert.ok(typeof call.then === 'function', 'a promise, not a synchronous throw');
+  await assert.rejects(call, /EACCES/);
+});
+
+test('a listing that rejects comes back as a rejection', async () => {
+  const call = withSerialPort(
+    { SerialPort: { list: () => Promise.reject(new Error('EACCES: permission denied')) } },
     () => listSerialPorts()
   );
   await assert.rejects(call, /EACCES/);
+});
+
+test('a missing binding inside an installed serialport is a failure, not an absence', async () => {
+  // Node puts the require stack in `message`, so the stack line under
+  // node_modules/serialport would satisfy a loose /serialport/ match and turn
+  // a broken install into "nothing to enumerate" — 200 with an empty list
+  // instead of the 500 it earns (Codex).
+  const real = Module._load;
+  Module._load = function load(request, parent, isMain) {
+    if (request !== 'serialport') return real(request, parent, isMain);
+    const err = new Error(
+      "Cannot find module './build/Release/bindings.node'\n"
+      + 'Require stack:\n'
+      + '- /app/node_modules/serialport/dist/index.js'
+    );
+    err.code = 'MODULE_NOT_FOUND';
+    throw err;
+  };
+  try {
+    await assert.rejects(listSerialPorts(), /bindings\.node/);
+  } finally {
+    Module._load = real;
+  }
 });
 
 test('a non-missing require failure rejects, and is not read as an absent dependency', async () => {
