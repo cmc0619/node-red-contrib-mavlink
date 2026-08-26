@@ -20,11 +20,38 @@
  */
 
 const { Connection, STATE, PeerTable } = require('../lib/connection');
+const { listSerialPorts } = require('../lib/connection/transport/serial');
 const { resolveIdentity } = require('../lib/identity');
 const { capBadge } = require('../lib/delivery');
 const { numberOr } = require('../lib/addressing');
 
+/** Admin endpoint path enumerating host serial ports for the editor dropdown. */
+const SERIAL_PORTS_ROUTE = '/mavlink/serial-ports';
+
+/** Whether the admin serial-ports route has been registered (once per process). */
+let _serialPortsRouteRegistered = false;
+
 module.exports = function registerMavlinkConnection(RED) {
+  // Admin endpoint feeding the editor's serial-path dropdown (§6 "Register
+  // with RED.auth.needsPermission"), once per process like the dialects
+  // route. serialport is an optional dependency: its absence is an empty
+  // list with HTTP 200, never a failure — UDP/TCP installs must keep
+  // working end to end. A real listing failure (permissions, a broken
+  // native binding) answers 500 with the error message, same shape as the
+  // XML-catalog routes.
+  if (!_serialPortsRouteRegistered && RED.httpAdmin && RED.auth) {
+    RED.httpAdmin.get(
+      SERIAL_PORTS_ROUTE,
+      RED.auth.needsPermission('mavlink.read'),
+      (_req, res) => {
+        listSerialPorts()
+          .then((ports) => res.json({ ports }))
+          .catch((err) => res.status(500).json({ ports: [], error: err.message }));
+      }
+    );
+    _serialPortsRouteRegistered = true;
+  }
+
   /**
    * @param {object} config  Node-RED node config from the editor
    */
