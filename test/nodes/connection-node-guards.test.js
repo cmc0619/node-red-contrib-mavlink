@@ -42,7 +42,7 @@ function makeRED(lookup) {
     // Registration installs the serial-ports admin route, same as the Vehicle
     // node's dialect routes — a RED double has to carry these two.
     httpAdmin: { get() {} },
-    auth: { needsPermission() { return (_r, _s, n) => n && n(); } },
+    auth: { needsPermission() { return (_r, _s, n) => n?.(); } },
   };
   registerMavlinkConnection(RED);
   return { ctor, RED };

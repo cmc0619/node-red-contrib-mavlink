@@ -44,7 +44,7 @@ function routeWith(lister) {
           if (routePath === '/mavlink/serial-ports') handler = fn;
         },
       },
-      auth: { needsPermission: () => (_r, _s, next) => next && next() },
+      auth: { needsPermission: () => (_r, _s, next) => next?.() },
       nodes: { registerType() {}, createNode() {}, getNode: () => null },
     });
   } finally {
