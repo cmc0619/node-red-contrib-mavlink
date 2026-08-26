@@ -225,12 +225,49 @@
         // UDP only: TCP is connection-oriented unicast and has no broadcast at
         // all, and a TCP server reaches every client through the peer table.
         $('#row-conn-broadcastHost, #row-conn-broadcastPort').toggle(mode === 'udp');
-        $('#row-conn-serialPath, #row-conn-baudRate').toggle(mode === 'serial');
+        $('#row-conn-serialPath, #row-conn-serialPorts, #row-conn-baudRate').toggle(mode === 'serial');
         $('#mav-conn-tcp-tip').toggle(mode === 'tcp');
         $('#mav-conn-serial-tip').toggle(mode === 'serial');
       }
       $('#node-config-input-mode').on('change', refreshTransportRows);
       refreshTransportRows();
+
+      // Serial path combo (node-owned row, 14.32): the dropdown enumerates
+      // host ports from GET /mavlink/serial-ports and copies the pick into
+      // the bound input; the input itself stays free text, because a host
+      // cannot enumerate a serial-over-network adapter or a symlink it has
+      // not seen. serialport is an optional dependency, so an empty list is
+      // a normal answer, and a saved path absent from the list keeps a
+      // '(saved value)' sentinel rather than snapping to blank (the
+      // populateDialectSelect pattern).
+      function fillSerialPorts(ports) {
+        var $sel = $('#mav-conn-serial-ports');
+        var saved = $('#node-config-input-serialPath').val() || '';
+        $sel.empty();
+        $sel.append($('<option></option>').val('').text('\u2014'));
+        (ports || []).forEach(function (port) {
+          var label = port.manufacturer ? port.path + ' — ' + port.manufacturer : port.path;
+          $sel.append($('<option></option>').val(port.path).text(label));
+        });
+        if (saved && !$sel.find('option[value="' + saved + '"]').length) {
+          $sel.append($('<option></option>').val(saved).text(saved + ' (saved value)'));
+        }
+        $sel.val(saved);
+      }
+      function fetchSerialPorts() {
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/serial-ports'), function (data) {
+          fillSerialPorts((data && data.ports) || []);
+        }).fail(function () {
+          fillSerialPorts([]);
+        });
+      }
+      $('#mav-conn-serial-ports').on('change', function () {
+        var picked = $(this).val();
+        if (!picked) return;
+        $('#node-config-input-serialPath').val(picked).trigger('change');
+      });
+      $('#mav-conn-serial-refresh').on('click', fetchSerialPorts);
+      fetchSerialPorts();
     },
     oneditsave: function () {
       // Collect the raw rows; the blank/duplicate/primary rules live in the
@@ -300,6 +337,13 @@
   <div class="form-row" id="row-conn-serialPath">
     <label for="node-config-input-serialPath"><i class="fa fa-usb"></i> Serial path</label>
     <input type="text" id="node-config-input-serialPath" placeholder="/dev/ttyUSB0 or COM3" />
+  </div>
+  <div class="form-row" id="row-conn-serialPorts">
+    <label for="mav-conn-serial-ports"><i class="fa fa-list"></i> Detected ports</label>
+    <select id="mav-conn-serial-ports" style="width:60%"></select>
+    <button type="button" id="mav-conn-serial-refresh" class="red-ui-button">
+      <i class="fa fa-refresh"></i> refresh
+    </button>
   </div>
   <div class="form-row" id="row-conn-baudRate">
     <label for="node-config-input-baudRate"><i class="fa fa-tachometer"></i> Baud</label>
@@ -389,7 +433,9 @@
   contract. UDP binds a local port and may set an optional remote default target.
   TCP with a remote host/port is a client; with only bind settings it is a server.
   Serial opens a device path (optional <code>serialport</code> dependency) at the
-  configured baud; peer-table endpoints are that path.</p>
+  configured baud; peer-table endpoints are that path. The <b>Detected ports</b>
+  dropdown lists the host's ports when that dependency is installed — the path
+  box still takes any value typed by hand.</p>
 
   <h3>Swarm address (UDP)</h3>
   <p>Optional, and only about <i>delivery</i>. A message reaches every vehicle
