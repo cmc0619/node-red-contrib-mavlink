@@ -12,7 +12,7 @@ const GCS = {
   sysid: 255,
   compid: 190,
   heartbeatIntervalMs: 1000,
-  heartbeat: { type: 6, autopilot: 8, systemStatus: 4 },
+  heartbeat: { type: 6, autopilot: 8 },
 };
 
 /** @param {number} ms @returns {Promise<void>} */

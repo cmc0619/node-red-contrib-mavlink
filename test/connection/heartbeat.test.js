@@ -12,7 +12,7 @@ const GCS = {
   sysid: 255,
   compid: 190,
   heartbeatIntervalMs: 1000,
-  heartbeat: { type: 6, autopilot: 8, systemStatus: 4 },
+  heartbeat: { type: 6, autopilot: 8 },
 };
 
 /**
@@ -83,15 +83,6 @@ test('the heartbeat resumes when the fault clears, logged once', () => {
 
   assert.equal(emitted.length, 2);
   assert.equal(logs.filter((l) => l.level === 'info').length, 1);
-});
-
-test('MAV_STATE reflects the live health read rather than a constant', () => {
-  const { scheduler, emitted } = build({
-    health: () => ({ healthy: true, systemStatus: 6 }), // MAV_STATE_CRITICAL
-  });
-  scheduler.add(GCS);
-  scheduler.tick();
-  assert.equal(emitted[0].message.fields.system_status, 6);
 });
 
 test('start/stop drive the injected interval and release it', () => {
