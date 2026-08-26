@@ -54,6 +54,9 @@
         },
       },
       anchorMode: { value: 'leader', validate: RED.mavlink.oneOf(['leader', 'fixed']) },
+      // Off by default: anchoring on a vehicle the flow did not name is a
+      // substitution, and substitutions are chosen, never assumed.
+      promoteLeader: { value: false },
       leader: {
         value: '',
         validate: whenAnchorMode('leader', function (v, _opt) {
@@ -124,6 +127,7 @@
       function refreshAnchorRows() {
         var mode = $('#node-input-anchorMode').val() || 'leader';
         $('#row-formation-leader').toggle(mode === 'leader');
+        $('#row-formation-promoteLeader').toggle(mode === 'leader');
         $('#row-formation-lat').toggle(mode === 'fixed');
         $('#row-formation-lon').toggle(mode === 'fixed');
         $('#row-formation-alt').toggle(mode === 'fixed');
@@ -143,6 +147,7 @@
   <div class="form-row"><label for="node-input-sysids">Sysids</label><input type="text" id="node-input-sysids" placeholder="1,2,3"></div>
   <div class="form-row"><label for="node-input-anchorMode">Anchor</label><select id="node-input-anchorMode"><option value="leader">Leader vehicle position</option><option value="fixed">Fixed position</option></select></div>
   <div class="form-row" id="row-formation-leader"><label for="node-input-leader">Leader sysid</label><input type="number" id="node-input-leader" min="1" max="255"></div>
+  <div class="form-row" id="row-formation-promoteLeader"><label for="node-input-promoteLeader">Promote on loss</label><input type="checkbox" id="node-input-promoteLeader" style="display:inline-block;width:auto;"></div>
   <div class="form-row" id="row-formation-lat"><label for="node-input-lat">Latitude</label><input type="number" id="node-input-lat"></div>
   <div class="form-row" id="row-formation-lon"><label for="node-input-lon">Longitude</label><input type="number" id="node-input-lon"></div>
   <div class="form-row" id="row-formation-alt"><label for="node-input-alt">Altitude m</label><input type="number" id="node-input-alt"></div>
@@ -168,6 +173,17 @@
   fails the message.
   <b>Fixed position</b> takes lat/lon/alt from the node (or
   <code>msg.payload.anchor</code>, which overrides either mode).</p>
+  <p><b>Promote on loss</b> lets the pattern survive losing its leader. With it off — the
+  default — the configured leader anchors the formation whatever state it is in,
+  and a leader that has gone quiet or never reported fails the message. With it
+  on, such a leader hands the pattern to the next vehicle that can carry it: the
+  lowest live sysid above the configured one, wrapping round to the lowest live
+  sysid overall. <i>Live</i> is the peer table's own reckoning — still
+  heartbeating, and carrying a position — the same test Fan-out selects members
+  by. Nothing is remembered: the promotion is re-decided on every message, so
+  the configured leader takes the pattern back on the first message after it
+  reports again. Off by default because anchoring on a vehicle the flow did not
+  name is a substitution, and the flow has to ask for it.</p>
   <p>Altitudes are metres above home (<code>MAV_FRAME_GLOBAL_RELATIVE_ALT</code>,
   the carrier's default frame): a leader anchor uses the leader's relative
   altitude. Slot 0 sits on the anchor altitude; planar shapes keep every
@@ -196,5 +212,7 @@
   <p>Output 0 fires only when every member succeeded, carrying the fan-out
   aggregate under <code>msg.payload</code>. Output 1 always carries the
   aggregate with per-vehicle detail. An anchor leader that has not reported
-  position fails the input.</p>
+  position fails the input. On a leader anchor both records carry
+  <code>leader</code>, the sysid the pattern actually hung off — compare it with
+  the configured leader to see whether a promotion happened.</p>
 </script>
