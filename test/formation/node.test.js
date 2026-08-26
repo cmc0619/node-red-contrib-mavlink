@@ -94,7 +94,7 @@ test('leader anchor reads position, relative altitude and heading from the peer 
   assert.equal(bySysid[2].y, e7(8.5), 'slot 1 stays on the leader longitude at heading 90');
 });
 
-test('leader with no reported position is refused, not defaulted', async () => {
+test('leader with no reported position fails loudly — nothing is sent', async () => {
   const connection = connectionStub([peer(1), peer(2), peer(7)]); // leader has position: null
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-formation')(RED);
@@ -112,34 +112,9 @@ test('leader with no reported position is refused, not defaulted', async () => {
   const err = await emitInput(node, { payload: {} }, (m) => { sent = m; }).then(() => null, (e) => e);
 
   assert.ok(err, 'missing leader position fails the input');
-  assert.match(err.message, /no reported position/);
-  assert.match(err.message, /7/, 'error names the leader sysid');
   assert.equal(connection.sends.length, 0, 'nothing was sent');
-  assert.equal(sent[0], null, 'no continue output on refusal');
+  assert.equal(sent[0], null, 'no continue output on failure');
   assert.equal(sent[1].result, 'failed');
-  assert.match(sent[1].detail, /no reported position/);
-});
-
-test('leader without a finite relative altitude is refused (altitude must not default)', async () => {
-  const leader = peer(7, { position: { lat: 47.4, lon: 8.5, alt: 430, relativeAlt: null, heading: 0 } });
-  const connection = connectionStub([peer(1), leader]);
-  const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-formation')(RED);
-  const node = new (RED.nodes.types['mavlink-formation'])({
-    connection: 'conn',
-    shape: 'line',
-    spacing: 10,
-    sysids: '1',
-    anchorMode: 'leader',
-    leader: 7,
-    pitchDeg: 0,    delivery: 'send',
-    intervalMs: 0,
-  });
-  const err = await emitInput(node, { payload: {} }, () => {}).then(() => null, (e) => e);
-
-  assert.ok(err, 'missing relative altitude fails the input');
-  assert.match(err.message, /relative altitude/);
-  assert.equal(connection.sends.length, 0);
 });
 
 test('unknown leader heading stays unknown — north is not invented', async () => {

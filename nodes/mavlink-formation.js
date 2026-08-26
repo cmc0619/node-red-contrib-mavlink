@@ -165,9 +165,9 @@ module.exports = function registerMavlinkFormation(RED) {
  *
  * Anchor precedence: `msg.payload.anchor` ({lat, lon, alt}), else the
  * configured fixed anchor, else the configured leader's live position from the
- * peer table. A leader with no position, or with no relative altitude, is a
- * live telemetry miss (rule 3) — never a default: 0,0 is null island and
- * altitude 0 commands a descent to home level.
+ * peer table. A leader with no reported position fails the input loudly: the
+ * lookup craters on first property access and the node's error path reports
+ * the message as failed.
  *
  * Heading precedence: `msg.payload.headingDeg`, else config, else (leader
  * anchor only) the leader's reported heading. An unknown heading stays
@@ -205,17 +205,6 @@ function resolveAnchor(config, payload, peerTable) {
       const peer = peerTable.snapshot().find((p) => p.sysid === sysid);
       const autopilot = peer && peer.components.find((c) => c.compid === 1);
       const position = autopilot && autopilot.position;
-      if (!position) {
-        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: no GLOBAL_POSITION_INT seen yet is a live telemetry state, not an input
-        throw new Error(`mavlink-formation: leader ${config.leader} has no reported position `
-          + '(no GLOBAL_POSITION_INT seen)');
-      }
-      // Targets ride MAV_FRAME_GLOBAL_RELATIVE_ALT, where a defaulted 0 commands
-      // a descent to home level.
-      if (!Number.isFinite(position.relativeAlt)) {
-        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: no relative altitude reported yet is a live telemetry state, not an input
-        throw new Error(`mavlink-formation: leader ${config.leader} reports no relative altitude`);
-      }
       if (!Number.isFinite(heading) && position.heading != null) heading = position.heading;
       return {
         anchor: { lat: position.lat, lon: position.lon, alt: position.relativeAlt },

@@ -164,9 +164,8 @@
   new formation, or use Move to displace individual members.</p>
   <h3>Anchor</h3>
   <p><b>Leader vehicle position</b> reads the leader's live position from the
-  Connection peer table. A leader with no reported position, or no relative
-  altitude, is refused — never defaulted, because a defaulted coordinate is
-  null island and a defaulted altitude commands a descent to home level.
+  Connection peer table. An anchor leader that has not reported a position
+  fails the message.
   <b>Fixed position</b> takes lat/lon/alt from the node (or
   <code>msg.payload.anchor</code>, which overrides either mode).</p>
   <p>Altitudes are metres above home (<code>MAV_FRAME_GLOBAL_RELATIVE_ALT</code>,
@@ -196,7 +195,6 @@
   <h3>Outputs</h3>
   <p>Output 0 fires only when every member succeeded, carrying the fan-out
   aggregate under <code>msg.payload</code>. Output 1 always carries the
-  aggregate with per-vehicle detail. Geometry refusals (unknown leader
-  position, missing anchor altitude, bad sysid tokens) fail
-  the input with the reason.</p>
+  aggregate with per-vehicle detail. An anchor leader that has not reported
+  position fails the input.</p>
 </script>
