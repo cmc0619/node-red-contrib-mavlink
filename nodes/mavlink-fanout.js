@@ -65,7 +65,6 @@ module.exports = function registerMavlinkFanout(RED) {
           maxRetries: numberOption(opts, config, 'maxRetries'),
           concurrency: numberOption(opts, config, 'concurrency'),
           stopOnError: opts.stopOnError !== undefined ? !!opts.stopOnError : !!config.stopOnError,
-          dryRun: opts.dryRun !== undefined ? !!opts.dryRun : !!config.dryRun,
           identityId: opts.identityId || config.identity,
         }));
 
@@ -182,18 +181,13 @@ function quietEmpty(aggregate) {
 }
 
 function applyAggregateStatus(node, aggregate, tier) {
-  // A dry run resolves everything and sends nothing: the yellow preview
-  // badge, same situation class as the Build tier below — keyed on the
-  // result, since the tier stays whatever the operator configured.
-  if (aggregate.result === 'dryrun') {
-    delivery.applyActionStatus(node, 'preview', `dry-run ${aggregate.count}`);
-  } else if (tier === 'build' && aggregate.success) {
-    // Build tier previews the fan-out — every member message constructed,
-    // none sent — so it wears the yellow preview badge (§6), the same as
-    // every other action node's Build (mavlink-command, mavlink-mission).
-    // The aggregate result is 'succeeded' either way (all members built), so
-    // the tier is the signal, not the result. Guarded on success so an empty
-    // selection still falls through to the grey 0-matched badge below.
+  // Build tier previews the fan-out — every member message constructed, none
+  // sent — so it wears the yellow preview badge (§6), the same as every other
+  // action node's Build (mavlink-command, mavlink-mission). The aggregate
+  // result is 'succeeded' either way (all members built), so the tier is the
+  // signal, not the result. Guarded on success so an empty selection still
+  // falls through to the grey 0-matched badge below.
+  if (tier === 'build' && aggregate.success) {
     delivery.applyActionStatus(node, 'preview', `${aggregate.count} preview`);
   } else if (aggregate.success) {
     delivery.applyActionStatus(node, 'ok', `${aggregate.count} succeeded`);
