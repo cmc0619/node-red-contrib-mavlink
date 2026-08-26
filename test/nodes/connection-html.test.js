@@ -134,6 +134,19 @@ test('Connection editor offers UDP, TCP, and serial without “not yet” stubs'
   assert.ok(!html.includes('(not yet)'), 'transport options must not be stubbed');
   assert.match(html, /function refreshTransportRows/, 'mode toggles transport field rows');
   assert.match(html, /node-config-input-serialPath/, 'serial path field is present');
+  // Suggestions, not a second control: the path box keeps free text, so a
+  // serial-over-network adapter or an unseen symlink is still reachable.
+  assert.match(
+    html,
+    /id="node-config-input-serialPath"[\s\S]{0,120}list="mav-conn-serial-ports"/,
+    'the path box is bound to the detected-ports datalist'
+  );
+  assert.match(html, /<datalist id="mav-conn-serial-ports">/, 'the datalist exists to fill');
+  assert.match(
+    html,
+    /if \(mode === 'serial'\) fillSerialPorts\(\);/,
+    'ports are fetched only once serial is the chosen transport'
+  );
   // A closed pulldown, not a number box: the rates are a fixed vocabulary,
   // so the control must not accept anything the list does not offer.
   assert.match(

@@ -237,9 +237,31 @@
         // all, and a TCP server reaches every client through the peer table.
         $('#row-conn-broadcastHost, #row-conn-broadcastPort').toggle(mode === 'udp');
         $('#row-conn-serialPath, #row-conn-baudRate').toggle(mode === 'serial');
+        if (mode === 'serial') fillSerialPorts();
         $('#mav-conn-tcp-tip').toggle(mode === 'tcp');
         $('#mav-conn-serial-tip').toggle(mode === 'serial');
       }
+      // Detected host ports, offered as suggestions on the path box. A
+      // datalist rather than a second picker control: the field still takes
+      // any path typed by hand, because a host cannot enumerate a
+      // serial-over-network adapter or a symlink it has not seen — and a
+      // suggestion list needs no saved-value sentinel, since the input holds
+      // whatever was saved whether the host reports it or not. Fetched once
+      // per dialog and only once serial is chosen, so UDP and TCP dialogs
+      // never call the endpoint. A failed fetch leaves the list empty, which
+      // reads the same as a host with no ports: the box still accepts a path.
+      var portsRequested = false;
+      function fillSerialPorts() {
+        if (portsRequested) return;
+        portsRequested = true;
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/serial-ports'), function (data) {
+          var $list = $('#mav-conn-serial-ports').empty();
+          ((data && data.ports) || []).forEach(function (port) {
+            $('<option></option>').val(port.path).text(port.manufacturer || '').appendTo($list);
+          });
+        });
+      }
+
       $('#node-config-input-mode').on('change', refreshTransportRows);
       refreshTransportRows();
     },
@@ -310,7 +332,9 @@
 
   <div class="form-row" id="row-conn-serialPath">
     <label for="node-config-input-serialPath"><i class="fa fa-usb"></i> Serial path</label>
-    <input type="text" id="node-config-input-serialPath" placeholder="/dev/ttyUSB0 or COM3" />
+    <input type="text" id="node-config-input-serialPath" placeholder="/dev/ttyUSB0 or COM3"
+      list="mav-conn-serial-ports" />
+    <datalist id="mav-conn-serial-ports"></datalist>
   </div>
   <div class="form-row" id="row-conn-baudRate">
     <label for="node-config-input-baudRate"><i class="fa fa-tachometer"></i> Baud</label>
@@ -400,7 +424,9 @@
   contract. UDP binds a local port and may set an optional remote default target.
   TCP with a remote host/port is a client; with only bind settings it is a server.
   Serial opens a device path (optional <code>serialport</code> dependency) at the
-  configured baud; peer-table endpoints are that path.</p>
+  configured baud; peer-table endpoints are that path. The path box suggests the
+  host's detected ports when that dependency is installed, and still accepts any
+  path typed by hand.</p>
 
   <h3>Swarm address (UDP)</h3>
   <p>Optional, and only about <i>delivery</i>. A message reaches every vehicle

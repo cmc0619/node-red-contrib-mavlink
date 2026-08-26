@@ -39,6 +39,10 @@ function makeRED(lookup) {
         return Object.prototype.hasOwnProperty.call(lookup, id) ? lookup[id] : null;
       },
     },
+    // Registration installs the serial-ports admin route, same as the Vehicle
+    // node's dialect routes — a RED double has to carry these two.
+    httpAdmin: { get() {} },
+    auth: { needsPermission() { return (_r, _s, n) => n?.(); } },
   };
   registerMavlinkConnection(RED);
   return { ctor, RED };
