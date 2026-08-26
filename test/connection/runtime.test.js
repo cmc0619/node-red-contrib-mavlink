@@ -1452,9 +1452,10 @@ test('a transport that never opened does not enter the redial loop — deploy fa
 });
 
 test('reconnect demotes learned endpoints — primacy is re-established by the first live frame', async () => {
-  // Demote-not-clear (owner-approved reconnect hygiene): the endpoint that
-  // routed before the drop belonged to the dead link, so it must not route
-  // now — but the peer record itself is history mavlink-state keeps reading.
+  // Demote-not-clear: the endpoint that routed before the drop belonged to
+  // the dead link, so it must not route now — but the peer record itself is
+  // history mavlink-state keeps reading, and the component's liveness is not
+  // the redial's business.
   const { connection, transports, redials } = reconnectBuild();
   await connection.start();
 
@@ -1478,7 +1479,16 @@ test('reconnect demotes learned endpoints — primacy is re-established by the f
 
   assert.equal(connection.peerTable.endpointFor(1, 1), null, 'the dead link’s endpoint no longer routes');
   assert.equal(connection.peerTable.has(1), true, 'the peer record survived — history stays for mavlink-state');
-  assert.equal(connection.peerTable.getComponent(1, 1).state, 'stale', 'demoted until live evidence returns');
+  // Liveness is sweep()'s call from lastSeen, which a redial does not change.
+  // Marking the component stale here would emit no transition and would hide
+  // every vehicle from selectFanoutMembers — which reads this field — until
+  // the next sweep, so an "all active vehicles" fan-out issued just after a
+  // reconnect would command nobody.
+  assert.equal(
+    connection.peerTable.getComponent(1, 1).state,
+    'active',
+    'a peer that is still heartbeating stays active across the redial'
+  );
 
   // The vehicle redials from the same address; the first frame on the fresh
   // transport re-establishes primacy from live evidence.
