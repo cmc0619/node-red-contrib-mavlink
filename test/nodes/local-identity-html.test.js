@@ -623,29 +623,11 @@ test('a companion saved behind the hidden row is seeded back to its own slot', (
   // field's untouched default (190) and the runtime discarded it for a pinned
   // 191. Now that the runtime reads what was saved, opening the dialog must
   // seed the role's slot back, or a companion silently becomes component 190.
-  assert.match(
-    html,
-    /if \(prevRole === 'companion'\)/,
-    'the seed is scoped to the role whose row was hidden'
-  );
-  assert.match(
-    html,
-    /Number\(savedCmp\) === ROLE_PRESETS\.gcs\.compid/,
-    'only the untouched default is rewritten — an explicit pick is not'
-  );
-  assert.match(
-    html,
-    /seededCompId = ROLE_PRESETS\.companion\.compid/,
-    'and it is seeded from the role preset, not a literal'
-  );
-  // Until the catalog lands the select holds only the saved option, so
-  // assigning 191 to it would select nothing and the fill would read 190
-  // straight back. The seed has to ride into the fill instead.
-  assert.match(html, /refillCompIds\(seededCompId\)/, 'the seed rides into the async fill');
   assert.doesNotMatch(
     html,
-    /\$compid\.val\(ROLE_PRESETS\.companion\.compid\)/,
-    'never assigned straight to the select'
+    /seededCompId|ROLE_PRESETS\.gcs\.compid/,
+    'no open-time CompID seeding — 190 is a legal companion slot, and inferring '
+      + '"never chosen" from the value is the shim pre-1.0 forbids'
   );
 });
 
@@ -750,50 +732,34 @@ test('heartbeatIntervalMs red-rings blank and non-positive values (walled garden
   assert.match(String(validate('abc')), /positive number/);
 });
 
-test('reopening a legacy companion lands on 191, not the hidden default it saved', () => {
-  // The upgrade path, driven rather than regex-matched. Until the catalog
-  // lands the select holds only the saved option, and FakeSelect models the
-  // real thing: assigning a value with no matching option selects nothing.
-  // A seed written straight to the select is therefore silently lost, and the
-  // fill reads the saved 190 back — which is what shipped until Codex caught
-  // it on #402.
-  const context = loadHelpers({ '#node-config-input-role': 'companion' });
-  context.$.responses['/mavlink/enums'] = {
-    dialect: 'common',
-    enums: {
-      MAV_COMPONENT: [
-        { name: 'MAV_COMP_ID_MISSIONPLANNER', value: 190, label: 'MISSIONPLANNER (190)' },
-        { name: 'MAV_COMP_ID_ONBOARD_COMPUTER', value: 191, label: 'ONBOARD_COMPUTER (191)' },
-        { name: 'MAV_COMP_ID_ONBOARD_COMPUTER2', value: 192, label: 'ONBOARD_COMPUTER2 (192)' },
-      ],
-    },
-  };
+test('reopening a companion never retypes its saved CompID', () => {
+  // 190 is a legal companion CompID. A seed that rewrote it to 191 on open
+  // would silently change an identity the operator picked — and inferring
+  // "this value was never chosen" from the value itself is the migration shim
+  // the pre-1.0 rule forbids. The dialog shows what was saved, in both cases.
+  for (const saved of [190, 192]) {
+    const context = loadHelpers({ '#node-config-input-role': 'companion' });
+    context.$.responses['/mavlink/enums'] = {
+      dialect: 'common',
+      enums: {
+        MAV_COMPONENT: [
+          { name: 'MAV_COMP_ID_MISSIONPLANNER', value: 190, label: 'MISSIONPLANNER (190)' },
+          { name: 'MAV_COMP_ID_ONBOARD_COMPUTER', value: 191, label: 'ONBOARD_COMPUTER (191)' },
+          { name: 'MAV_COMP_ID_ONBOARD_COMPUTER2', value: 192, label: 'ONBOARD_COMPUTER2 (192)' },
+        ],
+      },
+    };
 
-  context.identityDefinition.oneditprepare.call({
-    id: 'legacy', role: 'companion', sourceComponentId: 190, heartbeatIntervalMs: 1000,
-  });
+    context.identityDefinition.oneditprepare.call({
+      id: 'c', role: 'companion', sourceComponentId: saved, heartbeatIntervalMs: 1000,
+    });
 
-  assert.equal(context.$('#node-config-input-sourceComponentId').val(), '191');
-});
-
-test('reopening a companion that already picked a slot leaves it alone', () => {
-  // The seed rewrites only the untouched default. 192 was a real choice.
-  const context = loadHelpers({ '#node-config-input-role': 'companion' });
-  context.$.responses['/mavlink/enums'] = {
-    dialect: 'common',
-    enums: {
-      MAV_COMPONENT: [
-        { name: 'MAV_COMP_ID_ONBOARD_COMPUTER', value: 191, label: 'ONBOARD_COMPUTER (191)' },
-        { name: 'MAV_COMP_ID_ONBOARD_COMPUTER2', value: 192, label: 'ONBOARD_COMPUTER2 (192)' },
-      ],
-    },
-  };
-
-  context.identityDefinition.oneditprepare.call({
-    id: 'picked', role: 'companion', sourceComponentId: 192, heartbeatIntervalMs: 1000,
-  });
-
-  assert.equal(context.$('#node-config-input-sourceComponentId').val(), '192');
+    assert.equal(
+      context.$('#node-config-input-sourceComponentId').val(),
+      String(saved),
+      `companion saved on ${saved} reopens on ${saved}`
+    );
+  }
 });
 
 test('Companion save clears the derived SysID and keeps the chosen CompID', () => {

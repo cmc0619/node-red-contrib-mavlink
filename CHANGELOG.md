@@ -30,13 +30,14 @@ config-node shapes and message contracts may still change without a major bump.
   suggests those four slots. SysID is still derived from the Vehicle Profile:
   a companion is a component of the vehicle's system.
 
-  **Reopen and re-Done any companion identity you already have.** While the row
-  was hidden it saved the field's untouched default, `190`, and the runtime
-  threw that away in favour of the pinned `191`. Now the runtime reads what was
-  saved, so an untouched companion would deploy as `190` — a different component
-  than it has been sending as. Opening the dialog seeds the role's own slot back
-  (the pre-1.0 rule is re-pick, not migrate), and picking a slot explicitly is
-  what makes it stick.
+  **Reopen any companion identity you already have and pick its slot.** While
+  the row was hidden the dialog saved the field's untouched default, `190`, and
+  the runtime threw that away in favour of the pinned `191`. Now the runtime
+  reads what was saved, so a companion left alone deploys as `190` — a different
+  component than it has been sending as. Nothing rewrites it for you: `190` is
+  itself a legal companion slot, so a value chosen there is indistinguishable
+  from one that was never chosen, and guessing would retype identities that were
+  deliberate. Open the dialog and choose (the select suggests `191`-`194`).
 
 - **The Local Identity CompID select suggests the components its role means.**
   `191`-`194` for companion, `190` for GCS, the flat list for custom — floated

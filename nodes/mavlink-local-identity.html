@@ -155,21 +155,11 @@
             });
           }, enumLoadToken, { dialect: 'common' });
         }
-        // A companion saved while the CompID row was hidden carries the field's
-        // untouched default, 190 — never a choice, because the operator could
-        // not see the row. Seed the role's own slot so reopening the dialog is
-        // all it takes to keep the identity it has been sending as. It rides
-        // into the fill rather than being assigned here: until the catalog
-        // lands the select holds only the saved option, so `.val(191)` would
-        // select nothing and the fill would read 190 straight back.
-        var seededCompId = null;
-        if (prevRole === 'companion') {
-          var savedCmp = String(node.sourceComponentId || '').trim();
-          if (savedCmp === '' || Number(savedCmp) === ROLE_PRESETS.gcs.compid) {
-            seededCompId = ROLE_PRESETS.companion.compid;
-          }
-        }
-        refillCompIds(seededCompId);
+        // No seeding on open: 190 is a legal companion CompID, so rewriting it
+        // to 191 would silently retype an identity the operator chose. A saved
+        // companion from before this field was visible shows the 190 it saved,
+        // and picking a slot is the operator's (pre-1.0: re-pick, not migrate).
+        refillCompIds();
 
         function preset(role) {
           return ROLE_PRESETS[role] || ROLE_PRESETS.custom;
