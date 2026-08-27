@@ -669,9 +669,13 @@ test('the role floats its own components to the top of the CompID select', () =>
   assert.match(html, /function refillCompIds\(desired\)/, 'a single repaint owns the select');
   assert.match(
     html,
-    /function refillCompIds\(desired\) \{\s*\n\s*RED\.mavlink\.loadEnumsCatalog\(\['MAV_COMPONENT'\]/,
+    /function refillCompIds\(desired\)[\s\S]*?RED\.mavlink\.loadEnumsCatalog\(\['MAV_COMPONENT'\]/,
     'the fill owns its own fetch'
   );
+  // `desired` is captured at call time, unlike the role, so an out-of-order
+  // response would repaint an older role's pick.
+  assert.match(html, /var refresh = \+\+compIdRefresh;/, 'each fetch takes a generation');
+  assert.match(html, /if \(refresh !== compIdRefresh\) return;/, 'and a stale one is dropped');
   assert.doesNotMatch(html, /compIdEntries/, 'no held catalog survives');
   assert.match(
     html,

@@ -103,6 +103,7 @@
         var $hbType = $('#node-config-input-heartbeatType');
         var $hbAp   = $('#node-config-input-heartbeatAutopilot');
         var prevRole = $role.val() || 'gcs';
+        var compIdRefresh = 0;
         var enumLoadToken = { cancelled: false };
         node._mavEnumLoadToken = enumLoadToken;
 
@@ -137,7 +138,13 @@
          * further role change still paints the role now selected.
          */
         function refillCompIds(desired) {
+          // `desired` is captured here, not read in the callback like the role
+          // is, so an out-of-order response would repaint an older role's pick.
+          // Same counter the shared reloadCompIdSelect and Fan-out's MAV_TYPE
+          // fetch keep, for the same reason.
+          var refresh = ++compIdRefresh;
           RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
+            if (refresh !== compIdRefresh) return;
             // `desired === null` rather than truthiness: component 0 is
             // MAV_COMP_ID_ALL, a real member of the enum.
             RED.mavlink.fillCompIdSelect($compid, ((catalog || {}).enums || {}).MAV_COMPONENT || [], {

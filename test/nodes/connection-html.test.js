@@ -111,6 +111,7 @@ const BOUND = {
   'id-own': { name: 'Tablet', role: 'custom', sourceSystemId: 254, sourceComponentId: 190 },
   'id-comp': { name: 'Onboard', role: 'companion', sourceSystemId: null, sourceComponentId: 191 },
   'id-comp2': { name: 'Onboard 2', role: 'companion', sourceSystemId: null, sourceComponentId: 192 },
+  'id-comp-dup': { name: 'Onboard spare', role: 'companion', sourceSystemId: null, sourceComponentId: 191 },
 };
 
 function boundValidate(conn, value) {
@@ -154,8 +155,11 @@ test('two companions collide only when they share an onboard slot', () => {
   // Both derive sysid 7 from the Vehicle Profile, so the slot is the whole
   // difference: 191/192 are ONBOARD_COMPUTER and ONBOARD_COMPUTER2.
   assert.equal(boundValidate({ localIdentity: 'id-comp' }, ['id-comp2']), true);
+  // Two *distinct* companions on the same slot. Repeating one reference would
+  // not reach here — normalizeIdentityIds strips it at save — so the fixture
+  // has to be a second identity that happens to share 191.
   assert.match(
-    String(boundValidate({ localIdentity: 'id-comp' }, ['id-comp'])),
+    String(boundValidate({ localIdentity: 'id-comp' }, ['id-comp-dup'])),
     /both send as 7\/191/
   );
 });
