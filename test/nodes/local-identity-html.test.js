@@ -109,6 +109,24 @@ class FakeSelect {
     return this;
   }
 
+  // Row-visibility no-ops, so a test can drive oneditprepare end to end
+  // rather than regex-matching its source.
+  hide() {
+    return this;
+  }
+
+  show() {
+    return this;
+  }
+
+  toggle() {
+    return this;
+  }
+
+  closest() {
+    return this;
+  }
+
   trigger(eventName) {
     this.triggered.push(eventName);
     return this;
@@ -582,6 +600,24 @@ test('companion keeps its CompID row — only SysID is derived', () => {
   );
 });
 
+test('oneditsave clears only the derived SysID — the CompID is the operator\'s', () => {
+  // The runtime reads sourceComponentId in every role now, so blanking it on
+  // save would reach the wire as component 0 (Number('') === 0) and the
+  // operator's chosen onboard slot would never persist.
+  const save = html.slice(html.indexOf('oneditsave: function'));
+  const body = save.slice(0, save.indexOf('oneditcancel'));
+  assert.match(
+    body,
+    /\$\('#node-config-input-sourceSystemId'\)\.val\(''\)/,
+    'the derived SysID is still cleared'
+  );
+  assert.doesNotMatch(
+    body,
+    /node-config-input-sourceComponentId/,
+    'the CompID must survive the save'
+  );
+});
+
 test('a companion saved behind the hidden row is seeded back to its own slot', () => {
   // The upgrade path. While the CompID row was hidden the dialog saved the
   // field's untouched default (190) and the runtime discarded it for a pinned
@@ -599,8 +635,17 @@ test('a companion saved behind the hidden row is seeded back to its own slot', (
   );
   assert.match(
     html,
-    /\$compid\.val\(ROLE_PRESETS\.companion\.compid\)/,
+    /seededCompId = ROLE_PRESETS\.companion\.compid/,
     'and it is seeded from the role preset, not a literal'
+  );
+  // Until the catalog lands the select holds only the saved option, so
+  // assigning 191 to it would select nothing and the fill would read 190
+  // straight back. The seed has to ride into the fill instead.
+  assert.match(html, /refillCompIds\(seededCompId\)/, 'the seed rides into the async fill');
+  assert.doesNotMatch(
+    html,
+    /\$compid\.val\(ROLE_PRESETS\.companion\.compid\)/,
+    'never assigned straight to the select'
   );
 });
 
@@ -701,7 +746,53 @@ test('heartbeatIntervalMs red-rings blank and non-positive values (walled garden
   assert.match(String(validate('abc')), /positive number/);
 });
 
-test('Companion save clears hidden source IDs before Node-RED copies editor inputs', () => {
+test('reopening a legacy companion lands on 191, not the hidden default it saved', () => {
+  // The upgrade path, driven rather than regex-matched. Until the catalog
+  // lands the select holds only the saved option, and FakeSelect models the
+  // real thing: assigning a value with no matching option selects nothing.
+  // A seed written straight to the select is therefore silently lost, and the
+  // fill reads the saved 190 back — which is what shipped until Codex caught
+  // it on #402.
+  const context = loadHelpers({ '#node-config-input-role': 'companion' });
+  context.$.responses['/mavlink/enums'] = {
+    dialect: 'common',
+    enums: {
+      MAV_COMPONENT: [
+        { name: 'MAV_COMP_ID_MISSIONPLANNER', value: 190, label: 'MISSIONPLANNER (190)' },
+        { name: 'MAV_COMP_ID_ONBOARD_COMPUTER', value: 191, label: 'ONBOARD_COMPUTER (191)' },
+        { name: 'MAV_COMP_ID_ONBOARD_COMPUTER2', value: 192, label: 'ONBOARD_COMPUTER2 (192)' },
+      ],
+    },
+  };
+
+  context.identityDefinition.oneditprepare.call({
+    id: 'legacy', role: 'companion', sourceComponentId: 190, heartbeatIntervalMs: 1000,
+  });
+
+  assert.equal(context.$('#node-config-input-sourceComponentId').val(), '191');
+});
+
+test('reopening a companion that already picked a slot leaves it alone', () => {
+  // The seed rewrites only the untouched default. 192 was a real choice.
+  const context = loadHelpers({ '#node-config-input-role': 'companion' });
+  context.$.responses['/mavlink/enums'] = {
+    dialect: 'common',
+    enums: {
+      MAV_COMPONENT: [
+        { name: 'MAV_COMP_ID_ONBOARD_COMPUTER', value: 191, label: 'ONBOARD_COMPUTER (191)' },
+        { name: 'MAV_COMP_ID_ONBOARD_COMPUTER2', value: 192, label: 'ONBOARD_COMPUTER2 (192)' },
+      ],
+    },
+  };
+
+  context.identityDefinition.oneditprepare.call({
+    id: 'picked', role: 'companion', sourceComponentId: 192, heartbeatIntervalMs: 1000,
+  });
+
+  assert.equal(context.$('#node-config-input-sourceComponentId').val(), '192');
+});
+
+test('Companion save clears the derived SysID and keeps the chosen CompID', () => {
   const context = loadHelpers({
     '#node-config-input-role': 'companion',
     '#node-config-input-sourceSystemId': '255',
@@ -724,6 +815,9 @@ test('Companion save clears hidden source IDs before Node-RED copies editor inpu
   }
 
   assert.equal(node.role, 'companion');
-  assert.equal(node.sourceSystemId, '');
-  assert.equal(node.sourceComponentId, '');
+  assert.equal(node.sourceSystemId, '', 'SysID is derived, so a leftover value goes');
+  // The runtime reads this in every role. Blanking it would arrive as
+  // Number('') === 0 — component 0, MAV_COMP_ID_ALL — instead of the slot the
+  // operator picked.
+  assert.equal(node.sourceComponentId, '190', 'the CompID survives the save');
 });
