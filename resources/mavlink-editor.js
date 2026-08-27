@@ -1376,6 +1376,27 @@
   };
 
   /**
+   * True when the Connection offers a real Identity choice — more than one
+   * eligible identity under the caller's role filter.
+   *
+   * A select carrying one option, or none, decides nothing: the sole eligible
+   * identity is the one the send would stamp either way, and an empty select
+   * (a companion-only Connection under Fan-out's `gcs`/`custom` filter) offers
+   * the operator a blank control that cannot be answered. Both hide the row —
+   * the same rule the payload verb select already follows for its
+   * single-command topics. `fillIdentitySelect` still runs and still stamps
+   * the sole option into config, so hiding changes what is shown, not what is
+   * sent.
+   *
+   * @param {string} connectionId
+   * @param {string[]} [rolesAllowed]
+   * @returns {boolean}
+   */
+  RED.mavlink.hasIdentityChoice = function (connectionId, rolesAllowed) {
+    return RED.mavlink.identityOptionsFor(connectionId, rolesAllowed).length > 1;
+  };
+
+  /**
    * Fill an Identity select with the identities bound to the selected
    * connection. When the saved id is not eligible (or empty), the first
    * eligible identity is preselected — and thereby written into config on

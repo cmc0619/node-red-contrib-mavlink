@@ -498,6 +498,18 @@ test('mavlink-move has vehicle and identity defaults for role × tier matrix (§
   assert.match(html, /id="node-input-identity"/, 'identity select exists in template');
   assert.match(html, /id="row-move-vehicle"/, 'vehicle row has ID for tier-driven toggling');
   assert.match(html, /id="row-move-identity"/, 'identity row has ID for tier-driven toggling');
+  // Wire tier alone does not show it: a Connection binding one identity offers
+  // no choice, so the row goes rather than showing a one-option select.
+  assert.match(
+    html,
+    /identity:\s*state\.isWire && state\.identityIsChoice/,
+    'identity row also needs the Connection to offer a choice'
+  );
+  assert.match(
+    html,
+    /identityIsChoice:\s*RED\.mavlink\.hasIdentityChoice\(/,
+    'the choice test is the shared predicate'
+  );
   assert.match(html, /id="row-move-connection"/, 'connection row has ID for tier-driven toggling');
 });
 

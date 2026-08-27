@@ -95,10 +95,17 @@ test('identity defaults to empty string and refreshIdentitySelect uses gcs+custo
     /identity:\s*\{\s*value:\s*''\s*\}/,
     'identity property defaults to empty string'
   );
+  // One spelling of the filter: the select fill and the row's visibility test
+  // must ask the same question, so both read the hoisted constant.
   assert.match(
     html,
-    /RED\.mavlink\.refreshIdentitySelect\(node,\s*\{\s*rolesAllowed:\s*\[\s*['"]gcs['"]\s*,\s*['"]custom['"]\s*\]\s*\}\)/,
-    'shared refreshIdentitySelect is called with gcs+custom filter'
+    /var IDENTITY_ROLES = \[\s*['"]gcs['"]\s*,\s*['"]custom['"]\s*\];/,
+    'the gcs+custom filter is named once'
+  );
+  assert.match(
+    html,
+    /RED\.mavlink\.refreshIdentitySelect\(node,\s*\{\s*rolesAllowed:\s*IDENTITY_ROLES\s*\}\)/,
+    'shared refreshIdentitySelect is called with that filter'
   );
   assert.match(
     html,
@@ -221,8 +228,8 @@ test('rows reshape by selection, execution, and delivery (§6)', () => {
   assert.match(html, /\$\('#row-fanout-retries'\)\.toggle\(d === 'confirm'\)/, 'retries only for confirm tier');
   assert.match(
     html,
-    /\$\('#row-fanout-identity'\)\.toggle\(d !== 'build'\)/,
-    'identity row is hidden when delivery is build (source ids stamped at the wire)'
+    /\$\('#row-fanout-identity'\)\.toggle\(\s*d !== 'build'\s*&& RED\.mavlink\.hasIdentityChoice\([\s\S]*?IDENTITY_ROLES\)\s*\)/,
+    'identity row hides on Build, and on any Connection offering under two eligible identities'
   );
   for (const handler of ['delivery', 'selectionMode', 'executionMode']) {
     assert.match(

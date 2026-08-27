@@ -4,6 +4,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [Unreleased]
+
+### Changed
+
+- **The Identity row appears only when there is an identity to choose.** Every
+  action node that stamps a source address — Command, Fan-out, Mission, Move,
+  Param, Payload — showed an Identity dropdown on every wire tier, even when
+  the Connection bound exactly one identity (one option, nothing to decide) or,
+  on Fan-out against a companion-only Connection, none at all (an empty select
+  that could not be answered). The row now appears only when the Connection
+  offers more than one eligible identity; otherwise it is hidden and the
+  Connection's own identity is stamped, which is what those dialogs already
+  sent. Health has worked this way since it grew the field; the rule is now one
+  shared predicate rather than seven dialogs' worth of local opinion. No saved
+  flow changes behaviour.
+
 ## [0.5.1] "Nap of the earth" - 2026-08-25
 
 ### Added

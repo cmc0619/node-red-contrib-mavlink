@@ -49,6 +49,15 @@ test('mavlink-param has identity default (vehicle comes from the shared helper)'
   );
 });
 
+test('a Connection change reshapes the rows, not just the identity select', () => {
+  // The Identity row's visibility turns on the new Connection's identity
+  // count, so a re-fill without a reshape would leave a stale row on screen.
+  const handler = html.slice(html.indexOf("$('#node-input-connection').on('change'"));
+  const body = handler.slice(0, handler.indexOf('});'));
+  assert.match(body, /RED\.mavlink\.refreshIdentitySelect\(node\)/, 'the select is re-filled');
+  assert.match(body, /refreshVisibility\(\)/, 'and the reshape follows it');
+});
+
 test('mavlink-param calls refreshIdentitySelect on connection change', () => {
   assert.match(html, /RED\.mavlink\.refreshIdentitySelect\(node\)/, 'shared refreshIdentitySelect is called');
   assert.match(html, /node-input-identity/, 'identity select element exists');
@@ -95,6 +104,13 @@ test('mavlink-param has refreshVisibility and companion row hiding', () => {
   assert.match(html, /row-vehicle/, 'row-vehicle present for build tier');
   assert.match(html, /row-connection/, 'row-connection present for wire tiers');
   assert.match(html, /row-identity/, 'row-identity present for wire tiers');
+  // Wire tier alone does not show it: a Connection binding one identity offers
+  // no choice, so the row goes rather than showing a one-option select.
+  assert.match(
+    html,
+    /\$\('#row-identity'\)\.toggle\(\s*!isBuild && RED\.mavlink\.hasIdentityChoice\(/,
+    'identity row also needs the Connection to offer a choice'
+  );
   assert.match(html, /row-dialect/, 'row-dialect present for build tier');
   assert.match(html, /row-firmware/, 'row-firmware present for concrete build dialects');
   assert.match(

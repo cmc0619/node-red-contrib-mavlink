@@ -50,10 +50,15 @@ test('one helper decides single-vs-multi, so the three sites cannot drift', () =
   // on isSingleIdentity, not its own inline `<= 1`.
   assert.match(
     html,
-    /function isSingleIdentity\(connId\)\s*\{\s*return RED\.mavlink\.identityOptionsFor\(connId\)\.length <= 1;/,
-    'a single helper owns the count'
+    /function isSingleIdentity\(connId\)\s*\{\s*return !RED\.mavlink\.hasIdentityChoice\(connId\);/,
+    'a single helper owns the count, and it is the shared one every dialog uses'
   );
   assert.doesNotMatch(html, /options\.length <= 1/, 'no inline count survives the helper');
+  assert.doesNotMatch(
+    html,
+    /identityOptionsFor\([^)]*\)\.length/,
+    'the count is not re-derived locally (the bound-membership test still reads the list)'
+  );
 });
 
 test('the Identity row is hidden for a single-identity Connection, shown for many', () => {

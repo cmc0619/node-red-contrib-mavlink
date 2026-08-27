@@ -709,6 +709,54 @@ test('bindSelectTitleSync mirrors the selected option title onto the select', ()
   assert.equal(typeof sync, 'function');
 });
 
+// ── hasIdentityChoice ────────────────────────────────────────────────────────
+
+// A Connection carrying one gcs Local Identity plus one companion additional.
+const MIXED_ROLE_CONNECTION = {
+  'conn-mixed': { localIdentity: 'id-gcs', additionalIdentities: ['id-companion'] },
+  'id-gcs': { name: 'Ground', role: 'gcs' },
+  'id-companion': { name: 'Onboard', role: 'companion' },
+};
+
+test('hasIdentityChoice is false for a Connection with a single bound identity', () => {
+  const { RED } = loadResource({}, {
+    'conn-solo': { localIdentity: 'id-gcs', additionalIdentities: [] },
+    'id-gcs': { name: 'Ground', role: 'gcs' },
+  });
+  assert.equal(RED.mavlink.hasIdentityChoice('conn-solo'), false);
+});
+
+test('hasIdentityChoice is true once a second identity is bound', () => {
+  const { RED } = loadResource({}, MIXED_ROLE_CONNECTION);
+  assert.equal(RED.mavlink.hasIdentityChoice('conn-mixed'), true);
+});
+
+test('hasIdentityChoice counts only the roles the caller allows', () => {
+  const { RED } = loadResource({}, MIXED_ROLE_CONNECTION);
+  // Fan-out's filter leaves one eligible identity of the two bound — a select
+  // with a single option, so no choice.
+  assert.equal(RED.mavlink.hasIdentityChoice('conn-mixed', ['gcs', 'custom']), false);
+});
+
+test('hasIdentityChoice is false when the role filter leaves nothing at all', () => {
+  const { RED } = loadResource({}, {
+    'conn-companion': { localIdentity: 'id-companion', additionalIdentities: [] },
+    'id-companion': { name: 'Onboard', role: 'companion' },
+  });
+  // The empty Fan-out select: a companion-only Connection under gcs/custom.
+  assert.equal(RED.mavlink.hasIdentityChoice('conn-companion', ['gcs', 'custom']), false);
+  assert.deepEqual(
+    plain(RED.mavlink.identityOptionsFor('conn-companion', ['gcs', 'custom'])),
+    []
+  );
+});
+
+test('hasIdentityChoice is false for an unset or unknown Connection', () => {
+  const { RED } = loadResource();
+  assert.equal(RED.mavlink.hasIdentityChoice(''), false);
+  assert.equal(RED.mavlink.hasIdentityChoice('conn-missing'), false);
+});
+
 test('refreshIdentitySelect reads the live connection and forwards rolesAllowed', () => {
   const calls = [];
   const values = {
