@@ -21,6 +21,27 @@ test('mavlink-local-identity converts heartbeatIntervalMs as saved', () => {
   assert.equal(stock.heartbeatIntervalMs, 1000);
 });
 
+test('a companion carries its saved CompID; only SysID is derived', () => {
+  const RED = redStub();
+  require('../../nodes/mavlink-local-identity')(RED);
+  const Node = RED.nodes.types['mavlink-local-identity'];
+
+  // MAV_COMPONENT reserves 191-194 for onboard computers. The editor owns the
+  // CompID field in every role (§6) and the runtime reads what was saved, so
+  // two companions on a link separate on their slots.
+  const second = new Node({
+    id: 'c2', role: 'companion', sourceSystemId: '', sourceComponentId: 192,
+    heartbeatIntervalMs: 1000,
+  });
+
+  assert.equal(second.sourceComponentId, 192);
+  assert.equal(second.sourceSystemId, null, 'SysID is still derived from the vehicle');
+  assert.equal(second.derivesSysidFromVehicle, true);
+
+  second.bindVehicleSysid(7, 'Link', 'conn-1');
+  assert.deepEqual(second.getIdentity(), { sysid: 7, compid: 192 });
+});
+
 function redStub() {
   return {
     nodes: {

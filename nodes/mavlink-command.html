@@ -466,7 +466,12 @@
           connectionRow: '#row-cmd-connection'
         });
         // Command-owned wire rows stay local.
-        $('#row-cmd-identity')[isBuild ? 'hide' : 'show']();
+        // The Identity row appears only when the Connection carries more than
+        // one identity: a single-identity Connection has nothing to decide,
+        // and a select with one option is noise (shared hasIdentityChoice).
+        $('#row-cmd-identity').toggle(
+          !isBuild && RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
+        );
         $('#row-cmd-timeout')[isBuild ? 'hide' : 'show']();
         $('#row-cmd-maxRetries')[isBuild ? 'hide' : 'show']();
         $('#row-cmd-unconfirmedContinue')[isBuild ? 'hide' : 'show']();

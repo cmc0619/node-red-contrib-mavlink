@@ -20,36 +20,53 @@
     }
 
     /**
-     * Role-aware identity-id validator. The companion role derives its SysID
-     * and pins its CompID, so blank is valid there. Every other role requires
-     * a value.
+     * A required uint8 identity id. CompID uses this in every role — the field
+     * is the operator's everywhere — so its reason must not claim the
+     * requirement is role-conditional; SysID's caller supplies one that does.
+     */
+    function mavIdentityIdValidator(min, reason) {
+      var rangeCheck = RED.mavlink.validateUint8(min);
+      return function (v, opt) {
+        if (RED.mavlink.isBlank(v)) return reason;
+        return rangeCheck.call(this, v, opt);
+      };
+    }
+
+    /**
+     * SysID's validator. The companion role derives this one field from the
+     * vehicle on the bound Connection, so blank is its correct saved state;
+     * every other role requires a value.
      *
      * The live role read goes through liveOr so it is scoped to this node's
      * own dialog (#217): a bare $('#node-config-input-role') read would trust
      * whatever dialog happens to be open, and a foreign read here poisons
-     * `valid` on a node whose blank ids are legal — sticky until reopened,
+     * `valid` on a node whose blank sysid is legal — sticky until reopened,
      * and the Connection reds with it through Node-RED's config cascade.
      */
-    function mavIdentityIdValidator(min) {
+    function mavSourceSysidValidator(min) {
+      var required = mavIdentityIdValidator(min, 'required for this role');
       var rangeCheck = RED.mavlink.validateUint8(min);
       return function (v, opt) {
         var role = RED.mavlink.liveOr(this, '#node-config-input-role', this.role, 'gcs');
-        var blank = RED.mavlink.isBlank(v);
-        if (role === 'companion') {
-          return blank ? true : rangeCheck.call(this, v, opt);
-        }
-        return blank ? 'required for this role' : rangeCheck.call(this, v, opt);
+        if (role !== 'companion') return required.call(this, v, opt);
+        return RED.mavlink.isBlank(v) ? true : rangeCheck.call(this, v, opt);
       };
     }
 
     /**
      * Role presets: suggested identity values per role. Switching roles
      * pre-fills blank fields; an explicitly customized value is never rewritten.
+     *
+     * `compIdSuggest` floats the components the role plausibly means to the top
+     * of the CompID select — a substring matched against MAV_COMPONENT's own
+     * names, the same mechanism the Payload node's topic hint uses. Suggested,
+     * never filtered: custom names none and gets the flat list, and every
+     * component stays reachable in all three roles.
      */
     var ROLE_PRESETS = {
-      gcs:       { sysid: 255, compid: 190, heartbeatType: 'MAV_TYPE_GCS' },
-      companion: { sysid: null, compid: null, heartbeatType: 'MAV_TYPE_ONBOARD_CONTROLLER' },
-      custom:    { sysid: 255, compid: 190, heartbeatType: 'MAV_TYPE_GENERIC' }
+      gcs:       { sysid: 255, compid: 190, heartbeatType: 'MAV_TYPE_GCS', compIdSuggest: 'MISSIONPLANNER' },
+      companion: { sysid: null, compid: 191, heartbeatType: 'MAV_TYPE_ONBOARD_CONTROLLER', compIdSuggest: 'ONBOARD_COMPUTER' },
+      custom:    { sysid: 255, compid: 190, heartbeatType: 'MAV_TYPE_GENERIC', compIdSuggest: '' }
     };
 
     RED.nodes.registerType('mavlink-local-identity', {
@@ -58,12 +75,18 @@
         name:              { value: '' },
         role:              { value: 'gcs', required: true },
         /**
-         * NOT `required`: companion role derives sysid and pins compid, so
-         * blank is the correct saved state for those fields in that role.
-         * The role-aware validator below enforces the requirement for other roles.
+         * SysID is NOT `required`: the companion role derives it from the
+         * vehicle, so blank is the correct saved state in that role, and its
+         * validator carries that one allowance. CompID is required in every
+         * role — the operator picks the component in all three.
          */
-        sourceSystemId:    { value: 255, validate: mavIdentityIdValidator(1) },
-        sourceComponentId: { value: 190, validate: mavIdentityIdValidator(1) },
+        sourceSystemId:    { value: 255, validate: mavSourceSysidValidator(1) },
+        // `required` rides alongside the validator, as on Vehicle's
+        // vehicleFamily (owner ruling, #372): blank reds through the generic
+        // missing-required path, and any non-blank stray still gets the range
+        // reason. It also means a blank can never reach the runtime as
+        // Number('') === 0 — component 0 is MAV_COMP_ID_ALL, a real member.
+        sourceComponentId: { value: 190, required: true, validate: mavIdentityIdValidator(1, 'required — a blank CompID names no component') },
         heartbeatType:     { value: '' },
         heartbeatAutopilot:{ value: 'MAV_AUTOPILOT_INVALID' },
         heartbeatIntervalMs:{ value: 1000, validate: positiveNumberValidator }
@@ -96,8 +119,9 @@
         });
 
         // Local Identity has no Connection/Dialect row — request `common`
-        // explicitly (owns MAV_TYPE / MAV_AUTOPILOT / MAV_COMPONENT).
-        RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMPONENT'], function (catalog) {
+        // explicitly (owns MAV_TYPE / MAV_AUTOPILOT). CompID fetches its own,
+        // per role, in refillCompIds below.
+        RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT'], function (catalog) {
           var enums = (catalog && catalog.enums) || {};
           // Prefer live dialog values so a role change before the catalog
           // resolves is not overwritten by the pre-edit saved snapshot.
@@ -110,10 +134,39 @@
             valueKey: 'name',
             saved: $hbAp.val() || node.heartbeatAutopilot
           });
-          RED.mavlink.fillCompIdSelect($compid, enums.MAV_COMPONENT || [], {
-            saved: $compid.val() || node.sourceComponentId
-          });
         }, enumLoadToken, { dialect: 'common' });
+
+        /**
+         * Fill the CompID select with the current role's suggestions on top.
+         * The role is read in the callback, so a response that lands after a
+         * further role change still paints the role now selected.
+         *
+         * No sequence counter here. `enumLoadToken` already drops responses
+         * that land after the dialog closed, which is the reachable case and
+         * the one Fan-out's MAV_TYPE counter exists for — it has no per-open
+         * token. What a counter would add is ordering between two fetches
+         * inside one open dialog, and the only caller that can start a second
+         * one is the role select: an operator would have to change it twice
+         * within a localhost round trip. Nothing fires that change
+         * programmatically.
+         */
+        function refillCompIds(desired) {
+          RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
+            // `desired === null` rather than truthiness: component 0 is
+            // MAV_COMP_ID_ALL, a real member of the enum.
+            RED.mavlink.fillCompIdSelect($compid, ((catalog || {}).enums || {}).MAV_COMPONENT || [], {
+              saved: desired === null || desired === undefined
+                ? ($compid.val() || node.sourceComponentId)
+                : desired,
+              suggest: preset($role.val()).compIdSuggest
+            });
+          }, enumLoadToken, { dialect: 'common' });
+        }
+        // No seeding on open: 190 is a legal companion slot, so a saved 190 is
+        // indistinguishable from one an operator chose, and rewriting it to 191
+        // would silently retype a deliberate identity. The dialog shows what is
+        // saved, in every role; picking a slot is the operator's.
+        refillCompIds();
 
         function preset(role) {
           return ROLE_PRESETS[role] || ROLE_PRESETS.custom;
@@ -137,10 +190,12 @@
             }
           }
           /* compid */
+          var pickedCompId = null;
           if (next.compid !== null) {
             var curCmp = String($compid.val()).trim();
             if (curCmp === '' || Number($compid.val()) === prev.compid) {
-              $compid.val(next.compid);
+              pickedCompId = next.compid;
+              $compid.val(pickedCompId);
               $compid.trigger('change');
             }
           }
@@ -151,18 +206,25 @@
             $hbType.trigger('change');
           }
 
+          // The role names a different family of components, so the select's
+          // "Suggested" group is repainted with it — same entries, new order.
+          // The new suggestion rides along: switching role before the catalog
+          // lands leaves the select empty, where `.val()` sets nothing and the
+          // repaint would otherwise fall back to the pre-switch saved id.
+          refillCompIds(pickedCompId);
           applyVisibility(role);
           prevRole = role;
         }
 
         /**
-         * §6 rule: role reshapes the dialog. Companion derives sysid/compid —
-         * those rows hide and a note appears instead.
+         * §6 rule: role reshapes the dialog. Companion derives its SysID from
+         * the vehicle on the bound Connection, so that row hides and a note
+         * says where the value comes from. CompID stays: MAV_COMPONENT carries
+         * four onboard-computer slots, so it is a real choice (§14.135).
          */
         function applyVisibility(role) {
           var isCompanion = (role === 'companion');
           $sysid.closest('.form-row').toggle(!isCompanion);
-          $compid.closest('.form-row').toggle(!isCompanion);
           $('#mav-companion-ids-note').toggle(isCompanion);
           $('.mav-role-hint').hide();
           $('#mav-role-hint-' + role).show();
@@ -178,18 +240,15 @@
       oneditsave: function () {
         if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
         /**
-         * Companion role: clear any values a previous role left behind. The
-         * runtime ignores them anyway (derives sysid, pins compid to 191), but
-         * a saved 255 next to a derived 1 looks like a contradiction. Clear
-         * the editor fields because Node-RED copies them onto the node after
-         * oneditsave returns.
+         * Companion role: SysID is derived from the vehicle, so a value a
+         * previous role left behind reads as a contradiction next to it —
+         * clear the editor field, since Node-RED copies these onto the node
+         * after oneditsave returns. CompID is NOT cleared: the operator picks
+         * the onboard slot in this role too, and the runtime reads what is
+         * saved. Blanking it would reach the wire as component 0.
          */
         if ($('#node-config-input-role').val() === 'companion') {
           $('#node-config-input-sourceSystemId').val('');
-          $('#node-config-input-sourceComponentId')
-            .empty()
-            .append($('<option></option>').val(''))
-            .val('');
         }
       },
       oneditcancel: function () {
@@ -231,9 +290,11 @@
     <select id="node-config-input-sourceComponentId"></select>
   </div>
   <div class="form-tips" id="mav-companion-ids-note" style="margin-bottom:8px;display:none;">
-    <b>Source SysID</b> is derived from the Vehicle Profile on the bound Connection.
-    <b>CompID</b> is fixed at <code>191</code> (MAV_COMP_ID_ONBOARD_COMPUTER).
-    Use the <b>Custom</b> role to set either field yourself.
+    <b>Source SysID</b> is derived from the Vehicle Profile on the bound Connection —
+    a companion is a component of the vehicle's system. Use the <b>Custom</b> role to
+    set it yourself. <b>CompID</b> is yours to pick: MAVLink reserves
+    <code>191</code>-<code>194</code> for onboard computers, so a second companion on
+    the same Connection takes the next slot.
   </div>
   <div class="form-row">
     <label for="node-config-input-heartbeatType">HB Type</label>
@@ -266,9 +327,21 @@
     heartbeat <code>MAV_TYPE_GCS</code> with <code>MAV_AUTOPILOT_INVALID</code>.</li>
     <li><b>Onboard companion</b> — a computer riding on the airframe. SysID is derived from the
     Vehicle Profile on the Connection (it IS a component of that vehicle's system); CompID is
-    fixed at <code>191</code>. Heartbeat <code>MAV_TYPE_ONBOARD_CONTROLLER</code>.</li>
+    yours, suggested from MAVLink's four onboard-computer slots <code>191</code>-<code>194</code>.
+    Heartbeat <code>MAV_TYPE_ONBOARD_CONTROLLER</code>.</li>
     <li><b>Custom</b> — set everything yourself (test rigs, simulated components, unusual stacks).</li>
   </ul>
+  <p>A role is a starting point, not a quota. Nothing limits how many identities of a role you
+  create or how many one Connection binds. The one rule the Connection enforces is that no two
+  identities it binds share a source SysID/CompID pair, because that pair is the identity on the
+  wire.</p>
+  <p>Which half you vary follows what the thing <i>is</i>. A SysID names a system, a CompID a
+  component within it. Two ground stations are two systems: each is a <b>GCS</b> with its own SysID
+  (<code>255</code>, <code>254</code>…), since MAVLink defines a single ground-station component,
+  <code>190</code>. Two companions are two components of one airframe: each keeps the SysID it derives
+  from the vehicle and takes its own onboard-computer slot. Same SysID with different CompIDs says
+  "one station, several components" — right for a GCS app beside a co-located logger, wrong for two
+  operators.</p>
   <h3>MAVLink 2 signing</h3>
   <p>Signing is configured on the <b>Connection</b>, not here. A MAVLink link has one shared key,
   so the credential and sign/verify/require policy belong to the secured link — one identity can

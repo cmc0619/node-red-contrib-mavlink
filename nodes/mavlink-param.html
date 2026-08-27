@@ -269,7 +269,12 @@
           connectionRow: '#row-connection'
         });
         /* Param-owned wire rows stay local */
-        $('#row-identity').toggle(!isBuild);
+        /* The Identity row appears only when the Connection carries more than
+           one identity: a single-identity Connection has nothing to decide,
+           and a select with one option is noise (shared hasIdentityChoice). */
+        $('#row-identity').toggle(
+          !isBuild && RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
+        );
         $('#row-timeout').toggle(!isBuild);
 
         /* role-driven rows: companion hides both target rows */
@@ -793,6 +798,9 @@
       $('#node-input-connection').on('change', function () {
         clearParamDefs();
         RED.mavlink.refreshIdentitySelect(node);
+        // The Identity row's visibility turns on how many identities the new
+        // Connection binds, so the reshape has to follow the re-fill.
+        refreshVisibility();
         loadParamDefs();
         RED.mavlink.reloadTargetCompId(node);
       });
@@ -1034,7 +1042,7 @@
 
 <script type="text/html" data-help-name="mavlink-param">
   <p>Reads one parameter, sets one parameter, or requests a full list. Set confirmation is by matching the PARAM_VALUE echo, not COMMAND_ACK.</p>
-  <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — pick a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Identity</b> stamps the source address.</p>
+  <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — pick a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Identity</b> stamps the source address, and appears only when the Connection binds more than one identity to choose between.</p>
   <p><b>Confirm and collect.</b> On a set, <i>Send and echo-confirm</i> waits for
   the vehicle's <code>PARAM_VALUE</code> echo and re-sends the
   <code>PARAM_SET</code> on silence — three attempts in all, each waiting the

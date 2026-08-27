@@ -60,6 +60,7 @@ class FakeSelect {
     this.attrs = {};
     this.dataStore = {};
     this.triggered = [];
+    this.visible = true;
   }
 
   empty() {
@@ -109,6 +110,28 @@ class FakeSelect {
     return this;
   }
 
+  // Row visibility, recorded rather than swallowed: `closest('.form-row')`
+  // returns this same fake, so a test can drive oneditprepare and then read
+  // which rows the role reshaped instead of regex-matching the source.
+  hide() {
+    this.visible = false;
+    return this;
+  }
+
+  show() {
+    this.visible = true;
+    return this;
+  }
+
+  toggle(shown) {
+    this.visible = shown === undefined ? !this.visible : Boolean(shown);
+    return this;
+  }
+
+  closest() {
+    return this;
+  }
+
   trigger(eventName) {
     this.triggered.push(eventName);
     return this;
@@ -151,6 +174,10 @@ function loadHelpers(initialValues = {}, nodeLookup = {}) {
     }
     return elements.get(selector);
   }
+  // `deferred` holds each callback instead of firing it, so a test can close
+  // the dialog and *then* deliver the response — the only way to prove the
+  // cancel token actually drops it.
+  $.deferred = null;
   $.getJSON = function (url, query, cb) {
     if (typeof query === 'function') {
       cb = query;
@@ -158,7 +185,9 @@ function loadHelpers(initialValues = {}, nodeLookup = {}) {
     }
     $.lastRequest = { url, query };
     const data = $.responses[url] || { dialect: 'common', enums: { MAV_TYPE: [] } };
-    if (cb) cb(data);
+    if (cb && Array.isArray($.deferred)) {
+      $.deferred.push(() => cb(data));
+    } else if (cb) cb(data);
     return {
       fail() { return this; },
       done(doneCb) {
@@ -561,11 +590,160 @@ test('identity oneditprepare loads MAV_TYPE by enum name, not numeric value', ()
   assert.match(html, /saved:\s*\$compid\.val\(\)\s*\|\|\s*node\.sourceComponentId/);
 });
 
+test('companion reshapes the rows: SysID hidden, CompID still shown', () => {
+  // Driven, not matched. The fake records visibility now, so the §6 reshape
+  // is asserted from behaviour: the derived field goes, the choice stays.
+  const context = loadHelpers({ '#node-config-input-role': 'companion' });
+  context.$.responses['/mavlink/enums'] = {
+    dialect: 'common',
+    enums: {
+      MAV_COMPONENT: [
+        { name: 'MAV_COMP_ID_ONBOARD_COMPUTER', value: 191, label: 'ONBOARD_COMPUTER (191)' },
+      ],
+    },
+  };
+
+  context.identityDefinition.oneditprepare.call({
+    id: 'c', role: 'companion', sourceComponentId: 191, heartbeatIntervalMs: 1000,
+  });
+
+  assert.equal(
+    context.$('#node-config-input-sourceSystemId').visible,
+    false,
+    'SysID is derived from the vehicle, so its row goes'
+  );
+  assert.equal(
+    context.$('#node-config-input-sourceComponentId').visible,
+    true,
+    'CompID is four onboard slots — a real choice, so its row stays'
+  );
+});
+
+test('companion keeps its CompID row — only SysID is derived', () => {
+  // SysID genuinely comes from the vehicle, so that row hides. CompID is a
+  // choice of four onboard-computer slots, so it stays (§14.135: a control
+  // with something to decide is not noise).
+  assert.match(
+    html,
+    /\$sysid\.closest\('\.form-row'\)\.toggle\(!isCompanion\)/,
+    'the derived SysID row still hides for companion'
+  );
+  assert.doesNotMatch(
+    html,
+    /\$compid\.closest\('\.form-row'\)\.toggle\(!isCompanion\)/,
+    'the CompID row stays visible for companion'
+  );
+  assert.doesNotMatch(
+    html,
+    /CompID<\/b> is fixed at/,
+    'the note does not claim CompID is fixed'
+  );
+});
+
+test('oneditsave clears only the derived SysID — the CompID is the operator\'s', () => {
+  // The runtime reads sourceComponentId in every role now, so blanking it on
+  // save would reach the wire as component 0 (Number('') === 0) and the
+  // operator's chosen onboard slot would never persist.
+  const save = html.slice(html.indexOf('oneditsave: function'));
+  const body = save.slice(0, save.indexOf('oneditcancel'));
+  assert.match(
+    body,
+    /\$\('#node-config-input-sourceSystemId'\)\.val\(''\)/,
+    'the derived SysID is still cleared'
+  );
+  assert.doesNotMatch(
+    body,
+    /node-config-input-sourceComponentId/,
+    'the CompID must survive the save'
+  );
+});
+
+test('a companion saved behind the hidden row is seeded back to its own slot', () => {
+  // The upgrade path. While the CompID row was hidden the dialog saved the
+  // field's untouched default (190) and the runtime discarded it for a pinned
+  // 191. Now that the runtime reads what was saved, opening the dialog must
+  // seed the role's slot back, or a companion silently becomes component 190.
+  assert.doesNotMatch(
+    html,
+    /seededCompId|ROLE_PRESETS\.gcs\.compid/,
+    'no open-time CompID seeding — 190 is a legal companion slot, and inferring '
+      + '"never chosen" from the value is the shim pre-1.0 forbids'
+  );
+});
+
+test('the role floats its own components to the top of the CompID select', () => {
+  // The Payload topic hint, applied to roles: suggested, never filtered, so
+  // every component stays reachable in all three roles.
+  assert.match(
+    html,
+    /compIdSuggest:\s*'ONBOARD_COMPUTER'/,
+    'companion suggests the four onboard-computer slots'
+  );
+  assert.match(html, /compIdSuggest:\s*'MISSIONPLANNER'/, 'gcs suggests 190');
+  assert.match(html, /custom:[^\n]*compIdSuggest:\s*''/, 'custom names none — flat list');
+  assert.match(
+    html,
+    /suggest:\s*preset\(\$role\.val\(\)\)\.compIdSuggest/,
+    'the fill passes the current role\'s hint'
+  );
+  // One place owns the fill, and it fetches MAV_COMPONENT itself so a role
+  // change repaints from a fresh catalog rather than a held copy.
+  assert.match(html, /function refillCompIds\(desired\)/, 'a single repaint owns the select');
+  assert.match(
+    html,
+    /function refillCompIds\(desired\)[\s\S]*?RED\.mavlink\.loadEnumsCatalog\(\['MAV_COMPONENT'\]/,
+    'the fill owns its own fetch'
+  );
+  // Cancellation is proven by driving it, not by finding a token name in the
+  // source. This is the reachable staleness case — a response arriving after
+  // the dialog closed — and it is why no sequence counter is needed on top.
+  const ctx = loadHelpers({ '#node-config-input-role': 'gcs' });
+  ctx.$.responses['/mavlink/enums'] = {
+    dialect: 'common',
+    enums: {
+      MAV_COMPONENT: [
+        { name: 'MAV_COMP_ID_MISSIONPLANNER', value: 190, label: 'MISSIONPLANNER (190)' },
+        { name: 'MAV_COMP_ID_ONBOARD_COMPUTER', value: 191, label: 'ONBOARD_COMPUTER (191)' },
+      ],
+    },
+  };
+  ctx.$.deferred = [];
+  const editing = { id: 'g', role: 'gcs', sourceComponentId: 190, heartbeatIntervalMs: 1000 };
+  ctx.identityDefinition.oneditprepare.call(editing);
+
+  ctx.identityDefinition.oneditcancel.call(editing);
+  const compid = ctx.$('#node-config-input-sourceComponentId');
+  const before = compid.options.length;
+  ctx.$.deferred.forEach((deliver) => deliver());
+
+  assert.equal(
+    compid.options.length,
+    before,
+    'a response landing after the dialog closed must not repaint the select'
+  );
+  assert.doesNotMatch(html, /compIdEntries/, 'no held catalog survives');
+  assert.match(
+    html,
+    /refillCompIds\(pickedCompId\);\s*\n\s*applyVisibility\(role\)/,
+    'a role change repaints the suggestions, carrying its new pick'
+  );
+  // Switching role before the catalog lands leaves the select empty, where
+  // `.val()` sets nothing — the repaint must not then fall back to the
+  // pre-switch saved id.
+  // Component 0 is MAV_COMP_ID_ALL, so the pick is tested for null, not
+  // truthiness.
+  assert.match(
+    html,
+    /desired === null \|\| desired === undefined/,
+    'the role\'s own pick outranks the empty select, zero included'
+  );
+});
+
 test('identity oneditprepare seeds CompID before async enum catalog', () => {
   // Sync seed must appear before loadEnumsCatalog so post-prepare validation
   // sees the saved numeric CompID while MAV_COMPONENT is still loading.
   const seedIdx = html.indexOf("fillCompIdSelect($compid, [],");
-  const loadIdx = html.indexOf("loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMPONENT']");
+  const loadIdx = html.indexOf("loadEnumsCatalog(['MAV_COMPONENT']");
   assert.ok(seedIdx !== -1, 'sync CompID seed');
   assert.ok(loadIdx !== -1, 'async enum load');
   assert.ok(seedIdx < loadIdx, 'seed before async catalog');
@@ -617,7 +795,37 @@ test('heartbeatIntervalMs red-rings blank and non-positive values (walled garden
   assert.match(String(validate('abc')), /positive number/);
 });
 
-test('Companion save clears hidden source IDs before Node-RED copies editor inputs', () => {
+test('reopening a companion never retypes its saved CompID', () => {
+  // 190 is a legal companion CompID. A seed that rewrote it to 191 on open
+  // would silently change an identity the operator picked — and inferring
+  // "this value was never chosen" from the value itself is the migration shim
+  // the pre-1.0 rule forbids. The dialog shows what was saved, in both cases.
+  for (const saved of [190, 192]) {
+    const context = loadHelpers({ '#node-config-input-role': 'companion' });
+    context.$.responses['/mavlink/enums'] = {
+      dialect: 'common',
+      enums: {
+        MAV_COMPONENT: [
+          { name: 'MAV_COMP_ID_MISSIONPLANNER', value: 190, label: 'MISSIONPLANNER (190)' },
+          { name: 'MAV_COMP_ID_ONBOARD_COMPUTER', value: 191, label: 'ONBOARD_COMPUTER (191)' },
+          { name: 'MAV_COMP_ID_ONBOARD_COMPUTER2', value: 192, label: 'ONBOARD_COMPUTER2 (192)' },
+        ],
+      },
+    };
+
+    context.identityDefinition.oneditprepare.call({
+      id: 'c', role: 'companion', sourceComponentId: saved, heartbeatIntervalMs: 1000,
+    });
+
+    assert.equal(
+      context.$('#node-config-input-sourceComponentId').val(),
+      String(saved),
+      `companion saved on ${saved} reopens on ${saved}`
+    );
+  }
+});
+
+test('Companion save clears the derived SysID and keeps the chosen CompID', () => {
   const context = loadHelpers({
     '#node-config-input-role': 'companion',
     '#node-config-input-sourceSystemId': '255',
@@ -640,6 +848,9 @@ test('Companion save clears hidden source IDs before Node-RED copies editor inpu
   }
 
   assert.equal(node.role, 'companion');
-  assert.equal(node.sourceSystemId, '');
-  assert.equal(node.sourceComponentId, '');
+  assert.equal(node.sourceSystemId, '', 'SysID is derived, so a leftover value goes');
+  // The runtime reads this in every role. Blanking it would arrive as
+  // Number('') === 0 — component 0, MAV_COMP_ID_ALL — instead of the slot the
+  // operator picked.
+  assert.equal(node.sourceComponentId, '190', 'the CompID survives the save');
 });

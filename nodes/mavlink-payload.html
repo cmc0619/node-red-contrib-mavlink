@@ -291,7 +291,13 @@
           vehicleRow: '#row-payload-vehicle',
           connectionRow: '#row-payload-connection'
         });
-        $('#row-payload-identity').toggle(isWire);
+        // The Identity row appears only when the Connection carries more
+        // than one identity: a single-identity Connection has nothing to
+        // decide, and a select with one option is noise — the same rule the
+        // verb row below follows for single-command topics.
+        $('#row-payload-identity').toggle(
+          isWire && RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
+        );
         $('#row-payload-timeout').toggle(isWire);
         $('#row-payload-maxRetries').toggle(isWire);
 

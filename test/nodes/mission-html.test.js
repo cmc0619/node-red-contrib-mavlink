@@ -53,6 +53,13 @@ test('mavlink-mission has refreshVisibility and companion row hiding', () => {
   assert.match(html, /row-vehicle/, 'row-vehicle present for build tier');
   assert.match(html, /row-connection/, 'row-connection present for wire tiers');
   assert.match(html, /row-identity/, 'row-identity present for wire tiers');
+  // Wire tier alone does not show it: a Connection binding one identity offers
+  // no choice, so the row goes rather than showing a one-option select.
+  assert.match(
+    html,
+    /\$\('#row-identity'\)\.toggle\(\s*isWire && RED\.mavlink\.hasIdentityChoice\(/,
+    'identity row also needs the Connection to offer a choice'
+  );
 });
 
 test('mavlink-mission Build dialect select uses shared helper with Vehicle Profile escape', () => {

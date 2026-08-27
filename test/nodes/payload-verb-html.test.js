@@ -207,7 +207,11 @@ test('mavlink-payload build tier shows vehicle, hides connection/identity/timeou
   assert.match(payloadHtml, /dialectRow:\s*'#row-payload-dialect'/, 'dialect row selector passed');
   assert.match(payloadHtml, /vehicleRow:\s*'#row-payload-vehicle'/, 'vehicle row selector passed');
   assert.match(payloadHtml, /connectionRow:\s*'#row-payload-connection'/, 'connection row selector passed');
-  assert.match(payloadHtml, /#row-payload-identity'\)\.toggle\(isWire\)/, 'identity row shown only for wire tiers');
+  assert.match(
+    payloadHtml,
+    /#row-payload-identity'\)\.toggle\(\s*isWire && RED\.mavlink\.hasIdentityChoice\(/,
+    'identity row shown only for wire tiers, and only when the Connection offers a choice'
+  );
   assert.match(payloadHtml, /#row-payload-timeout'\)\.toggle\(isWire\)/, 'timeout row shown only for wire tiers');
   assert.match(payloadHtml, /#row-payload-maxRetries'\)\.toggle\(isWire\)/, 'maxRetries row shown only for wire tiers');
   assert.match(payloadHtml, /id="row-payload-dialect"/, 'dialect row has ID for toggling');

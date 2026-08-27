@@ -1113,7 +1113,10 @@
        */
       function moveRowVisibility(state) {
         return {
-          identity: state.isWire,
+          // The Identity row appears only when the Connection carries more
+          // than one identity: a single-identity Connection has nothing to
+          // decide, and a select with one option is noise.
+          identity: state.isWire && state.identityIsChoice,
           targetSystem: state.tgt.targetSystem,
           targetComponent: state.tgt.targetComponent,
           altRef: state.isGoto,
@@ -1250,7 +1253,9 @@
         });
 
         var show = moveRowVisibility({
-          isWire: isWire, tgt: tgt, isGoto: isGoto, isSteer: isSteer, isTurn: isTurn,
+          isWire: isWire,
+          identityIsChoice: RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || ''),
+          tgt: tgt, isGoto: isGoto, isSteer: isSteer, isTurn: isTurn,
           isSpeed: isSpeed, isAttitude: isAttitude, isManual: isManual,
           isCommandPath: isCommandPath, isStream: isStream, delivery: delivery,
           planeSteer: planeSteer, groups: groups

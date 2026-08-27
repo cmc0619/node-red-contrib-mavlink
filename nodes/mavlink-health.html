@@ -12,8 +12,10 @@
     // on it — row visibility, save-time clear, and the validator — cannot drift
     // apart (Sourcery). A Connection with at most one bound identity has no
     // real choice: its sole identity is the Local Identity the runtime asserts.
+    // The shared predicate answers the same question for every other dialog's
+    // Identity row, so the palette hides the row on one rule, not seven.
     function isSingleIdentity(connId) {
-      return RED.mavlink.identityOptionsFor(connId).length <= 1;
+      return !RED.mavlink.hasIdentityChoice(connId);
     }
 
     /**

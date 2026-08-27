@@ -4,6 +4,10 @@
   // counter, so the stale callback fails its seq check instead of writing
   // options into the new dialog's select.
   var _typeSeq = 0;
+  // Fan-out stamps a ground-station source, so only these roles are offered.
+  // One spelling: the select fill and the row's visibility test must ask the
+  // same question, or a hidden row could still be hiding a real choice.
+  var IDENTITY_ROLES = ['gcs', 'custom'];
   RED.nodes.registerType('mavlink-fanout', {
     category: 'mavlink',
     paletteLabel: 'fan-out',
@@ -239,7 +243,14 @@
         // Build never uses a Connection now (the list is the directory), so
         // the picker hides like every other sender's does on Build (§6).
         $('#row-fanout-connection').toggle(d !== 'build');
-        $('#row-fanout-identity').toggle(d !== 'build');
+        // Identity is a choice only when the Connection carries more than one
+        // eligible identity. A companion-only Connection offers none at all,
+        // and a single one offers nothing to decide; either way the row goes,
+        // and the fill still stamps into config whatever is actually sent.
+        $('#row-fanout-identity').toggle(
+          d !== 'build'
+            && RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '', IDENTITY_ROLES)
+        );
         $('#row-fanout-members, #tip-fanout-members').toggle(sel === 'list');
         $('#row-fanout-typeFilter').toggle(sel === 'filter');
         $('#row-fanout-firmwareFilter').toggle(sel === 'filter');
@@ -256,11 +267,11 @@
       $('#node-input-executionMode').on('change', refreshVisibility);
       $('#node-input-connection').on('change', function () {
         refreshVehicleTypeOptions();
-        RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: ['gcs', 'custom'] });
+        RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: IDENTITY_ROLES });
         refreshVisibility();
       });
       refreshVehicleTypeOptions();
-      RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: ['gcs', 'custom'] });
+      RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: IDENTITY_ROLES });
       refreshVisibility();
     },
     oneditsave: function () {
@@ -326,7 +337,7 @@
   <p>Fan-out addresses each member's <b>autopilot</b>: the built message's <code>target_component</code> is replaced per member. A message hand-addressed to another component is re-addressed, not honoured — use the single-vehicle nodes for that.</p>
   <p>Sequential mode sends one retargeted message per member at the configured interval; <b>Concurrency</b> lets up to N confirm waits overlap so one slow vehicle doesn't delay the rest; 1 is strictly sequential. <b>Stop on error</b> halts remaining members after the first failure — they report <code>skipped</code> in the aggregate rather than being commanded. Broadcast mode sends one packet with target_system 0 and target_component 1, and requires the <i>All active vehicles</i> selection — a broadcast reaches every vehicle on the link, so it cannot honour a subset, per-target patches, or a PARAM_SET.</p>
   <p>On <b>Build</b> delivery output 0 emits the product — one retargeted message per member for a downstream <b>mavlink-out</b>. Build requires an <i>Explicit sysid list</i> and needs no Connection: the downstream sender owns the wire, and the list already answers "which vehicles". All/filter selection (and Broadcast) live on the wire tiers, where the Connection's peer table is present to answer it. On wire tiers output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail.</p>
-  <p><b>Identity</b> — selects the GCS or custom identity that stamps source SysID/CompID on outbound frames. Only identities with a <code>gcs</code> or <code>custom</code> role are offered. Hidden on Build delivery (source ids are stamped at the wire by the sending node).</p>
+  <p><b>Identity</b> — selects the GCS or custom identity that stamps source SysID/CompID on outbound frames. Only identities with a <code>gcs</code> or <code>custom</code> role are offered, and the row appears only when the Connection carries more than one of them — with one, or with none (a companion-only Connection), there is nothing to choose and the Connection's own identity is stamped. Hidden on Build delivery (source ids are stamped at the wire by the sending node).</p>
   <p>Selecting Flight Termination, or broadcasting a position setpoint, is the operator's choice — the driver packs and sends what it is given. A stream lock still refuses a second setpoint owner on the same target.</p>
   <p>Setpoints honour the single-owner stream lock: a member another node (e.g. Move) is actively streaming setpoints to is refused on the wire tiers rather than fed contradictory setpoints — sequential runs refuse that member and continue, broadcast refuses entirely. Stop the stream first.</p>
 </script>

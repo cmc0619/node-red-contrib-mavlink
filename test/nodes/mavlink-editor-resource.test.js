@@ -709,6 +709,128 @@ test('bindSelectTitleSync mirrors the selected option title onto the select', ()
   assert.equal(typeof sync, 'function');
 });
 
+// ── hasIdentityChoice ────────────────────────────────────────────────────────
+
+// A Connection carrying one gcs Local Identity plus one companion additional.
+const MIXED_ROLE_CONNECTION = {
+  'conn-mixed': { localIdentity: 'id-gcs', additionalIdentities: ['id-companion'] },
+  'id-gcs': { name: 'Ground', role: 'gcs' },
+  'id-companion': { name: 'Onboard', role: 'companion' },
+};
+
+test('hasIdentityChoice is false for a Connection with a single bound identity', () => {
+  const { RED } = loadResource({}, {
+    'conn-solo': { localIdentity: 'id-gcs', additionalIdentities: [] },
+    'id-gcs': { name: 'Ground', role: 'gcs' },
+  });
+  assert.equal(RED.mavlink.hasIdentityChoice('conn-solo'), false);
+});
+
+test('hasIdentityChoice is true once a second identity is bound', () => {
+  const { RED } = loadResource({}, MIXED_ROLE_CONNECTION);
+  assert.equal(RED.mavlink.hasIdentityChoice('conn-mixed'), true);
+});
+
+test('hasIdentityChoice counts only the roles the caller allows', () => {
+  const { RED } = loadResource({}, MIXED_ROLE_CONNECTION);
+  // Fan-out's filter leaves one eligible identity of the two bound — a select
+  // with a single option, so no choice.
+  assert.equal(RED.mavlink.hasIdentityChoice('conn-mixed', ['gcs', 'custom']), false);
+});
+
+test('hasIdentityChoice is false when the role filter leaves nothing at all', () => {
+  const { RED } = loadResource({}, {
+    'conn-companion': { localIdentity: 'id-companion', additionalIdentities: [] },
+    'id-companion': { name: 'Onboard', role: 'companion' },
+  });
+  // The empty Fan-out select: a companion-only Connection under gcs/custom.
+  assert.equal(RED.mavlink.hasIdentityChoice('conn-companion', ['gcs', 'custom']), false);
+  assert.deepEqual(
+    plain(RED.mavlink.identityOptionsFor('conn-companion', ['gcs', 'custom'])),
+    []
+  );
+});
+
+test('hasIdentityChoice is false for an unset or unknown Connection', () => {
+  const { RED } = loadResource();
+  assert.equal(RED.mavlink.hasIdentityChoice(''), false);
+  assert.equal(RED.mavlink.hasIdentityChoice('conn-missing'), false);
+});
+
+// ── identityWireIds + duplicateBoundIdentity ─────────────────────────────────
+
+// Two stations and one companion on one link. 'id-second' is the accident this
+// ring exists for: the custom role presets to 255/190, the same pair the gcs
+// role does, so a second station left on its defaults collides with the first.
+const WIRE_NODES = {
+  'id-gcs': { name: 'Ground', role: 'gcs', sourceSystemId: 255, sourceComponentId: 190 },
+  'id-second': { name: 'Tablet', role: 'custom', sourceSystemId: 255, sourceComponentId: 190 },
+  'id-tablet': { name: 'Tablet', role: 'custom', sourceSystemId: 254, sourceComponentId: 190 },
+  'id-comp': { name: 'Onboard', role: 'companion', sourceSystemId: null, sourceComponentId: 191 },
+  'id-comp2': { name: 'Onboard 2', role: 'companion', sourceSystemId: null, sourceComponentId: 192 },
+};
+
+test('identityWireIds reads the saved pair for gcs and custom', () => {
+  const { RED } = loadResource({}, WIRE_NODES);
+  assert.deepEqual(
+    plain(RED.mavlink.identityWireIds('id-gcs', 7)),
+    { sysid: 255, compid: 190, label: 'Ground' }
+  );
+});
+
+test('identityWireIds derives the companion sysid from the vehicle', () => {
+  const { RED } = loadResource({}, WIRE_NODES);
+  // The companion has no saved sysid — it is a component of the vehicle's
+  // system, and 7 is what the Connection stamps at deploy.
+  assert.deepEqual(
+    plain(RED.mavlink.identityWireIds('id-comp', 7)),
+    { sysid: 7, compid: 191, label: 'Onboard' }
+  );
+});
+
+test('identityWireIds is null for an unknown identity or an unresolved pair', () => {
+  const { RED } = loadResource({}, WIRE_NODES);
+  assert.equal(RED.mavlink.identityWireIds('id-missing', 7), null);
+  // No vehicle sysid yet: the companion's pair cannot be resolved, so the
+  // caller gets null instead of NaN.
+  assert.equal(RED.mavlink.identityWireIds('id-comp', ''), null);
+});
+
+test('duplicateBoundIdentity passes a set whose pairs are all distinct', () => {
+  const { RED } = loadResource({}, WIRE_NODES);
+  assert.equal(
+    RED.mavlink.duplicateBoundIdentity(['id-gcs', 'id-tablet', 'id-comp'], 7),
+    null
+  );
+});
+
+test('duplicateBoundIdentity names both identities sharing a pair', () => {
+  const { RED } = loadResource({}, WIRE_NODES);
+  assert.deepEqual(
+    plain(RED.mavlink.duplicateBoundIdentity(['id-gcs', 'id-second'], 7)),
+    { a: 'Ground', b: 'Tablet', sysid: 255, compid: 190 }
+  );
+});
+
+test('duplicateBoundIdentity lets two companions coexist on separate slots', () => {
+  const { RED } = loadResource({}, WIRE_NODES);
+  // Both derive sysid 7; 191 and 192 are ONBOARD_COMPUTER and ONBOARD_COMPUTER2.
+  assert.equal(RED.mavlink.duplicateBoundIdentity(['id-comp', 'id-comp2'], 7), null);
+  // Same slot is the collision — one scheduler's heartbeats are the other's.
+  assert.deepEqual(
+    plain(RED.mavlink.duplicateBoundIdentity(['id-comp', 'id-comp'], 7)),
+    { a: 'Onboard', b: 'Onboard', sysid: 7, compid: 191 }
+  );
+});
+
+test('duplicateBoundIdentity skips identities it cannot resolve', () => {
+  const { RED } = loadResource({}, WIRE_NODES);
+  // An unresolved entry is not a collision — the picker's own required ring
+  // owns a missing reference.
+  assert.equal(RED.mavlink.duplicateBoundIdentity(['id-gcs', '', 'id-missing'], 7), null);
+  assert.equal(RED.mavlink.duplicateBoundIdentity([], 7), null);
+});
+
 test('refreshIdentitySelect reads the live connection and forwards rolesAllowed', () => {
   const calls = [];
   const values = {

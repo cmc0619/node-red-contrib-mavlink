@@ -4,6 +4,59 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [Unreleased]
+
+### Changed
+
+- **A Connection may bind as many identities as the flow needs, but each needs
+  its own source SysID/CompID.** There is no per-role limit and never was a
+  reason for one — a role is a preset, not a quota. A second ground station stays
+  a **GCS** and takes its own SysID (the role presets `255`, it never locks it);
+  a second companion keeps its derived SysID and takes the next onboard-computer
+  slot. SysID names a system, CompID a component within it, and MAVLink defines
+  exactly one ground-station component (`190`) against the companion's four. What the editor now reds is the thing that
+  actually breaks: two bound identities sharing a source SysID/CompID pair. That
+  pair *is* the identity on the wire, so sharing it made two heartbeat
+  schedulers emit indistinguishable frames and let one COMMAND_ACK satisfy two
+  waiters — both silently. Both the `gcs` and `custom` roles preset to
+  `255/190`, so binding a second station was exactly how an operator arrived
+  there.
+
+- **The onboard companion role no longer pins CompID to 191.** It was fixed at
+  `MAV_COMP_ID_ONBOARD_COMPUTER` and the field was hidden, which made every
+  companion on a link identical on the wire — same derived SysID, same pinned
+  CompID — so a second one could never work. MAVLink reserves **191-194** for
+  onboard computers; the CompID row is now shown for the companion role and
+  suggests those four slots. SysID is still derived from the Vehicle Profile:
+  a companion is a component of the vehicle's system.
+
+  **Reopen any companion identity you already have and pick its slot.** While
+  the row was hidden the dialog saved the field's untouched default, `190`, and
+  the runtime threw that away in favour of the pinned `191`. Now the runtime
+  reads what was saved, so a companion left alone deploys as `190` — a different
+  component than it has been sending as. Nothing rewrites it for you: `190` is
+  itself a legal companion slot, so a value chosen there is indistinguishable
+  from one that was never chosen, and guessing would retype identities that were
+  deliberate. Open the dialog and choose (the select suggests `191`-`194`).
+
+- **The Local Identity CompID select suggests the components its role means.**
+  `191`-`194` for companion, `190` for GCS, the flat list for custom — floated
+  to the top, never filtered, the same way the Payload node hints components
+  from its topic. Source SysID stays a plain number: MAVLink defines no enum of
+  system ids, so there is no pulldown to narrow it to.
+
+- **The Identity row appears only when there is an identity to choose.** Every
+  action node that stamps a source address — Command, Fan-out, Mission, Move,
+  Param, Payload — showed an Identity dropdown on every wire tier, even when
+  the Connection bound exactly one identity (one option, nothing to decide) or,
+  on Fan-out against a companion-only Connection, none at all (an empty select
+  that could not be answered). The row now appears only when the Connection
+  offers more than one eligible identity; otherwise it is hidden and the
+  Connection's own identity is stamped, which is what those dialogs already
+  sent. Health has worked this way since it grew the field; the rule is now one
+  shared predicate rather than seven dialogs' worth of local opinion. No saved
+  flow changes behaviour.
+
 ## [0.5.1] "Nap of the earth" - 2026-08-25
 
 ### Added

@@ -94,12 +94,29 @@ test('mavlink-local-identity: HB enums and source CompID use selects; SysID stay
   assert.match(html, /<select id="node-config-input-heartbeatType">/);
   assert.match(html, /<select id="node-config-input-heartbeatAutopilot">/);
   assert.match(html, /type="number" id="node-config-input-sourceSystemId"/);
-  assert.match(
-    html,
-    /loadEnumsCatalog\(\['MAV_TYPE',\s*'MAV_AUTOPILOT',\s*'MAV_COMPONENT'\]/
-  );
+  // Heartbeat enums load together; CompID fetches its own so a role change
+  // can repaint the suggestions without holding a catalog.
+  assert.match(html, /loadEnumsCatalog\(\['MAV_TYPE',\s*'MAV_AUTOPILOT'\]/);
+  assert.match(html, /loadEnumsCatalog\(\['MAV_COMPONENT'\]/);
   assert.match(html, /valueKey:\s*'name'/);
   assert.match(html, /enums\.MAV_TYPE/);
   assert.match(html, /enums\.MAV_AUTOPILOT/);
-  assert.match(html, /enums\.MAV_COMPONENT/);
+  assert.match(html, /MAV_COMPONENT \|\| \[\]/, 'CompID reads its own catalog response');
+  // SysID stays numeric because MAVLink defines no enum of system ids — 1-255
+  // is free and 255-as-GCS is convention, not spec. There is no pulldown to
+  // narrow it to; the uint8 ring is the whole vocabulary.
+  assert.doesNotMatch(html, /<select id="node-config-input-sourceSystemId"/);
+});
+
+test('mavlink-local-identity: the role hints which components it means (§6)', () => {
+  // Same rule as the Payload topic hint: suggested to the top, never filtered,
+  // so an unusual stack can still reach any component from any role.
+  const html = readHtml('mavlink-local-identity');
+  assert.match(
+    html,
+    /fillCompIdSelect\(\$compid,[\s\S]*?MAV_COMPONENT[\s\S]*?suggest:/,
+    'the source CompID fill carries a role hint'
+  );
+  assert.match(html, /compIdSuggest:\s*'ONBOARD_COMPUTER'/);
+  assert.match(html, /compIdSuggest:\s*'MISSIONPLANNER'/);
 });

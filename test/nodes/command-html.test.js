@@ -393,10 +393,12 @@ test('build tier hides connection row; wire tiers show it', () => {
     'vehicle row is handed to the shared visibility helper'
   );
   // Command-owned wire rows (identity/timeout/…) stay local and still hide on Build.
+  // Identity carries a second condition: a Connection with one bound identity
+  // offers no choice, so the row goes even on a wire tier.
   assert.match(
     vis,
-    /#row-cmd-identity['"]\)\s*\[\s*isBuild\s*\?\s*'hide'\s*:\s*'show'\s*\]/,
-    'identity row remains a command-owned Build hide'
+    /#row-cmd-identity['"]\)\.toggle\(\s*!isBuild && RED\.mavlink\.hasIdentityChoice\(/,
+    'identity row hides on Build and whenever the Connection offers no choice'
   );
 });
 
