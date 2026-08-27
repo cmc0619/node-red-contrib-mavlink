@@ -1064,11 +1064,23 @@ and should `additionalIdentities` become a bounded per-role slot set?" — reaso
 demonstrated flow asks for it." That is a YAGNI test for *our* code and the wrong test for a
 driver's *config surface*: the driver should permit viable flows whether or not a sample flow
 exists (owner, 2026-08-27). The framing was wrong twice over. It counted roles as categories
-when a role is a **preset to start from**: there is no need for "two GCS" because a second
-ground station on a link is a `custom` identity with its own sysid, and `custom` has been the
-escape hatch all along. And "one companion" was our policy contradicting the protocol —
-`MAV_COMPONENT` reserves **191-194** for onboard computers (measured against the bundled
-`common` dialect), plus 195/196 and 74 USER slots at 25-99.
+when a role is a **preset to start from**: a second ground station stays in the `gcs` role and
+takes its own sysid, because the role presets 255 and never locks it. (This entry first said such
+a station was a `custom` identity — wrong, and it sent operators out of the role that fits them;
+`custom` is for stacks the three roles do not describe, not for the second of a kind.) And "one
+companion" was our policy contradicting the protocol — `MAV_COMPONENT` reserves **191-194** for
+onboard computers (measured against the bundled `common` dialect), plus 195/196 and 74 USER slots
+at 25-99.
+
+Which half of the pair varies follows what the thing is, and the enum says it out loud: a sysid
+names a system, a compid a component within it, and `MAV_COMPONENT` carries exactly **one**
+ground-station component (190 `MISSIONPLANNER`, with no `MISSIONPLANNER2`) against the companion's
+four. Two ground stations are two systems and separate on sysid; two companions are two components
+of one airframe, keep the sysid they derive, and separate on compid. Same sysid with differing
+compids asserts "one station, several components" — right for a GCS app beside a co-located
+logger, wrong for two operators. The editor enforces neither shape: the ring asks only that the
+pair differ, and the CompID select stays unfiltered in every role (§6, suggestions never filters),
+so an unusual stack can still spell it the other way.
 
 Ruled: **no count cap, per role or total.** The one invariant is that no two identities bound
 to a Connection share a source `(sysid, compid)` — that pair *is* the identity on the wire.
