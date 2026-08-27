@@ -283,7 +283,6 @@
   </div>
   <div class="form-tips mav-role-hint" id="mav-role-hint-custom" style="margin-bottom:8px;display:none;">
     <b>Custom</b> sets no conventions — pick the SysID/CompID and heartbeat type yourself.
-    A second ground station does not need it: keep the <b>GCS</b> role and change its SysID.
   </div>
   <div class="form-row">
     <label for="node-config-input-sourceSystemId">Source SysID</label>
@@ -339,14 +338,13 @@
   create or how many one Connection binds. The one rule the Connection enforces is that no two
   identities it binds share a source SysID/CompID pair, because that pair is the identity on the
   wire.</p>
-  <p>Which half you vary follows what the thing <i>is</i>. A SysID names a system and a CompID names
-  a component within it, so a second ground station — a separate machine, a separate operator — stays
-  a <b>GCS</b> and takes its own SysID (<code>254</code>, <code>253</code>…); MAVLink defines a single
-  ground-station component, <code>190</code>, and no <code>MISSIONPLANNER2</code>. A second companion
-  goes the other way: it keeps the SysID it derives from the vehicle and takes the next onboard-computer
-  slot, because those four really are components of one airframe. Same SysID with different CompIDs
-  says "one station, several components" — right for a GCS app beside a co-located logger, wrong for
-  two operators.</p>
+  <p>Which half you vary follows what the thing <i>is</i>. A SysID names a system, a CompID a
+  component within it. Two ground stations are two systems: each is a <b>GCS</b> with its own SysID
+  (<code>255</code>, <code>254</code>…), since MAVLink defines a single ground-station component,
+  <code>190</code>. Two companions are two components of one airframe: each keeps the SysID it derives
+  from the vehicle and takes its own onboard-computer slot. Same SysID with different CompIDs says
+  "one station, several components" — right for a GCS app beside a co-located logger, wrong for two
+  operators.</p>
   <h3>MAVLink 2 signing</h3>
   <p>Signing is configured on the <b>Connection</b>, not here. A MAVLink link has one shared key,
   so the credential and sign/verify/require policy belong to the secured link — one identity can

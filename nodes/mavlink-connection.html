@@ -487,13 +487,11 @@
   needs is its <i>own</i> source <b>SysID/CompID</b>: that pair is the identity
   on the wire, so two identities sharing it heartbeat indistinguishably and make
   a command ack impossible to attribute. The editor reds the pair rather than
-  letting it reach the link. A second ground station stays a <b>GCS</b> and takes
-  its own <b>SysID</b> (<code>254</code>, <code>253</code>…) — two stations are two
-  <i>systems</i>, and MAVLink defines only one ground-station component
-  (<code>190</code>), so the SysID is what separates them. A second companion is
-  the other way round: same derived SysID, next onboard-computer slot
-  (<code>192</code>-<code>194</code>), because those really are components of the
-  one vehicle.</p>
+  letting it reach the link. Two ground stations are two <i>systems</i>, so each
+  takes its own <b>SysID</b> (<code>255</code>, <code>254</code>…) — MAVLink defines
+  one ground-station component, <code>190</code>. Two companions are two components
+  of one airframe, so each keeps the derived SysID and takes its own
+  onboard-computer slot (<code>191</code>-<code>194</code>).</p>
 
   <h3>Bands and scheduling</h3>
   <p>Every outbound message carries a priority band (emergency, liveness,
