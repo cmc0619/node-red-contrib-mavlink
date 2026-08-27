@@ -619,14 +619,15 @@ test('the role floats its own components to the top of the CompID select', () =>
     /suggest:\s*preset\(\$role\.val\(\)\)\.compIdSuggest/,
     'the fill passes the current role\'s hint'
   );
-  // One fetch, regrouped in place: a role change must not fire a second
-  // /mavlink/enums request.
+  // One place owns the fill, and it fetches MAV_COMPONENT itself so a role
+  // change repaints from a fresh catalog rather than a held copy.
   assert.match(html, /function refillCompIds\(desired\)/, 'a single repaint owns the select');
   assert.match(
     html,
-    /compIdEntries = enums\.MAV_COMPONENT \|\| \[\];/,
-    'the catalog is held rather than refetched'
+    /function refillCompIds\(desired\) \{\s*\n\s*RED\.mavlink\.loadEnumsCatalog\(\['MAV_COMPONENT'\]/,
+    'the fill owns its own fetch'
   );
+  assert.doesNotMatch(html, /compIdEntries/, 'no held catalog survives');
   assert.match(
     html,
     /refillCompIds\(pickedCompId\);\s*\n\s*applyVisibility\(role\)/,
@@ -648,7 +649,7 @@ test('identity oneditprepare seeds CompID before async enum catalog', () => {
   // Sync seed must appear before loadEnumsCatalog so post-prepare validation
   // sees the saved numeric CompID while MAV_COMPONENT is still loading.
   const seedIdx = html.indexOf("fillCompIdSelect($compid, [],");
-  const loadIdx = html.indexOf("loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMPONENT']");
+  const loadIdx = html.indexOf("loadEnumsCatalog(['MAV_COMPONENT']");
   assert.ok(seedIdx !== -1, 'sync CompID seed');
   assert.ok(loadIdx !== -1, 'async enum load');
   assert.ok(seedIdx < loadIdx, 'seed before async catalog');

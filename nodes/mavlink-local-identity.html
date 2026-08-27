@@ -103,7 +103,6 @@
         var $hbType = $('#node-config-input-heartbeatType');
         var $hbAp   = $('#node-config-input-heartbeatAutopilot');
         var prevRole = $role.val() || 'gcs';
-        var compIdEntries = [];
         var enumLoadToken = { cancelled: false };
         node._mavEnumLoadToken = enumLoadToken;
 
@@ -115,8 +114,9 @@
         });
 
         // Local Identity has no Connection/Dialect row — request `common`
-        // explicitly (owns MAV_TYPE / MAV_AUTOPILOT / MAV_COMPONENT).
-        RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT', 'MAV_COMPONENT'], function (catalog) {
+        // explicitly (owns MAV_TYPE / MAV_AUTOPILOT). CompID fetches its own,
+        // per role, in refillCompIds below.
+        RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT'], function (catalog) {
           var enums = (catalog && catalog.enums) || {};
           // Prefer live dialog values so a role change before the catalog
           // resolves is not overwritten by the pre-edit saved snapshot.
@@ -129,30 +129,26 @@
             valueKey: 'name',
             saved: $hbAp.val() || node.heartbeatAutopilot
           });
-          compIdEntries = enums.MAV_COMPONENT || [];
-          refillCompIds();
         }, enumLoadToken, { dialect: 'common' });
 
         /**
-         * Repaint the CompID select with the current role's suggestions on top.
-         *
-         * The entries are held from the open's one fetch — not to save a round
-         * trip (the admin API is local and cheap) but because we are already
-         * holding them: a role changes the grouping, never the catalog, so
-         * re-asking for data in hand would add an async call site to obtain
-         * exactly what this variable has. The dialog's single combined fetch is
-         * also the §6 shape the editor tests pin.
+         * Fill the CompID select with the current role's suggestions on top.
+         * The role is read in the callback, so a response that lands after a
+         * further role change still paints the role now selected.
          */
         function refillCompIds(desired) {
-          // `desired === null` rather than truthiness: component 0 is
-          // MAV_COMP_ID_ALL, a real member of the enum.
-          RED.mavlink.fillCompIdSelect($compid, compIdEntries, {
-            saved: desired === null || desired === undefined
-              ? ($compid.val() || node.sourceComponentId)
-              : desired,
-            suggest: preset($role.val()).compIdSuggest
-          });
+          RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
+            // `desired === null` rather than truthiness: component 0 is
+            // MAV_COMP_ID_ALL, a real member of the enum.
+            RED.mavlink.fillCompIdSelect($compid, ((catalog || {}).enums || {}).MAV_COMPONENT || [], {
+              saved: desired === null || desired === undefined
+                ? ($compid.val() || node.sourceComponentId)
+                : desired,
+              suggest: preset($role.val()).compIdSuggest
+            });
+          }, enumLoadToken, { dialect: 'common' });
         }
+        refillCompIds();
 
         function preset(role) {
           return ROLE_PRESETS[role] || ROLE_PRESETS.custom;
