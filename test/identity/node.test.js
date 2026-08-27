@@ -26,10 +26,9 @@ test('a companion carries its saved CompID; only SysID is derived', () => {
   require('../../nodes/mavlink-local-identity')(RED);
   const Node = RED.nodes.types['mavlink-local-identity'];
 
-  // MAV_COMPONENT reserves 191-194 for onboard computers. The runtime used to
-  // overwrite the saved value with 191, which made every companion on a link
-  // identical on the wire — same derived sysid, same pinned compid. The editor
-  // owns the field now (§6) and the runtime reads it.
+  // MAV_COMPONENT reserves 191-194 for onboard computers. The editor owns the
+  // CompID field in every role (§6) and the runtime reads what was saved, so
+  // two companions on a link separate on their slots.
   const second = new Node({
     id: 'c2', role: 'companion', sourceSystemId: '', sourceComponentId: 192,
     heartbeatIntervalMs: 1000,

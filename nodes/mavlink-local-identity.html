@@ -162,10 +162,10 @@
             });
           }, enumLoadToken, { dialect: 'common' });
         }
-        // No seeding on open: 190 is a legal companion CompID, so rewriting it
-        // to 191 would silently retype an identity the operator chose. A saved
-        // companion from before this field was visible shows the 190 it saved,
-        // and picking a slot is the operator's (pre-1.0: re-pick, not migrate).
+        // No seeding on open: 190 is a legal companion slot, so a saved 190 is
+        // indistinguishable from one an operator chose, and rewriting it to 191
+        // would silently retype a deliberate identity. The dialog shows what is
+        // saved, in every role; picking a slot is the operator's.
         refillCompIds();
 
         function preset(role) {

@@ -1432,9 +1432,9 @@
    * A Connection runs one heartbeat scheduler per bound identity, and ack
    * attribution matches a COMMAND_ACK's target ids against our own. Two
    * identities on one pair therefore emit indistinguishable heartbeats and let
-   * one ack satisfy both waiters, with nothing said either way. Both roles
-   * preset to 255/190, so binding a second station is exactly how an operator
-   * arrives here.
+   * one ack satisfy both waiters, with nothing said either way. The gcs and
+   * custom roles both preset to 255/190, so binding a second station is
+   * exactly how an operator arrives here.
    *
    * @param {string[]} identityIds  every identity bound to one Connection
    * @param {number|string} vehicleSysid  the bound Vehicle Profile's target sysid

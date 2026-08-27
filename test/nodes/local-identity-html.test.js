@@ -631,12 +631,12 @@ test('companion keeps its CompID row — only SysID is derived', () => {
   assert.doesNotMatch(
     html,
     /\$compid\.closest\('\.form-row'\)\.toggle\(!isCompanion\)/,
-    'the CompID row must no longer hide for companion'
+    'the CompID row stays visible for companion'
   );
   assert.doesNotMatch(
     html,
     /CompID<\/b> is fixed at/,
-    'the note must stop claiming CompID is fixed'
+    'the note does not claim CompID is fixed'
   );
 });
 
