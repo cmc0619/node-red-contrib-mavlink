@@ -10,9 +10,11 @@ config-node shapes and message contracts may still change without a major bump.
 
 - **A Connection may bind as many identities as the flow needs, but each needs
   its own source SysID/CompID.** There is no per-role limit and never was a
-  reason for one — a role is a preset, not a quota. A second ground station on a
-  link is a **Custom** identity with its own SysID; a second companion takes the
-  next onboard-computer slot. What the editor now reds is the thing that
+  reason for one — a role is a preset, not a quota. A second ground station stays
+  a **GCS** and takes its own SysID (the role presets `255`, it never locks it);
+  a second companion keeps its derived SysID and takes the next onboard-computer
+  slot. SysID names a system, CompID a component within it, and MAVLink defines
+  exactly one ground-station component (`190`) against the companion's four. What the editor now reds is the thing that
   actually breaks: two bound identities sharing a source SysID/CompID pair. That
   pair *is* the identity on the wire, so sharing it made two heartbeat
   schedulers emit indistinguishable frames and let one COMMAND_ACK satisfy two
