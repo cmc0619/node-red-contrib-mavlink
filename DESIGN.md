@@ -1036,6 +1036,34 @@ the notice, from `DESIGN_old.md`.
 
 ---
 
+## 14.135 Editor controls with nothing to decide
+
+**14.135 A select whose options number fewer than two is not a choice; the row goes.** ✔ (owner ruling, 2026-08-27)
+Six action dialogs — Command, Fan-out, Mission, Move, Param, Payload — showed the
+Identity select on every wire tier, unconditionally. Most Connections bind exactly one
+Local Identity, so the operator was handed a dropdown with a single option; Fan-out,
+the only caller passing a role filter (`['gcs','custom']`), rendered an outright *empty*
+select against a companion-only Connection — a required-looking control with no
+answerable value. Health had asked the question since it grew the field
+(`isSingleIdentity`), but the rule stayed local to Health and the shared helper
+(`fillIdentitySelect`) kept its fill-and-always-show default, so every other dialog
+inherited the wrong one. Ruled: the row's visibility is a function of the option count,
+`RED.mavlink.hasIdentityChoice` owns the count for the whole palette, and each dialog's
+own `refreshVisibility` ANDs it with its delivery-tier rule. Hiding changes what is
+shown, not what is sent — `fillIdentitySelect` still stamps the sole eligible identity
+into config, and a Connection with none eligible saves blank, which `resolveIdentity`
+has always read as "the Connection's default Local Identity". This generalizes the rule
+the Payload verb row already followed for its single-command topics (gripper, winch,
+parachute), and it is an editor-presentation rule: no runtime code moved, and §0 is
+untouched.
+*Open question the ruling does not settle:* whether a Connection needs to bind more than
+one identity **at all**. Role-diverse pairs have a use (a companion computer that also
+commands as a GCS on the same link — exactly what Fan-out's role filter serves); two of
+the *same* role buy only a second heartbeat scheduler that no demonstrated flow asks for.
+If the answer is "one per role at most," `additionalIdentities` becomes a bounded
+per-role slot set and this row disappears from the palette entirely.
+*Check:* `resources/mavlink-editor.js` `hasIdentityChoice`; `node --test test/nodes/`.
+
 ## Removed from the old §14, and why
 
 Entries and passages dropped in this rewrite. The *measurements* they carried survive
