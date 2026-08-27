@@ -77,7 +77,7 @@ test('additionalIdentities has an editor row (issue #94 — feature must be reac
   // list the feature is only reachable by hand-editing flow JSON.
   assert.match(
     html,
-    /additionalIdentities:\s*\{\s*value:\s*\[\]\s*\}/,
+    /additionalIdentities:\s*\{\s*value:\s*\[\]\s*,/,
     'defaults.additionalIdentities stays declared'
   );
   assert.match(
@@ -96,6 +96,77 @@ test('additionalIdentities has an editor row (issue #94 — feature must be reac
     'oneditsave routes through the shared, unit-tested normalizer — the '
       + 'blank/duplicate/primary rules are behaviorally covered in '
       + 'mavlink-editor-resource.test.js, not re-derived here'
+  );
+});
+
+// ── One link, one (sysid, compid) per bound identity ─────────────────────────
+//
+// Drives the REAL validator with no dialog open — the state Node-RED validates
+// in on import and on deploy, where the saved config is all there is.
+
+const BOUND = {
+  veh: { defaultTargetSystem: 7 },
+  'id-gcs': { name: 'Ground', role: 'gcs', sourceSystemId: 255, sourceComponentId: 190 },
+  'id-second': { name: 'Tablet', role: 'custom', sourceSystemId: 255, sourceComponentId: 190 },
+  'id-own': { name: 'Tablet', role: 'custom', sourceSystemId: 254, sourceComponentId: 190 },
+  'id-comp': { name: 'Onboard', role: 'companion', sourceSystemId: null, sourceComponentId: 191 },
+  'id-comp2': { name: 'Onboard 2', role: 'companion', sourceSystemId: null, sourceComponentId: 192 },
+};
+
+function boundValidate(conn, value) {
+  const defaults = loadNodeDefaults('mavlink-connection', BOUND);
+  return defaults.additionalIdentities.validate.call(
+    Object.assign({ id: 'c1', vehicle: 'veh' }, conn),
+    value,
+    {}
+  );
+}
+
+test('bound identities on distinct SysID/CompID pairs pass — no per-role limit', () => {
+  // Two ground stations and two companions on one link. Nothing here counts
+  // roles; the only rule is that each identity owns its pair.
+  assert.equal(
+    boundValidate({ localIdentity: 'id-gcs' }, ['id-own', 'id-comp', 'id-comp2']),
+    true
+  );
+});
+
+test('two bound identities sharing a pair red, and the reason names both', () => {
+  // The accident the ring exists for: `custom` presets to 255/190, the same
+  // pair `gcs` does, so a second station left on its defaults collides.
+  const reason = String(boundValidate({ localIdentity: 'id-gcs' }, ['id-second']));
+  assert.match(reason, /Ground/);
+  assert.match(reason, /Tablet/);
+  assert.match(reason, /255\/190/);
+  assert.match(reason, /own SysID\/CompID/);
+});
+
+test('the collision check covers the primary identity, not just the extras', () => {
+  // The primary is in the bound set even though it is not in the validated
+  // array — a collision against it is the same wire collision.
+  assert.match(
+    String(boundValidate({ localIdentity: 'id-second' }, ['id-gcs'])),
+    /both send as 255\/190/
+  );
+});
+
+test('two companions collide only when they share an onboard slot', () => {
+  // Both derive sysid 7 from the Vehicle Profile, so the slot is the whole
+  // difference: 191/192 are ONBOARD_COMPUTER and ONBOARD_COMPUTER2.
+  assert.equal(boundValidate({ localIdentity: 'id-comp' }, ['id-comp2']), true);
+  assert.match(
+    String(boundValidate({ localIdentity: 'id-comp' }, ['id-comp'])),
+    /both send as 7\/191/
+  );
+});
+
+test('no Vehicle resolved yet: the collision check stands down', () => {
+  // A companion's sysid is derived from the Vehicle Profile, so without one
+  // there is no pair to compare. The Vehicle picker's own required ring owns
+  // the missing reference — this validator must not ring for it too.
+  assert.equal(
+    boundValidate({ vehicle: '', localIdentity: 'id-gcs' }, ['id-second']),
+    true
   );
 });
 

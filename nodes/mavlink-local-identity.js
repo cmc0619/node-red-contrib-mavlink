@@ -55,18 +55,14 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
     node._vehicleSysid = null;
 
     /**
-     * Companion role: sysid is derived from the vehicle; compid is pinned to
-     * 191 (MAV_COMP_ID_ONBOARD_COMPUTER). Config values saved by a previous
-     * role are ignored rather than risking a silent mismatch.
+     * Companion role derives its sysid from the vehicle — that one field has no
+     * saved value to read. CompID is the operator's in every role: MAV_COMPONENT
+     * carries four onboard-computer slots (191-194), so a second companion on a
+     * link has somewhere to sit. Editor validateUint8(1) owns the range; runtime
+     * trusts the form.
      */
-    if (node.derivesSysidFromVehicle) {
-      node.sourceSystemId = null;
-      node.sourceComponentId = 191;
-    } else {
-      // Editor validateUint8(1) owns the range; runtime trusts the form.
-      node.sourceSystemId = Number(config.sourceSystemId);
-      node.sourceComponentId = Number(config.sourceComponentId);
-    }
+    node.sourceSystemId = node.derivesSysidFromVehicle ? null : Number(config.sourceSystemId);
+    node.sourceComponentId = Number(config.sourceComponentId);
 
     node.heartbeatType = config.heartbeatType || preset.heartbeatType;
     node.heartbeatAutopilot = config.heartbeatAutopilot || preset.heartbeatAutopilot;

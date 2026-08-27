@@ -561,6 +561,89 @@ test('identity oneditprepare loads MAV_TYPE by enum name, not numeric value', ()
   assert.match(html, /saved:\s*\$compid\.val\(\)\s*\|\|\s*node\.sourceComponentId/);
 });
 
+test('companion keeps its CompID row — only SysID is derived', () => {
+  // SysID genuinely comes from the vehicle, so that row hides. CompID is a
+  // choice of four onboard-computer slots, so it stays (§14.135: a control
+  // with something to decide is not noise).
+  assert.match(
+    html,
+    /\$sysid\.closest\('\.form-row'\)\.toggle\(!isCompanion\)/,
+    'the derived SysID row still hides for companion'
+  );
+  assert.doesNotMatch(
+    html,
+    /\$compid\.closest\('\.form-row'\)\.toggle\(!isCompanion\)/,
+    'the CompID row must no longer hide for companion'
+  );
+  assert.doesNotMatch(
+    html,
+    /CompID<\/b> is fixed at/,
+    'the note must stop claiming CompID is fixed'
+  );
+});
+
+test('a companion saved behind the hidden row is seeded back to its own slot', () => {
+  // The upgrade path. While the CompID row was hidden the dialog saved the
+  // field's untouched default (190) and the runtime discarded it for a pinned
+  // 191. Now that the runtime reads what was saved, opening the dialog must
+  // seed the role's slot back, or a companion silently becomes component 190.
+  assert.match(
+    html,
+    /if \(prevRole === 'companion'\)/,
+    'the seed is scoped to the role whose row was hidden'
+  );
+  assert.match(
+    html,
+    /Number\(savedCmp\) === ROLE_PRESETS\.gcs\.compid/,
+    'only the untouched default is rewritten — an explicit pick is not'
+  );
+  assert.match(
+    html,
+    /\$compid\.val\(ROLE_PRESETS\.companion\.compid\)/,
+    'and it is seeded from the role preset, not a literal'
+  );
+});
+
+test('the role floats its own components to the top of the CompID select', () => {
+  // The Payload topic hint, applied to roles: suggested, never filtered, so
+  // every component stays reachable in all three roles.
+  assert.match(
+    html,
+    /compIdSuggest:\s*'ONBOARD_COMPUTER'/,
+    'companion suggests the four onboard-computer slots'
+  );
+  assert.match(html, /compIdSuggest:\s*'MISSIONPLANNER'/, 'gcs suggests 190');
+  assert.match(html, /custom:[^\n]*compIdSuggest:\s*''/, 'custom names none — flat list');
+  assert.match(
+    html,
+    /suggest:\s*preset\(\$role\.val\(\)\)\.compIdSuggest/,
+    'the fill passes the current role\'s hint'
+  );
+  // One fetch, regrouped in place: a role change must not fire a second
+  // /mavlink/enums request.
+  assert.match(html, /function refillCompIds\(desired\)/, 'a single repaint owns the select');
+  assert.match(
+    html,
+    /compIdEntries = enums\.MAV_COMPONENT \|\| \[\];/,
+    'the catalog is held rather than refetched'
+  );
+  assert.match(
+    html,
+    /refillCompIds\(pickedCompId\);\s*\n\s*applyVisibility\(role\)/,
+    'a role change repaints the suggestions, carrying its new pick'
+  );
+  // Switching role before the catalog lands leaves the select empty, where
+  // `.val()` sets nothing — the repaint must not then fall back to the
+  // pre-switch saved id.
+  // Component 0 is MAV_COMP_ID_ALL, so the pick is tested for null, not
+  // truthiness.
+  assert.match(
+    html,
+    /desired === null \|\| desired === undefined/,
+    'the role\'s own pick outranks the empty select, zero included'
+  );
+});
+
 test('identity oneditprepare seeds CompID before async enum catalog', () => {
   // Sync seed must appear before loadEnumsCatalog so post-prepare validation
   // sees the saved numeric CompID while MAV_COMPONENT is still loading.

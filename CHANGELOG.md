@@ -8,6 +8,40 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Changed
 
+- **A Connection may bind as many identities as the flow needs, but each needs
+  its own source SysID/CompID.** There is no per-role limit and never was a
+  reason for one — a role is a preset, not a quota. A second ground station on a
+  link is a **Custom** identity with its own SysID; a second companion takes the
+  next onboard-computer slot. What the editor now reds is the thing that
+  actually breaks: two bound identities sharing a source SysID/CompID pair. That
+  pair *is* the identity on the wire, so sharing it made two heartbeat
+  schedulers emit indistinguishable frames and let one COMMAND_ACK satisfy two
+  waiters — both silently. Both the `gcs` and `custom` roles preset to
+  `255/190`, so binding a second station was exactly how an operator arrived
+  there.
+
+- **The onboard companion role no longer pins CompID to 191.** It was fixed at
+  `MAV_COMP_ID_ONBOARD_COMPUTER` and the field was hidden, which made every
+  companion on a link identical on the wire — same derived SysID, same pinned
+  CompID — so a second one could never work. MAVLink reserves **191-194** for
+  onboard computers; the CompID row is now shown for the companion role and
+  suggests those four slots. SysID is still derived from the Vehicle Profile:
+  a companion is a component of the vehicle's system.
+
+  **Reopen and re-Done any companion identity you already have.** While the row
+  was hidden it saved the field's untouched default, `190`, and the runtime
+  threw that away in favour of the pinned `191`. Now the runtime reads what was
+  saved, so an untouched companion would deploy as `190` — a different component
+  than it has been sending as. Opening the dialog seeds the role's own slot back
+  (the pre-1.0 rule is re-pick, not migrate), and picking a slot explicitly is
+  what makes it stick.
+
+- **The Local Identity CompID select suggests the components its role means.**
+  `191`-`194` for companion, `190` for GCS, the flat list for custom — floated
+  to the top, never filtered, the same way the Payload node hints components
+  from its topic. Source SysID stays a plain number: MAVLink defines no enum of
+  system ids, so there is no pulldown to narrow it to.
+
 - **The Identity row appears only when there is an identity to choose.** Every
   action node that stamps a source address — Command, Fan-out, Mission, Move,
   Param, Payload — showed an Identity dropdown on every wire tier, even when

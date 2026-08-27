@@ -107,7 +107,32 @@
       // Config-node references (§6 — everything enumerable is a dropdown).
       vehicle: { value: '', type: 'mavlink-vehicle', required: true },
       localIdentity: { value: '', type: 'mavlink-local-identity', required: true },
-      additionalIdentities: { value: [] },
+      // Every bound identity must send as its own (sysid, compid). Sharing the
+      // pair is a wire collision the driver cannot report: the Connection runs
+      // one heartbeat scheduler per identity, and ack attribution matches a
+      // COMMAND_ACK's target ids against our own — so two identities on one
+      // pair heartbeat indistinguishably and let a single ack satisfy both
+      // waiters, silently (§0 rule 3, the one guard-shaped case §9 promotes).
+      // `gcs` and `custom` both preset to 255/190, so adding a second station
+      // is precisely how an operator lands here.
+      //
+      // Validating the list covers the whole bound set, primary included: the
+      // additionals are the rows an operator can actually change. Siblings are
+      // read live through liveOr so the check is scoped to this dialog (#217).
+      additionalIdentities: { value: [], validate: function (v, _opt) {
+        var vehicleId = RED.mavlink.liveOr(this, '#node-config-input-vehicle', this.vehicle, '');
+        var vehicleNode = vehicleId ? RED.nodes.node(vehicleId) : null;
+        // No Vehicle resolved yet — its own required ring owns that, and a
+        // companion's sysid cannot be derived without it.
+        if (!vehicleNode) return true;
+        var primary = RED.mavlink.liveOr(this, '#node-config-input-localIdentity', this.localIdentity, '');
+        var bound = [primary].concat(Array.isArray(v) ? v : []);
+        var clash = RED.mavlink.duplicateBoundIdentity(bound, vehicleNode.defaultTargetSystem);
+        if (!clash) return true;
+        return '‘' + clash.a + '’ and ‘' + clash.b + '’ both send as '
+          + clash.sysid + '/' + clash.compid
+          + ' — each bound identity needs its own SysID/CompID';
+      } },
       // Sign outbound needs a key to sign with (§7): checked with both
       // credential boxes blank is a deploy that cannot start, so it reds here.
       // The sibling reads follow the exclusivity ring's saved/live resolution.
@@ -458,6 +483,13 @@
   identity as their Identity row's source. Binding a second identity is what
   makes that row appear — with one identity there is nothing to choose, so the
   action nodes hide it and stamp this one.</p>
+  <p>Bind as many as the flow needs — there is no per-role limit. What each one
+  needs is its <i>own</i> source <b>SysID/CompID</b>: that pair is the identity
+  on the wire, so two identities sharing it heartbeat indistinguishably and make
+  a command ack impossible to attribute. The editor reds the pair rather than
+  letting it reach the link. A second ground station is a <b>Custom</b> identity
+  with its own SysID, not a second GCS; a second companion takes the next
+  onboard-computer slot (<code>192</code>-<code>194</code>).</p>
 
   <h3>Bands and scheduling</h3>
   <p>Every outbound message carries a priority band (emergency, liveness,

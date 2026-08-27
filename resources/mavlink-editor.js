@@ -1397,6 +1397,65 @@
   };
 
   /**
+   * The source (sysid, compid) a Local Identity would stamp on the wire.
+   *
+   * The companion role has no saved sysid — it is a component of the vehicle's
+   * system, and the Connection derives the value from the bound Vehicle Profile
+   * at deploy (`nodes/mavlink-connection.js` identitySnapshot). The editor knows
+   * the same number, because a Connection's `vehicle` reference is required, so
+   * `vehicleSysid` stands in and the pair resolves for every role.
+   *
+   * @param {string} identityId
+   * @param {number|string} vehicleSysid  the bound Vehicle Profile's target sysid
+   * @returns {{sysid: number, compid: number, label: string}|null} null when the
+   *   identity is unresolvable or its ids are not yet readable
+   */
+  RED.mavlink.identityWireIds = function (identityId, vehicleSysid) {
+    const idNode = identityId ? RED.nodes.node(identityId) : null;
+    if (!idNode) return null;
+    const derives = RED.mavlink.identityRole(identityId) === 'companion';
+    const rawSysid = derives ? vehicleSysid : idNode.sourceSystemId;
+    // Blank first, then Number: `Number('')` is 0, and 0 would read as a real
+    // sysid that collides with the next unresolved identity. A pair that will
+    // not resolve is not a pair — say so, and let the field's own ring speak.
+    if (RED.mavlink.isBlank(rawSysid) || RED.mavlink.isBlank(idNode.sourceComponentId)) return null;
+    const sysid = Number(rawSysid);
+    const compid = Number(idNode.sourceComponentId);
+    if (!Number.isFinite(sysid) || !Number.isFinite(compid)) return null;
+    return { sysid: sysid, compid: compid, label: idNode.name || 'identity' };
+  };
+
+  /**
+   * The first pair of bound identities that would send as the same source
+   * (sysid, compid) — a wire collision, not a style problem.
+   *
+   * A Connection runs one heartbeat scheduler per bound identity, and ack
+   * attribution matches a COMMAND_ACK's target ids against our own. Two
+   * identities on one pair therefore emit indistinguishable heartbeats and let
+   * one ack satisfy both waiters, with nothing said either way. Both roles
+   * preset to 255/190, so binding a second station is exactly how an operator
+   * arrives here.
+   *
+   * @param {string[]} identityIds  every identity bound to one Connection
+   * @param {number|string} vehicleSysid  the bound Vehicle Profile's target sysid
+   * @returns {{a: string, b: string, sysid: number, compid: number}|null}
+   */
+  RED.mavlink.duplicateBoundIdentity = function (identityIds, vehicleSysid) {
+    const seen = {};
+    const ids = identityIds || [];
+    for (let i = 0; i < ids.length; i++) {
+      const wire = RED.mavlink.identityWireIds(ids[i], vehicleSysid);
+      if (!wire) continue;
+      const key = `${wire.sysid}/${wire.compid}`;
+      if (seen[key]) {
+        return { a: seen[key], b: wire.label, sysid: wire.sysid, compid: wire.compid };
+      }
+      seen[key] = wire.label;
+    }
+    return null;
+  };
+
+  /**
    * Fill an Identity select with the identities bound to the selected
    * connection. When the saved id is not eligible (or empty), the first
    * eligible identity is preselected — and thereby written into config on
