@@ -1036,7 +1036,7 @@ the notice, from `DESIGN_old.md`.
 
 ---
 
-## 14.135 Editor controls with nothing to decide
+## 14.135 – 14.136 Editor controls, and what a Connection may bind
 
 **14.135 A select whose options number fewer than two is not a choice; the row goes.** ✔ (owner ruling, 2026-08-27)
 Six action dialogs — Command, Fan-out, Mission, Move, Param, Payload — showed the
@@ -1056,13 +1056,38 @@ has always read as "the Connection's default Local Identity". This generalizes t
 the Payload verb row already followed for its single-command topics (gripper, winch,
 parachute), and it is an editor-presentation rule: no runtime code moved, and §0 is
 untouched.
-*Open question the ruling does not settle:* whether a Connection needs to bind more than
-one identity **at all**. Role-diverse pairs have a use (a companion computer that also
-commands as a GCS on the same link — exactly what Fan-out's role filter serves); two of
-the *same* role buy only a second heartbeat scheduler that no demonstrated flow asks for.
-If the answer is "one per role at most," `additionalIdentities` becomes a bounded
-per-role slot set and this row disappears from the palette entirely.
 *Check:* `resources/mavlink-editor.js` `hasIdentityChoice`; `node --test test/nodes/`.
+
+**14.136 A role is a preset, not a quota; the pair is the identity.** ✔ (owner ruling, 2026-08-27)
+14.135 closed on an open question — "does a Connection need more than one identity at all,
+and should `additionalIdentities` become a bounded per-role slot set?" — reasoned from "no
+demonstrated flow asks for it." That is a YAGNI test for *our* code and the wrong test for a
+driver's *config surface*: the driver should permit viable flows whether or not a sample flow
+exists (owner, 2026-08-27). The framing was wrong twice over. It counted roles as categories
+when a role is a **preset to start from**: there is no need for "two GCS" because a second
+ground station on a link is a `custom` identity with its own sysid, and `custom` has been the
+escape hatch all along. And "one companion" was our policy contradicting the protocol —
+`MAV_COMPONENT` reserves **191-194** for onboard computers (measured against the bundled
+`common` dialect), plus 195/196 and 74 USER slots at 25-99.
+
+Ruled: **no count cap, per role or total.** The one invariant is that no two identities bound
+to a Connection share a source `(sysid, compid)` — that pair *is* the identity on the wire.
+Sharing it is a silent double failure: `lib/connection/runtime.js` adds one heartbeat scheduler
+per bound identity, so the two emit indistinguishable frames, and `ackAddressedTo`
+(`lib/command/ack.js`) attributes COMMAND_ACK by comparing target ids against our own, so one
+ack satisfies both waiters. Neither is a cryptic error; both are §9's promotable class, so the
+check is a deploy-time red ring in `mavlink-connection.html` and nothing new runs at runtime.
+`normalizeIdentityIds` deduped by config-node id only and never saw this — and since `gcs` and
+`custom` both preset to 255/190, binding a second station *is* how an operator reaches it.
+
+The companion pin came out with it: the runtime overwrote the saved compid with 191 and the
+editor hid the row, which guaranteed that two companions on one link collided (same derived
+sysid, same pinned compid). The row is shown, the runtime reads what was saved, and the select
+floats 191-194 to the top by 14.135's own logic — a pinned field has nothing to decide, four
+slots do. SysID stays derived, and stays a plain number input in every role: MAVLink defines
+no enum of system ids, so there is nothing to pull down to.
+*Check:* `resources/mavlink-editor.js` `identityWireIds` / `duplicateBoundIdentity`;
+`nodes/mavlink-local-identity.js` (no compid override); `node --test test/nodes/ test/identity/`.
 
 ## Removed from the old §14, and why
 
