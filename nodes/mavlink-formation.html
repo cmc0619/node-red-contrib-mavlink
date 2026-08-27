@@ -174,9 +174,11 @@
   <b>Fixed position</b> takes lat/lon/alt from the node (or
   <code>msg.payload.anchor</code>, which overrides either mode).</p>
   <p><b>Promote on loss</b> lets the pattern survive losing its leader. With it off — the
-  default — the configured leader anchors the formation whatever state it is in,
-  and a leader that has gone quiet or never reported fails the message. With it
-  on, such a leader hands the pattern to the next vehicle that can carry it: the
+  default — the configured leader anchors the formation whatever state it is in.
+  A leader that has gone quiet still anchors it, from the last position it
+  reported; only one that has <i>never</i> reported a position fails the
+  message. With it on, a leader that has gone quiet or never reported hands the
+  pattern to the next vehicle that can carry it: the
   lowest live sysid above the configured one, wrapping round to the lowest live
   sysid overall. <i>Live</i> is the peer table's own reckoning — still
   heartbeating, and carrying a position — the same test Fan-out selects members
