@@ -103,7 +103,6 @@
         var $hbType = $('#node-config-input-heartbeatType');
         var $hbAp   = $('#node-config-input-heartbeatAutopilot');
         var prevRole = $role.val() || 'gcs';
-        var compIdRefresh = 0;
         var enumLoadToken = { cancelled: false };
         node._mavEnumLoadToken = enumLoadToken;
 
@@ -136,15 +135,18 @@
          * Fill the CompID select with the current role's suggestions on top.
          * The role is read in the callback, so a response that lands after a
          * further role change still paints the role now selected.
+         *
+         * No sequence counter here. `enumLoadToken` already drops responses
+         * that land after the dialog closed, which is the reachable case and
+         * the one Fan-out's MAV_TYPE counter exists for — it has no per-open
+         * token. What a counter would add is ordering between two fetches
+         * inside one open dialog, and the only caller that can start a second
+         * one is the role select: an operator would have to change it twice
+         * within a localhost round trip. Nothing fires that change
+         * programmatically.
          */
         function refillCompIds(desired) {
-          // `desired` is captured here, not read in the callback like the role
-          // is, so an out-of-order response would repaint an older role's pick.
-          // Same counter the shared reloadCompIdSelect and Fan-out's MAV_TYPE
-          // fetch keep, for the same reason.
-          var refresh = ++compIdRefresh;
           RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
-            if (refresh !== compIdRefresh) return;
             // `desired === null` rather than truthiness: component 0 is
             // MAV_COMP_ID_ALL, a real member of the enum.
             RED.mavlink.fillCompIdSelect($compid, ((catalog || {}).enums || {}).MAV_COMPONENT || [], {

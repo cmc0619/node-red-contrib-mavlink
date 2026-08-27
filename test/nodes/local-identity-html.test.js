@@ -654,10 +654,11 @@ test('the role floats its own components to the top of the CompID select', () =>
     /function refillCompIds\(desired\)[\s\S]*?RED\.mavlink\.loadEnumsCatalog\(\['MAV_COMPONENT'\]/,
     'the fill owns its own fetch'
   );
-  // `desired` is captured at call time, unlike the role, so an out-of-order
-  // response would repaint an older role's pick.
-  assert.match(html, /var refresh = \+\+compIdRefresh;/, 'each fetch takes a generation');
-  assert.match(html, /if \(refresh !== compIdRefresh\) return;/, 'and a stale one is dropped');
+  // No sequence counter: enumLoadToken already drops responses that land
+  // after the dialog closed, and ordering two fetches inside one open dialog
+  // would need the role select changed twice inside a localhost round trip.
+  assert.doesNotMatch(html, /compIdRefresh/, 'no ordering guard for an unreachable race');
+  assert.match(html, /enumLoadToken/, 'the reachable case stays covered by the close token');
   assert.doesNotMatch(html, /compIdEntries/, 'no held catalog survives');
   assert.match(
     html,
