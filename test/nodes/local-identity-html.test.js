@@ -60,6 +60,7 @@ class FakeSelect {
     this.attrs = {};
     this.dataStore = {};
     this.triggered = [];
+    this.visible = true;
   }
 
   empty() {
@@ -109,17 +110,21 @@ class FakeSelect {
     return this;
   }
 
-  // Row-visibility no-ops, so a test can drive oneditprepare end to end
-  // rather than regex-matching its source.
+  // Row visibility, recorded rather than swallowed: `closest('.form-row')`
+  // returns this same fake, so a test can drive oneditprepare and then read
+  // which rows the role reshaped instead of regex-matching the source.
   hide() {
+    this.visible = false;
     return this;
   }
 
   show() {
+    this.visible = true;
     return this;
   }
 
-  toggle() {
+  toggle(shown) {
+    this.visible = shown === undefined ? !this.visible : Boolean(shown);
     return this;
   }
 
@@ -169,6 +174,10 @@ function loadHelpers(initialValues = {}, nodeLookup = {}) {
     }
     return elements.get(selector);
   }
+  // `deferred` holds each callback instead of firing it, so a test can close
+  // the dialog and *then* deliver the response — the only way to prove the
+  // cancel token actually drops it.
+  $.deferred = null;
   $.getJSON = function (url, query, cb) {
     if (typeof query === 'function') {
       cb = query;
@@ -176,7 +185,9 @@ function loadHelpers(initialValues = {}, nodeLookup = {}) {
     }
     $.lastRequest = { url, query };
     const data = $.responses[url] || { dialect: 'common', enums: { MAV_TYPE: [] } };
-    if (cb) cb(data);
+    if (cb && Array.isArray($.deferred)) {
+      $.deferred.push(() => cb(data));
+    } else if (cb) cb(data);
     return {
       fail() { return this; },
       done(doneCb) {
@@ -579,6 +590,35 @@ test('identity oneditprepare loads MAV_TYPE by enum name, not numeric value', ()
   assert.match(html, /saved:\s*\$compid\.val\(\)\s*\|\|\s*node\.sourceComponentId/);
 });
 
+test('companion reshapes the rows: SysID hidden, CompID still shown', () => {
+  // Driven, not matched. The fake records visibility now, so the §6 reshape
+  // is asserted from behaviour: the derived field goes, the choice stays.
+  const context = loadHelpers({ '#node-config-input-role': 'companion' });
+  context.$.responses['/mavlink/enums'] = {
+    dialect: 'common',
+    enums: {
+      MAV_COMPONENT: [
+        { name: 'MAV_COMP_ID_ONBOARD_COMPUTER', value: 191, label: 'ONBOARD_COMPUTER (191)' },
+      ],
+    },
+  };
+
+  context.identityDefinition.oneditprepare.call({
+    id: 'c', role: 'companion', sourceComponentId: 191, heartbeatIntervalMs: 1000,
+  });
+
+  assert.equal(
+    context.$('#node-config-input-sourceSystemId').visible,
+    false,
+    'SysID is derived from the vehicle, so its row goes'
+  );
+  assert.equal(
+    context.$('#node-config-input-sourceComponentId').visible,
+    true,
+    'CompID is four onboard slots — a real choice, so its row stays'
+  );
+});
+
 test('companion keeps its CompID row — only SysID is derived', () => {
   // SysID genuinely comes from the vehicle, so that row hides. CompID is a
   // choice of four onboard-computer slots, so it stays (§14.135: a control
@@ -654,11 +694,33 @@ test('the role floats its own components to the top of the CompID select', () =>
     /function refillCompIds\(desired\)[\s\S]*?RED\.mavlink\.loadEnumsCatalog\(\['MAV_COMPONENT'\]/,
     'the fill owns its own fetch'
   );
-  // No sequence counter: enumLoadToken already drops responses that land
-  // after the dialog closed, and ordering two fetches inside one open dialog
-  // would need the role select changed twice inside a localhost round trip.
-  assert.doesNotMatch(html, /compIdRefresh/, 'no ordering guard for an unreachable race');
-  assert.match(html, /enumLoadToken/, 'the reachable case stays covered by the close token');
+  // Cancellation is proven by driving it, not by finding a token name in the
+  // source. This is the reachable staleness case — a response arriving after
+  // the dialog closed — and it is why no sequence counter is needed on top.
+  const ctx = loadHelpers({ '#node-config-input-role': 'gcs' });
+  ctx.$.responses['/mavlink/enums'] = {
+    dialect: 'common',
+    enums: {
+      MAV_COMPONENT: [
+        { name: 'MAV_COMP_ID_MISSIONPLANNER', value: 190, label: 'MISSIONPLANNER (190)' },
+        { name: 'MAV_COMP_ID_ONBOARD_COMPUTER', value: 191, label: 'ONBOARD_COMPUTER (191)' },
+      ],
+    },
+  };
+  ctx.$.deferred = [];
+  const editing = { id: 'g', role: 'gcs', sourceComponentId: 190, heartbeatIntervalMs: 1000 };
+  ctx.identityDefinition.oneditprepare.call(editing);
+
+  ctx.identityDefinition.oneditcancel.call(editing);
+  const compid = ctx.$('#node-config-input-sourceComponentId');
+  const before = compid.options.length;
+  ctx.$.deferred.forEach((deliver) => deliver());
+
+  assert.equal(
+    compid.options.length,
+    before,
+    'a response landing after the dialog closed must not repaint the select'
+  );
   assert.doesNotMatch(html, /compIdEntries/, 'no held catalog survives');
   assert.match(
     html,

@@ -81,7 +81,12 @@
          * role — the operator picks the component in all three.
          */
         sourceSystemId:    { value: 255, validate: mavSourceSysidValidator(1) },
-        sourceComponentId: { value: 190, validate: mavIdentityIdValidator(1, 'required — a blank CompID names no component') },
+        // `required` rides alongside the validator, as on Vehicle's
+        // vehicleFamily (owner ruling, #372): blank reds through the generic
+        // missing-required path, and any non-blank stray still gets the range
+        // reason. It also means a blank can never reach the runtime as
+        // Number('') === 0 — component 0 is MAV_COMP_ID_ALL, a real member.
+        sourceComponentId: { value: 190, required: true, validate: mavIdentityIdValidator(1, 'required — a blank CompID names no component') },
         heartbeatType:     { value: '' },
         heartbeatAutopilot:{ value: 'MAV_AUTOPILOT_INVALID' },
         heartbeatIntervalMs:{ value: 1000, validate: positiveNumberValidator }
