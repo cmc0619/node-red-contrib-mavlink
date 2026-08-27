@@ -135,8 +135,13 @@
 
         /**
          * Repaint the CompID select with the current role's suggestions on top.
-         * The catalog is fetched once and held here: a role change regroups the
-         * same entries rather than firing a second request.
+         *
+         * The entries are held from the open's one fetch — not to save a round
+         * trip (the admin API is local and cheap) but because we are already
+         * holding them: a role changes the grouping, never the catalog, so
+         * re-asking for data in hand would add an async call site to obtain
+         * exactly what this variable has. The dialog's single combined fetch is
+         * also the §6 shape the editor tests pin.
          */
         function refillCompIds(desired) {
           // `desired === null` rather than truthiness: component 0 is
@@ -188,10 +193,10 @@
           }
 
           // The role names a different family of components, so the select's
-          // "Suggested" group is repainted with it. The new suggestion rides
-          // along: switching role before the catalog lands leaves the select
-          // empty, where `.val()` sets nothing and the repaint would otherwise
-          // fall back to the pre-switch saved id.
+          // "Suggested" group is repainted with it — same entries, new order.
+          // The new suggestion rides along: switching role before the catalog
+          // lands leaves the select empty, where `.val()` sets nothing and the
+          // repaint would otherwise fall back to the pre-switch saved id.
           refillCompIds(pickedCompId);
           applyVisibility(role);
           prevRole = role;
