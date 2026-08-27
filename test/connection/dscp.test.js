@@ -15,7 +15,7 @@ const GCS = {
   id: 'gcs',
   sysid: 255,
   compid: 190,
-  heartbeat: { type: 6, autopilot: 8, systemStatus: 4 },
+  heartbeat: { type: 6, autopilot: 8 },
 };
 
 /** @returns {Promise<void>} */

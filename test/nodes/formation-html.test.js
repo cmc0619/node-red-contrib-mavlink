@@ -8,8 +8,15 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { loadNodeDefaults } = require('./html-assert');
+
+const html = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'nodes', 'mavlink-formation.html'),
+  'utf8'
+);
 
 test('spacing validator is the only guard: finite and > 0, blank red — with the reason rendered', () => {
   const defaults = loadNodeDefaults('mavlink-formation');
@@ -89,4 +96,26 @@ test('timeoutMs validator requires an integer >= 1 — a saved 0 arms confirm at
   assert.match(String(validate.call({}, 0)), />= 1/, '0 ms arms the confirm wait at 0 — red');
   assert.match(String(validate.call({}, '')), />= 1/, 'blank is rejected at deploy');
   assert.match(String(validate.call({}, 1.5)), />= 1/, 'fractional milliseconds red');
+});
+
+test('Promote defaults off and rides the leader anchor rows', () => {
+  // Anchoring on a vehicle the flow did not name is a substitution, so the
+  // saved default has to be the un-substituted one. A checkbox carries no
+  // validator, which makes the default the whole of its safety.
+  const defaults = loadNodeDefaults('mavlink-formation');
+  assert.equal(defaults.promoteLeader.value, false, 'promotion is never the saved default');
+  assert.equal(defaults.promoteLeader.validate, undefined, 'a checkbox saves a boolean; nothing to validate');
+
+  assert.match(
+    html,
+    /type="checkbox" id="node-input-promoteLeader"/,
+    'Promote is a checkbox, not a text field'
+  );
+  // Shown with the leader sysid it qualifies and hidden with it: on a fixed
+  // anchor there is no leader to promote, so the row would be a dead control.
+  assert.match(
+    html,
+    /\$\('#row-formation-promoteLeader'\)\.toggle\(mode === 'leader'\)/,
+    'the row follows the leader anchor mode'
+  );
 });
