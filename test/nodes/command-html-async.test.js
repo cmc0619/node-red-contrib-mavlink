@@ -8,15 +8,16 @@
  * responses the test releases by hand, because both findings are races that
  * only exist between a request and its response:
  *
- * 1. loadPresets carried no staleness fence, so a response requested by a
- *    closed dialog A rebuilt the preset select of the dialog B now open —
- *    through the live global selectors, with A's saved preset — and B would
- *    save A's preset.
- * 2. Two cold loadCommandsCatalog calls each started a fetch, and the second
- *    (loadCatalog's seq guard) discarded the first caller's callback. On an
- *    Advanced-mode open the discarded callback is the one that fills the
- *    MAV_CMD dropdown, so the dialog came up with an empty command list
- *    whenever the (smaller, faster) presets response landed mid-flight.
+ * 1. loadPresets carries a staleness fence: without one, a response requested
+ *    by a closed dialog A rebuilds the preset select of the dialog B now open
+ *    — through the live global selectors, with A's saved preset — and B
+ *    saves A's preset.
+ * 2. Every commands-catalog call site owns its request sequence: sharing one
+ *    lets a later fetch from another site discard the first caller's callback
+ *    (loadCatalog's seq guard). On an Advanced-mode open the discarded
+ *    callback is the one that fills the MAV_CMD dropdown, so the dialog comes
+ *    up with an empty command list whenever the (smaller, faster) presets
+ *    response lands mid-flight and starts the option-tips fetch.
  *
  * Scaffolding helpers that only touch chrome (config pickers, row
  * visibility, CompID reloads, tooltips, param controls) are stubbed at their
@@ -263,22 +264,24 @@ test('a closed dialog\'s late preset response cannot reprogram the dialog now op
   assert.equal(h.$('#node-input-preset').val(), 'takeoff', 'the live dialog keeps its own preset');
 });
 
-test('an Advanced open shares one in-flight catalog fetch — the MAV_CMD dropdown fills', () => {
+test('concurrent catalog fetches from different call sites do not cancel each other', () => {
   const h = makeHarness();
 
   // Advanced open starts the commands-catalog fetch for the MAV_CMD dropdown.
   h.openDialog(commandNode({ mode: 'advanced', advancedCommand: '400' }));
 
   // The (smaller) presets response lands while that fetch is in flight; its
-  // builder also wants the catalog. Starting a second fetch here made
-  // loadCatalog's seq guard discard the first — and with it the callback
-  // that fills the MAV_CMD dropdown, leaving the dialog without a command
-  // list. A pending caller must join the in-flight fetch instead.
+  // builder starts its own catalog fetch for the preset option tips. On a
+  // single shared request sequence that later fetch outdates the dropdown's
+  // and loadCatalog's seq guard discards the callback that fills the MAV_CMD
+  // list, leaving the dialog without a command list. Per-site sequences keep
+  // both fetches live.
   h.forUrl('/mavlink/command/presets')[0].ok({ groups: PRESET_GROUPS });
-  h.forUrl('/mavlink/command/commands').forEach((req) => req.ok(COMMANDS_CATALOG));
+  const catalogRequests = h.forUrl('/mavlink/command/commands');
+  assert.equal(catalogRequests.length, 2,
+    'the dropdown fill and the preset tips each fetch on their own sequence');
+  catalogRequests.forEach((req) => req.ok(COMMANDS_CATALOG));
 
   const sel = h.$('#node-input-advancedCommand');
   assert.equal(sel.val(), '400', 'the saved MAV_CMD is selected from the filled dropdown');
-  assert.equal(h.forUrl('/mavlink/command/commands').length, 1,
-    'concurrent cold callers share one fetch');
 });

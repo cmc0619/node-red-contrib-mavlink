@@ -240,15 +240,17 @@ test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
   assert.equal(written['#node-input-params'], '{}', 'a rendered empty form saves {} to the hidden field');
 });
 
-test('Command catalog state keeps only its request sequence', () => {
+test('Command catalog state keeps only its request sequences', () => {
   const html = readHtml('mavlink-command');
   assert.match(
     html,
     /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
     'commands catalog uses the shared loader'
   );
-  assert.match(html, /_cmdCatalog\s*=\s*\{\s*seq:\s*0\s*\}/);
-  assert.doesNotMatch(html, /\bbyKey\b|\binflight\b/);
+  // Per call site, so concurrent fetches from different sites cannot outdate
+  // each other; no held catalog value rides along.
+  assert.match(html, /presetTips:\s*\{\s*seq:\s*0\s*\}/);
+  assert.doesNotMatch(html, /\bbyKey\b|\binflight\b|_currentCmdCatalog/);
 });
 
 test('Command reapplies preset option tips when Connection / Vehicle changes', () => {
@@ -258,7 +260,7 @@ test('Command reapplies preset option tips when Connection / Vehicle changes', (
   // One catalog load paints tips then refreshParamFields with the latest data.
   assert.match(
     html,
-    /loadCommandsCatalog\(function \(catalog\) \{[\s\S]*applyPresetOptionTips\(null, catalog\);[\s\S]*refreshParamFields\(\);/
+    /loadCommandsCatalog\(_cmdCatalogSites\.presetTips, function \(catalog\) \{[\s\S]*applyPresetOptionTips\(null, catalog\);[\s\S]*refreshParamFields\(\);/
   );
   assert.match(
     html,
