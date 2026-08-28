@@ -6,6 +6,28 @@ citation was read in context, not just grepped. Findings only — no code was
 changed while auditing. Owner decides what ships; this file does not survive
 into the release (delete it in the branch's final commit, or before merge).
 
+## Status — executed 2026-08-28
+
+- **Done:** A1 (helper + test deleted), B1, B2 (fences deleted), B4 (better fix
+  than planned: the fetch already rode `loadEnumsCatalog`; `_typeSeq` replaced
+  by the sibling dialogs' `enumLoadToken`, cancelled in both close paths),
+  C1 (cache/waiters/drop deleted; per-site `{seq}` registry preserves the
+  concurrent-caller fix; open bumps every site), E1 (split finding: the
+  autopilot fallback was dead; HB Type had a real editor gap — `allowEmpty`
+  let an untouched fresh dialog save blank — closed in the editor, runtime
+  reads saved values directly; CHANGELOG carries the re-pick note),
+  S1 (+3), S2 (+20), S3 (+27) — the §5 conversions' +50 runtime is the price
+  of the affirmative-dispatch shape, taken on the owner's explicit ask.
+- **Checked, stays — reasons now in-code or below:** B3 (the presets endpoint
+  is target-free and must load exactly when `loadCatalog` would short-circuit
+  on an unresolved target; the 4-line fence keeps a why-comment),
+  C2 (the null during reload windows is itself the staleness guard for the
+  stale `change.mavmsgForm` handler; a closure catalog would repaint from the
+  wrong dialect), D1 (keys are credentials, absent in ways no editor
+  validator sees), D2 (documented §0-rule-3 false-success class).
+- **Owner's, still open:** A2 (`DESIGN_old.md`), the two doctrine sentences
+  below, and deleting this file before the PR goes ready.
+
 Owner rulings received during the audit, to be recorded in doctrine (straight
 to `main`, own commits, per §2):
 
