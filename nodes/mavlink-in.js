@@ -22,7 +22,7 @@
  */
 
 const { capBadge } = require('../lib/delivery');
-const { applyConnectionStatus, isBlank } = require('../lib/addressing');
+const { isBlank } = require('../lib/addressing');
 
 /**
  * Minimum interval (ms) between status-badge writes.
@@ -91,12 +91,10 @@ module.exports = function registerMavlinkIn(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    // A consumer node with no inputs: when the Connection does not resolve
-    // there is nothing to subscribe to and nothing to sink, so the badge-and-
-    // return is the whole story here.
+    // A consumer node with no inputs: the Connection resolves once here, and
+    // an unresolvable one craters on the subscribe below — loud in the deploy
+    // log, per the flow that shipped the bad reference (§0).
     const connectionNode = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, true, connectionNode);
-    if (!connectionNode) return;
 
     // Message filters — an empty list means "match all" (#211). The editor
     // owns the shape: oneditsave trims each row and drops blanks and

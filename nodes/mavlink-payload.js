@@ -17,7 +17,6 @@ const {
 } = require('../lib/command');
 const {
   resolveDeliveryContext,
-  applyConnectionStatus,
   numberOr,
 } = require('../lib/addressing');
 const {
@@ -59,7 +58,6 @@ module.exports = function registerMavlinkPayload(RED) {
     const waiterSlot = cancelSlot();
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
 
     node.on('input', (msg, send, done) => {
       try {

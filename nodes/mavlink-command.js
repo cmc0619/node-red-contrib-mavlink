@@ -63,7 +63,6 @@ const {
 const { loadMetadata } = require('../lib/metadata/load');
 const {
   resolveDeliveryContext,
-  applyConnectionStatus,
   dialectFromVehicleId,
   dialectFromConnection,
   isBlank,
@@ -132,7 +131,6 @@ module.exports = function registerMavlinkCommand(RED) {
     const completionKey = preset ? preset.completionKey : null;
 
     const connNode = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, config.delivery !== 'build', connNode);
 
     const delivery = config.delivery;
 

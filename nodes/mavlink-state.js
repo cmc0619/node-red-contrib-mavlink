@@ -1,7 +1,7 @@
 'use strict';
 
 const { createStateFeed, snapshotPeers } = require('../lib/state');
-const { firstDefined, applyConnectionStatus, dialectFromConnection } = require('../lib/addressing');
+const { firstDefined, dialectFromConnection } = require('../lib/addressing');
 const {
   makeStatusRecord,
   applyActionStatus,
@@ -14,14 +14,13 @@ module.exports = function registerMavlinkState(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
     const connectionNode = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, true, connectionNode);
 
     // Mode-name resolution context (lib/vehicle/modes.js): the bound profile's
     // firmware/family plus its compiled bundle. A disabled Connection carries
     // no vehicle snapshot — and an empty peer table that will never hold a
     // mode to name — so no context is built and outputs stay numbers-only.
-    // An unresolvable Connection keeps its badge above and its per-input
-    // failure path; this read must not turn it into a deploy crash.
+    // An unresolvable Connection craters on first use instead — the feed
+    // subscribe below at deploy, or per input in poll mode (§0).
     const vehicle = connectionNode && connectionNode.vehicle;
     const modes = vehicle && {
       firmware: vehicle.firmware,

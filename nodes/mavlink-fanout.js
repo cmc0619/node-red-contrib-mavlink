@@ -2,7 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
-const { applyConnectionStatus, numberOr } = require('../lib/addressing');
+const { numberOr } = require('../lib/addressing');
 
 module.exports = function registerMavlinkFanout(RED) {
   function MavlinkFanoutNode(config) {
@@ -14,7 +14,6 @@ module.exports = function registerMavlinkFanout(RED) {
     // follows the standard rule: no Connection needed on Build, required on
     // the wire tiers. Runtime payload overrides that ask for build+all or
     // build+filter without a Connection are refused per message below.
-    applyConnectionStatus(node, config.delivery !== 'build', connectionNode);
 
     // Abort-on-close discipline: a redeploy aborts every run in flight and
     // waits for each to unwind. Rationale lives with delivery.inFlightTracker.

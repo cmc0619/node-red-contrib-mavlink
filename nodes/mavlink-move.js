@@ -20,7 +20,7 @@ const {
 const { AckWaiter, sendFnFor, cancelSlot } = require('../lib/command');
 const { DEFAULT_MAX_RESENDS } = require('../lib/command/ack');
 const { BAND } = require('../lib/connection/bands');
-const { firstDefined, numberOr, resolveDeliveryContext, applyConnectionStatus } = require('../lib/addressing');
+const { firstDefined, numberOr, resolveDeliveryContext } = require('../lib/addressing');
 const {
   shouldSuppress,
   makeStatusRecord,
@@ -44,7 +44,6 @@ module.exports = function registerMavlinkMove(RED) {
     // config-node references resolve at deploy, not per input). Build-tier
     // body derivation reads firmware through it.
     const vehicleAtDeploy = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
-    applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
 
     // Stop the active stream and free its single-owner scope (#176). Every
     // stop the node causes — replacement, a non-stream input, an explicit

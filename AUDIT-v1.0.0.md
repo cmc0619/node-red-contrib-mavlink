@@ -50,8 +50,17 @@ a stray falls to the empty default and selects nothing.
   `applyConnectionStatus(node, delivery !== 'build', …)` boolean *arguments*
   — value computation, not dispatch, and select-nothing semantics would
   un-badge the most-broken configs.
-- **`applyConnectionStatus` itself — checked, stays (proposed for deletion
-  as a §6 duplicate, verdict reversed on verification):** the editor ring
+- **`applyConnectionStatus` — DELETED (owner ruling; §14.137 on `main`).**
+  The "stays" verdict below rested on a disabled-config-node state that no
+  editor UI can produce — the Connection's own Disable checkbox constructs
+  an inert stub (sends throw the named disabled error; no badge case), and
+  its label records that Node-RED cannot disable config nodes. The remaining
+  `getNode`-null paths are §9-refused hand-edits: senders crater per message
+  through their existing catch, `in`/`state`-feed crater at construction.
+  Helper + 13 call sites + `in`'s badge-and-return deleted; four tests
+  re-pinned to the loud outcomes; three verdict reversals in one finding,
+  each forced by an owner measurement. The superseded reasoning, kept for
+  the record: the editor ring
   (`connectionDefault`, embedded by `buildTierDialectDefaults`; stock
   `required: true` on always-wire nodes) covers blank, deleted, and invalid
   references — but not a **disabled** Connection, which validates green in

@@ -4,7 +4,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   resolveDeliveryContext,
-  applyConnectionStatus,
   dialectFromConnection,
 } = require('../../lib/addressing');
 
@@ -155,33 +154,3 @@ test('dialectFromConnection reads the bound profile node', () => {
   assert.equal(dialectFromConnection(RED, { vehicle: null }), null);
 });
 
-// ── applyConnectionStatus (§6 deploy-time badge) ─────────────────────────────
-
-test('applyConnectionStatus badges a wire tier whose Connection did not resolve', () => {
-  // §6's one exception to "action nodes report last activity": a node that
-  // cannot possibly work says so before it is triggered. The editor cannot
-  // catch this — the id is valid there and only fails when the runtime
-  // constructs the config node (disabled, or its constructor threw).
-  const statuses = [];
-  const node = { status: (s) => statuses.push(s) };
-
-  applyConnectionStatus(node, true, null);
-  assert.equal(statuses[0].fill, 'red');
-  assert.equal(statuses[0].shape, 'ring');
-  assert.equal(statuses[0].text, 'no connection');
-});
-
-test('applyConnectionStatus clears when the config resolves — both halves', () => {
-  // The clear is not decoration. Node-RED publishes a status clear only when a
-  // node is *removed*, not when it is modified and restarted, and the editor
-  // replays the last status it received — so without this a node that was
-  // fixed and redeployed would keep displaying the dead badge (§14).
-  const statuses = [];
-  const node = { status: (s) => statuses.push(s) };
-
-  applyConnectionStatus(node, true, { id: 'conn' });
-  assert.deepEqual(statuses[0], {}, 'a resolved Connection clears');
-
-  applyConnectionStatus(node, false, null);
-  assert.deepEqual(statuses[1], {}, 'a config that needs no Connection has nothing to report');
-});

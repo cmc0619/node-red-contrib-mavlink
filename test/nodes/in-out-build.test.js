@@ -290,14 +290,15 @@ function makeVehicleStub() {
 // mavlink-in tests
 // ---------------------------------------------------------------------------
 
-test('mavlink-in: marks invalid config when connection is missing', () => {
+test('mavlink-in: an unresolvable Connection craters the constructor loud', () => {
+  // A consumer node with no inputs has no per-message path to fail on, so the
+  // subscribe call is where a bad reference surfaces — a TypeError in the
+  // deploy log, blaming the flow that shipped it (§0).
   const RED = makeRED();
   require('../../nodes/mavlink-in')(RED);
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ id: 'n1', connection: 'missing' });
-  Constructor.call(node, inConfig({ connection: 'missing' }));
-  assert.equal(node._status && node._status.fill, 'red');
-  assert.equal(node._status && node._status.shape, 'ring');
+  assert.throws(() => Constructor.call(node, inConfig({ connection: 'missing' })), TypeError);
 });
 
 test('mavlink-in: subscribes to the connection on construction', () => {
@@ -912,12 +913,22 @@ test('mavlink-in: unsubscribes from the connection on close', () => {
 // mavlink-out tests
 // ---------------------------------------------------------------------------
 
-test('mavlink-out: marks invalid config when connection is missing', () => {
+test('mavlink-out: an unresolvable Connection fails loud per input', () => {
+  // Deploy succeeds — the constructor holds no per-connection state — and the
+  // first send craters in the handler's try/catch: one terminal record on
+  // output 1 plus done(err), the same exit as every other send fault (§2, §9).
   const RED = makeRED();
   require('../../nodes/mavlink-out')(RED);
   const Constructor = RED._nodeTypes['mavlink-out'];
   const node = makeNodeInstance({ connection: 'missing' });
-  Constructor.call(node, { connection: 'missing' });
+  Constructor.call(node, { connection: 'missing', band: '2' });
+
+  node._input({ payload: { name: 'HEARTBEAT', fields: {} } });
+
+  assert.equal(node._sends.length, 1);
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null, 'output 0 must not fire on a dead reference');
+  assert.equal(out1.result, 'failed');
   assert.equal(node._status && node._status.fill, 'red');
 });
 
@@ -1107,22 +1118,6 @@ test('mavlink-out: a disabled connection fails the send, not a phantom "sent"', 
 // ---------------------------------------------------------------------------
 // mavlink-build tests
 // ---------------------------------------------------------------------------
-
-test('mavlink-build: a resolvable config clears any stale badge at deploy', () => {
-  // The runtime publishes a status clear only when a node is *removed*
-  // (@node-red/runtime flows/Flow.js:395-399), and the editor simply replays
-  // whatever status events arrive. A node that was misconfigured, then fixed
-  // and redeployed, therefore kept showing the dead red badge until a message
-  // happened to flow through. Constructing successfully must say so.
-  const RED = makeRED();
-  RED.nodes._register('v1', makeVehicleStub());
-  require('../../nodes/mavlink-build')(RED);
-  const Constructor = RED._nodeTypes['mavlink-build'];
-  const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, { vehicle: 'v1', dialect: '__vehicle', tier: 'build', messageName: 'HEARTBEAT', fields: '{}' });
-
-  assert.deepEqual(node._status, {}, 'a good config clears rather than badges');
-});
 
 test('mavlink-build: suppresses when msg.payload === false', () => {
   const RED = makeRED();
@@ -1346,8 +1341,14 @@ test('mavlink-build Send tier: a missing Connection is a misconfiguration, not a
     fields: JSON.stringify({ type: 6, autopilot: 3 }),
   });
 
-  assert.equal(node._status && node._status.fill, 'red', 'says so at deploy (§6)');
-  assert.equal(node._sends.length, 0, 'and emits nothing it did not send');
+  assert.equal(node._sends.length, 0, 'emits nothing it did not send at deploy');
+
+  node._input({ payload: {} });
+
+  assert.equal(node._sends.length, 1, 'the first input fails loud');
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null, 'output 0 must not fire — no silent degrade to Build');
+  assert.equal(out1.result, 'failed');
 });
 
 test('mavlink-build Build tier: codec error emits error status on output 1', () => {

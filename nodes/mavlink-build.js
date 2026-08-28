@@ -36,7 +36,7 @@ const {
   shouldSuppress,
   applyActionStatus,
 } = require('../lib/delivery');
-const { dialectFromVehicleId, dialectFromConnection, applyConnectionStatus } = require('../lib/addressing');
+const { dialectFromVehicleId, dialectFromConnection } = require('../lib/addressing');
 const { loadMetadata } = require('../lib/metadata/load');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
@@ -58,8 +58,8 @@ module.exports = function registerMavlinkBuild(RED) {
     // they chose Build — silently rewriting a chosen Send into a Build emits a
     // constructed message on output 0 and reports success for something that
     // was never transmitted, which is the degrade §9 forbids everywhere else.
-    // A Send with no Connection is a misconfiguration; it says so at deploy and
-    // fails loud per message. Membership is judged per-run (§14 selection-typo
+    // A Send with no Connection is a misconfiguration; it fails loud per
+    // message. Membership is judged per-run (§14 selection-typo
     // cluster, the Move/Mission shape): `tier === 'build'` was the only
     // gate, so an unknown token — a typo'd hand-edit of 'build' included —
     // fell through to the Send side and put a real frame on the wire the
@@ -73,7 +73,7 @@ module.exports = function registerMavlinkBuild(RED) {
     const tierKnown = tier === 'build' || tier === 'send';
 
     // No `|| 'HEARTBEAT'`: an absent name leaves messageMeta null, which
-    // badges the node invalid at deploy and fails loud on input. Building a
+    // fails loud on input. Building a
     // heartbeat nobody asked for is the phantom §9 forbids (#222).
     const messageName = config.messageName;
     // The editor owns the default ('2' = Control) — just convert it.
@@ -100,7 +100,7 @@ module.exports = function registerMavlinkBuild(RED) {
     //   Build + plain dialect name → load from the bundled registry (no vehicle needed).
     //   Build + '__vehicle' → vehicle node's bundle.
     //   Wire tier → the connection's bound profile node's bundle (custom-safe).
-    // Null when any rung fails to resolve — badged below, refused per message.
+    // Null when any rung fails to resolve — refused per message.
     /** @type {import('../lib/metadata').DialectBundle|null} */
     let bundle;
     if (tier === 'build') {
@@ -114,12 +114,6 @@ module.exports = function registerMavlinkBuild(RED) {
       bundle = dialectFromConnection(RED, connectionNode);
     }
     const messageMeta = bundle ? bundle.messages[messageName] : null;
-
-    // §6 (ruled 2026-08-12): config validity is the editor's verdict — Node-RED
-    // draws that as a red triangle on the node body, and the status line is for
-    // external verdicts only. A wire tier whose Connection did not resolve is
-    // one of those: no transport, the same badge every other sender publishes.
-    applyConnectionStatus(node, tier !== 'build', connectionNode);
 
     /**
      * Core action: merge fields, encode, and emit based on the tier.
@@ -288,10 +282,9 @@ module.exports = function registerMavlinkBuild(RED) {
       if (execute(msg, done)) done();
     });
 
-    // Repeat timer. Never armed for a config that already badged invalid —
-    // an autonomous tick against a dead config would flood output 1 and every
-    // Catch flow at the configured rate with the refusal the badge already
-    // reports. Manual triggers still fail loudly through the input handler.
+    // Repeat timer. Never armed for a config that cannot run — an autonomous
+    // tick against a dead config would flood output 1 and every Catch flow at
+    // the configured rate with the refusal the input handler already reports. Manual triggers still fail loudly through the input handler.
     if (repeatMs > 0 && messageMeta && tierKnown) {
       rateWindowStart = Date.now();
       repeatTimer = setInterval(() => {
