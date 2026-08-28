@@ -327,13 +327,6 @@
       var _defsCatalog = '';
 
       /**
-       * Tier-aware defs load: build tier reads vehicle from the vehicle field;
-       * wire tiers read it through the selected connection's profile. Request
-       * sequencing prevents a stale response from overwriting a newer one.
-       */
-      var _defsSeq = 0;
-
-      /**
        * Give up on loading definitions, saying why. Every path out of
        * loadParamDefs has to come through here: a bare `return` leaves
        * _defsLoaded false, which is the one condition under which the notice
@@ -393,17 +386,19 @@
         return '';
       }
 
+      /**
+       * Tier-aware defs load: build tier reads vehicle from the vehicle field;
+       * wire tiers read it through the selected connection's profile.
+       */
       function loadParamDefs() {
         var target = RED.mavlink.resolveCatalogTarget();
         var missing = paramDefsTargetError(target);
         if (missing) { noParamDefs(missing); return; }
 
-        var seq = ++_defsSeq;
         // Cache under the key this request was built from, not whatever the
         // fields say when it lands.
         var key = target.key;
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), target.query, function (data) {
-          if (seq !== _defsSeq) return;
           _paramDefs = data.defs || {};
           _paramDefsByKey[key] = _paramDefs;
           _defsCatalog = data.catalog || '';
@@ -412,7 +407,6 @@
           rebuildParamIndex();
           refreshParamInfo();
         }).fail(function (xhr) {
-          if (seq !== _defsSeq) return;
           _paramDefs = {};
           _paramDefsByKey[key] = _paramDefs;
           _defsCatalog = '';

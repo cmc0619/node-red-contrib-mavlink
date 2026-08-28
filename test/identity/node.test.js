@@ -42,6 +42,59 @@ test('a companion carries its saved CompID; only SysID is derived', () => {
   assert.deepEqual(second.getIdentity(), { sysid: 7, compid: 192 });
 });
 
+test('a never-opened node deploys on the editor concrete defaults, no runtime preset fill', () => {
+  const RED = redStub();
+  require('../../nodes/mavlink-local-identity')(RED);
+  const Node = RED.nodes.types['mavlink-local-identity'];
+
+  // A node dropped on the canvas and deployed without its dialog ever being
+  // opened saves the raw `defaults` from mavlink-local-identity.html —
+  // concrete for both heartbeat fields (§6), so the runtime reads them as
+  // saved with no `||` preset fallback.
+  const node = new Node({
+    id: 'never-opened',
+    role: 'gcs',
+    sourceSystemId: 255,
+    sourceComponentId: 190,
+    heartbeatType: 'MAV_TYPE_GCS',
+    heartbeatAutopilot: 'MAV_AUTOPILOT_INVALID',
+    heartbeatIntervalMs: 1000,
+  });
+
+  assert.equal(node.heartbeatType, 'MAV_TYPE_GCS');
+  assert.equal(node.heartbeatAutopilot, 'MAV_AUTOPILOT_INVALID');
+  assert.deepEqual(node.getHeartbeatFields(), {
+    type: 'MAV_TYPE_GCS',
+    autopilot: 'MAV_AUTOPILOT_INVALID',
+    base_mode: 0,
+    custom_mode: 0,
+    system_status: 'MAV_STATE_ACTIVE',
+    mavlink_version: 3,
+  });
+});
+
+test('the runtime trusts the saved heartbeat fields directly, not the role preset', () => {
+  const RED = redStub();
+  require('../../nodes/mavlink-local-identity')(RED);
+  const Node = RED.nodes.types['mavlink-local-identity'];
+
+  // A companion whose saved heartbeat fields differ from
+  // ROLE_PRESETS.companion proves the runtime reads config directly rather
+  // than silently substituting the preset (§6 — no runtime fallback default).
+  const node = new Node({
+    id: 'custom-hb',
+    role: 'companion',
+    sourceSystemId: '',
+    sourceComponentId: 191,
+    heartbeatType: 'MAV_TYPE_GENERIC',
+    heartbeatAutopilot: 'MAV_AUTOPILOT_PX4',
+    heartbeatIntervalMs: 1000,
+  });
+
+  assert.equal(node.heartbeatType, 'MAV_TYPE_GENERIC');
+  assert.equal(node.heartbeatAutopilot, 'MAV_AUTOPILOT_PX4');
+});
+
 function redStub() {
   return {
     nodes: {

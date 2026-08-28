@@ -87,7 +87,14 @@
         // reason. It also means a blank can never reach the runtime as
         // Number('') === 0 — component 0 is MAV_COMP_ID_ALL, a real member.
         sourceComponentId: { value: 190, required: true, validate: mavIdentityIdValidator(1, 'required — a blank CompID names no component') },
-        heartbeatType:     { value: '' },
+        // Both concrete, matching the gcs preset (ROLE_PRESETS.gcs below): the
+        // initial role is never applied by applyRole (only wired to the role
+        // select's `change` event, so a fresh node's saved values are never
+        // rewritten), so these are what a dialog opened once and saved without
+        // touching Role actually persists. A blank saved value here would have
+        // no wire meaning, so neither field offers one (§6 — runtime trusts
+        // the saved member with no fallback default).
+        heartbeatType:     { value: 'MAV_TYPE_GCS' },
         heartbeatAutopilot:{ value: 'MAV_AUTOPILOT_INVALID' },
         heartbeatIntervalMs:{ value: 1000, validate: positiveNumberValidator }
       },
@@ -127,7 +134,6 @@
           // resolves is not overwritten by the pre-edit saved snapshot.
           RED.mavlink.fillEnumSelect($hbType, enums.MAV_TYPE || [], {
             valueKey: 'name',
-            allowEmpty: true,
             saved: $hbType.val() || node.heartbeatType
           });
           RED.mavlink.fillEnumSelect($hbAp, enums.MAV_AUTOPILOT || [], {

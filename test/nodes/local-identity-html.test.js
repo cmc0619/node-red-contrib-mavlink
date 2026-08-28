@@ -580,6 +580,23 @@ test('fillCompIdSelect allows an empty filter option', () => {
   assert.equal(select.selected, '');
 });
 
+test('heartbeatType and heartbeatAutopilot default to concrete values, matching the gcs preset', () => {
+  // A never-opened node deploys on these raw defaults (§6): both must be
+  // concrete, and heartbeatType must match ROLE_PRESETS.gcs.heartbeatType
+  // (the runtime's former fallback target) so removing that fallback does
+  // not change what a fresh gcs-role node sends on the wire.
+  const context = loadHelpers();
+  const { heartbeatType, heartbeatAutopilot } = context.identityDefinition.defaults;
+
+  assert.equal(heartbeatType.value, 'MAV_TYPE_GCS');
+  assert.equal(heartbeatAutopilot.value, 'MAV_AUTOPILOT_INVALID');
+  assert.doesNotMatch(
+    html,
+    /allowEmpty/,
+    'neither heartbeat select offers a blank option — blank has no wire meaning'
+  );
+});
+
 test('identity oneditprepare loads MAV_TYPE by enum name, not numeric value', () => {
   assert.match(
     html,
