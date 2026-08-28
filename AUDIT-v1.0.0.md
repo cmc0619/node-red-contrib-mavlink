@@ -25,8 +25,44 @@ into the release (delete it in the branch's final commit, or before merge).
   stale `change.mavmsgForm` handler; a closure catalog would repaint from the
   wrong dialect), D1 (keys are credentials, absent in ways no editor
   validator sees), D2 (documented §0-rule-3 false-success class).
-- **Owner's, still open:** A2 (`DESIGN_old.md`), the two doctrine sentences
-  below, and deleting this file before the PR goes ready.
+- **Owner's, still open:** deleting this file when the PR merges.
+
+## Status — second round, 2026-08-28 (owner rulings on §5 forks)
+
+Doctrine landed on `main` (`96bc0e8`): §6 no-migrations is unconditional;
+§5 gained the stacked-case-labels rule — never a boolean fork on one member,
+a stray falls to the empty default and selects nothing.
+
+- **Converted (545fa49):** every remaining tier/mode boolean fork —
+  `lib/addressing/delivery-context.js` (one switch composes the role
+  context; wire stack is the union of every caller's tiers:
+  send/confirm/complete/collect/stream), command's `coordKinds` and
+  `modeContext`, param's band pick, fan-out's stub selection / output
+  shaping / badge / `classifyMessage` / warnings / both executors. Stray
+  tiers compose nothing and every caller's own tier dispatch then selects
+  nothing — traced per site to loud failure or legal no-op, never silent
+  success. Cost +74 runtime.
+- **Checked, stays:** the two fan-out refusal-composing conditions
+  (broadcast+non-all, broadcast+stale-peers) — a switch there is the one-arm
+  validation switch §5 removes on sight; `mavlink-build.js` `tierKnown` —
+  its stray behavior is the ruled loud per-run refusal (Gitar #310), which
+  select-nothing would downgrade to silence; the seven
+  `applyConnectionStatus(node, delivery !== 'build', …)` boolean *arguments*
+  — value computation, not dispatch, and select-nothing semantics would
+  un-badge the most-broken configs.
+- **`applyConnectionStatus` itself — checked, stays (proposed for deletion
+  as a §6 duplicate, verdict reversed on verification):** the editor ring
+  (`connectionDefault`, embedded by `buildTierDialectDefaults`; stock
+  `required: true` on always-wire nodes) covers blank, deleted, and invalid
+  references — but not a **disabled** Connection, which validates green in
+  the editor while `RED.nodes.getNode()` returns null at runtime. That is a
+  deliberate operator state no editor ring can red, so the badge reports a
+  condition the editor never validated — not the forbidden second
+  deploy-time error path. For the input-less consumers (in, state) the
+  badge is also the only signal on an otherwise silently dead node
+  (§0 rule 3). Already ruled: §14.49 ("applyConnectionStatus carries the
+  deploy badge"), and `nodes/mavlink-state.js:23-24` documents the posture
+  in place.
 
 Owner rulings received during the audit, to be recorded in doctrine (straight
 to `main`, own commits, per §2):
