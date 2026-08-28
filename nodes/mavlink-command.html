@@ -680,6 +680,7 @@
         const dialect = String($dialect.val() || '');
         if (dialect === lastDialect) return;
         lastDialect = dialect;
+        outdateCommandCatalog();
         presetMessagesCatalog = null;
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
