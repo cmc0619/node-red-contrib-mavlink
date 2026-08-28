@@ -64,13 +64,6 @@
   }
 
   /**
-   * Load the Advanced catalog (commands + enums). Every call fetches — the
-   * admin API is local, and no catalog is held between calls.
-   *
-   * @param {{seq: number}} site  the caller's entry in `_cmdCatalogSites`
-   * @param {function({commands:Array, enums:Object, dialect:string}):void} cb
-   */
-  /**
    * Outdate every commands-catalog site. A pending response answers a catalog
    * target (or a dialog) that is gone; bumping each sequence makes
    * loadCatalog's seq check drop it. Called on open and whenever a handler
@@ -81,6 +74,13 @@
     for (const site of Object.values(_cmdCatalogSites)) site.seq += 1;
   }
 
+  /**
+   * Load the Advanced catalog (commands + enums). Every call fetches — the
+   * admin API is local, and no catalog is held between calls.
+   *
+   * @param {{seq: number}} site  the caller's entry in `_cmdCatalogSites`
+   * @param {function({commands:Array, enums:Object, dialect:string}):void} cb
+   */
   function loadCommandsCatalog(site, cb) {
     RED.mavlink.loadCatalog('/mavlink/command/commands', site, cb, {
       listKey: 'commands'
@@ -544,10 +544,25 @@
       }
 
       /**
+       * The rendered form is only as current as the catalog it came from.
+       * While a replacement catalog is in flight the old controls must not
+       * stay scrapable — `oneditsave` serializes whatever `_mavParamsRendered`
+       * blesses, so a Done inside the fetch window would persist the previous
+       * target's params. Loading state until the callback paints the new form.
+       */
+      function invalidateRenderedParams() {
+        node._mavParamsRendered = false;
+        container.empty().append(
+          $('<div class="form-row"><em>Loading command parameters\u2026</em></div>')
+        );
+      }
+
+      /**
        * Refresh preset-option titles and parameter fields when Connection,
        * Vehicle, or delivery changes.
        */
       function refreshPresetTipsAndParams() {
+        invalidateRenderedParams();
         loadCommandsCatalog(_cmdCatalogSites.presetTips, function (catalog) {
           if ($('#node-input-mode').val() !== 'preset') return;
           applyPresetOptionTips(null, catalog);
@@ -578,6 +593,7 @@
       }
 
       function refreshAdvancedCommands() {
+        invalidateRenderedParams();
         loadCommandsCatalog(_cmdCatalogSites.advancedList, function (catalog) {
           if ($('#node-input-mode').val() !== 'advanced') return;
           buildAdvancedDropdown(catalog);
