@@ -308,8 +308,24 @@ module.exports = function registerMavlinkParam(RED) {
 
         /** Send the message and, on a waiting tier, arm its transaction. */
         function wireTier() {
+          // Queue band per action (§5, §7): the full-table stream rides Bulk,
+          // the single-param conversations ride Control. A stray action
+          // selects no band here — and built no message either
+          // (buildParamMessage's own §5 default), so the send throws at the
+          // Connection's serialize choke before anything is queued.
+          let band;
+          switch (request.action) {
+            case 'request-list':
+              band = BAND.BULK;
+              break;
+            case 'read':
+            case 'set':
+              band = BAND.CONTROL;
+              break;
+            default: break; // This space intentionally left blank (§5)
+          }
           connNode.send(message, {
-            band: request.action === 'request-list' ? BAND.BULK : BAND.CONTROL,
+            band,
             target: request.target,
             identityId,
           });
