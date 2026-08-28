@@ -399,16 +399,23 @@
         // fields say when it lands.
         var key = target.key;
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), target.query, function (data) {
-          _paramDefs = data.defs || {};
-          _paramDefsByKey[key] = _paramDefs;
+          var defs = data.defs || {};
+          _paramDefsByKey[key] = defs;
+          // The dialog paints only the target it now shows: a response for a
+          // key the fields have moved off is cached above and nothing more —
+          // repainting from it would let Done persist metadata-derived
+          // settings for the wrong target.
+          if (currentDefsKey() !== key) return;
+          _paramDefs = defs;
           _defsCatalog = data.catalog || '';
           _defsNotice = data.notice || '';
           _defsLoaded = true;
           rebuildParamIndex();
           refreshParamInfo();
         }).fail(function (xhr) {
+          _paramDefsByKey[key] = {};
+          if (currentDefsKey() !== key) return;
           _paramDefs = {};
-          _paramDefsByKey[key] = _paramDefs;
           _defsCatalog = '';
           _defsNotice = (xhr && xhr.responseJSON && xhr.responseJSON.error) ||
             'Parameter definitions unavailable.';

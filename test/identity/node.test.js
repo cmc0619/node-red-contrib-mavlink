@@ -73,26 +73,30 @@ test('a never-opened node deploys on the editor concrete defaults, no runtime pr
   });
 });
 
-test('the runtime trusts the saved heartbeat fields directly, not the role preset', () => {
+test('the runtime sends the saved heartbeat fields verbatim — a blank stays blank', () => {
   const RED = redStub();
   require('../../nodes/mavlink-local-identity')(RED);
   const Node = RED.nodes.types['mavlink-local-identity'];
 
-  // A companion whose saved heartbeat fields differ from
-  // ROLE_PRESETS.companion proves the runtime reads config directly rather
-  // than silently substituting the preset (§6 — no runtime fallback default).
+  // Blank is the discriminating case: a truthy saved value survives any
+  // reading, but a blank one only survives a runtime that reads config
+  // directly with no preset substitution (§6). A flow saved blank deploys
+  // that blank, and the enum resolver at the Connection is where it fails —
+  // loud, at start, never as a silently substituted preset.
   const node = new Node({
-    id: 'custom-hb',
+    id: 'blank-hb',
     role: 'companion',
     sourceSystemId: '',
     sourceComponentId: 191,
-    heartbeatType: 'MAV_TYPE_GENERIC',
-    heartbeatAutopilot: 'MAV_AUTOPILOT_PX4',
+    heartbeatType: '',
+    heartbeatAutopilot: '',
     heartbeatIntervalMs: 1000,
   });
 
-  assert.equal(node.heartbeatType, 'MAV_TYPE_GENERIC');
-  assert.equal(node.heartbeatAutopilot, 'MAV_AUTOPILOT_PX4');
+  assert.equal(node.heartbeatType, '');
+  assert.equal(node.heartbeatAutopilot, '');
+  assert.equal(node.getHeartbeatFields().type, '');
+  assert.equal(node.getHeartbeatFields().autopilot, '');
 });
 
 function redStub() {

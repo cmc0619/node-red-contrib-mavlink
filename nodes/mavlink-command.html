@@ -70,6 +70,17 @@
    * @param {{seq: number}} site  the caller's entry in `_cmdCatalogSites`
    * @param {function({commands:Array, enums:Object, dialect:string}):void} cb
    */
+  /**
+   * Outdate every commands-catalog site. A pending response answers a catalog
+   * target (or a dialog) that is gone; bumping each sequence makes
+   * loadCatalog's seq check drop it. Called on open and whenever a handler
+   * moves the target — a stale site left current would repaint (and let Done
+   * persist) params from the previous catalog.
+   */
+  function outdateCommandCatalog() {
+    for (const site of Object.values(_cmdCatalogSites)) site.seq += 1;
+  }
+
   function loadCommandsCatalog(site, cb) {
     RED.mavlink.loadCatalog('/mavlink/command/commands', site, cb, {
       listKey: 'commands'
@@ -422,9 +433,8 @@
       const node = this;
       // The request sequences outlive a dialog (script scope), and a closed
       // dialog may have left a fetch in flight for a different dialect or
-      // profile. Outdating every site orphans those responses; this open's
-      // own fetches all start after the bump.
-      for (const site of Object.values(_cmdCatalogSites)) site.seq += 1;
+      // profile. This open's own fetches all start after the bump.
+      outdateCommandCatalog();
       const container = $('#node-input-params-container');
 
       RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
@@ -605,6 +615,7 @@
       }
 
       $('#node-input-connection').on('change', function () {
+        outdateCommandCatalog();
         presetMessagesCatalog = null;
         refreshDelivery();
         // Connection binds a Vehicle Profile → dialect; CompID + Advanced follow it.
@@ -619,6 +630,7 @@
       $('#node-input-vehicle').on('change', function () {
         // Vehicle Profile change invalidates build-tier catalogs.
         if ($('#node-input-delivery').val() === 'build') {
+          outdateCommandCatalog();
           presetMessagesCatalog = null;
           RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
           if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
@@ -631,6 +643,7 @@
         refreshVisibility();
         // Tier switch may change catalog source (build→vehicle, wire→connection).
         // Reload dialect data for the selected catalog source.
+        outdateCommandCatalog();
         presetMessagesCatalog = null;
         RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();

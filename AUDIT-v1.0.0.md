@@ -76,12 +76,12 @@ a stray falls to the empty default and selects nothing.
 Owner rulings received during the audit, to be recorded in doctrine (straight
 to `main`, own commits, per §2):
 
-1. **No migrations, ever — not just pre-1.0.** The API is not changing. The
-   `AGENTS.md` §6 / `CLAUDE.md` no-migrations clauses lose their "pre-1.0"
-   qualifier so v1.0.0 does not expire them.
-2. Proposed alongside (owner to confirm): **a two-member vocabulary may fork
-   as a boolean** (§5 clarification), so `tier === 'build'` /
-   `mode === 'broadcast'` forks stop being re-raised by review bots.
+1. **No migrations, ever — not just pre-1.0.** Landed on `main` (`96bc0e8`):
+   the `AGENTS.md` §6 / `CLAUDE.md` clauses lost their "pre-1.0" qualifier.
+2. **Stacked case labels, never a boolean fork on one member** — the owner
+   rejected the boolean-fork proposal and ruled the opposite; §5's stacked-label
+   bullet (`96bc0e8`) is the record, and the second-round status above is the
+   execution.
 
 ---
 
@@ -281,19 +281,8 @@ third-party-structure parsers in a §14 entry instead.
   for the resource test suite's direct coverage, not identity wrappers. No
   action unless the owner wants them private.
 
-## Execution plan (owner-approved order, same branch, one draft PR)
+## Execution plan — superseded
 
-1. **Commit 1 — mechanical, net negative or zero:** A1 dead helper,
-   B1-B4 fence dedupe, E1 runtime defaults, S1 payload kind-switch.
-2. **Commit 2 — catalog caches:** C1 (with per-caller seq states), C2.
-3. **Commit 3 — param dispatch restructure:** S2, own commit, tests prove
-   equivalence.
-4. **Doctrine (owner, straight to main, own commits):** no-migrations
-   unconditional; binary-fork sentence; optionally the S3 parser exemption —
-   ideally landed before the PR so review bots read them.
-5. **Parked pending §14 check:** D1, D2, S3 (if not exempted), A2 (owner
-   call).
-
-Per `CLAUDE.md`: every commit reports runtime / editor-html / resource /
-test logic-line counts, comments and blanks stripped both sides; bot gauntlet
-self-review before each push; findings answered in batches.
+The original three-commit plan executed and grew two more rounds; the Status
+sections above are the record. Remaining work: the owner's merge, and deleting
+this file in the commit that lands with it.

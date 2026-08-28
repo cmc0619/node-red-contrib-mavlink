@@ -92,10 +92,13 @@
         // select's `change` event, so a fresh node's saved values are never
         // rewritten), so these are what a dialog opened once and saved without
         // touching Role actually persists. A blank saved value here would have
-        // no wire meaning, so neither field offers one (§6 — runtime trusts
-        // the saved member with no fallback default).
-        heartbeatType:     { value: 'MAV_TYPE_GCS' },
-        heartbeatAutopilot:{ value: 'MAV_AUTOPILOT_INVALID' },
+        // no wire meaning — the runtime hands the saved name to the enum
+        // resolver as-is — so neither field offers one, and `required` reds
+        // the one path a blank could still take: a select left empty by a
+        // failed or empty catalog load (§6 — runtime trusts the saved member
+        // with no fallback default).
+        heartbeatType:     { value: 'MAV_TYPE_GCS', required: true },
+        heartbeatAutopilot:{ value: 'MAV_AUTOPILOT_INVALID', required: true },
         heartbeatIntervalMs:{ value: 1000, validate: positiveNumberValidator }
       },
       label: function () {

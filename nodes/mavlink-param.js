@@ -361,11 +361,15 @@ module.exports = function registerMavlinkParam(RED) {
 
           // No case armed a wait: the send above was the whole job, so the
           // input completes as sent — fire-and-forget is the general path
-          // here, the three waits above are the special cases.
-          if (mode === '') {
-            completeResult(node, send, 'succeeded', 'sent', message);
-            done();
-            return;
+          // here, the three waits above are the special cases. The composed
+          // token's vocabulary is closed by construction, so its no-wait
+          // member dispatches affirmatively like the rest (§5).
+          switch (mode) {
+            case '':
+              completeResult(node, send, 'succeeded', 'sent', message);
+              done();
+              return;
+            default: break; // This space intentionally left blank (§5)
           }
 
           // Supersede any prior in-flight transaction, releasing its done().
@@ -382,9 +386,13 @@ module.exports = function registerMavlinkParam(RED) {
 
           let attempt = 1;
           let refillRounds = 0;
-          const collector = mode === 'collect-list'
-            ? createParamListCollector({ warn: (text) => node.warn(`mavlink-param: ${text}`) })
-            : null;
+          let collector = null;
+          switch (mode) {
+            case 'collect-list':
+              collector = createParamListCollector({ warn: (text) => node.warn(`mavlink-param: ${text}`) });
+              break;
+            default: break; // This space intentionally left blank (§5)
+          }
 
           const unsubscribe = connNode.subscribe(echoFilter, (decoded) => {
             if (!pending || pending.gen !== myGen) return;
@@ -437,29 +445,36 @@ module.exports = function registerMavlinkParam(RED) {
           function armDeadline() {
             return setTimeout(() => {
               if (!pending || pending.gen !== myGen) return;
-              if (mode === 'confirm-set' && attempt < PARAM_SET_ATTEMPTS) {
-                attempt += 1;
-                applyActionStatus(node, 'sending', `resend ${attempt}/${PARAM_SET_ATTEMPTS} ${request.paramId}\u2026`);
-                send([null, makeStatusRecord(node.type, {
-                  result: 'progress',
-                  detail: `resend ${attempt}/${PARAM_SET_ATTEMPTS}`,
-                })]);
-                try {
-                  connNode.send(message, { band: BAND.CONTROL, target: request.target, identityId });
-                } catch (err) {
-                  // Timer context: Connection.send throws by design (queue
-                  // overflow, dead link) and nothing above this catches, so a
-                  // throw here would be an uncaughtException — settle instead
-                  // (same rule as lib/command/ack.js retry send).
-                  settle((finishDone) => failInput(node, send, err, finishDone));
-                  return;
-                }
-                pending.timer = armDeadline();
-                return;
+              let extra;
+              switch (mode) {
+                case 'confirm-set':
+                  if (attempt < PARAM_SET_ATTEMPTS) {
+                    attempt += 1;
+                    applyActionStatus(node, 'sending', `resend ${attempt}/${PARAM_SET_ATTEMPTS} ${request.paramId}\u2026`);
+                    send([null, makeStatusRecord(node.type, {
+                      result: 'progress',
+                      detail: `resend ${attempt}/${PARAM_SET_ATTEMPTS}`,
+                    })]);
+                    try {
+                      connNode.send(message, { band: BAND.CONTROL, target: request.target, identityId });
+                    } catch (err) {
+                      // Timer context: Connection.send throws by design (queue
+                      // overflow, dead link) and nothing above this catches, so a
+                      // throw here would be an uncaughtException — settle instead
+                      // (same rule as lib/command/ack.js retry send).
+                      settle((finishDone) => failInput(node, send, err, finishDone));
+                      return;
+                    }
+                    pending.timer = armDeadline();
+                    return;
+                  }
+                  // Attempts spent: the timeout below reports how many.
+                  extra = { attempts: attempt };
+                  break;
+                default: break; // This space intentionally left blank (§5)
               }
               settle((finishDone) =>
-                timeoutResult(node, send, timeoutDetail, finishDone,
-                  mode === 'confirm-set' ? { attempts: attempt } : undefined));
+                timeoutResult(node, send, timeoutDetail, finishDone, extra));
             }, timeoutMs);
           }
 
@@ -513,7 +528,10 @@ module.exports = function registerMavlinkParam(RED) {
 
           pending = { unsubscribe, timer: null, inactivityTimer: null, done, gen: myGen };
           pending.timer = armDeadline();
-          if (mode === 'collect-list') armInactivity();
+          switch (mode) {
+            case 'collect-list': armInactivity(); break;
+            default: break; // This space intentionally left blank (§5)
+          }
         }
       } catch (err) {
         failInput(node, send, err, done);
