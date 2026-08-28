@@ -1101,6 +1101,20 @@ no enum of system ids, so there is nothing to pull down to.
 *Check:* `resources/mavlink-editor.js` `identityWireIds` / `duplicateBoundIdentity`;
 `nodes/mavlink-local-identity.js` (no compid override); `node --test test/nodes/ test/identity/`.
 
+
+**14.137 The deploy-time Connection badge is gone; an unresolvable reference craters loud.** ✔ (owner ruling, 2026-08-28)
+Supersedes 14.49's badge clause and the 2026-08-12 "external verdict" classification of a
+missing Connection. The editor ring (`connectionDefault`, embedded by
+`buildTierDialectDefaults`; stock `required` on always-wire nodes) owns config validity.
+The Connection's own Disable checkbox constructs an inert stub whose sends throw the named
+disabled error — no badge needed, the node exists. The only `getNode`-null paths left are
+hand-edits and admin deploys, which never justify a runtime twin (§9): senders crater per
+message through their existing catch; `in` and `state`'s feed crater at construction on the
+subscribe, loud in the deploy log. The "disabled config node" the badge rationale cited
+cannot be produced by any editor UI — the Disable checkbox's own label records that
+Node-RED cannot disable config nodes.
+*Check:* `rg -n 'applyConnectionStatus' lib nodes test` — no matches.
+
 ## Removed from the old §14, and why
 
 Entries and passages dropped in this rewrite. The *measurements* they carried survive
