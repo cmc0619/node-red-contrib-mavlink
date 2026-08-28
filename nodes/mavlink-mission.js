@@ -42,7 +42,6 @@ const {
 } = require('../lib/mission');
 const {
   resolveDeliveryContext,
-  applyConnectionStatus,
   numberOr,
 } = require('../lib/addressing');
 
@@ -58,7 +57,6 @@ module.exports = function registerMavlinkMission(RED) {
     const operation = config.operation;
     const connNode = RED.nodes.getNode(config.connection);
     const delivery = config.delivery;
-    applyConnectionStatus(node, delivery !== 'build', connNode);
 
     // Configured upload items are deploy-constant: parse the JSON once, not
     // per input. The editor validates it (non-empty array or blank; the

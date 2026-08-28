@@ -23,21 +23,34 @@
 
   // ── Presets / command catalog loaded from server ───────────────────────────
   let _currentPresetGroups = [];
-  /** Commands catalog request sequence. */
-  const _cmdCatalog = { seq: 0 };
-  /** Commands catalog the loader last handed this dialog — paint from this. */
-  let _currentCmdCatalog = null;
   /** Messages catalog request sequence (request_message picker). */
   const _msgCatalog = { seq: 0 };
   /** Preset list request sequence. */
   const _presets = { seq: 0 };
-  /** Callbacks waiting on the in-flight commands fetch (null when idle). */
-  let _cmdCatalogWaiters = null;
+  // Commands-catalog request sequences, one per call site. A single shared
+  // sequence lets a fetch from one site outdate another site's still in
+  // flight and silently drop its callback — an Advanced open loses its
+  // MAV_CMD list whenever the presets response lands mid-flight and starts
+  // the option-tips fetch. Per-site, concurrent fetches never cancel each
+  // other, while repeat fetches from the same site still supersede; and
+  // oneditprepare outdates all of them, so a fetch a closed dialog left in
+  // flight cannot steer the dialog now open.
+  const _cmdCatalogSites = {
+    presetDropdown: { seq: 0 }, // buildPresetDropdown: option tips + first change
+    presetTips:     { seq: 0 }, // refreshPresetTipsAndParams
+    presetParams:   { seq: 0 }, // refreshParamFields, preset branch
+    advancedList:   { seq: 0 }, // refreshAdvancedCommands: MAV_CMD dropdown
+    advancedParams: { seq: 0 }, // refreshParamFields, advanced branch
+  };
 
   function loadPresets(cb) {
     // Same fence as loadCatalog's: each open requests anew, outdating any
     // request a closed dialog left in flight — whose response would otherwise
     // rebuild the select of the dialog now open with the old node's preset.
+    // The fetch itself cannot ride loadCatalog: that helper resolves a
+    // catalog target and answers empty without fetching when none resolves
+    // (fresh node — no connection, no dialect), while the preset list is
+    // target-free and must load for exactly those opens.
     const seq = ++_presets.seq;
     $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/presets'), function (data) {
       if (seq !== _presets.seq) return;
@@ -51,50 +64,27 @@
   }
 
   /**
-   * Load the Advanced catalog (commands + enums).
-   *
-   * @param {function({commands:Array, enums:Object, dialect:string}):void} cb
+   * Outdate every commands-catalog site. A pending response answers a catalog
+   * target (or a dialog) that is gone; bumping each sequence makes
+   * loadCatalog's seq check drop it. Called on open and whenever a handler
+   * moves the target — a stale site left current would repaint (and let Done
+   * persist) params from the previous catalog.
    */
-  function loadCommandsCatalog(cb) {
-    // One fetch per catalog target: every handler that moves the target nulls
-    // _currentCmdCatalog first, so a warm catalog is current — without this,
-    // tips + params refreshed as two fetches of the same catalog. An errored
-    // catalog is never served warm; the next caller retries the fetch.
-    if (_currentCmdCatalog && !_currentCmdCatalog.error) {
-      cb(_currentCmdCatalog);
-      return;
-    }
-    // A cold caller joins the fetch already in flight rather than starting a
-    // second one — loadCatalog's seq guard would discard the first fetch and
-    // the callback riding it (the Advanced open lost its MAV_CMD list that
-    // way whenever the presets response landed mid-flight).
-    if (_cmdCatalogWaiters) {
-      _cmdCatalogWaiters.push(cb);
-      return;
-    }
-    _cmdCatalogWaiters = [cb];
-    const waiters = _cmdCatalogWaiters;
-    RED.mavlink.loadCatalog('/mavlink/command/commands', _cmdCatalog, function (catalog) {
-      // The waiters' identity is this fetch's validity: dropCommandsCatalog
-      // replaced them, so this response answers a target nobody wants.
-      if (_cmdCatalogWaiters !== waiters) return;
-      _cmdCatalogWaiters = null;
-      _currentCmdCatalog = catalog;
-      waiters.forEach(function (fn) { fn(catalog); });
-    }, {
-      listKey: 'commands'
-    });
+  function outdateCommandCatalog() {
+    for (const site of Object.values(_cmdCatalogSites)) site.seq += 1;
   }
 
   /**
-   * Forget the warm commands catalog AND any fetch in flight for it — the
-   * catalog target moved (dialect/connection/tier/vehicle) or another dialog
-   * opened, so neither the cache nor the pending response speaks for what the
-   * dialog now shows.
+   * Load the Advanced catalog (commands + enums). Every call fetches — the
+   * admin API is local, and no catalog is held between calls.
+   *
+   * @param {{seq: number}} site  the caller's entry in `_cmdCatalogSites`
+   * @param {function({commands:Array, enums:Object, dialect:string}):void} cb
    */
-  function dropCommandsCatalog() {
-    _currentCmdCatalog = null;
-    _cmdCatalogWaiters = null;
+  function loadCommandsCatalog(site, cb) {
+    RED.mavlink.loadCatalog('/mavlink/command/commands', site, cb, {
+      listKey: 'commands'
+    });
   }
 
   function loadMessagesCatalog(cb) {
@@ -441,11 +431,10 @@
 
     oneditprepare: function () {
       const node = this;
-      // The warm-catalog cache outlives a dialog (script scope), and another
-      // Command node's dialog may have filled it — or left a fetch in flight
-      // for a different dialect or profile. Every open starts cold and orphans
-      // that fetch; the warm path only spans this open.
-      dropCommandsCatalog();
+      // The request sequences outlive a dialog (script scope), and a closed
+      // dialog may have left a fetch in flight for a different dialect or
+      // profile. This open's own fetches all start after the bump.
+      outdateCommandCatalog();
       const container = $('#node-input-params-container');
 
       RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
@@ -523,43 +512,49 @@
         // callback runs after the initial applyMode() left the dialog empty —
         // without this the exposed params stay stale until the user re-picks.
         sel.val(node.preset || 'arm');
-        loadCommandsCatalog(function (catalog) {
+        loadCommandsCatalog(_cmdCatalogSites.presetDropdown, function (catalog) {
           applyPresetOptionTips(sel, catalog);
           sel.trigger('change');
         });
       }
 
       /**
-       * Dialect-sourced titles on preset <option>s and the select.
+       * Dialect-sourced titles on preset <option>s and the select. Paint
+       * only: the caller's own catalog fetch hands the data over, so tips
+       * never race refreshParamFields with a second load.
        *
        * @param {JQuery} [$sel]
-       * @param {{commands?: Array}|null} [catalog]  when provided, paint only
-       *   (no second loadCommandsCatalog — avoids racing refreshParamFields).
+       * @param {{commands?: Array}|null} catalog
        */
       function applyPresetOptionTips($sel, catalog) {
         const sel = $sel && $sel.length ? $sel : $('#node-input-preset');
-        if (!sel.length) return;
-        function paint(cat) {
-          if (!cat) return;
-          const byId = {};
-          (cat.commands || []).forEach(function (c) {
-            byId[String(c.value)] = c.description || '';
-          });
-          sel.find('option').each(function () {
-            const pid = $(this).val();
-            const cid = presetCommandId(pid);
-            const tip = cid != null ? byId[String(cid)] : '';
-            if (tip) $(this).attr('title', tip);
-            else $(this).removeAttr('title');
-          });
-          RED.mavlink.bindSelectTitleSync(sel, { namespace: 'mavPresetTip' });
-        }
-        if (catalog) {
-          paint(catalog);
-          return;
-        }
-        // One catalog load that does not gate control rendering.
-        loadCommandsCatalog(paint);
+        if (!sel.length || !catalog) return;
+        const byId = {};
+        (catalog.commands || []).forEach(function (c) {
+          byId[String(c.value)] = c.description || '';
+        });
+        sel.find('option').each(function () {
+          const pid = $(this).val();
+          const cid = presetCommandId(pid);
+          const tip = cid != null ? byId[String(cid)] : '';
+          if (tip) $(this).attr('title', tip);
+          else $(this).removeAttr('title');
+        });
+        RED.mavlink.bindSelectTitleSync(sel, { namespace: 'mavPresetTip' });
+      }
+
+      /**
+       * The rendered form is only as current as the catalog it came from.
+       * While a replacement catalog is in flight the old controls must not
+       * stay scrapable — `oneditsave` serializes whatever `_mavParamsRendered`
+       * blesses, so a Done inside the fetch window would persist the previous
+       * target's params. Loading state until the callback paints the new form.
+       */
+      function invalidateRenderedParams() {
+        node._mavParamsRendered = false;
+        container.empty().append(
+          $('<div class="form-row"><em>Loading command parameters\u2026</em></div>')
+        );
       }
 
       /**
@@ -567,7 +562,8 @@
        * Vehicle, or delivery changes.
        */
       function refreshPresetTipsAndParams() {
-        loadCommandsCatalog(function (catalog) {
+        invalidateRenderedParams();
+        loadCommandsCatalog(_cmdCatalogSites.presetTips, function (catalog) {
           if ($('#node-input-mode').val() !== 'preset') return;
           applyPresetOptionTips(null, catalog);
           refreshParamFields();
@@ -597,7 +593,8 @@
       }
 
       function refreshAdvancedCommands() {
-        loadCommandsCatalog(function (catalog) {
+        invalidateRenderedParams();
+        loadCommandsCatalog(_cmdCatalogSites.advancedList, function (catalog) {
           if ($('#node-input-mode').val() !== 'advanced') return;
           buildAdvancedDropdown(catalog);
           refreshParamFields();
@@ -634,8 +631,8 @@
       }
 
       $('#node-input-connection').on('change', function () {
+        outdateCommandCatalog();
         presetMessagesCatalog = null;
-        dropCommandsCatalog();
         refreshDelivery();
         // Connection binds a Vehicle Profile → dialect; CompID + Advanced follow it.
         RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
@@ -649,8 +646,8 @@
       $('#node-input-vehicle').on('change', function () {
         // Vehicle Profile change invalidates build-tier catalogs.
         if ($('#node-input-delivery').val() === 'build') {
+          outdateCommandCatalog();
           presetMessagesCatalog = null;
-          dropCommandsCatalog();
           RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
           if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
           if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
@@ -662,8 +659,8 @@
         refreshVisibility();
         // Tier switch may change catalog source (build→vehicle, wire→connection).
         // Reload dialect data for the selected catalog source.
+        outdateCommandCatalog();
         presetMessagesCatalog = null;
-        dropCommandsCatalog();
         RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
         if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
@@ -691,15 +688,16 @@
 
       const $dialect = $('#node-input-dialect');
       // populateDialectSelect re-fires change with the value it already
-      // pinned; a same-value fire must not drop warm catalogs and refetch
-      // them all — on open that doubled every fetch this dialog makes.
+      // pinned; a same-value fire must not throw away the messages catalog
+      // and refetch every catalog this dialog reads — on open that doubles
+      // every fetch this dialog makes.
       let lastDialect = String(node.dialect || '');
       $dialect.on('change', function () {
         const dialect = String($dialect.val() || '');
         if (dialect === lastDialect) return;
         lastDialect = dialect;
+        outdateCommandCatalog();
         presetMessagesCatalog = null;
-        dropCommandsCatalog();
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node, { field: 'targetComponent' });
         if ($('#node-input-mode').val() === 'advanced') refreshAdvancedCommands();
@@ -890,41 +888,42 @@
         if (mode === 'advanced') {
           // Fields are created by selection (§6 / §9 Advanced): named params
           // from the dialect metadata — never a raw Param 1–7 grid.
-          const catalog = _currentCmdCatalog;
           const cmdId = $('#node-input-advancedCommand').val();
-          if (!catalog) {
-            container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
-            loadCommandsCatalog(function () {
-              if ($('#node-input-mode').val() !== 'advanced') return;
-              refreshParamFields();
-            });
-            return;
-          }
-          if (catalog.error && !(catalog.commands && catalog.commands.length)) {
-            container.append($('<div class="form-row"><em>Could not load command parameters for this Vehicle dialect. Deploy the Vehicle Profile (required for custom dialects).</em></div>'));
-            return;
-          }
           if (!cmdId) {
             container.append($('<div class="form-row"><em>Select a MAV_CMD to configure parameters.</em></div>'));
             return;
           }
-          const cmd = (catalog.commands || []).find(function (c) {
-            return String(c.value) === String(cmdId);
-          });
-          if (!cmd) {
-            container.append($('<div class="form-row"><em>Command not in this dialect.</em></div>'));
-            return;
-          }
-          const visible = (cmd.params || []).filter(function (p) { return !p.hidden; });
-          if (visible.length === 0) {
-            container.append($('<div class="form-row"><em>No exposed parameters for this command.</em></div>'));
+          container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
+          loadCommandsCatalog(_cmdCatalogSites.advancedParams, function (catalog) {
+            // The selection can move while the fetch is out, and the paths
+            // that move it off this form (mode flip, MAV_CMD cleared) render
+            // their own placeholder without fetching \u2014 so this site's seq
+            // alone does not outdate the response.
+            if ($('#node-input-mode').val() !== 'advanced') return;
+            if ($('#node-input-advancedCommand').val() !== cmdId) return;
+            container.empty();
+            if (catalog.error && !(catalog.commands && catalog.commands.length)) {
+              container.append($('<div class="form-row"><em>Could not load command parameters for this Vehicle dialect. Deploy the Vehicle Profile (required for custom dialects).</em></div>'));
+              return;
+            }
+            const cmd = (catalog.commands || []).find(function (c) {
+              return String(c.value) === String(cmdId);
+            });
+            if (!cmd) {
+              container.append($('<div class="form-row"><em>Command not in this dialect.</em></div>'));
+              return;
+            }
+            const visible = (cmd.params || []).filter(function (p) { return !p.hidden; });
+            if (visible.length === 0) {
+              container.append($('<div class="form-row"><em>No exposed parameters for this command.</em></div>'));
+              node._mavParamsRendered = true;
+              return;
+            }
+            for (const spec of visible) {
+              container.append(RED.mavlink.formRow(advancedParamLabel(spec), advancedParamInput(spec, catalog.enums || {}, cmdId)));
+            }
             node._mavParamsRendered = true;
-            return;
-          }
-          for (const spec of visible) {
-            container.append(RED.mavlink.formRow(advancedParamLabel(spec), advancedParamInput(spec, catalog.enums || {}, cmdId)));
-          }
-          node._mavParamsRendered = true;
+          });
         } else {
           const presetId = $('#node-input-preset').val();
           // A select with no option matching the saved preset leaves nothing
@@ -965,24 +964,23 @@
           // rendered-guard keeps a premature Done from scraping the empty form
           // (Codex #36).
           const commandId = presetCommandId(presetId);
-          function renderPresetRows(catalog) {
+          container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
+          loadCommandsCatalog(_cmdCatalogSites.presetParams, function (catalog) {
+            // The preset can move to a zero-param or message-waiting form
+            // while the fetch is out, and those paths render without
+            // fetching \u2014 so this site's seq alone does not outdate the
+            // response.
+            if ($('#node-input-mode').val() !== 'preset') return;
+            if ($('#node-input-preset').val() !== presetId) return;
+            container.empty();
+            // An errored catalog renders the curated skeleton (labels and
+            // numeric inputs) rather than an empty form.
             for (const spec of paramSpec) {
               // Curation keys override the catalog spec; omitted keys inherit.
               const merged = Object.assign({}, catalogParamByIndex(catalog, commandId, spec.index) || {}, spec);
               container.append(RED.mavlink.formRow(advancedParamLabel(merged), presetParamInput(merged, catalog.enums || {}, commandId)));
             }
             node._mavParamsRendered = true;
-          }
-          if (!_currentCmdCatalog) {
-            container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
-          }
-          loadCommandsCatalog(function (cmdCatalog) {
-            if ($('#node-input-mode').val() !== 'preset') return;
-            if ($('#node-input-preset').val() !== presetId) return;
-            container.empty();
-            // An errored catalog renders the curated skeleton (labels and
-            // numeric inputs) rather than an empty form.
-            renderPresetRows(cmdCatalog || { commands: [], enums: {} });
           });
         }
       }

@@ -37,8 +37,9 @@ re-raising a settled question.
 
 **PR size cap: 50 files.** (`AGENTS.md:34`) `git diff --name-only <base>...HEAD | wc -l`.
 
-**YAGNI is a hard constraint, not a preference.** Pre-1.0 and unpublished: no migrations,
-no compatibility shims, no aliases for renamed things. Delete and re-pick.
+**YAGNI is a hard constraint, not a preference.** At any version, ever (owner ruling,
+2026-08-28): no migrations, no compatibility shims, no aliases for renamed things.
+Delete and re-pick.
 
 **The editor validates; the runtime trusts the saved config.** Runtime code must not
 duplicate validation the editor already performed. When a saved value is unreadable

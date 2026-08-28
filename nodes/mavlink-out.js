@@ -37,7 +37,6 @@ const {
   applyActionStatus,
   failInput,
 } = require('../lib/delivery');
-const { applyConnectionStatus } = require('../lib/addressing');
 
 module.exports = function registerMavlinkOut(RED) {
   /**
@@ -48,7 +47,6 @@ module.exports = function registerMavlinkOut(RED) {
     const node = this;
 
     const connectionNode = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, true, connectionNode);
 
     // The editor owns the default ('2' = Control) — just convert it.
     const defaultBand = Number(config.band);

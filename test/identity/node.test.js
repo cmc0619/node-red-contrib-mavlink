@@ -42,6 +42,63 @@ test('a companion carries its saved CompID; only SysID is derived', () => {
   assert.deepEqual(second.getIdentity(), { sysid: 7, compid: 192 });
 });
 
+test('a never-opened node deploys on the editor concrete defaults, no runtime preset fill', () => {
+  const RED = redStub();
+  require('../../nodes/mavlink-local-identity')(RED);
+  const Node = RED.nodes.types['mavlink-local-identity'];
+
+  // A node dropped on the canvas and deployed without its dialog ever being
+  // opened saves the raw `defaults` from mavlink-local-identity.html —
+  // concrete for both heartbeat fields (§6), so the runtime reads them as
+  // saved with no `||` preset fallback.
+  const node = new Node({
+    id: 'never-opened',
+    role: 'gcs',
+    sourceSystemId: 255,
+    sourceComponentId: 190,
+    heartbeatType: 'MAV_TYPE_GCS',
+    heartbeatAutopilot: 'MAV_AUTOPILOT_INVALID',
+    heartbeatIntervalMs: 1000,
+  });
+
+  assert.equal(node.heartbeatType, 'MAV_TYPE_GCS');
+  assert.equal(node.heartbeatAutopilot, 'MAV_AUTOPILOT_INVALID');
+  assert.deepEqual(node.getHeartbeatFields(), {
+    type: 'MAV_TYPE_GCS',
+    autopilot: 'MAV_AUTOPILOT_INVALID',
+    base_mode: 0,
+    custom_mode: 0,
+    system_status: 'MAV_STATE_ACTIVE',
+    mavlink_version: 3,
+  });
+});
+
+test('the runtime sends the saved heartbeat fields verbatim — a blank stays blank', () => {
+  const RED = redStub();
+  require('../../nodes/mavlink-local-identity')(RED);
+  const Node = RED.nodes.types['mavlink-local-identity'];
+
+  // Blank is the discriminating case: a truthy saved value survives any
+  // reading, but a blank one only survives a runtime that reads config
+  // directly with no preset substitution (§6). A flow saved blank deploys
+  // that blank, and the enum resolver at the Connection is where it fails —
+  // loud, at start, never as a silently substituted preset.
+  const node = new Node({
+    id: 'blank-hb',
+    role: 'companion',
+    sourceSystemId: '',
+    sourceComponentId: 191,
+    heartbeatType: '',
+    heartbeatAutopilot: '',
+    heartbeatIntervalMs: 1000,
+  });
+
+  assert.equal(node.heartbeatType, '');
+  assert.equal(node.heartbeatAutopilot, '');
+  assert.equal(node.getHeartbeatFields().type, '');
+  assert.equal(node.getHeartbeatFields().autopilot, '');
+});
+
 function redStub() {
   return {
     nodes: {

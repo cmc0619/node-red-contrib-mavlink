@@ -580,6 +580,27 @@ test('fillCompIdSelect allows an empty filter option', () => {
   assert.equal(select.selected, '');
 });
 
+test('heartbeatType and heartbeatAutopilot are concrete, required, and never blank', () => {
+  // A never-opened node deploys on these raw defaults (§6): both concrete,
+  // with heartbeatType matching ROLE_PRESETS.gcs.heartbeatType so a fresh
+  // gcs-role node sends the preset the role means. `required` reds the one
+  // path a blank could still take — a select left empty by a failed or empty
+  // catalog load — and the selects offer no blank option, because the runtime
+  // hands the saved name to the enum resolver as-is.
+  const context = loadHelpers();
+  const { heartbeatType, heartbeatAutopilot } = context.identityDefinition.defaults;
+
+  assert.equal(heartbeatType.value, 'MAV_TYPE_GCS');
+  assert.equal(heartbeatType.required, true);
+  assert.equal(heartbeatAutopilot.value, 'MAV_AUTOPILOT_INVALID');
+  assert.equal(heartbeatAutopilot.required, true);
+  assert.doesNotMatch(
+    html,
+    /allowEmpty/,
+    'neither heartbeat select offers a blank option — blank has no wire meaning'
+  );
+});
+
 test('identity oneditprepare loads MAV_TYPE by enum name, not numeric value', () => {
   assert.match(
     html,

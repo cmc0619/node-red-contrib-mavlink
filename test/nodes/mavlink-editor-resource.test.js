@@ -605,13 +605,6 @@ test('bitmaskTitle appends the Ctrl/Cmd-click hint', () => {
   assert.match(RED.mavlink.bitmaskTitle(), /Bitmask flags/);
 });
 
-test('booleanEntryLabel maps FALSE/TRUE names to boolean words', () => {
-  const { RED } = loadResource();
-  assert.equal(RED.mavlink.booleanEntryLabel({ name: 'FALSE', label: 'FALSE (0)' }), 'false');
-  assert.equal(RED.mavlink.booleanEntryLabel({ name: 'MAV_BOOL_TRUE', label: 'x' }), 'true');
-  assert.equal(RED.mavlink.booleanEntryLabel({ name: 'OTHER', label: 'Other (2)' }), 'Other (2)');
-});
-
 test('selectedBitmaskValues returns the set flag values', () => {
   const { RED } = loadResource();
   const entries = [

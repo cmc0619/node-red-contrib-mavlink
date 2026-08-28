@@ -209,9 +209,9 @@
 
   /**
    * The dialect's boolean spellings — `TRUE` / `*_TRUE` and the FALSE twin.
-   * One private pair for the three readers (`booleanEntryLabel`,
-   * `booleanEnumInput`, `isFalseTrueEnum`); the suffix lengths were spelled
-   * out at each site and are exactly the kind of pair that drifts.
+   * One private pair for the two readers (`booleanEnumInput`,
+   * `isFalseTrueEnum`); the suffix lengths were spelled out at each site
+   * and are exactly the kind of pair that drifts.
    * @param {string} name
    * @returns {boolean}
    */
@@ -221,19 +221,6 @@
   function isFalseName(name) {
     return name === 'FALSE' || name.slice(-6) === '_FALSE';
   }
-
-  /**
-   * Display label for a FALSE/TRUE enum entry (`false` / `true`); otherwise
-   * the entry's catalog label or name.
-   * @param {{name?: string, label?: string}} entry
-   * @returns {string}
-   */
-  RED.mavlink.booleanEntryLabel = function (entry) {
-    const name = entry && entry.name ? entry.name : '';
-    if (isFalseName(name)) return 'false';
-    if (isTrueName(name)) return 'true';
-    return (entry && entry.label) || name;
-  };
 
   /**
    * Checkbox for a FALSE/TRUE enum param (§6: everything enumerable is a

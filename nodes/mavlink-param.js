@@ -50,7 +50,6 @@ const {
 const {
   resolveDeliveryContext,
   firstDefined,
-  applyConnectionStatus,
   numberOr,
 } = require('../lib/addressing');
 const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
@@ -215,7 +214,6 @@ module.exports = function registerMavlinkParam(RED) {
 
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, delivery !== 'build', connAtDeploy);
 
     /**
      * In-flight transaction, or null. `gen` is the single-flight token: a
@@ -308,8 +306,24 @@ module.exports = function registerMavlinkParam(RED) {
 
         /** Send the message and, on a waiting tier, arm its transaction. */
         function wireTier() {
+          // Queue band per action (§5, §7): the full-table stream rides Bulk,
+          // the single-param conversations ride Control. A stray action
+          // selects no band here — and built no message either
+          // (buildParamMessage's own §5 default), so the send throws at the
+          // Connection's serialize choke before anything is queued.
+          let band;
+          switch (request.action) {
+            case 'request-list':
+              band = BAND.BULK;
+              break;
+            case 'read':
+            case 'set':
+              band = BAND.CONTROL;
+              break;
+            default: break; // This space intentionally left blank (§5)
+          }
           connNode.send(message, {
-            band: request.action === 'request-list' ? BAND.BULK : BAND.CONTROL,
+            band,
             target: request.target,
             identityId,
           });
@@ -323,14 +337,39 @@ module.exports = function registerMavlinkParam(RED) {
           const echoFilter = { message: 'PARAM_VALUE', sysid: request.target.sysid, trustedOnly: true };
           if (request.target.compid) echoFilter.compid = request.target.compid;
 
-          const isConfirmSet = delivery === 'confirm' && request.action === 'set';
-          const isConfirmRead = delivery === 'confirm' && request.action === 'read';
-          const isCollectList = delivery === 'collect' && request.action === 'request-list';
+          // The wait this delivery×action combination arms (§5, §9): a confirm
+          // set waits for its echo, a confirm read for its reply, a collect
+          // for the full list. The subscribe callback, the deadline, and the
+          // refill machinery all dispatch on it.
+          let mode = '';
+          switch (delivery) {
+            case 'confirm':
+              switch (request.action) {
+                case 'set': mode = 'confirm-set'; break;
+                case 'read': mode = 'confirm-read'; break;
+                default: break; // This space intentionally left blank (§5)
+              }
+              break;
+            case 'collect':
+              switch (request.action) {
+                case 'request-list': mode = 'collect-list'; break;
+                default: break; // This space intentionally left blank (§5)
+              }
+              break;
+            default: break; // This space intentionally left blank (§5)
+          }
 
-          if (!isConfirmSet && !isConfirmRead && !isCollectList) {
-            completeResult(node, send, 'succeeded', 'sent', message);
-            done();
-            return;
+          // No case armed a wait: the send above was the whole job, so the
+          // input completes as sent — fire-and-forget is the general path
+          // here, the three waits above are the special cases. The composed
+          // token's vocabulary is closed by construction, so its no-wait
+          // member dispatches affirmatively like the rest (§5).
+          switch (mode) {
+            case '':
+              completeResult(node, send, 'succeeded', 'sent', message);
+              done();
+              return;
+            default: break; // This space intentionally left blank (§5)
           }
 
           // Supersede any prior in-flight transaction, releasing its done().
@@ -347,43 +386,54 @@ module.exports = function registerMavlinkParam(RED) {
 
           let attempt = 1;
           let refillRounds = 0;
-          const collector = isCollectList
-            ? createParamListCollector({ warn: (text) => node.warn(`mavlink-param: ${text}`) })
-            : null;
+          let collector = null;
+          switch (mode) {
+            case 'collect-list':
+              collector = createParamListCollector({ warn: (text) => node.warn(`mavlink-param: ${text}`) });
+              break;
+            default: break; // This space intentionally left blank (§5)
+          }
 
           const unsubscribe = connNode.subscribe(echoFilter, (decoded) => {
             if (!pending || pending.gen !== myGen) return;
-            if (isConfirmSet) {
-              if (!matchesParamEcho(request, decoded)) return;
-              settle((finishDone) => {
-                completeResult(node, send, 'succeeded', 'echo-confirmed', decoded, { attempts: attempt });
-                finishDone();
-              });
-            } else if (isConfirmRead) {
-              if (!matchesParamReadReply(request, decoded)) return;
-              settle((finishDone) => {
-                completeResult(node, send, 'succeeded', 'value-received', decoded);
-                finishDone();
-              });
-            } else {
-              const params = collector.accept(decoded);
-              // Only a frame the collector kept is list progress: re-arming on a
-              // 65535 set echo or an out-of-range index lets a steady echo
-              // stream postpone the refill while a real index is still missing.
-              if (params === null) return;
-              if (params === true) {
-                armInactivity();
-                return;
+            switch (mode) {
+              case 'confirm-set':
+                if (!matchesParamEcho(request, decoded)) return;
+                settle((finishDone) => {
+                  completeResult(node, send, 'succeeded', 'echo-confirmed', decoded, { attempts: attempt });
+                  finishDone();
+                });
+                break;
+              case 'confirm-read':
+                if (!matchesParamReadReply(request, decoded)) return;
+                settle((finishDone) => {
+                  completeResult(node, send, 'succeeded', 'value-received', decoded);
+                  finishDone();
+                });
+                break;
+              case 'collect-list': {
+                const params = collector.accept(decoded);
+                // Only a frame the collector kept is list progress: re-arming on a
+                // 65535 set echo or an out-of-range index lets a steady echo
+                // stream postpone the refill while a real index is still missing.
+                if (params === null) return;
+                if (params === true) {
+                  armInactivity();
+                  return;
+                }
+                settle((finishDone) => {
+                  completeResult(node, send, 'succeeded', 'list-complete', params);
+                  finishDone();
+                });
+                break;
               }
-              settle((finishDone) => {
-                completeResult(node, send, 'succeeded', 'list-complete', params);
-                finishDone();
-              });
+              default: break; // This space intentionally left blank (§5)
             }
           });
 
-          const timeoutDetail = isConfirmSet ? 'echo timeout'
-            : isConfirmRead ? 'read timeout' : 'list timeout';
+          // Display mapping, not dispatch (§5 last paragraph).
+          const timeoutDetail = mode === 'confirm-set' ? 'echo timeout'
+            : mode === 'confirm-read' ? 'read timeout' : 'list timeout';
 
           /**
            * Arm the deadline. On a confirm set the timeout is per attempt: echo
@@ -395,29 +445,36 @@ module.exports = function registerMavlinkParam(RED) {
           function armDeadline() {
             return setTimeout(() => {
               if (!pending || pending.gen !== myGen) return;
-              if (isConfirmSet && attempt < PARAM_SET_ATTEMPTS) {
-                attempt += 1;
-                applyActionStatus(node, 'sending', `resend ${attempt}/${PARAM_SET_ATTEMPTS} ${request.paramId}\u2026`);
-                send([null, makeStatusRecord(node.type, {
-                  result: 'progress',
-                  detail: `resend ${attempt}/${PARAM_SET_ATTEMPTS}`,
-                })]);
-                try {
-                  connNode.send(message, { band: BAND.CONTROL, target: request.target, identityId });
-                } catch (err) {
-                  // Timer context: Connection.send throws by design (queue
-                  // overflow, dead link) and nothing above this catches, so a
-                  // throw here would be an uncaughtException — settle instead
-                  // (same rule as lib/command/ack.js retry send).
-                  settle((finishDone) => failInput(node, send, err, finishDone));
-                  return;
-                }
-                pending.timer = armDeadline();
-                return;
+              let extra;
+              switch (mode) {
+                case 'confirm-set':
+                  if (attempt < PARAM_SET_ATTEMPTS) {
+                    attempt += 1;
+                    applyActionStatus(node, 'sending', `resend ${attempt}/${PARAM_SET_ATTEMPTS} ${request.paramId}\u2026`);
+                    send([null, makeStatusRecord(node.type, {
+                      result: 'progress',
+                      detail: `resend ${attempt}/${PARAM_SET_ATTEMPTS}`,
+                    })]);
+                    try {
+                      connNode.send(message, { band: BAND.CONTROL, target: request.target, identityId });
+                    } catch (err) {
+                      // Timer context: Connection.send throws by design (queue
+                      // overflow, dead link) and nothing above this catches, so a
+                      // throw here would be an uncaughtException — settle instead
+                      // (same rule as lib/command/ack.js retry send).
+                      settle((finishDone) => failInput(node, send, err, finishDone));
+                      return;
+                    }
+                    pending.timer = armDeadline();
+                    return;
+                  }
+                  // Attempts spent: the timeout below reports how many.
+                  extra = { attempts: attempt };
+                  break;
+                default: break; // This space intentionally left blank (§5)
               }
               settle((finishDone) =>
-                timeoutResult(node, send, timeoutDetail, finishDone,
-                  isConfirmSet ? { attempts: attempt } : undefined));
+                timeoutResult(node, send, timeoutDetail, finishDone, extra));
             }, timeoutMs);
           }
 
@@ -471,7 +528,10 @@ module.exports = function registerMavlinkParam(RED) {
 
           pending = { unsubscribe, timer: null, inactivityTimer: null, done, gen: myGen };
           pending.timer = armDeadline();
-          if (isCollectList) armInactivity();
+          switch (mode) {
+            case 'collect-list': armInactivity(); break;
+            default: break; // This space intentionally left blank (§5)
+          }
         }
       } catch (err) {
         failInput(node, send, err, done);

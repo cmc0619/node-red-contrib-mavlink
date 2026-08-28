@@ -64,8 +64,11 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
     node.sourceSystemId = node.derivesSysidFromVehicle ? null : Number(config.sourceSystemId);
     node.sourceComponentId = Number(config.sourceComponentId);
 
-    node.heartbeatType = config.heartbeatType || preset.heartbeatType;
-    node.heartbeatAutopilot = config.heartbeatAutopilot || preset.heartbeatAutopilot;
+    // Both fields carry concrete editor defaults with no blank affordance
+    // (mavlink-local-identity.html) — the editor owns the gcs-matching
+    // default, so the runtime just reads what was saved (§6).
+    node.heartbeatType = config.heartbeatType;
+    node.heartbeatAutopilot = config.heartbeatAutopilot;
     // The editor owns the 1000 default and the positive ring
     // (mavlink-local-identity.html) — just convert it.
     node.heartbeatIntervalMs = Number(config.heartbeatIntervalMs);

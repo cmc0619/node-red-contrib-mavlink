@@ -2,7 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList, isActive } = require('../lib/fanout');
-const { applyConnectionStatus, isBlank, dialectFromConnection } = require('../lib/addressing');
+const { isBlank, dialectFromConnection } = require('../lib/addressing');
 const { formationTargets } = require('../lib/formation');
 const {
   getPreset,
@@ -51,7 +51,6 @@ module.exports = function registerMavlinkFormation(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
     const connectionNode = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, true, connectionNode);
 
     // Abort-on-close discipline shared with mavlink-fanout: a redeploy aborts
     // every run in flight and waits for each to unwind. Rationale lives with

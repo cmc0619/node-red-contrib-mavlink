@@ -125,7 +125,6 @@
       // are shared keys whose enums differ per device. Pick a new verb and you
       // get that verb's defaults.
       var stash = Object.assign({}, node.values);
-      var seq = 0;
 
       function selection() {
         return {
@@ -257,13 +256,10 @@
         query.topic = sel.topic;
         query.verb = sel.verb;
         query.path = sel.path;
-        var mine = ++seq;
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, function (data) {
-          if (mine !== seq) return;
           renderFields(data);
           applyCarrier(data);
         }).fail(function () {
-          if (mine !== seq) return;
           notice('Could not load parameters for this verb.');
         });
       }

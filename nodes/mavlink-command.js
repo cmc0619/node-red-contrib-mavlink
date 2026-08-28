@@ -63,7 +63,6 @@ const {
 const { loadMetadata } = require('../lib/metadata/load');
 const {
   resolveDeliveryContext,
-  applyConnectionStatus,
   dialectFromVehicleId,
   dialectFromConnection,
   isBlank,
@@ -132,7 +131,6 @@ module.exports = function registerMavlinkCommand(RED) {
     const completionKey = preset ? preset.completionKey : null;
 
     const connNode = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, config.delivery !== 'build', connNode);
 
     const delivery = config.delivery;
 
@@ -148,16 +146,22 @@ module.exports = function registerMavlinkCommand(RED) {
     function coordKinds() {
       if (_coordKindsResolved) return _coordKinds;
       let bundle = null;
-      if (delivery === 'build') {
-        if (config.dialect === '__vehicle') {
-          bundle = dialectFromVehicleId(RED, config.vehicle, { rethrow: true });
-        } else if (config.dialect) {
-          const api = metadataApi();
-          if (api) bundle = api.loadBundled(config.dialect);
-        }
-      } else {
-        // Connection snapshot has no bundle — resolve the profile node (§7).
-        bundle = dialectFromConnection(RED, connNode, { rethrow: true });
+      switch (delivery) {
+        case 'build':
+          if (config.dialect === '__vehicle') {
+            bundle = dialectFromVehicleId(RED, config.vehicle, { rethrow: true });
+          } else if (config.dialect) {
+            const api = metadataApi();
+            if (api) bundle = api.loadBundled(config.dialect);
+          }
+          break;
+        case 'send':
+        case 'confirm':
+        case 'complete':
+          // Connection snapshot has no bundle — resolve the profile node (§7).
+          bundle = dialectFromConnection(RED, connNode, { rethrow: true });
+          break;
+        default: break; // This space intentionally left blank (§5)
       }
       _coordKinds = bundle ? intCoordKinds(bundle, commandId) : null;
       _coordKindsResolved = true;
@@ -176,33 +180,38 @@ module.exports = function registerMavlinkCommand(RED) {
      * and bundle; Build resolves through the Vehicle Profile escape only — a
      * concrete Build dialect has no firmware axis on this node, so shipped
      * tables cannot pick and an unmatched name rides to the NaN tail. Same
-     * build/wire split as coordKinds above.
+     * tier dispatch as coordKinds above (§5); a tier the editor's delivery
+     * select cannot save composes only the firmware axis, so name resolution
+     * falls to that same NaN tail — and the tier dispatch in handleInput
+     * sends nothing anyway.
      *
      * @param {{target: {sysid: number, compid: number}, profile: object|null}} resolution
      * @returns {import('../lib/vehicle/modes').ModeContext}
      */
     function modeContext(resolution) {
       const profile = resolution.profile || {};
-      const base = {
+      const context = {
         firmware: profile.firmware,
         vehicleFamily: profile.vehicleFamily,
       };
-      if (delivery === 'build') {
-        return {
-          ...base,
-          bundle: config.dialect === '__vehicle'
+      switch (delivery) {
+        case 'build':
+          context.bundle = config.dialect === '__vehicle'
             ? dialectFromVehicleId(RED, config.vehicle)
-            : null,
-        };
+            : null;
+          break;
+        case 'send':
+        case 'confirm':
+        case 'complete':
+          context.component = connNode.peerTable.getComponent(
+            resolution.target.sysid,
+            resolution.target.compid
+          );
+          context.bundle = dialectFromConnection(RED, connNode);
+          break;
+        default: break; // This space intentionally left blank (§5)
       }
-      return {
-        ...base,
-        component: connNode.peerTable.getComponent(
-          resolution.target.sysid,
-          resolution.target.compid
-        ),
-        bundle: dialectFromConnection(RED, connNode),
-      };
+      return context;
     }
 
     /**

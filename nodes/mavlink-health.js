@@ -25,7 +25,6 @@ const {
   applyActionStatus,
   failInput,
 } = require('../lib/delivery');
-const { applyConnectionStatus } = require('../lib/addressing');
 
 module.exports = function registerMavlinkHealth(RED) {
   /**
@@ -36,7 +35,6 @@ module.exports = function registerMavlinkHealth(RED) {
     const node = this;
 
     const connectionNode = RED.nodes.getNode(config.connection);
-    applyConnectionStatus(node, true, connectionNode);
 
     // Which identity's health this asserts. Blank config (the editor writes
     // blank for a single-identity Connection whose field is hidden) means the

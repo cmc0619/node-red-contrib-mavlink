@@ -80,8 +80,14 @@ test('advanced catalog load ignores stale responses and keeps the in-progress se
     /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
     'commands catalog uses the shared loader'
   );
-  assert.match(html, /_cmdCatalog\s*=\s*\{\s*seq:\s*0\s*\}/,
-    'commands render state has only a request sequence');
+  // One request sequence per call site: a shared sequence would let one
+  // site's fetch outdate another site's still in flight and drop its
+  // callback (the Advanced open would lose its MAV_CMD list whenever the
+  // presets response landed mid-flight).
+  assert.match(html, /advancedList:\s*\{\s*seq:\s*0\s*\}/,
+    'each commands-catalog call site owns only a request sequence');
+  assert.doesNotMatch(html, /_currentCmdCatalog|_cmdCatalogWaiters|dropCommandsCatalog/,
+    'no warm catalog, no waiter coalescing — every call fetches');
   assert.match(html, /saved:\s*node\.advancedCommand/, 'the saved MAV_CMD is offered');
   assert.match(html, /preferLive:\s*true/,
     'and an in-progress selection outranks it, so an async refill cannot snap it back');
@@ -90,7 +96,7 @@ test('advanced catalog load ignores stale responses and keeps the in-progress se
 test('Advanced mode populates commands before loading their parameter fields', () => {
   assert.match(
     html,
-    /function refreshAdvancedCommands\(\) \{[\s\S]*loadCommandsCatalog\(function \(catalog\) \{[\s\S]*buildAdvancedDropdown\(catalog\);[\s\S]*refreshParamFields\(\);/
+    /function refreshAdvancedCommands\(\) \{[\s\S]*loadCommandsCatalog\(_cmdCatalogSites\.advancedList, function \(catalog\) \{[\s\S]*buildAdvancedDropdown\(catalog\);[\s\S]*refreshParamFields\(\);/
   );
 });
 
@@ -98,7 +104,7 @@ test('initial preset load paints option tips before triggering the parameter ref
   const builder = sliceBetween('function buildPresetDropdown(groups)', '/**\n       * Dialect-sourced titles');
   assert.match(
     builder,
-    /loadCommandsCatalog\(function \(catalog\) \{[\s\S]*applyPresetOptionTips\(sel, catalog\);[\s\S]*sel\.trigger\('change'\);/
+    /loadCommandsCatalog\(_cmdCatalogSites\.presetDropdown, function \(catalog\) \{[\s\S]*applyPresetOptionTips\(sel, catalog\);[\s\S]*sel\.trigger\('change'\);/
   );
 });
 

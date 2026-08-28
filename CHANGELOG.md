@@ -8,6 +8,14 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Changed
 
+- **Local Identity heartbeat fields carry concrete editor defaults.** A node
+  created and saved without touching Role could persist a blank HB Type, which
+  the runtime silently replaced with the role preset. The editor default is
+  now `MAV_TYPE_GCS` outright, blank can no longer be saved, and the runtime
+  sends exactly what is saved. **Reopen and re-save any identity created that
+  way** — one saved with a blank HB Type now deploys that blank verbatim;
+  reopening fills the field and the save persists a real type.
+
 - **A Connection may bind as many identities as the flow needs, but each needs
   its own source SysID/CompID.** There is no per-role limit and never was a
   reason for one — a role is a preset, not a quota. A second ground station stays
