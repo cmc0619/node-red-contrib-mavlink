@@ -216,6 +216,11 @@ has no dispatcher at all.
   behavior. The empty `default: break` is how a reader sees that on purpose.
 - Do not use `if`/`else`, chained equality tests, ternaries, truthiness, inequality checks, an
   executable lookup table, or any other substitute for a `switch` to choose runtime behavior.
+- A vocabulary whose members share behaviors is still a switch: stack the case labels that
+  share an arm (`case 'send': case 'confirm': case 'collect':`), never fork a boolean on one
+  member. A boolean's else-arm is where a stray member rides a path nobody chose — the Build
+  node's selection-typo cluster put a frame on the wire the operator asked only to construct.
+  Under stacked labels an unmatched member falls to the empty default and selects nothing.
 - Do not use `x || 'default'` or a blank check that selects a default member.
 - An absent `msg` override may still mean “use the configured operator value.” Either pass the
   resulting value through or dispatch it, according to whether this code actually owns
@@ -248,8 +253,9 @@ the schema for static configuration.
 - For typed inputs, validate the configured expression in the editor. At runtime, evaluate it
   and pass the result on unchanged. Do not guard the resolved value. Dispatch it only when this
   layer owns multiple behaviors; otherwise pass it directly to the core implementation.
-- This is a pre-1.0 driver under active development. Do not add migrations, compatibility
-  shims, legacy-format handling, deprecation paths, or tests for old flow shapes.
+- Do not add migrations, compatibility shims, legacy-format handling, deprecation paths, or
+  tests for old flow shapes — at any version, ever, not merely pre-1.0. The config surface is
+  stable by policy; a changed value is deleted and re-picked, never migrated.
 
 ## 7. Tests
 
