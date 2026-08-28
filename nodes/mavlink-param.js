@@ -323,11 +323,32 @@ module.exports = function registerMavlinkParam(RED) {
           const echoFilter = { message: 'PARAM_VALUE', sysid: request.target.sysid, trustedOnly: true };
           if (request.target.compid) echoFilter.compid = request.target.compid;
 
-          const isConfirmSet = delivery === 'confirm' && request.action === 'set';
-          const isConfirmRead = delivery === 'confirm' && request.action === 'read';
-          const isCollectList = delivery === 'collect' && request.action === 'request-list';
+          // The wait this delivery×action combination arms (§5, §9): a confirm
+          // set waits for its echo, a confirm read for its reply, a collect
+          // for the full list. The subscribe callback, the deadline, and the
+          // refill machinery all dispatch on it.
+          let mode = '';
+          switch (delivery) {
+            case 'confirm':
+              switch (request.action) {
+                case 'set': mode = 'confirm-set'; break;
+                case 'read': mode = 'confirm-read'; break;
+                default: break; // This space intentionally left blank (§5)
+              }
+              break;
+            case 'collect':
+              switch (request.action) {
+                case 'request-list': mode = 'collect-list'; break;
+                default: break; // This space intentionally left blank (§5)
+              }
+              break;
+            default: break; // This space intentionally left blank (§5)
+          }
 
-          if (!isConfirmSet && !isConfirmRead && !isCollectList) {
+          // No case armed a wait: the send above was the whole job, so the
+          // input completes as sent — fire-and-forget is the general path
+          // here, the three waits above are the special cases.
+          if (mode === '') {
             completeResult(node, send, 'succeeded', 'sent', message);
             done();
             return;
@@ -347,43 +368,50 @@ module.exports = function registerMavlinkParam(RED) {
 
           let attempt = 1;
           let refillRounds = 0;
-          const collector = isCollectList
+          const collector = mode === 'collect-list'
             ? createParamListCollector({ warn: (text) => node.warn(`mavlink-param: ${text}`) })
             : null;
 
           const unsubscribe = connNode.subscribe(echoFilter, (decoded) => {
             if (!pending || pending.gen !== myGen) return;
-            if (isConfirmSet) {
-              if (!matchesParamEcho(request, decoded)) return;
-              settle((finishDone) => {
-                completeResult(node, send, 'succeeded', 'echo-confirmed', decoded, { attempts: attempt });
-                finishDone();
-              });
-            } else if (isConfirmRead) {
-              if (!matchesParamReadReply(request, decoded)) return;
-              settle((finishDone) => {
-                completeResult(node, send, 'succeeded', 'value-received', decoded);
-                finishDone();
-              });
-            } else {
-              const params = collector.accept(decoded);
-              // Only a frame the collector kept is list progress: re-arming on a
-              // 65535 set echo or an out-of-range index lets a steady echo
-              // stream postpone the refill while a real index is still missing.
-              if (params === null) return;
-              if (params === true) {
-                armInactivity();
-                return;
+            switch (mode) {
+              case 'confirm-set':
+                if (!matchesParamEcho(request, decoded)) return;
+                settle((finishDone) => {
+                  completeResult(node, send, 'succeeded', 'echo-confirmed', decoded, { attempts: attempt });
+                  finishDone();
+                });
+                break;
+              case 'confirm-read':
+                if (!matchesParamReadReply(request, decoded)) return;
+                settle((finishDone) => {
+                  completeResult(node, send, 'succeeded', 'value-received', decoded);
+                  finishDone();
+                });
+                break;
+              case 'collect-list': {
+                const params = collector.accept(decoded);
+                // Only a frame the collector kept is list progress: re-arming on a
+                // 65535 set echo or an out-of-range index lets a steady echo
+                // stream postpone the refill while a real index is still missing.
+                if (params === null) return;
+                if (params === true) {
+                  armInactivity();
+                  return;
+                }
+                settle((finishDone) => {
+                  completeResult(node, send, 'succeeded', 'list-complete', params);
+                  finishDone();
+                });
+                break;
               }
-              settle((finishDone) => {
-                completeResult(node, send, 'succeeded', 'list-complete', params);
-                finishDone();
-              });
+              default: break; // This space intentionally left blank (§5)
             }
           });
 
-          const timeoutDetail = isConfirmSet ? 'echo timeout'
-            : isConfirmRead ? 'read timeout' : 'list timeout';
+          // Display mapping, not dispatch (§5 last paragraph).
+          const timeoutDetail = mode === 'confirm-set' ? 'echo timeout'
+            : mode === 'confirm-read' ? 'read timeout' : 'list timeout';
 
           /**
            * Arm the deadline. On a confirm set the timeout is per attempt: echo
@@ -395,7 +423,7 @@ module.exports = function registerMavlinkParam(RED) {
           function armDeadline() {
             return setTimeout(() => {
               if (!pending || pending.gen !== myGen) return;
-              if (isConfirmSet && attempt < PARAM_SET_ATTEMPTS) {
+              if (mode === 'confirm-set' && attempt < PARAM_SET_ATTEMPTS) {
                 attempt += 1;
                 applyActionStatus(node, 'sending', `resend ${attempt}/${PARAM_SET_ATTEMPTS} ${request.paramId}\u2026`);
                 send([null, makeStatusRecord(node.type, {
@@ -417,7 +445,7 @@ module.exports = function registerMavlinkParam(RED) {
               }
               settle((finishDone) =>
                 timeoutResult(node, send, timeoutDetail, finishDone,
-                  isConfirmSet ? { attempts: attempt } : undefined));
+                  mode === 'confirm-set' ? { attempts: attempt } : undefined));
             }, timeoutMs);
           }
 
@@ -471,7 +499,7 @@ module.exports = function registerMavlinkParam(RED) {
 
           pending = { unsubscribe, timer: null, inactivityTimer: null, done, gen: myGen };
           pending.timer = armDeadline();
-          if (isCollectList) armInactivity();
+          if (mode === 'collect-list') armInactivity();
         }
       } catch (err) {
         failInput(node, send, err, done);

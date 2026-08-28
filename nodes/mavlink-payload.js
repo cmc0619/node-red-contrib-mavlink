@@ -251,42 +251,45 @@ module.exports = function registerMavlinkPayload(RED) {
         }
         try {
           const source = resolveCatalogSource(RED, metadataApi, req.query || {}, { soft: true });
-          if (source.kind === 'empty') {
-            return res.json({
-              dialect: source.dialect,
-              fields: {},
-              notice: source.notice,
-            });
-          }
-          if (source.kind === 'error') {
-            // getDialect / resolve failures can include filesystem paths —
-            // keep the client response generic (same posture as the catch below).
-            if (RED.log && typeof RED.log.error === 'function') {
-              RED.log.error(
-                `[mavlink-payload] field-tips unavailable: ${source.body.error}`
-              );
-            }
-            return res.status(400).json({
-              fields: {},
-              error: 'field tips unavailable',
-            });
-          }
           let bundle;
           let dialect;
-          if (source.kind === 'bundle') {
-            bundle = source.bundle;
-            dialect = source.dialect;
-          } else {
-            const known = metadataApi.knownDialects();
-            if (!known.includes(source.dialect)) {
+          switch (source.kind) {
+            case 'empty':
               return res.json({
                 dialect: source.dialect,
                 fields: {},
-                notice: `unknown dialect ${JSON.stringify(source.dialect)}`,
+                notice: source.notice,
               });
+            case 'error':
+              // getDialect / resolve failures can include filesystem paths —
+              // keep the client response generic (same posture as the catch below).
+              if (RED.log && typeof RED.log.error === 'function') {
+                RED.log.error(
+                  `[mavlink-payload] field-tips unavailable: ${source.body.error}`
+                );
+              }
+              return res.status(400).json({
+                fields: {},
+                error: 'field tips unavailable',
+              });
+            case 'bundle':
+              bundle = source.bundle;
+              dialect = source.dialect;
+              break;
+            case 'dialect': {
+              const known = metadataApi.knownDialects();
+              if (!known.includes(source.dialect)) {
+                return res.json({
+                  dialect: source.dialect,
+                  fields: {},
+                  notice: `unknown dialect ${JSON.stringify(source.dialect)}`,
+                });
+              }
+              bundle = metadataApi.loadBundled(source.dialect);
+              dialect = source.dialect;
+              break;
             }
-            bundle = metadataApi.loadBundled(source.dialect);
-            dialect = source.dialect;
+            default: break; // This space intentionally left blank (§5)
           }
           // The field set IS the form: keys are the rows the dialog renders,
           // values carry label/units/range/enum so nothing is baked into the
